@@ -33,7 +33,10 @@ Cache::Cache(
   : epm(epm),
     pinboard(create_extent_pinboard(
       crimson::common::get_conf<Option::size_t>(
-       "seastore_cachepin_size_pershard")))
+       "seastore_cachepin_size_pershard"))),
+    full_extent_integrity_check(
+      crimson::common::get_conf<bool>(
+        "seastore_full_integrity_check"))
 {
   register_metrics();
   segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
@@ -1078,6 +1081,29 @@ void Cache::on_transaction_destruct(Transaction& t)
     assert(t.omap_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
     assert(t.backref_tree_stats.is_clear());
+  }
+}
+
+void Cache::check_full_extent_integrity(
+  uint32_t ref_crc, uint32_t pin_crc)
+{
+  LOG_PREFIX(Cache::check_full_extent_integrity);;
+  DEBUG("checksum in the lba tree: 0x{:x}, actual checksum: 0x{:x}",
+    pin_crc,
+    ref_crc);
+
+  bool inconsistent = false;
+  if (full_extent_integrity_check) {
+    inconsistent = (pin_crc != ref_crc);
+  } else { // !full_extent_integrity_check: remapped extent may be skipped
+    inconsistent = !(pin_crc == CRC_NULL ||
+                     pin_crc == ref_crc);
+  }
+  if (unlikely(inconsistent)) {
+    ERROR("extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}",
+      pin_crc,
+      ref_crc);
+      ceph_abort_msg("extent checksum inconsistent");
   }
 }
 
@@ -2284,7 +2310,8 @@ Cache::_get_absent_extent_by_type(
   paddr_t offset,
   laddr_t laddr,
   extent_len_t length,
-  extent_init_func_t &&extent_init_func)
+  extent_init_func_t &&extent_init_func,
+  uint32_t pin_crc)
 {
   LOG_PREFIX(Cache::_get_absent_extent_by_type);
 
@@ -2379,7 +2406,7 @@ Cache::_get_absent_extent_by_type(
   t.add_to_read_set(CachedExtentRef(ret));
   touch_extent_fully(*ret, &t_src, t.get_cache_hint());
   return trans_intr::make_interruptible(
-    read_extent(std::move(ret), 0, length, &t_src
+    read_extent(std::move(ret), 0, length, &t_src, pin_crc
     ).safe_then([laddr](auto extent) {
       if (extent->is_logical()) {
 	extent->template cast<LogicalCachedExtent>()->set_laddr(laddr);

@@ -391,7 +391,8 @@ public:
     extent_len_t length,
     extent_len_t partial_off,
     extent_len_t partial_len,
-    Func &&extent_init_func) {
+    Func &&extent_init_func,
+    uint32_t pin_crc) {
     LOG_PREFIX(Cache::get_absent_extent);
 
 #ifndef NDEBUG
@@ -432,7 +433,7 @@ public:
       *ret, &t_src, t.get_cache_hint(),
       partial_off, partial_len);
     return trans_intr::make_interruptible(
-      read_extent<T>(std::move(ret), partial_off, partial_len, &t_src));
+      read_extent<T>(std::move(ret), partial_off, partial_len, &t_src, pin_crc));
   }
 
   /*
@@ -505,7 +506,7 @@ public:
       );
     }
     return get_absent_extent<T>(t, offset, length, 0, length,
-      std::forward<Func>(extent_init_func));
+      std::forward<Func>(extent_init_func), CRC_NULL);
   }
 
   CachedExtentRef peek_extent_viewable_by_trans(
@@ -803,7 +804,7 @@ private:
         extent->get_type(), extent->get_paddr(), extent->get_length(),
         partial_off, partial_len, *extent);
       return read_extent<T>(
-        std::move(extent), partial_off, partial_len, p_src);
+        std::move(extent), partial_off, partial_len, p_src, CRC_NULL);
     }
   }
 
@@ -846,7 +847,7 @@ private:
       // required by add_extent()
       on_cache(*ret);
       return read_extent<T>(
-	std::move(ret), partial_off, partial_len, p_src);
+	std::move(ret), partial_off, partial_len, p_src, CRC_NULL);
     }
 
     // extent PRESENT in cache
@@ -873,7 +874,7 @@ private:
 
       cached->state = CachedExtent::extent_state_t::INVALID;
       return read_extent<T>(
-	std::move(ret), partial_off, partial_len, p_src);
+	std::move(ret), partial_off, partial_len, p_src, CRC_NULL);
     }
 
     auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
@@ -1009,7 +1010,8 @@ private:
     paddr_t offset,
     laddr_t laddr,
     extent_len_t length,
-    extent_init_func_t &&extent_init_func);
+    extent_init_func_t &&extent_init_func,
+    uint32_t pin_crc);
 
   backref_entryrefs_by_seq_t backref_entryrefs_by_seq;
   backref_entry_mset_t backref_entry_mset;
@@ -1070,7 +1072,8 @@ public:
     paddr_t offset,         ///< [in] starting addr
     laddr_t laddr,          ///< [in] logical address if logical
     extent_len_t length,    ///< [in] length
-    Func &&extent_init_func ///< [in] extent init func
+    Func &&extent_init_func,///< [in] extent init func
+    uint32_t pin_crc        ///< [in] pin checksum
   ) {
     return _get_absent_extent_by_type(
       t,
@@ -1078,7 +1081,8 @@ public:
       offset,
       laddr,
       length,
-      extent_init_func_t(std::forward<Func>(extent_init_func)));
+      extent_init_func_t(std::forward<Func>(extent_init_func)),
+      pin_crc);
   }
 
   get_extent_by_type_ret get_absent_extent_by_type(
@@ -1089,7 +1093,7 @@ public:
     extent_len_t length
   ) {
     return get_absent_extent_by_type(
-      t, type, offset, laddr, length, [](CachedExtent &) {});
+      t, type, offset, laddr, length, [](CachedExtent &) {}, CRC_NULL);
   }
 
   void trim_backref_bufs(const journal_seq_t &trim_to) {
@@ -1686,6 +1690,8 @@ private:
 
   ExtentPinboardRef pinboard;
 
+  bool full_extent_integrity_check = false;
+
   btree_cursor_stats_t cursor_stats;
   struct invalid_trans_efforts_t {
     io_stat_t read;
@@ -1886,6 +1892,8 @@ private:
   /// Introspect transaction when it is being destructed
   void on_transaction_destruct(Transaction& t);
 
+  void check_full_extent_integrity(uint32_t ref_crc, uint32_t pin_crc);
+
   /// Read the extent in range offset~length,
   /// must be called exclusively for an extent,
   /// also see do_read_extent_maybe_partial().
@@ -1895,7 +1903,8 @@ private:
     CachedExtentRef &&extent,
     extent_len_t offset,
     extent_len_t length,
-    const Transaction::src_t *p_src)
+    const Transaction::src_t *p_src,
+    uint32_t pin_crc)
   {
     LOG_PREFIX(Cache::read_extent);
     assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
@@ -1923,7 +1932,7 @@ private:
           read_range.ptr);
       });
     }).safe_then(
-      [this, FNAME, extent=std::move(extent), offset, length]() mutable {
+      [this, FNAME, extent=std::move(extent), offset, length, pin_crc]() mutable {
         ceph_assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN
           || extent->state == CachedExtent::extent_state_t::CLEAN
           || !extent->is_valid());
@@ -1940,6 +1949,15 @@ private:
             extent->on_clean_read();
             SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} done -- {}",
               offset, length, *extent);
+
+            SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} veryfing integrity -- {}",
+              offset, length, *extent);
+            // We must check the integrity here prior to complete_io.
+            // Previously, concurrent transaction could have checked
+            // crc of non matching extent data.
+            // See: https://tracker.ceph.com/issues/73790
+            assert(extent->is_fully_loaded());
+            check_full_extent_integrity(extent->last_committed_crc, pin_crc);
           } else {
             extent->last_committed_crc = CRC_NULL;
             SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} done (partial) -- {}",
@@ -1965,9 +1983,10 @@ private:
     TCachedExtentRef<T>&& extent,
     extent_len_t offset,
     extent_len_t length,
-    const Transaction::src_t* p_src
+    const Transaction::src_t* p_src,
+    uint32_t pin_crc
   ) {
-    return _read_extent(std::move(extent), offset, length, p_src
+    return _read_extent(std::move(extent), offset, length, p_src, pin_crc
     ).safe_then([](auto extent) {
       return extent->template cast<T>();
     });
