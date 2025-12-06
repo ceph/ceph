@@ -974,14 +974,12 @@ void MDSMap::decode(bufferlist::const_iterator& p)
   }
 
   if (ev >= 14) {
-    ceph_release_t min_compat_client;
+    ceph_release_t min_compat_client = ceph_release_t::unknown;
     if (ev == 14) {
       int8_t r;
       decode(r, p);
-      if (r < 0) {
-	min_compat_client = ceph_release_t::unknown;
-      } else {
-	min_compat_client = ceph_release_t{static_cast<uint8_t>(r)};
+      if (r >= 0) {
+        min_compat_client = ceph_release_t{static_cast<uint8_t>(r)};
       }
     } else if (ev >= 15) {
       decode(min_compat_client, p);
@@ -1358,7 +1356,10 @@ void MDSMap::set_bal_rank_mask(std::string val)
   dout(10) << "set bal_rank_mask to \"" << bal_rank_mask << "\""<< dendl;
 }
 
-const bool MDSMap::check_special_bal_rank_mask(std::string val, bal_rank_mask_type_t type) const
+bool
+MDSMap::check_special_bal_rank_mask(
+    const std::string& val,
+    bal_rank_mask_type_t type) const
 {
   if ((type == BAL_RANK_MASK_TYPE_ANY || type == BAL_RANK_MASK_TYPE_ALL) && (val == "-1" || val == "all")) {
     return true;
