@@ -1472,40 +1472,39 @@ private:
 	extent.set_laddr(laddr);
 	maybe_init(extent);
 	extent.set_seen_by_users();
-      }
-    ).si_then([FNAME, &t, pin=pin, this](auto ref) mutable -> ret {
-      if (ref->is_fully_loaded()) {
-        auto crc = ref->calc_crc32c();
-        SUBTRACET(
-	  seastore_tm,
-	  "got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
-	  t,
-	  *ref,
-	  pin.get_checksum(),
-	  crc);
-        bool inconsistent = false;
-        if (full_extent_integrity_check) {
-	  inconsistent = (pin.get_checksum() != crc);
-        } else { // !full_extent_integrity_check: remapped extent may be skipped
-	  inconsistent = !(pin.get_checksum() == 0 ||
-                           pin.get_checksum() == crc);
+      },
+      [FNAME, &t, pin=pin, this](auto &ext) mutable {
+        auto &extent = static_cast<T&>(ext);
+        if (extent.is_fully_loaded()) {
+          auto crc = extent.calc_crc32c();
+          SUBTRACET(
+            seastore_tm,
+            "got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
+            t,
+            extent,
+            pin.get_checksum(),
+            crc);
+          bool inconsistent = false;
+          if (full_extent_integrity_check) {
+            inconsistent = (pin.get_checksum() != crc);
+          } else { // !full_extent_integrity_check: remapped extent may be skipped
+            inconsistent = !(pin.get_checksum() == 0 ||
+                             pin.get_checksum() == crc);
+          }
+          if (unlikely(inconsistent)) {
+            SUBERRORT(seastore_tm,
+              "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
+              t,
+              pin.get_checksum(),
+              crc,
+              extent);
+            ceph_abort();
+          }
+        } else {
+          assert(!full_extent_integrity_check);
         }
-        if (unlikely(inconsistent)) {
-	  SUBERRORT(seastore_tm,
-	    "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
-	    t,
-	    pin.get_checksum(),
-	    crc,
-	    *ref);
-	  ceph_abort();
-        }
-      } else {
-        assert(!full_extent_integrity_check);
       }
-      return pin_to_extent_ret<T>(
-	interruptible::ready_future_marker{},
-	std::move(ref));
-    });
+    );
   }
 
   /**
@@ -1546,36 +1545,37 @@ private:
 	lextent.set_laddr(direct_key);
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
+      },
+      [FNAME, &t, pin=pin, this](auto &extent) {
+        auto crc = extent.calc_crc32c();
+        SUBTRACET(
+          seastore_tm,
+          "got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
+          t,
+          extent,
+          pin.get_checksum(),
+          crc);
+        assert(extent.is_fully_loaded());
+        bool inconsistent = false;
+        if (full_extent_integrity_check) {
+          inconsistent = (pin.get_checksum() != crc);
+        } else { // !full_extent_integrity_check: remapped extent may be skipped
+          inconsistent = !(pin.get_checksum() == 0 ||
+                           pin.get_checksum() == crc);
+        }
+        if (unlikely(inconsistent)) {
+          SUBERRORT(seastore_tm,
+            "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
+            t,
+            pin.get_checksum(),
+            crc,
+            extent);
+          ceph_abort();
+        }
       }
-    ).si_then([FNAME, &t, pin=pin, this](auto ref) {
-      auto crc = ref->calc_crc32c();
-      SUBTRACET(
-	seastore_tm,
-	"got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
-	t,
-	*ref,
-	pin.get_checksum(),
-	crc);
-      assert(ref->is_fully_loaded());
-      bool inconsistent = false;
-      if (full_extent_integrity_check) {
-	inconsistent = (pin.get_checksum() != crc);
-      } else { // !full_extent_integrity_check: remapped extent may be skipped
-	inconsistent = !(pin.get_checksum() == 0 ||
-			 pin.get_checksum() == crc);
-      }
-      if (unlikely(inconsistent)) {
-	SUBERRORT(seastore_tm,
-	  "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
-	  t,
-	  pin.get_checksum(),
-	  crc,
-	  *ref);
-	ceph_abort();
-      }
-      return pin_to_extent_by_type_ret(
-	interruptible::ready_future_marker{},
-	std::move(ref->template cast<LogicalChildNode>()));
+    ).si_then([](auto ref) {
+      return pin_to_extent_iertr::make_ready_future<
+        LogicalChildNodeRef>(ref->template cast<LogicalChildNode>());
     });
   }
 
