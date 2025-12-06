@@ -486,14 +486,6 @@ public:
     int max,
     std::vector<ghobject_t> *ls, ghobject_t *next) override;
 
-  using ObjectStore::omap_get;
-  int omap_get(
-    CollectionHandle& c,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    ceph::buffer::list *header,      ///< [out] omap header
-    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value std::map
-    ) override;
-
   using ObjectStore::omap_get_header;
   /// Get omap header
   int omap_get_header(

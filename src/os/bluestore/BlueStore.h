@@ -3362,25 +3362,6 @@ public:
                              std::vector<ghobject_t> *ls,
                              ghobject_t *next) override;
 
-  int omap_get(
-    CollectionHandle &c,     ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    ceph::buffer::list *header,      ///< [out] omap header
-    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
-    ) override;
-  int _omap_get(
-    Collection *c,     ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    ceph::buffer::list *header,      ///< [out] omap header
-    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
-    );
-  int _onode_omap_get(
-    const OnodeRef& o,           ///< [in] Object containing omap
-    ceph::buffer::list *header,          ///< [out] omap header
-    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
-  );
-
-
   /// Get omap header
   int omap_get_header(
     CollectionHandle &c,                ///< [in] Collection containing oid
