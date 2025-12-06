@@ -4155,12 +4155,12 @@ options:
   - bdev_enable_discard
   - bdev_async_discard_max_pending
 - name: bdev_async_discard
-  long_desc: When set this works like an alias for 'bdev_async_discard_threads = 1"
-    mode to avoid implicit async discard mode disablement after upgrade.
-    Ignored if 'dev_asunc_discard_threads' is greater than zero.
+  long_desc: When enabled this works as an alias for 'bdev_async_discard_threads = 1'
+    to avoid implicit async discard disablement after an upgrade.
+    Ignored if 'dev_async_discard_threads' is greater than 0.
     This parameter is DEPRECATED and provided for backward compatibility for
     Squid minor releases only.
-    PLEASE SWITCH TO 'bdev_async_discard_threads' USE.
+    PLEASE USE 'bdev_async_discard_threads' INSTEAD.
   type: bool
   level: advanced
   default: false
@@ -4205,8 +4205,8 @@ options:
   type: uint
   level: advanced
   desc: times to retry the flock
-  long_desc: The number of times to retry on getting the block device lock. Programs
-    such as systemd-udevd may compete with Ceph for this lock. 0 means 'unlimited'.
+  long_desc: The number of times to retry on getting the block device lock. Processes
+    including systemd-udevd may compete with Ceph for this lock. 0 means 'unlimited'.
   default: 3
 - name: bluefs_alloc_size
   type: size
@@ -4278,16 +4278,16 @@ options:
   level: advanced
   desc: Enabled buffered IO for BlueFS reads.
   long_desc: When this option is enabled, BlueFS will in some cases perform buffered
-    reads.  This allows the kernel page cache to act as a secondary cache for things
-    like RocksDB block reads.  For example, if the RocksDB block cache isn't large
+    reads. This allows the kernel page cache to act as a secondary cache for things
+    like RocksDB block reads. For example, if the RocksDB block cache isn't large
     enough to hold all blocks during omap iteration, it may be possible to read them
     from page cache instead of from the device.  This can dramatically improve
     performance when the osd_memory_target is too small to hold all entries in block
-    cache but it does come with downsides.  It has been reported to occasionally
+    cache but it does come with downsides. It has been reported to occasionally
     cause excessive kernel swapping (and associated stalls) under certain workloads.
     Currently the best and most consistent performing combination appears to be
-    enabling bluefs_buffered_io and disabling system level swap.  It is possible
-    that this recommendation may change in the future however.
+    enabling bluefs_buffered_io and disabling system level swap. It is possible
+    that this recommendation may change in the future.
   default: true
   with_legacy: true
 - name: bluefs_sync_write
