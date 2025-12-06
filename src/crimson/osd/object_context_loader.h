@@ -330,7 +330,9 @@ private:
   DoutPrefixProvider& dpp;
   obc_accessing_list_t obc_set_accessing;
 
-  load_obc_iertr::future<> load_obc(ObjectContextRef obc);
+  load_obc_iertr::future<> load_obc(
+    ObjectContextRef obc,
+    PGBackend::load_metadata_iertr::future<PGBackend::loaded_object_md_t::ref> md);
 };
 
 using ObjectContextManager = ObjectContextLoader::Manager;
