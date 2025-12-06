@@ -16,6 +16,7 @@
 
 #include "types.h"
 #include "include/encoding.h"
+#include "include/rados/cls_traits.h"
 
 namespace cls::cmpomap {
 
@@ -95,6 +96,15 @@ inline void decode(cmp_rm_keys_op& o, ceph::bufferlist::const_iterator& bl)
   decode(o.comparison, bl);
   decode(o.values, bl);
   DECODE_FINISH(bl);
+}
+
+struct ClassId {
+  static constexpr auto name = "cmpomap";
+};
+namespace method {
+constexpr auto cmp_vals = ClsMethod<RdTag, ClassId>("cmp_vals");
+constexpr auto cmp_set_vals = ClsMethod<RdWrTag, ClassId>("cmp_set_vals");
+constexpr auto cmp_rm_keys = ClsMethod<RdWrTag, ClassId>("cmp_rm_keys");
 }
 
 } // namespace cls::cmpomap

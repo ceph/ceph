@@ -22,6 +22,8 @@
 #include "global/global_context.h"
 #include "test/librados/testcase_cxx.h"
 #include "test/librados/test_cxx.h"
+#include "cls/version/cls_version_ops.h"
+#include "cls/rbd/cls_rbd_types.h"
 
 #include "crimson_utils.h"
 
@@ -149,7 +151,7 @@ TEST_F(LibRadosMiscPP, ExecPP) {
   bufferlist bl;
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, 0));
   bufferlist bl2, out;
-  int r = ioctx.exec("foo", "rbd", "get_all_features", bl2, out);
+  int r = ioctx.exec("foo", cls::rbd::method::get_all_features, bl2, out);
   ASSERT_EQ(0, r);
   auto iter = out.cbegin();
   uint64_t all_features;
@@ -923,4 +925,38 @@ TEST_F(LibRadosMiscPP, Conf) {
   std::string actual;
   ASSERT_EQ(0, cluster.conf_get(option, actual));
   ASSERT_EQ(expected, actual);
+}
+
+// TEST_F(LibRadosMiscPP, ExecReadonlyWithWrite) {
+//   SKIP_IF_CRIMSON();
+//   bufferlist bl1, bl2;
+//   bl1.append("ceph");
+//   ObjectWriteOperation write;
+//   write.write(0, bl1);
+//   ASSERT_EQ(0, ioctx.operate("foo", &write));
+//
+//   // This should fail.
+//   ObjectReadOperation read1;
+//   cls_version_inc_op call;
+//   encode(call, bl2);
+//   read1.exec_ro("version", "inc", bl2);
+//   EXPECT_EQ(-EIO, ioctx.operate("foo", &read1, nullptr));
+//
+//   // This should work, to prove the issue is the read.
+//   ObjectWriteOperation write2;
+//   write2.exec("version", "inc", bl2);
+//   ASSERT_EQ(0, ioctx.operate("foo", &write2));
+// }
+
+TEST_F(LibRadosMiscPP, ExecReadonlyWithWrite) {
+  bufferlist bl;
+  ASSERT_EQ(0, ioctx.write("foo", bl, 0, 0));
+  bufferlist bl2, out;
+  int r = ioctx.exec("foo", cls::version::method::read, bl2, out);
+  ASSERT_EQ(-EIO, r);
+  auto iter = out.cbegin();
+  uint64_t all_features;
+  decode(all_features, iter);
+  // make sure *some* features are specified; don't care which ones
+  ASSERT_NE(all_features, (unsigned)0);
 }

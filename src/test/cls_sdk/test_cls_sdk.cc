@@ -3,8 +3,10 @@
 
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
+#include "cls/sdk/cls_sdk_ops.h"
 
 using namespace librados;
+using namespace cls::sdk;
 
 TEST(ClsSDK, TestSDKCoverageWrite) {
   Rados cluster;
@@ -15,7 +17,7 @@ TEST(ClsSDK, TestSDKCoverageWrite) {
 
   bufferlist in;
   librados::ObjectWriteOperation op;
-  op.exec("sdk", "test_coverage_write", in);
+  op.exec(method::test_coverage_write, in);
   ASSERT_EQ(0, ioctx.operate("myobject", &op));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
@@ -30,11 +32,11 @@ TEST(ClsSDK, TestSDKCoverageReplay) {
 
   bufferlist in;
   librados::ObjectWriteOperation op;
-  op.exec("sdk", "test_coverage_write", in);
+  op.exec(method::test_coverage_write, in);
   ASSERT_EQ(0, ioctx.operate("myobject", &op));
 
   librados::ObjectWriteOperation op2;
-  op2.exec("sdk", "test_coverage_replay", in);
+  op2.exec(method::test_coverage_replay, in);
   ASSERT_EQ(0, ioctx.operate("myobject", &op2));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
