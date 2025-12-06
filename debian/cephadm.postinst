@@ -41,6 +41,12 @@ case "$1" in
            usermod -U cephadm
        fi
 
+       # Older versions may not have configured a home directory.
+       # If they don't have one configured then add it.
+       if ! test ~cephadm = "/nonexistent"; then
+           usermod --home /var/lib/cephadm -m cephadm
+       fi
+
        # set up (initially empty) .ssh/authorized_keys file
        if ! test -d ~cephadm/.ssh; then
            mkdir ~cephadm/.ssh
