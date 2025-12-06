@@ -151,7 +151,6 @@ int main(int argc, const char **argv)
   bool mkkey = false;
   bool flushjournal = false;
   bool dump_journal = false;
-  bool convertfilestore = false;
   bool get_osd_fsid = false;
   bool get_cluster_fsid = false;
   bool get_journal_fsid = false;
@@ -181,8 +180,6 @@ int main(int argc, const char **argv)
       mkkey = true;
     } else if (ceph_argparse_flag(args, i, "--flush-journal", (char*)NULL)) {
       flushjournal = true;
-    } else if (ceph_argparse_flag(args, i, "--convert-filestore", (char*)NULL)) {
-      convertfilestore = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--dump-pg-log", (char*)NULL)) {
       dump_pg_log = val;
     } else if (ceph_argparse_flag(args, i, "--dump-journal", (char*)NULL)) {
@@ -477,23 +474,6 @@ flushjournal_out:
     forker.exit(0);
   }
 
-  if (convertfilestore) {
-    int err = store->mount();
-    if (err < 0) {
-      derr << TEXT_RED << " ** ERROR: error mounting store " << data_path
-	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
-      forker.exit(1);
-    }
-    err = store->upgrade();
-    store->umount();
-    if (err < 0) {
-      derr << TEXT_RED << " ** ERROR: error converting store " << data_path
-	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
-      forker.exit(1);
-    }
-    forker.exit(0);
-  }
-  
   {
     int r = extblkdev::preload(g_ceph_context);
     if (r < 0) {
