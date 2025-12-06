@@ -55,6 +55,26 @@ protected:
 
 public:
 
+#ifdef UNIT_TESTS_BUILT
+  void test_notify_osdmap(const OSDMap& osd_map)
+  {
+    std::lock_guard l(lock);
+    notify_osdmap(osd_map);
+  }
+  const PGMap::Incremental& test_get_pending_inc() const
+  {
+    return pending_inc;
+  }
+  const std::map<int64_t,unsigned>& test_get_existing_pools() const
+  {
+    return existing_pools;
+  }
+  const PGMap test_get_pg_map() const
+  {
+    return pg_map;
+  }
+#endif
+
   void load_digest(MMgrDigest *m);
   void ingest_pgstats(ceph::ref_t<MPGStats> stats);
 
