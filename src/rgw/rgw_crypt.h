@@ -179,3 +179,13 @@ static inline std::string get_str_attribute(const std::map<std::string, bufferli
 }
 
 int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y);
+
+int handle_sse_s3_encryption(const DoutPrefixProvider *dpp,
+  CephContext *cct,
+  optional_yield y,
+  rgw::sal::Bucket* bucket,
+  const rgw_obj_key& object,
+  std::string* err_msg,
+  std::map<std::string, ceph::bufferlist>& attrs,
+  std::unique_ptr<BlockCrypt>* block_crypt,
+  std::map<std::string, std::string>* crypt_http_responses);
