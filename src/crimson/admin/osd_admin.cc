@@ -442,7 +442,9 @@ public:
       logger().info("error during data error injection: {}", e.what());
       co_return tell_result_t(-EINVAL, e.what());
     }
-    co_await shard_services.get_store().inject_data_error(obj);
+    co_await crimson::os::with_store<&crimson::os::FuturizedStore::Shard::inject_data_error>(
+      shard_services.get_store(DEFAULT_STORE_INDEX),
+      obj);
     logger().info("successfully injected data error for obj={}", obj);
     ceph::bufferlist bl;
     bl.append("ok"sv);
@@ -484,7 +486,9 @@ public:
       logger().info("error during metadata error injection: {}", e.what());
       co_return tell_result_t(-EINVAL, e.what());
     }
-    co_await shard_services.get_store().inject_mdata_error(obj);
+    co_await crimson::os::with_store<&crimson::os::FuturizedStore::Shard::inject_mdata_error>(
+      shard_services.get_store(DEFAULT_STORE_INDEX),
+      obj);
     logger().info("successfully injected metadata error for obj={}", obj);
     ceph::bufferlist bl;
     bl.append("ok"sv);
@@ -613,5 +617,29 @@ private:
 };
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<DumpRecoveryReservationsHook>(crimson::osd::ShardServices& shard_services);
+
+class StoreShardNumsHook : public AdminSocketHook {
+public:
+  explicit StoreShardNumsHook(crimson::osd::ShardServices& shard_services) :
+    AdminSocketHook{"dump_store_shards", "", "show store shards on each osd shard"},
+    shard_services(shard_services)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&& input) const final
+  {
+    LOG_PREFIX(AdminSocketHook::StoreShardNumsHook);
+    DEBUG("");
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    f->open_object_section("Store shards");
+    co_await shard_services.dump_store_shards(f.get());
+    f->close_section();
+    co_return std::move(f);
+  }
+private:
+  crimson::osd::ShardServices& shard_services;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<StoreShardNumsHook>(crimson::osd::ShardServices& shard_services);
 
 } // namespace crimson::admin

@@ -15,10 +15,12 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore::journal {
 
 CircularBoundedJournal::CircularBoundedJournal(
+    unsigned int store_index,
     JournalTrimmer &trimmer,
     RBMDevice* device,
     const std::string &path)
-  : trimmer(trimmer), path(path),
+  : store_index(store_index),
+    trimmer(trimmer), path(path),
   cjs(device),
   record_submitter(crimson::common::get_conf<uint64_t>(
       "seastore_journal_iodepth_limit"),
@@ -36,7 +38,7 @@ CircularBoundedJournal::CircularBoundedJournal(
 CircularBoundedJournal::open_for_mkfs_ret
 CircularBoundedJournal::open_for_mkfs()
 {
-  return record_submitter.open(true
+  return record_submitter.open(store_index, true
   ).safe_then([this](auto ret) {
     return open_for_mkfs_ret(
       open_for_mkfs_ertr::ready_future_marker{},
@@ -47,7 +49,7 @@ CircularBoundedJournal::open_for_mkfs()
 CircularBoundedJournal::open_for_mount_ret
 CircularBoundedJournal::open_for_mount()
 {
-  return record_submitter.open(false
+  return record_submitter.open(store_index, false
   ).safe_then([this](auto ret) {
     return open_for_mount_ret(
       open_for_mount_ertr::ready_future_marker{},
