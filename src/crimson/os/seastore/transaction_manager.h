@@ -1431,7 +1431,6 @@ private:
     // must be user-oriented required by maybe_init
     assert(is_user_transaction(t.get_src()));
     assert(pin.is_viewable());
-    using ret = pin_to_extent_ret<T>;
     auto direct_length = pin.get_intermediate_length();
     if (full_extent_integrity_check) {
       direct_partial_off = 0;
@@ -1440,36 +1439,35 @@ private:
     LOG_PREFIX(TransactionManager::pin_to_extent);
     SUBTRACET(seastore_tm, "getting absent extent from pin {}, 0x{:x}~0x{:x} ...",
               t, pin, direct_partial_off, partial_len);
-    return cache->get_absent_extent<T>(
+
+    auto ref = co_await cache->get_absent_extent<T>(
       t,
       pin.get_val(),
       direct_length,
       direct_partial_off,
       partial_len,
-      [laddr=pin.get_intermediate_base(),
-       maybe_init=std::move(maybe_init),
-       child_pos=std::move(child_pos),
-       &t, this]
-      (T &extent) mutable {
-	assert(extent.is_logical());
-	assert(!extent.has_laddr());
-	assert(!extent.has_been_invalidated());
-	child_pos.link_child(&extent);
-	child_pos.invalidate_retired_placeholder(t, *cache, extent);
-	extent.set_laddr(laddr);
-	maybe_init(extent);
-	extent.set_seen_by_users();
-      }
-    ).si_then([FNAME, &t, pin=pin, this](auto ref) mutable -> ret {
-      if (ref->is_fully_loaded()) {
-        check_full_extent_integrity(t, ref->calc_crc32c(), pin.get_checksum());
-      } else {
-        assert(!full_extent_integrity_check);
-      }
-      return pin_to_extent_ret<T>(
-	interruptible::ready_future_marker{},
-	std::move(ref));
-    });
+      // extent_init_func
+      seastar::coroutine::lambda(
+        [laddr=pin.get_intermediate_base(),
+        maybe_init=std::move(maybe_init),
+        child_pos=std::move(child_pos),
+        &t, this] (T &extent) mutable {
+          assert(extent.is_logical());
+          assert(!extent.has_laddr());
+          assert(!extent.has_been_invalidated());
+          child_pos.link_child(&extent);
+          child_pos.invalidate_retired_placeholder(t, *cache, extent);
+          extent.set_laddr(laddr);
+          maybe_init(extent);
+          extent.set_seen_by_users();
+      })
+    );
+    if (ref->is_fully_loaded()) {
+      check_full_extent_integrity(t, ref->calc_crc32c(), pin.get_checksum());
+    } else {
+      assert(!full_extent_integrity_check);
+    }
+    co_return std::move(ref);
   }
 
   static void check_full_extent_integrity(
