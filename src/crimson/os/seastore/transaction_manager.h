@@ -1332,9 +1332,12 @@ private:
 	  }
 	}).si_then([this, &t, &remaps, original_paddr,
 		    original_laddr, original_len, FNAME](auto ext) mutable {
-	  ceph_assert(full_extent_integrity_check
-	      ? (ext && ext->is_fully_loaded())
-	      : true);
+	  if (full_extent_integrity_check) {
+	    ceph_assert(ext && ext->is_fully_loaded());
+	    // CRC_NULL shouldn't be possible when full extent
+	    // integrity checks are enabled.
+	    assert(ext->calc_crc32c() != CRC_NULL);
+	  }
 	  std::optional<ceph::bufferptr> original_bptr;
 	  // TODO: preserve the bufferspace if partially loaded
 	  if (ext && ext->is_fully_loaded()) {
@@ -1485,7 +1488,7 @@ private:
     });
   }
 
-  void check_full_extent_integrity(
+  static void check_full_extent_integrity(
     Transaction &t, uint32_t ref_crc, uint32_t pin_crc);
 
   /**

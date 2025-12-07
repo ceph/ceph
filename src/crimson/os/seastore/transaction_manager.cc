@@ -634,14 +634,7 @@ void TransactionManager::check_full_extent_integrity(
     t,
     pin_crc,
     ref_crc);
-  bool inconsistent = false;
-  if (full_extent_integrity_check) {
-    inconsistent = (pin_crc != ref_crc);
-  } else { // !full_extent_integrity_check: remapped extent may be skipped
-    inconsistent = !(pin_crc == 0 ||
-                     pin_crc == ref_crc);
-  }
-  if (unlikely(inconsistent)) {
+  if (unlikely(pin_crc != ref_crc)) {
     SUBERRORT(seastore_tm,
       "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}",
       t,
