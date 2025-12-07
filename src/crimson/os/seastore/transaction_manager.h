@@ -1427,6 +1427,9 @@ private:
     extent_len_t direct_partial_off,
     extent_len_t partial_len,
     lextent_init_func_t<T> &&maybe_init) {
+    LOG_PREFIX(TransactionManager::pin_to_extent);
+    SUBDEBUGT(seastore_tm, "getting absent extent from pin {}, 0x{:x}~0x{:x} ...",
+              t, pin, direct_partial_off, partial_len);
     static_assert(is_logical_type(T::TYPE));
     // must be user-oriented required by maybe_init
     assert(is_user_transaction(t.get_src()));
@@ -1436,9 +1439,12 @@ private:
       direct_partial_off = 0;
       partial_len = direct_length;
     }
-    LOG_PREFIX(TransactionManager::pin_to_extent);
-    SUBTRACET(seastore_tm, "getting absent extent from pin {}, 0x{:x}~0x{:x} ...",
-              t, pin, direct_partial_off, partial_len);
+
+    // are we reading the entire extent?
+    bool is_full_extent = (direct_partial_off == 0 &&
+                           partial_len == direct_length);
+    SUBDEBUGT(seastore_tm, "getting absent extent from pin {}, 0x{:x}~0x{:x} full extent: {}...",
+              t, pin, direct_partial_off, partial_len, is_full_extent);
 
     auto ref = co_await cache->get_absent_extent<T>(
       t,
@@ -1467,6 +1473,10 @@ private:
     } else {
       assert(!full_extent_integrity_check);
     }
+
+    SUBDEBUGT(seastore_tm, "got extent -- {} fully_loaded: {}",
+              t, *ref, ref->is_fully_loaded());
+
     co_return std::move(ref);
   }
 
