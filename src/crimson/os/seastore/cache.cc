@@ -1081,6 +1081,21 @@ void Cache::on_transaction_destruct(Transaction& t)
   }
 }
 
+void Cache::check_full_extent_integrity(
+  uint32_t ref_crc, uint32_t pin_crc)
+{
+  LOG_PREFIX(Cache::check_full_extent_integrity);;
+  DEBUG("checksum in the lba tree: 0x{:x}, actual checksum: 0x{:x}",
+    pin_crc,
+    ref_crc);
+  if (unlikely(pin_crc != ref_crc)) {
+    ERROR("extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}",
+      pin_crc,
+      ref_crc);
+      ceph_abort_msg("extent checksum inconsistent");
+  }
+}
+
 CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   Transaction &t,        ///< [in, out] current transaction
   extent_types_t type,   ///< [in] type tag

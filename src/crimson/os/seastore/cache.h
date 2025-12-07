@@ -1890,6 +1890,9 @@ private:
   /// Introspect transaction when it is being destructed
   void on_transaction_destruct(Transaction& t);
 
+  static void check_full_extent_integrity(
+    uint32_t ref_crc, uint32_t pin_crc);
+
   /// Read the extent in range offset~length,
   /// must be called exclusively for an extent,
   /// also see do_read_extent_maybe_partial().
@@ -1945,6 +1948,17 @@ private:
             extent->on_clean_read();
             SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} done -- {}",
               offset, length, *extent);
+
+            if (pin_crc != CRC_NULL) {
+              SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} veryfing integrity -- {}",
+                offset, length, *extent);
+              // We must check the integrity here prior to complete_io.
+              // Previously, concurrent transaction could have checked
+              // crc of non matching extent data.
+              // See: https://tracker.ceph.com/issues/73790
+              assert(extent->is_fully_loaded());
+              check_full_extent_integrity(extent->last_committed_crc, pin_crc);
+            }
           } else {
             extent->last_committed_crc = CRC_NULL;
             SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} done (partial) -- {}",

@@ -1469,20 +1469,12 @@ private:
       }),
       pin.get_checksum()
     );
-    if (ref->is_fully_loaded()) {
-      check_full_extent_integrity(t, ref->calc_crc32c(), pin.get_checksum());
-    } else {
-      assert(!full_extent_integrity_check);
-    }
 
     SUBDEBUGT(seastore_tm, "got extent -- {} fully_loaded: {}",
               t, *ref, ref->is_fully_loaded());
 
     co_return std::move(ref);
   }
-
-  static void check_full_extent_integrity(
-    Transaction &t, uint32_t ref_crc, uint32_t pin_crc);
 
   /**
    * pin_to_extent_by_type
@@ -1530,7 +1522,6 @@ private:
     SUBDEBUGT(seastore_tm, "got extent -- {} fully_loaded: {}",
               t, *ref, ref->is_fully_loaded());
     assert(ref->is_fully_loaded());
-    check_full_extent_integrity(t, ref->calc_crc32c(), pin.get_checksum());
     co_return ref->template cast<LogicalChildNode>();
   }
 
