@@ -1202,6 +1202,16 @@ void PrimaryLogPG::do_command(
     outbl.append(ss.str());
   }
 
+  else if (prefix == "scrub-abort") {
+    if (is_primary()) {
+      m_scrubber->on_operator_abort_scrub(f.get());
+    } else {
+      ss << "Not primary";
+      ret = -EPERM;
+      outbl.append(ss.str());
+    }
+  }
+
   // the test/debug commands that schedule a scrub by modifying timestamps
   else if (prefix == "schedule-scrub" || prefix == "schedule-deep-scrub") {
     if (is_primary()) {
