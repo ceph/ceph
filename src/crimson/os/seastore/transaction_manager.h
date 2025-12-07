@@ -1494,39 +1494,32 @@ private:
     assert(is_background_transaction(t.get_src()));
     laddr_t direct_key = pin.get_intermediate_base();
     extent_len_t direct_length = pin.get_intermediate_length();
-    return cache->get_absent_extent_by_type(
+    auto ref = co_await cache->get_absent_extent_by_type(
       t,
       type,
       pin.get_val(),
       direct_key,
       direct_length,
+      // extent_init_func
+      seastar::coroutine::lambda(
       [direct_key, child_pos=std::move(child_pos),
       &t, this](CachedExtent &extent) mutable {
-	assert(extent.is_logical());
-	auto &lextent = static_cast<LogicalChildNode&>(extent);
-	assert(!lextent.has_laddr());
-	assert(!lextent.has_been_invalidated());
-	child_pos.link_child(&lextent);
-	child_pos.invalidate_retired_placeholder(t, *cache, lextent);
-	lextent.set_laddr(direct_key);
+        assert(extent.is_logical());
+        auto &lextent = static_cast<LogicalChildNode&>(extent);
+        assert(!lextent.has_laddr());
+        assert(!lextent.has_been_invalidated());
+        child_pos.link_child(&lextent);
+        child_pos.invalidate_retired_placeholder(t, *cache, lextent);
+        lextent.set_laddr(direct_key);
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
       }
-    ).si_then([FNAME, &t, pin=pin, this](auto ref) {
-      auto crc = ref->calc_crc32c();
-      SUBTRACET(
-	seastore_tm,
-	"got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
-	t,
-	*ref,
-	pin.get_checksum(),
-	crc);
-      assert(ref->is_fully_loaded());
-      check_full_extent_integrity(t, ref->calc_crc32c(), pin.get_checksum());
-      return pin_to_extent_by_type_ret(
-	interruptible::ready_future_marker{},
-	std::move(ref->template cast<LogicalChildNode>()));
-    });
+    ));
+    SUBDEBUGT(seastore_tm, "got extent -- {} fully_loaded: {}",
+              t, *ref, ref->is_fully_loaded());
+    assert(ref->is_fully_loaded());
+    check_full_extent_integrity(t, ref->calc_crc32c(), pin.get_checksum());
+    co_return ref->template cast<LogicalChildNode>();
   }
 
   bool get_checksum_needed(paddr_t paddr) {
