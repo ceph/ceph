@@ -1466,7 +1466,8 @@ private:
           extent.set_laddr(laddr);
           maybe_init(extent);
           extent.set_seen_by_users();
-      })
+      }),
+      pin.get_checksum()
     );
     if (ref->is_fully_loaded()) {
       check_full_extent_integrity(t, ref->calc_crc32c(), pin.get_checksum());
@@ -1524,7 +1525,8 @@ private:
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
       }
-    ));
+    ),
+    pin.get_checksum());
     SUBDEBUGT(seastore_tm, "got extent -- {} fully_loaded: {}",
               t, *ref, ref->is_fully_loaded());
     assert(ref->is_fully_loaded());

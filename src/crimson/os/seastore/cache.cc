@@ -2284,7 +2284,8 @@ Cache::_get_absent_extent_by_type(
   paddr_t offset,
   laddr_t laddr,
   extent_len_t length,
-  extent_init_func_t &&extent_init_func)
+  extent_init_func_t &&extent_init_func,
+  uint32_t pin_crc)
 {
   LOG_PREFIX(Cache::_get_absent_extent_by_type);
 
@@ -2379,7 +2380,7 @@ Cache::_get_absent_extent_by_type(
   t.add_to_read_set(CachedExtentRef(ret));
   touch_extent_fully(*ret, &t_src, t.get_cache_hint());
   return trans_intr::make_interruptible(
-    read_extent(std::move(ret), 0, length, &t_src
+    read_extent(std::move(ret), 0, length, &t_src, pin_crc
     ).safe_then([laddr](auto extent) {
       if (extent->is_logical()) {
 	extent->template cast<LogicalCachedExtent>()->set_laddr(laddr);

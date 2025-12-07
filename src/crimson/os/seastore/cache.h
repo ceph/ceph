@@ -391,7 +391,8 @@ public:
     extent_len_t length,
     extent_len_t partial_off,
     extent_len_t partial_len,
-    Func &&extent_init_func) {
+    Func &&extent_init_func,
+    uint32_t pin_crc = CRC_NULL) {
     LOG_PREFIX(Cache::get_absent_extent);
 
 #ifndef NDEBUG
@@ -432,7 +433,7 @@ public:
       *ret, &t_src, t.get_cache_hint(),
       partial_off, partial_len);
     return trans_intr::make_interruptible(
-      read_extent<T>(std::move(ret), partial_off, partial_len, &t_src));
+      read_extent<T>(std::move(ret), partial_off, partial_len, &t_src, pin_crc));
   }
 
   /*
@@ -1009,7 +1010,8 @@ private:
     paddr_t offset,
     laddr_t laddr,
     extent_len_t length,
-    extent_init_func_t &&extent_init_func);
+    extent_init_func_t &&extent_init_func,
+    uint32_t pin_crc);
 
   backref_entryrefs_by_seq_t backref_entryrefs_by_seq;
   backref_entry_mset_t backref_entry_mset;
@@ -1065,12 +1067,13 @@ public:
    */
   template <typename Func>
   get_extent_by_type_ret get_absent_extent_by_type(
-    Transaction &t,         ///< [in] transaction
-    extent_types_t type,    ///< [in] type tag
-    paddr_t offset,         ///< [in] starting addr
-    laddr_t laddr,          ///< [in] logical address if logical
-    extent_len_t length,    ///< [in] length
-    Func &&extent_init_func ///< [in] extent init func
+    Transaction &t,             ///< [in] transaction
+    extent_types_t type,        ///< [in] type tag
+    paddr_t offset,             ///< [in] starting addr
+    laddr_t laddr,              ///< [in] logical address if logical
+    extent_len_t length,        ///< [in] length
+    Func &&extent_init_func,    ///< [in] extent init func
+    uint32_t pin_crc = CRC_NULL ///< [in] pin checksum (See: pin_to_extent)
   ) {
     return _get_absent_extent_by_type(
       t,
@@ -1078,7 +1081,8 @@ public:
       offset,
       laddr,
       length,
-      extent_init_func_t(std::forward<Func>(extent_init_func)));
+      extent_init_func_t(std::forward<Func>(extent_init_func)),
+      pin_crc);
   }
 
   get_extent_by_type_ret get_absent_extent_by_type(
@@ -1895,7 +1899,8 @@ private:
     CachedExtentRef &&extent,
     extent_len_t offset,
     extent_len_t length,
-    const Transaction::src_t *p_src)
+    const Transaction::src_t *p_src,
+    uint32_t pin_crc)
   {
     LOG_PREFIX(Cache::read_extent);
     assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
@@ -1923,7 +1928,7 @@ private:
           read_range.ptr);
       });
     }).safe_then(
-      [this, FNAME, extent=std::move(extent), offset, length]() mutable {
+      [this, FNAME, extent=std::move(extent), offset, length, pin_crc]() mutable {
         ceph_assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN
           || extent->state == CachedExtent::extent_state_t::CLEAN
           || !extent->is_valid());
@@ -1965,9 +1970,10 @@ private:
     TCachedExtentRef<T>&& extent,
     extent_len_t offset,
     extent_len_t length,
-    const Transaction::src_t* p_src
+    const Transaction::src_t* p_src,
+    uint32_t pin_crc = CRC_NULL
   ) {
-    return _read_extent(std::move(extent), offset, length, p_src
+    return _read_extent(std::move(extent), offset, length, p_src, pin_crc
     ).safe_then([](auto extent) {
       return extent->template cast<T>();
     });
