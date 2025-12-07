@@ -1292,6 +1292,7 @@ private:
       TCachedExtentRef<T> extent;
       pin = co_await pin.refresh();
       if (full_extent_integrity_check) {
+        SUBTRACET(seastore_tm, "{} reading pin...", t, pin);
         // read the entire extent from disk (See: pin_to_extent)
         auto maybe_indirect_extent = co_await read_pin<T>(t, pin);
         assert(!maybe_indirect_extent.is_indirect());
@@ -1300,12 +1301,14 @@ private:
       } else {
         auto ret = get_extent_if_linked<T>(t, pin);
         if (std::holds_alternative<get_child_ifut<T>>(ret)) {
+          SUBTRACET(seastore_tm, "getting linked child...", t);
           extent = co_await std::move(std::get<get_child_ifut<T>>(ret));
           if (!extent->is_seen_by_users()) {
             // Note, no maybe_init available for data extents
             extent->set_seen_by_users();
           }
         } else if (std::holds_alternative<unlinked_child_t>(ret)) {
+          SUBTRACET(seastore_tm, "retire extent place holder...", t);
           auto unlinked_child =  std::move(std::get<unlinked_child_t>(ret));
           auto retired_placeholder = cache->retire_absent_extent_addr(
             t, pin.get_key(), original_paddr, original_len
@@ -1326,12 +1329,14 @@ private:
       std::optional<ceph::bufferptr> original_bptr;
       // TODO: preserve the bufferspace if partially loaded
       if (extent && extent->is_fully_loaded()) {
+        SUBDEBUGT(seastore_tm, "extent fully loaded...", t);
         ceph_assert(extent->is_data_stable());
         ceph_assert(extent->get_length() >= original_len);
         ceph_assert(extent->get_paddr() == original_paddr);
         original_bptr = extent->get_bptr();
       }
       if (extent) {
+        SUBTRACET(seastore_tm, "retire extent...", t);
         assert(extent->is_seen_by_users());
         cache->retire_extent(t, extent);
       }
@@ -1360,6 +1365,7 @@ private:
       }
      }
 
+     SUBTRACET(seastore_tm, "remapping pins...", t);
      auto mapping_vec = co_await lba_manager->remap_mappings(
        t,
        pin,
