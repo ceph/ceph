@@ -340,6 +340,9 @@ class PgScrubber : public ScrubPgIF,
       scrub_level_t scrub_level,
       scrub_type_t scrub_type) final;
 
+  void on_operator_abort_scrub(
+      ceph::Formatter* f) final;
+
   /**
    * let the scrubber know that a recovery operation has completed.
    * This might trigger an 'after repair' scrub.

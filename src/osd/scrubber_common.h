@@ -458,6 +458,10 @@ struct ScrubPgIF {
     ceph::Formatter* f,
     scrub_level_t scrub_level) = 0;
 
+  /// abort an ongoing scrub, and cancel any pending operator scrub request
+  virtual void on_operator_abort_scrub(
+    ceph::Formatter* f) = 0;
+
   virtual void dump_scrubber(ceph::Formatter* f) const = 0;
 
   /**
