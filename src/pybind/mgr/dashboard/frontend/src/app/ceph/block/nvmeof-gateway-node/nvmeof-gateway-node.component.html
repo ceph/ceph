@@ -1,0 +1,15 @@
+<cd-table #table
+          [data]="hosts"
+          [columns]="columns"
+          columnMode="flex"
+          (fetchData)="getHosts($event)"
+          selectionType="multiClick"
+          [searchableObjects]="true"
+          [serverSide]="true"
+          [count]="count"
+          [maxLimit]="25"
+          (updateSelection)="updateSelection($event)">
+</cd-table>
+
+
+

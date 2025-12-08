@@ -39,7 +39,8 @@ export enum URLVerbs {
   EXPIRE = 'expire',
 
   /* Daemons */
-  RESTART = 'Restart'
+  RESTART = 'Restart',
+  GATEWAY_GROUP = ' Gateway Group'
 }
 
 export enum ActionLabels {
