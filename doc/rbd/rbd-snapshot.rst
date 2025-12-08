@@ -42,7 +42,7 @@ the ``rbd`` command and several higher-level interfaces, including `QEMU`_,
 Cephx Notes
 ===========
 
-When `cephx`_ authentication is enabled (it is by default), you must specify a
+When :ref:`cephx <rados-cephx-config-ref>` authentication is enabled (it is by default), you must specify a
 user name or ID and a path to the keyring containing the corresponding key. See
 :ref:`User Management <user-management>` for details.
 
@@ -361,7 +361,6 @@ For example:
    a flattened image takes up more storage space than a layered clone does.
 
 
-.. _cephx: ../../rados/configuration/auth-config-ref/
 .. _QEMU: ../qemu-rbd/
 .. _OpenStack: ../rbd-openstack/
 .. _OpenNebula: https://docs.opennebula.io/stable/management_and_operations/vm_management/vm_instances.html?highlight=ceph#managing-disk-snapshots
