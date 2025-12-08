@@ -797,7 +797,7 @@ class TestOngoingClonesCounter(CloneProgressReporterHelper):
     '''
     Class CloneProgressReporter contains the code that lets it figure out the
     number of ongoing clones on its own, without referring the MGR config
-    option mgr/volumes/max_concurrenr_clones. This class contains tests to
+    option mgr/volumes/max_concurrent_clones. This class contains tests to
     ensure that this code, that does the figuring out, is working fine.
     '''
 
