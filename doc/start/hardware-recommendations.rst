@@ -17,6 +17,10 @@ data cluster (e.g., OpenStack, OpenNebula, CloudStack, Kubernetes, etc).
 The requirements of one Ceph cluster are not the same as the requirements of
 another, but below are some general guidelines.
 
+.. important:: Note that as of December 2025, ARM architecture containers
+               provide a limited set of daemons. SMB service, for example, is not
+               yet supported.
+
 .. tip:: check out the `ceph blog`_ too.
 
 CPU
