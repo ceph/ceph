@@ -3,16 +3,28 @@
 
 #include "MetricsHandler.h"
 
+#include <cmath>
+#include <cstdlib>
+#include <limits>
+#include <string>
 #include <variant>
+#include <vector>
+#include <unistd.h>
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
+#include "common/perf_counters_key.h"
 
+#include "include/fs_types.h"
+#include "include/stringify.h"
 #include "messages/MClientMetrics.h"
 #include "messages/MMDSMetrics.h"
 #include "messages/MMDSPing.h"
 
 #include "MDSRank.h"
+#include "MDCache.h"
+#include "CInode.h"
 #include "SessionMap.h"
 
 #define dout_context g_ceph_context
@@ -23,6 +35,11 @@
 MetricsHandler::MetricsHandler(CephContext *cct, MDSRank *mds)
   : Dispatcher(cct),
     mds(mds) {
+  clk_tck = sysconf(_SC_CLK_TCK);
+  if (clk_tck <= 0) {
+    dout(1) << "failed to determine clock ticks per second, cpu usage metric disabled" << dendl;
+    clk_tck = 0;
+  }
 }
 
 Dispatcher::dispatch_result_t MetricsHandler::ms_dispatch2(const ref_t<Message> &m) {
@@ -46,6 +63,33 @@ Dispatcher::dispatch_result_t MetricsHandler::ms_dispatch2(const ref_t<Message> 
 void MetricsHandler::init() {
   dout(10) << dendl;
 
+  if (mds->get_nodeid() != 0 && !rank_perf_counters) {
+    std::string labels = ceph::perf_counters::key_create(
+      "mds_rank_perf",
+      {{"rank", stringify(mds->get_nodeid())}});
+
+    PerfCountersBuilder plb(cct, labels,
+                            l_mds_rank_perf_start, l_mds_rank_perf_last);
+    plb.add_u64(l_mds_rank_perf_cpu_usage,
+                "cpu_usage",
+                "Sum of per-core CPU utilisation for this MDS (100 == one full core)",
+                "cpu%",
+                PerfCountersBuilder::PRIO_USEFUL);
+    plb.add_u64(l_mds_rank_perf_open_requests,
+                "open_requests",
+                "Number of metadata requests currently in flight",
+                "req",
+                PerfCountersBuilder::PRIO_USEFUL);
+    rank_perf_counters = plb.create_perf_counters();
+    cct->get_perfcounters_collection()->add(rank_perf_counters);
+  }
+
+  subv_window_sec = g_conf().get_val<std::chrono::seconds>("subv_metrics_window_interval").count();
+  if (!subv_window_sec) {
+    dout(0) << "subv_metrics_window_interval is not set, setting to 300 seconds" << dendl;
+    subv_window_sec = 300;
+  }
+
   updater = std::thread([this]() {
       ceph_pthread_setname("mds-metrics");
       std::unique_lock locker(lock);
@@ -54,7 +98,7 @@ void MetricsHandler::init() {
         locker.unlock();
         sleep(after);
         locker.lock();
-        update_rank0();
+        update_rank0(locker);
       }
     });
 }
@@ -70,6 +114,12 @@ void MetricsHandler::shutdown() {
 
   if (updater.joinable()) {
     updater.join();
+  }
+
+  if (rank_perf_counters) {
+    cct->get_perfcounters_collection()->remove(rank_perf_counters);
+    delete rank_perf_counters;
+    rank_perf_counters = nullptr;
   }
 }
 
@@ -333,18 +383,7 @@ void MetricsHandler::handle_payload(Session* session,  const SubvolumeMetricsPay
   resolved_paths.reserve(payload.subvolume_metrics.size());
 
   // RAII guard: unlock on construction, re-lock on destruction (even on exceptions)
-  struct UnlockGuard {
-    std::unique_lock<ceph::mutex> &lk;
-    explicit UnlockGuard(std::unique_lock<ceph::mutex>& l) : lk(l) { lk.unlock(); }
-    ~UnlockGuard() noexcept {
-      if (!lk.owns_lock()) {
-        try { lk.lock(); }
-        catch (...) {
-          dout(0) << "failed to re-lock in UnlockGuard dtor" << dendl;
-        }
-      }
-    }
-  } unlock_guard{lk};
+  UnlockGuard unlock_guard{lk};
 
   // unlocked: resolve paths, no contention with mds lock
   for (const auto& metric : payload.subvolume_metrics) {
@@ -444,8 +483,11 @@ void MetricsHandler::notify_mdsmap(const MDSMap &mdsmap) {
   }
 }
 
-void MetricsHandler::update_rank0() {
+void MetricsHandler::update_rank0(std::unique_lock<ceph::mutex>& locker) {
   dout(20) << dendl;
+
+  sample_cpu_usage();
+  sample_open_requests();
 
   if (!addr_rank0) {
     dout(20) << ": not yet notified with rank0 address, ignoring" << dendl;
@@ -457,6 +499,7 @@ void MetricsHandler::update_rank0() {
 
   metrics_message.seq = next_seq;
   metrics_message.rank = mds->get_nodeid();
+  metrics_message.rank_metrics = rank_telemetry.metrics;
 
   for (auto p = client_metrics_map.begin(); p != client_metrics_map.end();) {
     // copy metrics and update local metrics map as required
@@ -470,14 +513,56 @@ void MetricsHandler::update_rank0() {
     }
   }
 
+  // Resolve used_bytes for all subvolumes without holding the metrics lock
+  // (same unlock pattern used for path resolution in handle_payload).
+  // Step 1 (locked): collect unique subvolume ids
+  std::vector<inodeno_t> subvol_ids;
+  subvol_ids.reserve(subvolume_metrics_map.size());
+  for (const auto &[path, aggregated_metrics] : subvolume_metrics_map) {
+    if (!aggregated_metrics.empty()) {
+      subvol_ids.push_back(aggregated_metrics.front().subvolume_id);
+    }
+  }
+
+  // Step 2 (unlocked): fetch rbytes under mds_lock via helper, release metric log
+  // it allows to proceed another update in metrics handler
+  UnlockGuard unlock_guard{locker};
+
+  // here the metrics handler lock witll be retaken via the UnlockGuard dtor
+  std::unordered_map<inodeno_t, uint64_t> subvol_used_bytes;
+  for (inodeno_t subvol_id : subvol_ids) {
+    if (subvol_used_bytes.count(subvol_id) == 0) {
+      uint64_t rbytes = mds->get_inode_rbytes(subvol_id);
+      subvol_used_bytes[subvol_id] = rbytes;
+      dout(20) << "resolved used_bytes for subvol " << subvol_id << " = " << rbytes << dendl;
+    }
+  }
+
   // subvolume metrics, reserve 100 entries per subvolume ? good enough?
   metrics_message.subvolume_metrics.reserve(subvolume_metrics_map.size()* 100);
   for (auto &[path, aggregated_metrics] : subvolume_metrics_map) {
     metrics_message.subvolume_metrics.emplace_back();
-    aggregate_subvolume_metrics(path, aggregated_metrics, metrics_message.subvolume_metrics.back());
+    aggregate_subvolume_metrics(path, aggregated_metrics, subvol_used_bytes,
+                                metrics_message.subvolume_metrics.back());
   }
   // if we need to show local MDS metrics, we need to save a last copy...
   subvolume_metrics_map.clear();
+
+  // Evict stale subvolume quota entries
+  if (subv_window_sec > 0) {
+    auto now = std::chrono::steady_clock::now();
+    auto threshold = std::chrono::seconds(subv_window_sec) * 2;
+    for (auto it = subvolume_quota.begin(); it != subvolume_quota.end(); ) {
+      auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - it->second.last_activity);
+      if (elapsed > threshold) {
+        dout(15) << "evicting stale subvolume quota entry " << it->first
+                 << " (inactive for " << elapsed.count() << "s)" << dendl;
+        it = subvolume_quota.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
 
   // only start incrementing when its kicked via set_next_seq()
   if (next_seq != 0) {
@@ -491,7 +576,9 @@ void MetricsHandler::update_rank0() {
 }
 
 void MetricsHandler::aggregate_subvolume_metrics(const std::string& subvolume_path,
-                                 const std::vector<AggregatedIOMetrics>& metrics_list, SubvolumeMetric &res) {
+                                 const std::vector<AggregatedIOMetrics>& metrics_list,
+                                 const std::unordered_map<inodeno_t, uint64_t>& subvol_used_bytes,
+                                 SubvolumeMetric &res) {
   dout(20) << ": aggregating " << metrics_list.size() << " subv_metrics" << dendl;
   res.subvolume_path = subvolume_path;
 
@@ -505,6 +592,8 @@ void MetricsHandler::aggregate_subvolume_metrics(const std::string& subvolume_pa
   res.avg_read_latency = 0;
   res.avg_write_latency = 0;
   res.time_stamp = 0;
+  res.quota_bytes = 0;
+  res.used_bytes = 0;
 
   for (const auto& m : metrics_list) {
     res.read_ops += m.read_count;
@@ -524,6 +613,27 @@ void MetricsHandler::aggregate_subvolume_metrics(const std::string& subvolume_pa
     }
   }
 
+  // Lookup quota and used_bytes after aggregating I/O metrics
+  if (!metrics_list.empty()) {
+    inodeno_t subvolume_id = metrics_list.front().subvolume_id;
+    
+    // Get quota/used bytes from cache and update last activity time
+    auto it = subvolume_quota.find(subvolume_id);
+    if (it != subvolume_quota.end()) {
+      res.quota_bytes = it->second.quota_bytes;
+      res.used_bytes = it->second.used_bytes;
+      it->second.last_activity = std::chrono::steady_clock::now();
+    }
+    
+    // Fallback: if cache didn't have used_bytes, use the pre-fetched map
+    if (res.used_bytes == 0) {
+      auto used_it = subvol_used_bytes.find(subvolume_id);
+      if (used_it != subvol_used_bytes.end()) {
+        res.used_bytes = used_it->second;
+      }
+    }
+  }
+
   // normalize latencies
   res.avg_read_latency = (res.read_ops > 0)
                          ? (weighted_read_latency_sum / res.read_ops)
@@ -531,4 +641,116 @@ void MetricsHandler::aggregate_subvolume_metrics(const std::string& subvolume_pa
   res.avg_write_latency = (res.write_ops > 0)
                           ? (weighted_write_latency_sum / res.write_ops)
                           : 0;
+}
+
+void MetricsHandler::maybe_update_subvolume_quota(inodeno_t subvol_id, uint64_t quota_bytes, uint64_t used_bytes, bool force_zero) {
+  std::lock_guard l(lock);
+  
+  auto it = subvolume_quota.find(subvol_id);
+  if (it == subvolume_quota.end()) {
+    // If the subvolume was not registered yet, insert it now so we don't lose
+    // the first quota update (e.g., when broadcast happens before caps/metadata).
+    it = subvolume_quota.emplace(subvol_id, SubvolumeQuotaInfo{}).first;
+    dout(20) << __func__ << " inserted subvolume_quota for " << subvol_id << dendl;
+  }
+
+  // Only update quota_bytes if this inode has quota enabled (avoid overwriting
+  // a good value from a quota-enabled child with 0 from the subvolume root).
+  // Exception: force_zero=true means quota was explicitly removed (set to unlimited).
+  if (quota_bytes > 0 || force_zero) {
+    it->second.quota_bytes = quota_bytes;
+  }
+  it->second.used_bytes = used_bytes;
+  it->second.last_activity = std::chrono::steady_clock::now();
+
+  dout(20) << __func__ << " subvol " << subvol_id
+           << " quota=" << it->second.quota_bytes
+           << " used=" << it->second.used_bytes
+           << " (input: quota=" << quota_bytes << ", used=" << used_bytes << ")" << dendl;
+}
+
+void MetricsHandler::sample_cpu_usage() {
+  uint64_t current_ticks = 0;
+  ceph::mds::proc_stat_error err;
+
+  if (clk_tck <= 0) {
+    rank_telemetry.metrics.cpu_usage_percent = 0;
+    if (rank_perf_counters) {
+      rank_perf_counters->set(l_mds_rank_perf_cpu_usage, 0);
+    }
+    return;
+  }
+
+  if (!ceph::mds::read_process_cpu_ticks(&current_ticks, &err)) {
+    rank_telemetry.metrics.cpu_usage_percent = 0;
+    if (rank_perf_counters) {
+      rank_perf_counters->set(l_mds_rank_perf_cpu_usage, 0);
+    }
+    constexpr const char* stat_path = PROCPREFIX "/proc/self/stat";
+    if (err == ceph::mds::proc_stat_error::not_resolvable) {
+      dout(5) << "input file '" << stat_path << "' not resolvable" << dendl;
+    } else if (err == ceph::mds::proc_stat_error::not_found) {
+      dout(5) << "input file '" << stat_path << "' not found" << dendl;
+    }
+    return;
+  }
+
+  auto now = std::chrono::steady_clock::now();
+  if (!rank_telemetry.cpu_sample_initialized) {
+    rank_telemetry.last_cpu_total_ticks = current_ticks;
+    rank_telemetry.last_cpu_sample_time = now;
+    rank_telemetry.cpu_sample_initialized = true;
+    rank_telemetry.metrics.cpu_usage_percent = 0;
+    if (rank_perf_counters) {
+      rank_perf_counters->set(l_mds_rank_perf_cpu_usage, 0);
+    }
+    return;
+  }
+
+  if (current_ticks < rank_telemetry.last_cpu_total_ticks) {
+    rank_telemetry.last_cpu_total_ticks = current_ticks;
+    rank_telemetry.last_cpu_sample_time = now;
+    rank_telemetry.metrics.cpu_usage_percent = 0;
+    if (rank_perf_counters) {
+      rank_perf_counters->set(l_mds_rank_perf_cpu_usage, 0);
+    }
+    return;
+  }
+
+  double elapsed = std::chrono::duration<double>(now - rank_telemetry.last_cpu_sample_time).count();
+  if (elapsed <= 0.0) {
+    rank_telemetry.metrics.cpu_usage_percent = 0;
+    if (rank_perf_counters) {
+      rank_perf_counters->set(l_mds_rank_perf_cpu_usage, 0);
+    }
+    return;
+  }
+
+  uint64_t delta_ticks = current_ticks - rank_telemetry.last_cpu_total_ticks;
+  rank_telemetry.last_cpu_total_ticks = current_ticks;
+  rank_telemetry.last_cpu_sample_time = now;
+
+  double cpu_seconds = static_cast<double>(delta_ticks) / static_cast<double>(clk_tck);
+  double cores_used = cpu_seconds / elapsed;
+  double usage_percent = cores_used * 100.0;
+  if (usage_percent < 0.0) {
+    usage_percent = 0.0;
+  }
+
+  uint64_t stored = static_cast<uint64_t>(std::llround(usage_percent));
+  if (rank_perf_counters) {
+    rank_perf_counters->set(l_mds_rank_perf_cpu_usage, stored);
+  }
+  rank_telemetry.metrics.cpu_usage_percent = stored;
+}
+
+void MetricsHandler::sample_open_requests() {
+  uint64_t open = 0;
+  if (mds->op_tracker.is_tracking()) {
+    open = mds->op_tracker.get_num_ops_in_flight();
+  }
+  rank_telemetry.metrics.open_requests = open;
+  if (rank_perf_counters) {
+    rank_perf_counters->set(l_mds_rank_perf_open_requests, open);
+  }
 }
