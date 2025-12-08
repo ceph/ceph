@@ -6,18 +6,14 @@ set -ex
 
 function get_jobs() {
     local jobs=$(nproc)
-    if [ $jobs -ge 8 ] ; then
-        echo 8
-    else
-        echo $jobs
-    fi
+    [ $jobs -gt 8 ] && jobs=8
+    echo $jobs
 }
 
 [ -z "$BUILD_DIR" ] && BUILD_DIR=build
 
 function build() {
     local encode_dump_path=$1
-    shift
 
     ./do_cmake.sh \
         -DWITH_MGR_DASHBOARD_FRONTEND=OFF \
@@ -54,9 +50,7 @@ function run() {
 
 function import_corpus() {
     local encode_dump_path=$1
-    shift
-    local version=$1
-    shift
+    local version=$2
 
     # import the corpus
     ../src/test/encoding/import.sh \
@@ -77,18 +71,18 @@ function verify() {
 
 function commit_and_push() {
     local version=$1
-    shift
 
     pushd ../ceph-object-corpus
     git checkout -b wip-${version}
     git add archive/${version}
     git commit --signoff --message=${version}
-    git remote add cc git@github.com:ceph/ceph-object-corpus.git
+    git remote get-url cc &>/dev/null || git remote add cc git@github.com:ceph/ceph-object-corpus.git
     git push cc wip-${version}
     popd
 }
 
 encode_dump_path=$(mktemp -d)
+trap "rm -rf '$encode_dump_path'" EXIT
 build $encode_dump_path
 echo "generating corpus objects.."
 run
@@ -99,4 +93,4 @@ echo "verifying imported corpus.."
 verify
 echo "all good, pushing to remote repo.."
 commit_and_push ${version}
-rm -rf encode_dump_path
+
