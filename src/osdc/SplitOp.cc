@@ -710,7 +710,9 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
       st.flags |= CEPH_OSD_FLAG_BALANCE_READS;
     }
     st.osd = st.acting[(int)shard];
-    st.actual_pgid.reset_shard(shard);
+    if (pi->is_erasure()) {
+      st.actual_pgid.reset_shard(shard);
+    }
 
     objecter._op_submit_with_timeout(sub_op, sul, ptid);
     debug_op_summary("sent_op", sub_op, cct);
