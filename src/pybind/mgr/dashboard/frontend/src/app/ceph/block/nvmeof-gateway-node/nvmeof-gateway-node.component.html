@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <div>
   <cd-table
     #table
@@ -33,12 +34,36 @@
 >
   <span class="cds-ml-2">{{ value }}</span>
 </ng-template>
+=======
+
+<cd-table
+  #table
+  [data]="hosts"
+  [columns]="columns"
+  columnMode="flex"
+  (fetchData)="getHosts($event)"
+  selectionType="multiClick"
+  [searchableObjects]="true"
+  [serverSide]="false"
+  [maxLimit]="25"
+  (updateSelection)="updateSelection($event)"
+  emptyStateTitle="No nodes available"
+  i18n-emptyStateTitle
+  emptyStateMessage="Add your first gateway node to start using NVMe over Fabrics. Nodes provide the resources required to expose NVMe/TCP block storage."
+  i18n-emptyStateMessage
+>
+</cd-table>
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
 
 <ng-template
   #addrTpl
   let-value="data.value"
 >
   <span>{{ value || '-' }}</span>
+<<<<<<< HEAD
+=======
+
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
 </ng-template>
 
 <ng-template
@@ -46,6 +71,7 @@
   let-value="data.value"
   let-row="data.row"
 >
+<<<<<<< HEAD
   @if (value) {
     <div
       [cdsStack]="'horizontal'"
@@ -76,4 +102,27 @@
   } @else {
     <span>-</span>
   }
+=======
+  <div
+    [cdsStack]="'horizontal'"
+    gap="4"
+  >
+  @if (value === HostStatus.AVAILABLE) {
+    <cd-icon type="success"></cd-icon>
+  }
+
+  <span class="cds-ml-3">{{ value | titlecase }}</span>
+  </div>
+
+</ng-template>
+
+<ng-template #labelsTpl
+             let-value="data.value">
+@if (value && value.length > 0) {
+  <cds-tag *ngFor="let label of value"
+           class="tag tag-dark">{{ label }}</cds-tag>
+} @else {
+  <span>-</span>
+}
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
 </ng-template>

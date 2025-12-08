@@ -1,13 +1,17 @@
 import {
   Component,
   EventEmitter,
+<<<<<<< HEAD
   Input,
+=======
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
   OnDestroy,
   OnInit,
   Output,
   TemplateRef,
   ViewChild
 } from '@angular/core';
+<<<<<<< HEAD
 import { ActivatedRoute } from '@angular/router';
 import { Observable, Subject, Subscription, of } from 'rxjs';
 import { catchError, finalize, tap } from 'rxjs/operators';
@@ -18,6 +22,16 @@ import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
+=======
+import { forkJoin, Subject } from 'rxjs';
+import { map, mergeMap, takeUntil } from 'rxjs/operators';
+
+import { HostService } from '~/app/shared/api/host.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { HostStatus } from '~/app/shared/enum/host-status.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -28,6 +42,7 @@ import { Permission } from '~/app/shared/models/permissions';
 import { Host } from '~/app/shared/models/host.interface';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+<<<<<<< HEAD
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
@@ -38,6 +53,11 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+=======
+import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+
+import _ from 'lodash';
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
 
 @Component({
   selector: 'cd-nvmeof-gateway-node',
@@ -47,6 +67,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 })
 export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   @ViewChild(TableComponent, { static: true })
+<<<<<<< HEAD
   table!: TableComponent;
 
   @ViewChild('hostNameTpl', { static: true })
@@ -60,21 +81,44 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
 
   @ViewChild('labelsTpl', { static: true })
   labelsTpl!: TemplateRef<any>;
+=======
+  table: TableComponent;
+
+  @ViewChild('hostNameTpl', { static: true })
+  hostNameTpl: TemplateRef<any>;
+
+  @ViewChild('statusTpl', { static: true })
+  statusTpl: TemplateRef<any>;
+
+  @ViewChild('addrTpl', { static: true })
+  addrTpl: TemplateRef<any>;
+
+  @ViewChild('labelsTpl', { static: true })
+  labelsTpl: TemplateRef<any>;
+
+  @ViewChild('orchTmpl', { static: true })
+  orchTmpl: TemplateRef<any>;
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
 
   @Output() selectionChange = new EventEmitter<CdTableSelection>();
   @Output() hostsLoaded = new EventEmitter<number>();
 
+<<<<<<< HEAD
   @Input() groupName: string | undefined;
   @Input() mode: 'selector' | 'details' = NvmeofGatewayNodeMode.SELECTOR;
 
   usedHostnames: Set<string> = new Set();
   serviceSpec: CephServiceSpec | undefined;
   hasAvailableHosts = false;
+=======
+  usedHostnames: Set<string> = new Set();
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
 
   permission: Permission;
   columns: CdTableColumn[] = [];
   hosts: Host[] = [];
   isLoadingHosts = false;
+<<<<<<< HEAD
   tableActions: CdTableAction[] = [];
   selectionType: 'single' | 'multiClick' | 'none' = 'single';
 
@@ -95,11 +139,28 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private taskWrapper: TaskWrapperService,
     private notificationService: NotificationService
+=======
+  tableActions: CdTableAction[];
+  selection = new CdTableSelection();
+  icons = Icons;
+  HostStatus = HostStatus;
+  private tableContext: CdTableFetchDataContext = null;
+  count = 5;
+  orchStatus: OrchestratorStatus;
+  private destroy$ = new Subject<void>();
+
+  constructor(
+    private authStorageService: AuthStorageService,
+    private hostService: HostService,
+    private orchService: OrchestratorService,
+    private nvmeofService: NvmeofService
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
 
   ngOnInit(): void {
+<<<<<<< HEAD
     const routeData = this.route.snapshot.data;
     if (routeData?.['mode']) {
       this.mode = routeData['mode'];
@@ -114,6 +175,8 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
       this.setTableActions();
     }
 
+=======
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
     this.columns = [
       {
         name: $localize`Hostname`,
@@ -134,7 +197,11 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
         cellTemplate: this.statusTpl
       },
       {
+<<<<<<< HEAD
         name: $localize`Labels (tags)`,
+=======
+        name: $localize`Labels`,
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
         prop: 'labels',
         flexGrow: 1,
         cellTemplate: this.labelsTpl
@@ -142,6 +209,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     ];
   }
 
+<<<<<<< HEAD
   private setTableActions() {
     this.tableActions = [
       {
@@ -222,6 +290,11 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     if (this.sub) {
       this.sub.unsubscribe();
     }
+=======
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
   }
 
   updateSelection(selection: CdTableSelection): void {
@@ -234,13 +307,23 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   }
 
   getHosts(context: CdTableFetchDataContext): void {
+<<<<<<< HEAD
     this.tableContext =
       context || this.tableContext || new CdTableFetchDataContext(() => undefined);
+=======
+    if (context !== null) {
+      this.tableContext = context;
+    }
+    if (this.tableContext == null) {
+      this.tableContext = new CdTableFetchDataContext(() => undefined);
+    }
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
     if (this.isLoadingHosts) {
       return;
     }
     this.isLoadingHosts = true;
 
+<<<<<<< HEAD
     if (this.sub) {
       this.sub.unsubscribe();
     }
@@ -328,4 +411,64 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     this.count = this.hosts.length;
     this.hostsLoaded.emit(this.count);
   }
+=======
+    forkJoin([this.buildUsedHostsObservable(), this.buildHostListObservable()])
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(
+        ([usedHostnames, hostList]: [Set<string>, Host[]]) =>
+          this.processHostResults(usedHostnames, hostList),
+        () => {
+          this.isLoadingHosts = false;
+          context.error();
+        }
+      );
+  }
+
+  private buildUsedHostsObservable() {
+    return this.nvmeofService.listGatewayGroups().pipe(
+      map((groups: CephServiceSpec[][]) => {
+        const usedHosts = new Set<string>();
+        const groupList = groups?.[0] ?? [];
+        groupList.forEach((group: CephServiceSpec) => {
+          const hosts = group.placement?.hosts || [];
+          hosts.forEach((hostname: string) => usedHosts.add(hostname));
+        });
+        return usedHosts;
+      })
+    );
+  }
+
+  private buildHostListObservable() {
+    return this.orchService.status().pipe(
+      mergeMap((orchStatus) => {
+        this.orchStatus = orchStatus;
+        const factsAvailable = this.hostService.checkHostsFactsAvailable(orchStatus);
+        return this.hostService.list(this.tableContext?.toParams(), factsAvailable.toString());
+      })
+    );
+  }
+
+  private processHostResults(usedHostnames: Set<string>, hostList: Host[]) {
+    this.usedHostnames = usedHostnames;
+    this.hosts = (hostList || [])
+      .map((host: Host) => ({
+        ...host,
+        status: host.status || HostStatus.AVAILABLE
+      }))
+      .filter((host: Host) => {
+        const isNotUsed = !this.usedHostnames.has(host.hostname);
+        const status = host.status || HostStatus.AVAILABLE;
+        const isAvailable = status === HostStatus.AVAILABLE || status === HostStatus.RUNNING;
+        return isNotUsed && isAvailable;
+      });
+
+    this.isLoadingHosts = false;
+    this.count = this.hosts.length;
+    this.hostsLoaded.emit(this.count);
+  }
+
+  checkHostsFactsAvailable(): boolean {
+    return this.hostService.checkHostsFactsAvailable(this.orchStatus);
+  }
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
 }

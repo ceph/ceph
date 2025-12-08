@@ -1,4 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+<<<<<<< HEAD
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
 import { BehaviorSubject, of, throwError } from 'rxjs';
@@ -6,23 +7,39 @@ import { BehaviorSubject, of, throwError } from 'rxjs';
 import { BrowserAnimationsModule, provideAnimations } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+=======
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { RouterTestingModule } from '@angular/router/testing';
+
+import { of, throwError } from 'rxjs';
+
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
 import { CephModule } from '~/app/ceph/ceph.module';
 import { CephSharedModule } from '~/app/ceph/shared/ceph-shared.module';
 import { CoreModule } from '~/app/core/core.module';
 import { HostService } from '~/app/shared/api/host.service';
+<<<<<<< HEAD
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+=======
+import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+<<<<<<< HEAD
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+=======
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { TagModule } from 'carbon-components-angular';
@@ -34,9 +51,12 @@ describe('NvmeofGatewayNodeComponent', () => {
   let hostService: HostService;
   let orchService: OrchestratorService;
   let nvmeofService: NvmeofService;
+<<<<<<< HEAD
   let cephServiceService: CephServiceService;
   let modalService: ModalCdsService;
   let taskWrapperService: TaskWrapperService;
+=======
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
 
   const fakeAuthStorageService = {
     getPermissions: () => {
@@ -85,8 +105,13 @@ describe('NvmeofGatewayNodeComponent', () => {
       hostname: 'gateway-node-3',
       addr: '192.168.1.12',
       status: '',
+<<<<<<< HEAD
       labels: [] as string[],
       services: [] as string[],
+=======
+      labels: [],
+      services: [],
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
       ceph_version: 'ceph version 18.0.0',
       sources: {
         ceph: true,
@@ -107,6 +132,7 @@ describe('NvmeofGatewayNodeComponent', () => {
       CoreModule,
       TagModule
     ],
+<<<<<<< HEAD
     providers: [
       provideAnimations(),
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
@@ -129,6 +155,9 @@ describe('NvmeofGatewayNodeComponent', () => {
       TaskWrapperService,
       NotificationService
     ]
+=======
+    providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }]
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
   });
 
   beforeEach(() => {
@@ -137,9 +166,12 @@ describe('NvmeofGatewayNodeComponent', () => {
     hostService = TestBed.inject(HostService);
     orchService = TestBed.inject(OrchestratorService);
     nvmeofService = TestBed.inject(NvmeofService);
+<<<<<<< HEAD
     cephServiceService = TestBed.inject(CephServiceService);
     modalService = TestBed.inject(ModalCdsService);
     taskWrapperService = TestBed.inject(TaskWrapperService);
+=======
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
   });
 
   it('should create', () => {
@@ -168,7 +200,11 @@ describe('NvmeofGatewayNodeComponent', () => {
   it('should initialize with default values', () => {
     expect(component.hosts).toEqual([]);
     expect(component.isLoadingHosts).toBe(false);
+<<<<<<< HEAD
     expect(component.count).toBe(0);
+=======
+    expect(component.count).toBe(5);
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
     expect(component.permission).toBeDefined();
   });
 
@@ -186,11 +222,24 @@ describe('NvmeofGatewayNodeComponent', () => {
     component.selection = new CdTableSelection();
     component.selection.selected = [mockGatewayNodes[0], mockGatewayNodes[1]];
 
+<<<<<<< HEAD
     const selectedHosts = component.getSelectedHostnames();
 
     expect(selectedHosts.length).toBe(2);
     expect(selectedHosts[0]).toEqual(mockGatewayNodes[0].hostname);
     expect(selectedHosts[1]).toEqual(mockGatewayNodes[1].hostname);
+=======
+    // ensure hosts list contains the selected hosts for lookup
+    component.hosts = [mockGatewayNodes[0], mockGatewayNodes[1]];
+
+    const selectedHosts = component
+      .getSelectedHostnames()
+      .map((hostname) => component.hosts.find((host) => host.hostname === hostname));
+
+    expect(selectedHosts.length).toBe(2);
+    expect(selectedHosts[0]).toEqual(mockGatewayNodes[0]);
+    expect(selectedHosts[1]).toEqual(mockGatewayNodes[1]);
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
   });
 
   it('should get selected hostnames', () => {
@@ -202,6 +251,7 @@ describe('NvmeofGatewayNodeComponent', () => {
     expect(selectedHostnames).toEqual(['gateway-node-1', 'gateway-node-2']);
   });
 
+<<<<<<< HEAD
   it('should load hosts with orchestrator available and facts feature enabled', fakeAsync(() => {
     spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(of([mockGatewayNodes[2]]));
     component.getHosts(new CdTableFetchDataContext(() => undefined));
@@ -231,11 +281,116 @@ describe('NvmeofGatewayNodeComponent', () => {
 
   it('should handle error when fetching hosts', fakeAsync(() => {
     spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(throwError(() => new Error('Error')));
+=======
+  it('should load hosts with orchestrator available and facts feature enabled', (done) => {
+    const hostListSpy = spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
+    const mockOrcStatus: any = {
+      available: true,
+      features: new Map([['get_facts', { available: true }]])
+    };
+
+    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(of([[]]));
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+    fixture.detectChanges();
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+
+    setTimeout(() => {
+      expect(hostListSpy).toHaveBeenCalled();
+      // Only hosts with status 'available', '' or 'running' are included (excluding 'maintenance')
+      expect(component.hosts.length).toBe(2);
+      expect(component.isLoadingHosts).toBe(false);
+      expect(component.hosts[0]['hostname']).toBe('gateway-node-1');
+      expect(component.hosts[0]['status']).toBe(HostStatus.AVAILABLE);
+      done();
+    }, 100);
+  });
+
+  it('should normalize empty status to "available"', (done) => {
+    spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
+    const mockOrcStatus: any = {
+      available: true,
+      features: new Map()
+    };
+
+    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(of([[]]));
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+    fixture.detectChanges();
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+
+    setTimeout(() => {
+      // Host at index 1 in filtered list (gateway-node-3 has empty status which becomes 'available')
+      const nodeWithEmptyStatus = component.hosts.find((h) => h.hostname === 'gateway-node-3');
+      expect(nodeWithEmptyStatus?.['status']).toBe(HostStatus.AVAILABLE);
+      done();
+    }, 100);
+  });
+
+  it('should set count to hosts length', (done) => {
+    spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
+    const mockOrcStatus: any = {
+      available: true,
+      features: new Map()
+    };
+
+    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(of([[]]));
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+    fixture.detectChanges();
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+
+    setTimeout(() => {
+      // Count should equal the filtered hosts length
+      expect(component.count).toBe(component.hosts.length);
+      done();
+    }, 100);
+  });
+
+  it('should set count to 0 when no hosts are returned', (done) => {
+    spyOn(hostService, 'list').and.returnValue(of([]));
+    const mockOrcStatus: any = {
+      available: true,
+      features: new Map()
+    };
+
+    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(of([[]]));
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+    fixture.detectChanges();
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+
+    setTimeout(() => {
+      expect(component.count).toBe(0);
+      expect(component.hosts.length).toBe(0);
+      done();
+    }, 100);
+  });
+
+  it('should handle error when fetching hosts', (done) => {
+    const errorMsg = 'Failed to fetch hosts';
+    spyOn(hostService, 'list').and.returnValue(throwError(() => new Error(errorMsg)));
+    const mockOrcStatus: any = {
+      available: true,
+      features: new Map()
+    };
+
+    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(of([[]]));
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+    fixture.detectChanges();
+
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
     const context = new CdTableFetchDataContext(() => undefined);
     spyOn(context, 'error');
 
     component.getHosts(context);
 
+<<<<<<< HEAD
     tick(100);
     expect(component.isLoadingHosts).toBe(false);
     expect(context.error).toHaveBeenCalled();
@@ -267,6 +422,82 @@ describe('NvmeofGatewayNodeComponent', () => {
   }));
 
   it('should handle host list with various label types', fakeAsync(() => {
+=======
+    setTimeout(() => {
+      expect(component.isLoadingHosts).toBe(false);
+      expect(context.error).toHaveBeenCalled();
+      done();
+    }, 100);
+  });
+
+  it('should check hosts facts available when orchestrator features present', () => {
+    component.orchStatus = {
+      available: true,
+      features: new Map([['get_facts', { available: true }]])
+    } as any;
+
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+
+    const result = component.checkHostsFactsAvailable();
+
+    expect(result).toBe(true);
+  });
+
+  it('should return false when get_facts feature is not available', () => {
+    component.orchStatus = {
+      available: true,
+      features: new Map([['other_feature', { available: true }]])
+    } as any;
+
+    const result = component.checkHostsFactsAvailable();
+
+    expect(result).toBe(false);
+  });
+
+  it('should return false when orchestrator status features are empty', () => {
+    component.orchStatus = {
+      available: true,
+      features: new Map()
+    } as any;
+
+    const result = component.checkHostsFactsAvailable();
+
+    expect(result).toBe(false);
+  });
+
+  it('should return false when orchestrator status is undefined', () => {
+    component.orchStatus = undefined;
+
+    const result = component.checkHostsFactsAvailable();
+
+    expect(result).toBe(false);
+  });
+
+  it('should not re-fetch if already loading', (done) => {
+    component.isLoadingHosts = true;
+    const hostListSpy = spyOn(hostService, 'list');
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+
+    setTimeout(() => {
+      expect(hostListSpy).not.toHaveBeenCalled();
+      done();
+    }, 100);
+  });
+
+  it('should unsubscribe on component destroy', () => {
+    const destroy$ = component['destroy$'];
+    spyOn(destroy$, 'next');
+    spyOn(destroy$, 'complete');
+
+    component.ngOnDestroy();
+
+    expect(destroy$.next).toHaveBeenCalled();
+    expect(destroy$.complete).toHaveBeenCalled();
+  });
+
+  it('should handle host list with various label types', (done) => {
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
     const hostsWithLabels = [
       {
         ...mockGatewayNodes[0],
@@ -285,6 +516,7 @@ describe('NvmeofGatewayNodeComponent', () => {
     };
 
     spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
+<<<<<<< HEAD
     spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(
       of([
         [
@@ -297,16 +529,31 @@ describe('NvmeofGatewayNodeComponent', () => {
     );
     spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
     component.groupName = 'group1';
+=======
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(of([[]]));
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
     fixture.detectChanges();
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
+<<<<<<< HEAD
     tick(100);
     expect(component.hosts[0]['labels'].length).toBe(3);
     expect(component.hosts[1]['labels'].length).toBe(0);
   }));
 
   it('should handle hosts with multiple services', fakeAsync(() => {
+=======
+    setTimeout(() => {
+      expect(component.hosts[0]['labels'].length).toBe(3);
+      expect(component.hosts[1]['labels'].length).toBe(0);
+      done();
+    }, 100);
+  });
+
+  it('should handle hosts with multiple services', (done) => {
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
     const hostsWithServices = [
       {
         ...mockGatewayNodes[0],
@@ -324,6 +571,7 @@ describe('NvmeofGatewayNodeComponent', () => {
     };
 
     spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
+<<<<<<< HEAD
     spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(
       of([
         [
@@ -336,15 +584,29 @@ describe('NvmeofGatewayNodeComponent', () => {
     );
     spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
     component.groupName = 'group1';
+=======
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(of([[]]));
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
     fixture.detectChanges();
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
+<<<<<<< HEAD
     tick(100);
     expect(component.hosts[0]['services'].length).toBe(2);
   }));
 
   it('should initialize table context on first getHosts call', fakeAsync(() => {
+=======
+    setTimeout(() => {
+      expect(component.hosts[0]['services'].length).toBe(2);
+      done();
+    }, 100);
+  });
+
+  it('should initialize table context on first getHosts call', (done) => {
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
     spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
     const mockOrcStatus: any = {
       available: true,
@@ -352,6 +614,7 @@ describe('NvmeofGatewayNodeComponent', () => {
     };
 
     spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
+<<<<<<< HEAD
     spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(
       of([
         [
@@ -375,6 +638,23 @@ describe('NvmeofGatewayNodeComponent', () => {
   }));
 
   it('should reuse table context if already set', fakeAsync(() => {
+=======
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(of([[]]));
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+    fixture.detectChanges();
+
+    expect((component as any).tableContext).toBeNull();
+
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+
+    setTimeout(() => {
+      expect((component as any).tableContext).not.toBeNull();
+      done();
+    }, 100);
+  });
+
+  it('should reuse table context if already set', (done) => {
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
     const context = new CdTableFetchDataContext(() => undefined);
     spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
     const mockOrcStatus: any = {
@@ -389,6 +669,7 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     component.getHosts(context);
 
+<<<<<<< HEAD
     tick(100);
     const storedContext = (component as any).tableContext;
     expect(storedContext).toBe(context);
@@ -485,5 +766,12 @@ describe('NvmeofGatewayNodeComponent', () => {
         hosts: ['host2']
       }
     });
+=======
+    setTimeout(() => {
+      const storedContext = (component as any).tableContext;
+      expect(storedContext).toBe(context);
+      done();
+    }, 100);
+>>>>>>> 6a0b00cb976 (mgr/dashboard: NVMeof-Create Gatway group Form)
   });
 });
