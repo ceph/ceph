@@ -1,0 +1,93 @@
+
+
+* right now, functions that take a commit parameter generally only commit on success; should we also commit on failure? 
+
+* I started to implement vivification
+
+
+* TLI improvements:
+    - if you pass a txn, use that txn
+    - if passed dbh, create txn
+
+    - default commit mode (reads: no; mutations: yes)
+
+* OOP helper (or lambda helper) to bind dbh, we don't need that param, either.
+
+* Some "missing" things (might make a great intro project):
+    - fdb_get_max_api_version()
+
+Because this file is VERY hard to find:
+    fdbclient/vexillographer/fdb.options
+...the relationship between client library, bindings, and documentation in this project is
+logical but neither clear and nor "obvious" from the documentation. Stuff gets generated from
+this, and the documentation references generated files that may or may not exist at the time
+you read the documentation (for example). 
+
+-- some notes WRT streaming mode, etc.:
+
+/* Equivalence with FDBStreamingMode:
+ *
+FDB_STREAMING_MODE_ITERATOR
+
+The caller is implementing an iterator (most likely in a binding to a higher level language). The amount of data returned depends on the value of the iteration parameter to fdb_transaction_get_range().
+
+FDB_STREAMING_MODE_SMALL
+
+Data is returned in small batches (not much more expensive than reading individual key-value pairs).
+
+FDB_STREAMING_MODE_MEDIUM
+
+Data is returned in batches between _SMALL and _LARGE.
+
+FDB_STREAMING_MODE_LARGE
+
+Data is returned in batches large enough to be, in a high-concurrency environment, nearly as efficient as possible. If the caller does not need the entire range, some disk and network bandwidth may be wasted. The batch size may be still be too small to allow a single client to get high throughput from the database.
+
+FDB_STREAMING_MODE_SERIAL
+
+Data is returned in batches large enough that an individual client can get reasonable read bandwidth from the database. If the caller does not need the entire range, considerable disk and network bandwidth may be wasted.
+
+FDB_STREAMING_MODE_WANT_ALL
+
+The caller intends to consume the entire range and would like it all transferred as early as possible.
+
+FDB_STREAMING_MODE_EXACT
+
+The caller has passed a specific row limit and wants that many rows delivered in a single batch.
+
+enum struct streaming_mode_t : int {
+ iterator	= FDB_STREAMING_MODE_ITERATOR,
+ small		= FDB_STREAMING_MODE_SMALL,
+ medium		= FDB_STREAMING_MODE_MEDIUM,
+ large		= FDB_STREAMING_MODE_LARGE,
+ serial		= FDB_STREAMING_MODE_SERIAL,
+ all		= FDB_STREAMING_MODE_WANT_ALL,
+3F exact		= FDB_STREAMING_MODE_EXACT
+};
+
+...these are not defined in terms of int or enum as far as I can tell, needs more exploring.
+*/
+
+/* JFW: key selectors are another area of FDB that I need to give more thought to before exposing to the public interface--
+it may be that some operator overloading is natural and pleasant, or that it's got some critical issue. This doesn't feel
+bad, for instance:
+  get(txn, begin_key < end_key);
+  get(txn, begin_key <= end_key);
+
+FDBFuture *fdb_transaction_get_key(
+  FDBTransaction *transaction, 
+  uint8_t const *key_name, int key_name_length, 
+  fdb_bool_t or_equal, 
+  int offset, 
+  fdb_bool_t snapshot)
+
+...for now, we're going to offer just one query and an overload to handle the interval (as there currently are
+no standard intervals that I'm aware of).
+
+Details (looks simple, but like many things in here gets complex quickly):
+https://apple.github.io/foundationdb/developer-guide.html#key-selectors
+
+Ok, some forward motion- instead of thinking of this as an interval, I'm getting milage from the selector idea 
+in the library, and especially std::string::compare();
+
+*/
