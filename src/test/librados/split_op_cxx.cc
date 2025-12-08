@@ -26,6 +26,34 @@ void RadosTestPPBase::ensure_log_committed(const char* oid, uint64_t offset, uin
   ASSERT_EQ(0, rc);
 }
 
+TEST_P(LibRadosSplitOpPP, BigRead) {
+  bufferlist bl;
+  bl.append_zero(512*1024);
+  ObjectWriteOperation write1, write2;
+  write1.write(0, bl);
+  uint32_t hash_position;
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
+  ASSERT_EQ(0, ioctx.get_object_pg_hash_position2("foo", &hash_position));
+
+  std::string other_object = "other";
+  while (true) {
+    uint32_t hash_position2;
+    ASSERT_EQ(0, ioctx.get_object_pg_hash_position2(other_object, &hash_position2));
+    if (hash_position == hash_position2) {
+      break;
+    }
+    other_object += ".";
+  }
+  // The second write flushes the commit of the first.
+  write2.write(0, bl);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, other_object, &write2));
+
+
+  ObjectReadOperation read;
+  read.read(0, bl.length(), NULL, NULL);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, 3, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
+}
+
 TEST_P(LibRadosSplitOpECPP, ReadWithVersion) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
@@ -192,4 +220,5 @@ TEST_P(LibRadosSplitOpECPP, Stat) {
   ASSERT_NE(0, time.tv_sec);
 }
 
+INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosSplitOpPP);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosSplitOpECPP);
