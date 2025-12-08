@@ -6,7 +6,7 @@ import logging
 import math
 from datetime import datetime, timezone
 from functools import partial
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import cherrypy
 import rbd
@@ -49,6 +49,22 @@ RBD_GROUP_GET_SCHEMA = [{
     "group": (str, 'group name'),
     "images": ([str], '')
 }]
+
+RBD_GROUP_SNAPSHOT_LIST_SCHEMA = [{
+    "id": (str, 'snapshot id'),
+    "name": (str, 'snapshot name'),
+    "state": (int, 'snapshot state'),
+    "namespace_type": (int, 'namespace type')
+}]
+
+RBD_GROUP_SNAPSHOT_GET_SCHEMA = {
+    "id": (str, 'snapshot id'),
+    "name": (str, 'snapshot name'),
+    "state": (int, 'snapshot state'),
+    "namespace_type": (int, 'namespace type'),
+    "image_snap_name": (str, 'image snapshot name'),
+    "image_snaps": ([dict], 'image snapshots')
+}
 
 
 # pylint: disable=not-callable
@@ -593,3 +609,87 @@ class RbdGroup(RESTController):
             RbdService.validate_namespace(ioctx, namespace)
             ioctx.set_namespace(namespace)
             return group.remove_image(ioctx, image_name)
+
+
+@APIRouter('/block/pool/{pool_name}/group/{group_name}/snap', Scope.RBD_IMAGE)
+@APIDoc("RBD Group Snapshot Management API", "RbdGroupSnapshot")
+class RbdGroupSnapshot(RESTController):
+
+    RESOURCE_ID = "snapshot_name"
+
+    def __init__(self):
+        super().__init__()
+        self.rbd_inst = rbd.RBD()
+
+    @handle_rbd_error()
+    @EndpointDoc("List group snapshots",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                 },
+                 responses={200: RBD_GROUP_SNAPSHOT_LIST_SCHEMA})
+    def list(self, pool_name: str, group_name: str, namespace: Optional[str] = None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            group = rbd.Group(ioctx, group_name)
+            result = []
+            for snap in group.list_snaps():
+                result.append({
+                    'id': snap['id'],
+                    'name': snap['name'],
+                    'state': snap['state'],
+                    'namespace_type': snap['namespace_type']
+                })
+            return result
+
+    @handle_rbd_error()
+    @EndpointDoc("Get group snapshot information",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'snapshot_name': (str, 'Name of the snapshot'),
+                 },
+                 responses={200: RBD_GROUP_SNAPSHOT_GET_SCHEMA})
+    def get(self, pool_name: str, group_name: str, snapshot_name: str,
+            namespace: Optional[str] = None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            group = rbd.Group(ioctx, group_name)
+            return group.get_snap_info(snapshot_name)
+
+    @RbdTask('group_snap/create',
+             ['{pool_name}', '{group_name}', '{snapshot_name}'], 2.0)
+    @EndpointDoc("Create a group snapshot",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'snapshot_name': (str, 'Name of the snapshot'),
+                     'flags': (int, 'Snapshot creation flags'),
+                 },
+                 responses={200: None})
+    def create(self, pool_name: str, group_name: str, snapshot_name: str,
+               namespace: Optional[str] = None, flags: int = 0):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            group = rbd.Group(ioctx, group_name)
+            return group.create_snap(snapshot_name, flags)
+
+    @RbdTask('group_snap/delete',
+             ['{pool_name}', '{group_name}', '{snapshot_name}'], 2.0)
+    @EndpointDoc("Delete a group snapshot",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'snapshot_name': (str, 'Name of the snapshot'),
+                 },
+                 responses={200: None})
+    def delete(self, pool_name: str, group_name: str, snapshot_name: str,
+               namespace: Optional[str] = None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            group = rbd.Group(ioctx, group_name)
+            return group.remove_snap(snapshot_name)
