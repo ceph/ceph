@@ -299,7 +299,7 @@ public:
     // must be user-oriented required by maybe_init
     assert(is_user_transaction(t.get_src()));
 
-    pin = co_await pin.refresh();
+    co_await pin.co_refresh();
 
     if (pin.is_indirect()) {
       pin = co_await lba_manager->complete_indirect_lba_mapping(
@@ -640,7 +640,7 @@ public:
     SUBDEBUGT(seastore_tm,
       "src_base={}, dst_base={}, {}~{}, mapping={}, pos={}, updateref={}",
       t, src_base, dst_base, offset, len, mapping, pos, updateref);
-    pos = co_await pos.refresh();
+    co_await pos.co_refresh();
     mapping = co_await mapping.refresh();
     auto left = len;
     bool shared_direct = false;
@@ -1279,7 +1279,7 @@ private:
     if (pin.is_indirect()) {
       SUBDEBUGT(seastore_tm, "{} into {} remaps ...",
         t, pin, remaps.size());
-      pin = co_await pin.refresh();
+      co_await pin.co_refresh();
       pin = co_await lba_manager->complete_indirect_lba_mapping(t, pin);
     } else {
       laddr_t original_laddr = pin.get_key();
@@ -1290,7 +1290,7 @@ private:
       ceph_assert(!pin.is_clone());
 
       TCachedExtentRef<T> extent;
-      pin = co_await pin.refresh();
+      co_await pin.co_refresh();
       if (full_extent_integrity_check) {
         SUBTRACET(seastore_tm, "{} reading pin...", t, pin);
         // read the entire extent from disk (See: pin_to_extent)
