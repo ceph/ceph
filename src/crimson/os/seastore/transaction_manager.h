@@ -929,7 +929,10 @@ public:
     LBAMapping mapping,
     std::array<TransactionManager::remap_entry_t, N> remaps)
   {
+    LOG_PREFIX(TransactionManager::remap_mappings);
     if (!mapping.is_indirect() && mapping.is_zero_reserved()) {
+      SUBDEBUGT(seastore_tm, "zero reserved, mapping {}, {} remaps",
+		t, mapping, remaps);
       std::vector<LBAMapping> ret;
       auto orig_laddr = mapping.get_key();
       auto pos = co_await remove(
@@ -954,6 +957,10 @@ public:
       }
       co_return ret;
     } else {
+      SUBDEBUGT(
+	seastore_tm,
+	"not zero reserved, calling remap_pin, mapping {}, {} remaps",
+	t, mapping, remaps);
       co_return co_await remap_pin<T, N>(
 	t, std::move(mapping), std::move(remaps));
     }
