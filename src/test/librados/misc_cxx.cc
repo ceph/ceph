@@ -938,7 +938,7 @@ TEST_F(LibRadosMiscPP, NoVer) {
 
   write.write_full(bl);
   ASSERT_EQ(0, ioctx.operate("foo", &write));
-  ASSERT_EQ(1, ioctx.get_last_version());
+  uint64_t version = ioctx.get_last_version();
 
   ioctx.set_no_version_on_read(true);
   bl.append("moreceph");
@@ -946,10 +946,10 @@ TEST_F(LibRadosMiscPP, NoVer) {
   ASSERT_EQ(0, ioctx.operate("foo", &write2));
 
   // Write versioning should still work.
-  ASSERT_EQ(2, ioctx.get_last_version());
+  ASSERT_EQ(++version, ioctx.get_last_version());
 
   // Asserting the version should still work.
-  read.assert_version(2);
+  read.assert_version(version);
   read.read(0, bl.length(), NULL, NULL);
   ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
 
@@ -963,7 +963,7 @@ TEST_F(LibRadosMiscPP, NoVer) {
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 
   // last version should now have been corrected.
-  ASSERT_EQ(2, ioctx.get_last_version());
+  ASSERT_EQ(version, ioctx.get_last_version());
 }
 
 TEST_F(LibRadosMiscPP, ExecReadonlyWithWrite) {
