@@ -1701,7 +1701,7 @@ ObjectDataHandler::do_clone(
   LBAMapping first_mapping,
   bool updateref)
 {
-  LOG_PREFIX("ObjectDataHandler::do_clone");
+  LOG_PREFIX(ObjectDataHandler::do_clone);
   assert(d_object_data.is_null());
   auto old_base = object_data.get_reserved_data_base();
   auto old_len = object_data.get_reserved_data_len();
