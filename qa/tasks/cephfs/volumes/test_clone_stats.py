@@ -332,7 +332,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         c = 'ss1clone1'
 
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
@@ -369,7 +369,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         c = 'ss1clone1'
 
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 10, 1024)
+        size = self._do_subvolume_io(sv, None, None, 100, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
@@ -417,7 +417,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
 
         self.run_ceph_cmd(f'fs subvolumegroup create {v} {group}')
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} {group} --mode=777')
-        size = self._do_subvolume_io(sv, group, None, 10, 1024)
+        size = self._do_subvolume_io(sv, group, None, 100, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss} {group}')
         self.wait_till_rbytes_is_right(v, sv, size, group)
@@ -469,7 +469,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         self.config_set('mds', 'mds_snap_rstat', 'true')
 
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 10, 1024)
+        size = self._do_subvolume_io(sv, None, None, 100, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
@@ -513,7 +513,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         c = self._gen_subvol_clone_name(4)
 
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 10, 1024)
+        size = self._do_subvolume_io(sv, None, None, 100, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
@@ -563,7 +563,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
 
         self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
@@ -614,7 +614,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
 
         self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
@@ -673,7 +673,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
         sv_path = sv_path[1:]
 
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
 
@@ -716,7 +716,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
         sv_path = sv_path[1:]
 
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
 
@@ -763,7 +763,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
         sv_path = sv_path[1:]
 
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
 
@@ -814,7 +814,7 @@ class TestOngoingClonesCounter(CloneProgressReporterHelper):
         sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
         sv_path = sv_path[1:]
 
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
 
