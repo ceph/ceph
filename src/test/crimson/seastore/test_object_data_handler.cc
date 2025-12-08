@@ -976,6 +976,47 @@ TEST_P(object_data_handler_test_t, parallel_partial_read) {
   });
 }
 
+TEST_P(object_data_handler_test_t, basic_clone_write_read) {
+  run_async([this] {
+    {
+      auto t = create_mutate_transaction();
+      write(*t, 0, 4<<10, 'a');
+      submit_transaction(std::move(t));
+    }
+    std::vector<std::vector<std::pair<uint64_t, uint64_t>>> writes {
+      {{551263, 793594}},
+      {{568070, 468843}},
+      {{584877, 544092}},
+    };
+    {
+      auto t = create_mutate_transaction();
+      write(*t, 0, 4<<10, 'a');
+      submit_transaction(std::move(t));
+    }
+    unsigned next_snap = 0;
+    for (auto &snap_writes: writes) {
+      auto snap = next_snap++;
+      {
+	auto t = create_mutate_transaction();
+	clone(*t, snap);
+	submit_transaction(std::move(t));
+      }
+      for (auto &[off, len]: snap_writes) {
+	auto t = create_mutate_transaction();
+	write(*t, off, len, 'a' + snap);
+	submit_transaction(std::move(t));
+      }
+    }
+    {
+      auto t = create_mutate_transaction();
+      read(*t, 0, 4<<20);
+      for (unsigned i = 0; i < next_snap; ++i) {
+	read(*t, 0, 4<<20, i);
+      }
+    }
+  });
+}
+
 INSTANTIATE_TEST_SUITE_P(
   object_data_handler_test,
   object_data_handler_test_t,
