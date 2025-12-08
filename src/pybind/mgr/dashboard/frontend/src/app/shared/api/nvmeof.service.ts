@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 
 import _ from 'lodash';
 import { Observable, of as observableOf } from 'rxjs';
-import { catchError, mapTo } from 'rxjs/operators';
+import { catchError, map, mapTo } from 'rxjs/operators';
 import { CephServiceSpec } from '../models/service.interface';
 
 export const DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM = 512;
@@ -196,6 +196,22 @@ export class NvmeofService {
       {
         observe: 'response'
       }
+    );
+  }
+
+  // Check if gateway group exists
+  exists(groupName: string): Observable<boolean> {
+    return this.listGatewayGroups().pipe(
+      map((groups: CephServiceSpec[][]) => {
+        const groupsList = groups?.[0] ?? [];
+        return groupsList.some((group: CephServiceSpec) => group?.spec?.group === groupName);
+      }),
+      catchError((error: any) => {
+        if (_.isFunction(error?.preventDefault)) {
+          error.preventDefault();
+        }
+        return observableOf(false);
+      })
     );
   }
 }

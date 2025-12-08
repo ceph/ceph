@@ -43,7 +43,8 @@ export enum URLVerbs {
 
   /* Multi-cluster */
   CONNECT = 'connect',
-  RECONNECT = 'reconnect'
+  RECONNECT = 'reconnect',
+  GATEWAY_GROUP = 'Gateway group'
 }
 
 export enum ActionLabels {
