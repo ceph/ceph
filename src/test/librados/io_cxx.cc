@@ -214,7 +214,7 @@ TEST_P(LibRadosIoPP, SparseReadOpPP) {
     int rval = -1;
     ObjectReadOperation op;
     op.sparse_read(0, sizeof(buf), &extents, &read_bl, &rval, sizeof(buf) / 2, 1);
-    ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
     ASSERT_EQ(0, rval);
     assert_eq_sparse(bl, extents, read_bl);
   }
