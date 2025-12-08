@@ -1,0 +1,129 @@
+<form
+  #formDir="ngForm"
+  [formGroup]="groupForm"
+  novalidate
+>
+  <div cdsGrid
+       [useCssGrid]="true"
+       [narrow]="true"
+       [fullWidth]="true">
+    <div cdsCol
+         [columnNumbers]="{sm: 4, md: 8}">
+      <div cdsRow
+           class="form-heading form-item">
+      <h3>{{ action | titlecase }} {{ resource }}</h3>
+      <cd-help-text>
+        <span i18n>
+           A logical group of gateways that hosts will connect to.
+        </span>
+      </cd-help-text>
+      <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+      </div>
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-text-label
+            labelInputID="name"
+            i18n
+            i18n-helperText
+            helperText="A unique name to identify this gateway group."
+            cdRequiredField="Gateway group name"
+            [invalid]="groupName.isInvalid">
+            Gateway group name
+            <input
+              cdsText
+              cdValidate
+              type="text"
+              id="groupName"
+              #groupName="cdValidate"
+              autofocus
+              formControlName="groupName"
+              [invalid]="groupName.isInvalid"
+            />
+          </cds-text-label>
+          <span
+            class="invalid-feedback"
+            *ngIf="groupForm.showError('groupName', formDir, 'required')"
+            i18n>This field is required.</span>
+          <span
+            class="invalid-feedback"
+            *ngIf="groupForm.get('groupName')?.hasError('notUnique') && (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)"
+            i18n>Group name must be unique.</span>
+          <span
+            class="invalid-feedback"
+            *ngIf="groupForm.get('groupName')?.hasError('invalidChars') && (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)"
+            i18n>Special characters are not allowed.</span>
+
+        </div>
+      </div>
+      <!-- Pool -->
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-select
+            label="Block pool"
+            helperText="An RBD application-enabled pool in which the gateway configuration can be managed."
+            labelInputID="pool"
+            id="pool"
+            formControlName="pool"
+            cdRequiredField="Block pool"
+            [invalid]="groupForm.controls.pool.invalid && groupForm.controls.pool.dirty"
+            [invalidText]="poolError"
+            i18n-label
+            i18n-helperText
+          >
+            <option *ngIf="poolsLoading"
+                    [ngValue]="null"
+                    i18n>Loading...</option>
+            <option *ngIf="!poolsLoading && pools.length === 0"
+                    [ngValue]="null"
+                    i18n>-- No block pools available --</option>
+            <option *ngFor="let pool of pools"
+                    [value]="pool.pool_name">{{ pool.pool_name }}</option>
+          </cds-select>
+          <ng-template #poolError>
+            <span class="invalid-feedback"
+                  *ngIf="groupForm.showError('pool', formDir, 'required')"
+                  i18n>This field is required.</span>
+          </ng-template>
+        </div>
+      </div>
+
+      <!-- Target Nodes Selection -->
+      <div
+        cdsRow
+        class="form-item"
+      >
+      <div cdsCol>
+        <h1 class="cds--type-heading-02">Select target nodes</h1>
+      <cd-help-text>
+        <span i18n>
+          Gateway nodes to run NVMe-oF target pods/services
+        </span>
+      </cd-help-text>
+      </div>
+      <div
+        cdsCol
+        class="cds-pt-3 cds-pb-3"
+      >
+        <cd-nvmeof-gateway-node
+          (hostsLoaded)="onHostsLoaded($event)"
+        ></cd-nvmeof-gateway-node>
+      </div>
+      </div>
+
+      <div cdsRow>
+        <cd-form-button-panel
+          (submitActionEvent)="onSubmit()"
+          [form]="groupForm"
+          [submitText]="(action | titlecase) + ' ' + (resource)"
+          [disabled]="isCreateDisabled"
+          wrappingClass="text-right form-button"
+        >
+        </cd-form-button-panel>
+      </div>
+    </div>
+  </div>
+</form>
+
+
