@@ -263,7 +263,7 @@ int SplitOp::assemble_rc() {
     }
   }
 
-  if (rc < 0) {
+  if (rc < 0 || !is_erasure()) {
     return rc;
   }
 
