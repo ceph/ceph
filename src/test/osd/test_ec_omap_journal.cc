@@ -84,7 +84,7 @@ TEST(ecomapjournal, add_entry)
 
   // The journal should contain the added entry
   ASSERT_EQ(1u, journal.size(test_hoid));
-  ASSERT_TRUE(journal.begin(test_hoid)->version == entry1.version);
+  ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry1.version);
 }
 
 TEST(ecomapjournal, remove_entry)
@@ -103,8 +103,8 @@ TEST(ecomapjournal, remove_entry)
 
   // The journal should have 2 entries in it after removal
   ASSERT_EQ(2u, journal.size(test_hoid));
-  ASSERT_TRUE(journal.begin(test_hoid)->version == entry2.version);
-  ASSERT_TRUE((++journal.begin(test_hoid))->version == entry3.version);
+  ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry2.version);
+  ASSERT_TRUE((++journal.begin_entries(test_hoid))->version == entry3.version);
 }
 
 TEST(ecomapjournal, remove_entry_by_version)
@@ -123,8 +123,8 @@ TEST(ecomapjournal, remove_entry_by_version)
 
   // The journal should have 2 entries in it after removal
   ASSERT_EQ(2u, journal.size(test_hoid));
-  ASSERT_TRUE(journal.begin(test_hoid)->version == entry1.version);
-  ASSERT_TRUE((++journal.begin(test_hoid))->version == entry3.version);
+  ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry1.version);
+  ASSERT_TRUE((++journal.begin_entries(test_hoid))->version == entry3.version);
 }
 
 TEST(ecomapjournal, clear_one_journal)
@@ -174,7 +174,7 @@ TEST(ecomapjournal, remove_bad_entry)
 
   // The journal should still have 1 entry in it after failed removal
   ASSERT_EQ(1u, journal.size(test_hoid));
-  ASSERT_TRUE(journal.begin(test_hoid)->version == entry1.version);
+  ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry1.version);
 }
 
 TEST(ecomapjournal, remove_bad_entry_by_version)
@@ -192,5 +192,5 @@ TEST(ecomapjournal, remove_bad_entry_by_version)
 
   // The journal should still have 1 entry in it after failed removal
   ASSERT_EQ(1u, journal.size(test_hoid));
-  ASSERT_TRUE(journal.begin(test_hoid)->version == entry1.version);
+  ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry1.version);
 }

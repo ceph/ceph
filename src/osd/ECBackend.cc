@@ -1320,8 +1320,8 @@ int ECBackend::omap_iterate (
       if (journal_it->first == store_key) {
         found_store_key_in_journal = true;
       }
-      if (journal_it->second.has_value()) {
-        ObjectStore::omap_iter_ret_t r = f(journal_it->first, std::string_view(journal_it->second->c_str(), journal_it->second->length()));
+      if (journal_it->second.value.has_value()) {
+        ObjectStore::omap_iter_ret_t r = f(journal_it->first, std::string_view(journal_it->second.value->c_str(), journal_it->second.value->length()));
         if (r == ObjectStore::omap_iter_ret_t::STOP) {
           return r;
         }
@@ -1347,8 +1347,8 @@ int ECBackend::omap_iterate (
 
   ObjectStore::omap_iter_ret_t ret = ObjectStore::omap_iter_ret_t::NEXT;
   while (journal_it != update_map.end()) {
-    if (journal_it->second.has_value()) {
-      ret = f(journal_it->first, std::string_view(journal_it->second->c_str(), journal_it->second->length()));
+    if (journal_it->second.value.has_value()) {
+      ret = f(journal_it->first, std::string_view(journal_it->second.value->c_str(), journal_it->second.value->length()));
       if (ret == ObjectStore::omap_iter_ret_t::STOP) {
         break;
       }
@@ -1370,11 +1370,12 @@ int ECBackend::omap_get_values(
   
   set<string> keys_still_to_get;
   for (auto &key : keys) {
-    if (update_map.find(key) != update_map.end()) {
-      if (!update_map[key].has_value()) {
+    auto it = update_map.find(key);
+    if (it != update_map.end()) {
+      if (!it->second.value.has_value()) {
         continue;
       }
-      (*out)[key] = *(update_map[key]);
+      (*out)[key] = *(it->second.value);
     } else if (PrimaryLogPG::should_be_removed(removed_ranges, key)) {
       continue;
     } else {
@@ -1432,8 +1433,8 @@ int ECBackend::omap_get(
 
   // Apply updates in update_map
   for (const auto &[key, val_opt] : update_map) {
-    if (val_opt.has_value()) {
-      (*out)[key] = *val_opt;
+    if (val_opt.value.has_value()) {
+      (*out)[key] = *(val_opt.value);
     } else {
       out->erase(key);
     }
@@ -1458,7 +1459,7 @@ int ECBackend::omap_check_keys(
   for (const auto &key : keys) {
     auto it = update_map.find(key);
     if (it != update_map.end()) {
-      if (it->second.has_value()) {
+      if (it->second.value.has_value()) {
         out->insert(key);
       }
     } else if (should_be_removed(removed_ranges, key)) {

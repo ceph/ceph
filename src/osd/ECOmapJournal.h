@@ -36,9 +36,12 @@ class ECOmapValue {
 
 class RemovedRanges {
  public:
+  eversion_t version;
   std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> ranges;
 
-  RemovedRanges() = default;
+  RemovedRanges(eversion_t version) : version(version) {}
+  RemovedRanges(eversion_t version, std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> ranges) 
+    : version(version), ranges(std::move(ranges)) {}
 
   void add_range(const std::optional<std::string>& start, const std::optional<std::string>& end);
   void clear_omap();
@@ -57,38 +60,38 @@ class ECOmapHeader {
 };
 
 class ECOmapJournal {
+  using UpdateMapType = std::map<std::string, ECOmapValue>;
+  using RangeListType = std::list<std::pair<std::optional<std::string>, std::optional<std::string>>>;
+  using const_iterator = std::list<ECOmapJournalEntry>::const_iterator;
  private:
-  // Intact journal entries 
+  // Unprocessed journal entries 
   std::map<hobject_t, std::list<ECOmapJournalEntry>> entries;
 
-  // Split up journal entries
+  // Processed journal entries
   std::map<hobject_t, std::map<std::string, ECOmapValue>> key_map;
-  std::map<hobject_t, std::list<std::map<eversion_t, RemovedRanges>>> removed_ranges_map;
+  std::map<hobject_t, std::list<RemovedRanges>> removed_ranges_map;
   std::map<hobject_t, ECOmapHeader> header_map;
 
-  // Function to get specific object's entries
+  // Function to get specific object's unprocessed entries
   std::list<ECOmapJournalEntry>& get_entries(const hobject_t &hoid);
   std::list<ECOmapJournalEntry> snapshot_entries(const hobject_t &hoid) const;
 
- public:
-  using const_iterator = std::list<ECOmapJournalEntry>::const_iterator;
+  void process_entries(const hobject_t &hoid);
+  bool remove_processed_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
+  bool remove_processed_entry_by_version(const hobject_t &hoid, const eversion_t version);
+  UpdateMapType get_key_map(const hobject_t &hoid);
+  RangeListType get_removed_ranges(const hobject_t &hoid);
 
-  // Specific object operations
+ public:
   void add_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
   bool remove_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
   bool remove_entry_by_version(const hobject_t &hoid, const eversion_t version);
-  // Clear entries for a specific object
   void clear(const hobject_t &hoid);
-  // Clear all entries
   void clear_all();
-  // Entries for a specific object
   int size(const hobject_t &hoid) const;
-  
-  const_iterator begin(const hobject_t &hoid);
-  const_iterator end(const hobject_t &hoid);
-
-  using UpdateMapType = std::map<std::string, std::optional<ceph::buffer::list>>;
-  using RangeListType = std::list<std::pair<std::optional<std::string>, std::optional<std::string>>>;
-  std::tuple<UpdateMapType, RangeListType> get_value_updates(const hobject_t &hoid);;
+  std::tuple<UpdateMapType, RangeListType> get_value_updates(const hobject_t &hoid);
   std::optional<ceph::buffer::list> get_updated_header(const hobject_t &hoid);
+
+  const_iterator begin_entries(const hobject_t &hoid);
+  const_iterator end_entries(const hobject_t &hoid);
 };
