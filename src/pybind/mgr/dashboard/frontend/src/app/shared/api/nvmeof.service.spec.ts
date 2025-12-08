@@ -41,6 +41,58 @@ describe('NvmeofService', () => {
       const req = httpTesting.expectOne(`${API_PATH}/gateway`);
       expect(req.request.method).toBe('GET');
     });
+
+    it('should check if gateway group exists - returns true when group exists', () => {
+      const mockGroups = [
+        [
+          {
+            spec: { group: 'default' },
+            service_name: 'nvmeof.rbd.default'
+          },
+          {
+            spec: { group: 'test-group' },
+            service_name: 'nvmeof.rbd.test-group'
+          }
+        ]
+      ];
+
+      service.exists('default').subscribe((exists) => {
+        expect(exists).toBe(true);
+      });
+
+      const req = httpTesting.expectOne(`${API_PATH}/gateway/group`);
+      expect(req.request.method).toBe('GET');
+      req.flush(mockGroups);
+    });
+
+    it('should check if gateway group exists - returns false when group does not exist', () => {
+      const mockGroups = [
+        [
+          {
+            spec: { group: 'default' },
+            service_name: 'nvmeof.rbd.default'
+          }
+        ]
+      ];
+
+      service.exists('non-existent-group').subscribe((exists) => {
+        expect(exists).toBe(false);
+      });
+
+      const req = httpTesting.expectOne(`${API_PATH}/gateway/group`);
+      expect(req.request.method).toBe('GET');
+      req.flush(mockGroups);
+    });
+
+    it('should check if gateway group exists - returns false on API error', () => {
+      service.exists('test-group').subscribe((exists) => {
+        expect(exists).toBe(false);
+      });
+
+      const req = httpTesting.expectOne(`${API_PATH}/gateway/group`);
+      expect(req.request.method).toBe('GET');
+      req.error(new ErrorEvent('Network error'));
+    });
   });
 
   describe('test subsystems APIs', () => {

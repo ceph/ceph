@@ -74,6 +74,11 @@ import Close from '@carbon/icons/es/close/32';
 import AddFilled from '@carbon/icons/es/add--filled/32';
 import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
 import Reset from '@carbon/icons/es/reset/32';
+import SubtractAlt from '@carbon/icons/es/subtract--alt/20';
+import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
+import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group/nvmeof-gateway-group.component';
+import { NvmeofGroupFormComponent } from './nvmeof-group-form /nvmeof-group-form.component';
+import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway-node.component';
 
 @NgModule({
   imports: [
@@ -101,7 +106,8 @@ import Reset from '@carbon/icons/es/reset/32';
     DatePickerModule,
     ComboBoxModule,
     TabsModule,
-    TagModule
+    TagModule,
+    GridModule
   ],
   declarations: [
     RbdListComponent,
@@ -138,13 +144,16 @@ import Reset from '@carbon/icons/es/reset/32';
     NvmeofNamespacesListComponent,
     NvmeofNamespacesFormComponent,
     NvmeofInitiatorsListComponent,
-    NvmeofInitiatorsFormComponent
+    NvmeofInitiatorsFormComponent,
+    NvmeofGatewayGroupComponent,
+    NvmeofGatewayNodeComponent,
+    NvmeofGroupFormComponent
   ],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
 export class BlockModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([ChevronDown, Close, AddFilled, SubtractFilled, Reset]);
+    this.iconService.registerAll([ChevronDown, Close, AddFilled, SubtractFilled, Reset, SubtractAlt, ProgressBarRound]);
   }
 }
 
@@ -283,7 +292,13 @@ const routes: Routes = [
       }
     },
     children: [
-      { path: '', redirectTo: 'subsystems', pathMatch: 'full' },
+      { path: '', redirectTo: 'gateways', pathMatch: 'full' },
+      { path: 'gateways', component: NvmeofGatewayComponent, data: { breadcrumbs: 'Gateways' } },
+      {
+        path: `gateways/${URLVerbs.CREATE}`,
+        component: NvmeofGroupFormComponent,
+        data: { breadcrumbs: `${ActionLabels.CREATE}${URLVerbs.GATEWAY_GROUP}` }
+      },
       {
         path: 'subsystems',
         component: NvmeofSubsystemsComponent,
@@ -320,8 +335,7 @@ const routes: Routes = [
             outlet: 'modal'
           }
         ]
-      },
-      { path: 'gateways', component: NvmeofGatewayComponent, data: { breadcrumbs: 'Gateways' } }
+      }
     ]
   }
 ];
