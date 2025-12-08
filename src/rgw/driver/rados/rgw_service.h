@@ -56,6 +56,7 @@ public:
 class RGWSI_Finisher;
 class RGWSI_Bucket;
 class RGWSI_Bucket_SObj;
+class RGWSI_VectorBucket_SObj;
 class RGWSI_Bucket_Sync;
 class RGWSI_Bucket_Sync_SObj;
 class RGWSI_BucketIndex;
@@ -86,6 +87,7 @@ struct RGWServices_Def
 
   std::unique_ptr<RGWSI_Finisher> finisher;
   std::unique_ptr<RGWSI_Bucket_SObj> bucket_sobj;
+  std::unique_ptr<RGWSI_VectorBucket_SObj> vector_bucket_sobj;
   std::unique_ptr<RGWSI_Bucket_Sync_SObj> bucket_sync_sobj;
   std::unique_ptr<RGWSI_BucketIndex_RADOS> bi_rados;
   std::unique_ptr<RGWSI_BILog_RADOS> bilog_rados;
@@ -124,7 +126,9 @@ struct RGWServices
 
   RGWSI_Finisher *finisher{nullptr};
   RGWSI_Bucket *bucket{nullptr};
+  RGWSI_Bucket *vector_bucket{nullptr};
   RGWSI_Bucket_SObj *bucket_sobj{nullptr};
+  RGWSI_VectorBucket_SObj *vector_bucket_sobj{nullptr};
   RGWSI_Bucket_Sync *bucket_sync{nullptr};
   RGWSI_Bucket_Sync_SObj *bucket_sync_sobj{nullptr};
   RGWSI_BucketIndex *bi{nullptr};
@@ -180,6 +184,8 @@ struct RGWCtlDef {
     std::unique_ptr<RGWMetadataManager> mgr;
     std::unique_ptr<RGWMetadataHandler> bucket;
     std::unique_ptr<RGWMetadataHandler> bucket_instance;
+    std::unique_ptr<RGWMetadataHandler> vector_bucket;
+    std::unique_ptr<RGWMetadataHandler> vector_bucket_instance;
     std::unique_ptr<RGWMetadataHandler> user;
     std::unique_ptr<RGWMetadataHandler> otp;
     std::unique_ptr<RGWMetadataHandler> role;
@@ -195,6 +201,7 @@ struct RGWCtlDef {
 
   std::unique_ptr<RGWUserCtl> user;
   std::unique_ptr<RGWBucketCtl> bucket;
+  std::unique_ptr<RGWBucketCtl> vector_bucket;
 
   RGWCtlDef();
   ~RGWCtlDef();
@@ -214,6 +221,8 @@ struct RGWCtl {
 
     RGWMetadataHandler *bucket{nullptr};
     RGWMetadataHandler *bucket_instance{nullptr};
+    RGWMetadataHandler *vector_bucket{nullptr};
+    RGWMetadataHandler *vector_bucket_instance{nullptr};
     RGWMetadataHandler *user{nullptr};
     RGWMetadataHandler *otp{nullptr};
     RGWMetadataHandler *role{nullptr};
@@ -224,6 +233,7 @@ struct RGWCtl {
 
   RGWUserCtl *user{nullptr};
   RGWBucketCtl *bucket{nullptr};
+  RGWBucketCtl *vector_bucket{nullptr};
 
   int init(RGWServices *_svc, rgw::sal::Driver* driver,
            librados::Rados& rados, const DoutPrefixProvider *dpp);

@@ -427,6 +427,13 @@ class RadosStore : public StoreDriver {
 				  const std::string& unique_tag) override;
     virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
     virtual bool valid_placement(const rgw_placement_rule& rule) override;
+    int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                            std::unique_ptr<VectorBucket>* bucket, optional_yield y) override;
+    int list_vector_buckets(const DoutPrefixProvider* dpp,
+			     const rgw_owner& owner, const std::string& tenant,
+			     const std::string& marker, const std::string& end_marker,
+			     uint64_t max, BucketList& listing,
+			     optional_yield y) override;
 
     virtual void shutdown(void) override;
 
@@ -811,6 +818,51 @@ class RadosBucket : public StoreBucket {
     int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
     int unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, optional_yield y, bool update_entrypoint = true);
     friend class RadosUser;
+};
+
+class RadosVectorBucket : public StoreVectorBucket {
+  private:
+    RadosStore* store;
+
+  public:
+    RadosVectorBucket(RadosStore *_st)
+      : store(_st) {}
+
+    RadosVectorBucket(RadosStore *_st, const rgw_bucket& _b)
+      : StoreVectorBucket(_b),
+	store(_st) {}
+
+    RadosVectorBucket(RadosStore *_st, const RGWBucketInfo& _i)
+      : StoreVectorBucket(_i),
+	store(_st) {}
+
+    ~RadosVectorBucket() override = default;
+    int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) override;
+    int create(const DoutPrefixProvider* dpp, const CreateParams& params,
+               optional_yield y) override;
+    int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
+    int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
+    std::unique_ptr<VectorBucket> clone() override {
+      return std::make_unique<RadosVectorBucket>(*this);
+    }
+    // TODO: [s3vector] add following methods
+    /*virtual int read_stats_async(const DoutPrefixProvider *dpp,
+                                 const bucket_index_layout_generation& idx_layout,
+                                 int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx) override;
+    int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                         RGWBucketEnt* ent) override;
+    virtual int chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      optional_yield y) override;
+    virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
+    virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
+    virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y) override;
+    virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
+    */
+  private:
+    int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
+    int unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, optional_yield y, bool update_entrypoint = true);
 };
 
 class RadosMultipartPart : public StoreMultipartPart {

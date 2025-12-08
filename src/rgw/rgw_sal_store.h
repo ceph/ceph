@@ -276,6 +276,56 @@ class StoreBucket : public Bucket {
     friend class BucketList;
 };
 
+class StoreVectorBucket : public VectorBucket {
+  protected:
+    RGWBucketInfo info;
+    Attrs attrs;
+    ceph::real_time mtime;
+    obj_version bucket_version;
+
+  public:
+
+    StoreVectorBucket() = default;
+    StoreVectorBucket(const rgw_bucket& b) { info.bucket = b; }
+    StoreVectorBucket(const RGWBucketInfo& i) : info(i) {}
+    virtual ~StoreVectorBucket() = default;
+
+    virtual Attrs& get_attrs(void) override { return attrs; }
+    virtual int set_attrs(Attrs a) override { attrs = a; return 0; }
+    const rgw_owner& get_owner() const override { return info.owner; }
+    bool empty() const override { return info.bucket.name.empty(); }
+    const std::string& get_name() const override { return info.bucket.name; }
+    const std::string& get_tenant() const override { return info.bucket.tenant; }
+    const std::string& get_marker() const override { return info.bucket.marker; }
+    const std::string& get_bucket_id() const override { return info.bucket.bucket_id; }
+    rgw_placement_rule& get_placement_rule() override { return info.placement_rule; }
+    ceph::real_time& get_creation_time() override { return info.creation_time; }
+    ceph::real_time& get_modification_time() override { return mtime; }
+    rgw_bucket& get_key() override { return info.bucket; }
+    RGWBucketInfo& get_info() override { return info; }
+    void print(std::ostream& out) const override { out << info.bucket; }
+    bool operator==(const VectorBucket& b) const override {
+      if (typeid(*this) != typeid(b)) {
+	return false;
+      }
+      const StoreVectorBucket& sb = dynamic_cast<const StoreVectorBucket&>(b);
+
+      return (info.bucket.tenant == sb.info.bucket.tenant) &&
+	     (info.bucket.name == sb.info.bucket.name) &&
+	     (info.bucket.bucket_id == sb.info.bucket.bucket_id);
+    }
+    virtual bool operator!=(const VectorBucket& b) const override {
+      if (typeid(*this) != typeid(b)) {
+	return false;
+      }
+      const StoreVectorBucket& sb = dynamic_cast<const StoreVectorBucket&>(b);
+
+      return (info.bucket.tenant != sb.info.bucket.tenant) ||
+	     (info.bucket.name != sb.info.bucket.name) ||
+	     (info.bucket.bucket_id != sb.info.bucket.bucket_id);
+    }
+};
+
 class StoreObject : public Object {
   protected:
     RGWObjState state;
