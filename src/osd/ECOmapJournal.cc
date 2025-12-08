@@ -23,7 +23,7 @@ void RemovedRanges::add_range(const std::optional<std::string>& start, const std
   bool inserted = false;
   while (it != ranges.end()) {
     // Current range is to the left of new range
-    if (it->second && *it->second < *new_start) {
+    if (it->second && new_start && *it->second < *new_start) {
       it++;
       continue;
     }
@@ -113,17 +113,12 @@ void ECOmapJournal::clear_all() {
 }
 
 // Only works if each processed object creates a RemovedRanges entry
-int ECOmapJournal::size(const hobject_t &hoid) const {
+int ECOmapJournal::entries_size(const hobject_t &hoid) const {
   auto entries_it = entries.find(hoid);
-  auto removed_ranges_it = removed_ranges_map.find(hoid);
-  int sum = 0;
   if (entries_it != entries.end()) {
-    sum += entries_it->second.size();
+    return entries_it->second.size();
   }
-  if (removed_ranges_it != removed_ranges_map.end()) {
-    sum += removed_ranges_it->second.size();
-  }
-  return sum;
+  return 0;
 }
 
 // Function to get specific object's entries, if not present, creates an empty list
@@ -251,6 +246,8 @@ void ECOmapJournal::process_entries(const hobject_t &hoid) {
         default:
           ceph_abort_msg("Unknown OmapUpdateType");
       }
+    }
+    if (!removed_ranges.ranges.empty()) {
       removed_ranges_map[hoid].emplace_back(removed_ranges);
     }
   }
@@ -389,7 +386,7 @@ ECOmapJournal::RangeListType ECOmapJournal::get_removed_ranges(const hobject_t &
         bool inserted = false;
         while (mr_it != merged_ranges.end()) {
           // Current range is to the left of new range
-          if (mr_it->second && *mr_it->second < *start) {
+          if (mr_it->second && start &&*mr_it->second < *start) {
             ++mr_it;
             continue;
           }

@@ -88,7 +88,7 @@ class ECOmapJournal {
   bool remove_entry_by_version(const hobject_t &hoid, const eversion_t version);
   void clear(const hobject_t &hoid);
   void clear_all();
-  int size(const hobject_t &hoid) const;
+  int entries_size(const hobject_t &hoid) const;
   std::tuple<UpdateMapType, RangeListType> get_value_updates(const hobject_t &hoid);
   std::optional<ceph::buffer::list> get_updated_header(const hobject_t &hoid);
 

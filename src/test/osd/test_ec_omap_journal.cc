@@ -71,7 +71,7 @@ TEST(ecomapjournal, new_journal_starts_empty)
   const hobject_t test_hoid("test_key", CEPH_NOSNAP, 1, 0, "test_namespace");
 
   // A new journal should start empty
-  ASSERT_EQ(0u, journal.size(test_hoid));
+  ASSERT_EQ(0u, journal.entries_size(test_hoid));
 }
 
 TEST(ecomapjournal, add_entry)
@@ -83,7 +83,7 @@ TEST(ecomapjournal, add_entry)
   journal.add_entry(test_hoid, entry1);
 
   // The journal should contain the added entry
-  ASSERT_EQ(1u, journal.size(test_hoid));
+  ASSERT_EQ(1u, journal.entries_size(test_hoid));
   ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry1.version);
 }
 
@@ -102,7 +102,7 @@ TEST(ecomapjournal, remove_entry)
   ASSERT_TRUE(res);
 
   // The journal should have 2 entries in it after removal
-  ASSERT_EQ(2u, journal.size(test_hoid));
+  ASSERT_EQ(2u, journal.entries_size(test_hoid));
   ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry2.version);
   ASSERT_TRUE((++journal.begin_entries(test_hoid))->version == entry3.version);
 }
@@ -122,7 +122,7 @@ TEST(ecomapjournal, remove_entry_by_version)
   ASSERT_TRUE(res);
 
   // The journal should have 2 entries in it after removal
-  ASSERT_EQ(2u, journal.size(test_hoid));
+  ASSERT_EQ(2u, journal.entries_size(test_hoid));
   ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry1.version);
   ASSERT_TRUE((++journal.begin_entries(test_hoid))->version == entry3.version);
 }
@@ -139,7 +139,7 @@ TEST(ecomapjournal, clear_one_journal)
   journal.clear(test_hoid);
 
   // The journal should be empty after clearing
-  ASSERT_EQ(0u, journal.size(test_hoid));
+  ASSERT_EQ(0u, journal.entries_size(test_hoid));
 }
 
 TEST(ecomapjournal, clear_all_journals)
@@ -155,8 +155,8 @@ TEST(ecomapjournal, clear_all_journals)
   journal.clear_all();
 
   // Both journals should be empty after clearing all
-  ASSERT_EQ(0u, journal.size(test_hoid1));
-  ASSERT_EQ(0u, journal.size(test_hoid2));
+  ASSERT_EQ(0u, journal.entries_size(test_hoid1));
+  ASSERT_EQ(0u, journal.entries_size(test_hoid2));
 }
 
 TEST(ecomapjournal, remove_bad_entry)
@@ -173,7 +173,7 @@ TEST(ecomapjournal, remove_bad_entry)
   ASSERT_FALSE(res);
 
   // The journal should still have 1 entry in it after failed removal
-  ASSERT_EQ(1u, journal.size(test_hoid));
+  ASSERT_EQ(1u, journal.entries_size(test_hoid));
   ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry1.version);
 }
 
@@ -191,7 +191,7 @@ TEST(ecomapjournal, remove_bad_entry_by_version)
   ASSERT_FALSE(res);
 
   // The journal should still have 1 entry in it after failed removal
-  ASSERT_EQ(1u, journal.size(test_hoid));
+  ASSERT_EQ(1u, journal.entries_size(test_hoid));
   ASSERT_TRUE(journal.begin_entries(test_hoid)->version == entry1.version);
 }
 
@@ -230,7 +230,7 @@ TEST(ecomapjournal, get_value_updates_multiple_updates)
     {std::pair(OmapUpdateType::RemoveRange, range_bl)}
   );
   ECOmapJournalEntry entry2(
-    eversion_t(1, 2), false, std::nullopt, 
+    eversion_t(1, 2), true, std::nullopt, 
     {std::pair(OmapUpdateType::Insert, map_bl)}
   );
   journal.add_entry(test_hoid, entry1);
@@ -243,8 +243,8 @@ TEST(ecomapjournal, get_value_updates_multiple_updates)
   ASSERT_TRUE(!removed_ranges.empty());
 
   // Removed ranges should contain the removed range from entry1
-  ASSERT_TRUE(removed_ranges.front().first.has_value());
-  ASSERT_TRUE(removed_ranges.front().second.has_value());
+  ASSERT_TRUE(!removed_ranges.front().first.has_value());
+  ASSERT_TRUE(!removed_ranges.front().second.has_value());
 
   // Update map should contain key1 inserted in entry2
   auto it = update_map.find("key_1");
