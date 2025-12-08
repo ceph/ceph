@@ -734,6 +734,10 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
                               NVMEOFHAMAP);
   auto& group_gws = map.created_gws[group_key];
   auto gw = group_gws.find(gw_id);
+  auto& pend_gws =  pending_map.created_gws[group_key];
+  auto pend_gw = pend_gws.find(gw_id);
+
+  bool gw_exists = (gw != group_gws.end() && (pend_gw != pend_gws.end()));
   const BeaconSubsystems& sub = m->get_subsystems();
   auto now = ceph::coarse_mono_clock::now();
   int beacons_till_ack =
@@ -742,7 +746,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   bool send_ack =  false;
 
   if (avail == gw_availability_t::GW_CREATED) {
-    if (gw == group_gws.end()) {
+    if (!gw_exists) {
       gw_created = false;
       dout(10) << "Warning: GW " << gw_id << " group_key " << group_key
 	       << " was not found in the  map.created_gws "
@@ -776,7 +780,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   // gw already created
   } else { // first GW beacon should come with avail = Created
     // if GW reports Avail/Unavail but in monitor's database it is Unavailable
-    if (gw != group_gws.end()) {
+    if (gw_exists) {
       // it means it did not perform "exit" after failover was set by
       // NVMeofGWMon
       if ((pending_map.created_gws[group_key][gw_id].availability ==
@@ -797,7 +801,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     }
   }
   // Beacon from GW in !Created state but it does not appear in the map
-  if (gw == group_gws.end()) {
+  if (!gw_exists) {
     dout(4) << "GW that does not appear in the map sends beacon, ignore "
        << gw_id << dendl;
     mon.no_reply(op);
