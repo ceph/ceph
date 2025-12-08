@@ -2124,16 +2124,42 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool qu
   if (!(mds->is_active() || mds->is_stopping()))
     return;
 
-  if (!in->is_auth() || in->is_frozen())
-    return;
-
   const auto& pi = in->get_projected_inode();
-  if (!pi->quota.is_enabled() && !quota_change)
-    return;
 
   // creaete snaprealm for quota inode (quota was set before mimic)
   if (!in->get_projected_srnode())
     mds->server->create_quota_realm(in);
+
+  inodeno_t subvolume_id = in->get_subvolume_id();
+
+  dout(10) << __func__ << " ino " << in->ino()
+           << " subvol " << subvolume_id
+           << " quota_enabled=" << pi->quota.is_enabled()
+           << " quota_change=" << quota_change
+           << " max_bytes=" << pi->quota.max_bytes
+           << " rbytes=" << pi->rstat.rbytes
+           << dendl;
+
+  // Update subvolume quota cache in MetricsHandler even if we return early.
+  // Update when quota is enabled OR when there's a quota change (e.g., removing quota).
+  // This ensures cache is updated to 0 when quota is set to unlimited.
+  // Pass both quota and current used_bytes from this inode.
+  if (subvolume_id != inodeno_t{0} && (pi->quota.is_enabled() || quota_change)) {
+    // force_zero=true when quota was removed (quota_change but not enabled)
+    bool force_zero = quota_change && !pi->quota.is_enabled();
+    uint64_t used_bytes = pi->rstat.rbytes > 0 ? static_cast<uint64_t>(pi->rstat.rbytes) : 0;
+    mds->metrics_handler.maybe_update_subvolume_quota(
+      subvolume_id,
+      pi->quota.max_bytes > 0 ? static_cast<uint64_t>(pi->quota.max_bytes) : 0,
+      used_bytes,
+      force_zero);
+  }
+
+  if (!in->is_auth() || in->is_frozen())
+    return;
+
+  if (!pi->quota.is_enabled() && !quota_change)
+    return;
 
   for (auto &p : in->client_caps) {
     Capability *cap = &p.second;
@@ -2177,6 +2203,7 @@ update:
     msg->quota = pi->quota;
     mds->send_message_client_counted(msg, cap->get_session());
   }
+
   for (const auto &it : in->get_replicas()) {
     auto msg = make_message<MGatherCaps>();
     msg->ino = in->ino();

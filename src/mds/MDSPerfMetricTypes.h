@@ -18,6 +18,11 @@ enum UpdateType : uint32_t {
   UPDATE_TYPE_REMOVE,
 };
 
+inline constexpr uint32_t l_mds_rank_perf_start = 40000;
+inline constexpr uint32_t l_mds_rank_perf_cpu_usage = l_mds_rank_perf_start + 1;
+inline constexpr uint32_t l_mds_rank_perf_open_requests = l_mds_rank_perf_start + 2;
+inline constexpr uint32_t l_mds_rank_perf_last = l_mds_rank_perf_start + 3;
+
 struct CapHitMetric {
   uint64_t hits = 0;
   uint64_t misses = 0;
@@ -301,6 +306,30 @@ WRITE_CLASS_DENC(ReadIoSizesMetric)
 WRITE_CLASS_DENC(WriteIoSizesMetric)
 WRITE_CLASS_DENC(SubvolumeMetric)
 
+struct RankPerfMetrics {
+  uint64_t cpu_usage_percent = 0;
+  uint64_t open_requests = 0;
+
+  DENC(RankPerfMetrics, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.cpu_usage_percent, p);
+    denc(v.open_requests, p);
+    DENC_FINISH(p);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_unsigned("cpu_usage_percent", cpu_usage_percent);
+    f->dump_unsigned("open_requests", open_requests);
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const RankPerfMetrics &metric) {
+    os << "{cpu_usage_percent=" << metric.cpu_usage_percent
+       << ", open_requests=" << metric.open_requests << "}";
+    return os;
+  }
+};
+WRITE_CLASS_DENC(RankPerfMetrics)
+
 // metrics that are forwarded to the MDS by client(s).
 struct Metrics {
   // metrics
@@ -377,6 +406,7 @@ struct metrics_message_t {
   mds_rank_t rank = MDS_RANK_NONE;
   std::map<entity_inst_t, Metrics> client_metrics_map;
   std::vector<SubvolumeMetric> subvolume_metrics;
+  RankPerfMetrics rank_metrics;
 
   metrics_message_t() {
   }
@@ -386,22 +416,28 @@ struct metrics_message_t {
 
   void encode(bufferlist &bl, uint64_t features) const {
     using ceph::encode;
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(seq, bl);
     encode(rank, bl);
     encode(client_metrics_map, bl, features);
     encode(subvolume_metrics, bl);
+    encode(rank_metrics, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator &iter) {
     using ceph::decode;
-    DECODE_START(2, iter);
+    DECODE_START(3, iter);
     decode(seq, iter);
     decode(rank, iter);
     decode(client_metrics_map, iter);
     if (struct_v >= 2) {
       decode(subvolume_metrics, iter);
+    }
+    if (struct_v >= 3) {
+      decode(rank_metrics, iter);
+    } else {
+      rank_metrics = {};
     }
     DECODE_FINISH(iter);
   }
@@ -413,6 +449,7 @@ struct metrics_message_t {
       f->dump_object("client", client);
       f->dump_object("metrics", metrics);
     }
+    f->dump_object("rank_metrics", rank_metrics);
     f->open_array_section("subvolume_metrics");
     for (const auto &metric : subvolume_metrics) {
       f->open_object_section("metric");
@@ -425,7 +462,9 @@ struct metrics_message_t {
     friend std::ostream& operator<<(std::ostream& os, const metrics_message_t &m) {
       os << "[sequence=" << m.seq << ", rank=" << m.rank
          << ", client_metrics=" << m.client_metrics_map
-         << ", subvolume_metrics=" << m.subvolume_metrics << "]";
+         << ", subvolume_metrics=" << m.subvolume_metrics;
+      os << ", rank_metrics=" << m.rank_metrics;
+      os << "]";
       return os;
     }
 };
