@@ -376,7 +376,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
 
         self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
 
-        with safe_while(tries=10, sleep=1) as proceed:
+        with safe_while(tries=10, sleep=2) as proceed:
             while proceed():
                 pev = self.get_pevs_from_ceph_status(c)
 
@@ -425,7 +425,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c} '
                           f'--group-name {group}')
 
-        with safe_while(tries=10, sleep=1) as proceed:
+        with safe_while(tries=10, sleep=2) as proceed:
             while proceed():
                 pev = self.get_pevs_from_ceph_status(c)
 
@@ -521,7 +521,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         for i in c:
             self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
 
-        with safe_while(tries=10, sleep=1) as proceed:
+        with safe_while(tries=10, sleep=2) as proceed:
             while proceed():
                 pev = self.get_pevs_from_ceph_status(c)
 
@@ -573,7 +573,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
 
         msg = ('messages for progress bars for snapshot cloning are not how '
                'they were expected')
-        with safe_while(tries=20, sleep=1, action=msg) as proceed:
+        with safe_while(tries=20, sleep=2, action=msg) as proceed:
             while proceed():
                 pevs = self.get_pevs_from_ceph_status(c)
 
