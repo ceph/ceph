@@ -32,7 +32,6 @@
 #include "msg/Messenger.h"
 #include "messages/MHeartbeat.h"
 
-#include <fstream>
 #include <vector>
 #include <map>
 
@@ -41,6 +40,7 @@ using namespace std;
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/util.h"
 
 /* Note, by default debug_mds_balancer is 1/5. For debug messages 1<lvl<=5,
  * should_gather (below) will be true; so, debug_mds will be ignored even if
@@ -360,20 +360,12 @@ mds_load_t MDBalancer::get_load()
 
   uint64_t cpu_time = 1;
   {
-    string stat_path = PROCPREFIX "/proc/self/stat";
-    ifstream stat_file(stat_path);
-    if (stat_file.is_open()) {
-      vector<string> stat_vec(std::istream_iterator<string>{stat_file},
-			      std::istream_iterator<string>());
-      if (stat_vec.size() >= 15) {
-	// utime + stime
-	cpu_time = strtoll(stat_vec[13].c_str(), nullptr, 10) +
-		   strtoll(stat_vec[14].c_str(), nullptr, 10);
-      } else {
-	derr << "input file '" << stat_path << "' not resolvable" << dendl_impl;
-      }
+    uint64_t ticks = 0;
+    std::string err;
+    if (ceph::read_process_cpu_ticks(&ticks, &err)) {
+      cpu_time = ticks;
     } else {
-      derr << "input file '" << stat_path << "' not found" << dendl_impl;
+      derr << err << dendl_impl;
     }
   }
 
