@@ -261,9 +261,24 @@ public:
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;
 
+inline std::ostream &operator<<(
+  std::ostream &lhs,
+  const LBAManager::remap_entry_t &rhs)
+{
+  return lhs << "remap_entry_t("
+	     << "offset=0x" << std::hex << rhs.offset
+	     << ", len=0x" << rhs.len << std::dec
+	     << ", extent=" << rhs.extent
+	     << ")";
+}
+
 class Cache;
 namespace lba {
 LBAManagerRef create_lba_manager(Cache &cache);
 }
 
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::LBAManager::remap_entry_t> : fmt::ostream_formatter {};
+#endif
