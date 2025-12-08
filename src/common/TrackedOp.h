@@ -146,6 +146,7 @@ public:
   bool dump_historic_slow_ops(ceph::Formatter *f, std::set<std::string> filters = {""});
   bool register_inflight_op(TrackedOp *i);
   void unregister_inflight_op(TrackedOp *i);
+  uint64_t get_num_ops_in_flight();
   void record_history_op(TrackedOpRef&& i);
 
   void get_age_ms_histogram(pow2_hist_t *h);
