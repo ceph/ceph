@@ -97,6 +97,28 @@ std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster) 
   return err;
 }
 
+std::string create_pool_pp(const std::string &pool_name, Rados &cluster) {
+  int ret = cluster.pool_create(pool_name.c_str());
+  if (ret) {
+    cluster.shutdown();
+    std::ostringstream oss;
+    oss << "cluster.pool_create(" << pool_name << ") failed with error " << ret;
+    return oss.str();
+  }
+
+  IoCtx ioctx;
+  ret = cluster.ioctx_create(pool_name.c_str(), ioctx);
+  if (ret < 0) {
+    cluster.shutdown();
+    std::ostringstream oss;
+    oss << "cluster.ioctx_create(" << pool_name << ") failed with error "
+        << ret;
+    return oss.str();
+  }
+  ioctx.application_enable("rados", true);
+  return "";
+}
+
 std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster, bool fast_ec) {
   std::ostringstream oss;
   int ret = destroy_ec_profile_and_rule_pp(cluster, pool_name, oss);
@@ -128,7 +150,7 @@ std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster, bool
       "\", \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}",
       {}, NULL, NULL);
     if (ret) {
-      destroy_ec_pool_pp(pool_name, cluster);
+      destroy_pool_pp(pool_name, cluster);
       destroy_ec_profile_pp(cluster, pool_name, oss);
       oss << "rados_mon_command osd pool create failed with error " << ret;
       return oss.str();
@@ -141,7 +163,7 @@ std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster, bool
       "\", \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}",
       {}, NULL, NULL);
     if (ret) {
-      destroy_ec_pool_pp(pool_name, cluster);
+      destroy_pool_pp(pool_name, cluster);
       destroy_ec_profile_pp(cluster, pool_name, oss);
       oss << "rados_mon_command osd pool create failed with error " << ret;
       return oss.str();
@@ -270,6 +292,6 @@ int destroy_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
   return ret;
 }
 
-int destroy_ec_pool_pp(const std::string &pool_name, Rados &cluster) {
+int destroy_pool_pp(const std::string &pool_name, Rados &cluster) {
   return cluster.pool_delete(pool_name.c_str());
 }

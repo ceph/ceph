@@ -145,20 +145,24 @@ protected:
   }
 };
 
-class RadosTestPP : public RadosTestPPBase, public ::testing::Test {
+class RadosTestPP : public RadosTestPPBase,
+                    public ::testing::TestWithParam<bool> {
 public:
   RadosTestPP(bool c=false) : cleanup(c) {}
   ~RadosTestPP() override {}
 protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
-  static std::string pool_name;
+  static std::string pool_name_default;
+  static std::string pool_name_split;
+  std::string pool_name;
 
   void SetUp() override;
   void TearDown() override;
   bool cleanup;
   std::string nspace;
 };
+
 
 class RadosTestParamPP : public RadosTestPPBase,
                          public ::testing::TestWithParam<const char*> {

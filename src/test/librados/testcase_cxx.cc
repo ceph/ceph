@@ -192,24 +192,34 @@ void RadosTestECPPNS::TearDown()
   ioctx.close();
 }
 
-std::string RadosTestPP::pool_name;
+std::string RadosTestPP::pool_name_default;
+std::string RadosTestPP::pool_name_split;
 Rados RadosTestPPBase::s_cluster;
 
 void RadosTestPP::SetUpTestCase()
 {
   init_rand();
   auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
-  pool_name = get_temp_pool_name(pool_prefix);
-  ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
+  pool_name_default = get_temp_pool_name(pool_prefix);
+  pool_name_split = get_temp_pool_name(pool_prefix);
+  ASSERT_EQ("", connect_cluster_pp(s_cluster));
+  ASSERT_EQ("", create_pool_pp(pool_name_default, s_cluster));
+  ASSERT_EQ("", create_pool_pp(pool_name_split, s_cluster));
+  ASSERT_EQ("", set_split_ops_pp(pool_name_split, s_cluster, true));
+  s_cluster.wait_for_latest_osdmap();
 }
 
 void RadosTestPP::TearDownTestCase()
 {
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
+  ASSERT_EQ(0, destroy_pool_pp(pool_name_default, s_cluster));
+  ASSERT_EQ(0, destroy_pool_pp(pool_name_split, s_cluster));
 }
 
 void RadosTestPP::SetUp()
 {
+  bool s = GetParam();
+  split_ops = s;
+  pool_name = s ? pool_name_split : pool_name_default;
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
   nspace = get_temp_pool_name();
   ioctx.set_namespace(nspace);
@@ -382,14 +392,15 @@ void RadosTestECPP::SetUpTestCase()
   ASSERT_EQ("", create_ec_pool_pp(pool_name_fast, s_cluster, true));
   ASSERT_EQ("", create_ec_pool_pp(pool_name_fast_split, s_cluster, true));
   ASSERT_EQ("", set_split_ops_pp(pool_name_fast_split, s_cluster, true));
+  s_cluster.wait_for_latest_osdmap();
 }
 
 void RadosTestECPP::TearDownTestCase()
 {
   SKIP_IF_CRIMSON();
-  ASSERT_EQ(0, destroy_ec_pool_pp(pool_name_default, s_cluster));
-  ASSERT_EQ(0, destroy_ec_pool_pp(pool_name_fast, s_cluster));
-  ASSERT_EQ(0, destroy_ec_pool_pp(pool_name_fast_split, s_cluster));
+  ASSERT_EQ(0, destroy_pool_pp(pool_name_default, s_cluster));
+  ASSERT_EQ(0, destroy_pool_pp(pool_name_fast, s_cluster));
+  ASSERT_EQ(0, destroy_pool_pp(pool_name_fast_split, s_cluster));
   s_cluster.shutdown();
 }
 
@@ -426,7 +437,7 @@ void RadosTestECPP::TearDown()
     cleanup_namespace(ioctx, nspace);
   }
   if (ec_overwrites_set) {
-    ASSERT_EQ(0, destroy_ec_pool_pp(pool_name, s_cluster));
+    ASSERT_EQ(0, destroy_pool_pp(pool_name, s_cluster));
     ASSERT_EQ("", create_ec_pool_pp(pool_name, s_cluster, fast_ec));
     if (split_ops) {
       set_split_ops_pp(pool_name, s_cluster, true);
