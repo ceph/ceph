@@ -1,17 +1,15 @@
 import os
 
-from .container_types import CephContainer
+from .container_types import CephContainer, BasicContainer
 from .context import CephadmContext
 from cephadmlib.context_getters import fetch_custom_config_files
 
 
-def to_deployment_container(
-    ctx: CephadmContext, ctr: CephContainer
-) -> CephContainer:
-    """Given a standard ceph container instance return a CephContainer
-    prepared for a deployment as a daemon, having the extra args and
-    custom configurations added.
-    NOTE: The `ctr` object is mutated before being returned.
+def enhance_container(ctx: CephadmContext, ctr: BasicContainer) -> None:
+    """Given a context and a basic container object, update the container
+    object such that it's arguments, entrypoint arguments, and volume mounts
+    'inherit' global "extra" -container args, -entrypoint args, and config
+    files in a common manner.
     """
     if 'extra_container_args' in ctx and ctx.extra_container_args:
         ctr.container_args.extend(ctx.extra_container_args)
@@ -32,4 +30,15 @@ def to_deployment_container(
                     os.path.basename(mount_path),
                 )
                 ctr.volume_mounts[file_path] = mount_path
+
+
+def to_deployment_container(
+    ctx: CephadmContext, ctr: CephContainer
+) -> CephContainer:
+    """Given a standard ceph container instance return a CephContainer
+    prepared for a deployment as a daemon, having the extra args and
+    custom configurations added.
+    NOTE: The `ctr` object is mutated before being returned.
+    """
+    enhance_container(ctx, ctr)
     return ctr
