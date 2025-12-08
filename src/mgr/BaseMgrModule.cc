@@ -1177,6 +1177,8 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
     {"subv_write_throughput", MDSPerformanceCounterType::SUBV_WRITE_THROUGHPUT_METRIC},
     {"subv_avg_read_latency", MDSPerformanceCounterType::SUBV_AVG_READ_LATENCY_METRIC},
     {"subv_avg_write_latency", MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC},
+    {"subv_quota_bytes", MDSPerformanceCounterType::SUBV_QUOTA_BYTES_METRIC},
+    {"subv_used_bytes", MDSPerformanceCounterType::SUBV_USED_BYTES_METRIC},
   };
 
   PyObject *py_query = nullptr;

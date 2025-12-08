@@ -47,6 +47,8 @@ void MDSPerformanceCounterDescriptor::pack_counter(
   case MDSPerformanceCounterType::SUBV_WRITE_THROUGHPUT_METRIC:
   case MDSPerformanceCounterType::SUBV_AVG_READ_LATENCY_METRIC:
   case MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC:
+  case MDSPerformanceCounterType::SUBV_QUOTA_BYTES_METRIC:
+  case MDSPerformanceCounterType::SUBV_USED_BYTES_METRIC:
     break;
   default:
     ceph_abort_msg("unknown counter type");
@@ -81,6 +83,8 @@ void MDSPerformanceCounterDescriptor::unpack_counter(
   case MDSPerformanceCounterType::SUBV_WRITE_THROUGHPUT_METRIC:
   case MDSPerformanceCounterType::SUBV_AVG_READ_LATENCY_METRIC:
   case MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC:
+  case MDSPerformanceCounterType::SUBV_QUOTA_BYTES_METRIC:
+  case MDSPerformanceCounterType::SUBV_USED_BYTES_METRIC:
     break;
   default:
     ceph_abort_msg("unknown counter type");
@@ -155,6 +159,12 @@ std::ostream& operator<<(std::ostream &os, const MDSPerformanceCounterDescriptor
      case MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC:
        os << "subv_avg_write_latency";
        break;
+    case MDSPerformanceCounterType::SUBV_QUOTA_BYTES_METRIC:
+      os << "subv_quota_bytes";
+      break;
+    case MDSPerformanceCounterType::SUBV_USED_BYTES_METRIC:
+      os << "subv_used_bytes";
+      break;
    }
 
    return os;
