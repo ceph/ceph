@@ -76,14 +76,18 @@ class ECOmapJournal {
   std::list<ECOmapJournalEntry>& get_entries(const hobject_t &hoid);
   std::list<ECOmapJournalEntry> snapshot_entries(const hobject_t &hoid) const;
 
+  using iterator = std::list<ECOmapJournalEntry>::iterator;
+  iterator begin_entries_mutable(const hobject_t &hoid);
+  iterator end_entries_mutable(const hobject_t &hoid);
   void process_entries(const hobject_t &hoid);
+  void process_headers(const hobject_t &hoid);
   bool remove_processed_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
   bool remove_processed_entry_by_version(const hobject_t &hoid, const eversion_t version);
   UpdateMapType get_key_map(const hobject_t &hoid);
   RangeListType get_removed_ranges(const hobject_t &hoid);
 
  public:
-  void add_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
+  void add_entry(const hobject_t &hoid, ECOmapJournalEntry &entry);
   bool remove_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
   bool remove_entry_by_version(const hobject_t &hoid, const eversion_t version);
   void clear(const hobject_t &hoid);

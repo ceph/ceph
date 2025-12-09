@@ -60,7 +60,7 @@ void ECOmapHeader::update_header(eversion_t version, std::optional<ceph::buffer:
 }
 
 
-void ECOmapJournal::add_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
+void ECOmapJournal::add_entry(const hobject_t &hoid, ECOmapJournalEntry &entry) {
   entries[hoid].push_back(entry);
 }
 
@@ -72,6 +72,11 @@ bool ECOmapJournal::remove_entry(const hobject_t &hoid, const ECOmapJournalEntry
     for (auto an_entry : entry_list) {
       if (an_entry.version == entry.version) {
         entry_list.remove(an_entry);
+        auto header_it = header_map.find(hoid);
+        if (header_it != header_map.end() &&
+            header_it->second.version == entry.version) {
+          header_map.erase(header_it);
+        }
         return true;
       }
     }
@@ -89,6 +94,11 @@ bool ECOmapJournal::remove_entry_by_version(const hobject_t &hoid, const eversio
     for (auto entry : entry_list) {
       if (entry.version == version) {
         entry_list.remove(entry);
+        auto header_it = header_map.find(hoid);
+        if (header_it != header_map.end() &&
+            header_it->second.version == entry.version) {
+          header_map.erase(header_it);
+            }
         return true;
       }
     }
@@ -142,8 +152,18 @@ ECOmapJournal::const_iterator ECOmapJournal::end_entries(const hobject_t &hoid) 
   return entries[hoid].end();
 }
 
+ECOmapJournal::iterator ECOmapJournal::begin_entries_mutable(const hobject_t &hoid)
+{
+  return entries[hoid].begin();
+}
+
+ECOmapJournal::iterator ECOmapJournal::end_entries_mutable(const hobject_t& hoid)
+{
+  return entries[hoid].end();
+}
+
 std::optional<ceph::buffer::list> ECOmapJournal::get_updated_header(const hobject_t &hoid) {
-  process_entries(hoid);
+  process_headers(hoid);
   if (header_map.find(hoid) == header_map.end()) {
     return std::nullopt;
   }
@@ -153,6 +173,21 @@ std::optional<ceph::buffer::list> ECOmapJournal::get_updated_header(const hobjec
 std::tuple<ECOmapJournal::UpdateMapType, ECOmapJournal::RangeListType> ECOmapJournal::get_value_updates(const hobject_t &hoid) {
   process_entries(hoid);
   return {get_key_map(hoid), get_removed_ranges(hoid)};
+}
+
+void ECOmapJournal::process_headers(const hobject_t& hoid) {
+  for (auto entry_iter = begin_entries_mutable(hoid);
+        entry_iter != end_entries_mutable(hoid); ++entry_iter) {
+    // Update header if present
+    if (entry_iter->omap_header) {
+      if (!header_map.contains(hoid)) {
+        header_map[hoid] = ECOmapHeader(entry_iter->version, entry_iter->omap_header);
+      } else {
+        header_map[hoid].update_header(entry_iter->version, entry_iter->omap_header);
+      }
+      entry_iter->omap_header = std::nullopt;
+    }
+  }
 }
 
 void ECOmapJournal::process_entries(const hobject_t &hoid) {
