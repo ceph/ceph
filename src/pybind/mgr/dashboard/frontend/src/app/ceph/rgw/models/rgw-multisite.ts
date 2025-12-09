@@ -72,3 +72,8 @@ export interface Zone {
   added: string[];
   removed: string[];
 }
+
+export interface RgwRealmToken {
+  realm: string;
+  token: string;
+}
