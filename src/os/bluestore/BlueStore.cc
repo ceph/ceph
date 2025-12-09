@@ -12584,7 +12584,8 @@ int BlueStore::read(
       l_bluestore_read_onode_meta_lat,
       mono_clock::now() - start1,
       cct->_conf->bluestore_log_op_age,
-      "", l_bluestore_slow_read_onode_meta_count);
+      "", l_bluestore_slow_read_onode_meta_count,
+      op_flags & CEPH_OSD_OP_FLAG_SCRUB);
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -12616,7 +12617,9 @@ int BlueStore::read(
   log_latency(__func__,
     l_bluestore_read_lat,
     mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age);
+    cct->_conf->bluestore_log_op_age,
+    "", l_bluestore_first,
+    op_flags & CEPH_OSD_OP_FLAG_SCRUB);
   return r;
 }
 
@@ -12929,7 +12932,8 @@ int BlueStore::_do_read(
     l_bluestore_read_onode_meta_lat,
     mono_clock::now() - start,
     cct->_conf->bluestore_log_op_age,
-    "", l_bluestore_slow_read_onode_meta_count);
+    "", l_bluestore_slow_read_onode_meta_count,
+    op_flags & CEPH_OSD_OP_FLAG_SCRUB);
   _dump_onode<30>(cct, *o);
 
   // for deep-scrub, we only read dirty cache and bypass clean cache in
@@ -13238,7 +13242,9 @@ int BlueStore::readv(
     log_latency("get_onode@read",
       l_bluestore_read_onode_meta_lat,
       mono_clock::now() - start1,
-      cct->_conf->bluestore_log_op_age);
+      cct->_conf->bluestore_log_op_age,
+      "", l_bluestore_first,
+      op_flags & CEPH_OSD_OP_FLAG_SCRUB);
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -13272,7 +13278,9 @@ int BlueStore::readv(
   log_latency(__func__,
     l_bluestore_read_lat,
     mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age);
+    cct->_conf->bluestore_log_op_age,
+    "", l_bluestore_first,
+    op_flags & CEPH_OSD_OP_FLAG_SCRUB);
   return r;
 }
 
@@ -13317,7 +13325,8 @@ int BlueStore::_do_readv(
     l_bluestore_read_onode_meta_lat,
     mono_clock::now() - start,
     cct->_conf->bluestore_log_op_age,
-    "", l_bluestore_slow_read_onode_meta_count);
+    "", l_bluestore_slow_read_onode_meta_count,
+    op_flags & CEPH_OSD_OP_FLAG_SCRUB);
   _dump_onode<30>(cct, *o);
 
   IOContext ioc(cct, NULL, !cct->_conf->bluestore_fail_eio);
@@ -18797,7 +18806,7 @@ int BlueStore::_merge_collection(
   return r;
 }
 
-size_t BlueStore::_trim_slow_op_event_queue(mono_clock::time_point cur_time) {
+std::pair<size_t, size_t> BlueStore::_trim_slow_op_event_queue(mono_clock::time_point cur_time) {
   ceph_assert(ceph_mutex_is_locked(qlock));
   auto warn_duration = std::chrono::seconds(cct->_conf->bluestore_slow_ops_warn_lifetime);
   while (!slow_op_event_queue.empty() && 
@@ -18805,16 +18814,25 @@ size_t BlueStore::_trim_slow_op_event_queue(mono_clock::time_point cur_time) {
       (slow_op_event_queue.size() > cct->_conf->bluestore_slow_ops_warn_threshold))) {
       slow_op_event_queue.pop();
   }
-  return slow_op_event_queue.size();
+  while (!slow_scrub_op_event_queue.empty() &&
+    ((slow_scrub_op_event_queue.front() < cur_time - warn_duration) ||
+      (slow_scrub_op_event_queue.size() > cct->_conf->bluestore_slow_ops_warn_threshold))) {
+      slow_scrub_op_event_queue.pop();
+  }
+  return {slow_op_event_queue.size(), slow_scrub_op_event_queue.size()};
 }
 
-void BlueStore::_add_slow_op_event() {
+void BlueStore::_add_slow_op_event(bool scrub_op) {
   if (!cct->_conf->bluestore_slow_ops_warn_threshold) {
     return;
   }
   std::lock_guard lock(qlock);
   auto cur_time = mono_clock::now();
-  slow_op_event_queue.push(cur_time);
+  if (scrub_op) {
+    slow_scrub_op_event_queue.push(cur_time);
+  } else {
+    slow_op_event_queue.push(cur_time);
+  }
   _trim_slow_op_event_queue(cur_time);
 }
 
@@ -18824,16 +18842,24 @@ void BlueStore::log_latency(
   const ceph::timespan& l,
   double lat_threshold,
   const char* info,
-  int idx2)
+  int idx2,
+  bool scrub_op)
 {
   logger->tinc_with_max(idx, l);
   if (lat_threshold > 0.0 &&
       l >= make_timespan(lat_threshold)) {
-    dout(0) << __func__ << " slow operation observed for " << name
-      << ", latency = " << l
-      << info
-      << dendl;
-    _add_slow_op_event();
+    if (scrub_op) {
+      dout(0) << __func__ << " slow operation observed in scrub for " << name
+        << ", latency = " << l
+        << info
+        << dendl;
+    } else {
+      dout(0) << __func__ << " slow operation observed for " << name
+        << ", latency = " << l
+        << info
+        << dendl;
+    }
+    _add_slow_op_event(scrub_op);
     if (idx2 > l_bluestore_first && idx2 < l_bluestore_last) {
       logger->inc(idx2);
     }
@@ -19275,11 +19301,16 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     spillover_alert.clear();
   }
   if (cct->_conf->bluestore_slow_ops_warn_threshold) {
-    size_t qsize = _trim_slow_op_event_queue(mono_clock::now());
+    auto [qsize, scrub_qsize] = _trim_slow_op_event_queue(mono_clock::now());
     if (qsize >= cct->_conf->bluestore_slow_ops_warn_threshold) {
       ostringstream ss;
       ss << "observed slow operation indications in BlueStore";
       alerts.emplace("BLUESTORE_SLOW_OP_ALERT", ss.str());
+    }
+    if (scrub_qsize >= cct->_conf->bluestore_slow_ops_warn_threshold) {
+      ostringstream ss;
+      ss << "observed slow operation indications during scrub in BlueStore";
+      alerts.emplace("BLUESTORE_SLOW_SCRUB_OP_ALERT", ss.str());
     }
   }
   bdev->collect_alerts(alerts, "BLOCK");
