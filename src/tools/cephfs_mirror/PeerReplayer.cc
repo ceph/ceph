@@ -1655,6 +1655,9 @@ void PeerReplayer::SnapDiffSync::finish_sync() {
 
     m_sync_stack.pop();
   }
+
+  // Crawl and entry operations are done syncing here. So mark crawl finished here
+  mark_crawl_finished();
 }
 
 PeerReplayer::RemoteSync::RemoteSync(MountRef local, MountRef remote, FHandles *fh,
@@ -1801,6 +1804,9 @@ void PeerReplayer::RemoteSync::finish_sync() {
 
     m_sync_stack.pop();
   }
+
+  // Crawl and entry operations are done syncing here. So mark stack finished here
+  mark_crawl_finished();
 }
 
 int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &current,
