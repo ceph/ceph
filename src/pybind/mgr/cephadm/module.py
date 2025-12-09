@@ -493,6 +493,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'before the host is marked offline'
         ),
         Option(
+            'asyncssh_log_enabled',
+            type='bool',
+            default=False,
+            desc='Enable asyncssh debug logging to '
+            '/var/log/ceph/asyncssh_debug.log'
+        ),
+        Option(
             'cephadm_log_destination',
             type='str',
             default='',

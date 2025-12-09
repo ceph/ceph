@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 asyncssh_logger = logging.getLogger('asyncssh')
 asyncssh_logger.propagate = False
 
+# File handler for asyncssh logging (initialized conditionally)
+_asyncssh_fh = None
+
 
 class HostConnectionError(OrchestratorError):
     def __init__(self, message: str, hostname: str, addr: str) -> None:
@@ -145,6 +148,41 @@ class SSHManager:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.cons: Dict[str, "SSHClientConnection"] = {}
+        self._setup_asyncssh_logging()
+
+    def _setup_asyncssh_logging(self) -> None:
+        """Setup asyncssh logging based on module configuration."""
+        global _asyncssh_fh
+        # Remove existing handler if it exists
+        if _asyncssh_fh is not None:
+            asyncssh_logger.removeHandler(_asyncssh_fh)
+            _asyncssh_fh = None
+
+        # Check if asyncssh logging is enabled
+        try:
+            asyncssh_log_enabled = self.mgr.get_module_option(
+                'asyncssh_log_enabled', True)
+        except Exception:
+            # Fallback to default if option is not available
+            asyncssh_log_enabled = True
+
+        if asyncssh_log_enabled:
+            # Enable persistent asyncssh debug logging for troubleshooting
+            # Logs will be written to /var/log/ceph/asyncssh_debug.log
+            try:
+                _asyncssh_fh = logging.FileHandler(
+                    '/var/log/ceph/asyncssh_debug.log')
+                _asyncssh_fh.setLevel(logging.DEBUG)
+                _asyncssh_fh.setFormatter(
+                    logging.Formatter('%(asctime)s %(levelname)s: %(message)s'))
+                asyncssh_logger.addHandler(_asyncssh_fh)
+                asyncssh_logger.setLevel(logging.DEBUG)
+            except Exception:
+                logger.info('Failed to enable asyncssh logging to file')
+                _asyncssh_fh = None
+        else:
+            # Disable asyncssh logging
+            asyncssh_logger.setLevel(logging.WARNING)
 
     async def _remote_connection(self,
                                  host: str,
