@@ -128,6 +128,7 @@ private:
     // includes parent dentry purge
     bool purged_or_itype_changed = false;
     bool is_snapdiff = false;
+    bool sync_check = true;
 
     SyncEntry() {
     }
@@ -136,6 +137,13 @@ private:
               const struct ceph_statx &stx)
       : epath(path),
         stx(stx) {
+    }
+    SyncEntry(std::string_view path,
+              const struct ceph_statx &stx,
+	      bool sync_check)
+      : epath(path),
+        stx(stx),
+	sync_check(sync_check) {
     }
     SyncEntry(std::string_view path,
               ceph_dir_result *dirp,
