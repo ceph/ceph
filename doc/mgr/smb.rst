@@ -119,6 +119,53 @@ password_filter_out
     the string.  If the filter is ``hidden`` the password values will be
     replaced by a invalid generic replacement string containing only asterisks.
 
+
+Examples
+~~~~~~~~
+
+Create a cluster with two locally defined users:
+
+.. prompt:: bash #
+
+    ceph smb cluster create bob user \
+        --define-user-pass=bob%Passw0rd1 \
+        --define-user-pass=carol%Passw0rd2
+
+Create a cluster with a single user and an explicit placement value for
+cephadm (hosts labeled ``smb``):
+
+.. prompt:: bash #
+
+    ceph smb cluster create test1 user \
+        --define-user-pass=test%Passw0rd1 \
+        --placement="label:smb"
+
+Create a cluster connected to an active directory system. Use a custom DNS
+server:
+
+.. prompt:: bash #
+
+    ceph smb cluster create test2 active-directory \
+        --domain-realm=MYDOM.EXAMPLE.ORG \
+        --domain-join-user-pass=Administrator%Ph0nyPassw0rd \
+        --custom-dns=192.168.76.210
+
+
+Create a cluster connected to an active directory system, similar to the
+previous example. Set three CTDB public address values and a custom placement:
+
+.. prompt:: bash #
+
+    ceph smb cluster create test3 active-directory \
+        --domain-realm=MYDOM.EXAMPLE.ORG \
+        --domain-join-user-pass=Administrator%Ph0nyPassw0rd \
+        --custom-dns=192.168.76.210 \
+        --public-address=192.168.76.110/24 \
+        --public-address=192.168.76.111/24 \
+        --public-address=192.168.76.112/24 \
+        --placement="3 label:smb"
+
+
 Remove Cluster
 ++++++++++++++
 
@@ -184,6 +231,37 @@ subvolume
     specified.
 readonly
     Creates a read-only share
+
+
+Examples
+~~~~~~~~
+
+Create a share using the subvolume ``photos`` in the subvolumegroup ``company``:
+
+.. prompt:: bash #
+
+    ceph smb share create test1 pics cephfs --subvolume=company/photos --path=/
+
+Create a share similar to the example above with a customized name:
+
+.. prompt:: bash #
+
+    ceph smb share create test1 pics cephfs \
+        --subvolume=company/photos --path=/  --share-name="Company Photos"
+
+Create a share at the root of a CephFS volume (not generally recommended):
+
+.. prompt:: bash #
+
+    ceph smb share create test1 rootie cephfs --path=/
+
+Create a read-only share at a custom path in the CephFS volume:
+
+.. prompt:: bash #
+
+    ceph smb share create test1 plans cephfs \
+        --path=/qbranch/top/secret/plans --readonly
+
 
 Remove Share
 ++++++++++++
