@@ -1529,8 +1529,16 @@ bool PeeringState::needs_recovery() const
     }
     if (pm->second.num_missing()) {
       psdout(10) << "osd." << peer << " has "
-		 << pm->second.num_missing() << " missing" << dendl;
-      return true;
+		 << pm->second.num_missing() << " missing";
+    
+      const auto &items = pm->second.get_items();
+      if (!items.empty()) {
+        const auto &first = *items.begin();
+        const hobject_t &oid = first.first;
+        psdout(10) << ", first missing oid=" << oid;
+      }
+
+      psdout(10) << dendl;
     }
   }
 
