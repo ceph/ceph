@@ -1702,8 +1702,7 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
     dout(20) << ": top of stack path=" << entry.epath << dendl;
 
     if (!entry.is_directory()) {
-      *epath = entry.epath;
-      *stx = entry.stx;
+      push_dataq_entry(std::move(entry));
       m_sync_stack.pop();
       return 0;
     }
@@ -1720,7 +1719,6 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
     }
 
     int r;
-    std::string e_name;
     while (true) {
       struct dirent de;
       r = ceph_readdirplus_r(m_local, entry.dirp, &de, NULL,
@@ -1737,8 +1735,42 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
 
       auto d_name = std::string(de.d_name);
       if (d_name != "." && d_name != "..") {
-        e_name = d_name;
-        break;
+        struct ceph_statx cstx;
+        auto _epath = entry_path(entry.epath, d_name);
+        r = ceph_statxat(m_local, m_fh->c_fd, _epath.c_str(), &cstx,
+                         CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
+                         CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
+                         AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+        if (r < 0) {
+          derr << ": failed to stat epath=" << _epath << ": " << cpp_strerror(r)
+               << dendl;
+          return r;
+        }
+
+        if (S_ISDIR(cstx.stx_mode)) {
+          ceph_dir_result *dirp;
+          r = opendirat(m_local, m_fh->c_fd, _epath, AT_SYMLINK_NOFOLLOW, &dirp);
+          if (r < 0) {
+            derr << ": failed to open local directory=" << _epath << ": "
+                 << cpp_strerror(r) << dendl;
+            return r;
+          }
+
+          m_sync_stack.emplace(SyncEntry(_epath, dirp, cstx));
+          dout(20) << ": Added directory to stack =" << _epath << dendl;
+          r = remote_mkdir(_epath, cstx);
+          if (r < 0) {
+            derr << ": mkdir failed on remote. epath=" << _epath << ": " << cpp_strerror(r)
+               << dendl;
+            return r;
+          }
+          //Fill epath to avoid caller treat this as failure and breaking the loop early.
+          *epath = _epath;
+          *stx = cstx;
+          return r; // New directory added to stack
+        } else {
+          push_dataq_entry(SyncEntry(_epath, cstx));
+        }
       }
     }
 
@@ -1754,35 +1786,6 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
     if (r < 0) {
       return r;
     }
-
-    struct ceph_statx cstx;
-    auto _epath = entry_path(entry.epath, e_name);
-    r = ceph_statxat(m_local, m_fh->c_fd, _epath.c_str(), &cstx,
-                     CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
-                     CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                     AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
-    if (r < 0) {
-      derr << ": failed to stat epath=" << _epath << ": " << cpp_strerror(r)
-           << dendl;
-      return r;
-    }
-
-    if (S_ISDIR(cstx.stx_mode)) {
-      ceph_dir_result *dirp;
-      r = opendirat(m_local, m_fh->c_fd, _epath, AT_SYMLINK_NOFOLLOW, &dirp);
-      if (r < 0) {
-        derr << ": failed to open local directory=" << _epath << ": "
-             << cpp_strerror(r) << dendl;
-        break;
-      }
-
-      m_sync_stack.emplace(SyncEntry(_epath, dirp, cstx));
-    }
-
-    *epath = _epath;
-    *stx = cstx;
-
-    return 0;
   }
 
   *epath = "";
