@@ -1137,8 +1137,6 @@ bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
   }
 
   get_osd_perf_counters()->inc(unlabeled_cntrs_idx.write_blocked);
-  // to be removed in version 'Umbrella':
-  get_labeled_counters()->inc(scrbcnt_write_blocked);
   return true;
 }
 
