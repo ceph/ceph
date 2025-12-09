@@ -386,15 +386,9 @@ void ECTransaction::Generate::process_init() {
     [&](const PGTransaction::ObjectOperation::Init::Create &_) {
       all_shards_written();
       for (auto &&[shard, t]: transactions) {
-        if (osdmap->require_osd_release >= ceph_release_t::octopus) {
-          t.create(
-            coll_t(spg_t(pgid, shard)),
-            ghobject_t(oid, ghobject_t::NO_GEN, shard));
-        } else {
-          t.touch(
-            coll_t(spg_t(pgid, shard)),
-            ghobject_t(oid, ghobject_t::NO_GEN, shard));
-        }
+        t.create(
+          coll_t(spg_t(pgid, shard)),
+          ghobject_t(oid, ghobject_t::NO_GEN, shard));
       }
     },
     [&](const PGTransaction::ObjectOperation::Init::Clone &cop) {
