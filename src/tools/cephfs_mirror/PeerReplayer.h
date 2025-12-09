@@ -223,6 +223,12 @@ private:
     std::string_view get_m_dir_root() {
       return m_dir_root;
     }
+    Snapshot get_m_current() const {
+      return m_current;
+    }
+    boost::optional<Snapshot> get_m_prev() const {
+      return m_prev;
+    }
 
     int remote_mkdir(const std::string &epath, const struct ceph_statx &stx);
   protected:
