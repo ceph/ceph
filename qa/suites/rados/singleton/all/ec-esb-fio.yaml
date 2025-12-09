@@ -1,0 +1,47 @@
+meta:
+  - desc:
+      all/ec-esb-fio
+
+roles:
+- - mon.a
+  - mgr.x
+  - client.0
+- - osd.0
+  - osd.1
+- - osd.2
+  - osd.3
+- - osd.4
+  - osd.5
+openstack:
+  - volumes: # attached to each instance
+      count: 6
+      size: 20 # GB
+
+overrides:
+  ceph:
+    conf:
+      osd:
+        bluestore write v2: false
+        debug osd: 5
+        debug bluestore: 5
+        bluestore_elastic_shared_blobs: true
+        osd memory target: 939524096
+        bluestore onode segment size: 0
+        bluestore debug extent map encode check: true
+
+tasks:
+- install:
+- ceph:
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(OBJECT_
+      - \(PG_
+      - \(SLOW_OPS\)
+      - overall HEALTH
+      - slow request
+- workunit:
+    clients:
+      client.0:
+        - rados/ec-esb-fio.sh
