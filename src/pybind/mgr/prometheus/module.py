@@ -177,7 +177,7 @@ class HealthHistory:
 
     def __init__(self, mgr: MgrModule):
         self.mgr = mgr
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.max_entries = cast(int, self.mgr.get_localized_module_option('healthcheck_history_max_entries', 1000))
         self.healthcheck: LRUCacheDict[str, HealthCheckEvent] = LRUCacheDict(maxsize=self.max_entries)
         self._load()
@@ -261,6 +261,7 @@ class HealthHistory:
 
             if changes_made:
                 self.save()
+            self.mgr.log.debug("check(): DONE")
 
     def __str__(self) -> str:
         """Print the healthcheck history.
@@ -1000,13 +1001,14 @@ class Module(MgrModule, OrchestratorClientMixin):
                     self.metrics[path].set(0)
 
         self.health_history.check(health)
-        for name, info in self.health_history.healthcheck.items():
-            v = 1 if info.active else 0
-            self.metrics['health_detail'].set(
-                v, (
-                    name,
-                    str(info.severity))
-            )
+        with self.health_history.lock:
+            for name, info in self.health_history.healthcheck.items():
+                v = 1 if info.active else 0
+                self.metrics['health_detail'].set(
+                    v, (
+                        name,
+                        str(info.severity))
+                )
 
     @profile_method()
     def get_pool_stats(self) -> None:
