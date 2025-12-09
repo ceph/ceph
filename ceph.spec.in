@@ -933,6 +933,7 @@ Summary:	Ceph Object Storage Daemon (classic)
 Group:		System/Filesystems
 %endif
 Requires:   ceph-osd = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:  ceph-osd < %{_epoch_prefix}%{version}-%{release}
 %description osd-classic
 classic-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
@@ -945,6 +946,7 @@ Summary:	Ceph Object Storage Daemon (crimson)
 Group:		System/Filesystems
 %endif
 Requires:	ceph-osd = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	ceph-osd < %{_epoch_prefix}%{version}-%{release}
 Requires:	binutils
 Requires:	protobuf
 %description osd-crimson
@@ -2348,7 +2350,7 @@ fi
 %{_bindir}/ceph-osd-crimson
 %{_bindir}/crimson-objectstore-tool
 
-%post osd-crimson
+%posttrans osd-crimson
 %{_sbindir}/update-alternatives --install %{_bindir}/ceph-osd ceph-osd \
     %{_bindir}/ceph-osd-crimson 50
 
@@ -2358,7 +2360,7 @@ if [ $1 -eq 0 ]; then
 fi
 %endif
 
-%post osd-classic
+%posttrans osd-classic
 %{_sbindir}/update-alternatives --install %{_bindir}/ceph-osd ceph-osd \
     %{_bindir}/ceph-osd-classic 100
 

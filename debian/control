@@ -451,16 +451,16 @@ Package: ceph-osd-classic
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
-         ${shlibs:Depends},
+         ${shlibs:Depends}
+Conflicts: ceph-osd (<< 20.3)
 Replaces: ceph (<< 10),
           ceph-test (<< 12.2.2-14),
-          ceph-osd (<< 20.1.1)
+          ceph-osd (<< 20.3)
 Breaks: ceph (<< 10),
-        ceph-test (<< 12.2.2-14),
-        ceph-osd (<< 20.1.1)
+        ceph-test (<< 12.2.2-14)
 Recommends: ceph-volume (= ${binary:Version}),
             nvme-cli,
-            smartmontools,
+            smartmontools
 Description: Classic OSD server for the ceph storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -494,6 +494,8 @@ Depends: ceph-base (= ${binary:Version}),
 Recommends: ceph-volume (= ${binary:Version}),
             nvme-cli,
             smartmontools,
+Conflicts: ceph-osd (<< 20.3)
+Replaces:  ceph-osd (<< 20.3)
 Description: Crimson OSD server for the ceph storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
