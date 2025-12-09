@@ -1,0 +1,6 @@
+# TODO: enable once ec is supported https://tracker.ceph.com/issues/75092
+overrides:
+  rgw:
+    ec-data-pool: true
+  s3tests:
+    slow_backend: true
