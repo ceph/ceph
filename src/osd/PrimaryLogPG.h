@@ -305,11 +305,6 @@ public:
     return pgbackend.get();
   }
 
-  static bool should_be_removed(
-    const std::list<std::pair<std::optional<std::string>,
-                                std::optional<std::string>>>& removed_ranges,
-    std::string_view key);
-
   /// Listener methods
   void add_temp_obj(const hobject_t &oid) override { get_pgbackend()->add_temp_obj(oid); }
   void clear_temp_obj(const hobject_t &oid) override { get_pgbackend()->clear_temp_obj(oid); }

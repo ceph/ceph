@@ -16,25 +16,25 @@ void ECOmapValue::update_value(eversion_t version, std::optional<ceph::buffer::l
   this->value = value;
 }
 
-void RemovedRanges::add_range(const std::optional<std::string>& start, const std::optional<std::string>& end) {
-  std::optional<std::string> new_start = start;
+void RemovedRanges::add_range(const std::string& start, const std::optional<std::string>& end) {
+  std::string new_start = start;
   std::optional<std::string> new_end = end;
   auto it = ranges.begin();
   bool inserted = false;
   while (it != ranges.end()) {
     // Current range is to the left of new range
-    if (it->second && new_start && *it->second < *new_start) {
+    if (it->second && *it->second < new_start) {
       it++;
       continue;
     }
     // Current range is to the right of new range
-    if (it->first && (!new_end || *new_end < *it->first)) {
+    if (!new_end || *new_end < it->first) {
       ranges.insert(it, {new_start, new_end});
       inserted = true;
       break;
     }
     // Ranges overlap, merge them
-    if (!it->first || (new_start && *it->first < *new_start)) {
+    if (it->first < new_start) {
       new_start = it->first;
     }
     if (!it->second) {
@@ -51,7 +51,7 @@ void RemovedRanges::add_range(const std::optional<std::string>& start, const std
 
 void RemovedRanges::clear_omap() {
   ranges.clear();
-  ranges.emplace_back(std::nullopt, std::nullopt);
+  ranges.emplace_back("", std::nullopt);
 }
 
 void ECOmapHeader::update_header(eversion_t version, std::optional<ceph::buffer::list> header) {
@@ -170,7 +170,7 @@ std::optional<ceph::buffer::list> ECOmapJournal::get_updated_header(const hobjec
   return header_map[hoid].header;
 }
 
-std::tuple<ECOmapJournal::UpdateMapType, ECOmapJournal::RangeListType> ECOmapJournal::get_value_updates(const hobject_t &hoid) {
+std::tuple<ECOmapJournal::UpdateMapType, ECOmapJournal::RangeMapType> ECOmapJournal::get_value_updates(const hobject_t &hoid) {
   process_entries(hoid);
   return {get_key_map(hoid), get_removed_ranges(hoid)};
 }
@@ -263,7 +263,7 @@ void ECOmapJournal::process_entries(const hobject_t &hoid) {
           decode(key_end, iter);
           
           // Add removed range
-          std::optional<std::string> start = key_begin;
+          std::string start = key_begin;
           std::optional<std::string> end = key_end;
           removed_ranges.add_range(start, end);
 
@@ -407,44 +407,47 @@ ECOmapJournal::UpdateMapType ECOmapJournal::get_key_map(const hobject_t &hoid) {
   return key_map[hoid];
 }
 
-ECOmapJournal::RangeListType ECOmapJournal::get_removed_ranges(const hobject_t &hoid) {
+ECOmapJournal::RangeMapType ECOmapJournal::get_removed_ranges(const hobject_t &hoid) {
   // Merge all removed ranges for the object
-  RangeListType merged_ranges;
+  RangeMapType merged_ranges;
   auto it = removed_ranges_map.find(hoid);
   if (it != removed_ranges_map.end()) {
     for (const auto &rr : it->second) {
       for (const auto &range : rr.ranges) {
         // Add range to merged_ranges, merging overlapping ranges
-        std::optional<std::string> start = range.first;
+        std::string start = range.first;
         std::optional<std::string> end = range.second;
-        auto mr_it = merged_ranges.begin();
-        bool inserted = false;
-        while (mr_it != merged_ranges.end()) {
-          // Current range is to the left of new range
-          if (mr_it->second && start &&*mr_it->second < *start) {
-            ++mr_it;
-            continue;
+
+        // Find the range that starts after the current start
+        auto map_it = merged_ranges.upper_bound(start);
+        if (map_it != merged_ranges.begin()) {
+          // Merge range to the left, if they overlap
+          auto prev = std::prev(map_it);
+          if (!prev->second || *prev->second >= start) {
+            start = prev->first;
+            if (!end) {
+
+            } else if (!prev->second) {
+              end = std::nullopt;
+            } else if (*prev->second > *end) {
+              end = *prev->second;
+            }
+            merged_ranges.erase(prev);
           }
-          // Current range is to the right of new range
-          if (mr_it->first && (!end || *end < *mr_it->first)) {
-            merged_ranges.insert(mr_it, {start, end});
-            inserted = true;
-            break;
-          }
-          // Ranges overlap, merge them
-          if (!mr_it->first || (start && *mr_it->first < *start)) {
-            start = mr_it->first;
-          }
-          if (!mr_it->second) {
+        }
+        // Merge ranges to the right, if they overlap
+        while (map_it != merged_ranges.end() &&
+               (!end || map_it->first <= *end)) {
+          if (!end) {
+
+          } else if (!map_it->second) {
             end = std::nullopt;
-          } else if (end && *mr_it->second > *end) {
-            end = mr_it->second;
+          } else if (*map_it->second > *end) {
+            end = map_it->second;
           }
-          mr_it = merged_ranges.erase(mr_it);
+          map_it = merged_ranges.erase(map_it);
         }
-        if (!inserted) {
-          merged_ranges.emplace_back(start, end);
-        }
+        merged_ranges.emplace_hint(map_it, start, end);
       }
     }
   }

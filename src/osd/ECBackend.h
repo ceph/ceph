@@ -427,8 +427,7 @@ public:
   );
 
   bool should_be_removed(
-    const std::list<std::pair<std::optional<std::string>,
-                              std::optional<std::string>>>& removed_ranges,
+    const std::map<std::string, std::optional<std::string>>& removed_ranges,
     std::string_view key
   );
 };

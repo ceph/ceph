@@ -1376,7 +1376,7 @@ int ECBackend::omap_get_values(
         continue;
       }
       (*out)[key] = *(it->second.value);
-    } else if (PrimaryLogPG::should_be_removed(removed_ranges, key)) {
+    } else if (should_be_removed(removed_ranges, key)) {
       continue;
     } else {
       keys_still_to_get.insert(key);
@@ -1475,27 +1475,25 @@ int ECBackend::omap_check_keys(
 }
 
 bool ECBackend::should_be_removed(
-  const std::list<std::pair<std::optional<std::string>,
-                            std::optional<std::string>>>& removed_ranges,
+  const std::map<std::string, std::optional<std::string>>& removed_ranges,
   std::string_view key) 
 {
-  for (const auto& range : removed_ranges) {
-    const auto& start_opt = range.first;
-    const auto& end_opt = range.second;
+  // Find range that comes after this key
+  auto it = removed_ranges.upper_bound(std::string(key));
 
-    bool start_ok = true;
-    bool end_ok = true;
-
-    if (start_opt.has_value()) {
-      start_ok = key >= start_opt.value();
-    }
-    if (end_opt.has_value()) {
-      end_ok = key < end_opt.value();
-    }
-
-    if (start_ok && end_ok) {
-      return true;
-    }
+  // If there are no ranges, return false
+  if (it == removed_ranges.begin()) {
+    return false;
   }
+
+  // Go back to the previous range
+  --it;
+  // If this range contains the key, return true
+  const auto& end_opt = it->second;
+  if (!end_opt || key < *end_opt) {
+    return true;
+  }
+
+  // No ranges contain the key, return false
   return false;
 }

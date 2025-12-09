@@ -242,9 +242,9 @@ TEST(ecomapjournal, get_value_updates_multiple_updates)
   ASSERT_TRUE(!update_map.empty());
   ASSERT_TRUE(!removed_ranges.empty());
 
-  // Removed ranges should contain the removed range from entry1
-  ASSERT_TRUE(!removed_ranges.front().first.has_value());
-  ASSERT_TRUE(!removed_ranges.front().second.has_value());
+  // Removed ranges should contain the clear from entry2
+  ASSERT_TRUE(removed_ranges.contains(""));
+  ASSERT_TRUE(!removed_ranges[""].has_value());
 
   // Update map should contain key1 inserted in entry2
   auto it = update_map.find("key_1");

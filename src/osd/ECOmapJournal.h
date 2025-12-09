@@ -37,13 +37,13 @@ class ECOmapValue {
 class RemovedRanges {
  public:
   eversion_t version;
-  std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> ranges;
+  std::list<std::pair<std::string, std::optional<std::string>>> ranges;
 
   RemovedRanges(eversion_t version) : version(version) {}
-  RemovedRanges(eversion_t version, std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> ranges) 
+  RemovedRanges(eversion_t version, std::list<std::pair<std::string, std::optional<std::string>>> ranges)
     : version(version), ranges(std::move(ranges)) {}
 
-  void add_range(const std::optional<std::string>& start, const std::optional<std::string>& end);
+  void add_range(const std::string& start, const std::optional<std::string>& end);
   void clear_omap();
 };
 
@@ -61,7 +61,7 @@ class ECOmapHeader {
 
 class ECOmapJournal {
   using UpdateMapType = std::map<std::string, ECOmapValue>;
-  using RangeListType = std::list<std::pair<std::optional<std::string>, std::optional<std::string>>>;
+  using RangeMapType = std::map<std::string, std::optional<std::string>>;
   using const_iterator = std::list<ECOmapJournalEntry>::const_iterator;
  private:
   // Unprocessed journal entries 
@@ -84,7 +84,7 @@ class ECOmapJournal {
   bool remove_processed_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
   bool remove_processed_entry_by_version(const hobject_t &hoid, const eversion_t version);
   UpdateMapType get_key_map(const hobject_t &hoid);
-  RangeListType get_removed_ranges(const hobject_t &hoid);
+  RangeMapType get_removed_ranges(const hobject_t &hoid);
 
  public:
   void add_entry(const hobject_t &hoid, ECOmapJournalEntry &entry);
@@ -93,7 +93,7 @@ class ECOmapJournal {
   void clear(const hobject_t &hoid);
   void clear_all();
   int entries_size(const hobject_t &hoid) const;
-  std::tuple<UpdateMapType, RangeListType> get_value_updates(const hobject_t &hoid);
+  std::tuple<UpdateMapType, RangeMapType> get_value_updates(const hobject_t &hoid);
   std::optional<ceph::buffer::list> get_updated_header(const hobject_t &hoid);
 
   const_iterator begin_entries(const hobject_t &hoid);

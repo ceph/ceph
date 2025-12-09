@@ -8271,31 +8271,6 @@ int PrimaryLogPG::_verify_no_head_clones(const hobject_t& soid,
   return 0;
 }
 
-bool PrimaryLogPG::should_be_removed(
-  const std::list<std::pair<std::optional<std::string>,
-                            std::optional<std::string>>>& removed_ranges,
-        std::string_view key) {
-  for (const auto& range : removed_ranges) {
-    const auto& start_opt = range.first;
-    const auto& end_opt = range.second;
-
-    bool start_ok = true;
-    bool end_ok = true;
-
-    if (start_opt.has_value()) {
-      start_ok = key >= start_opt.value();
-    }
-    if (end_opt.has_value()) {
-      end_ok = key < end_opt.value();
-    }
-
-    if (start_ok && end_ok) {
-      return true;
-    }
-  }
-  return false;
-}
-
 inline int PrimaryLogPG::_delete_oid(
   OpContext *ctx,
   bool no_whiteout,     // no whiteouts, no matter what.
