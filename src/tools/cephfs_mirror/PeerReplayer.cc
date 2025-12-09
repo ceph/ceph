@@ -1327,12 +1327,17 @@ bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
   std::unique_lock lock(sdq_lock);
   dout(20) << ": snapshot syncdata replayer waiting - m_sync_dataq empty!!!" << dendl;
   sdq_cv.wait(lock, [this]{ return !m_sync_dataq.empty() || m_sync_stack_finished;});
-  dout(20) << ": snapshot syncdata replayer woke up - m_syncm_dataq non-empty!!!" << dendl;
-  if (m_sync_dataq.empty() && m_sync_stack_finished)
+  dout(20) << ": snapshot syncdata replayer woke up - m_syncm_dataq non-empty or stack_finished!!!" << dendl;
+  if (m_sync_dataq.empty() && m_sync_stack_finished) {
+     dout(20) << ": snapshot syncdata replayer dataq_empty and stack finished - waiting for other"
+	      << " inflight processing threads to finish!!!" << dendl;
+     sdq_cv.wait(lock, [this]{ return in_flight == 0;});
      return false; // no more work
+   }
 
   out_entry = std::move(m_sync_dataq.front());
   m_sync_dataq.pop();
+  in_flight++;
   dout(10) << ": snapshot syncdata replayer queue popped epath=" << out_entry.epath << dendl;
   return true;
 }
@@ -2231,12 +2236,16 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *datasync_replayer) {
       /* TODO if entry process fails, add back the entry
        * syncm->m_sync_dataq.push(std::move(entry);
        */
+      syncm->dec_in_flight();
     }
 
     // If you are here, m_sync_dataq is completely processed without errors
     {
-      std::unique_lock lock(smq_lock);
-      if (!syncm_q.empty() && syncm_q.front() == syncm) {
+      std::unique_lock smq_l1(smq_lock);
+      std::unique_lock sdq_l1(syncm->get_sdq_lock());
+      if (!syncm_q.empty() && syncm_q.front() == syncm
+          && syncm->get_in_flight_unlocked() == 0
+	  && syncm->get_stack_finished_unlocked() == true) {
         dout(20) << ": Dequeue syncm object=" << syncm << " after processing" << dendl;
         syncm_q.pop();
 	smq_cv.notify_all();
