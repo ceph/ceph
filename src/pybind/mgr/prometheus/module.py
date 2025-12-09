@@ -18,7 +18,7 @@ from mgr_util import get_default_addr, profile_method, build_url, test_port_allo
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from rbd import RBD
 
-from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable, IO, TypeVar, Generic
+from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable, IO, TypeVar, Iterator
 LabelValues = Tuple[str, ...]
 Number = Union[int, float]
 MetricValue = Dict[LabelValues, Number]
@@ -190,8 +190,7 @@ K = TypeVar('K')
 V = TypeVar('V')
 
 
-class LRUCacheDict(OrderedDict[K, V], Generic[K, V]):
-    maxsize: int
+class LRUCacheDict(OrderedDict[K, V]):
 
     def __init__(self, maxsize: int, *args: Any, **kwargs: Any) -> None:
         self.maxsize = maxsize
@@ -212,9 +211,9 @@ class HealthHistory:
 
     def __init__(self, mgr: MgrModule):
         self.mgr = mgr
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.max_entries = cast(int, self.mgr.get_localized_module_option('healthcheck_history_max_entries', 1000))
-        self.healthcheck: LRUCacheDict[str, HealthCheckEvent] = LRUCacheDict(maxsize=self.max_entries)
+        self.healthcheck: ThreadSafeLRUCacheDict[str, HealthCheckEvent] = ThreadSafeLRUCacheDict(maxsize=self.max_entries)
         self._load()
 
     def _load(self) -> None:
@@ -357,6 +356,55 @@ class HealthHistory:
             str: YAML representation of the healthcheck history
         """
         return yaml.safe_dump(self.as_dict(), explicit_start=True, default_flow_style=False)
+
+
+class ThreadSafeLRUCacheDict(LRUCacheDict[K, V]):
+    maxsize: int
+
+    def __init__(self, maxsize: int, *args: Any, **kwargs: Any) -> None:
+        self.maxsize = maxsize
+        self._lock = threading.RLock()
+        super().__init__(maxsize, *args, **kwargs)
+
+    def __setitem__(self, key: K, value: V) -> None:
+        with self._lock:
+            super().__setitem__(key, value)
+
+    def __getitem__(self, key: Any) -> V:
+        with self._lock:
+            return super().__getitem__(key)
+
+    def __iter__(self) -> Iterator[K]:
+        with self._lock:
+            return iter(list(super().keys()))
+
+    def __contains__(self, key: object) -> bool:
+        with self._lock:
+            return super().__contains__(key)
+
+    def __len__(self) -> int:
+        with self._lock:
+            return super().__len__()
+
+    def get(self, key: K, default: Optional[V] = None) -> Optional[V]:  # type: ignore[override]
+        with self._lock:
+            return super().get(key, default)
+
+    def clear(self) -> None:
+        with self._lock:
+            super().clear()
+
+    def keys(self) -> List[K]:  # type: ignore[override]
+        with self._lock:
+            return list(super().keys())
+
+    def items(self) -> List[Tuple[K, V]]:  # type: ignore[override]
+        with self._lock:
+            return list(super().items())
+
+    def values(self) -> List[V]:  # type: ignore[override]
+        with self._lock:
+            return list(super().values())
 
 
 class Metric(object):
@@ -1057,6 +1105,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self._process_cert_health_detail(alert_id, active_healthchecks[alert_id])
 
         self.health_history.check(health)
+
         for name, info in self.health_history.healthcheck.items():
             # Skip CEPHADM_CERT_ERROR and CEPHADM_CERT_WARNING as they're handled specially above with message details
             if name in ('CEPHADM_CERT_ERROR', 'CEPHADM_CERT_WARNING'):
