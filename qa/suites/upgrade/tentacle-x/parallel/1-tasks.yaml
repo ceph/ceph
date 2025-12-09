@@ -5,22 +5,22 @@ overrides:
       - telemetry module includes new collections
 tasks:
 - install:
-    branch: reef
+    branch: tentacle
     exclude_packages:
       - ceph-osd-classic
       - ceph-volume
       - ceph-osd-crimson
 - print: "**** done install task..."
-- print: "**** done start installing reef cephadm ..."
+- print: "**** done start installing tentacle cephadm ..."
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:reef
-    compiled_cephadm_branch: reef
+    image: quay.ceph.io/ceph-ci/ceph:tentacle
+    compiled_cephadm_branch: tentacle
     conf:
       osd:
         #set config option for which cls modules are allowed to be loaded / used
         osd_class_load_list: "*"
         osd_class_default_list: "*"
-- print: "**** done end installing reef cephadm ..."
+- print: "**** done end installing tentacle cephadm ..."
 
 - print: "**** done start cephadm.shell ceph config set mgr..."
 - cephadm.shell:
@@ -28,12 +28,12 @@ tasks:
       - ceph config set mgr mgr/cephadm/use_repo_digest true --force
 - print: "**** done cephadm.shell ceph config set mgr..."
 
-- print: "**** done start telemetry reef..."
+- print: "**** done start telemetry tentacle..."
 - workunit:
     clients:
       client.0:
-        - test_telemetry_reef.sh
-- print: "**** done end telemetry reef..."
+        - test_telemetry_tentacle.sh
+- print: "**** done end telemetry tentacle..."
 
 - print: "**** done start parallel"
 - parallel:
@@ -45,5 +45,5 @@ tasks:
 - workunit:
     clients:
       client.0:
-        - test_telemetry_reef_x.sh
+        - test_telemetry_tentacle_x.sh
 - print: "**** done end telemetry x..."
