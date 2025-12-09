@@ -1270,12 +1270,12 @@ struct bluestore_onode_t {
     DENC_FINISH(p);
   }
   void encode(::ceph::buffer::list::contiguous_appender& p, uint64_t features) const {
+    DENC_DUMP_PRE(bluestore_onode_t);
     __u8 struct_v_to_use = 3;
     if ((features & FLAG_DEBUG_FORCE_V2) != 0) {
       struct_v_to_use = 2;
     }
     DENC_START_UNCHECKED(struct_v_to_use, 1, p);
-    DENC_DUMP_PRE(Type);
     _denc_friend(*this, p, struct_v_to_use);
     DENC_FINISH(p);
   }
