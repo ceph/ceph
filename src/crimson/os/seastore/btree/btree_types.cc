@@ -92,6 +92,7 @@ std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
              << "~0x" << std::hex << v.len
              << ", checksum=0x" << v.checksum
              << ", refcount=" << std::dec << v.refcount
+             << ", type=" << v.type
              << ")";
 }
 
