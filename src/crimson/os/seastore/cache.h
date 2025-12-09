@@ -384,14 +384,15 @@ public:
    * The extent in query is supposed to be absent in Cache.
    * partially load buffer from partial_off~partial_len if not present.
    */
-  template <typename T, typename Func>
+  template <typename T, typename Func, typename OnRead>
   get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
     Transaction &t,
     paddr_t offset,
     extent_len_t length,
     extent_len_t partial_off,
     extent_len_t partial_len,
-    Func &&extent_init_func) {
+    Func &&extent_init_func,
+    OnRead &&onread) {
     LOG_PREFIX(Cache::get_absent_extent);
 
 #ifndef NDEBUG
@@ -432,7 +433,8 @@ public:
       *ret, &t_src, t.get_cache_hint(),
       partial_off, partial_len);
     return trans_intr::make_interruptible(
-      read_extent<T>(std::move(ret), partial_off, partial_len, &t_src));
+      read_extent<T>(std::move(ret), partial_off, partial_len,
+        &t_src, std::forward<OnRead>(onread)));
   }
 
   /*
@@ -505,7 +507,7 @@ public:
       );
     }
     return get_absent_extent<T>(t, offset, length, 0, length,
-      std::forward<Func>(extent_init_func));
+      std::forward<Func>(extent_init_func), [](CachedExtent &) {});
   }
 
   CachedExtentRef peek_extent_viewable_by_trans(
@@ -803,7 +805,7 @@ private:
         extent->get_type(), extent->get_paddr(), extent->get_length(),
         partial_off, partial_len, *extent);
       return read_extent<T>(
-        std::move(extent), partial_off, partial_len, p_src);
+        std::move(extent), partial_off, partial_len, p_src, [](CachedExtent&) {});
     }
   }
 
@@ -846,7 +848,7 @@ private:
       // required by add_extent()
       on_cache(*ret);
       return read_extent<T>(
-	std::move(ret), partial_off, partial_len, p_src);
+	std::move(ret), partial_off, partial_len, p_src, [](CachedExtent&) {});
     }
 
     // extent PRESENT in cache
@@ -873,7 +875,7 @@ private:
 
       cached->state = CachedExtent::extent_state_t::INVALID;
       return read_extent<T>(
-	std::move(ret), partial_off, partial_len, p_src);
+	std::move(ret), partial_off, partial_len, p_src, [](CachedExtent&) {});
     }
 
     auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
@@ -1003,13 +1005,15 @@ private:
     }
   }
 
+  using on_read_cb_t = std::function<void (CachedExtent&)>;
   get_extent_by_type_ret _get_absent_extent_by_type(
     Transaction &t,
     extent_types_t type,
     paddr_t offset,
     laddr_t laddr,
     extent_len_t length,
-    extent_init_func_t &&extent_init_func);
+    extent_init_func_t &&extent_init_func,
+    on_read_cb_t &&onread);
 
   backref_entryrefs_by_seq_t backref_entryrefs_by_seq;
   backref_entry_mset_t backref_entry_mset;
@@ -1070,7 +1074,8 @@ public:
     paddr_t offset,         ///< [in] starting addr
     laddr_t laddr,          ///< [in] logical address if logical
     extent_len_t length,    ///< [in] length
-    Func &&extent_init_func ///< [in] extent init func
+    Func &&extent_init_func,///< [in] extent init func
+    on_read_cb_t &&onread   ///< [in] callback on extent read
   ) {
     return _get_absent_extent_by_type(
       t,
@@ -1078,7 +1083,8 @@ public:
       offset,
       laddr,
       length,
-      extent_init_func_t(std::forward<Func>(extent_init_func)));
+      extent_init_func_t(std::forward<Func>(extent_init_func)),
+      std::move(onread));
   }
 
   get_extent_by_type_ret get_absent_extent_by_type(
@@ -1089,7 +1095,9 @@ public:
     extent_len_t length
   ) {
     return get_absent_extent_by_type(
-      t, type, offset, laddr, length, [](CachedExtent &) {});
+      t, type, offset, laddr, length,
+      [](CachedExtent &) {},
+      [](CachedExtent &) {});
   }
 
   void trim_backref_bufs(const journal_seq_t &trim_to) {
@@ -1895,7 +1903,8 @@ private:
     CachedExtentRef &&extent,
     extent_len_t offset,
     extent_len_t length,
-    const Transaction::src_t *p_src)
+    const Transaction::src_t *p_src,
+    on_read_cb_t &&onread)
   {
     LOG_PREFIX(Cache::read_extent);
     assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
@@ -1923,7 +1932,8 @@ private:
           read_range.ptr);
       });
     }).safe_then(
-      [this, FNAME, extent=std::move(extent), offset, length]() mutable {
+      [this, FNAME, extent=std::move(extent), offset,
+      length, onread=std::move(onread)]() mutable {
         ceph_assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN
           || extent->state == CachedExtent::extent_state_t::CLEAN
           || !extent->is_valid());
@@ -1945,6 +1955,7 @@ private:
             SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} done (partial) -- {}",
               offset, length, *extent);
           }
+          onread(*extent);
         } else {
           SUBDEBUG(seastore_cache, "read extent 0x{:x}~0x{:x} done (invalidated) -- {}",
             offset, length, *extent);
@@ -1965,9 +1976,11 @@ private:
     TCachedExtentRef<T>&& extent,
     extent_len_t offset,
     extent_len_t length,
-    const Transaction::src_t* p_src
+    const Transaction::src_t* p_src,
+    on_read_cb_t &&onread
   ) {
-    return _read_extent(std::move(extent), offset, length, p_src
+    return _read_extent(
+      std::move(extent), offset, length, p_src, std::move(onread)
     ).safe_then([](auto extent) {
       return extent->template cast<T>();
     });
