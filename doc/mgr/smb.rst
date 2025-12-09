@@ -73,21 +73,25 @@ cluster_id
 auth_mode
     One of ``user`` or ``active-directory``
 domain_realm
+    Required for ``active-directory`` clusters and ignored by ``user`` clusters.
     The domain/realm value identifying the AD domain. Required when choosing
     ``active-directory``
 domain_join_user_pass
+    Required for ``active-directory`` clusters and ignored by ``user`` clusters.
     A string in the form ``<username>%<password>`` that will be used to join
     Samba servers to the AD domain.
 define_user_pass
+    Optional. Ignored by ``active-directory`` clusters.
     A string of the form ``<username>%<password>`` that will be used for
-    authentication in ``user`` auth_mode.
+    authentication in ``user`` auth_mode. Can be specified multiple times to
+    define more than one user.
 custom_dns
     Optional. Can be specified multiple times. One or more IP Addresses that
     will be applied to the Samba containers to override the default DNS
     resolver(s). This option is intended to be used when the host Ceph node is
     not configured to resolve DNS entries within AD domain(s).
 placement
-    A Ceph orchestration :ref:`placement specifier <orchestrator-cli-placement-spec>`
+    Optional. A Ceph orchestration :ref:`placement specifier <orchestrator-cli-placement-spec>`
 clustering
     Optional. Control if a cluster abstraction actually uses Samba's clustering
     mechanism.  The value may be one of ``default``, ``always``, or ``never``.
@@ -97,22 +101,23 @@ clustering
     disables clustering regardless of the placement count. If unspecified,
     ``default`` is assumed.
 public_addrs
-    Optional. A string in the form of <ipaddress/prefixlength>[%<destination interface>].
-    Supported only when using Samba's clustering. Assign "virtual" IP
-    addresses that will be managed by the clustering subsystem and may automatically
-    move between nodes running Samba containers.
+    Optional. A string in the form of <ipaddress/prefixlength>[%<destination address>].
+    Supported only when using Samba's clustering. Assign "virtual" IP addresses
+    that will be managed by the clustering subsystem and may automatically move
+    between nodes running Samba containers.  Can be specified multiple times to
+    assign more than one public address to the SMB cluster.
 password_filter
-    One of ``none`` or ``base64``. If the filter is ``none`` the password
-    values on the command line are assumed to be plain text. If the filter is
-    ``base64`` the password values are assumed to be obscured with
+    Optional.  One of ``none`` or ``base64``. If the filter is ``none`` the
+    password values on the command line are assumed to be plain text. If the
+    filter is ``base64`` the password values are assumed to be obscured with
     base64 encoding the string. If ``--password-filter-out`` is not specified
     this filter will also be applied to the output.
 password_filter_out
-    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
-    password fields in the output are emitted as plain text. If the filter is
-    ``base64`` password fields will be obscured by base64 encoding the
-    string.  If the filter is ``hidden`` the password values will be replaced
-    by a invalid generic replacement string containing only asterisks.
+    Optional.  One of ``none``, ``base64``, or ``hidden``. If the filter is
+    ``none`` the password fields in the output are emitted as plain text. If the
+    filter is ``base64`` password fields will be obscured by base64 encoding
+    the string.  If the filter is ``hidden`` the password values will be
+    replaced by a invalid generic replacement string containing only asterisks.
 
 Remove Cluster
 ++++++++++++++
@@ -128,11 +133,12 @@ Options:
 cluster_id
     A ``cluster_id`` value identifying a cluster resource.
 password_filter
-    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
-    password fields in the output are emitted as plain text. If the filter is
-    ``base64`` password fields will be obscured by base64 encoding the
-    string.  If the filter is ``hidden`` the password values will be replaced
-    by a invalid generic replacement string containing only asterisks.
+    Optional. One of ``none``, ``base64``, or ``hidden``. If the filter is
+    ``none`` the password fields in the output are emitted as plain text. If
+    the filter is ``base64`` password fields will be obscured by base64
+    encoding the string.  If the filter is ``hidden`` the password values will
+    be replaced by a invalid generic replacement string containing only
+    asterisks.
 
 
 List Clusters
@@ -166,7 +172,7 @@ cluster_id
 share_id
     A short string uniquely identifying the share
 cephfs_volume
-    The name of the cephfs volume to be shared
+    The name of the CephFS volume to be shared
 path
     A path relative to the root of the volume and/or subvolume
 share_name
@@ -227,19 +233,20 @@ format
     One of ``json`` (the default) or ``yaml``. Output format can be
     selected independent of the input format.
 password_filter
-    One of ``none`` or ``base64``. If the filter is ``none`` the password
-    fields in the input are assumed to be plain text. If the filter is
+    Optional. One of ``none`` or ``base64``. If the filter is ``none`` the
+    password fields in the input are assumed to be plain text. If the filter is
     ``base64`` the password fields are assumed to be obscured with
     base64 encoding the string. If ``--password-filter-out`` is not specified
     this filter will also be applied to the output.
 password_filter_out
-    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
-    password fields in the output are emitted as plain text. If the filter is
-    ``base64`` password fields will be obscured by base64 encoding the
-    string.  If the filter is ``hidden`` the password values will be replaced
-    by a invalid generic replacement string containing only asterisks.
+    Optional. One of ``none``, ``base64``, or ``hidden``. If the filter is
+    ``none`` the password fields in the output are emitted as plain text. If
+    the filter is ``base64`` password fields will be obscured by base64
+    encoding the string.  If the filter is ``hidden`` the password values will
+    be replaced by a invalid generic replacement string containing only
+    asterisks.
 input
-    A file name or ``-`` to use stdin.
+    A file name or ``-`` to use the standard input (aka ``stdin``).
 
 
 Resources that have already been applied to the Ceph cluster configuration can
@@ -269,11 +276,12 @@ results
     single item is found the output will always include a wrapper object like
     (in pseudo-JSON): ``{"resources": [...Resource objects...]}``.
 password_filter
-    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
-    password fields in the output are emitted as plain text. If the filter is
-    ``base64`` password fields will be obscured by base64 encoding the
-    string.  If the filter is ``hidden`` the password values will be replaced
-    by a invalid generic replacement string containing only asterisks.
+    Optional. One of ``none``, ``base64``, or ``hidden``. If the filter is
+    ``none`` the password fields in the output are emitted as plain text. If
+    the filter is ``base64`` password fields will be obscured by base64
+    encoding the string.  If the filter is ``hidden`` the password values will
+    be replaced by a invalid generic replacement string containing only
+    asterisks.
 
 ``resource_name`` arguments can take the following forms:
 
@@ -368,7 +376,7 @@ An example YAML based resource list looks like the following:
         # ... other fields skipped for brevity ...
 
 
-An example JSON based resoure list looks like the following:
+An example JSON based resource list looks like the following:
 
 .. code-block:: json
 
@@ -561,10 +569,10 @@ custom_smb_global_options
    ``public_addrs`` on a cluster could lead to unexpected results. The ``smbd``
    process can only dynamically add/remove public addresses when assigned to
    monitor a network device (e.g. ``eth0``) versus a specific address. If the
-   network device is assigned multiple addresses and those addreses overlap
+   network device is assigned multiple addresses and those addresses overlap
    with a different smb cluster it is possible the services may fail to start.
    Currently, one must manually ensure that the devices used by a IP or network
-   is exclusvely used for that network to ensure SMB services start properly.
+   is exclusively used for that network to ensure SMB services start properly.
 
 
 .. _join-source-fields:
