@@ -54,12 +54,21 @@ bool ExclusiveLock<I>::accept_request(OperationRequestType request_type,
                                       int *ret_val) const {
   std::lock_guard locker{ML<I>::m_lock};
 
-  bool accept_request =
-    (!ML<I>::is_state_shutdown() && ML<I>::is_state_locked() &&
-     (m_request_blocked_count == 0 ||
-      m_image_ctx.get_exclusive_lock_policy()->accept_blocked_request(
-        request_type)));
-  *ret_val = accept_request ? 0 : m_request_blocked_ret_val;
+  bool accept_request;
+  if (!ML<I>::is_state_shutdown() && ML<I>::is_state_locked()) {
+    if (m_request_blocked_count == 0 ||
+        m_image_ctx.get_exclusive_lock_policy()->accept_blocked_request(
+          request_type)) {
+      accept_request = true;
+      *ret_val = 0;
+    } else {
+      accept_request = false;
+      *ret_val = m_request_blocked_ret_val;
+    }
+  } else {
+    accept_request = false;
+    *ret_val = 0;
+  }
 
   ldout(m_image_ctx.cct, 20) << "=" << accept_request << " ret_val=" << *ret_val
                              << " (request_type=" << request_type << ")" << dendl;
