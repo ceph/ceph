@@ -305,7 +305,7 @@ int PeerReplayer::init() {
   while (nr_replayers-- > 0) {
     std::unique_ptr<SnapshotDataSyncThread> datasync_replayer(
       new SnapshotDataSyncThread(this));
-    std::string name("data_replayer-" + stringify(nr_replayers));
+    std::string name("d_replayer-" + stringify(nr_replayers));
     datasync_replayer->create(name.c_str());
     m_data_replayers.push_back(std::move(datasync_replayer));
   }
@@ -2123,17 +2123,27 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *datasync_replayer) {
 
   // TODO Do we need something like scan_interval ???
 
-  /* TODO
-   * Do we need separate lock like m_lock to for synchornization or can you use the same m_lock?
-   * Using m_lock doesn't serve the purpose of having a separate thread as the existing thread
-   * also holds the m_lock and most of the datastructures in PeerReplayer uses it!!! So it's
-   * little tricky to solve this ??
+  /* The entire snapshot is synced outside the lock. The m_lock and m_cond pair
+   * is used for these threads along with crawler threads to work well with all
+   * terminal conditions like shutdown
    */
+  std::unique_lock locker(m_lock);
   while (true) {
+    // do not check if client is blocklisted under lock
+    m_cond.wait_for(locker, 1s, [this]{return is_stopping();});
+    if (is_stopping()) {
+      dout(5) << ": exiting datasync replayer=" << datasync_replayer << dendl;
+      break;
+    }
+
+    locker.unlock();
+
+    if (m_fs_mirror->is_blocklisted()) {
+      dout(5) << ": exiting datasync replayer=" << datasync_replayer << " as client is blocklisted" << dendl;
+      break;
+    }
+
     /* TODO
-     * cond wait
-     * is_stopping
-     * is_blocklisted
      * SyncMechanism initiated ?
      */
 
@@ -2145,6 +2155,9 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *datasync_replayer) {
      * pre_sync and open handles
      * consume queue from SyncMechanism and sync data
      */
+
+    //lock again to satify m_cond
+    locker.lock();
   }
 }
 
