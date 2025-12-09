@@ -1766,7 +1766,8 @@ void OSDService::queue_for_snap_trim(PG *pg, uint64_t cost_per_object)
       return cost_per_object * cct->_conf->osd_pg_max_concurrent_snap_trims;
     } else {
       /* We retain this legacy behavior for WeightedPriorityQueue.
-       * This branch should be removed after Squid.
+       * This branch should be removed after Umbrella (after consulting
+       * dev team)
        */
       return cct->_conf->osd_snap_trim_cost;
     }
