@@ -53,7 +53,7 @@ Feature bits
 ------------
 
 - [x] ensure that `SERVER_X` is defined
-- [ ] change any features `DEPRECATED` in release X-3 are now marked `RETIRED`.
+- [x] change any features `DEPRECATED` in release X-3 are now marked `RETIRED`.
 - [ ] look for features that (1) were present in X-2 and (2) have no
   client dependency and mark them `DEPRECATED` as of X.
 
@@ -92,12 +92,12 @@ OSDMap
 Code cleanup
 ------------
 
-- [ ] search code for "after X-1" or "X" for conditional checks
-- [ ] search code for X-2 and X-3 (`CEPH_FEATURE_SERVER_*` and
+- [x] search code for "after X-1" or "X" for conditional checks
+- [x] search code for X-2 and X-3 (`CEPH_FEATURE_SERVER_*` and
   `ceph_release_t::*`)
 - [ ] search code for `require_osd_release`
 - [ ] search code for `min_mon_release`
-- [ ] check include/denc.h if DENC_START macro still needs reference to squid
+- [x] check include/denc.h if DENC_START macro still needs reference to squid
 
 QA suite
 --------
