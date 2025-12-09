@@ -57,4 +57,7 @@ ceph telemetry show
 ceph telemetry show-device
 ceph telemetry show-all
 
+# Opt out
+ceph telemetry off
+
 echo OK
