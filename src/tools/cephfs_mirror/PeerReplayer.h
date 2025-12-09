@@ -443,6 +443,7 @@ private:
   ceph::mutex smq_lock;
   ceph::condition_variable smq_cv;
   std::queue<std::shared_ptr<SyncMechanism>> syncm_q;
+  bool take_snapshot = false;
 
   ServiceDaemonStats m_service_daemon_stats;
 

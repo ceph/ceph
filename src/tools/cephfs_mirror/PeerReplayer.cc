@@ -1965,6 +1965,14 @@ int PeerReplayer::synchronize(const std::string &dir_root, const Snapshot &curre
     return r;
   }
 
+  {
+    std::unique_lock lock(smq_lock);
+    dout(20) << ": Waiting for data sync to be done to take snapshot!!!" << dendl;
+    smq_cv.wait(lock, [this]{return take_snapshot;});
+    dout(20) << ": Woke up to take snapshot!!!" << dendl;
+    take_snapshot = false;
+  }
+
   auto cur_snap_id_str{stringify(current.second)};
   snap_metadata snap_meta[] = {{PRIMARY_SNAP_ID_KEY.c_str(), cur_snap_id_str.c_str()}};
   r = ceph_mksnap(m_remote_mount, dir_root.c_str(), current.first.c_str(), 0755,
@@ -2260,6 +2268,7 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *datasync_replayer) {
 	  && syncm->get_stack_finished_unlocked() == true) {
         dout(20) << ": Dequeue syncm object=" << syncm << " after processing" << dendl;
         syncm_q.pop();
+	take_snapshot = true;
 	smq_cv.notify_all();
       }
     }
