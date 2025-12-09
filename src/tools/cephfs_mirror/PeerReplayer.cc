@@ -1306,10 +1306,42 @@ PeerReplayer::SyncMechanism::SyncMechanism(MountRef local, MountRef remote, FHan
       m_fh(fh),
       m_peer(peer),
       m_current(current),
-      m_prev(prev) {
+      m_prev(prev),
+      sdq_lock(ceph::make_mutex("cephfs::mirror::PeerReplayer::SyncMechanism" + stringify(peer.uuid))) {
   }
 
 PeerReplayer::SyncMechanism::~SyncMechanism() {
+}
+
+/* TODO : Caller
+ * syncm->push_dataq_entry(std::move(s.top()));
+ * s.pop();
+ */
+void PeerReplayer::SyncMechanism::push_dataq_entry(SyncEntry e) {
+  dout(10) << ": snapshot syncdata replayer dataq pushed epath=" << e.epath << dendl;
+  std::unique_lock lock(sdq_lock);
+  m_sync_dataq.push(std::move(e));
+  sdq_cv.notify_all();
+}
+
+bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
+  std::unique_lock lock(sdq_lock);
+  dout(20) << ": snapshot syncdata replayer waiting - m_sync_dataq empty!!!" << dendl;
+  sdq_cv.wait(lock, [this]{ return !m_sync_dataq.empty() || m_sync_stack_finished;});
+  dout(20) << ": snapshot syncdata replayer woke up - m_syncm_dataq non-empty!!!" << dendl;
+  if (m_sync_dataq.empty() && m_sync_stack_finished)
+     return false; // no more work
+
+  out_entry = std::move(m_sync_dataq.front());
+  m_sync_dataq.pop();
+  dout(10) << ": snapshot syncdata replayer queue popped epath=" << out_entry.epath << dendl;
+  return true;
+}
+
+void PeerReplayer::SyncMechanism::mark_stack_finished() {
+  std::unique_lock lock(sdq_lock);
+  m_sync_stack_finished = true;
+  sdq_cv.notify_all();
 }
 
 int PeerReplayer::SyncMechanism::get_changed_blocks(const std::string &epath,
@@ -2177,10 +2209,6 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *datasync_replayer) {
       syncm = syncm_q.front();
     }
 
-    /* TODO
-     * Process syncm
-     */
-
     // TODO Remove the sleep on introduction of cond_wait
     dout(20) << ": snapshot syncdata replayer sleep for 20s!!!" << dendl;
     std::this_thread::sleep_for(20s);
@@ -2189,20 +2217,24 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *datasync_replayer) {
      * pre_sync and open handles
      * consume queue from SyncMechanism and sync data
      */
+    // Wait on actual data sync queue
+    SyncEntry entry;
+    while (syncm->pop_dataq_entry(entry)) {
+      //TODO Process entry
+      /* TODO if entry process fails, add back the entry
+       * syncm->m_sync_dataq.push(std::move(entry);
+       */
+    }
 
-
-    /* TODO
-      Set internal_queue_empty using internal queue lock
-      */
-     bool internal_queue_empty = true;
-     if (internal_queue_empty) {
+    // If you are here, m_sync_dataq is completely processed without errors
+    {
       std::unique_lock lock(smq_lock);
       if (!syncm_q.empty() && syncm_q.front() == syncm) {
         dout(20) << ": Dequeue syncm object=" << syncm << " after processing" << dendl;
         syncm_q.pop();
 	smq_cv.notify_all();
       }
-     }
+    }
 
     /* TODO
      * On failure, add back to the syncm_q for retry
