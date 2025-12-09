@@ -19,20 +19,25 @@
 #ifndef PGBACKEND_H
 #define PGBACKEND_H
 
-#include "ECListener.h"
-#include "ECTypes.h"
-#include "ECExtentCache.h"
-#include "osd_types.h"
-#include "pg_features.h"
-#include "common/intrusive_timer.h"
+#include <string>
+
+#include "common/LogClient.h"
 #include "common/WorkQueue.h"
+#include "common/intrusive_timer.h"
+#include "common/ostream_temp.h"
 #include "include/Context.h"
 #include "os/ObjectStore.h"
 #include "osd/scrubber_common.h"
-#include "common/LogClient.h"
-#include <string>
+
+#include "ECExtentCache.h"
+#include "ECListener.h"
+#include "ECTypes.h"
 #include "PGTransaction.h"
-#include "common/ostream_temp.h"
+#include "osd_types.h"
+#include "pg_features.h"
+
+
+class ECOmapJournalEntry;
 
 namespace Scrub {
   class Store;
@@ -447,7 +452,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual shard_id_map<bufferlist> ec_decode_acting_set(
        const shard_id_map<bufferlist> &shard_map, int chunk_size) const = 0;
    virtual ECUtil::stripe_info_t ec_get_sinfo() const = 0;
-   virtual bool remove_ec_omap_journal_entry(const hobject_t &hoid, const eversion_t version) {
+   virtual bool remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
      return false; // Only EC uses ec_omap_journal
    };
    using OmapIterFunction = std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)>;

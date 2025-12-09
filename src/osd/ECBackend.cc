@@ -1294,8 +1294,8 @@ int ECBackend::be_deep_scrub(
   return 0;
 }
 
-bool ECBackend::remove_ec_omap_journal_entry(const hobject_t &hoid, const eversion_t version) {
-  return ec_omap_journal.remove_entry_by_version(hoid, version);
+bool ECBackend::remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
+  return ec_omap_journal.remove_entry(hoid, entry);
 }
 
 int ECBackend::omap_iterate (

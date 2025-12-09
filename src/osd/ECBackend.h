@@ -383,7 +383,7 @@ public:
     return object_size_to_shard_size(logical_size, shard_id);
   }
 
-  bool remove_ec_omap_journal_entry(const hobject_t &hoid, const eversion_t version);
+  bool remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
 
   using OmapIterFunction = std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)>;
   int omap_iterate (

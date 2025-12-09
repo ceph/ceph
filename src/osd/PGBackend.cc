@@ -434,7 +434,11 @@ struct Trimmer : public ObjectModDesc::Visitor {
           break;
       }
     }
-    pg->remove_ec_omap_journal_entry(soid, entry.version);
+    ECOmapJournalEntry to_remove(
+      entry.version, clear_omap,
+      omap_header, omap_updates
+      );
+    pg->remove_ec_omap_journal_entry(soid, to_remove);
   }
 };
 

@@ -425,9 +425,9 @@ public:
   bool get_is_ec_optimized() const final {
     return is_optimized();
   }
-  bool remove_ec_omap_journal_entry(const hobject_t &hoid, const eversion_t version) override {
+  bool remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) override {
     if (is_optimized()) {
-      return optimized.remove_ec_omap_journal_entry(hoid, version);
+      return optimized.remove_ec_omap_journal_entry(hoid, entry);
     }
     dout(10) << "ECSwitch::remove_ec_omap_journal_entry called on legacy EC backend" << dendl;
     return false;
