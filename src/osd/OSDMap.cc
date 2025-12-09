@@ -7859,7 +7859,7 @@ void OSDMap::check_health(CephContext *cct,
 			    ss.str(), 0);
     }
   }
-  // UNEQUAL_WEIGHT
+  // INCORRECT_NUM_BUCKETS_STRETCH_MODE
   if (stretch_mode_enabled) {
     vector<int> subtrees;
     crush->get_subtree_of_type(stretch_mode_bucket, &subtrees);
@@ -7869,12 +7869,15 @@ void OSDMap::check_health(CephContext *cct,
       checks->add("INCORRECT_NUM_BUCKETS_STRETCH_MODE", HEALTH_WARN, ss.str(), 0);
       return;
     }
+    // STRETCH_MODE_BUCKET_WEIGHT_IMBALANCE
     int weight1 = crush->get_item_weight(subtrees[0]);
     int weight2 = crush->get_item_weight(subtrees[1]);
+    double stretch_max_weight_delta = g_conf().get_val<double>("mon_stretch_max_bucket_weight_delta");
     stringstream ss;
-    if (weight1 != weight2) {
-      ss << "Stretch mode buckets have different weights!";
-      checks->add("UNEVEN_WEIGHTS_STRETCH_MODE", HEALTH_WARN, ss.str(), 0);
+    if (abs(weight1 - weight2) >
+      (stretch_max_weight_delta * std::min(weight1, weight2))) {
+      ss << "Stretch mode buckets differ in weight by more than " << (stretch_max_weight_delta * 100) << "%";
+      checks->add("STRETCH_MODE_BUCKET_WEIGHT_IMBALANCE", HEALTH_WARN, ss.str(), 0);
     }
   }
 

@@ -1678,17 +1678,21 @@ until the condition is fixed.
 We encourage you to fix this by removing additional dividing buckets or bump the
 number of dividing buckets to 2.
 
-UNEVEN_WEIGHTS_STRETCH_MODE
-___________________________
+STRETCH_MODE_BUCKET_WEIGHT_IMBALANCE
+____________________________________
 
-The 2 dividing buckets must have equal weights when stretch mode is enabled.
-This warning suggests that the 2 dividing buckets have uneven weights after
-stretch mode is enabled. This is not immediately fatal, however, you can expect
-Ceph to be confused when trying to process transitions between dividing buckets.
+The 2 dividing buckets must have weights within a certain percentage difference 
+when stretch mode is enabled. This is determined by the configuration option
+``mon_stretch_max_bucket_weight_delta`` (default: 0.1).
 
-We encourage you to fix this by making the weights even on both dividing buckets.
+This is not immediately fatal, however, you can expect Ceph to experience performance bottlenecks
+and imbalanced PG distribution if the aggregate CRUSH weights of the buckets differ significantly,
+because the smaller bucket will carry a higher I/O load per OSD.
+
+We encourage you to fix this by making the weights of the dividing buckets more even.
 This can be done by making sure the combined weight of the OSDs on each dividing
-bucket are the same.
+bucket are within the percentage difference defined by
+``mon_stretch_max_bucket_weight_delta``.
 
 NONEXISTENT_MON_CRUSH_LOC_STRETCH_MODE
 ______________________________________
