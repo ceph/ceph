@@ -9402,11 +9402,11 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
     if (left > 0 && !cursor.omap_complete) {
       ceph_assert(cursor.data_complete);
       if (cursor.omap_offset.empty()) {
-	osd->store->omap_get_header(ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
-				    &reply_obj.omap_header);
+	get_pgbackend()->omap_get_header(ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
+				    &reply_obj.omap_header, false);
       }
       bufferlist omap_data;
-      const auto result = osd->store->omap_iterate(
+      const auto result = get_pgbackend()->omap_iterate(
         ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
         ObjectStore::omap_iter_seek_t{
           .seek_position = cursor.omap_offset,
