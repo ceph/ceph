@@ -23,6 +23,7 @@
 #include "common/BackTrace.h"
 #include "common/ceph_time.h"
 
+#include "rgw_cksum.h"
 #include "rgw_sal.h"
 #include "rgw_zone.h"
 #include "rgw_cache.h"
@@ -4546,8 +4547,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
     bool canceled = false;
     ret = processor.complete(accounted_size, etag, mtime, set_mtime,
-                             attrs, delete_at, nullptr, nullptr, nullptr,
-                             zones_trace, &canceled, rctx, rgw::sal::FLAG_LOG_OP);
+                             attrs, rgw::cksum::no_cksum, delete_at, nullptr, nullptr,
+			     nullptr, zones_trace, &canceled, rctx,
+			     rgw::sal::FLAG_LOG_OP);
     if (ret < 0) {
       goto set_err_state;
     }
@@ -5109,7 +5111,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   }
 
   const req_context rctx{dpp, y, nullptr};
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+			    rgw::cksum::no_cksum, delete_at,
                             nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
                             log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
@@ -6754,13 +6757,13 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
   }
 
   return 0;
-}
+} /* RGWRados::set_attrs() */
 
-static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
-                              RGWRados* store, RGWBucketInfo& bucket_info,
-                              RGWObjectCtx* rctx, RGWObjManifest* manifest,
-                              int part_num, int* parts_count, bool prefetch,
-                              RGWObjState** pstate, RGWObjManifest** pmanifest)
+int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
+				 RGWRados* store, RGWBucketInfo& bucket_info,
+				 RGWObjectCtx* rctx, RGWObjManifest* manifest,
+				 int part_num, int* parts_count, bool prefetch,
+				 RGWObjState** pstate, RGWObjManifest** pmanifest)
 {
   if (!manifest) {
     return -ERR_INVALID_PART;
@@ -6839,6 +6842,9 @@ static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 
   // update the object size
   sm->state.size = part_manifest.get_obj_size();
+  if (!sm->state.attrset.count(RGW_ATTR_COMPRESSION)) {
+    sm->state.accounted_size = sm->state.size;
+  }
 
   *pmanifest = &part_manifest;
   return 0;
@@ -6866,6 +6872,15 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
   int r = source->get_state(dpp, &astate, &manifest, true, y);
   if (r < 0)
     return r;
+
+  if (manifest /* params.parts_count */) {
+      RGWObjManifest::obj_iterator end = manifest->obj_end(dpp);
+      auto cur_part_id = end.get_cur_part_id();
+      if (cur_part_id != 0 ) {
+	/* end.get_cur_part_id() returns 0 for non-multipart manifests */
+	params.parts_count = (cur_part_id == 1) ? 1 : cur_part_id - 1;
+      }
+  }
 
   if (!astate->exists) {
     return -ENOENT;
