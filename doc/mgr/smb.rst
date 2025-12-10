@@ -581,15 +581,15 @@ public_addrs
     address
         Required string. An IP address with a required prefix length (example:
         ``192.168.4.51/24``). This address will be assigned to one of the
-        host's network devices and managed automatically.
+        host's network interfaces and managed automatically.
     destination
         Optional. String or list of strings. A ``destination`` defines where
         the system will assign the managed IPs. Each string value must be a
         network address (example ``192.168.4.0/24``). One or more destinations
         may be supplied. The typical case is to use exactly one destination and
         so the value may be supplied as a string, rather than a list with a
-        single item. Each destination network will be mapped to a device on a
-        host. Run ``cephadm list-networks`` for an example of these mappings.
+        single item. Each destination network will be mapped to an interface on
+        a host. Run ``cephadm list-networks`` for an example of these mappings.
         If destination is not supplied the network is automatically determined
         using the address value supplied and taken as the destination.
 remote_control
@@ -643,14 +643,15 @@ custom_smb_global_options
    same ``smb`` service without clustering enabled can cause unexpected behavior.
 
 .. warning::
-   The behavior of the system when combining ``bind_addrs`` and
-   ``public_addrs`` on a cluster could lead to unexpected results. The ``smbd``
-   process can only dynamically add/remove public addresses when assigned to
-   monitor a network device (e.g. ``eth0``) versus a specific address. If the
-   network device is assigned multiple addresses and those addresses overlap
-   with a different smb cluster it is possible the services may fail to start.
-   Currently, one must manually ensure that the devices used by a IP or network
-   is exclusively used for that network to ensure SMB services start properly.
+    The behavior of the system when combining ``bind_addrs`` and
+    ``public_addrs`` on a cluster could lead to unexpected results. The ``smbd``
+    process can only dynamically add/remove public addresses when assigned to
+    monitor a network interface (e.g. ``eth0``) versus a specific address. If
+    the network interface is assigned multiple addresses and those addresses
+    overlap with a different SMB cluster it is possible the services may fail
+    to start.  Currently, one must manually ensure that the interfaces used by
+    an IP or network is exclusively used for that network to ensure SMB
+    services start properly.
 
 
 .. _join-source-fields:
