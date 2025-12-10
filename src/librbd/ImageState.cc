@@ -248,6 +248,12 @@ public:
     ceph_assert(m_on_notify == nullptr);
   }
 
+  void set_work_queue(asio::ContextWQ* work_queue) {
+    ceph_assert(work_queue != nullptr);
+    std::lock_guard locker{m_lock};
+    m_work_queue = work_queue;
+  }
+
   void register_watcher(QuiesceWatchCtx *watcher, uint64_t *handle) {
     ldout(m_cct, 20) << "QuiesceWatchers::" << __func__ << ": watcher="
                      << watcher << dendl;
@@ -461,6 +467,12 @@ ImageState<I>::ImageState(I *image_ctx)
     m_update_watchers(new ImageUpdateWatchers(image_ctx->cct)),
     m_quiesce_watchers(new QuiesceWatchers(
       image_ctx->cct, image_ctx->asio_engine->get_work_queue())) {
+}
+
+template <typename I>
+void ImageState<I>::rebind_quiesce_work_queue(asio::ContextWQ* work_queue) {
+  ceph_assert(m_quiesce_watchers != nullptr);
+  m_quiesce_watchers->set_work_queue(work_queue);
 }
 
 template <typename I>

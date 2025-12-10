@@ -135,6 +135,13 @@ bool QueueImageDispatch<I>::enqueue(
     return false;
   }
 
+  // Already on a ContextWQ channel: stay there so the object-request
+  // completion token captures this thread.
+  auto* wq = m_image_ctx->asio_engine->get_work_queue();
+  if (wq != nullptr && wq->current_channel() != nullptr) {
+    return false;
+  }
+
   if (!read_op) {
     m_flush_tracker->start_io(tid);
     *on_finish = new LambdaContext([this, tid, on_finish=*on_finish](int r) {
