@@ -49,7 +49,6 @@ import { CephfsVolumeFormComponent } from './ceph/cephfs/cephfs-form/cephfs-form
 import { UpgradeProgressComponent } from './ceph/cluster/upgrade/upgrade-progress/upgrade-progress.component';
 import { MultiClusterComponent } from './ceph/cluster/multi-cluster/multi-cluster.component';
 import { MultiClusterListComponent } from './ceph/cluster/multi-cluster/multi-cluster-list/multi-cluster-list.component';
-import { MultiClusterDetailsComponent } from './ceph/cluster/multi-cluster/multi-cluster-details/multi-cluster-details.component';
 import { SmbClusterFormComponent } from './ceph/smb/smb-cluster-form/smb-cluster-form.component';
 import { SmbShareFormComponent } from './ceph/smb/smb-share-form/smb-share-form.component';
 import { SmbJoinAuthFormComponent } from './ceph/smb/smb-join-auth-form/smb-join-auth-form.component';
@@ -228,10 +227,6 @@ const routes: Routes = [
                 path: `${URLVerbs.RECONNECT}/:name`,
                 component: MultiClusterFormComponent,
                 data: { breadcrumbs: ActionLabels.RECONNECT }
-              },
-              {
-                path: 'performance-details',
-                component: MultiClusterDetailsComponent
               }
             ]
           }

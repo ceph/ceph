@@ -123,7 +123,9 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     TagModule,
     TextLabelListComponent,
     SelectModule,
-    LayoutModule
+    LayoutModule,
+    CheckboxModule,
+    GridModule
   ],
   declarations: [
     MonitorComponent,

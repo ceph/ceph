@@ -16,7 +16,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { MultiCluster } from '~/app/shared/models/multi-cluster';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Router } from '@angular/router';
 import { CookiesService } from '~/app/shared/services/cookie.service';
 import { Observable, Subscription } from 'rxjs';
 import { SettingsService } from '~/app/shared/api/settings.service';
@@ -65,7 +65,6 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
     private cookieService: CookiesService,
     private settingsService: SettingsService,
     private cdsModalService: ModalCdsService,
-    private route: ActivatedRoute,
     private urlBuilder: URLBuilderService
   ) {
     super();
@@ -276,7 +275,6 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
 
   setExpandedRow(expandedRow: any) {
     super.setExpandedRow(expandedRow);
-    this.router.navigate(['performance-details'], { relativeTo: this.route });
   }
 
   refresh() {
