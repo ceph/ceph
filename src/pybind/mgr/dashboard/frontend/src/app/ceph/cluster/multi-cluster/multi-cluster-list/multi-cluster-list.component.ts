@@ -22,11 +22,14 @@ import { Observable, Subscription } from 'rxjs';
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+const BASE_URL = 'multi-cluster/manage-clusters';
 
 @Component({
   selector: 'cd-multi-cluster-list',
   templateUrl: './multi-cluster-list.component.html',
-  styleUrls: ['./multi-cluster-list.component.scss']
+  styleUrls: ['./multi-cluster-list.component.scss'],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class MultiClusterListComponent extends ListWithDetails implements OnInit, OnDestroy {
   @ViewChild(TableComponent)
@@ -38,7 +41,7 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
   private subs = new Subscription();
   permissions: Permissions;
   tableActions: CdTableAction[];
-  clusterTokenStatus: object = {};
+  clusterTokenStatus: { [key: string]: any } = {};
   columns: Array<CdTableColumn> = [];
   data: any;
   selection = new CdTableSelection();
@@ -62,7 +65,8 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
     private cookieService: CookiesService,
     private settingsService: SettingsService,
     private cdsModalService: ModalCdsService,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private urlBuilder: URLBuilderService
   ) {
     super();
     this.tableActions = [
@@ -70,22 +74,22 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
         permission: 'create',
         icon: Icons.add,
         name: this.actionLabels.CONNECT,
-        disable: (selection: CdTableSelection) => this.getDisable('connect', selection),
-        click: () => this.openRemoteClusterInfoModal('connect')
+        disable: (selection: CdTableSelection) => this.getDisable('Connect', selection),
+        routerLink: () => this.urlBuilder.getConnect()
       },
       {
         permission: 'update',
         icon: Icons.edit,
         name: this.actionLabels.EDIT,
         disable: (selection: CdTableSelection) => this.getDisable('edit', selection),
-        click: () => this.openRemoteClusterInfoModal('edit')
+        routerLink: () => this.urlBuilder.getEdit(this.selection.first().name)
       },
       {
         permission: 'update',
         icon: Icons.refresh,
         name: this.actionLabels.RECONNECT,
         disable: (selection: CdTableSelection) => this.getDisable('reconnect', selection),
-        click: () => this.openRemoteClusterInfoModal('reconnect')
+        routerLink: () => this.urlBuilder.getReconnect(this.selection.first().name)
       },
       {
         permission: 'delete',
@@ -100,7 +104,7 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
 
   ngOnInit(): void {
     this.subs.add(
-      this.multiClusterService.subscribe((resp: object) => {
+      this.multiClusterService.subscribe((resp: any) => {
         if (resp && resp['config']) {
           this.hubUrl = resp['hub_url'];
           this.currentUrl = resp['current_url'];
@@ -254,12 +258,12 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
     if (this.hubUrl !== this.currentUrl) {
       return $localize`Please switch to the local-cluster to ${action} a remote cluster`;
     }
-    if (!selection.hasSelection && action !== 'connect') {
+    if (!selection.hasSelection && action !== 'Connect') {
       return $localize`Please select one or more clusters to ${action}`;
     }
     if (selection.hasSingleSelection) {
       const cluster = selection.first();
-      if (cluster['cluster_alias'] === 'local-cluster' && action !== 'connect') {
+      if (cluster['cluster_alias'] === 'local-cluster' && action !== 'Connect') {
         return $localize`Cannot ${action} local cluster`;
       }
     }
