@@ -291,7 +291,7 @@ public:
     // must be user-oriented required by maybe_init
     assert(is_user_transaction(t.get_src()));
 
-    co_await pin.co_refresh();
+    co_await pin.mapping_refresh();
 
     if (pin.is_indirect()) {
       pin = co_await complete_mapping(t, std::move(pin));
@@ -466,10 +466,10 @@ public:
       }
     }
     if (pos) {
-      auto npos = co_await pos->refresh();
+      co_await pos->mapping_refresh();
       co_await lba_manager->alloc_extents(
 	t,
-	npos.get_effective_cursor_ref(),
+	pos->get_effective_cursor_ref(),
 	std::vector<LogicalChildNodeRef>(
 	  exts.begin(), exts.end()));
     } else {
@@ -535,7 +535,7 @@ public:
     extent_len_t len) {
     LOG_PREFIX(TransactionManager::reserve_region);
     SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
-    pos = co_await pos.refresh();
+    co_await pos.mapping_refresh();
     auto pin = co_await lba_manager->reserve_region(
       t,
       pos.get_effective_cursor_ref(),
@@ -571,7 +571,7 @@ public:
     SUBDEBUGT(seastore_tm, "{} clone to hint {} ... pos={}, updateref={}",
       t, mapping, hint, pos, updateref);
     ceph_assert(!pos.is_indirect());
-    pos = co_await pos.refresh();
+    co_await pos.mapping_refresh();
     mapping = co_await complete_mapping(t, mapping);
     laddr_t inter_key = mapping.is_indirect() ?
       mapping.get_intermediate_key() :
@@ -615,8 +615,8 @@ public:
     SUBDEBUGT(seastore_tm,
       "src_base={}, dst_base={}, {}~{}, mapping={}, pos={}, updateref={}",
       t, src_base, dst_base, offset, len, mapping, pos, updateref);
-    co_await pos.co_refresh();
-    mapping = co_await mapping.refresh();
+    co_await pos.mapping_refresh();
+    co_await mapping.mapping_refresh();
     auto left = len;
     bool shared_direct = false;
     auto cloned_to = offset;
@@ -1085,21 +1085,21 @@ public:
     LOG_PREFIX(TransactionManager::remove_mappings_in_range);
     SUBDEBUGT(seastore_tm, "{}~{}, first_mapping: {}",
       t, start, unaligned_len, first_mapping);
-    auto mapping = co_await first_mapping.refresh();
-    while (!mapping.is_end()) {
-      assert(mapping.get_key() >= start);
-      auto mapping_end = (mapping.get_key() + mapping.get_length()
+    co_await first_mapping.mapping_refresh();
+    while (!first_mapping.is_end()) {
+      assert(first_mapping.get_key() >= start);
+      auto mapping_end = (first_mapping.get_key() + first_mapping.get_length()
 	).checked_to_laddr();
       if (mapping_end > start + unaligned_len) {
 	break;
       }
-      if (params.skip_direct_mapping && mapping.is_real()) {
-	mapping = co_await mapping.next();
+      if (params.skip_direct_mapping && first_mapping.is_real()) {
+	first_mapping = co_await first_mapping.next();
 	continue;
       }
       if (params.cascade_remove_on_indirect ||
-	  mapping.is_zero_reserved()) {
-	mapping = co_await remove(t, std::move(mapping)
+	  first_mapping.is_zero_reserved()) {
+	first_mapping = co_await remove(t, std::move(first_mapping)
 	).handle_error_interruptible(
 	  punch_mappings_iertr::pass_further{},
 	  crimson::ct_error::assert_all{
@@ -1107,8 +1107,8 @@ public:
 	  }
 	);
       } else {
-	mapping = co_await _remove_indirect_mapping_only(
-	  t, std::move(mapping)
+	first_mapping = co_await _remove_indirect_mapping_only(
+	  t, std::move(first_mapping)
 	).handle_error_interruptible(
 	  punch_mappings_iertr::pass_further{},
 	  crimson::ct_error::assert_all{
@@ -1117,7 +1117,7 @@ public:
 	);
       }
     }
-    co_return mapping;
+    co_return first_mapping;
   }
 
   ~TransactionManager();
@@ -1250,7 +1250,7 @@ private:
     if (pin.is_indirect()) {
       SUBDEBUGT(seastore_tm, "{} into {} remaps ...",
         t, pin, remaps.size());
-      co_await pin.co_refresh();
+      co_await pin.mapping_refresh();
       pin = co_await complete_mapping(t, std::move(pin));
     } else {
       laddr_t original_laddr = pin.get_key();
@@ -1261,7 +1261,7 @@ private:
       ceph_assert(!pin.is_clone());
 
       TCachedExtentRef<T> extent;
-      co_await pin.co_refresh();
+      co_await pin.mapping_refresh();
       if (full_extent_integrity_check) {
         SUBTRACET(seastore_tm, "{} reading pin...", t, pin);
         // read the entire extent from disk (See: pin_to_extent)
@@ -1368,10 +1368,7 @@ private:
     co_await trans_intr::parallel_for_each(
       ret,
       [](auto &remapped_mapping) {
-	return remapped_mapping.refresh(
-	).si_then([&remapped_mapping](auto mapping) {
-	  remapped_mapping = std::move(mapping);
-	});
+	return remapped_mapping.mapping_refresh();
       });
     SUBDEBUGT(seastore_tm, "remapped {} pins", t, ret.size());
     co_return ret;

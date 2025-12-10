@@ -243,7 +243,7 @@ TransactionManager::remove(
   Transaction &t,
   LBAMapping mapping)
 {
-  mapping = co_await mapping.refresh();
+  co_await mapping.mapping_refresh();
   mapping = co_await _remove(t, std::move(mapping));
   co_return mapping;
 }
@@ -331,7 +331,9 @@ TransactionManager::resolve_cursor_to_mapping(
   LBACursorRef cursor)
 {
   if (cursor->is_end() || !cursor->is_indirect()) {
-    co_return co_await LBAMapping::create_direct(std::move(cursor)).refresh();
+    auto ret = LBAMapping::create_direct(std::move(cursor));
+    co_await ret.mapping_refresh();
+    co_return ret;
   }
 
   assert(cursor->val->refcount == EXTENT_DEFAULT_REF_COUNT);
@@ -350,9 +352,11 @@ TransactionManager::resolve_cursor_to_mapping(
   assert(direct_cursor->get_laddr() <= intermediate_key);
   assert(direct_cursor->get_laddr() + direct_cursor->get_length()
 	 >= intermediate_key + cursor->get_length());
-  co_return co_await LBAMapping::create_indirect(
+  auto ret = LBAMapping::create_indirect(
     std::move(direct_cursor),
-    std::move(cursor)).refresh();
+    std::move(cursor));
+  co_await ret.mapping_refresh();
+  co_return ret;
 }
 
 TransactionManager::refs_ret TransactionManager::remove(

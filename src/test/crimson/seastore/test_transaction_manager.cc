@@ -798,10 +798,9 @@ struct transaction_manager_test_t :
       }).unsafe_get();
   }
 
-  LBAMapping refresh_lba_mapping(test_transaction_t &t, LBAMapping mapping) {
-    return with_trans_intr(*t.t, [mapping=std::move(mapping)](auto &t) mutable {
-      return mapping.refresh();
-    }).unsafe_get();
+  LBAMapping refresh_lba_mapping(LBAMapping mapping) {
+      mapping.mapping_refresh().unsafe_get();
+      return mapping;
   }
 
   bool try_submit_transaction(test_transaction_t t) {
@@ -1480,7 +1479,7 @@ struct transaction_manager_test_t :
 	auto l_clone_pin = clone_pin(
 	  t, std::move(l_clone_pos), std::move(lpin), l_clone_offset);
         //split left
-	l_clone_pin = refresh_lba_mapping(t, std::move(l_clone_pin));
+	l_clone_pin = refresh_lba_mapping(std::move(l_clone_pin));
         auto pin1 = remap_pin(t, std::move(l_clone_pin), 0, 16 << 10);
         ASSERT_TRUE(pin1);
         auto pin2 = remap_pin(t, std::move(*pin1), 0, 8 << 10);
@@ -1495,7 +1494,7 @@ struct transaction_manager_test_t :
 	auto r_clone_pin = clone_pin(
 	  t, std::move(r_clone_pos), std::move(rpin), r_clone_offset);
         //split right
-	r_clone_pin = refresh_lba_mapping(t, std::move(r_clone_pin));
+	r_clone_pin = refresh_lba_mapping(std::move(r_clone_pin));
         auto pin4 = remap_pin(t, std::move(r_clone_pin), 16 << 10, 16 << 10);
         ASSERT_TRUE(pin4);
         auto pin5 = remap_pin(t, std::move(*pin4), 8 << 10, 8 << 10);
@@ -2216,7 +2215,7 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
       assert(pin.is_viewable());
       std::ignore = alloc_extent(t, get_laddr_hint((LEAF_NODE_CAPACITY + 1) * 4096), 4096, 'a');
       assert(!pin.is_viewable());
-      pin = refresh_lba_mapping(t, pin);
+      pin = refresh_lba_mapping(pin);
       auto extent2 = with_trans_intr(*(t.t), [&pin](auto& trans) {
         auto v = pin.get_logical_extent(trans);
         assert(v.has_child());
