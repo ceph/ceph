@@ -6589,19 +6589,24 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     } else if (command == "getomap") {
       //Debug: Output entire omap
       bufferlist hdrbl;
-      map<string, bufferlist> keyvals;
+      map<string, string> keyvals;
       auto ch = store->open_collection(coll_t(pgid));
       if (!ch) {
 	ss << "unable to open collection for " << pgid;
 	r = -ENOENT;
       } else {
-	r = store->omap_get(ch, ghobject_t(obj), &hdrbl, &keyvals);
+	r = store->omap_get_header(ch, ghobject_t(obj), &hdrbl);
+	r = r < 0 ? r : store->omap_iterate(
+	  ch, ghobject_t(obj),
+	  ObjectStore::omap_iter_seek_t::min_lower_bound(),
+	  [&keyvals] (std::string_view key, std::string_view value) mutable {
+	    keyvals.emplace(key, value);
+	    return ObjectStore::omap_iter_ret_t::NEXT;
+	  });
 	if (r >= 0) {
           ss << "header=" << string(hdrbl.c_str(), hdrbl.length());
-          for (map<string, bufferlist>::iterator it = keyvals.begin();
-	       it != keyvals.end(); ++it)
-            ss << " key=" << (*it).first << " val="
-               << string((*it).second.c_str(), (*it).second.length());
+          for (auto& kv : keyvals)
+            ss << " key=" << kv.first << " val=" << kv.second;
 	} else {
           ss << "error=" << r;
 	}
