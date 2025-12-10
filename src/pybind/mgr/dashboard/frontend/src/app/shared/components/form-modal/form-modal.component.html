@@ -87,7 +87,7 @@
                          [invalidText]="getError(field)"
                          [appendInline]="false"
                          cdDynamicInputCombobox
-                         (updatedItems)="field.typeConfig.options = $event"
+                         (updatedItems)="onLabelsUpdated(field, $event)"
                          [items]="field?.typeConfig?.options"
                          [cdRequiredField]="field?.required === true ? field.label : ''"
                          i18n>
