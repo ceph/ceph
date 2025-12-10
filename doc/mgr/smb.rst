@@ -117,7 +117,7 @@ password_filter_out
     ``none`` the password fields in the output are emitted as plain text. If the
     filter is ``base64`` password fields will be obscured by base64 encoding
     the string.  If the filter is ``hidden`` the password values will be
-    replaced by a invalid generic replacement string containing only asterisks.
+    replaced by an invalid generic replacement string containing only asterisks.
 
 
 Examples
@@ -184,7 +184,7 @@ password_filter
     ``none`` the password fields in the output are emitted as plain text. If
     the filter is ``base64`` password fields will be obscured by base64
     encoding the string.  If the filter is ``hidden`` the password values will
-    be replaced by a invalid generic replacement string containing only
+    be replaced by an invalid generic replacement string containing only
     asterisks.
 
 
@@ -321,7 +321,7 @@ password_filter_out
     ``none`` the password fields in the output are emitted as plain text. If
     the filter is ``base64`` password fields will be obscured by base64
     encoding the string.  If the filter is ``hidden`` the password values will
-    be replaced by a invalid generic replacement string containing only
+    be replaced by an invalid generic replacement string containing only
     asterisks.
 input
     A file name or ``-`` to use the standard input (aka ``stdin``).
@@ -358,7 +358,7 @@ password_filter
     ``none`` the password fields in the output are emitted as plain text. If
     the filter is ``base64`` password fields will be obscured by base64
     encoding the string.  If the filter is ``hidden`` the password values will
-    be replaced by a invalid generic replacement string containing only
+    be replaced by an invalid generic replacement string containing only
     asterisks.
 
 ``resource_name`` arguments can take the following forms:
@@ -771,7 +771,7 @@ cephfs
         Optional string. Name of a subvolumegroup to share
     subvolume
         Optional string. Name of a subvolume to share. If ``subvolumegroup`` is
-        not set and this value contains a exactly one ``/`` character, the
+        not set and this value contains exactly one ``/`` character, the
         subvolume field will automatically be split into
         ``<subvolumegroup>/<subvolume>`` parts for convenience
     provider
