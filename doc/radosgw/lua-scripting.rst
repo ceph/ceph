@@ -135,6 +135,12 @@ Debug Log
 The ``RGWDebugLog()`` function accepts a string and prints it to the debug log with priority 20.
 Each log message is prefixed ``Lua INFO:``. This function has no return value.
 
+The ``RGWDebugLog2()`` function accepts a format string and a variable list of arguments,
+and prints the formatted string to the debug log with priority 20.
+Instances of "{}" in the format string are replaced by the corresponding arguments.
+The arguments must be of Lua types convertible to strings.
+Each log message is prefixed ``Lua INFO:``. This function has no return value.
+
 Request Fields
 -----------------
 
@@ -383,6 +389,25 @@ Lua Code Samples
     RGWDebugLog("copy from object:")
     print_object(Request.CopyFrom.Object)
     RGWDebugLog("to object:")
+    print_object(Request.Object)
+  end
+
+- Print information using ``RGWDebugLog2`` on source and destination objects in case of copy:
+
+.. code-block:: lua
+
+  function print_object(object)
+    RGWDebugLog2("  Name: {}", object.Name)
+    RGWDebugLog2("  Instance: {}", object.Instance)
+    RGWDebugLog2("  Id: {}", object.Id)
+    RGWDebugLog2("  Size: {}", object.Size)
+    RGWDebugLog2("  MTime: {}", object.MTime)
+  end
+
+  if Request.CopyFrom and Request.Object and Request.CopyFrom.Object then
+    RGWDebugLog2("copy from object:")
+    print_object(Request.CopyFrom.Object)
+    RGWDebugLog2("to object:")
     print_object(Request.Object)
   end
 
