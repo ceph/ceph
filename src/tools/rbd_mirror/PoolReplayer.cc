@@ -326,6 +326,13 @@ void PoolReplayer<I>::init(const std::string& site_name) {
     return;
   }
 
+  r = m_remote_rados->cluster_fsid(&m_remote_fsid);
+  if (r < 0) {
+    derr << "failed to retrieve remote cluster fsid: " << cpp_strerror(r)
+	 << dendl;
+    return;
+  }
+
   r = m_remote_rados->ioctx_create(m_local_io_ctx.get_pool_name().c_str(),
                                    m_remote_io_ctx);
   if (r < 0) {
@@ -362,9 +369,10 @@ void PoolReplayer<I>::init(const std::string& site_name) {
     m_remote_pool_poller.reset();
     return;
   }
+
   ceph_assert(!m_remote_pool_meta.mirror_uuid.empty());
   m_pool_meta_cache->set_remote_pool_meta(
-    m_remote_io_ctx.get_id(), m_remote_pool_meta);
+    m_remote_fsid, m_remote_io_ctx.get_id(), m_remote_pool_meta);
   m_pool_meta_cache->set_local_pool_meta(
     m_local_io_ctx.get_id(), {m_local_mirror_uuid});
 
@@ -440,7 +448,8 @@ void PoolReplayer<I>::shut_down() {
     m_remote_pool_poller->shut_down(&ctx);
     ctx.wait();
 
-    m_pool_meta_cache->remove_remote_pool_meta(m_remote_io_ctx.get_id());
+    m_pool_meta_cache->remove_remote_pool_meta(m_remote_fsid,
+                                               m_remote_io_ctx.get_id());
     m_pool_meta_cache->remove_local_pool_meta(m_local_io_ctx.get_id());
   }
   m_remote_pool_poller.reset();
