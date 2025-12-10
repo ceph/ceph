@@ -237,6 +237,13 @@ private:
     boost::optional<Snapshot> get_m_prev() const {
       return m_prev;
     }
+    void set_snapshot_unlocked() {
+      take_snapshot = true;
+    }
+    void sdq_cv_notify_all_unlocked() {
+      sdq_cv.notify_all();
+    }
+    void wait_until_safe_to_snapshot();
 
     int remote_mkdir(const std::string &epath, const struct ceph_statx &stx);
   protected:
@@ -253,6 +260,7 @@ private:
     std::queue<PeerReplayer::SyncEntry> m_sync_dataq;
     int in_flight = 0;
     bool m_sync_stack_finished = false;
+    bool take_snapshot = false;
     // It's not used in RemoteSync but required for unlock in unregister_directory by data sync threads
     std::string m_dir_root;
   };
@@ -451,7 +459,6 @@ private:
   ceph::mutex smq_lock;
   ceph::condition_variable smq_cv;
   std::queue<std::shared_ptr<SyncMechanism>> syncm_q;
-  bool take_snapshot = false;
 
   ServiceDaemonStats m_service_daemon_stats;
 
