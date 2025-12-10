@@ -8,6 +8,7 @@
 #include "include/buffer.h"
 #include "include/neorados/RADOS.hpp"
 #include "include/rados/librados.hpp"
+#include "include/rbd/asio/ContextWQ.hpp"
 #include "common/zipkin_trace.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Types.h"
@@ -82,6 +83,7 @@ protected:
   IOContext m_io_context;
   Context *m_completion;
   ZTracer::Trace m_trace;
+  asio::ContextWQ::Channel m_channel = nullptr;
 
   void async_finish(int r);
   void finish(int r);
