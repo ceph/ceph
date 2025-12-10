@@ -318,6 +318,10 @@ Note that the command will not execute when the cluster is in
 recovery stretch mode. The command executes only when the cluster
 is in degraded stretch mode or healthy stretch mode.
 
+.. important:: The ability to exit stretch mode is not present in
+               releases before 18.2.8 (Reef). Clusters running an
+               earlier release should be updated to 18.2.8 or later.
+
 Limitations of Stretch Mode 
 ===========================
 When using stretch mode, OSDs must be located at exactly two sites. 
