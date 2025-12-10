@@ -2064,6 +2064,29 @@ class TestSubvolumes(TestVolumesHelper):
         v = json.loads(v)
         self.assertEqual(v, attrs)
 
+    def test_subvolume_clone_charmap(self):
+        subvolume = self._gen_subvol_name()
+        attrs = {
+          "normalization": "nfkd",
+          "encoding": "utf8",
+          "casesensitive": False,
+        }
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        for setting, value in attrs.items():
+            self._fs_cmd("subvolume", "charmap", "set", self.volname, subvolume, setting, str(value))
+
+        snapshot = "snap1"
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+        clone = "clone"
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # wait for clone to complete
+        self._wait_for_clone_to_complete(clone)
+
+        v = self._fs_cmd("subvolume", "charmap", "get", self.volname, clone)
+        v = json.loads(v)
+        self.assertEqual(v, attrs)
+
     def test_subvolume_charmap_rm(self):
         subvolume = self._gen_subvol_name()
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
@@ -2531,6 +2554,70 @@ class TestSubvolumes(TestVolumesHelper):
                     self._fs_cmd("subvolume", "earmark", operation, self.volname, subvolume)
             except CommandFailedError as ce:
                 self.assertEqual(ce.exitstatus, errno.ENOENT, error_message)
+
+    def test_subvolume_create_without_normalization(self):
+        # create subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolume)
+        self.assertNotEqual(subvolpath, None)
+
+        # check normalization
+        try:
+            self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume, "normalization")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENODATA)
+        else:
+            self.fail("expected the 'fs subvolume charmap' command to fail")
+
+    def test_subvolume_create_with_normalization(self):
+        # create subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--normalization", "nfc")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolume)
+        self.assertNotEqual(subvolpath, None)
+
+        # check normalization
+        normalization = self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume, "normalization")
+        self.assertEqual(normalization.strip(), "nfc")
+
+    def test_subvolume_create_without_case_sensitivity(self):
+        # create subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolume)
+        self.assertNotEqual(subvolpath, None)
+
+        # check case sensitivity
+        try:
+            self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume, "casesensitive")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENODATA)
+        else:
+            self.fail("expected the 'fs subvolume charmap' command to fail")
+
+    def test_subvolume_create_with_case_insensitive(self):
+        # create subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--casesensitive=0")
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolume)
+        self.assertNotEqual(subvolpath, None)
+
+        # check case sensitivity
+        case_sensitive = self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume, "casesensitive")
+        self.assertEqual(case_sensitive.strip(), "0")
+
+        # check normalization (it's implicitly enabled by --case-insensitive, with default value 'nfd')
+        normalization = self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume, "normalization")
+        self.assertEqual(normalization.strip(), "nfd")
 
     def test_subvolume_expand(self):
         """
