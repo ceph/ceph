@@ -575,17 +575,17 @@ Commands
   With ``--verbose``, show additional output status
   details for every mirror-enabled image in the pool or namespace.
 
-:command:`mirror snapshot schedule add` [-p | --pool *pool*] [--namespace *namespace*] [--image *image*] *interval* [*start-time*]
+:command:`mirror snapshot schedule add` [-p | --pool *pool*] [--namespace *namespace*] [--image *image*] *interval*
   Add mirror snapshot schedule. The ``interval`` can be specified in
   days, hours, or minutes using the d, h, m suffix respectively.
-  The ``start-time`` is a time string in ISO 8601 format. Not providing the
-  ``--pool``, ``--namespace`` and ``--image`` options creates a global
-  schedule which applies to all mirror-enabled images in the cluster.
+  Not providing the ``--pool``, ``--namespace`` and ``--image``
+  options creates a global schedule which applies to all mirror-enabled
+  images in the cluster.
 
 :command:`mirror snapshot schedule list` [-R | --recursive] [--format *format*] [--pretty-format] [-p | --pool *pool*] [--namespace *namespace*] [--image *image*]
   List mirror snapshot schedule.
 
-:command:`mirror snapshot schedule remove` [-p | --pool *pool*] [--namespace *namespace*] [--image *image*] *interval* [*start-time*]
+:command:`mirror snapshot schedule remove` [-p | --pool *pool*] [--namespace *namespace*] [--image *image*] *interval*
   Remove mirror snapshot schedule.
 
 :command:`mirror snapshot schedule status` [-p | --pool *pool*] [--format *format*] [--pretty-format] [--namespace *namespace*] [--image *image*]
@@ -693,13 +693,13 @@ Commands
   it can be removed using ``--force``. An image that is actively in-use by clones
   or has snapshots cannot be removed.
 
-:command:`trash purge schedule add` [-p | --pool *pool*] [--namespace *namespace*] *interval* [*start-time*]
+:command:`trash purge schedule add` [-p | --pool *pool*] [--namespace *namespace*] *interval*
   Add trash purge schedule.
 
 :command:`trash purge schedule list` [-R | --recursive] [--format *format*] [--pretty-format] [-p | --pool *pool*] [--namespace *namespace*]
   List trash purge schedule.
 
-:command:`trash purge schedule remove` [-p | --pool *pool*] [--namespace *namespace*] *interval* [*start-time*]
+:command:`trash purge schedule remove` [-p | --pool *pool*] [--namespace *namespace*] *interval*
   Remove trash purge schedule.
 
 :command:`trash purge schedule status` [-p | --pool *pool*] [--format *format*] [--pretty-format] [--namespace *namespace*]
@@ -1037,7 +1037,7 @@ To restore an image from trash and rename it::
 
 To create a mirror snapshot schedule for an image::
 
-       rbd mirror snapshot schedule add --pool mypool --image myimage 12h 14:00:00-05:00
+       rbd mirror snapshot schedule add --pool mypool --image myimage 12h
 
 Availability
 ============

@@ -149,25 +149,23 @@ class Module(MgrModule):
     @with_latest_osdmap
     def mirror_snapshot_schedule_add(self,
                                      level_spec: str,
-                                     interval: str,
-                                     start_time: Optional[str] = None) -> Tuple[int, str, str]:
+                                     interval: str) -> Tuple[int, str, str]:
         """
         Add rbd mirror snapshot schedule
         """
         spec = LevelSpec.from_name(self, level_spec, namespace_validator, image_validator)
-        return self.mirror_snapshot_schedule.add_schedule(spec, interval, start_time)
+        return self.mirror_snapshot_schedule.add_schedule(spec, interval)
 
     @CLIWriteCommand('rbd mirror snapshot schedule remove')
     @with_latest_osdmap
     def mirror_snapshot_schedule_remove(self,
                                         level_spec: str,
-                                        interval: Optional[str] = None,
-                                        start_time: Optional[str] = None) -> Tuple[int, str, str]:
+                                        interval: Optional[str] = None) -> Tuple[int, str, str]:
         """
         Remove rbd mirror snapshot schedule
         """
         spec = LevelSpec.from_name(self, level_spec, namespace_validator, image_validator)
-        return self.mirror_snapshot_schedule.remove_schedule(spec, interval, start_time)
+        return self.mirror_snapshot_schedule.remove_schedule(spec, interval)
 
     @CLIReadCommand('rbd mirror snapshot schedule list')
     @with_latest_osdmap
@@ -193,25 +191,23 @@ class Module(MgrModule):
     @with_latest_osdmap
     def mirror_group_snapshot_schedule_add(self,
                                            level_spec: str,
-                                           interval: str,
-                                           start_time: Optional[str] = None) -> Tuple[int, str, str]:
+                                           interval: str) -> Tuple[int, str, str]:
         """
         Add rbd mirror group snapshot schedule
         """
         spec = LevelSpec.from_name(self, level_spec, namespace_validator, group_validator=group_validator)
-        return self.mirror_group_snapshot_schedule.add_schedule(spec, interval, start_time)
+        return self.mirror_group_snapshot_schedule.add_schedule(spec, interval)
 
     @CLIWriteCommand('rbd mirror group snapshot schedule remove')
     @with_latest_osdmap
     def mirror_group_snapshot_schedule_remove(self,
                                               level_spec: str,
-                                              interval: Optional[str] = None,
-                                              start_time: Optional[str] = None) -> Tuple[int, str, str]:
+                                              interval: Optional[str] = None) -> Tuple[int, str, str]:
         """
         Remove rbd mirror group snapshot schedule
         """
         spec = LevelSpec.from_name(self, level_spec, namespace_validator, group_validator=group_validator)
-        return self.mirror_group_snapshot_schedule.remove_schedule(spec, interval, start_time)
+        return self.mirror_group_snapshot_schedule.remove_schedule(spec, interval)
 
     @CLIReadCommand('rbd mirror group snapshot schedule list')
     @with_latest_osdmap
@@ -333,25 +329,23 @@ class Module(MgrModule):
     @with_latest_osdmap
     def trash_purge_schedule_add(self,
                                  level_spec: str,
-                                 interval: str,
-                                 start_time: Optional[str] = None) -> Tuple[int, str, str]:
+                                 interval: str) -> Tuple[int, str, str]:
         """
         Add rbd trash purge schedule
         """
         spec = LevelSpec.from_name(self, level_spec, allow_image_level=False)
-        return self.trash_purge_schedule.add_schedule(spec, interval, start_time)
+        return self.trash_purge_schedule.add_schedule(spec, interval)
 
     @CLIWriteCommand('rbd trash purge schedule remove')
     @with_latest_osdmap
     def trash_purge_schedule_remove(self,
                                     level_spec: str,
-                                    interval: Optional[str] = None,
-                                    start_time: Optional[str] = None) -> Tuple[int, str, str]:
+                                    interval: Optional[str]) -> Tuple[int, str, str]:
         """
         Remove rbd trash purge schedule
         """
         spec = LevelSpec.from_name(self, level_spec, allow_image_level=False)
-        return self.trash_purge_schedule.remove_schedule(spec, interval, start_time)
+        return self.trash_purge_schedule.remove_schedule(spec, interval)
 
     @CLIReadCommand('rbd trash purge schedule list')
     @with_latest_osdmap

@@ -40,7 +40,7 @@ public:
 
 private:
   std::string name;
-  std::list<std::pair<std::string, std::string>> items;
+  std::list<std::string> intervals;
 };
 
 std::ostream& operator<<(std::ostream& os, Schedule &s);

@@ -494,29 +494,27 @@ class MirrorGroupSnapshotScheduleHandler:
 
     def add_schedule(self,
                      level_spec: LevelSpec,
-                     interval: str,
-                     start_time: Optional[str]) -> Tuple[int, str, str]:
+                     interval: str) -> Tuple[int, str, str]:
         self.log.debug(
-            "MirrorGroupSnapshotScheduleHandler: add_schedule: level_spec={}, interval={}, start_time={}".format(
-                level_spec.name, interval, start_time))
+            "MirrorGroupSnapshotScheduleHandler: add_schedule: "
+            "level_spec={}, interval={}".format(level_spec.name, interval))
 
         # TODO: optimize to rebuild only affected part of the queue
         with self.lock:
-            self.schedules.add(level_spec, interval, start_time)
+            self.schedules.add(level_spec, interval)
             self.rebuild_queue()
         return 0, "", ""
 
     def remove_schedule(self,
                         level_spec: LevelSpec,
-                        interval: Optional[str],
-                        start_time: Optional[str]) -> Tuple[int, str, str]:
+                        interval: Optional[str]) -> Tuple[int, str, str]:
         self.log.debug(
-            "MirrorGroupSnapshotScheduleHandler: remove_schedule: level_spec={}, interval={}, start_time={}".format(
-                level_spec.name, interval, start_time))
+            "MirrorGroupSnapshotScheduleHandler: remove_schedule: "
+            "level_spec={}, interval={}".format(level_spec.name, interval))
 
         # TODO: optimize to rebuild only affected part of the queue
         with self.lock:
-            self.schedules.remove(level_spec, interval, start_time)
+            self.schedules.remove(level_spec, interval)
             self.rebuild_queue()
         return 0, "", ""
 
