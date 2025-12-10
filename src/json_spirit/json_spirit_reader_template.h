@@ -136,7 +136,12 @@ namespace json_spirit
     {
         typedef typename String_type::const_iterator Iter_type;
 
-        if( end - begin < 2 ) return String_type( begin, end );
+        // Check for empty or single-character strings before processing
+        // 1. begin >= end: prevents invalid/reversed iterator ranges
+        // 2. end - begin < 2: handles empty strings and single-char strings
+        if (begin >= end || end - begin < 2) {
+            return String_type(begin, end);
+        }
 
         String_type result;
         
