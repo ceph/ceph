@@ -459,8 +459,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual int omap_iterate(
      ObjectStore::CollectionHandle &c_, ///< [in] collection
      const ghobject_t &oid, ///< [in] object
-     ObjectStore::omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
-     OmapIterFunction f ///< [in] function to call for each key/value pair
+     const ObjectStore::omap_iter_seek_t &start_from, ///< [in] where the iterator should point to at the beginning
+     const OmapIterFunction &f ///< [in] function to call for each key/value pair
    ) = 0;
    virtual int omap_get_values(
      ObjectStore::ObjectStore::CollectionHandle &c_, ///< [in] collection
@@ -472,7 +472,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
      const ghobject_t &oid,   ///< [in] Object containing omap
      ceph::buffer::list *header,      ///< [out] omap header
-     bool allow_eio = false ///< [in] don't assert on eio
+     bool allow_eio ///< [in] don't assert on eio
    ) = 0;
    virtual int omap_get(
      ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid

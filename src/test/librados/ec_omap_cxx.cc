@@ -65,7 +65,7 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
 
   // OMAP GET VALS TESTING
 
-  read.read(0, bl_write.length(), &bl_read, NULL);
+  read.read(0, bl_write.length(), &bl_read, nullptr);
 
   std::map<std::string, bufferlist> returned_vals_1;
   std::map<std::string, bufferlist> returned_vals_2;
@@ -78,8 +78,8 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
 
   ASSERT_EQ(0, memcmp(bl_read.c_str(), "ceph", 4));
   ASSERT_EQ(0, err);
-  ASSERT_EQ(returned_vals_1.size(), (unsigned)1);
-  ASSERT_EQ(returned_vals_2.size(), (unsigned)4);
+  ASSERT_EQ(1u, returned_vals_1.size());
+  ASSERT_EQ(4u, returned_vals_2.size());
 
   // OMAP GET KEYS TESTING
 
@@ -91,7 +91,7 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
   EXPECT_EQ(ret, 0);
 
   ASSERT_EQ(0, err);
-  ASSERT_EQ(returned_keys.size(), (unsigned)6);
+  ASSERT_EQ(6u, returned_keys.size());
 
   // OMAP GET HEADER TESTING
 
@@ -119,7 +119,7 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
   EXPECT_EQ(ret, 0);
 
   ASSERT_EQ(0, err);
-  ASSERT_EQ(returned_vals_by_keys.size(), (unsigned)2);
+  ASSERT_EQ(2u, returned_vals_by_keys.size());
 
   // OMAP CMP TESTING
 
@@ -155,7 +155,7 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
   EXPECT_EQ(ret, 0);
 
   ASSERT_EQ(0, err);
-  ASSERT_EQ(returned_keys_with_removed.size(), (unsigned)5);
+  ASSERT_EQ(5u, returned_keys_with_removed.size());
 
   // OMAP REMOVE RANGE TESTING
 
@@ -172,7 +172,7 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
   EXPECT_EQ(ret, 0);
 
   ASSERT_EQ(0, err);
-  ASSERT_EQ(returned_keys_with_removed_range.size(), (unsigned)3);
+  ASSERT_EQ(3u, returned_keys_with_removed_range.size());
 
   // OMAP CLEAR TESTING
 
@@ -187,7 +187,7 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
   EXPECT_EQ(ret, 0);
 
   ASSERT_EQ(0, err);
-  ASSERT_EQ(returned_keys.size(), (unsigned)0);
+  ASSERT_TRUE(returned_keys.empty());
 
 }
 

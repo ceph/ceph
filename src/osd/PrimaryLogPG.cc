@@ -7847,7 +7847,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       {
         get_pgbackend()->omap_get_header(ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
-                                         &osd_op.outdata);
+                                         &osd_op.outdata, false);
 	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
