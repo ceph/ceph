@@ -103,8 +103,8 @@ struct client_config {
         << ")";
     return out.str();
   }
-
-  std::string json_str() const {
+/*
+  std::string json_str(std::string_view format) const {
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->open_object_section("client_config");
     f->dump_string("server_addr", server_addr.str());
@@ -116,8 +116,9 @@ struct client_config {
     f->dump_unsigned("depth", depth);
     f->dump_bool("skip_core_0", skip_core_0);
     f->close_section();
-    return f->str();
+    co_return std::move(f); //f->str();
   }
+  */
 
   static client_config load(bpo::variables_map& options) {
     client_config conf;
@@ -169,7 +170,6 @@ struct server_config {
   }
 }; // SERVER CONFIG
 
-} // anonymous namespace
 
 const unsigned SAMPLE_RATE = 256;
 
@@ -272,14 +272,13 @@ static seastar::future<> run(
           server.msgr->set_auth_client(&server.dummy_auth);
           server.msgr->set_auth_server(&server.dummy_auth);
           server.is_fixed_cpu = is_fixed_cpu;
-          return server.msgr->bind(entity_addrvec_t{addr}
-          ).safe_then([&server] {
-            return server.msgr->start({&server});
-          }, crimson::net::Messenger::bind_ertr::assert_all_func(
+          co_await server.msgr->bind(entity_addrvec_t{addr});
+          co_await server.msgr->start({&server});
+          co_await crimson::net::Messenger::bind_ertr::assert_all_func(
               [addr] (const std::error_code& e) {
             logger().error("Server: "
                            "there is another instance running at {}", addr);
-          }));
+          });
         });
       }
 
@@ -310,7 +309,10 @@ static seastar::future<> run(
         unsigned msg_count_interval = 0;
       };
 
-      // should not be called frequently to impact performance
+      // should not be called frequently to impact performance: we might keep a
+      // counter of the last time this was called, so we could ignore any call
+      // made within a short period (e.g., 100ms) to reduce the overhead of
+      // collecting report data
       void get_report(ShardReport& last) {
         unsigned last_msg_count = last.msg_count;
         int msg_size = -1;
@@ -340,103 +342,94 @@ static seastar::future<> run(
       void start_report() {
         seastar::promise<> pr_report;
         fut_report = pr_report.get_future();
-        seastar::do_with(
-            TimerReport(seastar::smp::count),
-            [this](auto &report) {
-          return seastar::do_until(
-            [this] { return is_stopped; },
-            [&report, this] {
-              return seastar::sleep(2s
-              ).then([&report, this] {
-                report.elapsed += 2;
-                if (is_fixed_cpu) {
-                  return seastar::smp::submit_to(msgr_sid,
-                      [&report, this] {
-                    auto &server = container().local();
-                    server.get_report(report.reports[seastar::this_shard_id()]);
-                  }).then([&report, this] {
-                    auto now = mono_clock::now();
-                    auto prv = report.start_time;
-                    report.start_time = now;
-                    if (prv == mono_clock::zero()) {
-                      // cannot compute duration
-                      return;
-                    }
-                    std::chrono::duration<double> duration_d = now - prv;
-                    double duration = duration_d.count();
-                    auto &ireport = report.reports[msgr_sid];
-                    double iops = ireport.msg_count_interval / duration;
-                    double throughput_MB = -1;
-                    if (ireport.msg_size >= 0) {
-                      throughput_MB = iops * ireport.msg_size / 1048576;
-                    }
-                    std::ostringstream sout;
-                    sout << setfill(' ')
-                         << report.elapsed
-                         << "(" << std::setw(5) << duration << ") "
-                         << std::setw(9) << iops << "IOPS "
-                         << std::setw(8) << throughput_MB << "MiB/s "
-                         << ireport.reactor_utilization
-                         << "(" << ireport.conn_count << ")";
-                    std::cout << sout.str() << std::endl;
-                  });
-                } else {
-                  return seastar::smp::invoke_on_all([&report, this] {
-                    auto &server = container().local();
-                    server.get_report(report.reports[seastar::this_shard_id()]);
-                  }).then([&report] {
-                    auto now = mono_clock::now();
-                    auto prv = report.start_time;
-                    report.start_time = now;
-                    if (prv == mono_clock::zero()) {
-                      // cannot compute duration
-                      return;
-                    }
-                    std::chrono::duration<double> duration_d = now - prv;
-                    double duration = duration_d.count();
-                    unsigned num_msgs = 0;
-                    // -1 means unavailable, -2 means mismatch
-                    int msg_size = -1;
-                    for (auto &i : report.reports) {
-                      if (i.msg_size >= 0) {
-                        if (msg_size == -2) {
-                          // pass
-                        } else if (msg_size == -1) {
-                          msg_size = i.msg_size;
-                        } else {
-                          if (msg_size != i.msg_size) {
-                            msg_size = -2;
-                          }
-                        }
-                      }
-                      num_msgs += i.msg_count_interval;
-                    }
-                    double iops = num_msgs / duration;
-                    double throughput_MB = msg_size;
-                    if (msg_size >= 0) {
-                      throughput_MB = iops * msg_size / 1048576;
-                    }
-                    std::ostringstream sout;
-                    sout << setfill(' ')
-                         << report.elapsed
-                         << "(" << std::setw(5) << duration << ") "
-                         << std::setw(9) << iops << "IOPS "
-                         << std::setw(8) << throughput_MB << "MiB/s ";
-                    for (auto &i : report.reports) {
-                      sout << i.reactor_utilization
-                           << "(" << i.conn_count << ") ";
-                    }
-                    std::cout << sout.str() << std::endl;
-                  });
-                }
-              });
+
+        TimerReport report(seastar::smp::count);
+        co_await seastar::sleep(2s);
+        report.elapsed += 2;
+
+        // If running on a single CPU, get the server report directly, otherwise,
+        // get report from all participant CPUs, using the same lambda
+        if (is_fixed_cpu) {
+          co_await seastar::smp::submit_to(msgr_sid,
+                                         seastar::coroutine::lambda([&report, this] {
+                                         auto &server = container().local();
+                                         server.get_report(report.reports[seastar::this_shard_id()]);
+                                         }));
+        } else {
+          co_await seastar::smp::invoke_on_all(
+            seastar::coroutine::lambda([&report, this] {
+              auto &server = container().local();
+              server.get_report(report.reports[seastar::this_shard_id()]);
+            }));
+        }
+
+        auto now = mono_clock::now();
+        auto prv = report.start_time;
+        report.start_time = now;
+        if (prv == mono_clock::zero()) {
+          // cannot compute duration
+          return;
+        }
+        std::chrono::duration<double> duration_d = now - prv;
+        double duration = duration_d.count();
+
+        if (is_fixed_cpu) {
+            auto &ireport = report.reports[msgr_sid];
+            double iops = ireport.msg_count_interval / duration;
+            double throughput_MB = -1;
+            if (ireport.msg_size >= 0) {
+              throughput_MB = iops * ireport.msg_size / 1048576;
             }
-          );
-        }).then([] {
-          logger().info("report is stopped!");
-        }).forward_to(std::move(pr_report));
-      }
-    };
+            std::ostringstream sout;
+            sout << setfill(' ')
+              << report.elapsed
+              << "(" << std::setw(5) << duration << ") "
+              << std::setw(9) << iops << "IOPS "
+              << std::setw(8) << throughput_MB << "MiB/s "
+              << ireport.reactor_utilization
+              << "(" << ireport.conn_count << ")";
+            std::cout << sout.str() << std::endl;
+        } else {
+          unsigned num_msgs = 0;
+          // -1 means unavailable, -2 means mismatch
+          int msg_size = -1;
+          for (auto &i : report.reports) {
+            if (i.msg_size >= 0) {
+              if (msg_size == -2) {
+                // pass
+              } else if (msg_size == -1) {
+                msg_size = i.msg_size;
+              } else {
+                if (msg_size != i.msg_size) {
+                  msg_size = -2;
+                }
+              }
+            }
+            num_msgs += i.msg_count_interval;
+          }
+          double iops = num_msgs / duration;
+          double throughput_MB = msg_size;
+          if (msg_size >= 0) {
+            throughput_MB = iops * msg_size / 1048576;
+          }
+          // TODO: how to produce JSON instead
+          std::ostringstream sout;
+          sout << setfill(' ')
+            << report.elapsed
+            << "(" << std::setw(5) << duration << ") "
+            << std::setw(9) << iops << "IOPS "
+            << std::setw(8) << throughput_MB << "MiB/s ";
+          for (auto &i : report.reports) {
+            sout << i.reactor_utilization
+              << "(" << i.conn_count << ") ";
+          }
+          std::cout << sout.str() << std::endl;
+        }
+        logger().info("report is stopped!");
+        // apr was the old promise from the do_with()
+        //apr.forward_to(std::move(pr_report));
+    } // start_report
+  }; // Server
 
     struct Client final
         : public crimson::net::Dispatcher,
@@ -532,6 +525,7 @@ static seastar::future<> run(
           throughput_mbps += stats.throughput_mbps;
         }
 
+          // TODO: worth considering producing JSON as well
         void report() const {
           auto str = fmt::format(
             "{}(depth={}):\n"
@@ -667,6 +661,9 @@ static seastar::future<> run(
         return sid + num_clients >= seastar::smp::count;
       }
 
+      // Worth considering measuring some phases to have a better understanding of the time breakdown,
+      // e.g., connection time vs messaging time, or even the latency distribution of messages, 
+      // since we noticed a performance degradation when increasing the number of SMP/CPUs
       seastar::future<> init() {
         return container().invoke_on_all([](auto& client) {
           if (client.is_active()) {
@@ -1083,9 +1080,9 @@ static seastar::future<> run(
 
           conn_state.stopped_send_promise.set_value(stats);
         });
-      }
-    };
-  };
+      } // do_dispatch_messages
+    }; // client
+  }; // test_state
 
   std::optional<unsigned> server_sid;
   bool server_needs_report = false;
@@ -1206,9 +1203,9 @@ static seastar::future<> run(
     });
   });
 
-}
+} // run
 
-}
+} // namespace
 
 int main(int argc, char** argv)
 {

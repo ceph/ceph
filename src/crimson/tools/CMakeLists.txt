@@ -19,6 +19,9 @@ install(TARGETS crimson-store-bench DESTINATION bin)
 add_executable(perf-crimson-msgr perf_crimson_msgr.cc)
 target_link_libraries(perf-crimson-msgr crimson)
 
+add_executable(perf-crimson-msgr-coro perf_crimson_msgr_coro.cc)
+target_link_libraries(perf-crimson-msgr-coro crimson)
+
 add_executable(perf-async-msgr perf_async_msgr.cc)
 target_link_libraries(perf-async-msgr ceph-common global ${ALLOC_LIBS})
 

@@ -50,16 +50,16 @@ static std::list<seastar::lw_shared_ptr<seastar::sharded<T>>> sharded_objects;
 template <typename T, typename... Args>
 seastar::future<T*> create_sharded(Args... args) {
   // seems we should only construct/stop shards on #0
-  return seastar::smp::submit_to(0, [=] {
+  auto *ptr_shard = co_await seastar::smp::submit_to(0, 
+                                  seastar::coroutine::lambda( [=] {
     auto sharded_obj = seastar::make_lw_shared<seastar::sharded<T>>();
     sharded_objects<T>.push_back(sharded_obj);
-    return sharded_obj->start(args...).then([sharded_obj]() {
-      return sharded_obj.get();
-    });
-  }).then([] (seastar::sharded<T> *ptr_shard) {
-    // return the pointer valid for the caller CPU
-    return &ptr_shard->local();
-  });
+    co_await  sharded_obj->start(args...);
+    co_return sharded_obj.get();
+    })
+  );
+  // return the pointer valid for the caller CPU
+  co_return &ptr_shard->local();
 }
 
 double get_reactor_utilization() {
