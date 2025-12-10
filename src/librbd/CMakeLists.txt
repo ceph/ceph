@@ -51,7 +51,7 @@ set(librbd_internal_srcs
   api/Snapshot.cc
   api/Trash.cc
   api/Utils.cc
-  asio/ContextWQ.cc
+  asio/AsioContextWQ.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
   cache/ObjectCacherWriteback.cc
@@ -365,3 +365,8 @@ if(ENABLE_SHARED)
     endif()
 endif(ENABLE_SHARED)
 install(TARGETS librbd DESTINATION ${CMAKE_INSTALL_LIBDIR})
+# Install public headers for external ContextWQ implementations
+install(DIRECTORY
+  "${CMAKE_SOURCE_DIR}/src/include/rbd/asio"
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rbd
+  FILES_MATCHING PATTERN "*.hpp")
