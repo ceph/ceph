@@ -731,7 +731,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     # places and modifying it can will lead to unnecessary disturbances in all
     # those places.
     # See: https://github.com/ceph/ceph/pull/60534#discussion_r2228436110
-    def _is_name_valid(self, name):
+    def _is_name_valid(self, name, nameof):
+        '''
+        Return "Success" if name is valid and if it's invalid return the string
+        that should be printed in stdout.
+        '''
+        if not name:
+            stdout_str = (f"{nameof} name is blank which is not allowed, "
+                          f"choose a better {nameof} name")
         # leading dot in name of subvolume groups and subvolumes
         # will make them hidden dirs, which doesn't seem like a
         # sensible thing to have
@@ -740,29 +747,30 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         # NOTE:
         # we only accept goodchars set of characters, so the input parsing
         # logic does all the heavy lifting of input validation
-        if name.startswith('.'):
-            return False
+        elif name.startswith('.'):
+            stdout_str = (f"{nameof} name starting with a dot which is not "
+                          f"allowed, choose a better {nameof} name")
         # don't allow names starting with a digit. For example, names like "2",
         # "3cephfs", "7subvol".
         elif name[0].isdigit():
-            return False
-        return True
+            stdout_str = (f"{nameof} name starting with a digit which is not "
+                          f"allowed, choose a better {nameof} name")
+        else:
+            stdout_str = None
+
+        if stdout_str:
+            return (-errno.EINVAL, "", stdout_str)
+        else:
+            return (0, "", "Success")
 
     def _is_vol_name_valid(self, name):
-        if not name or not self._is_name_valid(name):
-            return -errno.EINVAL, "", "choose a better volume name"
-        return 0, "", "Success"
+        return self._is_name_valid(name, 'volume')
 
     def _is_group_name_valid(self, name):
-        if not name or self._is_name_valid(name):
-            # for None ... e.g. we're okay when group_name is None
-            return 0, "", "Success"
-        return -errno.EINVAL, "", "choose a better subvolume group name"
+        return self._is_name_valid(name, 'subvolume group')
 
     def _is_subvol_name_valid(self, name):
-        if not name or not self._is_name_valid(name):
-            return -errno.EINVAL, "", "choose a better subvolume name"
-        return 0, "", "Success"
+        return self._is_name_valid(name, 'subvolume')
 
     def handle_command(self, inbuf, cmd):
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
