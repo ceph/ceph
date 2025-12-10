@@ -186,7 +186,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
               const clusterUser = clusterDetails[USER];
 
               if (
-                clusterName === this.selectedCluster[USER] &&
+                clusterName === this.selectedCluster['name'] &&
                 clusterUser === this.selectedCluster[USER] &&
                 clusterDetails['cluster_alias'] !== 'local-cluster'
               ) {

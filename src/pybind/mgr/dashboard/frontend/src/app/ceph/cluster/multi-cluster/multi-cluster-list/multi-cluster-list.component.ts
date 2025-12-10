@@ -6,8 +6,6 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { ModalService } from '~/app/shared/services/modal.service';
-import { MultiClusterFormComponent } from '../multi-cluster-form/multi-cluster-form.component';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -16,7 +14,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { MultiCluster } from '~/app/shared/models/multi-cluster';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Router } from '@angular/router';
 import { CookiesService } from '~/app/shared/services/cookie.service';
 import { Observable, Subscription } from 'rxjs';
 import { SettingsService } from '~/app/shared/api/settings.service';
@@ -62,11 +60,9 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
     public actionLabels: ActionLabelsI18n,
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
-    private modalService: ModalService,
     private cookieService: CookiesService,
     private settingsService: SettingsService,
     private cdsModalService: ModalCdsService,
-    private route: ActivatedRoute,
     private urlBuilder: URLBuilderService
   ) {
     super();
@@ -216,23 +212,6 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
     }
   }
 
-  openRemoteClusterInfoModal(action: string) {
-    const initialState = {
-      clustersData: this.data,
-      action: action,
-      cluster: this.selection.first()
-    };
-    this.bsModalRef = this.modalService.show(MultiClusterFormComponent, initialState, {
-      size: 'xl'
-    });
-    this.bsModalRef.componentInstance.submitAction.subscribe(() => {
-      const currentRoute = this.router.url.split('?')[0];
-      this.multiClusterService.refreshMultiCluster(currentRoute);
-      this.checkClusterConnectionStatus();
-      this.multiClusterService.isClusterAdded(true);
-    });
-  }
-
   openDeleteClusterModal() {
     const cluster = this.selection.first();
     this.modalRef = this.cdsModalService.show(DeleteConfirmationModalComponent, {
@@ -277,7 +256,6 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
 
   setExpandedRow(expandedRow: any) {
     super.setExpandedRow(expandedRow);
-    this.router.navigate(['performance-details'], { relativeTo: this.route });
   }
 
   refresh() {
