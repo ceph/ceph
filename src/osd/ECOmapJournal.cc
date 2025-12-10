@@ -3,17 +3,19 @@
 
 #include "ECOmapJournal.h"
 
-ECOmapJournalEntry::ECOmapJournalEntry(eversion_t version, bool clear_omap, std::optional<ceph::buffer::list> omap_header,
+#include <utility>
+
+ECOmapJournalEntry::ECOmapJournalEntry(const eversion_t version, const bool clear_omap, std::optional<ceph::buffer::list> omap_header,
   std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> omap_updates) : 
-  version(version), clear_omap(clear_omap), omap_header(omap_header), omap_updates(std::move(omap_updates)) {}
+  version(version), clear_omap(clear_omap), omap_header(std::move(omap_header)), omap_updates(std::move(omap_updates)) {}
 
 bool ECOmapJournalEntry::operator==(const ECOmapJournalEntry& other) const {
   return this->version == other.version;
 }
 
-void ECOmapValue::update_value(eversion_t version, std::optional<ceph::buffer::list> value) {
-  this->version = version;
-  this->value = value;
+void ECOmapValue::update_value(const eversion_t new_version, std::optional<ceph::buffer::list> new_value) {
+  this->version = new_version;
+  this->value = std::move(new_value);
 }
 
 void RemovedRanges::add_range(const std::string& start, const std::optional<std::string>& end) {
@@ -24,7 +26,7 @@ void RemovedRanges::add_range(const std::string& start, const std::optional<std:
   while (it != ranges.end()) {
     // Current range is to the left of new range
     if (it->second && *it->second < new_start) {
-      it++;
+      ++it;
       continue;
     }
     // Current range is to the right of new range
@@ -54,26 +56,26 @@ void RemovedRanges::clear_omap() {
   ranges.emplace_back("", std::nullopt);
 }
 
-void ECOmapHeader::update_header(eversion_t version, std::optional<ceph::buffer::list> header) {
-  this->version = version;
-  this->header = header;
+void ECOmapHeader::update_header(const eversion_t new_version, std::optional<ceph::buffer::list> new_header) {
+  this->version = new_version;
+  this->header = std::move(new_header);
 }
 
 
-void ECOmapJournal::add_entry(const hobject_t &hoid, ECOmapJournalEntry &entry) {
+void ECOmapJournal::add_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
   entries[hoid].push_back(entry);
 }
 
 bool ECOmapJournal::remove_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
   // Attempt to remove entry from unprocessed entries
-  auto it_map = entries.find(hoid);
-  if (it_map != entries.end()) {
+  if (const auto it_map = entries.find(hoid);
+    it_map != entries.end()) {
     auto &entry_list = it_map->second;
-    for (auto an_entry : entry_list) {
+    for (const auto& an_entry : entry_list) {
       if (an_entry.version == entry.version) {
         entry_list.remove(an_entry);
-        auto header_it = header_map.find(hoid);
-        if (header_it != header_map.end() &&
+        if (const auto header_it = header_map.find(hoid);
+          header_it != header_map.end() &&
             header_it->second.version == entry.version) {
           header_map.erase(header_it);
         }
@@ -88,14 +90,14 @@ bool ECOmapJournal::remove_entry(const hobject_t &hoid, const ECOmapJournalEntry
 
 bool ECOmapJournal::remove_entry_by_version(const hobject_t &hoid, const eversion_t version) {
   // Attempt to remove entry from unprocessed entries
-  auto it_map = entries.find(hoid);
-  if (it_map != entries.end()) {
+  if (const auto it_map = entries.find(hoid);
+    it_map != entries.end()) {
     auto &entry_list = it_map->second;
-    for (auto entry : entry_list) {
+    for (const auto& entry : entry_list) {
       if (entry.version == version) {
         entry_list.remove(entry);
-        auto header_it = header_map.find(hoid);
-        if (header_it != header_map.end() &&
+        if (const auto header_it = header_map.find(hoid);
+          header_it != header_map.end() &&
             header_it->second.version == entry.version) {
           header_map.erase(header_it);
             }
@@ -123,12 +125,12 @@ void ECOmapJournal::clear_all() {
 }
 
 // Only works if each processed object creates a RemovedRanges entry
-int ECOmapJournal::entries_size(const hobject_t &hoid) const {
-  auto entries_it = entries.find(hoid);
-  if (entries_it != entries.end()) {
+std::size_t ECOmapJournal::entries_size(const hobject_t &hoid) const {
+  if (const auto entries_it = entries.find(hoid);
+    entries_it != entries.end()) {
     return entries_it->second.size();
   }
-  return 0;
+  return 0u;
 }
 
 // Function to get specific object's entries, if not present, creates an empty list
@@ -137,8 +139,8 @@ std::list<ECOmapJournalEntry>& ECOmapJournal::get_entries(const hobject_t &hoid)
 }
 
 std::list<ECOmapJournalEntry> ECOmapJournal::snapshot_entries(const hobject_t &hoid) const {
-  auto it = entries.find(hoid);
-  if (it != entries.end()) {
+  if (const auto it = entries.find(hoid);
+    it != entries.end()) {
     return it->second;
   }
   return {};
@@ -164,7 +166,7 @@ ECOmapJournal::iterator ECOmapJournal::end_entries_mutable(const hobject_t& hoid
 
 std::optional<ceph::buffer::list> ECOmapJournal::get_updated_header(const hobject_t &hoid) {
   process_headers(hoid);
-  if (header_map.find(hoid) == header_map.end()) {
+  if (!header_map.contains(hoid)) {
     return std::nullopt;
   }
   return header_map[hoid].header;
@@ -198,8 +200,8 @@ void ECOmapJournal::process_entries(const hobject_t &hoid) {
     // Clear omap if specified
     if (entry_iter->clear_omap) {
       // Mark all keys as removed
-      for (auto &&key_value : key_map[hoid]) {
-        key_value.second.update_value(entry_iter->version, std::nullopt);
+      for (auto [_, value] : key_map[hoid]) {
+        value.update_value(entry_iter->version, std::nullopt);
       }
       // Mark entire range as removed
       removed_ranges.clear_omap();
@@ -207,7 +209,7 @@ void ECOmapJournal::process_entries(const hobject_t &hoid) {
 
     // Update header if present
     if (entry_iter->omap_header) {
-      if (header_map.find(hoid) == header_map.end()) {
+      if (!header_map.contains(hoid)) {
         header_map[hoid] = ECOmapHeader(entry_iter->version, entry_iter->omap_header);
       } else {
         header_map[hoid].update_header(entry_iter->version, entry_iter->omap_header);
@@ -216,9 +218,8 @@ void ECOmapJournal::process_entries(const hobject_t &hoid) {
 
     // Process key updates
     auto &obj_map = key_map[hoid];
-    for (auto &&update : entry_iter->omap_updates) {
-      OmapUpdateType type = update.first;
-      auto iter = update.second.cbegin();
+    for (const auto & [type, update] : entry_iter->omap_updates) {
+      auto iter = update.cbegin();
       switch (type) {
         case OmapUpdateType::Insert: {
           std::map<std::string, ceph::buffer::list> vals;
@@ -246,8 +247,8 @@ void ECOmapJournal::process_entries(const hobject_t &hoid) {
           // Mark keys in key_map as removed
           for (const auto &key : keys) {
             // Check if key already exists in key map
-            auto entry_it = obj_map.find(key);
-            if (entry_it != obj_map.end()) {
+            if (auto entry_it = obj_map.find(key);
+              entry_it != obj_map.end()) {
               // Update existing value to null
               entry_it->second.update_value(entry_iter->version, std::nullopt);
             } else {
@@ -291,16 +292,15 @@ void ECOmapJournal::process_entries(const hobject_t &hoid) {
 
 bool ECOmapJournal::remove_processed_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
   // Remove the header if version matches
-  auto header_it = header_map.find(hoid);
-  if (header_it != header_map.end() && header_it->second.version == entry.version) {
-    header_map.erase(header_it);
+  if (const auto header_it = header_map.find(hoid);
+    header_it != header_map.end() && header_it->second.version == entry.version) {
+      header_map.erase(header_it);
   }
 
   // Remove key updates if version matches
   auto &obj_map = key_map[hoid];
-  for (auto &&update : entry.omap_updates) {
-    OmapUpdateType type = update.first;
-    auto iter = update.second.cbegin();
+  for (const auto & [type, update] : entry.omap_updates) {
+    auto iter = update.cbegin();
     switch (type) {
       case OmapUpdateType::Insert: {
         std::map<std::string, ceph::buffer::list> vals;
@@ -319,8 +319,8 @@ bool ECOmapJournal::remove_processed_entry(const hobject_t &hoid, const ECOmapJo
         std::set<std::string> keys;
         decode(keys, iter);
         for (const auto &key : keys) {
-          auto it = obj_map.find(key);
-          if (it != obj_map.end() && 
+          if (auto it = obj_map.find(key);
+            it != obj_map.end() &&
               it->second.version == entry.version) {
             obj_map.erase(key);
           }
@@ -351,8 +351,8 @@ bool ECOmapJournal::remove_processed_entry(const hobject_t &hoid, const ECOmapJo
   }
 
   // Remove removed ranges if version matches
-  auto removed_ranges_it = removed_ranges_map.find(hoid);
-  if (removed_ranges_it != removed_ranges_map.end()) {
+  if (const auto removed_ranges_it = removed_ranges_map.find(hoid);
+    removed_ranges_it != removed_ranges_map.end()) {
     auto &removed_ranges_list = removed_ranges_it->second;
     for (auto rr_it = removed_ranges_list.begin(); rr_it != removed_ranges_list.end(); ++rr_it) {
       if (rr_it->version == entry.version) {
@@ -369,8 +369,8 @@ bool ECOmapJournal::remove_processed_entry(const hobject_t &hoid, const ECOmapJo
 
 bool ECOmapJournal::remove_processed_entry_by_version(const hobject_t &hoid, const eversion_t version) {
   // Remove the header if version matches
-  auto header_it = header_map.find(hoid);
-  if (header_it != header_map.end() && header_it->second.version == version) {
+  if (const auto header_it = header_map.find(hoid);
+    header_it != header_map.end() && header_it->second.version == version) {
     header_map.erase(header_it);
   }
 
@@ -410,20 +410,20 @@ ECOmapJournal::UpdateMapType ECOmapJournal::get_key_map(const hobject_t &hoid) {
 ECOmapJournal::RangeMapType ECOmapJournal::get_removed_ranges(const hobject_t &hoid) {
   // Merge all removed ranges for the object
   RangeMapType merged_ranges;
-  auto it = removed_ranges_map.find(hoid);
-  if (it != removed_ranges_map.end()) {
+  if (const auto it = removed_ranges_map.find(hoid);
+    it != removed_ranges_map.end()) {
     for (const auto &rr : it->second) {
-      for (const auto &range : rr.ranges) {
+      for (const auto & [range_first, range_second] : rr.ranges) {
         // Add range to merged_ranges, merging overlapping ranges
-        std::string start = range.first;
-        std::optional<std::string> end = range.second;
+        std::string start = range_first;
+        std::optional<std::string> end = range_second;
 
         // Find the range that starts after the current start
         auto map_it = merged_ranges.upper_bound(start);
         if (map_it != merged_ranges.begin()) {
           // Merge range to the left, if they overlap
-          auto prev = std::prev(map_it);
-          if (!prev->second || *prev->second >= start) {
+          if (const auto prev = std::prev(map_it);
+            !prev->second || *prev->second >= start) {
             start = prev->first;
             if (!end) {
 
