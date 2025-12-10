@@ -615,6 +615,7 @@ void Session::dump(Formatter *f, bool cap_dump) const
   f->dump_unsigned("num_completed_requests", get_num_completed_requests());
   f->dump_unsigned("num_completed_flushes", get_num_completed_flushes());
   f->dump_bool("reconnecting", reconnecting);
+  f->dump_int("importing_count", importing_count);
   f->dump_object("recall_caps", recall_caps);
   f->dump_object("release_caps", release_caps);
   f->dump_object("recall_caps_throttle", recall_caps_throttle);
