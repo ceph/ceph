@@ -4080,6 +4080,11 @@ void RGWDeleteBucket::execute(optional_yield y)
 
 int RGWPutObj::init_processing(optional_yield y) {
   copy_source = url_decode(s->info.env->get("HTTP_X_AMZ_COPY_SOURCE", ""));
+  if (copy_source.empty()) {
+    ldpp_dout(this, 5) << "copy obj x-amz-copy-source is null" << dendl;
+    ret = -EINVAL;
+  }
+
   copy_source_range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
   size_t pos;
   int ret;
