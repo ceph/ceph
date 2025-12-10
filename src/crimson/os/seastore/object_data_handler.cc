@@ -779,49 +779,43 @@ ObjectDataHandler::do_remap_based_edge_punch(
     assert(overwrite_range.is_end_in_mapping(edge_mapping));
   }
 
-  auto fut = base_iertr::now();
   if (((edge & edge_t::LEFT) &&
 	!overwrite_range.is_begin_aligned(ctx.tm.get_block_size())) ||
       ((edge & edge_t::RIGHT) &&
 	!overwrite_range.is_end_aligned(ctx.tm.get_block_size()))) {
     // if the overwrite range is not aligned,
     // we need to read the padding data first.
-    fut = read_unaligned_edge_data(
+    co_await read_unaligned_edge_data(
       ctx, overwrite_range, data, edge_mapping, edge);
   }
-  return fut.si_then([ctx, edge_mapping, &overwrite_range, edge] {
-    if (edge == edge_t::LEFT) {
-      if (overwrite_range.aligned_begin > edge_mapping.get_key()) {
-	return ctx.tm.cut_mapping<ObjectDataBlock>(
-	  ctx.t, overwrite_range.aligned_begin, std::move(edge_mapping), true
-	).si_then([](auto mapping) {
-	  return mapping.next();
-	});
-      } else {
-	// this branch happens when:
-	// "overwrite.aligned_begin == edge_mapping.get_key() &&
-	//  overwrite.unaligned_begin > edge_mapping.get_key()"
-	return base_iertr::make_ready_future<
-	  LBAMapping>(std::move(edge_mapping));
-      }
+  if (edge == edge_t::LEFT) {
+    if (overwrite_range.aligned_begin > edge_mapping.get_key()) {
+      edge_mapping = co_await ctx.tm.cut_mapping<ObjectDataBlock>(
+        ctx.t, overwrite_range.aligned_begin, std::move(edge_mapping), true);
+      edge_mapping = co_await edge_mapping.next();
     } else {
-      assert(edge == edge_t::RIGHT);
-      if (overwrite_range.aligned_end <
-		edge_mapping.get_key() + edge_mapping.get_length()) {
-	return ctx.tm.cut_mapping<ObjectDataBlock>(
-	  ctx.t, overwrite_range.aligned_end, std::move(edge_mapping), false);
+      // this branch happens when:
+      // "overwrite.aligned_begin == edge_mapping.get_key() &&
+      //  overwrite.unaligned_begin > edge_mapping.get_key()"
+    }
+  } else {
+    assert(edge == edge_t::RIGHT);
+    if (overwrite_range.aligned_end <
+        edge_mapping.get_key() + edge_mapping.get_length()) {
+      edge_mapping = co_await ctx.tm.cut_mapping<ObjectDataBlock>(
+        ctx.t, overwrite_range.aligned_end, std::move(edge_mapping), false);
       } else {
-	// this branch happens when overwrite.aligned_end is equal to
-	// the end of the edge_mapping while overwrite.unaligned_end is
-	// less than that of the edge_mapping.
-	return ctx.tm.remove(ctx.t, std::move(edge_mapping)
-	).handle_error_interruptible(
-	  base_iertr::pass_further{},
-	  crimson::ct_error::assert_all{"unexpected error"}
+        // this branch happens when overwrite.aligned_end is equal to
+        // the end of the edge_mapping while overwrite.unaligned_end is
+        // less than that of the edge_mapping.
+        edge_mapping = co_await ctx.tm.remove(ctx.t, std::move(edge_mapping)
+        ).handle_error_interruptible(
+          base_iertr::pass_further{},
+          crimson::ct_error::assert_all{"unexpected error"}
 	);
       }
-    }
-  });
+  }
+  co_return std::move(edge_mapping);
 }
 
 // punch the edge mapping following the edge_handle_policy_t.
