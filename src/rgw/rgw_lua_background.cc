@@ -121,6 +121,7 @@ std::unique_ptr<lua_state_guard> Background::initialize_lguard_state() {
     open_standard_libs(L);
     set_package_path(L, lua_manager->luarocks_path());
     create_debug_action(L, cct);
+    create_debug_action_f(L, cct);
     create_background_metatable(L);
   } catch (const std::runtime_error& e) {
     ldpp_dout(&dp, 1)

@@ -280,6 +280,168 @@ TEST(TestRGWLua, URI)
   ASSERT_EQ(rc, 0);
 }
 
+TEST(TestRGWLua, RGWDebugLogF)
+{
+  const std::string script = R"(
+    RGWDebugLogF("Testing {} {} {} {}", "hello", 1234567890, true, nil)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLogFTooManyArguments)
+{
+  // fmt does not consider too many args to be an error
+  const std::string script = R"(
+    RGWDebugLogF("Testing {}", "hello", 1234567890)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLogFTooFewArguments)
+{
+  // This will fail internally but rc is still 0
+  const std::string script = R"(
+    RGWDebugLogF("Testing {} , {}", 1234567890)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLogFNoArguments)
+{
+  const std::string script = R"(
+    RGWDebugLogF("Hello World")
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLogFUnsupportedFormat1)
+{
+  const std::string script = R"(
+    RGWDebugLogF("Testing {:10f}", 123.456)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLogFUnsupportedFormat2)
+{
+  const std::string script = R"(
+    RGWDebugLogF("Testing {1} {0} {1}", "world", "hello")
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLogFUnsupportedFormat3)
+{
+  const std::string script = R"(
+    RGWDebugLogF("Testing {{ {} }} {}", 123, 456)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLogFInvalidFormat)
+{
+  const std::string script = R"(
+    RGWDebugLogF("Testing {} incomplete format string {", 1234567890, true)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLogFUnsupportedType)
+{
+  const std::string script = R"(
+    RGWDebugLogF("Testing table {}", {"abc", "def"})
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLogFInvalidField)
+{
+  const std::string script = R"(
+    RGWDebugLogF("Testing {}", Request.Kaboom)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, -1);
+}
+
+TEST(TestRGWLua, RGWDebugLogFRequest)
+{
+  // This will fail internally as this is a table.
+  // However rc will still be 0
+  const std::string script = R"(
+    RGWDebugLogF("Testing {}", Request.Bucket)
+  )";
+
+  DEFINE_REQ_STATE;
+  RGWBucketInfo info;
+  info.bucket.tenant = "mytenant";
+  info.bucket.name = "myname";
+  info.bucket.marker = "mymarker";
+  info.bucket.bucket_id = "myid";
+  info.owner = rgw_user{"mytenant", "myuser"};
+  s.bucket.reset(new sal::RadosBucket(nullptr, info));
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLogFBucketNameField)
+{
+  const std::string script = R"(
+    RGWDebugLogF("Testing {}", Request.Bucket.Name)
+  )";
+
+  DEFINE_REQ_STATE;
+  RGWBucketInfo info;
+  info.bucket.tenant = "mytenant";
+  info.bucket.name = "myname";
+  info.bucket.marker = "mymarker";
+  info.bucket.bucket_id = "myid";
+  info.owner = rgw_user{"mytenant", "myuser"};
+  s.bucket.reset(new sal::RadosBucket(nullptr, info));
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
 TEST(TestRGWLua, Response)
 {
   const std::string script = R"(
