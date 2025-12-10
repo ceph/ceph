@@ -2361,9 +2361,15 @@ void Objecter::resend_mon_ops()
 // read | write ---------------------------
 
 
-void Objecter::op_post_submit(Op* op) {
+void Objecter::op_post_redrive(Op* op) {
   boost::asio::post(service, [this, op]() {
-    op_submit(op);
+    shunique_lock rl(rwlock, ceph::acquire_shared);
+    // This is a redrive, so the op throttlling has already
+    // been driven once.
+    op->ctx_budgeted = true;
+    ceph_tid_t tid = 0;
+    op->trace.event("op submit");
+    _op_submit_with_timeout(op, rl, &tid);
   });
 }
 

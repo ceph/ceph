@@ -392,7 +392,7 @@ void SplitOp::complete() {
     objecter._finish_op(orig_op, rc);
   } else {
     ldout(cct, DBG_LVL) << __func__ << " retry this=" << this << " rc=" << rc << dendl;
-    objecter.op_post_submit(orig_op);
+    objecter.op_post_redrive(orig_op);
   }
 }
 
