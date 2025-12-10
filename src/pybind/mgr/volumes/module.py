@@ -742,6 +742,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         # logic does all the heavy lifting of input validation
         if name.startswith('.'):
             return False
+        # don't allow names starting with a digit. For example, names like "2",
+        # "3cephfs", "7subvol".
+        elif name[0].isdigit():
+            return False
         return True
 
     def _is_vol_name_valid(self, name):
