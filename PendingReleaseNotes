@@ -228,6 +228,10 @@
   to ensure compatibility during upgrades, but can be disabled once old usage logs
   are no longer present to avoid performance overhead.
 
+* RBD: The "start-time" argument for RBD snapshot and purge schedules has been
+  removed because it produced confusing results and conflicted with upcoming
+  work to stagger scheduled operations to avoid activity spikes.
+
 >=19.2.1
 
 * CephFS: The `fs subvolume create` command now allows tagging subvolumes through option

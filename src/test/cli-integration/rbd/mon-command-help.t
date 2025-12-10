@@ -2,12 +2,11 @@
    Monitor commands: 
    =================
   rbd mirror snapshot schedule add        Add rbd mirror snapshot schedule
-   <level_spec> <interval> [<start_time>] 
+   <level_spec> <interval>                
   rbd mirror snapshot schedule list       List rbd mirror snapshot schedule
    [<level_spec>]                         
   rbd mirror snapshot schedule remove     Remove rbd mirror snapshot schedule
-   <level_spec> [<interval>] [<start_     
-   time>]                                 
+   <level_spec> [<interval>]              
   rbd mirror snapshot schedule status     Show rbd mirror snapshot schedule status
    [<level_spec>]                         
   rbd perf image counters [<pool_spec>]   Retrieve current RBD IO performance 
@@ -35,10 +34,10 @@
   rbd task list [<task_id>]               List pending or running asynchronous 
                                            tasks
   rbd trash purge schedule add <level_    Add rbd trash purge schedule
-   spec> <interval> [<start_time>]        
+   spec> <interval>                       
   rbd trash purge schedule list [<level_  List rbd trash purge schedule
    spec>]                                 
   rbd trash purge schedule remove <level_ Remove rbd trash purge schedule
-   spec> [<interval>] [<start_time>]      
+   spec> [<interval>]                     
   rbd trash purge schedule status         Show rbd trash purge schedule status
    [<level_spec>]                         

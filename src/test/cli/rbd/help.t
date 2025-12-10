@@ -1998,13 +1998,12 @@
                                         [--pool <pool>] 
                                         [--namespace <namespace>] 
                                         [--image <image>] 
-                                        <interval> [<start-time>] 
+                                        <interval> 
   
   Add mirror snapshot schedule.
   
   Positional arguments
     <interval>           schedule interval
-    <start-time>         schedule start time
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2033,13 +2032,12 @@
                                         [--pool <pool>] 
                                         [--namespace <namespace>] 
                                         [--image <image>] 
-                                        [<interval>] [<start-time>] 
+                                        [<interval>] 
   
   Remove mirror snapshot schedule.
   
   Positional arguments
     <interval>           schedule interval
-    <start-time>         schedule start time
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2611,13 +2609,12 @@
   
   rbd help trash purge schedule add
   usage: rbd trash purge schedule add [--pool <pool>] [--namespace <namespace>] 
-                                      <interval> [<start-time>] 
+                                      <interval> 
   
   Add trash purge schedule.
   
   Positional arguments
     <interval>           schedule interval
-    <start-time>         schedule start time
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2640,13 +2637,12 @@
   rbd help trash purge schedule remove
   usage: rbd trash purge schedule remove
                                         [--pool <pool>] [--namespace <namespace>] 
-                                        [<interval>] [<start-time>] 
+                                        [<interval>] 
   
   Remove trash purge schedule.
   
   Positional arguments
     <interval>           schedule interval
-    <start-time>         schedule start time
   
   Optional arguments
     -p [ --pool ] arg    pool name
