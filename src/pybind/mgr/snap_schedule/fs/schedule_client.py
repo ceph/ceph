@@ -361,7 +361,7 @@ class SnapSchedClient(CephfsClient):
             path = sched.path
             prune_candidates = set()
             time = datetime.now(timezone.utc)
-            mds_max_snaps_per_dir = self.mgr.get_ceph_option('mds_max_snaps_per_dir')
+            mds_max_snaps_per_dir = self.mgr.get_foreign_ceph_option('mds', 'mds_max_snaps_per_dir')
             with open_filesystem(self, sched.fs) as fs_handle:
                 snap_dir = self.mgr.rados.conf_get('client_snapdir')
                 with fs_handle.opendir(f'{path}/{snap_dir}') as d_handle:
