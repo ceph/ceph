@@ -720,31 +720,26 @@ ObjectDataHandler::merge_into_pending_edge(
   } else {
     bl.append_zero(unaligned_len);
   }
-  return ctx.tm.read_pin<ObjectDataBlock>(ctx.t, edge_mapping
-  ).si_then([bl=std::move(bl), &overwrite_range, edge_mapping, edge]
-	    (auto maybe_indirect_extent) mutable {
-    assert(!maybe_indirect_extent.is_indirect());
-    assert(maybe_indirect_extent.extent);
-    assert(maybe_indirect_extent.extent->is_initial_pending());
-    extent_len_t offset =
-      (edge == edge_t::LEFT)
-	? overwrite_range.unaligned_begin.template get_byte_distance<
-	    extent_len_t>(edge_mapping.get_key())
-	: 0;
-    auto iter = bl.cbegin();
-    auto &ptr = maybe_indirect_extent.extent->get_bptr();
-    iter.copy(bl.length(), ptr.c_str() + offset);
-    if (edge == edge_t::LEFT) {
-      auto new_begin = edge_mapping.get_key() + edge_mapping.get_length();
-      overwrite_range.shrink_begin(new_begin.checked_to_laddr());
-      return edge_mapping.next();
-    } else {
-      auto new_end = edge_mapping.get_key();
-      overwrite_range.shrink_end(new_end);
-      return base_iertr::make_ready_future<
-	LBAMapping>(std::move(edge_mapping));
-    }
-  });
+  auto maybe_indirect_extent = co_await ctx.tm.read_pin<ObjectDataBlock>(ctx.t, edge_mapping);
+  assert(!maybe_indirect_extent.is_indirect());
+  assert(maybe_indirect_extent.extent);
+  assert(maybe_indirect_extent.extent->is_initial_pending());
+  extent_len_t offset =
+    (edge == edge_t::LEFT)
+    ? overwrite_range.unaligned_begin.template get_byte_distance<extent_len_t>(edge_mapping.get_key())
+    : 0;
+  auto iter = bl.cbegin();
+  auto &ptr = maybe_indirect_extent.extent->get_bptr();
+  iter.copy(bl.length(), ptr.c_str() + offset);
+  if (edge == edge_t::LEFT) {
+    auto new_begin = edge_mapping.get_key() + edge_mapping.get_length();
+    overwrite_range.shrink_begin(new_begin.checked_to_laddr());
+    edge_mapping = co_await edge_mapping.next();
+  } else {
+    auto new_end = edge_mapping.get_key();
+    overwrite_range.shrink_end(new_end);
+  }
+  co_return std::move(edge_mapping);
 }
 
 base_iertr::future<LBAMapping>
