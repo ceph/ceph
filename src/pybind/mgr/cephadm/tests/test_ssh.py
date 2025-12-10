@@ -94,9 +94,9 @@ class TestWithSSH:
                                                                    exit_status="",
                                                                    exit_signal="",
                                                                    stderr=stderr,
-                                                                   stdout="")), f"Cannot execute the command.+{stderr}")
+                                                                   stdout="")), f"cannot execute the command.+{stderr}")
         # Test case 4: generic error
-        run_test('test4', FakeConn(exception=Exception), "Generic error while executing command.+")
+        run_test('test4', FakeConn(exception=Exception), "Generic error Exception while executing command.+")
 
 
 @pytest.mark.skipif(ConnectionLost is not None, reason='asyncssh')
