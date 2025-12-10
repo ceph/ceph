@@ -726,13 +726,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                             self.vc.cloner.resume()
 
 
+    # XXX: these checks can be done through modifying goodchars regex string but
+    # that is deliberately being avoided as it is also being used in many other
+    # places and modifying it can will lead to unnecessary disturbances in all
+    # those places.
+    # See: https://github.com/ceph/ceph/pull/60534#discussion_r2228436110
     def _is_name_valid(self, name):
         # leading dot in name of subvolume groups and subvolumes
         # will make them hidden dirs, which doesn't seem like a
         # sensible thing to have
         # we also don't want strings with path separators or spaces or
         # non-printable characters
-        # Note:
+        # NOTE:
         # we only accept goodchars set of characters, so the input parsing
         # logic does all the heavy lifting of input validation
         if name.startswith('.'):
