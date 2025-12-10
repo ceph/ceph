@@ -1029,6 +1029,7 @@ TEST(LibCephFS, StatfsQuota) {
 
   ASSERT_EQ(0, ceph_mkdir(cmount, quota_dir, 0777));
   EXPECT_EQ(0, ceph_setxattr(cmount, quota_dir, "ceph.quota.max_files", "10000", 05, 0));
+  EXPECT_EQ(0, ceph_setxattr(cmount, "/", "ceph.quota.max_bytes", "20G", 03, 0));
 
   const int num_quota_files = 1;
   char quota_file[256];
@@ -1057,6 +1058,7 @@ TEST(LibCephFS, StatfsQuota) {
   struct statvfs reg_stvbuf;
   ASSERT_EQ(0, ceph_statfs(cmount, "test_statfs_regular_1", &reg_stvbuf));
   ASSERT_GT(reg_stvbuf.f_files, quota_stvbuf.f_files);
+  ASSERT_EQ(21474836480, quota_stvbuf.f_blocks*quota_stvbuf.f_bsize);
 
   for (int i = 0; i < num_reg_files; i++) {
     sprintf(regular_file, "test_statfs_regular_%d", i);
