@@ -1444,22 +1444,20 @@ private:
       direct_partial_off,
       partial_len,
       // extent_init_func
-      seastar::coroutine::lambda(
-        [laddr=pin.get_intermediate_base(),
-        maybe_init=std::move(maybe_init),
-        child_pos=std::move(child_pos),
-        &t, this] (T &extent) mutable {
-          assert(extent.is_logical());
-          assert(!extent.has_laddr());
-          assert(!extent.has_been_invalidated());
-          child_pos.link_child(&extent);
-          child_pos.invalidate_retired_placeholder(t, *cache, extent);
-          extent.set_laddr(laddr);
-          maybe_init(extent);
-          extent.set_seen_by_users();
-      }),
-      pin.get_checksum()
-    );
+      [laddr=pin.get_intermediate_base(),
+      maybe_init=std::move(maybe_init),
+      child_pos=std::move(child_pos),
+      &t, this] (T &extent) mutable {
+        assert(extent.is_logical());
+        assert(!extent.has_laddr());
+        assert(!extent.has_been_invalidated());
+        child_pos.link_child(&extent);
+        child_pos.invalidate_retired_placeholder(t, *cache, extent);
+        extent.set_laddr(laddr);
+        maybe_init(extent);
+        extent.set_seen_by_users();
+      },
+      pin.get_checksum());
 
     SUBDEBUGT(seastore_tm, "got extent -- {} fully_loaded: {}",
               t, *ref, ref->is_fully_loaded());
@@ -1495,7 +1493,6 @@ private:
       direct_key,
       direct_length,
       // extent_init_func
-      seastar::coroutine::lambda(
       [direct_key, child_pos=std::move(child_pos),
       &t, this](CachedExtent &extent) mutable {
         assert(extent.is_logical());
@@ -1507,9 +1504,8 @@ private:
         lextent.set_laddr(direct_key);
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
-      }
-    ),
-    cursor->get_checksum());
+      },
+      cursor->get_checksum());
     SUBDEBUGT(seastore_tm, "got extent -- {} fully_loaded: {}",
               t, *ref, ref->is_fully_loaded());
     assert(ref->is_fully_loaded());
