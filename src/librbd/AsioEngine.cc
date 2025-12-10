@@ -6,7 +6,7 @@
 #include "include/neorados/RADOS.hpp"
 #include "include/rados/librados.hpp"
 #include "common/dout.h"
-#include "librbd/asio/ContextWQ.h"
+#include "librbd/asio/AsioContextWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -21,9 +21,11 @@ AsioEngine::AsioEngine(std::shared_ptr<librados::Rados> rados)
     m_cct(m_rados_api->cct()),
     m_io_context(m_rados_api->get_io_context()),
     m_api_strand(std::make_unique<boost::asio::strand<executor_type>>(
-      boost::asio::make_strand(m_io_context))),
-    m_context_wq(std::make_unique<asio::ContextWQ>(m_cct, m_io_context)) {
-  ldout(m_cct, 20) << dendl;
+      boost::asio::make_strand(m_io_context))) {
+
+  // ASIO mode: Create ASIO-based ContextWQ (default mode)
+  m_context_wq = std::make_shared<asio::AsioContextWQ>(m_cct, m_io_context);
+  ldout(m_cct, 20) << "ASIO mode" << dendl;
 
   auto rados_threads = m_cct->_conf.get_val<uint64_t>("librados_thread_count");
   auto rbd_threads = m_cct->_conf.get_val<uint64_t>("rbd_op_threads");
@@ -43,6 +45,12 @@ AsioEngine::AsioEngine(librados::IoCtx& io_ctx)
 AsioEngine::~AsioEngine() {
   ldout(m_cct, 20) << dendl;
   m_api_strand.reset();
+}
+
+void AsioEngine::set_context_wq(std::shared_ptr<asio::ContextWQ> context_wq) {
+  ceph_assert(context_wq != nullptr);
+  ldout(m_cct, 20) << "Setting external ContextWQ" << dendl;
+  m_context_wq = context_wq;
 }
 
 void AsioEngine::dispatch(Context* ctx, int r) {

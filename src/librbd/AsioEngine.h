@@ -54,6 +54,14 @@ public:
     return m_context_wq.get();
   }
 
+  /**
+   * Set an external ContextWQ implementation, replaces the
+   * default ASIO-based ContextWQ.
+   *
+   * @param context_wq Shared pointer to external ContextWQ implementation
+   */
+  void set_context_wq(std::shared_ptr<asio::ContextWQ> context_wq);
+
   template <typename T>
   void dispatch(T&& t) {
     boost::asio::dispatch(m_io_context, std::forward<T>(t));
@@ -72,7 +80,7 @@ private:
 
   boost::asio::io_context& m_io_context;
   std::unique_ptr<boost::asio::strand<executor_type>> m_api_strand;
-  std::unique_ptr<asio::ContextWQ> m_context_wq;
+  std::shared_ptr<asio::ContextWQ> m_context_wq;
 };
 
 } // namespace librbd
