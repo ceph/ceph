@@ -2156,6 +2156,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                 # Lock the function execution
                 assert isinstance(_global_instance, Module)
                 with _global_instance.collect_lock:
+                    cherrypy.response.headers['Content-Type'] = 'text/plain; charset=utf-8'
                     return self._metrics(_global_instance)
 
             @staticmethod
@@ -2365,6 +2366,7 @@ class StandbyModule(MgrStandbyModule):
 
             @cherrypy.expose
             def metrics(self) -> str:
+                cherrypy.response.headers['Content-Type'] = 'text/plain; charset=utf-8'
                 return ''
 
         cherrypy.tree.mount(Root(), '/', {})
