@@ -142,7 +142,8 @@ protected:
   );
   void read_omap_keys(
     std::string oid, 
-    std::set<std::string> &keys_read
+    std::set<std::string> &keys_read,
+    int max_keys = -1
   );
   void check_returned_keys(
     std::list<std::pair<std::string, std::string>> expected_ranges,

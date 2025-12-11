@@ -1340,10 +1340,14 @@ int ECBackend::omap_iterate (
     return f(store_key, store_value);
   };
 
-        if (const auto result = store->omap_iterate(c_, oid, start_from, wrapper);
-          result < 0) {
-          return result;
-        }
+  if (const auto result = store->omap_iterate(c_, oid, start_from, wrapper);
+    result < 0) {
+    return result;
+    }
+  else if (const auto stop = static_cast<bool>(result);
+      stop) {
+      return 1;
+  }
 
   auto ret = ObjectStore::omap_iter_ret_t::NEXT;
   while (journal_it != update_map.end()) {
@@ -1356,7 +1360,7 @@ int ECBackend::omap_iterate (
     ++journal_it;
   }
 
-  return ret == ObjectStore::omap_iter_ret_t::STOP ? 0 : 1;
+  return ret == ObjectStore::omap_iter_ret_t::STOP ? 1 : 0;
 }
 
 int ECBackend::omap_get_values(

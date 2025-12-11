@@ -153,11 +153,12 @@ void RadosTestECPP::write_omap_keys(std::string oid, int min_index,
 
 void RadosTestECPP::read_omap_keys(
   std::string oid, 
-  std::set<std::string> &keys_read)
+  std::set<std::string> &keys_read,
+  const int max_keys)
 {
   ObjectReadOperation read;
   int err = 0;
-  read.omap_get_keys2("", LONG_MAX, &keys_read, nullptr, &err);
+  read.omap_get_keys2("", max_keys, &keys_read, nullptr, &err);
   int ret = ioctx.operate(oid, &read, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(0, err);

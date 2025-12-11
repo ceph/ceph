@@ -653,7 +653,7 @@ TEST_P(LibRadosOmapECPP, MixedBluestoreJournalReads) {
 
   EXPECT_EQ(returned_keys, expected_keys);
 
-  // 2. Wait for Journal to trim then Freeze journal (Write should force a trim and garentee other shards have the data)
+  // 2. Wait for Journal to trim then Freeze journal (Write should force a trim and guarantee other shards have the data)
   bufferlist bl_write;
 
   bl_write.append("ceph");
@@ -693,6 +693,43 @@ TEST_P(LibRadosOmapECPP, MixedBluestoreJournalReads) {
   EXPECT_EQ(returned_keys, expected_keys);
 
   // 6. Unfreeze journal
+  unfreeze_omap_journal();
+}
+
+TEST_P(LibRadosOmapECPP, IteratorStopsButKeysStillInJounral)
+{
+  // 1. Insert keys and allow journal to trim
+  std::set<std::string> expected_keys;
+  std::set<std::string> returned_keys;
+
+  write_omap_keys("Iterator-stop", 1, 25, expected_keys);
+
+  read_omap_keys("Iterator-stop", returned_keys);
+
+  EXPECT_EQ(returned_keys, expected_keys);
+
+  // 2. Wait for Journal to trim then Freeze journal (Write should force a trim and guarantee other shards have the data)
+  bufferlist bl_write;
+
+  bl_write.append("ceph");
+  ObjectWriteOperation write;
+  write.write(0, bl_write);
+  int ret = ioctx.operate("Iterator-stop", &write);
+  EXPECT_EQ(ret, 0);
+
+  freeze_omap_journal();
+
+  // 3. Add some more keys (now some exist in Bluestore, some in journal)
+
+  write_omap_keys("Iterator-stop", 26, 50, expected_keys);
+
+  returned_keys.clear();
+
+  read_omap_keys("Iterator-stop", returned_keys, 20);
+
+  EXPECT_EQ(20u, returned_keys.size());
+
+  // 4. Unfreeze journal
   unfreeze_omap_journal();
 }
 
