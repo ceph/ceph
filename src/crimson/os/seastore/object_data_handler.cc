@@ -627,23 +627,20 @@ ObjectDataHandler::delta_based_edge_overwrite(
 	  extent_len_t>(edge_mapping.get_key() + edge_mapping.get_length())
       : overwrite_range.unaligned_end.template get_byte_distance<
 	  extent_len_t>(edge_mapping.get_key());
-  return delta_based_overwrite(
+  co_await delta_based_overwrite(
     ctx,
     unaligned_overlapped_offset,
     unaligned_overlapped_len,
-    edge_mapping, std::move(bl)
-  ).si_then([edge_mapping, &overwrite_range, edge]() mutable {
-    if (edge == edge_t::LEFT) {
-      auto new_begin = edge_mapping.get_key() + edge_mapping.get_length();
-      overwrite_range.shrink_begin(new_begin.checked_to_laddr());
-      return edge_mapping.next();
-    } else {
-      auto new_end = edge_mapping.get_key();
-      overwrite_range.shrink_end(new_end);
-      return base_iertr::make_ready_future<
-	LBAMapping>(std::move(edge_mapping));
-    }
-  });
+    edge_mapping, std::move(bl));
+  if (edge == edge_t::LEFT) {
+    auto new_begin = edge_mapping.get_key() + edge_mapping.get_length();
+    overwrite_range.shrink_begin(new_begin.checked_to_laddr());
+    edge_mapping = co_await edge_mapping.next();
+  } else {
+    auto new_end = edge_mapping.get_key();
+    overwrite_range.shrink_end(new_end);
+  }
+  co_return std::move(edge_mapping);
 }
 
 ObjectDataHandler::write_ret
