@@ -220,5 +220,27 @@ TEST_P(LibRadosSplitOpECPP, Stat) {
   ASSERT_NE(0, time.tv_sec);
 }
 
+TEST_P(LibRadosSplitOpECPP, Cancel)
+{
+  // cancellation tests are racy, so retry if completion beats the cancellation
+  int ret = 0;
+  int tries = 10;
+  do {
+    auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+    ObjectReadOperation op;
+    op.assert_exists();
+    ioctx.aio_operate("nonexistent", c.get(), &op, nullptr);
+
+    EXPECT_EQ(0, c->cancel());
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, c->wait_for_complete());
+    }
+    ret = c->get_return_value();
+  } while (ret == -ENOENT && --tries);
+
+  EXPECT_EQ(-ECANCELED, ret);
+}
+
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosSplitOpPP);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosSplitOpECPP);
