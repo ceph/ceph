@@ -152,16 +152,16 @@ private:
   void validate_image_snaps_sync_complete(
     const cls::rbd::GroupSnapshot &local_snap, Context *on_finish);
 
+  void is_resync_requested();
+  void handle_is_resync_requested(int r);
+  void is_rename_requested();
+  void handle_is_rename_requested(int r);
   void validate_local_group_snapshots();
   void load_local_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void handle_load_local_group_snapshots(int r);
 
   void load_remote_group_snapshots();
   void handle_load_remote_group_snapshots(int r);
-  void is_resync_requested();
-  void handle_is_resync_requested(int r);
-  void is_rename_requested();
-  void handle_is_rename_requested(int r);
   void check_local_group_snapshots(std::unique_lock<ceph::mutex>* locker);
 
   void scan_for_unsynced_group_snapshots(std::unique_lock<ceph::mutex>* locker);
