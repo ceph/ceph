@@ -1,0 +1,40 @@
+<ng-container *ngIf="gatewayGroup$ | async as gateways">
+  <cd-table
+    #table
+    [data]="gateways"
+    [columns]="columns"
+    columnMode="flex"
+    selectionType="single"
+    identifier="name"
+    (updateSelection)="updateSelection($event)"
+    (fetchData)="fetchData()">
+  </cd-table>
+</ng-container>
+
+<ng-template #dateTpl
+             let-created="data.value">
+  <span *ngIf="created">{{ created | date:'EEE d MMM, yyyy' }}</span>
+</ng-template>
+
+<ng-template #gatewayStatusTpl
+             let-gateway="data.value">
+  <div [cdsStack]="'horizontal'"
+       gap="4">
+
+    @if (gateway.running > 0) {
+    <span>
+      <cd-icon   type="success"></cd-icon>
+      <span class="cds-ml-3">{{ gateway.running }}</span>
+    </span>
+  }
+
+  @if (gateway.error > 0) {
+    <span class="cds-ml-3">
+      <cd-icon   type="error"></cd-icon>
+      <span class="cds-ml-3">{{ gateway.error }}</span>
+    </span>
+  }
+
+
+  </div>
+</ng-template>
