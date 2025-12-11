@@ -2323,6 +2323,7 @@ class StandbyModule(MgrStandbyModule):
 
             @cherrypy.expose
             def metrics(self) -> str:
+                cherrypy.response.headers['Content-Type'] = 'text/plain'
                 return ''
 
         cherrypy.tree.mount(Root(), '/', {})
