@@ -1,14 +1,8 @@
-<cds-tile>
 @if (cardTitle) {
-  <div class="details-card-header">
-    <span class="cds--type-heading-03"
-          i18n>{{ cardTitle }}</span>
-  </div>
+  <span class="details-card-header cds--type-heading-compact-02"
+        i18n>{{ cardTitle }}</span>
 }
 
-  <div class="details-card-body">
-    <div cdsRow>
-      <ng-content select=".details-body-content"></ng-content>
-    </div>
-  </div>
-</cds-tile>
+<div class="details-card-body">
+  <ng-content select=".details-body-content"></ng-content>
+</div>

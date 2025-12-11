@@ -8,10 +8,8 @@
   position: relative;
 }
 
-::ng-deep .cds--label {
-  display: block;
-}
-
-.cds--row {
-  row-gap: layout.$spacing-05;
+.details-card-body {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: layout.$spacing-07;
 }

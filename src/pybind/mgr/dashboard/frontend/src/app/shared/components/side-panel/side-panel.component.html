@@ -4,18 +4,16 @@
 
 <cds-panel [expanded]="expanded"
            [attr.panel-size]="size">
-  <div>
+  <ng-container *ngIf="headerText">
+    <span class="panel-header cds--type-heading-03">{{ headerText }}</span>
     <cds-icon-button kind="ghost"
-                     class="float-end"
+                     class="close-btn"
                      title="Close"
                      (click)="close()">
       <svg cdsIcon="close"></svg>
     </cds-icon-button>
-    <div class="panel-header"
-         *ngIf="headerText">
-    {{ headerText }}
-    </div>
-  </div>
+  </ng-container>
+
   <ng-content select=".panel-content"></ng-content>
   <ng-content select=".panel-footer"></ng-content>
 </cds-panel>

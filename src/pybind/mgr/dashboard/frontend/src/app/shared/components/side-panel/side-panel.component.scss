@@ -1,8 +1,13 @@
-@use './src/styles/vendor/variables' as vv;
+@use '../../../../styles/vendor/variables' as vv;
 @use '@carbon/layout';
 @use '@carbon/styles/scss/theme';
 
 :host ::ng-deep cds-panel {
+  .cds--header-panel--expanded {
+    display: flex;
+    flex-direction: column;
+  }
+
   &[panel-size='sm'] .cds--header-panel--expanded {
     inline-size: 20rem;
   }
@@ -23,19 +28,18 @@
     inline-size: 80rem;
   }
 
-  .cds--header-panel--expanded {
-    background-color: vv.$white;
-    max-inline-size: 100%;
-    overflow: hidden;
-    display: grid;
-    grid-template-rows: auto 1fr auto;
+  .panel-header {
+    flex-direction: row;
+    margin: layout.$spacing-04;
   }
 
-  .panel-header {
-    padding: layout.$spacing-04 layout.$spacing-04 0 layout.$spacing-04;
+  .close-btn {
+    position: absolute;
+    right: 0;
   }
 
   .panel-content {
+    flex: 1;
     overflow: auto;
     padding: 0 layout.$spacing-04 0 layout.$spacing-04;
   }
@@ -43,6 +47,7 @@
   .panel-footer {
     display: flex;
     justify-content: flex-end;
+    width: 100% ;
     border-top: 1px solid theme.$border-subtle-02;
   }
 }
