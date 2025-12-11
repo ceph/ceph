@@ -68,7 +68,7 @@ else:
             if enable_auth:
                 client_key = NvmeofGatewaysConfig.get_client_key(service_name)
                 client_cert = NvmeofGatewaysConfig.get_client_cert(service_name)
-                server_cert = NvmeofGatewaysConfig.get_server_cert(service_name)
+                server_cert = NvmeofGatewaysConfig.get_ssl_cert(service_name)
                 logger.info('Securely connecting to: %s', self.gateway_addr)
                 credentials = grpc.ssl_channel_credentials(
                     root_certificates=server_cert,
