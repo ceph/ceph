@@ -833,9 +833,10 @@ auto Objecter::_linger_by_cookie(uint64_t cookie)
   return info;
 }
 
-Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
-					      const object_locator_t& oloc,
-					      int flags)
+auto Objecter::linger_register(const object_t& oid,
+			       const object_locator_t& oloc,
+			       int flags)
+  -> boost::intrusive_ptr<LingerOp>
 {
   unique_lock l(rwlock);
   // Acquire linger ID

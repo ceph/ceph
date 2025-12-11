@@ -1744,7 +1744,7 @@ void RADOS::notify_(Object o, IOContext _ioc, bufferlist bl,
     bl, &inbl);
 
   impl->objecter->linger_notify(
-    linger_op, rd, ioc->snap_seq, inbl,
+    linger_op.get(), rd, ioc->snap_seq, inbl,
     asio::bind_executor(
       e,
       [cb](bs::error_code ec, ceph::bufferlist bl) mutable {
