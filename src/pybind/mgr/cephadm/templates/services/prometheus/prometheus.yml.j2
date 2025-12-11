@@ -45,6 +45,7 @@ scrape_configs:
 {% for service, urls in service_discovery_cfg.items() %}
  {% if service != 'alertmanager' %}
   - job_name: '{{ service }}'
+    fallback_scrape_protocol: PrometheusText0.0.4
     relabel_configs:
     - source_labels: [__address__]
       target_label: cluster

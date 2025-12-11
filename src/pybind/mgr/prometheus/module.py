@@ -2330,6 +2330,7 @@ class StandbyModule(MgrStandbyModule):
 
             @cherrypy.expose
             def metrics(self) -> str:
+                cherrypy.response.headers['Content-Type'] = 'text/plain; charset=utf-8'
                 return ''
 
         cherrypy.tree.mount(Root(), '/', {})
