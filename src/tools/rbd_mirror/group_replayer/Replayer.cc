@@ -205,13 +205,7 @@ void Replayer<I>::handle_schedule_load_group_snapshots(int r) {
   ceph_assert(m_load_snapshots_task != nullptr);
   m_load_snapshots_task = nullptr;
 
-  auto ctx = new LambdaContext(
-    [this](int r) {
-      validate_local_group_snapshots();
-      m_in_flight_op_tracker.finish_op();
-    });
-  m_in_flight_op_tracker.start_op();
-  m_threads->work_queue->queue(ctx, 0);
+  is_resync_requested();
 }
 
 template <typename I>
@@ -376,7 +370,7 @@ void Replayer<I>::init(Context* on_finish) {
   on_finish->complete(0);
 
   m_update_group_state = true;
-  validate_local_group_snapshots();
+  is_resync_requested();
 }
 
 template <typename I>
@@ -571,7 +565,7 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
       ++remote_snap;
     }
   }
-  is_resync_requested();
+  check_local_group_snapshots(&locker);
 }
 
 template <typename I>
@@ -667,7 +661,14 @@ void Replayer<I>::handle_is_rename_requested(int r) {
     handle_replay_complete(&locker, 0, "remote group renamed");
     return;
   }
-  check_local_group_snapshots(&locker);
+
+  auto ctx = new LambdaContext(
+    [this](int r) {
+      validate_local_group_snapshots();
+      m_in_flight_op_tracker.finish_op();
+    });
+  m_in_flight_op_tracker.start_op();
+  m_threads->work_queue->queue(ctx, 0);
 }
 
 template <typename I>
