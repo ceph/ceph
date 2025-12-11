@@ -423,15 +423,14 @@ match an individual mirrored image will run.
 
 To create a mirror-snapshot schedule with ``rbd``, specify the
 ``mirror snapshot schedule add`` command along with an optional pool or
-image name; interval; and optional start time::
+image name, and interval:
 
-        rbd mirror snapshot schedule add [--pool {pool-name}] [--image {image-name}] {interval} [{start-time}]
+        rbd mirror snapshot schedule add [--pool {pool-name}] [--image {image-name}] {interval}
 
 The ``interval`` can be specified in days, hours, or minutes using ``d``, ``h``,
-``m`` suffix respectively. The optional ``start-time`` can be specified using
-the ISO 8601 time format. For example::
+``m`` suffix respectively. For example::
 
-        $ rbd --cluster site-a mirror snapshot schedule add --pool image-pool 24h 14:00:00-05:00
+        $ rbd --cluster site-a mirror snapshot schedule add --pool image-pool 24h
         $ rbd --cluster site-a mirror snapshot schedule add --pool image-pool --image image1 6h
 
 To remove a mirror-snapshot schedules with ``rbd``, specify the
@@ -446,7 +445,7 @@ example::
 
         $ rbd --cluster site-a mirror snapshot schedule ls --pool image-pool --recursive
         POOL        NAMESPACE IMAGE  SCHEDULE                            
-        image-pool  -         -      every 1d starting at 14:00:00-05:00 
+        image-pool  -         -      every 1d
         image-pool            image1 every 6h                            
 
 To view the status for when the next snapshots will be created for

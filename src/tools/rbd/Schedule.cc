@@ -183,9 +183,6 @@ void add_schedule_options(po::options_description *positional,
       ("interval", po::value<std::string>()->default_value(""),
        "schedule interval");
   }
-  positional->add_options()
-    ("start-time", po::value<std::string>()->default_value(""),
-     "schedule start time");
 }
 
 int get_schedule_args(const po::variables_map &vm, bool mandatory,
@@ -201,11 +198,6 @@ int get_schedule_args(const po::variables_map &vm, bool mandatory,
     return 0;
   }
   (*args)["interval"] = interval;
-
-  std::string start_time = utils::get_positional_argument(vm, arg_index++);
-  if (!start_time.empty()) {
-    (*args)["start_time"] = start_time;
-  }
 
   return 0;
 }
@@ -234,12 +226,7 @@ int Schedule::parse(json_spirit::mValue &schedule_val) {
       }
       auto interval = item["interval"].get_str();
 
-      std::string start_time;
-      if (item["start_time"].type() == json_spirit::str_type) {
-        start_time = item["start_time"].get_str();
-      }
-
-      items.push_back({interval, start_time});
+      intervals.push_back(interval);
     }
 
   } catch (std::runtime_error &) {
@@ -251,23 +238,17 @@ int Schedule::parse(json_spirit::mValue &schedule_val) {
 }
 
 void Schedule::dump(ceph::Formatter *f) {
-  f->open_array_section("items");
-  for (auto &item : items) {
-    f->open_object_section("item");
-    f->dump_string("interval", item.first);
-    f->dump_string("start_time", item.second);
-    f->close_section(); // item
+  f->open_array_section("intervals");
+  for (auto &interval : intervals) {
+    f->dump_string("interval", interval);
   }
-  f->close_section(); // items
+  f->close_section(); // intervals
 }
 
 std::ostream& operator<<(std::ostream& os, Schedule &s) {
   std::string delimiter;
-  for (auto &item : s.items) {
-    os << delimiter << "every " << item.first;
-    if (!item.second.empty()) {
-      os << " starting at " << item.second;
-    }
+  for (auto &interval : s.intervals) {
+    os << delimiter << "every " << interval;
     delimiter = ", ";
   }
   return os;

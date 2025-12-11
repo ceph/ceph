@@ -22,7 +22,6 @@ export class RbdFormModel {
   mirror_mode?: string;
 
   schedule_info: ScheduleInfo;
-  start_time: string;
 }
 
 export class ScheduleInfo {
@@ -33,5 +32,4 @@ export class ScheduleInfo {
 
 export class ScheduleInterval {
   interval: string;
-  start_time: string;
 }
