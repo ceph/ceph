@@ -386,9 +386,6 @@ struct Trimmer : public ObjectModDesc::Visitor {
     spg_t spg = pg->get_parent()->whoami_spg_t();
     auto sinfo = pg->ec_get_sinfo();
 
-    // We need shard and sinfo
-    // sinfo may not be needed if we have another way to check if shard is primary
-
     if (omap_header) {
       if (!sinfo.is_nonprimary_shard(shard)) {
         t->omap_setheader(
