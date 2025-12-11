@@ -151,7 +151,14 @@ export class SilenceListComponent extends PrometheusListHelper {
       {
         name: $localize`Status`,
         prop: 'status.state',
-        cellTransformation: CellTemplate.classAdding
+        cellTransformation: CellTemplate.tag,
+        customTemplateConfig: {
+          map: {
+            active: { class: 'tag-danger' },
+            pending: { class: 'tag-warning' },
+            expired: { class: 'tag-default' }
+          }
+        }
       }
     ];
   }
