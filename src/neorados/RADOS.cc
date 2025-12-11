@@ -1382,7 +1382,7 @@ class Notifier : public async::service_list_base_hook {
   };
 
   asio::io_context::executor_type ex;
-  Objecter::LingerOp* linger_op;
+  boost::intrusive_ptr<Objecter::LingerOp> linger_op;
   // Zero for unbounded. I would not recommend this.
   const uint32_t capacity;
 
@@ -1397,18 +1397,17 @@ class Notifier : public async::service_list_base_hook {
     if (neoref) {
       neoref = nullptr;
     }
-    if (linger_op) {
-      linger_op->put();
-    }
+    linger_op.reset();
     std::unique_lock l(m);
     handlers.clear();
   }
 
 public:
 
-  Notifier(asio::io_context::executor_type ex, Objecter::LingerOp* linger_op,
+  Notifier(asio::io_context::executor_type ex,
+	   boost::intrusive_ptr<Objecter::LingerOp> linger_op,
 	   uint32_t capacity, std::shared_ptr<detail::Client> neoref)
-    : ex(ex), linger_op(linger_op), capacity(capacity),
+    : ex(ex), linger_op(std::move(linger_op)), capacity(capacity),
       svc(asio::use_service<async::service<Notifier>>(
 	    asio::query(ex, boost::asio::execution::context))),
       neoref(std::move(neoref)) {
@@ -1523,12 +1522,12 @@ void RADOS::watch_(Object o, IOContext _ioc,
   auto e = asio::prefer(get_executor(),
 			asio::execution::outstanding_work.tracked);
   impl->objecter->linger_watch(
-    linger_op, op, ioc->snapc, ceph::real_clock::now(), bl,
+    linger_op.get(), op, ioc->snapc, ceph::real_clock::now(), bl,
     asio::bind_executor(
       std::move(e),
       [c = std::move(c), cookie, linger_op](bs::error_code e, cb::list) mutable {
 	if (e) {
-	  linger_op->objecter->linger_cancel(linger_op);
+	  linger_op->objecter->linger_cancel(linger_op.get());
 	  cookie = 0;
 	}
 	asio::dispatch(asio::append(std::move(c), e, cookie));
@@ -1557,13 +1556,13 @@ void RADOS::watch_(Object o, IOContext _ioc, WatchComp c,
   auto e = asio::prefer(get_executor(),
 			asio::execution::outstanding_work.tracked);
   impl->objecter->linger_watch(
-    linger_op, op, ioc->snapc, ceph::real_clock::now(), bl,
+    linger_op.get(), op, ioc->snapc, ceph::real_clock::now(), bl,
     asio::bind_executor(
       std::move(e),
       [c = std::move(c), cookie, linger_op](bs::error_code e, cb::list) mutable {
 	if (e) {
 	  linger_op->user_data.reset();
-	  linger_op->objecter->linger_cancel(linger_op);
+	  linger_op->objecter->linger_cancel(linger_op.get());
 	  cookie = 0;
 	}
 	asio::dispatch(asio::append(std::move(c), e, cookie));
