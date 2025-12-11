@@ -3415,8 +3415,8 @@ test_resync_marker()
 
   # demote primary and request resync on secondary - check that group does not get deleted (due to resync request flag)
   mirror_group_demote "${primary_cluster}" "${pool}/${group0}" 
-  mirror_group_resync "${secondary_cluster}" "${pool}/${group0}" 
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+unknown'
+  mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
 
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
   test "${group_id_before}" = "${group_id_after}" || fail "group recreated with no primary"
