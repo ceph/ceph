@@ -203,7 +203,7 @@ class SplitOp {
   static void prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContext *cct);
   void protect_torn_reads();
   static bool create(Objecter::Op *op, Objecter &objecter,
-    shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, CephContext *cct);
+    shunique_lock<ceph::shared_mutex>& sul, CephContext *cct);
 };
 
 class ECSplitOp : public SplitOp{

@@ -2406,9 +2406,21 @@ void Objecter::_op_submit_with_budget(Op *op,
     }
   }
 
-  bool was_split = SplitOp::create(op, *this, sul, ptid, cct);
+  bool was_split = SplitOp::create(op, *this, sul, cct);
 
-  if (!was_split) {
+  if (was_split) {
+    // All the ops have been sent, but we need to track the op with a tid.
+    if (op->tid == 0) {
+      op->tid = ++last_tid;
+    }
+    OSDSession *s;;
+    int r = _get_session(op->target.osd, &s, sul);
+    // The lock has been held since the last calc_target, so it should not
+    // be possible for a new map to have appeared.
+    ceph_assert(r == 0);
+    _session_op_assign(s, op);
+    inflight_ops++;
+  } else {
     _op_submit_with_timeout(op, sul, ptid);
   }
 }
@@ -2666,9 +2678,20 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r,
   }
 #endif
 
-  ldout(cct, 10) << __func__ << " tid " << tid << " in session " << s->osd
-		 << dendl;
   Op *op = p->second;
+  if (op->split_op_tids) {
+    ldout(cct, 10) << __func__ << " split_op cancel tid " << tid
+                   << " in session " << s->osd << dendl;
+    // An op with split ops is not actually active, but has child ops which
+    // need to be canceled.  This op should end up being canceled by the
+    // generated completions.
+    for (auto tid : *op->split_op_tids) {
+      op_cancel(tid, r);
+    }
+    return 0;
+  }
+  ldout(cct, 10) << __func__ << " tid " << tid << " in session " << s->osd
+               << dendl;
   if (op->has_completion()) {
     num_in_flight--;
     op->complete(ec, r, service.get_executor());
@@ -3417,6 +3440,7 @@ void Objecter::_finish_op(Op *op, int r)
 
   ceph_assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
 
+  ceph_assert(inflight_ops > 0);
   inflight_ops--;
 
   op->put();
