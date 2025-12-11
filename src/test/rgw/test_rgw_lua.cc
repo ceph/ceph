@@ -7,6 +7,7 @@
 #include "rgw_lua_data_filter.h"
 #include "rgw_sal_config.h"
 #include "rgw_perf_counters.h"
+#include "rgw_tag.h"
 
 using namespace std;
 using namespace rgw;
@@ -1723,4 +1724,55 @@ TEST(TestRGWLua, NotValidLua)
   const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script, return_code);
   ASSERT_EQ(rc, -1);
   EXPECT_NE(return_code, -EPERM);
+}
+
+TEST(TestRGWLua, BucketTags)
+{
+  const std::string script = R"(
+    assert(Request.Bucket.Tags["Project"] == "Ceph")
+  )";
+
+  DEFINE_REQ_STATE;
+
+  RGWBucketInfo info;
+  info.bucket.tenant = "mytenant";
+  info.bucket.name = "myname";
+
+  RGWObjTags tags;
+  tags.add_tag("Project", "Ceph");
+
+  bufferlist bl;
+  tags.encode(bl);
+
+  s.bucket_attrs[RGW_ATTR_TAGS] = bl;
+  s.bucket.reset(new sal::RadosBucket(nullptr, info));
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, BucketTagsCount)
+{
+  const std::string script = R"(
+    assert(#Request.Bucket.Tags == 3)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  RGWBucketInfo info;
+  info.bucket.name = "tag-test-bucket";
+
+  RGWObjTags tags;
+  tags.add_tag("Project", "Ceph");
+  tags.add_tag("Owner", "Ceph Team");
+  tags.add_tag("Status", "Testing");
+
+  bufferlist bl;
+  tags.encode(bl);
+
+  s.bucket_attrs[RGW_ATTR_TAGS] = bl;
+  s.bucket.reset(new sal::RadosBucket(nullptr, info));
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
 }
