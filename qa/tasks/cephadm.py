@@ -2109,3 +2109,6 @@ def task(ctx, config):
         finally:
             log.info('Teardown begin')
 
+            log.info('Tearing down any agents...')
+            _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
+                    ['ceph', 'config', 'set', 'mgr', 'mgr/cephadm/use_agent', 'false'])
