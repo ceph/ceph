@@ -1817,7 +1817,7 @@ public:
   bool is_erasure() const { return get_type() == TYPE_ERASURE; }
 
   bool supports_omap() const {
-    return true;
+    return !is_erasure() || allows_ecoptimizations();
   }
 
   bool requires_aligned_append() const {
