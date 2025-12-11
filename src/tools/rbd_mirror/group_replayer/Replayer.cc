@@ -1058,11 +1058,6 @@ void Replayer<I>::mirror_snapshot_complete(
   cls::rbd::GroupSnapshot remote_snap = *itr;
   locker.unlock();
 
-  if (local_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATED) {
-    check_mirror_snapshot_sync_complete(group_snap_id, local_snap, on_finish);
-    return;
-  }
-
   bufferlist* out_bl = new bufferlist();
   std::vector<cls::rbd::GroupImageStatus>* local_images =
     new std::vector<cls::rbd::GroupImageStatus>();
@@ -1215,8 +1210,10 @@ void Replayer<I>::post_mirror_snapshot_created(
     local_snap_copy.snaps = local_image_snap_specs;
     const auto &mirror_namespace = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
             local_snap_copy.snapshot_namespace);
+    // Skip on-disk update if snap state is already in GROUP_SNAPSHOT_STATE_CREATED
     if (mirror_namespace.complete ==
-        cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED) {
+        cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED ||
+        local_snap_copy.state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATED) {
       dout(10) << "local group snap info: "
                << "id: " << local_snap_copy.id
                << ", name: " << local_snap_copy.name
