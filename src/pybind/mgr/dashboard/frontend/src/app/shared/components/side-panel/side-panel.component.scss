@@ -15,6 +15,14 @@
     inline-size: 40rem;
   }
 
+  &[panel-size='xl'] .cds--header-panel--expanded {
+    inline-size: 60rem;
+  }
+
+  &[panel-size='2xl'] .cds--header-panel--expanded {
+    inline-size: 80rem;
+  }
+
   .cds--header-panel--expanded {
     background-color: vv.$white;
     max-inline-size: 100%;
