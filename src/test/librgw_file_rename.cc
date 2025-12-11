@@ -88,15 +88,19 @@ TEST(LibRGW, CREATE_BUCKETS) {
 
     ret = rgw_mkdir(fs, fs->root_fh, bucket1_name.c_str(), &st, create_mask,
 			&bucket1_fh, RGW_MKDIR_FLAG_NONE);
-    ASSERT_EQ(ret, 0);
-    ret = rgw_fh_rele(fs, bucket1_fh, 0 /* flags */);
-    ASSERT_EQ(ret, 0);
+    ASSERT_TRUE((ret == 0) || (ret == -EEXIST));
+    if (ret == 0) {
+      ret = rgw_fh_rele(fs, bucket1_fh, 0 /* flags */);
+      ASSERT_EQ(ret, 0);
+    }
 
     ret = rgw_mkdir(fs, fs->root_fh, bucket2_name.c_str(), &st, create_mask,
 		    &bucket2_fh, RGW_MKDIR_FLAG_NONE);
-    ASSERT_EQ(ret, 0);
-    ret = rgw_fh_rele(fs, bucket2_fh, 0 /* flags */);
-    ASSERT_EQ(ret, 0); 
+    ASSERT_TRUE((ret == 0) || (ret == -EEXIST));
+    if (ret == 0) {
+      ret = rgw_fh_rele(fs, bucket2_fh, 0 /* flags */);
+      ASSERT_EQ(ret, 0);
+    }
   }
 }
 
@@ -131,27 +135,30 @@ TEST(LibRGW, TOPDIR_RENAME) {
   /* rename a file directly residing at the bucket */
   int ret{0};
 
-  ret = make_object(bucket1_fh, obj_name1);
-  ASSERT_EQ(ret, 0);
+  if (do_create) {
+    ret = make_object(bucket1_fh, obj_name1);
+    ASSERT_EQ(ret, 0);
 
-  /* now move it */
-  ret = rgw_rename(fs,
-		   bucket1_fh, obj_name1.c_str(),
-		   bucket1_fh, obj_name2.c_str(),
-		   0 /* flags */);
-  ASSERT_EQ(ret, 0);
+    /* now move it */
+    ret = rgw_rename(fs,
+                     bucket1_fh, obj_name1.c_str(),
+                     bucket1_fh, obj_name2.c_str(),
+                     0 /* flags */);
+    ASSERT_EQ(ret, 0);
 
-  /* now check the result */
-  struct rgw_file_handle* name2_fh;
-  ret = rgw_lookup(fs, bucket1_fh, obj_name2.c_str(), &name2_fh,
-		   nullptr, 0, RGW_LOOKUP_FLAG_NONE);
-  ASSERT_EQ(ret, 0);
-  /* release file handle */
-  ret = rgw_fh_rele(fs, name2_fh, 0 /* flags */);
-  ASSERT_EQ(ret, 0);
+    /* now check the result */
+    struct rgw_file_handle* name2_fh;
+    ret = rgw_lookup(fs, bucket1_fh, obj_name2.c_str(), &name2_fh,
+                     nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+    /* release file handle */
+    ret = rgw_fh_rele(fs, name2_fh, 0 /* flags */);
+    ASSERT_EQ(ret, 0);
+  }
 }
 
 TEST(LibRGW, SUBDIR_RENAME) {
+  /* rename a file object from one name to another, in same subdir */
   int ret{0};
 
   if (do_create) {
@@ -162,8 +169,13 @@ TEST(LibRGW, SUBDIR_RENAME) {
       st.st_mode = 755;
 
       ret = rgw_mkdir(fs, bucket1_fh, subdir1_name.c_str(), &st, create_mask,
-		      &subdir1_fh, RGW_MKDIR_FLAG_NONE);
-      ASSERT_EQ(ret, 0);
+                      &subdir1_fh, RGW_MKDIR_FLAG_NONE);
+      ASSERT_TRUE((ret == 0) || (ret == -EEXIST));
+      if (!subdir1_fh /* -EEXIST */) {
+        ret = rgw_lookup(fs, bucket1_fh, subdir1_name.c_str(),
+                         &subdir1_fh, nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+        ASSERT_EQ(ret, 0);
+      }
 
       ret = make_object(subdir1_fh, obj_name1);
       ASSERT_EQ(ret, 0);
@@ -187,6 +199,7 @@ TEST(LibRGW, SUBDIR_RENAME) {
   /* release file handle */
   ret = rgw_fh_rele(fs, name2_fh, 0 /* flags */);
   ASSERT_EQ(ret, 0);
+
   /* we'll re-use subdir1_fh */
 }
 
@@ -203,6 +216,13 @@ TEST(LibRGW, CROSS_BUCKET_RENAME) {
 
       ret = rgw_mkdir(fs, bucket2_fh, subdir2_name.c_str(), &st, create_mask,
 		      &subdir2_fh, RGW_MKDIR_FLAG_NONE); // galahad/mork
+      ASSERT_TRUE((ret == 0) || (ret == -EEXIST));
+      if (!subdir2_fh /* -EEXIST */) {
+        ret = rgw_lookup(fs, bucket2_fh, subdir2_name.c_str(),
+                         &subdir2_fh, nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+        ASSERT_EQ(ret, 0);
+      }
+
       ASSERT_EQ(ret, 0);
 
       ret = make_object(subdir1_fh, obj_name1); // wyndemere/meep/tommy1
@@ -229,8 +249,20 @@ TEST(LibRGW, CROSS_BUCKET_RENAME) {
   ASSERT_EQ(ret, 0);
 }
 
-TEST(LibRGW, CLEANUP) {
-  // do nothing
+TEST(LibRGW, CLEANUP)
+{
+  if (do_delete) {
+    int ret{0};
+
+    ret = rgw_unlink(fs, subdir1_fh, obj_name1.c_str(), RGW_UNLINK_FLAG_NONE);
+    ret = rgw_unlink(fs, subdir1_fh, obj_name2.c_str(), RGW_UNLINK_FLAG_NONE);
+    ret = rgw_fh_rele(fs, subdir1_fh, 0 /* flags */);
+    ret = rgw_unlink(fs, bucket1_fh, subdir1_name.c_str(),
+                     RGW_UNLINK_FLAG_NONE);
+
+    ret = rgw_unlink(fs, bucket1_fh, obj_name1.c_str(), RGW_UNLINK_FLAG_NONE);
+    ret = rgw_unlink(fs, bucket1_fh, obj_name2.c_str(), RGW_UNLINK_FLAG_NONE);
+  }
 }
 
 TEST(LibRGW, UMOUNT) {
