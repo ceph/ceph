@@ -1786,7 +1786,12 @@ int librados::IoCtxImpl::aio_unwatch(uint64_t cookie, AioCompletionImpl *c)
   c->io = this;
   boost::intrusive_ptr linger_op = objecter->linger_by_cookie(cookie);
   if (!linger_op) {
-    return -ENOTCONN;
+    // reject invalid cookies with ENOTCONN, but deliver to the
+    // AioCompletion instead of returning directly
+    boost::asio::defer(client->finish_strand,
+        boost::asio::append(CB_AioCompleteAndSafe(c), -ENOTCONN));
+
+    return 0;
   }
   Context *oncomplete = new C_aio_linger_Complete(c, linger_op, true);
 
