@@ -12175,8 +12175,6 @@ int BlueStore::get_devices(set<string> *ls)
 
 void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
 {
-  buf->reset();
-
   auto prefix = per_pool_omap == OMAP_BULK ?
     PREFIX_OMAP :
     per_pool_omap == OMAP_PER_POOL ?
@@ -12205,19 +12203,39 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
   int rc = bdev->get_ebd_state(ebd_state);
   if (rc == 0) {
     buf->total += ebd_state.get_physical_total();
-
     // we are limited by both the size of the virtual device and the
     // underlying physical device.
-    bfree = std::min(bfree, ebd_state.get_physical_avail());
-
-    buf->allocated = ebd_state.get_physical_total() - ebd_state.get_physical_avail();;
+    buf->available = std::min(bfree, ebd_state.get_physical_avail());
+    // fixme! create algorithm to provide better estimates
+    buf->est_capacity = buf->total;
+    buf->est_available = buf->available;
   } else {
     buf->total += bdev->get_size();
+    buf->available = bfree;
+    // Use linear proportion: (total) is to (used) as (est_capacity) is to (stored).
+    // used/total:
+    // < 0.1%   est_capacity = total
+    // ...      interpolate
+    // > 1%     est_capacity = (total * stored) / used;
+    double total = buf->total;
+    double used = std::max(total - buf->available, 0.);
+
+    double low_range = 0.1;
+    double high_range = 1;
+    if (used < total * low_range) {
+      buf->est_capacity = buf->total;
+    } else {
+      double est_cap = total * buf->data_stored / used;
+      if (used > total * high_range) {
+        buf->est_capacity = est_cap;
+      } else {
+        double in_range = (used / total - low_range) * (1 / (high_range - low_range));
+        in_range = std::max(std::min(in_range, 1.), 0.); // make sure is <0..1>
+        buf->est_capacity = total * (1. - in_range) + est_cap * in_range;
+      }
+    }
+    buf->est_available = buf->est_capacity - buf->data_stored;
   }
-  buf->available = bfree;
-  // fixme! create algorithm to provide better estimates
-  buf->est_capacity = buf->total;
-  buf->est_available = buf->available;
 }
 
 int BlueStore::statfs(struct store_statfs_t *buf,
@@ -12227,7 +12245,7 @@ int BlueStore::statfs(struct store_statfs_t *buf,
     alerts->clear();
     _log_alerts(*alerts);
   }
-  _get_statfs_overall(buf);
+  buf->reset();
   {
     std::lock_guard l(vstatfs_lock);
     buf->allocated = vstatfs.allocated();
@@ -12236,6 +12254,7 @@ int BlueStore::statfs(struct store_statfs_t *buf,
     buf->data_compressed_original = vstatfs.compressed_original();
     buf->data_compressed_allocated = vstatfs.compressed_allocated();
   }
+  _get_statfs_overall(buf);
 
   dout(20) << __func__ << " " << *buf << dendl;
   return 0;
