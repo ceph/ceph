@@ -85,17 +85,27 @@ tasks:
    - workload
 - print: "**** done workload v18.2.2"
 
-# TODO: uncomment when v18.2.3 is available
-#######  upgrade to v18.2.3
-# - install.upgrade:
-#    mon.a:
-#      tag: v18.2.3
-#    mon.b:
-#      tag: v18.2.3
-#- parallel:
-#   - workload_reef
-#   - upgrade-sequence_reef
-#- print: "**** done parallel reef v18.2.3"
+######  upgrade to v18.2.4
+- install.upgrade:
+    mon.a:
+      tag: v18.2.4
+    mon.b:
+      tag: v18.2.4
+- parallel:
+   - workload_reef
+   - upgrade-sequence_reef
+- print: "**** done parallel reef v18.2.4"
+
+######  upgrade to v18.2.5
+- install.upgrade:
+    mon.a:
+      tag: v18.2.5
+    mon.b:
+      tag: v18.2.5
+- parallel:
+   - workload_reef
+   - upgrade-sequence_reef
+- print: "**** done parallel reef v18.2.5"
 
 ####  upgrade to latest reef
 - install.upgrade:
@@ -118,7 +128,6 @@ workload_reef:
    full_sequential:
    - workunit:
        branch: reef
-       # tag: v18.2.2
        clients:
          client.1:
          - rados/test.sh
