@@ -3271,8 +3271,7 @@ Then run the following:
             self.set_store(PrometheusService.PASS_CFG_KEY, password)
         return (user, password)
 
-    @handle_orch_error
-    def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:
+    def _generate_certificates(self, module_name: str) -> Dict[str, str]:
         supported_moduels = ['dashboard', 'prometheus']
         if module_name not in supported_moduels:
             raise OrchestratorError(f'Unsupported modlue {module_name}. Supported moduels are: {supported_moduels}')
@@ -3287,10 +3286,14 @@ Then run the following:
 
         tls_creds = self.cert_mgr.generate_cert(host_fqdns, self.get_mgr_ip())
         _, mgmt_gw_enabled, _ = self._get_security_config()
-        return {'mtls': mgmt_gw_enabled,
+        return {'mtls': str(mgmt_gw_enabled),
                 'cert': tls_creds.cert,
                 'key': tls_creds.key,
                 'root_ca': self.cert_mgr.get_root_ca()}
+
+    @handle_orch_error
+    def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:
+        return self._generate_certificates(module_name)
 
     @handle_orch_error
     def set_prometheus_access_info(self, user: str, password: str) -> str:

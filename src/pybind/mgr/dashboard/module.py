@@ -192,7 +192,7 @@ class CherryPyConfig(object):
 
 
 if TYPE_CHECKING:
-    SslConfigKey = Literal['crt', 'key']
+    SslConfigKey = Literal['crt', 'key', 'root_ca']
 
 
 class Module(MgrModule, CherryPyConfig):
@@ -235,6 +235,7 @@ class Module(MgrModule, CherryPyConfig):
         Option(name='url_prefix', type='str', default=''),
         Option(name='key_file', type='str', default=''),
         Option(name='crt_file', type='str', default=''),
+        Option(name='root_ca_file', type='str', default=''),
         Option(name='ssl', type='bool', default=True),
         Option(name='standby_behaviour', type='str', default='redirect',
                enum_allowed=['redirect', 'error']),
@@ -355,8 +356,10 @@ class Module(MgrModule, CherryPyConfig):
         logger.info('Stopping engine...')
         self.shutdown_event.set()
 
-    def _set_ssl_item(self, item_label: str, item_key: 'SslConfigKey' = 'crt',
-                      mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
+    def _set_ssl_item(self, item_label: str,
+                      item_key: 'SslConfigKey' = 'crt',
+                      mgr_id: Optional[str] = None,
+                      inbuf: Optional[str] = None):
         if inbuf is None:
             return -errno.EINVAL, '', f'Please specify the {item_label} with "-i" option'
 
@@ -382,6 +385,10 @@ class Module(MgrModule, CherryPyConfig):
     @CLIWriteCommand("dashboard set-ssl-root-ca-cert")
     def set_ssl_root_ca_certificate(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
         return self._set_ssl_item('root CA certificate', 'root_ca', mgr_id, inbuf)
+
+    @CLIWriteCommand("dashboard remove-ssl-root-ca-cert")
+    def remove_ssl_root_ca_certificate(self, mgr_id: Optional[str] = None):
+        return self._set_ssl_item('root CA certificate', 'root_ca', mgr_id, '')
 
     @CLIWriteCommand("dashboard create-self-signed-cert")
     def set_mgr_created_self_signed_cert(self):

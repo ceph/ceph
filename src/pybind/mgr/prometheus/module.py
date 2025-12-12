@@ -9,7 +9,7 @@ import time
 import enum
 from collections import namedtuple
 from collections import OrderedDict
-from tempfile import NamedTemporaryFile
+import tempfile
 import ssl
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand

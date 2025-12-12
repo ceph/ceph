@@ -54,6 +54,12 @@ class MgmtGatewayService(CephadmService):
         # we adjust the standby behaviour so rev-proxy can pick correctly the active instance
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '503')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
+        # we generate cephadm-signed certs and enforce mTLS for the dashboard
+        tls_creds = self.mgr._generate_certificates('dashboard')
+        self.mgr.check_mon_command({'prefix': 'dashboard set-ssl-certificate'}, tls_creds['cert'])
+        self.mgr.check_mon_command({'prefix': 'dashboard set-ssl-certificate-key'}, tls_creds['key'])
+        self.mgr.check_mon_command({'prefix': 'dashboard set-ssl-root-ca-cert'}, tls_creds['root_ca'])
+        self.mgr.check_mon_command({'prefix': 'dashboard refresh-ssl-certificates'})
 
     def get_service_discovery_endpoints(self) -> List[str]:
         sd_endpoints = []
@@ -151,3 +157,6 @@ class MgmtGatewayService(CephadmService):
         self.mgr.cert_mgr.rm_self_signed_cert_key_pair(MgmtGatewayService.TYPE, daemon.hostname, label=INTERNAL_CERT_LABEL)
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '500')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'redirect')
+        # Stop enforcing mTLS as the mgmt-gateway is now disabled
+        self.mgr.check_mon_command({'prefix': 'dashboard remove-ssl-root-ca-cert'})
+        self.mgr.check_mon_command({'prefix': 'dashboard refresh-ssl-certificates'})
