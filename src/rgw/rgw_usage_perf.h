@@ -75,6 +75,8 @@ private:
   
   void cleanup_worker();
   void refresh_worker();
+  void enumerate_all_buckets_from_metadata();
+  void enumerate_all_users_from_metadata();
   
   void refresh_bucket_stats(const std::string& bucket_key);
   void refresh_user_stats(const std::string& user_id);
@@ -121,6 +123,7 @@ void evict_from_cache(const std::string& user_id,
                       const std::string& bucket_name);
   
 void sync_user_from_rados(const std::string& user_id);
+void sync_bucket_from_rados(const std::string& bucket_key);
 
 // Stats retrieval (from cache)
 std::optional<UsageStats> get_user_stats(const std::string& user_id);

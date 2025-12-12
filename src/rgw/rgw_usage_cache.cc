@@ -145,6 +145,31 @@ void UsageCache::set_counter(int counter, uint64_t value) {
   }
 }
 
+int UsageCache::delete_corrupted_database() {
+  std::vector<std::string> files_to_delete = {
+    config.db_path,           // Main database file (e.g., /tmp/usage_cache.mdb)
+    config.db_path + "-lock"  // Lock file (e.g., /tmp/usage_cache.mdb-lock)
+  };
+  
+  bool any_deleted = false;
+  for (const auto& file : files_to_delete) {
+    if (unlink(file.c_str()) == 0) {
+      if (cct) {
+        ldout(cct, 1) << "UsageCache: Deleted corrupted file: " << file << dendl;
+      }
+      any_deleted = true;
+    } else if (errno != ENOENT) {
+      // ENOENT is okay (file doesn't exist), other errors are problems
+      if (cct) {
+        ldout(cct, 1) << "UsageCache: Warning - could not delete " << file 
+                      << ": " << cpp_strerror(errno) << dendl;
+      }
+    }
+  }
+  
+  return any_deleted ? 0 : -ENOENT;
+}
+
 int UsageCache::init() {
   if (initialized.exchange(true)) {
     return 0;
@@ -175,13 +200,46 @@ int UsageCache::init() {
     }
   }
   
+  // Try to open database
   int ret = open_database();
-  if (ret < 0) {
+  
+  // Handle corruption with auto-recovery
+  if (ret == -MDB_CORRUPTED || ret == -MDB_INVALID || ret == -MDB_BAD_TXN || ret == -MDB_PANIC) {
+    ldout(cct, 0) << "UsageCache: Corrupted cache detected (error=" << ret 
+                  << "), attempting recovery..." << dendl;
+    
+    // Delete corrupted database files
+    ret = delete_corrupted_database();
+    if (ret < 0) {
+      ldout(cct, 0) << "UsageCache: Failed to delete corrupted cache files: " 
+                    << cpp_strerror(-ret) << dendl;
+      // Continue anyway - open_database will create fresh files
+    }
+    
+    // Try to open fresh database
+    ret = open_database();
+    if (ret < 0) {
+      ldout(cct, 0) << "UsageCache: Failed to recreate cache after corruption: " 
+                    << cpp_strerror(-ret) << dendl;
+      initialized = false;
+      return ret;
+    }
+    
+    ldout(cct, 0) << "UsageCache: Successfully recovered from corruption. "
+                  << "Cache will be repopulated on next refresh cycle." << dendl;
+  } else if (ret < 0) {
+    ldout(cct, 0) << "UsageCache: Failed to open database: " 
+                  << cpp_strerror(-ret) << dendl;
     initialized = false;
     return ret;
   }
   
   set_counter(PERF_CACHE_SIZE, get_cache_size());
+  
+  if (cct) {
+    ldout(cct, 1) << "UsageCache: Initialized successfully at " 
+                  << config.db_path << dendl;
+  }
   
   return 0;
 }
@@ -198,7 +256,7 @@ int UsageCache::open_database() {
     if (cct) {
       ldout(cct, 0) << "LMDB env_create failed: " << mdb_strerror(rc) << dendl;
     }
-    return -EIO;
+    return -rc;
   }
 
   rc = mdb_env_set_mapsize(env, config.max_db_size);
@@ -208,7 +266,7 @@ int UsageCache::open_database() {
     }
     mdb_env_close(env);
     env = nullptr;
-    return -EIO;
+    return -rc;
   }
 
   rc = mdb_env_set_maxreaders(env, config.max_readers);
@@ -218,7 +276,7 @@ int UsageCache::open_database() {
     }
     mdb_env_close(env);
     env = nullptr;
-    return -EIO;
+    return -rc;
   }
 
   rc = mdb_env_set_maxdbs(env, 2);
@@ -228,7 +286,7 @@ int UsageCache::open_database() {
     }
     mdb_env_close(env);
     env = nullptr;
-    return -EIO;
+    return -rc;
   }
 
   rc = mdb_env_open(env, config.db_path.c_str(), MDB_NOSUBDIR | MDB_NOTLS, 0644);
@@ -239,7 +297,7 @@ int UsageCache::open_database() {
     }
     mdb_env_close(env);
     env = nullptr;
-    return -EIO;
+    return -rc;
   }
 
   // Open named databases
@@ -251,7 +309,7 @@ int UsageCache::open_database() {
     }
     mdb_env_close(env);
     env = nullptr;
-    return -EIO;
+    return -rc;
   }
 
   rc = mdb_dbi_open(txn, "user_stats", MDB_CREATE, &user_dbi);
@@ -263,7 +321,7 @@ int UsageCache::open_database() {
     mdb_txn_abort(txn);
     mdb_env_close(env);
     env = nullptr;
-    return -EIO;
+    return -rc;
   }
 
   rc = mdb_dbi_open(txn, "bucket_stats", MDB_CREATE, &bucket_dbi);
@@ -275,7 +333,7 @@ int UsageCache::open_database() {
     mdb_txn_abort(txn);
     mdb_env_close(env);
     env = nullptr;
-    return -EIO;
+    return -rc;
   }
 
   rc = mdb_txn_commit(txn);
@@ -285,7 +343,7 @@ int UsageCache::open_database() {
     }
     mdb_env_close(env);
     env = nullptr;
-    return -EIO;
+    return -rc;
   }
 
   if (cct) {

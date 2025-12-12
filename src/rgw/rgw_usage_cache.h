@@ -91,6 +91,7 @@ private:
   // Database operations
   int open_database();
   void close_database();
+  int delete_corrupted_database();
   
   template<typename T>
   int put_stats(MDB_dbi dbi, const std::string& key, const T& stats);

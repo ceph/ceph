@@ -392,6 +392,8 @@ target_include_directories(unittest_rgw_usage_perf_counters PRIVATE
 )
 
 target_link_libraries(unittest_rgw_usage_perf_counters
+                      rgw_common
+                      ${rgw_libs}
                       ${UNITTEST_LIBS}
                       global
                       ceph-common
