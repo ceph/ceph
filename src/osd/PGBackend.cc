@@ -341,11 +341,12 @@ struct Trimmer : public ObjectModDesc::Visitor {
   const hobject_t &soid;
   PGBackend *pg;
   ObjectStore::Transaction *t;
+  const pg_log_entry_t &entry;
   Trimmer(
-    const hobject_t &soid,
     PGBackend *pg,
-    ObjectStore::Transaction *t)
-    : soid(soid), pg(pg), t(t) {}
+    ObjectStore::Transaction *t,
+    const pg_log_entry_t &entry)
+    : soid(entry.soid), pg(pg), t(t), entry(entry) {}
   void rmobject(version_t old_version) override {
     pg->trim_rollback_object(
       soid,
@@ -377,6 +378,80 @@ struct Trimmer : public ObjectModDesc::Visitor {
       }
     }
   }
+
+  void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
+    std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) override {
+
+    auto shard = pg->get_parent()->whoami_shard().shard;
+    spg_t spg = pg->get_parent()->whoami_spg_t();
+    auto sinfo = pg->ec_get_sinfo();
+    const auto [gen, lost_delete] = pg->omap_get_generation(soid);
+
+    if (!sinfo.is_nonprimary_shard(shard)) {
+      // If lost_delete is true, check if the object exists before performing updates
+      bool should_update = true;
+      if (lost_delete) {
+        struct stat st;
+        int r = pg->store->stat(
+          pg->ch,
+          ghobject_t(soid, gen, shard),
+          &st,
+          true);
+        if (r != 0) {
+          // Object doesn't exist on this shard, skip the update
+          should_update = false;
+        }
+      }
+
+      if (should_update) {
+        if (omap_header) {
+          t->omap_setheader(
+            coll_t(spg),
+            ghobject_t(soid, gen, shard),
+            *(omap_header));
+        }
+
+        if (clear_omap) {
+          t->omap_clear(
+            coll_t(spg),
+            ghobject_t(soid, gen, shard));
+        }
+
+        for (auto &&up: omap_updates) {
+          switch (up.first) {
+            case OmapUpdateType::Remove:
+              t->omap_rmkeys(
+                coll_t(spg),
+                ghobject_t(soid, gen, shard),
+                up.second);
+              break;
+            case OmapUpdateType::Insert:
+              t->omap_setkeys(
+                coll_t(spg),
+                ghobject_t(soid, gen, shard),
+                up.second);
+              break;
+            case OmapUpdateType::RemoveRange:
+              t->omap_rmkeyrange(
+                coll_t(spg),
+                ghobject_t(soid, gen, shard),
+                up.second);
+              break;
+          }
+        }
+      }
+    }
+
+    // Only remove journal entry if generation is NO_GEN (object not deleted)
+    // If gen != NO_GEN, the object has been deleted and journal was already cleared
+    if (gen == ghobject_t::NO_GEN && pg->get_parent()->pgb_is_primary()) {
+      const ECOmapJournalEntry to_remove(
+        entry.version, clear_omap,
+        omap_header, omap_updates
+        );
+      pg->remove_ec_omap_journal_entry(soid, to_remove);
+    }
+  }
 };
 
 void PGBackend::rollforward(
@@ -387,7 +462,7 @@ void PGBackend::rollforward(
   ldpp_dout(dpp, 20) << __func__ << ": entry=" << entry << dendl;
   if (!entry.can_rollback())
     return;
-  Trimmer trimmer(entry.soid, this, t);
+  Trimmer trimmer(this, t, entry);
   entry.mod_desc.visit(&trimmer);
 }
 
@@ -397,7 +472,7 @@ void PGBackend::trim(
 {
   if (!entry.can_rollback())
     return;
-  Trimmer trimmer(entry.soid, this, t);
+  Trimmer trimmer(this, t, entry);
   entry.mod_desc.visit(&trimmer);
 }
 
