@@ -984,6 +984,29 @@ this may be done for specific OSDs or a given mask, for example:
    ceph config set class:ssd bluestore_slow_ops_warn_lifetime 300
    ceph config set class:ssd bluestore_slow_ops_warn_threshold 5
 
+DISPATCH_QUEUE_THROTTLE
+_______________________
+
+Messenger reached Dispatch Queue throttle limit. Hitting the Dispatch Queue
+throttle limit would prevent fast dispatch of critical messages. This warning
+will be reported in ``ceph health detail``. The warning state is cleared when
+the condition clears.
+
+:confval:`ms_dispatch_throttle_bytes` represents the total size of messages
+waiting to be dispatched. This configuration limit messages that are read off
+the network but still being processed.
+
+:confval:`ms_dispatch_throttle_log_interval` is the interval in seconds to
+show the cluster warning and health warning. Setting it to 0 disables the
+cluster warning and health warning.
+
+To change the default values, run a command of the following form:
+
+.. prompt:: bash $
+
+   ceph config set global ms_dispatch_throttle_bytes 50
+   ceph config set global ms_dispatch_throttle_log_interval 5
+
 Device health
 -------------
 
