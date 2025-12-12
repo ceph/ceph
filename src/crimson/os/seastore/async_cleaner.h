@@ -1359,9 +1359,9 @@ public:
   store_statfs_t get_stat() const final {
     store_statfs_t st;
     st.total = segments.get_total_bytes();
-    st.total_raw = st.total;
+    st.est_capacity = st.total;
     st.available = segments.get_total_bytes() - stats.used_bytes;
-    st.avail_raw = st.available;
+    st.est_available = st.available;
     st.allocated = stats.used_bytes;
     st.data_stored = stats.used_bytes;
 
@@ -1727,9 +1727,9 @@ public:
   store_statfs_t get_stat() const final {
     store_statfs_t st;
     st.total = get_total_bytes();
-    st.total_raw = st.total;
+    st.est_capacity = st.total;
     st.available = get_total_bytes() - get_journal_bytes() - stats.used_bytes;
-    st.avail_raw = st.available;
+    st.est_available = st.available;
     st.allocated = get_journal_bytes() + stats.used_bytes;
     st.data_stored = get_journal_bytes() + stats.used_bytes;
     return st;

@@ -848,10 +848,10 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
     f->dump_int("total_bytes", osd_sum.statfs.total);
     f->dump_int("total_avail_bytes", osd_sum.statfs.available);
     f->dump_int("total_used_bytes", osd_sum.statfs.get_used());
-    f->dump_int("total_raw_bytes", osd_sum.statfs.total_raw);
-    f->dump_int("total_avail_raw_bytes", osd_sum.statfs.get_avail_raw());
     f->dump_int("total_used_raw_bytes", osd_sum.statfs.get_used_raw());
     f->dump_float("total_used_raw_ratio", osd_sum.statfs.get_used_raw_ratio());
+    f->dump_int("total_estimated_capacity", osd_sum.statfs.est_capacity);
+    f->dump_int("total_estimated_avail_bytes", osd_sum.statfs.est_available);
     f->dump_unsigned("num_osds", osd_sum.num_osds);
     f->dump_unsigned("num_per_pool_osds", osd_sum.num_per_pool_osds);
     f->dump_unsigned("num_per_pool_omap_osds", osd_sum.num_per_pool_omap_osds);
@@ -862,9 +862,9 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
       f->dump_int("total_bytes", i.second.statfs.total);
       f->dump_int("total_avail_bytes", i.second.statfs.available);
       f->dump_int("total_used_bytes", i.second.statfs.get_used());
-      f->dump_int("total_raw_bytes", i.second.statfs.total_raw);
-      f->dump_int("total_avail_raw_bytes", i.second.statfs.get_avail_raw());
       f->dump_int("total_used_raw_bytes", i.second.statfs.get_used_raw());
+      f->dump_int("total_estimated_capacity", i.second.statfs.est_capacity);
+      f->dump_int("total_estimated_avail_bytes", i.second.statfs.est_available);
       f->dump_float("total_used_raw_ratio",
 		    i.second.statfs.get_used_raw_ratio());
       f->close_section();
@@ -877,9 +877,9 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
     tbl.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
     tbl.define_column("AVAIL", TextTable::RIGHT, TextTable::RIGHT);
     tbl.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
-    tbl.define_column("RAW AVAIL", TextTable::RIGHT, TextTable::RIGHT);
     tbl.define_column("RAW USED", TextTable::RIGHT, TextTable::RIGHT);
     tbl.define_column("%RAW USED", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("EST AVAIL", TextTable::RIGHT, TextTable::RIGHT);
 
 
     for (auto& i : osd_sum_by_class) {
@@ -887,21 +887,21 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
       tbl << stringify(byte_u_t(i.second.statfs.total))
 	  << stringify(byte_u_t(i.second.statfs.available))
 	  << stringify(byte_u_t(i.second.statfs.get_used()))
-	  << stringify(byte_u_t(i.second.statfs.get_avail_raw()))
 	  << stringify(byte_u_t(i.second.statfs.get_used_raw()))
 	  << percentify(i.second.statfs.get_used_raw_ratio()*100.0)
+	  << stringify(byte_u_t(i.second.statfs.est_available))
 	  << TextTable::endrow;
     }
     tbl << "TOTAL";
     tbl << stringify(byte_u_t(osd_sum.statfs.total))
         << stringify(byte_u_t(osd_sum.statfs.available))
         << stringify(byte_u_t(osd_sum.statfs.get_used()))
-        << stringify(byte_u_t(osd_sum.statfs.get_avail_raw()))
         << stringify(byte_u_t(osd_sum.statfs.get_used_raw()))
-	<< percentify(osd_sum.statfs.get_used_raw_ratio()*100.0)
+        << percentify(osd_sum.statfs.get_used_raw_ratio()*100.0)
+        << stringify(byte_u_t(osd_sum.statfs.est_available))
 	<< TextTable::endrow;
 
-    *ss << "--- STORAGE ---\n";
+    *ss << "--- RAW STORAGE ---\n";
     *ss << tbl;
   }
 }

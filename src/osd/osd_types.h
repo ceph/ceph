@@ -2464,22 +2464,35 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r);
  */
 struct store_statfs_t
 {
-  uint64_t total = 0;                  ///< Total logical bytes
-  uint64_t available = 0;              ///< Free bytes available
-  uint64_t internally_reserved = 0;    ///< Bytes reserved for internal purposes
+  // Primary device stats
+  uint64_t total = 0;                  ///< Total capacity. Store is able to accomodate at least this amount of data.
+                                       ///  For regular devices it is the device size. For block devices that employ
+                                       ///  compression it is the physical capacity, not the logical space size.
+                                       ///  This is the value crush uses for weight.
+                                       ///  BlueStore: If DB volume exists, its size is added here.
+  uint64_t available = 0;              ///< Available capacity. Indicates how much more data can fit on the device.
+                                       ///  The value is a minimum should new data be non-compressible 100% entropy.
+                                       ///  If ObjectStore compression is enabled or block device employs hardware
+                                       ///  compression it might accomodate more.
+  uint64_t internally_reserved = 0;    ///< Bytes that are part of total but cannot be directly used for storing data.
+                                       ///  BlueStore: if DB volume exists, it is considered reserved.
+  uint64_t est_capacity = 0;           ///< Reflects projection of how much user data will fit on the store.
+                                       ///  When full est_capacity and data_stored should be the same.
+  uint64_t est_available = 0;          ///< Reflects projection of how much more user data can the store accomodate.
+                                       ///  Typically, data_stored + est_available ~= est_capacity.
 
-  // physical bytes
-  uint64_t total_raw = 0;              ///< Total physical bytes
-  uint64_t avail_raw = 0;              ///< Physically used bytes
+  // Additional user-specific ObjectStore stats
+  int64_t allocated = 0;                  ///< Bytes allocated - how much of logical space is occupied by user data
+  int64_t data_stored = 0;                ///< Bytes stored by user - how much data is kept in the store from user's perspective.
+  int64_t data_compressed = 0;            ///< Output compressed - how many bytes compression produced.
+  int64_t data_compressed_allocated = 0;  ///< Stored compressed - how much logical disk space compressed data occupies.
+                                          ///  Reported in bytes but counts full allocation units.
+  int64_t data_compressed_original = 0;   ///< Input data compressed - how many user bytes have undergone compression.
 
-  int64_t allocated = 0;             ///< Bytes allocated for user data
-  int64_t data_stored = 0;                ///< Bytes actually stored by the user
-  int64_t data_compressed = 0;            ///< Bytes stored after compression
-  int64_t data_compressed_allocated = 0;  ///< Bytes allocated for compressed data
-  int64_t data_compressed_original = 0;   ///< Bytes that were compressed
-
-  int64_t omap_allocated = 0;         ///< approx usage of omap data
-  int64_t internal_metadata = 0;      ///< approx usage of internal metadata
+  // Additional internal ObjectStore stats
+  int64_t omap_allocated = 0;         ///< Bytes for OMAP - how much space used to keep OMAPs (estimation)
+  int64_t internal_metadata = 0;      ///< Bytes for internal metadata - how much space used for internal metadata
+                                      ///  BlueStore: omap_allocated + internal_metadata together reflect RocksDB size.
 
   void reset() {
     *this = store_statfs_t();
@@ -2489,9 +2502,8 @@ struct store_statfs_t
     FLOOR(total);
     FLOOR(available);
     FLOOR(internally_reserved);
-
-    FLOOR(total_raw);
-    FLOOR(avail_raw);
+    FLOOR(est_capacity);
+    FLOOR(est_available);
 
     FLOOR(allocated);
     FLOOR(data_stored);
@@ -2513,18 +2525,14 @@ struct store_statfs_t
     return total - available - internally_reserved;
   }
 
-  // bytes physically used
+  // this accumulates both actually used and statfs's internally_reserved
   uint64_t get_used_raw() const {
-    return total_raw - avail_raw;
-  }
-  // bytes physically available
-  uint64_t get_avail_raw() const {
-    return avail_raw;
+    return total - available;
   }
 
   float get_used_raw_ratio() const {
-    if (total_raw) {
-      return (float)get_used_raw() / (float)total_raw;
+    if (total) {
+      return (float)get_used_raw() / (float)total;
     } else {
       return 0.0;
     }
@@ -2538,14 +2546,7 @@ struct store_statfs_t
     return total >> 10;
   }
   uint64_t kb_used() const {
-    return get_used() >> 10;
-  }
-
-  uint64_t kb_avail_raw() const {
-    return avail_raw >> 10;
-  }
-  uint64_t kb_total_raw() const {
-    return total_raw >> 10;
+    return (total - available - internally_reserved) >> 10;
   }
   uint64_t kb_used_raw() const {
     return get_used_raw() >> 10;
@@ -2566,15 +2567,15 @@ struct store_statfs_t
     total += o.total;
     available += o.available;
     internally_reserved += o.internally_reserved;
-
-    total_raw += o.total_raw;
-    avail_raw += o.avail_raw;
+    est_capacity += o.est_capacity;
+    est_available += o.est_available;
 
     allocated += o.allocated;
     data_stored += o.data_stored;
     data_compressed += o.data_compressed;
     data_compressed_allocated += o.data_compressed_allocated;
     data_compressed_original += o.data_compressed_original;
+
     omap_allocated += o.omap_allocated;
     internal_metadata += o.internal_metadata;
   }
@@ -2582,9 +2583,8 @@ struct store_statfs_t
     total -= o.total;
     available -= o.available;
     internally_reserved -= o.internally_reserved;
-
-    total_raw -= o.total_raw;
-    avail_raw -= o.avail_raw;
+    est_capacity -= o.est_capacity;
+    est_available -= o.est_available;
 
     allocated -= o.allocated;
     data_stored -= o.data_stored;
