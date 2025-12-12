@@ -307,9 +307,7 @@ namespace ECInject {
   }
 
   bool test_read_error2(const ghobject_t& o) {
-    bool r = test_error(o, &read_failures2);
-    ceph_assert(r);
-    return r;
+    return test_error(o, &read_failures2);
   }
 
   bool test_write_error0(const hobject_t& o,
