@@ -12580,12 +12580,14 @@ int BlueStore::read(
     std::shared_lock l(c->lock);
     auto start1 = mono_clock::now();
     OnodeRef o = c->get_onode(oid, false);
+    bool is_scrub = op_flags & CEPH_OSD_OP_FLAG_SCRUB;
     log_latency("get_onode@read",
       l_bluestore_read_onode_meta_lat,
       mono_clock::now() - start1,
-      cct->_conf->bluestore_log_op_age,
+      is_scrub ? cct->_conf->bluestore_log_scrub_op_age
+               : cct->_conf->bluestore_log_op_age,
       "", l_bluestore_slow_read_onode_meta_count,
-      op_flags & CEPH_OSD_OP_FLAG_SCRUB);
+      is_scrub);
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -12614,12 +12616,15 @@ int BlueStore::read(
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
+  bool is_scrub = op_flags & CEPH_OSD_OP_FLAG_SCRUB;
   log_latency(__func__,
     l_bluestore_read_lat,
     mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age,
-    "", l_bluestore_first,
-    op_flags & CEPH_OSD_OP_FLAG_SCRUB);
+    is_scrub ? cct->_conf->bluestore_log_scrub_op_age
+            : cct->_conf->bluestore_log_op_age,
+    "",
+    l_bluestore_first,
+    is_scrub);
   return r;
 }
 
@@ -12928,12 +12933,14 @@ int BlueStore::_do_read(
 
   auto start = mono_clock::now();
   o->extent_map.fault_range(db, offset, length);
+  bool is_scrub = op_flags & CEPH_OSD_OP_FLAG_SCRUB;
   log_latency(__func__,
     l_bluestore_read_onode_meta_lat,
     mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age,
+    is_scrub ? cct->_conf->bluestore_log_scrub_op_age
+             : cct->_conf->bluestore_log_op_age,
     "", l_bluestore_slow_read_onode_meta_count,
-    op_flags & CEPH_OSD_OP_FLAG_SCRUB);
+    is_scrub);
   _dump_onode<30>(cct, *o);
 
   // for deep-scrub, we only read dirty cache and bypass clean cache in
@@ -13239,12 +13246,14 @@ int BlueStore::readv(
     std::shared_lock l(c->lock);
     auto start1 = mono_clock::now();
     OnodeRef o = c->get_onode(oid, false);
+    bool is_scrub = op_flags & CEPH_OSD_OP_FLAG_SCRUB;
     log_latency("get_onode@read",
       l_bluestore_read_onode_meta_lat,
       mono_clock::now() - start1,
-      cct->_conf->bluestore_log_op_age,
+      is_scrub ? cct->_conf->bluestore_log_scrub_op_age
+               : cct->_conf->bluestore_log_op_age,
       "", l_bluestore_first,
-      op_flags & CEPH_OSD_OP_FLAG_SCRUB);
+      is_scrub);
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -13275,12 +13284,14 @@ int BlueStore::readv(
   dout(10) << __func__ << " " << cid << " " << oid
            << " fiemap " << m << std::dec
            << " = " << r << dendl;
+  bool is_scrub = op_flags & CEPH_OSD_OP_FLAG_SCRUB;
   log_latency(__func__,
     l_bluestore_read_lat,
     mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age,
+    is_scrub ? cct->_conf->bluestore_log_scrub_op_age
+             : cct->_conf->bluestore_log_op_age,
     "", l_bluestore_first,
-    op_flags & CEPH_OSD_OP_FLAG_SCRUB);
+    is_scrub);
   return r;
 }
 
@@ -13321,12 +13332,14 @@ int BlueStore::_do_readv(
   ceph_assert(m.range_end() <= o->onode.size);
   auto start = mono_clock::now();
   o->extent_map.fault_range(db, m.range_start(), m.range_end() - m.range_start());
+  bool is_scrub = op_flags & CEPH_OSD_OP_FLAG_SCRUB;
   log_latency(__func__,
     l_bluestore_read_onode_meta_lat,
     mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age,
+    is_scrub ? cct->_conf->bluestore_log_scrub_op_age
+             : cct->_conf->bluestore_log_op_age,
     "", l_bluestore_slow_read_onode_meta_count,
-    op_flags & CEPH_OSD_OP_FLAG_SCRUB);
+    is_scrub);
   _dump_onode<30>(cct, *o);
 
   IOContext ioc(cct, NULL, !cct->_conf->bluestore_fail_eio);
