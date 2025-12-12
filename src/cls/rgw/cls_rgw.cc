@@ -3557,18 +3557,20 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 	  op.max, max, op.reshardlog);
 
   int ret;
-  uint32_t count = 0;
-  bool more = false;
   rgw_cls_bi_list_ret op_ret;
 
   if (op.reshardlog) {
-    ret = reshard_log_list_entries(hctx, op.marker, op.max, op_ret.entries, &op_ret.is_truncated);
-    if (ret < 0)
+    ret = reshard_log_list_entries(hctx, op.marker, max, op_ret.entries, &op_ret.is_truncated);
+    if (ret < 0) {
       return ret;
+    }
     CLS_LOG(20, "%s: returning %lu entries, is_truncated=%d", __func__, op_ret.entries.size(), op_ret.is_truncated);
     encode(op_ret, *out);
     return 0;
   }
+
+  uint32_t count = 0;
+  bool more = false;
 
   ret = list_plain_entries(hctx, op.name_filter, op.marker, max,
 			   &op_ret.entries, &more, PlainEntriesRegion::Low);
