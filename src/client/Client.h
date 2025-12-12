@@ -1067,7 +1067,7 @@ protected:
     bool is_rename = false;
     bool require_target = true;
   };
-  int path_walk(InodeRef dirinode, const filepath& fp, struct walk_dentry_result* result, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options);
+  int path_walk(InodeRef dirinode, const filepath& fp, struct walk_dentry_result* result, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options, std::string trimmed_path=std::string());
   int path_walk(InodeRef dirinode, const filepath& fp, InodeRef *end, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options);
 
   // fake inode number for 32-bits ino_t
