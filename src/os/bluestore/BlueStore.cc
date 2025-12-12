@@ -12175,6 +12175,32 @@ int BlueStore::get_devices(set<string> *ls)
 
 void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
 {
+  auto estimate_capacity = [&](double total, double used, double stored) -> uint64_t {
+    // Use linear proportion: (total) is to (used) as (est_capacity) is to (stored).
+    // used/total:
+    // < 0.1%   est_capacity = total
+    // ...      interpolate
+    // > 1%     est_capacity = (total * stored) / used;
+    double est_capacity;
+    double low_range = 0.001;
+    double high_range = 0.01;
+    if (used < total * low_range) {
+      est_capacity = total;
+    } else {
+      double est_cap = total * stored / used;
+      if (used > total * high_range) {
+        est_capacity = est_cap;
+      } else {
+        double in_range = (used / total - low_range) * (1 / (high_range - low_range));
+        in_range = std::max(std::min(in_range, 1.), 0.); // make sure is <0..1>
+        est_capacity = total * (1. - in_range) + est_cap * in_range;
+      }
+    }
+    // make sure that est_capacity >= stored
+    est_capacity = std::max(est_capacity, stored);
+    return est_capacity;
+  };
+
   auto prefix = per_pool_omap == OMAP_BULK ?
     PREFIX_OMAP :
     per_pool_omap == OMAP_PER_POOL ?
@@ -12202,39 +12228,29 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
   ExtBlkDevState ebd_state;
   int rc = bdev->get_ebd_state(ebd_state);
   if (rc == 0) {
-    buf->total += ebd_state.get_physical_total();
+    uint64_t phy_total = ebd_state.get_physical_total();
+    uint64_t phy_avail = ebd_state.get_physical_avail();
+    buf->total += phy_total;
     // we are limited by both the size of the virtual device and the
     // underlying physical device.
     buf->available = std::min(bfree, ebd_state.get_physical_avail());
-    // fixme! create algorithm to provide better estimates
-    buf->est_capacity = buf->total;
-    buf->est_available = buf->available;
+    uint64_t est_capacity_by_phy = estimate_capacity(
+      phy_total, phy_total - phy_avail, buf->data_stored);
+    uint64_t log_total = ebd_state.get_logical_total();
+    uint64_t log_avail = ebd_state.get_logical_avail();
+    uint64_t est_capacity_by_log = estimate_capacity(
+      log_total, log_total - log_avail, buf->data_stored);
+    dout(20) << __func__ << " by_phy=" << est_capacity_by_phy
+      << " by_log=" << est_capacity_by_log << dendl;
+    buf->est_capacity = std::min(est_capacity_by_log, est_capacity_by_phy);
+    buf->est_available = std::max(buf->est_capacity - buf->data_stored, buf->available);
   } else {
-    buf->total += bdev->get_size();
-    buf->available = bfree;
-    // Use linear proportion: (total) is to (used) as (est_capacity) is to (stored).
-    // used/total:
-    // < 0.1%   est_capacity = total
-    // ...      interpolate
-    // > 1%     est_capacity = (total * stored) / used;
-    double total = buf->total;
-    double used = std::max(total - buf->available, 0.);
-
-    double low_range = 0.1;
-    double high_range = 1;
-    if (used < total * low_range) {
-      buf->est_capacity = buf->total;
-    } else {
-      double est_cap = total * buf->data_stored / used;
-      if (used > total * high_range) {
-        buf->est_capacity = est_cap;
-      } else {
-        double in_range = (used / total - low_range) * (1 / (high_range - low_range));
-        in_range = std::max(std::min(in_range, 1.), 0.); // make sure is <0..1>
-        buf->est_capacity = total * (1. - in_range) + est_cap * in_range;
-      }
-    }
-    buf->est_available = buf->est_capacity - buf->data_stored;
+    uint64_t dev_total = bdev->get_size();
+    buf->total += dev_total;
+    buf->available = std::min(bfree, dev_total); // min to make sure avail <= total
+    buf->est_capacity = estimate_capacity(
+      dev_total, dev_total - buf->available, buf->data_stored);
+    buf->est_available = std::max(buf->est_capacity - buf->data_stored, buf->available);
   }
 }
 
