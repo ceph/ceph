@@ -145,6 +145,8 @@ typedef interval_set<
 using shard_id_set = bitset_set<128, shard_id_t>;
 WRITE_CLASS_DENC(shard_id_set)
 
+enum class OmapUpdateType {Remove, Insert, RemoveRange};
+
 /**
  * osd request identifier
  *
