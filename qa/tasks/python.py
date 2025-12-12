@@ -1,6 +1,6 @@
 import logging
 from teuthology import misc as teuthology
-from tasks.vip import subst_vip
+from tasks import template
 
 log = logging.getLogger(__name__)
 
@@ -41,5 +41,6 @@ def task(ctx, config):
         ]
         if sudo:
             args = ['sudo'] + args
-        remote.run(args=args, stdin=subst_vip(ctx, code))
+        code = template.transform(ctx, config, code)
+        remote.run(args=args, stdin=code)
 
