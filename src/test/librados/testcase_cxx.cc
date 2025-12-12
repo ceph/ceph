@@ -479,10 +479,9 @@ void RadosTestECPP::inject_ec_read_error(const std::string &objname) {
   ceph::consistency::RadosCommands ec_commands(s_cluster);
   osd = ec_commands.get_primary_osd(pool_name, objname, nspace);
 
-  // FIXME: THe inject mechanism does not currently understand namespaces.
   ceph::messaging::osd::InjectECErrorRequest<
     io_exerciser::InjectOpType::ReadDelayed>
-  injectErrorRequest(pool_name, "*", 0, 2, 0, std::numeric_limits<int64_t>::max());
+  injectErrorRequest(nspace + "/" + pool_name, objname, 0, 2, 0, std::numeric_limits<int64_t>::max());
 
   JSONFormatter f;
   encode_json("ReadDelayedInject", injectErrorRequest, &f);
@@ -498,10 +497,9 @@ void RadosTestECPP::clear_ec_read_error(const std::string &objname) {
   ceph::consistency::RadosCommands ec_commands(s_cluster);
   osd = ec_commands.get_primary_osd(pool_name, objname, nspace);
 
-  // FIXME: THe inject mechanism does not currently understand namespaces.
   ceph::messaging::osd::InjectECClearErrorRequest<
       io_exerciser::InjectOpType::ReadDelayed>
-      clearErrorInject{pool_name, "*", 0, 2};
+      clearErrorInject{nspace + "/" + pool_name, objname, 0, 2};
 
   JSONFormatter f;
   encode_json("ReadDelayedInject", clearErrorInject, &f);
