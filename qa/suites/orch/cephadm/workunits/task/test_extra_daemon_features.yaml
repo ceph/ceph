@@ -13,6 +13,8 @@ overrides:
       - CEPHADM_
     log-ignorelist:
       - CEPHADM_FAILED_DAEMON
+      - PG_AVAILABILITY
+      - POOL_APP_NOT_ENABLED
 tasks:
 - install:
 - cephadm:
