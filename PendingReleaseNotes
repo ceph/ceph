@@ -22,6 +22,8 @@
 * RGW: For `radosgw-admin account rm`, the `--purge-data` option previously applied only
   to buckets and objects, but now deletes account users, roles, groups, and oidc-providers
   too instead of failing with ENOTEMPTY.
+* CephFS: Dispatch Queue Throttling produces a cluster warning every 30s by default and
+  updates the 'ceph status' with a health warning.
 * RADOS: When objects are read during deep scrubs, the data is read in strides,
   and the scrubbing process is delayed between each read in order to avoid monopolizing
   the I/O capacity of the OSD.
