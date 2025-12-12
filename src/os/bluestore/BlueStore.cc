@@ -18810,16 +18810,16 @@ std::pair<size_t, size_t> BlueStore::_trim_slow_op_event_queue(mono_clock::time_
   ceph_assert(ceph_mutex_is_locked(qlock));
   auto warn_duration = std::chrono::seconds(cct->_conf->bluestore_slow_ops_warn_lifetime);
   while (!slow_op_event_queue.empty() && 
-    ((slow_op_event_queue.front() < cur_time - warn_duration) ||
+    ((slow_op_event_queue.front().first < cur_time - warn_duration) ||
       (slow_op_event_queue.size() > cct->_conf->bluestore_slow_ops_warn_threshold))) {
+      if (!slow_op_event_queue.front().second) {
+        slow_op_event_count--;
+      } else {
+        slow_scrub_op_event_count--;
+      }
       slow_op_event_queue.pop();
   }
-  while (!slow_scrub_op_event_queue.empty() &&
-    ((slow_scrub_op_event_queue.front() < cur_time - warn_duration) ||
-      (slow_scrub_op_event_queue.size() > cct->_conf->bluestore_slow_ops_warn_threshold))) {
-      slow_scrub_op_event_queue.pop();
-  }
-  return {slow_op_event_queue.size(), slow_scrub_op_event_queue.size()};
+  return {slow_op_event_count, slow_scrub_op_event_count};
 }
 
 void BlueStore::_add_slow_op_event(bool scrub_op) {
@@ -18829,9 +18829,11 @@ void BlueStore::_add_slow_op_event(bool scrub_op) {
   std::lock_guard lock(qlock);
   auto cur_time = mono_clock::now();
   if (scrub_op) {
-    slow_scrub_op_event_queue.push(cur_time);
+    slow_op_event_queue.push({cur_time, true});
+    slow_scrub_op_event_count++;
   } else {
-    slow_op_event_queue.push(cur_time);
+    slow_op_event_queue.push({cur_time, false});
+    slow_op_event_count++;
   }
   _trim_slow_op_event_queue(cur_time);
 }
