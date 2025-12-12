@@ -24,6 +24,7 @@
 #include "ECTypes.h"
 #include "messages/MOSDPGPushReply.h"
 #include "msg/MessageRef.h"
+#include "osd/ECOmapJournal.h"
 #if WITH_CRIMSON
 #include "crimson/osd/object_context.h"
 #include "os/Transaction.h"
@@ -57,6 +58,8 @@ struct PGLog;
 struct RecoveryMessages;
 
 struct ECCommon {
+  ECOmapJournal ec_omap_journal;
+
   struct ec_extent_t {
     int err;
     extent_map emap;
