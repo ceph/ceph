@@ -148,7 +148,7 @@ First stable release
 ====================
 
 - [x] src/ceph_release: change type `stable`
-- [ ] generate new object corpus for encoding/decoding tests - see :doc:`corpus`
+- [x] generate new object corpus for encoding/decoding tests - see :doc:`corpus`
 - [x] src/cephadm/cephadmlib/constants.py: update `LATEST_STABLE_RELEASE`
 - [x] activate latest release in readthedocs, as described in `the readthedocs
   documentation <https://docs.readthedocs.io/en/stable/versions.html>`_ 
