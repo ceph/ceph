@@ -1995,6 +1995,17 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
           maybe_enable_pool_split_ops(pending_inc.new_pools[id]);
         }
       }
+
+      // Auto-enable omap support for replicated pools
+      for (auto& [pool_id, pool] : tmp.get_pools()) {
+        if (!pool.has_flag(pg_pool_t::FLAG_OMAP) && pool.is_replicated()) {
+          pg_pool_t p = pool;
+          p.flags |= pg_pool_t::FLAG_OMAP;
+          pending_inc.new_pools[pool_id] = p;
+          dout(10) << __func__ << " replicated pool " << pool_id
+                   << " has OMAP support auto-enabled" << dendl;
+        }
+      }
     }
   }
 
@@ -5471,7 +5482,8 @@ namespace {
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
-    EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT };
+    EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT,
+    SUPPORTS_OMAP };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6280,6 +6292,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"allow_ec_optimizations", EC_OPTIMIZATIONS},
       {"ec_data_shard_count", EC_DATA_SHARD_COUNT},
       {"ec_coding_shard_count", EC_CODING_SHARD_COUNT},
+      {"supports_omap", SUPPORTS_OMAP},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6552,6 +6565,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
             f->dump_unsigned("ec_coding_shard_count",
                              p->ec_coding_shard_count.value_or(0));
 	  break;
+          case SUPPORTS_OMAP:
+            f->dump_bool("supports_omap", p->supports_omap());
+            break;
 	}
       }
       f->close_section();
@@ -6737,6 +6753,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
             ss << "ec_coding_shard_count: "
                << static_cast<unsigned int>(p->ec_coding_shard_count.value_or(0))
                << "\n";
+            break;
+          case SUPPORTS_OMAP:
+            ss << "supports_omap: " <<
+              (p->supports_omap() ? "true" : "false") << "\n";
             break;
 	}
 	rdata.append(ss.str());
@@ -8331,6 +8351,10 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (crimson) {
     pi->set_flag(pg_pool_t::FLAG_CRIMSON);
   }
+  if (pool_type == pg_pool_t::TYPE_REPLICATED
+      && osdmap.require_osd_release >= ceph_release_t::umbrella) {
+    pi->set_flag(pg_pool_t::FLAG_OMAP);
+  }
 
   pi->size = size;
   pi->min_size = min_size;
@@ -9124,6 +9148,25 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       p.set_flag(n);
     } else {
       p.unset_flag(n);
+    }
+  } else if (var == "supports_omap") {
+    if ((val == "true") && osdmap.require_osd_release < ceph_release_t::umbrella) {
+      ss << "supports_omap cannot be enabled until require_osd_release is set to umbrella or later";
+      return -EPERM;
+    }
+    // Disabling omap support will leave omap data in RocksDB which cannot be cleaned up
+    // It will also break any services that depend on this pool to store metadata
+    if ((val == "false") && (p.has_flag(pg_pool_t::FLAG_OMAP))) {
+      ss << "supports_omap cannot be disabled once enabled";
+      return -EINVAL;
+    }
+    // This restriction is temporary until omap support is well tested in Fast EC pools
+    if ((val == "true") && p.is_erasure()) {
+      ss << "supports_omap cannot be enabled in ec pools";
+      return -EINVAL;
+    }
+    if (val == "true") {
+      p.flags |= pg_pool_t::FLAG_OMAP;
     }
   } else if (var == "target_max_objects") {
     if (interr.length()) {
