@@ -2413,6 +2413,7 @@ void Objecter::_op_submit_with_budget(Op *op,
     if (op->tid == 0) {
       op->tid = ++last_tid;
     }
+    *ptid = op->tid;
     OSDSession *s;;
     int r = _get_session(op->target.osd, &s, sul);
     // The lock has been held since the last calc_target, so it should not
@@ -2680,13 +2681,18 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r,
 
   Op *op = p->second;
   if (op->split_op_tids) {
-    ldout(cct, 10) << __func__ << " split_op cancel tid " << tid
-                   << " in session " << s->osd << dendl;
+    auto tids = *op->split_op_tids; // intentional copy.
+    sl.unlock();
+
     // An op with split ops is not actually active, but has child ops which
     // need to be canceled.  This op should end up being canceled by the
     // generated completions.
-    for (auto tid : *op->split_op_tids) {
-      op_cancel(tid, r);
+    for (auto sub_tid : tids) {
+      ldout(cct, 10) << __func__ << " SplitOp:: cancel tid " << tid
+               << " sub_tid " << sub_tid
+               << " in session " << s->osd << dendl;
+      //FIXME - don't want assert here...
+      ceph_assert(0 == _op_cancel(sub_tid, r));
     }
     return 0;
   }
