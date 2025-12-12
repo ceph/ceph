@@ -481,7 +481,7 @@ void RadosTestECPP::inject_ec_read_error(const std::string &objname) {
 
   ceph::messaging::osd::InjectECErrorRequest<
     io_exerciser::InjectOpType::ReadDelayed>
-  injectErrorRequest(nspace + "/" + pool_name, objname, 0, 2, 0, std::numeric_limits<int64_t>::max());
+  injectErrorRequest(pool_name, "*", 0, 2, 0, std::numeric_limits<int64_t>::max());
 
   JSONFormatter f;
   encode_json("ReadDelayedInject", injectErrorRequest, &f);
@@ -499,7 +499,7 @@ void RadosTestECPP::clear_ec_read_error(const std::string &objname) {
 
   ceph::messaging::osd::InjectECClearErrorRequest<
       io_exerciser::InjectOpType::ReadDelayed>
-      clearErrorInject{nspace + "/" + pool_name, objname, 0, 2};
+      clearErrorInject{pool_name, "*", 0, 2};
 
   JSONFormatter f;
   encode_json("ReadDelayedInject", clearErrorInject, &f);

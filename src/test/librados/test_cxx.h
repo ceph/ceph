@@ -26,6 +26,8 @@ std::string connect_cluster_pp(librados::Rados &cluster,
 int destroy_one_pool_pp(const std::string &pool_name, librados::Rados &cluster);
 int destroy_one_ec_pool_pp(const std::string &pool_name, librados::Rados &cluster);
 int destroy_pool_pp(const std::string &pool_name, librados::Rados &cluster);
+int set_config(librados::Rados &cluster, const std::string& who, const std::string& name, const std::string &val);
+std::string get_config(librados::Rados &cluster, const std::string& who, const std::string& name);
 std::string set_pool_flags_pp(const std::string &pool_name, librados::Rados &cluster, int64_t flags, bool set_not_unset);
 std::string set_split_ops_pp(const std::string &pool_name, librados::Rados &cluster, bool set_not_unset);
 

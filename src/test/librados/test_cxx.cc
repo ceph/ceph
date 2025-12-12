@@ -17,6 +17,7 @@
 
 #include "test.h"
 #include "gtest/gtest.h"
+#include "common/ceph_json.h"
 
 using namespace librados;
 
@@ -69,6 +70,29 @@ int destroy_ec_profile_pp(Rados &cluster, const std::string& pool_name,
                                 {}, NULL, NULL);
   if (ret)
     oss << "mon_command: osd erasure-code-profile rm testprofile-" << pool_name << " failed with error " << ret << std::endl;
+  return ret;
+}
+
+int set_config(Rados &cluster, const std::string& who, const std::string& name, const std::string &val) {
+  int ret = cluster.mon_command("{\"prefix\": \"config set\", \"who\": \"" + who + "\", "
+    + "\"name\": \"" + name + "\", "
+    + "\"value\": \"" + val + "\"}",
+    {}, NULL, NULL);
+  if (ret != 0) {
+    return ret;
+  }
+  /* Wait for the config option to reach this client! */
+  std::string actual_val;
+  // This can be quite slow, so we allow 100s.
+  int retries = 100;
+  do {
+    if (--retries <= 0) {
+      return -ETIMEDOUT;
+    }
+    sleep(1);
+    cluster.conf_get("rados_osd_op_timeout", actual_val);
+  } while (actual_val != val);
+
   return ret;
 }
 

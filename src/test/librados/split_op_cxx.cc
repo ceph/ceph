@@ -220,9 +220,80 @@ TEST_P(LibRadosSplitOpECPP, Stat) {
   ASSERT_NE(0, time.tv_sec);
 }
 
-TEST_P(LibRadosSplitOpECPP, Cancel)
+TEST_P(LibRadosSplitOpPP, CancelReplica)
 {
   SKIP_IF_CRIMSON();
+  if (!split_ops) {
+    GTEST_SKIP() << "Inject requires split_ops!";
+  }
+  bufferlist bl, attr_bl, attr_read_bl;
+  uint64_t length = 512 * 1024;
+  const std::string oid = "foo";
+
+  bl.append_zero(length);
+  ObjectWriteOperation write1;
+  write1.write(0, bl);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, oid, &write1));
+
+  int ret = 0;
+  auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ObjectReadOperation op;
+  int osd_ret;
+  bufferlist outval;
+  op.read(0, length, &outval, &osd_ret);
+  ioctx.aio_operate(oid, c.get(), &op, librados::OPERATION_BALANCE_READS, nullptr);
+
+  EXPECT_EQ(0, c->cancel());
+  {
+    TestAlarm alarm;
+    EXPECT_EQ(0, c->wait_for_complete());
+  }
+  ret = c->get_return_value();
+
+  EXPECT_EQ(-ECANCELED, ret);
+}
+
+TEST_P(LibRadosSplitOpECPP, CancelSmall)
+{
+  SKIP_IF_CRIMSON();
+  if (!split_ops) {
+    GTEST_SKIP() << "Inject requires split_ops!";
+  }
+  bufferlist bl, attr_bl, attr_read_bl;
+  uint64_t length = 1 * 1024;
+  const std::string oid = "foo";
+
+  bl.append_zero(length);
+  ObjectWriteOperation write1;
+  write1.write(0, bl);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, oid, &write1));
+
+  inject_ec_read_error(oid);
+  int ret = 0;
+  auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ObjectReadOperation op;
+  int osd_ret;
+  bufferlist outval;
+  op.read(0, length, &outval, &osd_ret);
+  ioctx.aio_operate(oid, c.get(), &op, librados::OPERATION_BALANCE_READS, nullptr);
+
+  EXPECT_EQ(0, c->cancel());
+  {
+    TestAlarm alarm;
+    EXPECT_EQ(0, c->wait_for_complete());
+  }
+  ret = c->get_return_value();
+  clear_ec_read_error(oid);
+
+  EXPECT_EQ(-ECANCELED, ret);
+}
+
+TEST_P(LibRadosSplitOpECPP, CancelBig)
+{
+  SKIP_IF_CRIMSON();
+  if (!split_ops) {
+    GTEST_SKIP() << "Inject requires split_ops!";
+  }
   bufferlist bl, attr_bl, attr_read_bl;
   uint64_t length = 12 * 1024;
   const std::string oid = "foo";
@@ -252,6 +323,43 @@ TEST_P(LibRadosSplitOpECPP, Cancel)
   EXPECT_EQ(-ECANCELED, ret);
 }
 
+TEST_P(LibRadosSplitOpECPP, TimeoutBig)
+{
+  SKIP_IF_CRIMSON();
+
+  if (!split_ops) {
+    GTEST_SKIP() << "Inject requires split_ops!";
+  }
+  bufferlist bl, attr_bl, attr_read_bl;
+  uint64_t length = 12 * 1024;
+  const std::string oid = "foo";
+
+  bl.append_zero(length);
+  ObjectWriteOperation write1;
+  write1.write(0, bl);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, oid, &write1));
+
+  inject_ec_read_error(oid);
+  int ret = 0;
+  auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ObjectReadOperation op;
+  int osd_ret;
+  bufferlist outval;
+  op.read(0, length, &outval, &osd_ret);
+  ASSERT_EQ(0, set_config(s_cluster, "global", "rados_osd_op_timeout", "1"));
+  ioctx.aio_operate(oid, c.get(), &op, librados::OPERATION_BALANCE_READS, nullptr);
+
+  {
+    TestAlarm alarm;
+    EXPECT_EQ(0, c->wait_for_complete());
+  }
+  ret = c->get_return_value();
+  clear_ec_read_error(oid);
+
+  EXPECT_EQ(-ETIMEDOUT, ret);
+  // Reset timeout to default.
+  ASSERT_EQ(0, set_config(s_cluster, "global", "rados_osd_op_timeout", "0"));
+}
 
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosSplitOpPP);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosSplitOpECPP);
