@@ -2369,7 +2369,7 @@ void Objecter::op_post_redrive(Op* op) {
     op->ctx_budgeted = true;
     ceph_tid_t tid = 0;
     op->trace.event("op submit");
-    _op_submit_with_timeout(op, rl, &tid);
+    _op_submit(op, rl, &tid);
   });
 }
 
@@ -2406,6 +2406,16 @@ void Objecter::_op_submit_with_budget(Op *op,
     }
   }
 
+  if (osd_timeout > timespan(0)) {
+    if (op->tid == 0)
+      op->tid = ++last_tid;
+    auto tid = op->tid;
+    op->ontimeout = timer.add_event(osd_timeout,
+				    [this, tid]() {
+				      op_cancel(tid, -ETIMEDOUT); });
+  }
+
+
   bool was_split = SplitOp::create(op, *this, sul, cct);
 
   if (was_split) {
@@ -2422,28 +2432,8 @@ void Objecter::_op_submit_with_budget(Op *op,
     _session_op_assign(s, op);
     inflight_ops++;
   } else {
-    _op_submit_with_timeout(op, sul, ptid);
+    _op_submit(op, sul, ptid);
   }
-}
-
-void Objecter::_op_submit_with_timeout(Op *op,
-                                      shunique_lock<ceph::shared_mutex>& sul,
-                                      ceph_tid_t *ptid)
-{
-  if (op->target.force_shard) {
-    logger->inc(l_osdc_split_op_reads);
-  }
-
-  if (osd_timeout > timespan(0)) {
-    if (op->tid == 0)
-      op->tid = ++last_tid;
-    auto tid = op->tid;
-    op->ontimeout = timer.add_event(osd_timeout,
-				    [this, tid]() {
-				      op_cancel(tid, -ETIMEDOUT); });
-  }
-
-  _op_submit(op, sul, ptid);
 }
 
 void Objecter::_send_op_account(Op *op)
@@ -2543,6 +2533,10 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   // rwlock is locked
 
   ldout(cct, 10) << __func__ << " op " << op << dendl;
+
+  if (op->target.force_shard) {
+    logger->inc(l_osdc_split_op_reads);
+  }
 
   // pick target
   ceph_assert(op->session == NULL);

@@ -2847,9 +2847,6 @@ private:
 			      ceph::shunique_lock<ceph::shared_mutex>& lc,
 			      ceph_tid_t *ptid,
 			      int *ctx_budget = NULL);
-  void _op_submit_with_timeout(Op *op,
-                            ceph::shunique_lock<ceph::shared_mutex>& lc,
-                            ceph_tid_t *ptid);
   // public interface
 public:
   void op_post_redrive(Op *op);
