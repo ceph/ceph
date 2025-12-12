@@ -5688,6 +5688,12 @@ options:
   desc: Log a BlueStore operation if it is slower than this age (seconds)
   default: 5
   with_legacy: true
+- name: bluestore_log_scrub_op_age
+  type: float
+  level: advanced
+  desc: Log a BlueStore Scrub operation if it is slower than this age (seconds)
+  default: 15
+  with_legacy: true
 - name: bluestore_log_omap_iterator_age
   type: float
   level: advanced
