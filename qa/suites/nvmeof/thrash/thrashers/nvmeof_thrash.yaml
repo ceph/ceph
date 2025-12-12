@@ -3,6 +3,7 @@ overrides:
     log-ignorelist:  
       # general ignorelist
       - OSD_DOWN
+      - osds down
       - OSD_HOST_DOWN
       - OSD_ROOT_DOWN
       - PG_DEGRADED
