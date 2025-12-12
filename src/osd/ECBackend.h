@@ -397,4 +397,52 @@ public:
     }
     return object_size_to_shard_size(logical_size, shard_id);
   }
+
+  bool remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
+
+  using OmapIterFunction = std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)>;
+  int omap_iterate (
+    ObjectStore::CollectionHandle &c_, ///< [in] collection
+    const ghobject_t &oid, ///< [in] object
+    const ObjectStore::omap_iter_seek_t &start_from, ///< [in] where the iterator should point to at the beginning
+    const OmapIterFunction &f, ///< [in] function to call for each key/value pair
+    ObjectStore *store
+  );
+
+  int omap_get_values(
+    ObjectStore::CollectionHandle &c_, ///< [in] collection
+    const ghobject_t &oid,              ///< [in] object
+    const std::set<std::string> &keys,  ///< [in] keys to get
+    std::map<std::string, ceph::buffer::list> *out, ///< [out] returned key/values
+    ObjectStore *store
+  );
+
+  int omap_get_header(
+    ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    ceph::buffer::list *header,      ///< [out] omap header
+    bool allow_eio, ///< [in] don't assert on eio
+    ObjectStore *store
+  );
+
+  int omap_get(
+    ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    ceph::buffer::list *header,      ///< [out] omap header
+    std::map<std::string, ceph::buffer::list> *out, /// < [out] Key to value map
+    ObjectStore *store
+  );
+
+  int omap_check_keys(
+    ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    const std::set<std::string> &keys, ///< [in] Keys to check
+    std::set<std::string> *out,         ///< [out] Subset of keys defined on oid
+    ObjectStore *store
+  );
+
+  bool should_be_removed(
+    const std::map<std::string, std::optional<std::string>>& removed_ranges,
+    std::string_view key
+  );
 };

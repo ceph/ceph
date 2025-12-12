@@ -134,6 +134,38 @@ public:
     }
   }
 
+  int omap_iterate(
+    ObjectStore::CollectionHandle &c_, ///< [in] collection
+    const ghobject_t &oid, ///< [in] object
+    const ObjectStore::omap_iter_seek_t &start_from,
+    ///^ [in] where the iterator should point to at the beginning
+    const OmapIterFunction &f ///< [in] function to call for each key/value pair
+  ) override;
+  int omap_get_values(
+    ObjectStore::CollectionHandle &c_, ///< [in] collection
+    const ghobject_t &oid, ///< [in] object
+    const std::set<std::string> &keys, ///< [in] keys to get
+    std::map<std::string, ceph::buffer::list> *out ///< [out] returned key/values
+  ) override;
+  int omap_get_header(
+    ObjectStore::CollectionHandle &c_, ///< [in] Collection containing oid
+    const ghobject_t &oid, ///< [in] Object containing omap
+    ceph::buffer::list *header, ///< [out] omap header
+    bool allow_eio ///< [in] don't assert on eio
+  ) override;
+  int omap_get(
+    ObjectStore::CollectionHandle &c_, ///< [in] Collection containing oid
+    const ghobject_t &oid, ///< [in] Object containing omap
+    ceph::buffer::list *header, ///< [out] omap header
+    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
+  ) override;
+  int omap_check_keys(
+    ObjectStore::CollectionHandle &c_, ///< [in] Collection containing oid
+    const ghobject_t &oid, ///< [in] Object containing omap
+    const std::set<std::string> &keys, ///< [in] Keys to check
+    std::set<std::string> *out ///< [out] Subset of keys defined on oid
+  ) override;
+
   int objects_read_sync(
     const hobject_t &hoid,
     uint64_t off,
