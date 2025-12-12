@@ -222,25 +222,38 @@ TEST_P(LibRadosSplitOpECPP, Stat) {
 
 TEST_P(LibRadosSplitOpECPP, Cancel)
 {
+  SKIP_IF_CRIMSON();
+  bufferlist bl, attr_bl, attr_read_bl;
+  std::string attr_key = "my_key";
+  std::string attr_value = "my_attr";
+  const std::string oid = "foo";
+
+  bl.append("ceph");
+  ObjectWriteOperation write1;
+  write1.write(0, bl);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, oid, &write1));
+
+  inject_ec_read_error(oid);
   // cancellation tests are racy, so retry if completion beats the cancellation
   int ret = 0;
-  int tries = 10;
-  do {
-    auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
-    ObjectReadOperation op;
-    op.assert_exists();
-    ioctx.aio_operate("nonexistent", c.get(), &op, nullptr);
+  auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ObjectReadOperation op;
+  int osd_ret;
+  bufferlist outval;
+  op.read(0, 4, &outval, &osd_ret);
+  ioctx.aio_operate(oid, c.get(), &op, librados::OPERATION_BALANCE_READS, nullptr);
 
-    EXPECT_EQ(0, c->cancel());
-    {
-      TestAlarm alarm;
-      ASSERT_EQ(0, c->wait_for_complete());
-    }
-    ret = c->get_return_value();
-  } while (ret == -ENOENT && --tries);
+  EXPECT_EQ(0, c->cancel());
+  {
+    TestAlarm alarm;
+    EXPECT_EQ(0, c->wait_for_complete());
+  }
+  ret = c->get_return_value();
+  clear_ec_read_error(oid);
 
   EXPECT_EQ(-ECANCELED, ret);
 }
+
 
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosSplitOpPP);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosSplitOpECPP);

@@ -196,6 +196,8 @@ protected:
   static std::string pool_name_default;
   static std::string pool_name_fast;
   static std::string pool_name_fast_split;
+  void inject_ec_read_error(const std::string &objname);
+  void clear_ec_read_error(const std::string &objname);
 
   std::string pool_name;
   void SetUp() override;

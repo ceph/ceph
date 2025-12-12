@@ -21,9 +21,10 @@ RadosCommands::RadosCommands(librados::Rados& rados) :
  * @returns int ID of the acting primary OSD
  */
 int RadosCommands::get_primary_osd(const std::string& pool_name,
-                                   const std::string& oid)
+                                   const std::string& oid,
+                                   const std::string& nspace)
 {
-  ceph::messaging::osd::OSDMapRequest osd_map_request{pool_name, oid, ""};
+  ceph::messaging::osd::OSDMapRequest osd_map_request{pool_name, oid, nspace};
   encode_json("OSDMapRequest", osd_map_request, formatter.get());
 
   std::ostringstream oss;

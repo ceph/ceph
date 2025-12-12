@@ -16,6 +16,10 @@
 
 #include "common/ceph_context.h"
 #include "common/perf_counters_collection.h"
+#include "common/ceph_json.h"
+
+#include "erasure-code/consistency/RadosCommands.h"
+#include "common/json/OSDStructures.h"
 
 using namespace librados;
 
@@ -468,6 +472,44 @@ void RadosTestECPP::set_allow_ec_overwrites()
     ASSERT_LT(std::chrono::steady_clock::now(), end);
     std::this_thread::sleep_for(std::chrono::seconds(2));
   }
+}
+
+void RadosTestECPP::inject_ec_read_error(const std::string &objname) {
+  int osd = -1;
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+  osd = ec_commands.get_primary_osd(pool_name, objname, nspace);
+
+  // FIXME: THe inject mechanism does not currently understand namespaces.
+  ceph::messaging::osd::InjectECErrorRequest<
+    io_exerciser::InjectOpType::ReadDelayed>
+  injectErrorRequest(pool_name, "*", 0, 2, 0, std::numeric_limits<int64_t>::max());
+
+  JSONFormatter f;
+  encode_json("ReadDelayedInject", injectErrorRequest, &f);
+
+  std::ostringstream oss;
+  f.flush(oss);
+  int rc = s_cluster.osd_command(osd, oss.str(), {}, {}, nullptr);
+  ASSERT_EQ(0, rc);
+}
+
+void RadosTestECPP::clear_ec_read_error(const std::string &objname) {
+  int osd = -1;
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+  osd = ec_commands.get_primary_osd(pool_name, objname, nspace);
+
+  // FIXME: THe inject mechanism does not currently understand namespaces.
+  ceph::messaging::osd::InjectECClearErrorRequest<
+      io_exerciser::InjectOpType::ReadDelayed>
+      clearErrorInject{pool_name, "*", 0, 2};
+
+  JSONFormatter f;
+  encode_json("ReadDelayedInject", clearErrorInject, &f);
+
+  std::ostringstream oss;
+  f.flush(oss);
+  int rc = s_cluster.osd_command(osd, oss.str(), {}, {}, nullptr);
+  ASSERT_EQ(0, rc);
 }
 
 uint64_t RadosTestPPBase::get_perf_counter_by_path(std::string_view path) {

@@ -140,6 +140,7 @@ void RadosIo::applyIoOp(IoOp& op) {
       wop.write_full(op_info->bufferlist[0]);
       auto create_cb = [this](boost::system::error_code ec, version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
+        std::cout << "Completed Create OP" << std::endl;
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, primary_oid,
@@ -259,6 +260,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
         ceph_assert(db->validate(op_info->bufferlist[i], op_info->offset[i],
                                  op_info->length[i]));
       }
+      std::cout << "Completed Read OP" << std::endl;
       finish_io();
     };
     
@@ -296,6 +298,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
     }
     auto write_cb = [this](boost::system::error_code ec, version_t ver) {
       ceph_assert(ec == boost::system::errc::success);
+      std::cout << "Completed Write OP" << std::endl;
       finish_io();
     };
     librados::async_operate(asio.get_executor(), io, primary_oid,
@@ -438,6 +441,16 @@ void RadosIo::applyInjectOp(IoOp& op) {
                                   "InjectECErrorRequest", {},
                                   &inject_outbl, formatter.get());
         ceph_assert(rc == 0);
+      } else if (errorOp.type == 2) {
+        ceph::messaging::osd::InjectECErrorRequest<
+            InjectOpType::ReadDelayed>
+            injectErrorRequest{pool,         primary_oid,          errorOp.shard,
+                               errorOp.type, errorOp.when, errorOp.duration};
+        int rc = send_osd_command(osd, injectErrorRequest, rados,
+                                  "InjectECErrorRequest", {},
+                                  &inject_outbl, formatter.get());
+        std::cout << "InjectECErrorRequest output: " << inject_outbl.c_str() << std::endl;
+        ceph_assert(rc == 0);
       } else {
         ceph_abort_msg("Unsupported inject type");
       }
@@ -463,10 +476,6 @@ void RadosIo::applyInjectOp(IoOp& op) {
                                   "InjectECErrorRequest", {},
                                   &inject_outbl, formatter.get());
         ceph_assert(rc == 0);
-
-        // This inject is sent directly to the shard we want to inject the error
-        // on
-        osd = shard_order[errorOp.shard];
       } else {
         ceph_abort("Unsupported inject type");
       }
@@ -491,6 +500,15 @@ void RadosIo::applyInjectOp(IoOp& op) {
         int rc = send_osd_command(osd, clearErrorInject, rados,
                                   "InjectECClearErrorRequest", {},
                                   &inject_outbl, formatter.get());
+        ceph_assert(rc == 0);
+      } else if (errorOp.type == 2) {
+        ceph::messaging::osd::InjectECClearErrorRequest<
+            InjectOpType::ReadDelayed>
+            clearErrorInject{pool, primary_oid, errorOp.shard, errorOp.type};
+        int rc = send_osd_command(osd, clearErrorInject, rados,
+                                  "InjectECClearErrorRequest", {},
+                                  &inject_outbl, formatter.get());
+        std::cout << "InjectECClearErrorRequest output: " << inject_outbl.c_str() << std::endl;
         ceph_assert(rc == 0);
       } else {
         ceph_abort("Unsupported inject type");

@@ -18,7 +18,8 @@ add_library(radostest-cxx STATIC
   $<TARGET_OBJECTS:radostest_shared>)
 target_link_libraries(radostest-cxx PUBLIC
   GTest::GTest
-  ceph-common)
+  ceph-common
+  ec_consistency)
 
 add_executable(ceph_test_rados_api_cmd
   cmd.cc)
