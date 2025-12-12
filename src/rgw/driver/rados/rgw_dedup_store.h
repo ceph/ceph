@@ -138,6 +138,7 @@ namespace rgw::dedup {
     disk_record_t(const rgw::sal::Bucket *p_bucket,
                   const std::string      &obj_name,
                   const parsed_etag_t    *p_parsed_etag,
+                  const std::string      &instance,
                   uint64_t                obj_size,
                   const std::string      &storage_class);
     disk_record_t() {}
@@ -161,10 +162,10 @@ namespace rgw::dedup {
       uint64_t      md5_high;        // High Bytes of the Object Data MD5
       uint64_t      md5_low;         // Low  Bytes of the Object Data MD5
       uint64_t      obj_bytes_size;
-      uint64_t      object_version;
 
       uint16_t      bucket_id_len;
       uint16_t      tenant_name_len;
+      uint16_t      instance_len;
       uint16_t      stor_class_len;
       uint16_t      ref_tag_len;
 
@@ -180,6 +181,7 @@ namespace rgw::dedup {
     std::string bucket_id;
     std::string tenant_name;
     std::string ref_tag;
+    std::string instance;
     std::string stor_class;
     bufferlist  manifest_bl;
   };
