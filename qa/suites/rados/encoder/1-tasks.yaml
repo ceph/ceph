@@ -2,10 +2,11 @@ tasks:
 - print: "**** install version -2 (reef) ****"
 - install:
     branch: reef
-    exclude_packages:
-      - ceph-volume
-      - ceph-osd-classic
-      - ceph-osd-crimson
+    packages:
+      deb:
+        - ceph-common
+      rpm:
+        - ceph-common
 - print: "**** done install task..."
 - print: "**** start dencoder reef... ****"
 - workunit:
@@ -17,10 +18,11 @@ tasks:
 - print: "**** installing N-1 version (squid) ****"
 - install:
     branch: squid
-    exclude_packages:
-      - ceph-volume
-      - ceph-osd-classic
-      - ceph-osd-crimson
+    packages:
+      deb:
+        - ceph-common
+      rpm:
+        - ceph-common
 - print: "**** done end installing task..."
 
 - print: "**** start dencoder squid... ****"
@@ -33,9 +35,11 @@ tasks:
 - print: "**** installing N version (Tentacle) ****"
 - install:
     branch: tentacle
-    exclude_packages:
-      - ceph-volume
-      - ceph-osd-classic
+    packages:
+      deb:
+        - ceph-common
+      rpm:
+        - ceph-common
 - print: "**** done end installing task..."
 - print: "**** start dencoder tentacle... ****"
 - workunit:
