@@ -45,6 +45,7 @@ ECBackend::ECBackend(pg_shard_t whoami,
 		     DoutPrefixProvider &dpp,
 		     ECListener &eclistener)
   : PGBackend{whoami, coll, shard_services, store_index, dpp},
+    ECCommon(dpp),
     ec_impl{create_ec_impl(ec_profile)},
     sinfo(ec_impl, &(eclistener.get_pool()), stripe_width),
     fast_read{fast_read},

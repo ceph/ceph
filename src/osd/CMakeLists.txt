@@ -53,6 +53,8 @@ set(osd_srcs
   ECInject.cc
   ECInject.h
   Coroutines.h
+  ECOmapJournal.cc
+  ECOmapJournal.h
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   ${osd_cyg_functions_src}

@@ -51,6 +51,10 @@ struct PGLog;
 struct RecoveryMessages;
 
 struct ECCommon {
+  ECOmapJournal ec_omap_journal;
+
+  explicit ECCommon(const DoutPrefixProvider& dpp) : ec_omap_journal(dpp) {}
+
   struct ec_extent_t {
     int err;
     extent_map emap;

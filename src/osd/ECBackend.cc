@@ -75,7 +75,8 @@ ECBackend::ECBackend(
   uint64_t stripe_width,
   ECSwitch *s,
   ECExtentCache::LRU &ec_extent_cache_lru)
-  : parent(pg), cct(cct), switcher(s),
+  : ECCommon(*pg->get_dpp()),
+    parent(pg), cct(cct), switcher(s),
 #ifdef WITH_CRIMSON
     read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
 #else
