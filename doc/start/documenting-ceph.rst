@@ -146,14 +146,14 @@ Select a Branch
 When you make small changes to the documentation, such as fixing typographical
 errors or clarifying explanations, use the ``main`` branch (default). You
 should also use the ``main`` branch when making contributions to features that
-are in the current release. ``main`` is the most commonly used branch. :
+are in the current release. ``main`` is the most commonly used branch.
 
 .. prompt:: bash $
 
 	git checkout main
 
 When you make changes to documentation that affect an upcoming release, use
-the ``next`` branch. ``next`` is the second most commonly used branch. :
+the ``next`` branch. ``next`` is the second most commonly used branch.
 
 .. prompt:: bash $
 
@@ -179,7 +179,7 @@ http://tracker.ceph.com/issues/4000.
    describes the changes.
 
 Before you create your branch name, ensure that it doesn't already exist in the
-local or remote repository. :
+local or remote repository.
 
 .. prompt:: bash $
 
@@ -813,7 +813,7 @@ the documentation in both native reStructuredText format and its rendered
 formats such as HTML. Navigate to your Ceph repository and view a document in
 its native format. You may notice that it is generally as legible in a terminal
 as it is in its rendered HTML format. Additionally, you may also notice that
-diagrams in ``ditaa`` format also render reasonably well in text mode. :
+diagrams in ``ditaa`` format also render reasonably well in text mode.
 
 .. prompt:: bash $
 
@@ -951,8 +951,8 @@ Sphinx." looks like this:
 
 ::
 
-    ``Click `here <https://www.sphinx-doc.org>`_ to learn more about Python
-    Sphinx.``
+    Click `here <https://www.sphinx-doc.org>`_ to learn more about Python
+    Sphinx.
 
 And here it is, rendered:
 
@@ -999,7 +999,7 @@ addresses external to the Ceph documentation:
 
 ::
 
-   `inline text <http:www.foo.com>`_
+   `inline text <https://www.foo.com>`_
 
 .. note:: Do not fail to include the space between the inline text and the
    less-than sign.
