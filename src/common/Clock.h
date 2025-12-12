@@ -33,4 +33,18 @@ static inline utime_t ceph_clock_now()
   return n;
 }
 
+static inline utime_t mono_clock_now()
+{
+#if defined(__linux__)
+  struct timespec tp;
+  clock_gettime(CLOCK_MONOTONIC, &tp);
+  utime_t n(tp);
+#else
+  struct timeval tv;
+  gettimeofday(&tv, nullptr);
+  utime_t n(&tv);
+#endif
+  return n;
+}
+
 #endif
