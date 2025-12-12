@@ -1405,6 +1405,22 @@ extern "C" int ceph_flock(struct ceph_mount_info *cmount, int fd, int operation,
   return cmount->get_client()->flock(fd, operation, owner);
 }
 
+extern "C" int ceph_getlk(struct ceph_mount_info *cmount, int fd, struct flock *fl,
+			  uint64_t owner)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->getlk(fd, fl, owner);
+}
+
+extern "C" int ceph_setlk(struct ceph_mount_info *cmount, int fd, struct flock *fl,
+			  uint64_t owner, int sleep)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->setlk(fd, fl, owner, sleep);
+}
+
 extern "C" int ceph_truncate(struct ceph_mount_info *cmount, const char *path,
 			     int64_t size)
 {

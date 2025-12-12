@@ -1277,6 +1277,32 @@ int ceph_flock(struct ceph_mount_info *cmount, int fd, int operation,
 	       uint64_t owner);
 
 /**
+ * Test the existence of a record lock.
+ *
+ * @param cmount the ceph mount handle to use for performing the lock.
+ * @param fd the open file descriptor to test the existence of a record lock.
+ * @param pointer to an flock structure.
+ * @param owner the user-supplied owner identifier (an arbitrary integer)
+ * @returns 0 on success or negative error code on failure.
+ */ 
+ int ceph_getlk(struct ceph_mount_info *cmount, int fd, struct flock *flock,
+		uint64_t owner);
+
+/**
+ * Set a record lock.
+ *
+ * @param cmount the ceph mount handle to use for performing the lock.
+ * @param fd the open file descriptor to set a record lock
+ * @param pointer to an flock structure.
+ * @param owner the user-supplied owner identifier (an arbitrary integer)
+ * @param sleep the user-supplied sleep flag
+ * @returns 0 on success or negative error code on failure.
+ */ 
+ 
+ int ceph_setlk(struct ceph_mount_info *cmount, int fd, struct flock *flock,
+		uint64_t owner, int sleep);
+
+/**
  * Truncate the file to the given size.  If this operation causes the
  * file to expand, the empty bytes will be filled in with zeros.
  *
