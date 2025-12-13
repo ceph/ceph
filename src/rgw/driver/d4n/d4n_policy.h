@@ -157,6 +157,7 @@ class LFUDAPolicy : public CachePolicy {
     BlockDirectory* blockDir;
     ObjectDirectory* objDir;
     BucketDirectory* bucketDir;
+    D4NTransaction* m_d4n_trx;
     rgw::cache::CacheDriver* cacheDriver;
     std::optional<asio::steady_timer> rthread_timer;
     rgw::sal::Driver* driver;
@@ -190,12 +191,19 @@ class LFUDAPolicy : public CachePolicy {
       blockDir = new BlockDirectory{conn};
       objDir = new ObjectDirectory{conn};
       bucketDir = new BucketDirectory{conn};
+      //all objects share the same transaction
+      m_d4n_trx = new rgw::d4n::D4NTransaction();
+      objDir->set_d4n_trx(m_d4n_trx);
+      blockDir->set_d4n_trx(m_d4n_trx);
+      bucketDir->set_d4n_trx(m_d4n_trx);
     }
     ~LFUDAPolicy() {
       rthread_stop();
-      delete bucketDir;
-      delete blockDir;
-      delete objDir;
+      if (bucketDir) delete bucketDir;
+      if (blockDir) delete blockDir;
+      if (objDir) delete objDir;
+      if (m_d4n_trx) delete m_d4n_trx;
+      
       quit = true;
       cond.notify_all();
       if (tc.joinable()) { tc.join(); }
