@@ -540,6 +540,14 @@ void ActivePyModules::start_one(PyModuleRef py_module)
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
   finisher.queue(new LambdaContext([this, active_module, name](int) {
+    // Delay loading in testing scenarios
+    auto delay = g_conf().get_val<std::chrono::milliseconds>("mgr_module_load_delay");
+    std::string delayed_module = g_conf().get_val<std::string>("mgr_module_load_delay_name");
+    if ((name == delayed_module) && (delay > std::chrono::milliseconds{0})) {
+      dout(4) << "Delaying load time for module '" << name
+              << "' by " << delay << "..." << dendl;
+      std::this_thread::sleep_for(delay);
+    }
     int r = active_module->load(this);
     std::lock_guard l(lock);
     pending_modules.erase(name);
@@ -555,6 +563,12 @@ void ActivePyModules::start_one(PyModuleRef py_module)
       dout(4) << "Starting active module " << name <<" finisher thread "
         << active_module->get_fin_thread_name() << dendl;
       active_module->finisher.start();
+    }
+
+    // Signal when we're finally done starting up modules
+    if (pending_modules.empty() && recheck_modules_start) {
+      finisher.queue(recheck_modules_start);
+      recheck_modules_start = nullptr;
     }
   }));
 }
@@ -1760,4 +1774,14 @@ PyObject* ActivePyModules::get_daemon_health_metrics()
       }
       return f.get();
   });
+}
+
+void ActivePyModules::check_all_modules_started(Context *modules_start_complete) {
+  std::lock_guard l(lock);
+  if (pending_modules.empty()) {
+    // Modules are already done starting, signal completion right away
+    finisher.queue(modules_start_complete);
+  } else {
+    recheck_modules_start = modules_start_complete; // signal that we need to check again later
+  }
 }
