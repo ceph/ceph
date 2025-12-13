@@ -50,6 +50,12 @@ cdef extern from "Python.h":
     char* PyBytes_AsString(PyObject *string) except NULL
     int _PyBytes_Resize(PyObject **string, Py_ssize_t newsize) except -1
 
+    # Python 3.9+ sub-interpreter support
+    ctypedef struct PyThreadState:
+        pass
+    PyThreadState* PyThreadState_Get() nogil
+    PyThreadState* PyThreadState_Swap(PyThreadState *) nogil
+
 cdef extern from "<errno.h>" nogil:
     enum:
         _ECANCELED "ECANCELED"
@@ -392,6 +398,88 @@ cdef int progress_callback(uint64_t offset, uint64_t total, void* ptr) with gil:
 cdef int no_op_progress_callback(uint64_t offset, uint64_t total, void* ptr):
     return 0
 
+
+# Python 3.12+ callback wrapper for sub-interpreter safety
+cdef class CallbackWrapper:
+    """
+    Generic callback wrapper for Python 3.12+ sub-interpreter safety.
+
+    Python 3.12+ introduced significant changes to sub-interpreter isolation
+    which can cause crashes when callbacks are invoked from C code in a
+    different interpreter context than where the callback was created.
+
+    This wrapper stores the interpreter state when created and switches
+    to the correct interpreter when the callback is invoked, ensuring
+    the callback executes in its original interpreter context.
+
+    Works for both progress callbacks and AIO oncomplete callbacks by
+    accepting variable arguments and returning the callback's result.
+    """
+    cdef object callback
+    cdef PyThreadState* tstate
+
+    def __init__(self, callback):
+        self.callback = callback
+        # Capture the current thread state (interpreter context)
+        # This is called from Python code, so GIL is held and we're in the right interpreter
+        with nogil:
+            self.tstate = PyThreadState_Get()
+
+    def __call__(self, *args, **kwargs):
+        """
+        Invoke the wrapped callback with proper interpreter context.
+
+        Accepts variable arguments to support different callback signatures:
+        - progress_callback(offset, total) -> int
+        - oncomplete(completion) -> None
+        - oncomplete(completion, image) -> None
+        - oncomplete(completion, info) -> None
+        - oncomplete(completion, mode) -> None
+        """
+        cdef PyThreadState* orig_tstate = NULL
+        cdef PyThreadState* current_tstate = NULL
+
+        # Get current thread state to check if we need to swap
+        current_tstate = PyThreadState_Get()
+
+        # Only swap if we're in a different interpreter context
+        # This optimization skips unnecessary swaps in the common case
+        # (main interpreter) while maintaining safety for sub-interpreters
+        if current_tstate != self.tstate:
+            with nogil:
+                orig_tstate = PyThreadState_Swap(self.tstate)
+
+        try:
+            return self.callback(*args, **kwargs)
+        finally:
+            # Restore the original interpreter state only if we swapped
+            if orig_tstate != NULL:
+                with nogil:
+                    PyThreadState_Swap(orig_tstate)
+
+
+cdef object wrap_callback(object callback):
+    """
+    Wraps a callback for Python 3.12+ sub-interpreter compatibility.
+
+    On Python 3.12+, returns a CallbackWrapper that switches to the
+    correct interpreter context when invoked. On Python < 3.12, returns the
+    callback unchanged for performance (no wrapper overhead).
+
+    Works for both progress callbacks and AIO oncomplete callbacks.
+    """
+    if callback is None:
+        return None
+
+    # Only wrap on Python 3.12+ where sub-interpreter issues exist
+    if sys.version_info >= (3, 12):
+        return CallbackWrapper(callback)
+    else:
+        # Python < 3.12: no wrapping needed, return callback as-is
+        return callback
+
+
+
 def cstr(val, name, encoding="utf-8", opt=False):
     """
     Create a byte string from a Python string
@@ -461,7 +549,7 @@ cdef class Completion(object):
         object exc_info
 
     def __cinit__(self, image, object oncomplete):
-        self.oncomplete = oncomplete
+        self.oncomplete = wrap_callback(oncomplete)
         self.image = image
         self.persisted = False
 
@@ -792,9 +880,11 @@ class RBD(object):
             char *_name = name
             librbd_progress_fn_t _prog_cb = &no_op_progress_callback
             void *_prog_arg = NULL
+            object wrapped_callback = None
         if on_progress:
+            wrapped_callback = wrap_callback(on_progress)
             _prog_cb = &progress_callback
-            _prog_arg = <void *>on_progress
+            _prog_arg = <void *>wrapped_callback
         with nogil:
             ret = rbd_remove_with_progress(_ioctx, _name, _prog_cb, _prog_arg)
         if ret != 0:
@@ -900,9 +990,11 @@ class RBD(object):
             int _force = force
             librbd_progress_fn_t _prog_cb = &no_op_progress_callback
             void *_prog_arg = NULL
+            object wrapped_callback = None
         if on_progress:
+            wrapped_callback = wrap_callback(on_progress)
             _prog_cb = &progress_callback
-            _prog_arg = <void *>on_progress
+            _prog_arg = <void *>wrapped_callback
         with nogil:
             ret = rbd_trash_remove_with_progress(_ioctx, _image_id, _force,
                                                  _prog_cb, _prog_arg)
@@ -1141,9 +1233,11 @@ class RBD(object):
             char *_image_name = image_name
             librbd_progress_fn_t _prog_cb = &no_op_progress_callback
             void *_prog_arg = NULL
+            object wrapped_callback = None
         if on_progress:
+            wrapped_callback = wrap_callback(on_progress)
             _prog_cb = &progress_callback
-            _prog_arg = <void *>on_progress
+            _prog_arg = <void *>wrapped_callback
         with nogil:
             ret = rbd_migration_execute_with_progress(_ioctx, _image_name,
                                                       _prog_cb, _prog_arg)
@@ -1168,9 +1262,11 @@ class RBD(object):
             char *_image_name = image_name
             librbd_progress_fn_t _prog_cb = &no_op_progress_callback
             void *_prog_arg = NULL
+            object wrapped_callback = None
         if on_progress:
+            wrapped_callback = wrap_callback(on_progress)
             _prog_cb = &progress_callback
-            _prog_arg = <void *>on_progress
+            _prog_arg = <void *>wrapped_callback
         with nogil:
             ret = rbd_migration_commit_with_progress(_ioctx, _image_name,
                                                      _prog_cb, _prog_arg)
@@ -1195,9 +1291,11 @@ class RBD(object):
             char *_image_name = image_name
             librbd_progress_fn_t _prog_cb = &no_op_progress_callback
             void *_prog_arg = NULL
+            object wrapped_callback = None
         if on_progress:
+            wrapped_callback = wrap_callback(on_progress)
             _prog_cb = &progress_callback
-            _prog_arg = <void *>on_progress
+            _prog_arg = <void *>wrapped_callback
         with nogil:
             ret = rbd_migration_abort_with_progress(_ioctx, _image_name,
                                                     _prog_cb, _prog_arg)
@@ -4331,9 +4429,11 @@ written." % (self.name, ret, length))
         cdef:
             librbd_progress_fn_t _prog_cb = &no_op_progress_callback
             void *_prog_arg = NULL
+            object wrapped_callback = None
         if on_progress:
+            wrapped_callback = wrap_callback(on_progress)
             _prog_cb = &progress_callback
-            _prog_arg = <void *>on_progress
+            _prog_arg = <void *>wrapped_callback
         with nogil:
             ret = rbd_flatten_with_progress(self.image, _prog_cb, _prog_arg)
         if ret < 0:
