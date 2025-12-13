@@ -17,6 +17,7 @@
 #define MDS_RANK_H_
 
 #include <atomic>
+#include <cstdint>
 #include <string_view>
 
 #include "common/admin_socket.h" // for asok_finisher
@@ -126,6 +127,15 @@ enum {
   l_mdm_last,
 };
 
+namespace ceph::mds {
+enum class proc_stat_error {
+  none,
+  not_found,
+  not_resolvable
+};
+bool read_process_cpu_ticks(uint64_t* total, proc_stat_error* error = nullptr);
+}
+
 namespace ceph {
   struct heartbeat_handle_d;
 }
@@ -167,6 +177,9 @@ class MDSRank {
     friend class C_CacheDropExecAndReply;
     friend class C_ScrubExecAndReply;
     friend class C_ScrubControlExecAndReply;
+    friend class MDCache;
+    friend class Locker;
+    friend class CInode;
 
     CephContext *cct;
 
@@ -391,6 +404,7 @@ class MDSRank {
     }
 
     std::string get_path(inodeno_t ino);
+    uint64_t get_inode_rbytes(inodeno_t ino);
 
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
