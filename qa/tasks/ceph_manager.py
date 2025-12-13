@@ -1046,8 +1046,19 @@ class OSDThrasher(Thrasher):
                 self.log("chose to kill {n} OSDs".format(n=most_killable))
                 acting_set = self.get_rand_pg_acting_set(pool_id)
                 assert most_killable < len(acting_set)
+                # kill the selected osds first, then mark them out. This makes
+                # the error inject a single 'atomic' failure. It simulates what
+                # happens if multiple OSDs fail over a couple of minutes and
+                # then the mon marks them out mon_osd_down_out_interval (10 mins)
+                # later. In contrast if each osd is killed and marked out in turn
+                # then this simulates a rolling failure, here rebalancing and
+                # async recovery can start after the first osd is marked out
+                # further reducing redundancy. With this number of injects in
+                # quick succession this risks a PG in the pool becoming dead
                 for i in range(0, most_killable):
-                    self.kill_osd(osd=acting_set[i], mark_out=True)
+                    self.kill_osd(osd=acting_set[i])
+                for i in range(0, most_killable):
+                    self.out_osd(osd=acting_set[i])
                 self.log("dead_osds={d}, live_osds={ld}".format(d=self.dead_osds, ld=self.live_osds))
                 with safe_while(
                     sleep=25, tries=5,
