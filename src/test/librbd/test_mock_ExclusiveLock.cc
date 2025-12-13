@@ -800,6 +800,12 @@ TEST_F(TestMockExclusiveLock, BlockRequests) {
                 exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &ret_val));
   ASSERT_EQ(0, ret_val);
 
+  expect_is_state_shutdown(exclusive_lock, false);
+  expect_is_state_locked(exclusive_lock, false);
+  ASSERT_FALSE(exclusive_lock->accept_request(
+                 exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &ret_val));
+  ASSERT_EQ(0, ret_val);
+
   exclusive_lock->block_requests(-EROFS);
   expect_is_state_shutdown(exclusive_lock, false);
   expect_is_state_locked(exclusive_lock, true);
@@ -809,6 +815,12 @@ TEST_F(TestMockExclusiveLock, BlockRequests) {
   ASSERT_FALSE(exclusive_lock->accept_request(
                  exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &ret_val));
   ASSERT_EQ(-EROFS, ret_val);
+
+  expect_is_state_shutdown(exclusive_lock, false);
+  expect_is_state_locked(exclusive_lock, false);
+  ASSERT_FALSE(exclusive_lock->accept_request(
+                 exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &ret_val));
+  ASSERT_EQ(0, ret_val);
 
   expect_is_state_shutdown(exclusive_lock, false);
   expect_is_state_locked(exclusive_lock, true);
