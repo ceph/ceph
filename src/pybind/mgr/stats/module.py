@@ -37,5 +37,8 @@ class Module(MgrModule):
         prefix = cmd['prefix']
         # only supported command is `fs perf stats` right now
         if prefix.startswith('fs perf stats'):
-            return self.fs_perf_stats.get_perf_data(cmd)
+            result = self.fs_perf_stats.get_perf_data(cmd)
+            if 'format' in cmd and cmd['format'] == 'json-pretty':
+                return 0, json.dumps(result, indent=2), ""
+            return 0, json.dumps(result), ""
         raise NotImplementedError(cmd['prefix'])
