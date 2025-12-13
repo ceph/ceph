@@ -1,124 +1,197 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+<cds-modal
+  size="md"
+  [open]="open"
+  [hasScrollingContent]="false"
+  (overlaySelected)="closeModal()"
+>
+  <cds-modal-header
+    (closeSelect)="closeModal()"
+  >
+    <h3
+      cdsModalHeaderHeading
+      i18n
+    >
+      {{ action | titlecase }} {{ resource | upperFirst }}
+    </h3>
+  </cds-modal-header>
 
-  <ng-container class="modal-content">
-    <form #frm="ngForm"
-          [formGroup]="form"
-          novalidate>
-      <div class="modal-body">
-        <div class="form-group row">
-          <label for="name"
-                 class="cd-col-form-label">
-            <ng-container i18n>Name</ng-container>
-            <span class="required"></span>
-          </label>
-          <div class="cd-col-form-input">
-            <input type="text"
-                   id="name"
-                   name="name"
-                   class="form-control"
-                   placeholder="Name..."
-                   formControlName="name"
-                   autofocus>
-            <span class="invalid-feedback"
-                  *ngIf="form.showError('name', frm, 'required')"
-                  i18n>This field is required!</span>
-            <span class="invalid-feedback"
-                  *ngIf="form.showError('name', frm, 'pattern')"
-                  i18n>The name can only consist of alphanumeric characters, dashes and underscores.</span>
-            <span class="invalid-feedback"
-                  *ngIf="form.showError('name', frm, 'uniqueName')"
-                  i18n>The chosen erasure code profile name is already in use.</span>
-          </div>
+  <ng-container
+    class="modal-content"
+  >
+    <form
+      [formGroup]="form"
+      novalidate
+    >
+      <div
+        cdsModalContent
+        class="modal-wrapper"
+      >
+        <div
+          class="form-item"
+        >
+          <cds-text-label
+            [invalid]="!form.controls.name.valid && form.controls.name.dirty"
+            [invalidText]="nameError"
+            i18n
+          >
+            Name
+            <input
+              cdsText
+              id="name"
+              type="text"
+              formControlName="name"
+            />
+          </cds-text-label>
+
+          <ng-template
+            #nameError
+          >
+            @if (form.showError('name', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+            >
+              This field is required!
+            </span>
+            }
+            @if (form.showError('name', formDir, 'pattern')) {
+            <span
+              class="invalid-feedback"
+              i18n
+            >
+              The name can only consist of alphanumeric characters, dashes and underscores.
+            </span>
+            }
+            @if (form.showError('name', formDir, 'uniqueName')) {
+            <span
+              class="invalid-feedback"
+              i18n
+            >
+              The chosen erasure code profile name is already in use.
+            </span>
+            }
+          </ng-template>
         </div>
 
         <!-- Root -->
-        <div class="form-group row">
-          <label for="root"
-                 class="cd-col-form-label">
-            <ng-container i18n>Root</ng-container>
-            <cd-helper [html]="tooltips.root">
-            </cd-helper>
-            <span class="required"></span>
-          </label>
-          <div class="cd-col-form-input">
-            <select class="form-select"
-                    id="root"
-                    name="root"
-                    formControlName="root">
-              <option *ngIf="!buckets"
-                      ngValue=""
-                      i18n>Loading...</option>
-              <option *ngFor="let bucket of buckets"
-                      [ngValue]="bucket">
-                {{ bucket.name }}
-              </option>
-            </select>
-            <span class="invalid-feedback"
-                  *ngIf="form.showError('root', frm, 'required')"
-                  i18n>This field is required!</span>
-          </div>
+        <div
+          class="form-item"
+        >
+          <cds-dropdown
+            label="Root"
+            id="root"
+            formControlName="root"
+            [invalid]="!form.controls.root.valid && form.controls.root.dirty"
+            [helperText]="tooltips.root"
+            [invalidText]="rootError"
+            i18n
+          >
+            <cds-dropdown-list
+              [items]="buckets"
+            >
+            </cds-dropdown-list>
+          </cds-dropdown>
+          <ng-template
+            #rootError
+          >
+            @if (form.showError('root', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+            >
+              This field is required!
+            </span>
+            }
+          </ng-template>
         </div>
 
-        <!-- Failure Domain Type -->
-        <div class="form-group row">
-          <label for="failure_domain"
-                 class="cd-col-form-label">
-            <ng-container i18n>Failure domain type</ng-container>
-            <cd-helper [html]="tooltips.failure_domain">
-            </cd-helper>
-            <span class="required"></span>
-          </label>
-          <div class="cd-col-form-input">
-            <select class="form-select"
-                    id="failure_domain"
-                    name="failure_domain"
-                    formControlName="failure_domain">
-              <option *ngIf="!failureDomains"
-                      ngValue=""
-                      i18n>Loading...</option>
-              <option *ngFor="let domain of failureDomainKeys"
-                      [ngValue]="domain">
-                {{ domain }} ( {{failureDomains[domain].length}} )
-              </option>
-            </select>
-            <span class="invalid-feedback"
-                  *ngIf="form.showError('failure_domain', frm, 'required')"
-                  i18n>This field is required!</span>
-          </div>
+        <!-- Failure Domain -->
+        <div
+          class="form-item"
+        >
+          <cds-select
+            label="Failure domain type"
+            id="failure_domain"
+            formControlName="failure_domain"
+            [invalid]="!form.controls.failure_domain.valid && form.controls.failure_domain.dirty"
+            [invalidText]="failureDomainError"
+            [helperText]="tooltips.failure_domain"
+            i18n
+          >
+            @if (!failureDomains) {
+            <option
+              value=""
+            >
+              Loading...
+            </option>
+            }
+            @for (domain of failureDomainKeys; track domain) {
+            <option
+              [value]="domain"
+            >
+              {{ domain }} ( {{failureDomains[domain].length}} )
+            </option>
+            }
+          </cds-select>
+
+          <ng-template
+            #failureDomainError
+          >
+            <span
+              class="invalid-feedback"
+              i18n
+            >
+              This field is required!
+            </span>
+          </ng-template>
         </div>
 
         <!-- Class -->
-        <div class="form-group row">
-          <label for="device_class"
-                 class="cd-col-form-label">
-            <ng-container i18n>Device class</ng-container>
-          </label>
-          <div class="cd-col-form-input">
-            <select class="form-select"
-                    id="device_class"
-                    name="device_class"
-                    formControlName="device_class">
-              <option ngValue=""
-                      i18n>All devices</option>
-              <option *ngFor="let deviceClass of devices"
-                      [ngValue]="deviceClass">
-                {{ deviceClass }}
-              </option>
-            </select>
-            <cd-help-text>
-              <span i18n>{{tooltips.device_class}}</span>
-            </cd-help-text>
-          </div>
+        <div
+          class="form-item"
+        >
+          <cds-select
+            label="Device class"
+            id="device_class"
+            formControlName="device_class"
+            [invalid]="!form.controls.device_class.valid && form.controls.device_class.dirty"
+            [invalidText]="deviceClassError"
+            [helperText]="tooltips.device_class"
+            i18n
+          >
+            <option
+              value=""
+            >
+              All devices
+            </option>
+            @for (deviceClass of devices; track deviceClass) {
+            <option
+              [value]="deviceClass"
+            >
+              {{ deviceClass }}
+            </option>
+            }
+          </cds-select>
+
+          <ng-template
+            #deviceClassError
+          >
+            <span
+              class="invalid-feedback"
+              i18n
+            >
+              This field is required!
+            </span>
+          </ng-template>
         </div>
       </div>
-
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                              [form]="form"
-                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
-      </div>
+      <cd-form-button-panel
+        (submitActionEvent)="onSubmit()"
+        [form]="form"
+        [modalForm]="true"
+        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+      >
+      </cd-form-button-panel>
     </form>
   </ng-container>
-</cd-modal>
+</cds-modal>
