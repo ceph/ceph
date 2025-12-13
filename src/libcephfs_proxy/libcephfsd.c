@@ -8,6 +8,8 @@
 #include <string.h>
 #include <stdarg.h>
 
+#include <linux/fscrypt.h>
+
 #include "include/cephfs/libcephfs.h"
 
 #include "proxy_manager.h"
@@ -1821,6 +1823,190 @@ done:
 	return CEPH_COMPLETE(client, err, ans);
 }
 
+static int32_t libcephfsd_add_fscrypt_key(proxy_client_t *client,
+					  proxy_req_t *req, const void *data,
+					  int32_t data_size)
+{
+	CEPH_DATA(ceph_add_fscrypt_key, ans, 1);
+	char kid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+	proxy_mount_t *mount;
+	uint32_t user;
+	int32_t err;
+
+	err = ptr_check(&client->random, req->add_fscrypt_key.cmount,
+			(void **)&mount);
+	if ((err >= 0) &&
+	    (req->add_fscrypt_key.kid != sizeof(kid))) {
+		err = proxy_log(LOG_ERR, EINVAL, "Invalid size of key id");
+	}
+	if (err >= 0) {
+		user = req->add_fscrypt_key.user;
+
+		CEPH_BUFF_ADD(ans, kid, sizeof(kid));
+
+		err = ceph_add_fscrypt_key(proxy_cmount(mount), data,
+					   req->add_fscrypt_key.key, kid,
+					   user);
+		TRACE("add_fscrypt_key(%p, %u) -> %d", mount, user, err);
+	}
+
+	return CEPH_COMPLETE(client, err, ans);
+}
+
+static int32_t libcephfsd_remove_fscrypt_key(proxy_client_t *client,
+					     proxy_req_t *req, const void *data,
+					     int32_t data_size)
+{
+	CEPH_DATA(ceph_remove_fscrypt_key, ans, 1);
+	proxy_mount_t *mount;
+	uint32_t user;
+	int32_t err;
+
+	err = ptr_check(&client->random, req->remove_fscrypt_key.cmount,
+			(void **)&mount);
+	if ((err >= 0) &&
+	    (req->remove_fscrypt_key.arg !=
+	     sizeof(struct fscrypt_remove_key_arg))) {
+		err = proxy_log(LOG_ERR, EINVAL,
+				"Invalid size of key remove arg");
+	}
+	if (err >= 0) {
+		user = req->remove_fscrypt_key.user;
+
+		CEPH_BUFF_ADD(ans, data, sizeof(struct fscrypt_remove_key_arg));
+
+		err = ceph_remove_fscrypt_key(
+			proxy_cmount(mount),
+			(struct fscrypt_remove_key_arg *)data, user);
+		TRACE("remove_fscrypt_key(%p, %u) -> %d", mount, user, err);
+	}
+
+	return CEPH_COMPLETE(client, err, ans);
+}
+
+static int32_t libcephfsd_get_fscrypt_key_status(proxy_client_t *client,
+						 proxy_req_t *req,
+						 const void *data,
+						 int32_t data_size)
+{
+	CEPH_DATA(ceph_get_fscrypt_key_status, ans, 1);
+	proxy_mount_t *mount;
+	int32_t err;
+
+	err = ptr_check(&client->random, req->get_fscrypt_key_status.cmount,
+			(void **)&mount);
+	if ((err >= 0) &&
+	    (req->get_fscrypt_key_status.arg !=
+	     sizeof(struct fscrypt_get_key_status_arg))) {
+		err = proxy_log(LOG_ERR, EINVAL,
+				"Invalid size of key status arg");
+	}
+	if (err >= 0) {
+		CEPH_BUFF_ADD(ans, data,
+			      sizeof(struct fscrypt_get_key_status_arg));
+
+		err = ceph_get_fscrypt_key_status(
+			proxy_cmount(mount),
+			(struct fscrypt_get_key_status_arg *)data);
+		TRACE("get_fscrypt_key_status(%p) -> %d", mount, err);
+	}
+
+	return CEPH_COMPLETE(client, err, ans);
+}
+
+static int32_t libcephfsd_ll_set_fscrypt_policy_v2(proxy_client_t *client,
+						   proxy_req_t *req,
+						   const void *data,
+						   int32_t data_size)
+{
+	CEPH_DATA(ceph_ll_set_fscrypt_policy_v2, ans, 0);
+	proxy_mount_t *mount;
+	Inode *inode;
+	int32_t err;
+
+	err = ptr_check(&client->random, req->ll_set_fscrypt_policy_v2.cmount,
+			(void **)&mount);
+	if (err >= 0) {
+		err = ptr_check(&client->random,
+				req->ll_set_fscrypt_policy_v2.inode,
+				(void **)&inode);
+	}
+	if ((err >= 0) &&
+	    (req->ll_set_fscrypt_policy_v2.policy !=
+	     sizeof(struct fscrypt_policy_v2))) {
+		err = proxy_log(LOG_ERR, EINVAL,
+				"Invalid size of fscrypt_policy_v2");
+	}
+	if (err >= 0) {
+		err = ceph_ll_set_fscrypt_policy_v2(proxy_cmount(mount), inode,
+						    data);
+		TRACE("ll_set_fscrypt_policy_v2(%p) -> %d", mount, err);
+	}
+
+	return CEPH_COMPLETE(client, err, ans);
+}
+
+static int32_t libcephfsd_ll_get_fscrypt_policy_v2(proxy_client_t *client,
+						   proxy_req_t *req,
+						   const void *data,
+						   int32_t data_size)
+{
+	CEPH_DATA(ceph_ll_get_fscrypt_policy_v2, ans, 1);
+	struct fscrypt_policy_v2 policy;
+	proxy_mount_t *mount;
+	Inode *inode;
+	int32_t err;
+
+	err = ptr_check(&client->random, req->ll_get_fscrypt_policy_v2.cmount,
+			(void **)&mount);
+	if (err >= 0) {
+		err = ptr_check(&client->random,
+				req->ll_get_fscrypt_policy_v2.inode,
+				(void **)&inode);
+	}
+	if ((err >= 0) &&
+	    (req->ll_get_fscrypt_policy_v2.policy !=
+	     sizeof(struct fscrypt_policy_v2))) {
+		err = proxy_log(LOG_ERR, EINVAL,
+				"Invalid size of fscrypt_policy_v2");
+	}
+	if (err >= 0) {
+		CEPH_BUFF_ADD(ans, &policy, sizeof(policy));
+
+		err = ceph_ll_get_fscrypt_policy_v2(proxy_cmount(mount), inode,
+						    &policy);
+		TRACE("ll_get_fscrypt_policy_v2(%p) -> %d", mount, err);
+	}
+
+	return CEPH_COMPLETE(client, err, ans);
+}
+
+static int32_t libcephfsd_ll_is_encrypted(proxy_client_t *client,
+					  proxy_req_t *req, const void *data,
+					  int32_t data_size)
+{
+	CEPH_DATA(ceph_ll_is_encrypted, ans, 0);
+	proxy_mount_t *mount;
+	Inode *inode;
+	char *tag;
+	int32_t err;
+
+	err = ptr_check(&client->random, req->ll_is_encrypted.cmount,
+			(void **)&mount);
+	if (err >= 0) {
+		err = ptr_check(&client->random, req->ll_is_encrypted.inode,
+				(void **)&inode);
+	}
+	if (err >= 0) {
+		tag = (char *)CEPH_STR_GET(req->ll_is_encrypted, tag, data);
+
+		err = ceph_ll_is_encrypted(proxy_cmount(mount), inode, tag);
+		TRACE("ll_is_encrypted(%p) -> %d", mount, err);
+	}
+
+	return CEPH_COMPLETE(client, err, ans);
+}
+
 static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 	[LIBCEPHFSD_OP_VERSION] = libcephfsd_version,
 	[LIBCEPHFSD_OP_USERPERM_NEW] = libcephfsd_userperm_new,
@@ -1870,6 +2056,15 @@ static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 	[LIBCEPHFSD_OP_LL_RELEASEDIR] = libcephfsd_ll_releasedir,
 	[LIBCEPHFSD_OP_MOUNT_PERMS] = libcephfsd_mount_perms,
 	[LIBCEPHFSD_OP_LL_NONBLOCKING_RW] = libcephfsd_ll_nonblocking_rw,
+	[LIBCEPHFSD_OP_ADD_FSCRYPT_KEY] = libcephfsd_add_fscrypt_key,
+	[LIBCEPHFSD_OP_REMOVE_FSCRYPT_KEY] = libcephfsd_remove_fscrypt_key,
+	[LIBCEPHFSD_OP_GET_FSCRYPT_KEY_STATUS] =
+		libcephfsd_get_fscrypt_key_status,
+	[LIBCEPHFSD_OP_LL_SET_FSCRYPT_POLICY_V2] =
+		libcephfsd_ll_set_fscrypt_policy_v2,
+	[LIBCEPHFSD_OP_LL_GET_FSCRYPT_POLICY_V2] =
+		libcephfsd_ll_get_fscrypt_policy_v2,
+	[LIBCEPHFSD_OP_LL_IS_ENCRYPTED] = libcephfsd_ll_is_encrypted,
 };
 
 static void serve_binary(proxy_client_t *client)
