@@ -189,6 +189,50 @@ TEST(RGWRateLimit, allow_unlimited_access)
   EXPECT_EQ(false, success);
 }
 
+TEST(RGWRateLimit, unlimited_access_not_left_large_read_ops_budget)
+{
+    // 0 values in RGWRateLimitInfo should allow unlimited access
+    std::atomic_bool replacing;
+    std::condition_variable cv;
+    RateLimiter ratelimit(g_ceph_context, replacing, cv);
+    RGWRateLimitInfo info;
+    info.enabled = true;
+    auto time = ceph::coarse_real_clock::now();
+    std::string key = "uuser123";
+
+    for(int i = 0; i < 10000; i++)
+    {
+        bool success = ratelimit.should_rate_limit("GET", key, time, &info, "");
+        EXPECT_EQ(false, success);
+    }
+    time +=61s;
+    info.max_read_ops = 1; // make read ops limited
+    bool success = ratelimit.should_rate_limit("GET", key, time, &info, "");
+    EXPECT_EQ(false, success);
+}
+
+TEST(RGWRateLimit, unlimited_access_not_left_large_write_ops_budget)
+{
+    // 0 values in RGWRateLimitInfo should allow unlimited access
+    std::atomic_bool replacing;
+    std::condition_variable cv;
+    RateLimiter ratelimit(g_ceph_context, replacing, cv);
+    RGWRateLimitInfo info;
+    info.enabled = true;
+    auto time = ceph::coarse_real_clock::now();
+    std::string key = "uuser123";
+
+    for(int i = 0; i < 10000; i++)
+    {
+        bool success = ratelimit.should_rate_limit("PUT", key, time, &info, "");
+        EXPECT_EQ(false, success);
+    }
+    time +=61s;
+    info.max_write_ops = 1; // make write ops limited
+    bool success = ratelimit.should_rate_limit("PUT", key, time, &info, "");
+    EXPECT_EQ(false, success);
+}
+
 TEST(RGWRateLimitGC, NO_GC_AHEAD_OF_TIME)
 {
   // Test if GC is not starting the replace before getting to map_size * 0.9
@@ -487,6 +531,28 @@ TEST(RGWRateLimit, list_limit_does_not_affect_writes)
   // Should still be able to do a PUT (write)
   success = ratelimit.should_rate_limit("PUT", key, time, &info, "");
   EXPECT_EQ(false, success);
+}
+
+TEST(RGWRateLimit, unlimited_access_not_left_large_list_ops_budget)
+{
+    // 0 values in RGWRateLimitInfo should allow unlimited access
+    std::atomic_bool replacing;
+    std::condition_variable cv;
+    RateLimiter ratelimit(g_ceph_context, replacing, cv);
+    RGWRateLimitInfo info;
+    info.enabled = true;
+    auto time = ceph::coarse_real_clock::now();
+    std::string key = "uuser_list";
+
+    for(int i = 0; i < 10000; i++)
+    {
+        bool success = ratelimit.should_rate_limit("GET", key, time, &info, RES_LIST_TYPE_2);
+        EXPECT_EQ(false, success);
+    }
+    time +=61s;
+    info.max_list_ops = 1; // make list ops limited
+    bool success = ratelimit.should_rate_limit("GET", key, time, &info, RES_LIST_TYPE_2);
+    EXPECT_EQ(false, success);
 }
 
 TEST(RGWRateLimit, write_limit_does_not_affect_lists)
@@ -907,6 +973,27 @@ TEST(RGWRateLimit, delete_limit_does_not_affect_writes)
   success = ratelimit.should_rate_limit("PUT", key, time, &info, "");
   EXPECT_EQ(false, success);
 }
+
+TEST(RGWRateLimit, unlimited_access_not_left_large_delete_ops_budget) {
+    // 0 values in RGWRateLimitInfo should allow unlimited access
+    std::atomic_bool replacing;
+    std::condition_variable cv;
+    RateLimiter ratelimit(g_ceph_context, replacing, cv);
+    RGWRateLimitInfo info;
+    info.enabled = true;
+    auto time = ceph::coarse_real_clock::now();
+    std::string key = "uuser_delete";
+
+    for (int i = 0; i < 10000; i++) {
+        bool success = ratelimit.should_rate_limit("DELETE", key, time, &info, "");
+        EXPECT_EQ(false, success);
+    }
+    time += 61s;
+    info.max_delete_ops = 1; // make delete ops limited
+    bool success = ratelimit.should_rate_limit("DELETE", key, time, &info, "");
+    EXPECT_EQ(false, success);
+}
+
 
 TEST(RGWRateLimitEntry, reject_delete_op_over_limit)
 {
