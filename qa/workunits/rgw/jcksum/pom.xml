@@ -11,7 +11,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.source>1.9</maven.compiler.source>
     <maven.compiler.target>${maven.compiler.source}</maven.compiler.target>
-    <aws.java.sdk.version>2.20.43</aws.java.sdk.version>
+    <aws.java.sdk.version>2.32.2</aws.java.sdk.version>
     <slf4j.version>1.7.28</slf4j.version>
     <junit5.version>5.10.1</junit5.version>
     <junit.platform.version>1.10.1</junit.platform.version>
