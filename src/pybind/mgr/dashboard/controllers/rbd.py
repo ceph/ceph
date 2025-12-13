@@ -534,7 +534,20 @@ class RbdGroup(RESTController):
             return self.rbd_inst.group_create(ioctx, name)
 
     @handle_rbd_error()
-    @EndpointDoc("Update a group",
+    @EndpointDoc("Delete a group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                 },
+                 responses={200: None})
+    def delete(self, pool_name, group_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return self.rbd_inst.group_remove(ioctx, group_name)
+
+    @handle_rbd_error()
+    @EndpointDoc("Update a group (rename)",
                  parameters={
                      'pool_name': (str, 'Name of the pool'),
                      'group_name': (str, 'Name of the group'),
