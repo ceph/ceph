@@ -864,6 +864,130 @@ def test_multi_target_command():
             assert(list(mds_sessions.keys())[0].startswith('mds.'))
 
 
+class TestUnlinkat:
+
+    def test_unlinkat_regfile_fd_of_root(self, testdir):
+        regfilename = 'file1'
+
+        fd = cephfs.open(regfilename, 'w', 0o755)
+        cephfs.write(fd, b"abcd", 0)
+        cephfs.close(fd)
+
+        fd = cephfs.open('/', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        cephfs.unlinkat(fd, './' + regfilename, 0)
+        cephfs.close(fd)
+
+    def test_unlinkat_dir_fd_of_root(self, testdir):
+        dirname = 'dir1'
+
+        cephfs.mkdir(dirname, 0o755)
+        fd = cephfs.open('/', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        # AT_REMOVEDIR = 0x200
+        cephfs.unlinkat(fd, dirname, 0x200)
+        cephfs.close(fd)
+
+    def test_unlinkat_regfile_fd_of_nonroot(self, testdir):
+        dir1_name = 'dir1'
+        regfile_name = 'file1'
+        regfile_path = 'dir1/file1'
+
+        cephfs.mkdir(dir1_name, 0o755)
+        fd = cephfs.open(regfile_path, 'w', 0o755)
+        cephfs.write(fd, b"abcd", 0)
+        cephfs.close(fd)
+
+        fd = cephfs.open(dir1_name, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        cephfs.unlinkat(fd, regfile_name, 0)
+        cephfs.close(fd)
+
+    def test_unlinkat_dir_fd_of_nonroot(self, testdir):
+        dir1_name = 'dir1'
+        dir2_name = 'dir2'
+        dir2_path = 'dir1/dir2'
+
+        cephfs.mkdir(dir1_name, 0o755)
+        cephfs.mkdir(dir2_path, 0o755)
+        fd = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        cephfs.unlinkat(fd, dir2_name, libcephfs.AT_REMOVEDIR)
+        cephfs.close(fd)
+
+    def test_unlinkat_regfile_AT_FDCWD(self, testdir):
+        regfilename = 'file1'
+
+        fd = cephfs.open(regfilename, 'w', 0o755)
+        cephfs.write(fd, b"abcd", 0)
+        cephfs.close(fd)
+        cephfs.unlinkat(libcephfs.AT_FDCWD, regfilename, 0)
+
+    def test_unlinkat_dir_AT_FDCWD(self, testdir):
+        dirname = 'dir1'
+
+        cephfs.mkdir(dirname, 0o755)
+        cephfs.unlinkat(libcephfs.AT_FDCWD, dirname, libcephfs.AT_REMOVEDIR)
+
+    def test_unlinkat_for_opened_dir(self, testdir):
+        dirname = 'dir1'
+
+        cephfs.mkdir(dirname, 0o755)
+        fd = cephfs.open('/', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        fh = cephfs.opendir(dirname)
+        cephfs.unlinkat(fd, dirname, libcephfs.AT_REMOVEDIR)
+        cephfs.close(fd)
+
+
+class TestFdopendir:
+    '''
+    Tests for libcephfs's fdopendir().
+    '''
+
+    def test_fdopendir_for_dir_at_CWD(self, testdir):
+        dirname = 'dir1'
+        cephfs.mkdir(dirname, 0o755)
+
+        fd = cephfs.open(dirname, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        dh = cephfs.fdopendir(fd)
+
+        dh.close()
+
+    def test_fdopendir_for_dir_not_at_CWD(self, testdir):
+        dirname = 'dir1/dir2/dir3'
+        cephfs.mkdir('dir1', 0o755)
+        cephfs.mkdir('dir1/dir2', 0o755)
+        cephfs.mkdir(dirname, 0o755)
+
+        fd = cephfs.open(dirname, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        dh = cephfs.fdopendir(fd)
+
+        dh.close()
+
+
+class TestOpenat:
+
+    def test_openat_for_child_subdir(self, testdir):
+        dir1 = 'dir1'
+        dir2 = 'dir2'
+
+        cephfs.mkdir(dir1, 0o755)
+        cephfs.mkdir(f'{dir1}/{dir2}', 0o755)
+
+        fd1 = cephfs.open(dir1, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        fd2 = cephfs.openat(fd1, dir2, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+        cephfs.close(fd1)
+        cephfs.close(fd2)
+
+    def test_openat_for_grandchild_subdir(self, testdir):
+        cephfs.mkdir('dir1', 0o755)
+        cephfs.mkdir('dir1/dir2', 0o755)
+        cephfs.mkdir('dir1/dir2/dir3', 0o755)
+
+        fd1 = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        fd2 = cephfs.openat(fd1, 'dir2/dir3', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+        cephfs.close(fd1)
+        cephfs.close(fd2)
+
+
 class TestWithRootUser:
 
     def setup_method(self):
@@ -891,7 +1015,7 @@ class TestWithRootUser:
         cephfs.chown('/', int(uid), int(gid))
         cephfs.conf_set('client_permissions' , 'true')
 
-    def test_chown(testdir):
+    def test_chown(self, testdir):
         fd = cephfs.open('file1', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
         cephfs.close(fd)
@@ -903,7 +1027,7 @@ class TestWithRootUser:
         assert_equal(st.st_uid, uid)
         assert_equal(st.st_gid, gid)
 
-    def test_chown_change_uid_but_not_gid(testdir):
+    def test_chown_change_uid_but_not_gid(self, testdir):
         fd = cephfs.open('file1', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
         cephfs.close(fd)
@@ -918,7 +1042,7 @@ class TestWithRootUser:
         # ensure that gid is unchaged.
         assert_equal(st1.st_gid, st2.st_gid)
 
-    def test_chown_change_gid_but_not_uid(testdir):
+    def test_chown_change_gid_but_not_uid(self, testdir):
         fd = cephfs.open('file1', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
         cephfs.close(fd)
@@ -933,7 +1057,7 @@ class TestWithRootUser:
         # ensure that uid is unchaged.
         assert_equal(st1.st_uid, st2.st_uid)
 
-    def test_lchown(testdir):
+    def test_lchown(self, testdir):
         fd = cephfs.open('file1', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
         cephfs.close(fd)
@@ -946,7 +1070,7 @@ class TestWithRootUser:
         assert_equal(st.st_uid, uid)
         assert_equal(st.st_gid, gid)
 
-    def test_lchown_change_uid_but_not_gid(testdir):
+    def test_lchown_change_uid_but_not_gid(self, testdir):
         fd = cephfs.open('file2', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
         cephfs.close(fd)
@@ -962,7 +1086,7 @@ class TestWithRootUser:
         # ensure that gid is unchaged.
         assert_equal(st1.st_gid, st2.st_gid)
 
-    def test_lchown_change_gid_but_not_uid(testdir):
+    def test_lchown_change_gid_but_not_uid(self, testdir):
         fd = cephfs.open('file3', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
         cephfs.close(fd)
@@ -978,7 +1102,7 @@ class TestWithRootUser:
         # ensure that uid is unchaged.
         assert_equal(st1.st_uid, st2.st_uid)
 
-    def test_fchown(testdir):
+    def test_fchown(self, testdir):
         fd = cephfs.open(b'/file-fchown', 'w', 0o655)
         uid = os.getuid()
         gid = os.getgid()
@@ -995,7 +1119,7 @@ class TestWithRootUser:
         cephfs.close(fd)
         cephfs.unlink(b'/file-fchown')
 
-    def test_fchown_change_uid_but_not_gid(testdir):
+    def test_fchown_change_uid_but_not_gid(self, testdir):
         fd = cephfs.open('file1', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
 
@@ -1011,7 +1135,7 @@ class TestWithRootUser:
 
         cephfs.close(fd)
 
-    def test_fchown_change_gid_but_not_uid(testdir):
+    def test_fchown_change_gid_but_not_uid(self, testdir):
         fd = cephfs.open('file1', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
 
@@ -1027,7 +1151,7 @@ class TestWithRootUser:
 
         cephfs.close(fd)
 
-    def test_setattrx(testdir):
+    def test_setattrx(self, testdir):
         fd = cephfs.open(b'file-setattrx', 'w', 0o655)
         cephfs.write(fd, b"1111", 0)
         cephfs.close(fd)
@@ -1072,7 +1196,7 @@ class TestWithRootUser:
         assert_equal(10, st1["size"])
         cephfs.unlink(b'file-setattrx')
 
-    def test_fsetattrx(testdir):
+    def test_fsetattrx(self, testdir):
         fd = cephfs.open(b'file-fsetattrx', 'w', 0o655)
         cephfs.write(fd, b"1111", 0)
         st = cephfs.statx(b'file-fsetattrx', libcephfs.CEPH_STATX_MODE, 0)
@@ -1245,6 +1369,25 @@ class TestRmtree:
         cephfs.rmtree('dir3', should_cancel, suppress_errors=False)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir3')
 
+    def test_rmtree_when_path_has_trailing_slash(self, testdir):
+        '''
+        Test rmtree() successfully deletes the entire file hierarchy when path
+        passed to rmtree() ends with a slash
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir1/', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
     def test_rmtree_when_symlink_points_to_parent_dir(self, testdir):
         '''
         Test that rmtree() successfully deletes entire file hierarchy that
@@ -1322,16 +1465,28 @@ class TestRmtree:
             cephfs.write(fd, b'abcd', 0)
             cephfs.close(fd)
 
+        cephfs.mkdir('dir1/dir5', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir4/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.mkdir('dir1/dir6', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir4/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
         # actual test
-        cephfs.chmod('/dir1/dir3', 0o000)
+        cephfs.chmod('/dir1/dir4', 0o000)
         # Errors are expected from call to this method. Set suppress_errors to
         # True to confirm that this argument works.
         cephfs.rmtree('dir1', should_cancel, suppress_errors=True)
         # ensure /dir1/dir3 wasn't deleted
-        cephfs.stat('dir1/dir3')
-        cephfs.chmod('/dir1/dir3', 0o755)
+        cephfs.stat('dir1/dir4')
+        cephfs.chmod('/dir1/dir4', 0o755)
         for i in range(1, 6):
-            cephfs.stat(f'dir1/dir3/file{i}')
+            cephfs.stat(f'dir1/dir4/file{i}')
 
         # cleanup
         cephfs.rmtree('dir1', should_cancel)
@@ -1531,6 +1686,9 @@ class TestRmtree:
         # this will change return value of should_cancel and therefore halt
         # execution of rmtree()
         cancel_flag.set()
+        # give a little time for cephs.rmtree() to catch the raised exception
+        # due to cancel flag.
+        time.sleep(0.1)
         # ensure dir6 wasn't deleted
         cephfs.stat('dir6')
         # ensure that deletion had begun but hadn't finished and was halted
@@ -1543,11 +1701,13 @@ class TestRmtree:
         assert file_count > 0 and file_count < 100
 
         # cleanup
+
+        # clear flag so that coming call to rmtree() doesn't cancel.
         cancel_flag.clear()
         cephfs.rmtree('dir6', should_cancel)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
 
-    def test_rmtree_on_a_very_broad_tree(self, testdir):
+    def test_rmtree_on_a_200_dir_broad_tree(self, testdir):
         '''
         Test that rmtree() successfully deletes a file hierarchy with 200
         subdirectories on the same level.
@@ -1567,7 +1727,7 @@ class TestRmtree:
         cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
 
-    def test_rmtree_on_a_very_very_broad_tree(self, testdir):
+    def test_rmtree_on_a_2k_dir_broad_tree(self, testdir):
         '''
         Test that rmtree() successfully deletes a file hierarchy with 2000
         subdirectories on the same level.
@@ -1587,7 +1747,7 @@ class TestRmtree:
         cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
 
-    def test_rmtree_on_a_very_deep_tree(self, testdir):
+    def test_rmtree_on_a_200_dir_deep_tree(self, testdir):
         '''
         Test that rmtree() successfully deletes a file hierarchy with 2000
         levels.
@@ -1606,7 +1766,7 @@ class TestRmtree:
         cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
 
-    def test_rmtree_on_a_very_very_deep_tree(self, testdir):
+    def test_rmtree_on_a_2k_dir_deep_tree(self, testdir):
         '''
         Test that rmtree() successfully deletes a file hierarchy with 2000
         levels.
