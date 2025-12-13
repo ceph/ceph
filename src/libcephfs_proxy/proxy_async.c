@@ -1,8 +1,6 @@
 
 #include <unistd.h>
 
-#include "include/cephfs/libcephfs.h"
-
 #include "proxy_async.h"
 #include "proxy_requests.h"
 #include "proxy_log.h"
