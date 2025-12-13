@@ -32,14 +32,14 @@ class SplitOp {
     uint64_t ro_offset;
     uint64_t shard_offset;
     uint64_t length;
-    shard_id_t shard;
+    raw_shard_id_t raw_shard;
 
-    friend std::ostream & operator<<(std::ostream &os, const ECChunkInfo &obj) {
+    friend std::ostream & operator<<(std::ostream &os, const ECChunkInfo &chunk_info) {
       return os
-          << "ro_offset: " << obj.ro_offset
-          << " shard_offset: " << obj.shard_offset
-          << " length: " << obj.length
-          << " shard: " << obj.shard;
+          << "ro_offset: " << chunk_info.ro_offset
+          << " shard_offset: " << chunk_info.shard_offset
+          << " length: " << chunk_info.length
+          << " raw_shard: " << (int)chunk_info.raw_shard;
     }
   };
 
@@ -66,11 +66,9 @@ class SplitOp {
       uint64_t chunk = start_offset / chunk_size;
       current_info.length = std::min(total_len, (chunk + 1) * chunk_size - start_offset);
 
-      // Maybe this is paranoia, as compiler would probably detect that this
-      // / and % could be done in a single op.
-      auto chunk_div = std::lldiv(chunk, data_chunk_count);
-      current_info.shard = shard_id_t(chunk_div.rem);
-      current_info.shard_offset = (chunk_div.quot) * chunk_size + start_offset % chunk_size;
+      current_info.raw_shard = raw_shard_id_t(chunk % data_chunk_count);
+      current_info.shard_offset = (chunk / data_chunk_count) * chunk_size +
+        start_offset % chunk_size;
     }
 
     value_type operator*() const {
@@ -83,10 +81,10 @@ class SplitOp {
       current_info.shard_offset += current_info.length - chunk_size;
       current_info.length = std::min(chunk_size, end_offset - current_info.ro_offset);
       ceph_assert(current_info.ro_offset <= end_offset);
-      ++current_info.shard;
-      if (unsigned(current_info.shard) == data_chunk_count) {
+      ++current_info.raw_shard;
+      if (std::cmp_equal((int)current_info.raw_shard, data_chunk_count)) {
         current_info.shard_offset += chunk_size;
-        current_info.shard = shard_id_t(0);
+        current_info.raw_shard = raw_shard_id_t(0);
       }
       return *this;
     }
@@ -154,10 +152,16 @@ class SplitOp {
     std::optional<extents_map> e;
   };
 
+  struct InternalVersion {
+    boost::system::error_code ec;
+    bufferlist bl;
+  };
+
   struct SubRead {
     ::ObjectOperation rd;
     mini_flat_map<int, Details> details;
     int rc = -EIO;
+    std::optional<InternalVersion> internal_version;
 
     SubRead(int count) : details(count) {}
   };
@@ -195,8 +199,10 @@ class SplitOp {
   SplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count) : orig_op(op), objecter(objecter), sub_reads(count), cct(cct) {}
   virtual ~SplitOp() = default;
   void complete();
+  static void prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContext *cct);
+  void protect_torn_reads();
   static bool create(Objecter::Op *op, Objecter &objecter,
-    shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, int *ctx_budget, CephContext *cct);
+    shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, CephContext *cct);
 };
 
 class ECSplitOp : public SplitOp{

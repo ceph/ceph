@@ -260,14 +260,16 @@ switched off: the bypass code must be trivially simple.
 Throttling Considerations
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This change presents a challenge for the existing throttling framework. It is
-critical that the throttling behavior for a single logical client read remains
-consistent, regardless of how many physical OSD operations it is split into.
-The precise method for ensuring that the throttling scheduler correctly
-accounts for these fragmented operations as a single logical unit is an open
-problem that requires further investigation. As such, the design for this
-component is not yet finalised and will be addressed during the implementation
-phase.
+The only place this code interacts with any throttling code is the Objecter
+``throttle`` mechanism.  This is a simple mechanism which collects two metrics
+which it calls ``bytes`` - derived from bytes transferred, and ``ops``.  The
+``SplitOp`` mechanism will be inserted after the throttle processing has
+completed. No attempt will be made to mark a direct reads as multiple ops. We
+can justify this because:
+
+- Avoids changing client behavior too much.
+- If ops are being split into direct reads, the bytes metric should dominate.
+- This is the simpler approach.
 
 Replica Balanced Reads
 ----------------------
