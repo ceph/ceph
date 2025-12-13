@@ -702,15 +702,23 @@ bool Inode::delegations_broken(bool skip_read)
 
   if (skip_read) {
     Delegation& deleg = delegations.front();
+    // if skip_read is true, recall_deleg() should've recalled write 
+    // delegations but kept read delegations.
+    if (deleg.get_type() == CEPH_FILE_MODE_WR && deleg.is_recalled()) {
+      lsubdout(client->cct, client, 10) << 
+      __func__ << ": write deleg broken on " << *this << dendl;
+      return true;
+    }
     lsubdout(client->cct, client, 10) <<
-	__func__ << ": read delegs only on " << *this << dendl;
+	__func__ << ": skipped breaking read delegs " << *this << dendl;
     if (deleg.get_type() == CEPH_FILE_MODE_RD) {
-	return true;
+	return false;
     }
   }
+  // if skip_read is false, every delegation was recalled
   lsubdout(client->cct, client, 10) <<
-	__func__ << ": not broken" << *this << dendl;
-  return false;
+	__func__ << ": broken " << *this << dendl;
+  return true;
 }
 
 void Inode::break_deleg(bool skip_read)

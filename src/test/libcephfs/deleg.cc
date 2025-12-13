@@ -447,3 +447,37 @@ TEST(LibCephFS, DelegTestWithWrite) {
   ceph_unmount(cmount1);
   ceph_release(cmount1);
 }
+
+TEST(LibCephFS, TestWriteDelegatedRead) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+  ASSERT_EQ(set_default_deleg_timeout(cmount), 0);
+
+  Inode *root = NULL, *file = NULL;
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
+
+  char filename[32];
+  sprintf(filename, "testwritedelegatedread%x", getpid());
+
+  Fh *fh = NULL;
+  struct ceph_statx stx;
+  UserPerm *perms = ceph_mount_perms(cmount);
+
+  std::atomic_bool recalled(false);
+  ASSERT_EQ(ceph_ll_create(cmount, root, filename, 0666,
+			   O_WRONLY|O_CREAT|O_EXCL, &file, &fh, &stx, 0, 0, perms), 0);
+  ASSERT_EQ(ceph_ll_delegation_wait(cmount, fh, CEPH_DELEGATION_WR,
+            dummy_deleg_cb, &recalled), 0);
+  ASSERT_EQ(ceph_ll_write(cmount, fh, 0, sizeof(filename), filename),
+	    static_cast<int>(sizeof(filename)));
+  ASSERT_EQ(0, ceph_ll_fsync(cmount, fh, false));
+  ASSERT_EQ(ceph_ll_open(cmount, file, O_RDONLY, &fh, perms), 0);
+  ASSERT_EQ(recalled.load(), true);
+  ASSERT_EQ(ceph_ll_close(cmount, fh), 0);
+
+  ceph_unmount(cmount);
+  ceph_release(cmount);
+}
