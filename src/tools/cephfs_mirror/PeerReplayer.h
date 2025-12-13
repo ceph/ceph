@@ -95,6 +95,21 @@ private:
     PeerReplayer *m_peer_replayer;
   };
 
+  class SnapshotDataSyncThread : public Thread {
+  public:
+    SnapshotDataSyncThread(PeerReplayer *peer_replayer)
+      : m_peer_replayer(peer_replayer) {
+    }
+
+    void *entry() override {
+      m_peer_replayer->run_datasync(this);
+      return 0;
+    }
+
+  private:
+    PeerReplayer *m_peer_replayer;
+  };
+
   struct DirRegistry {
     int fd;
     bool canceled = false;
@@ -113,6 +128,7 @@ private:
     // includes parent dentry purge
     bool purged_or_itype_changed = false;
     bool is_snapdiff = false;
+    bool sync_check = true;
 
     SyncEntry() {
     }
@@ -121,6 +137,13 @@ private:
               const struct ceph_statx &stx)
       : epath(path),
         stx(stx) {
+    }
+    SyncEntry(std::string_view path,
+              const struct ceph_statx &stx,
+	      bool sync_check)
+      : epath(path),
+        stx(stx),
+	sync_check(sync_check) {
     }
     SyncEntry(std::string_view path,
               ceph_dir_result *dirp,
@@ -163,7 +186,8 @@ private:
 
   class SyncMechanism {
   public:
-    SyncMechanism(MountRef local, MountRef remote, FHandles *fh,
+    SyncMechanism(std::string_view dir_root,
+                  MountRef local, MountRef remote, FHandles *fh,
                   const Peer &peer, /* keep dout happy */
                   const Snapshot &current, boost::optional<Snapshot> prev);
     virtual ~SyncMechanism() = 0;
@@ -180,6 +204,48 @@ private:
 
     virtual void finish_sync() = 0;
 
+    void push_dataq_entry(PeerReplayer::SyncEntry e);
+    bool pop_dataq_entry(PeerReplayer::SyncEntry &out);
+    void mark_stack_finished();
+    bool get_stack_finished_unlocked() {
+      return m_sync_stack_finished;
+    }
+    void dec_in_flight() {
+      std::unique_lock lock(sdq_lock);
+      --in_flight;
+      /* If the crawler is done (m_sync_stack_finished = true) and m_sync_dataq
+       * is empty, threads will block until other pending threads which are syncing
+       * the entry picked up from queue are completed. So make sure to wake them
+       * up when the processing is complete. This is to avoid the busy loop of jobless
+       * data sync threads.
+       */
+      if (in_flight == 0)
+        sdq_cv.notify_all();
+    }
+    int get_in_flight_unlocked() {
+      return in_flight;
+    }
+    ceph::mutex& get_sdq_lock() {
+      return sdq_lock;
+    }
+    std::string_view get_m_dir_root() {
+      return m_dir_root;
+    }
+    Snapshot get_m_current() const {
+      return m_current;
+    }
+    boost::optional<Snapshot> get_m_prev() const {
+      return m_prev;
+    }
+    void set_snapshot_unlocked() {
+      take_snapshot = true;
+    }
+    void sdq_cv_notify_all_unlocked() {
+      sdq_cv.notify_all();
+    }
+    void wait_until_safe_to_snapshot();
+
+    int remote_mkdir(const std::string &epath, const struct ceph_statx &stx);
   protected:
     MountRef m_local;
     MountRef m_remote;
@@ -188,11 +254,21 @@ private:
     Snapshot m_current;
     boost::optional<Snapshot> m_prev;
     std::stack<PeerReplayer::SyncEntry> m_sync_stack;
+
+    ceph::mutex sdq_lock;
+    ceph::condition_variable sdq_cv;
+    std::queue<PeerReplayer::SyncEntry> m_sync_dataq;
+    int in_flight = 0;
+    bool m_sync_stack_finished = false;
+    bool take_snapshot = false;
+    // It's not used in RemoteSync but required for unlock in unregister_directory by data sync threads
+    std::string m_dir_root;
   };
 
   class RemoteSync : public SyncMechanism {
   public:
-    RemoteSync(MountRef local, MountRef remote, FHandles *fh,
+    RemoteSync(std::string_view dir_root,
+               MountRef local, MountRef remote, FHandles *fh,
                const Peer &peer, /* keep dout happy */
                const Snapshot &current, boost::optional<Snapshot> prev);
     ~RemoteSync();
@@ -231,7 +307,6 @@ private:
     int next_entry(SyncEntry &entry, std::string *e_name, snapid_t *snapid);
     void fini_directory(SyncEntry &entry);
 
-    std::string m_dir_root;
     std::map<std::string, std::set<std::string>> m_deleted;
   };
 
@@ -357,6 +432,7 @@ private:
   }
 
   typedef std::vector<std::unique_ptr<SnapshotReplayerThread>> SnapshotReplayers;
+  typedef std::vector<std::unique_ptr<SnapshotDataSyncThread>> SnapshotDataReplayers;
 
   CephContext *m_cct;
   FSMirror *m_fs_mirror;
@@ -378,11 +454,18 @@ private:
   bool m_stopping = false;
   SnapshotReplayers m_replayers;
 
+  SnapshotDataReplayers m_data_replayers;
+
+  ceph::mutex smq_lock;
+  ceph::condition_variable smq_cv;
+  std::queue<std::shared_ptr<SyncMechanism>> syncm_q;
+
   ServiceDaemonStats m_service_daemon_stats;
 
   PerfCounters *m_perf_counters;
 
   void run(SnapshotReplayerThread *replayer);
+  void run_datasync(SnapshotDataSyncThread *datasync_replayer);
 
   boost::optional<std::string> pick_directory();
   int register_directory(const std::string &dir_root, SnapshotReplayerThread *replayer);
@@ -421,13 +504,15 @@ private:
                   boost::optional<Snapshot> prev);
   int do_sync_snaps(const std::string &dir_root);
 
-  int remote_mkdir(const std::string &epath, const struct ceph_statx &stx, const FHandles &fh);
-  int remote_file_op(SyncMechanism *syncm, const std::string &dir_root,
+  int remote_file_op(std::shared_ptr<SyncMechanism>& syncm, const std::string &dir_root,
                      const std::string &epath, const struct ceph_statx &stx,
                      bool sync_check, const FHandles &fh, bool need_data_sync, bool need_attr_sync);
   int copy_to_remote(const std::string &dir_root, const std::string &epath, const struct ceph_statx &stx,
                      const FHandles &fh, uint64_t num_blocks, struct cblock *b);
   int sync_perms(const std::string& path);
+
+  // add a syncm pointer to syncm queue
+  void enqueue_syncm(const std::shared_ptr<SyncMechanism>& item);
 };
 
 } // namespace mirror
