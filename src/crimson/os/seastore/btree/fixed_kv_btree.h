@@ -2378,6 +2378,15 @@ struct is_fixed_kv_tree<
     cursor_t,
     node_size>> : std::true_type {};
 
+template <typename tree_type_t,
+          std::enable_if_t<is_fixed_kv_tree<tree_type_t>::value, int> = 0>
+Cache::get_root_iertr::future<tree_type_t>
+get_btree(Cache &cache, op_context_t c)
+{
+  auto croot = co_await cache.get_root(c.trans);
+  co_return tree_type_t{croot};
+}
+
 template <
   typename tree_type_t,
   typename F,

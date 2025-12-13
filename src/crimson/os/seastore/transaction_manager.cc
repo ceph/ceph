@@ -202,24 +202,26 @@ TransactionManager::close() {
 
 TransactionManager::ref_ret TransactionManager::remove(
   Transaction &t,
-  LogicalChildNodeRef &ref)
+  LogicalChildNodeRef ref)
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, *ref);
-  return lba_manager->get_mapping(t, *ref
-  ).si_then([ref, this, &t](auto mapping) {
-    return lba_manager->remove_mapping(t, std::move(mapping));
-  }).si_then([this, FNAME, &t, ref](auto result) {
-    assert(!result.direct_result);
-    auto &primary_result = result.result;
-    if (primary_result.refcount == 0) {
-      cache->retire_extent(t, ref);
-    }
-    DEBUGT("removed {}~0x{:x} refcount={} -- {}",
-           t, primary_result.addr, primary_result.length,
-           primary_result.refcount, *ref);
-    return primary_result.refcount;
-  });
+  auto cursor = co_await lba_manager->get_cursor(t, *ref);
+  assert(cursor->is_direct());
+  extent_ref_count_t refcount = cursor->get_refcount();
+  auto laddr = cursor->get_laddr();
+  auto length = cursor->get_length();
+  assert(refcount > 0);
+  --refcount;
+  co_await lba_manager->update_mapping_refcount(
+    t, std::move(cursor), -1);
+  if (refcount == 0) {
+    cache->retire_extent(t, ref);
+  }
+  DEBUGT("removed {}~0x{:x} refcount={} -- {}",
+	 t, laddr, length,
+	 refcount, *ref);
+  co_return refcount;
 }
 
 TransactionManager::ref_ret TransactionManager::remove(
@@ -228,12 +230,12 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, offset);
-  return lba_manager->get_mapping(t, offset
-  ).si_then([&t, this](auto mapping) {
-    return _remove(t, std::move(mapping));
-  }).si_then([](auto result) {
-    return result.result.refcount;
-  });
+  auto cursor = co_await lba_manager->get_cursor(t, offset);
+  auto refcount = cursor->get_refcount();
+  ceph_assert(refcount > 0);
+  auto mapping = co_await resolve_cursor_to_mapping(t, std::move(cursor));
+  mapping = co_await _remove(t, std::move(mapping));
+  co_return refcount - 1;
 }
 
 TransactionManager::ref_iertr::future<LBAMapping>
@@ -241,11 +243,9 @@ TransactionManager::remove(
   Transaction &t,
   LBAMapping mapping)
 {
-  return mapping.refresh().si_then([&t, this](auto mapping) {
-    return _remove(t, std::move(mapping));
-  }).si_then([](auto res) {
-    return std::move(res.result.mapping);
-  });
+  co_await mapping.mapping_refresh();
+  mapping = co_await _remove(t, std::move(mapping));
+  co_return mapping;
 }
 
 TransactionManager::ref_iertr::future<LBAMapping>
@@ -253,168 +253,110 @@ TransactionManager::_remove_indirect_mapping_only(
   Transaction &t,
   LBAMapping mapping)
 {
-  return lba_manager->remove_indirect_mapping_only(
-    t, std::move(mapping)
-  ).si_then([](auto result) {
-    return std::move(result.result.mapping);
-  });
+  assert(mapping.is_indirect());
+  auto ret_cursor = co_await lba_manager->update_mapping_refcount(
+    t, std::move(mapping.indirect_cursor), -1
+  );
+  co_return co_await resolve_cursor_to_mapping(
+    t,
+    ret_cursor);
 }
 
-TransactionManager::ref_iertr::future<
-  TransactionManager::_remove_mapping_result_t>
-TransactionManager::_remove_indirect_mapping(
-  Transaction &t,
-  LBAMapping mapping)
-{
-  LOG_PREFIX(TransactionManager::_remove_indirect_mapping);
-  return seastar::do_with(
-    std::move(mapping),
-    [&t, this, FNAME](auto &mapping) {
-    return lba_manager->complete_indirect_lba_mapping(t, std::move(mapping)
-    ).si_then([FNAME, &mapping, &t, this](auto m) {
-      mapping = std::move(m);
-      auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping);
-      if (ret.index() == 1) {
-        return std::move(std::get<1>(ret)
-        ).si_then([&t, mapping, this, FNAME](auto extent) {
-          return lba_manager->remove_mapping(t, std::move(mapping)
-          ).si_then([this, FNAME, &t, extent](auto result) {
-            ceph_assert(result.direct_result);
-            auto &primary_result = result.result;
-            ceph_assert(primary_result.refcount == 0);
-            auto &direct_result = *result.direct_result;
-            ceph_assert(direct_result.addr.is_paddr());
-            ceph_assert(!direct_result.addr.get_paddr().is_zero());
-            ceph_assert(extent);
-            if (direct_result.refcount == 0) {
-              cache->retire_extent(t, extent);
-            }
-            DEBUGT("removed indirect mapping {}~0x{:x} refcount={} offset={} "
-                   "with direct mapping {}~0x{:x} refcount={} offset={}",
-                   t, primary_result.addr,
-                   primary_result.length,
-                   primary_result.refcount,
-                   primary_result.key,
-                   direct_result.addr,
-                   direct_result.length,
-                   direct_result.refcount,
-                   direct_result.key);
-            return ref_iertr::make_ready_future<
-              _remove_mapping_result_t>(std::move(result));
-          });
-        });
-      } else {
-        auto remove_direct = mapping.would_cascade_remove();
-        if (remove_direct) {
-          auto unlinked_child = std::move(std::get<0>(ret));
-          auto retired_placeholder = cache->retire_absent_extent_addr(
-            t, mapping.get_intermediate_base(),
-            mapping.get_val(),
-            mapping.get_intermediate_length()
-          )->template cast<RetiredExtentPlaceholder>();
-          unlinked_child.child_pos.link_child(retired_placeholder.get());
-        }
-        return lba_manager->remove_mapping(t, std::move(mapping)
-        ).si_then([&t, FNAME, remove_direct](auto result) mutable {
-          ceph_assert(result.direct_result);
-          auto &primary_result = result.result;
-          ceph_assert(primary_result.refcount == 0);
-          auto &direct_result = *result.direct_result;
-          ceph_assert(direct_result.addr.is_paddr());
-          ceph_assert(!direct_result.addr.get_paddr().is_zero());
-          ceph_assert(remove_direct == (direct_result.refcount == 0));
-          DEBUGT("removed indirect mapping {}~0x{:x} refcount={} offset={} "
-                 "with direct mapping {}~0x{:x} refcount={} offset={}",
-                 t, primary_result.addr,
-                 primary_result.length,
-                 primary_result.refcount,
-                 primary_result.key,
-                 direct_result.addr,
-                 direct_result.length,
-                 direct_result.refcount,
-                 direct_result.key);
-          return ref_iertr::make_ready_future<
-            _remove_mapping_result_t>(std::move(result));
-        });
-      }
-    });
-  });
-}
-
-TransactionManager::ref_iertr::future<
-  TransactionManager::_remove_mapping_result_t>
-TransactionManager::_remove_direct_mapping(
-  Transaction &t,
-  LBAMapping mapping)
-{
-  LOG_PREFIX(TransactionManager::_remove_direct_mapping);
-  auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping);
-  if (ret.index() == 1) {
-    return std::move(std::get<1>(ret)
-    ).si_then([&t, mapping, this, FNAME](auto extent) {
-      return lba_manager->remove_mapping(t, std::move(mapping)
-      ).si_then([this, FNAME, &t, extent](auto result) {
-        auto &primary_result = result.result;
-        ceph_assert(primary_result.refcount == 0);
-        ceph_assert(primary_result.addr.is_paddr());
-        ceph_assert(!primary_result.addr.get_paddr().is_zero());
-        ceph_assert(extent);
-        cache->retire_extent(t, extent);
-        DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
-               t, primary_result.addr, primary_result.length,
-               primary_result.refcount, primary_result.key);
-        return ref_iertr::make_ready_future<
-          _remove_mapping_result_t>(std::move(result));
-      });
-    });
-  } else {
-    auto unlinked_child = std::move(std::get<0>(ret));
-    auto retired_placeholder = cache->retire_absent_extent_addr(
-      t, mapping.get_key(), mapping.get_val(), mapping.get_length()
-    )->template cast<RetiredExtentPlaceholder>();
-    unlinked_child.child_pos.link_child(retired_placeholder.get());
-    return lba_manager->remove_mapping(t, std::move(mapping)
-    ).si_then([&t, FNAME](auto result) mutable {
-      auto &primary_result = result.result;
-      ceph_assert(primary_result.refcount == 0);
-      ceph_assert(primary_result.addr.is_paddr());
-      ceph_assert(!primary_result.addr.get_paddr().is_zero());
-      DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
-             t, primary_result.addr, primary_result.length,
-             primary_result.refcount, primary_result.key);
-      return ref_iertr::make_ready_future<
-        _remove_mapping_result_t>(std::move(result));
-    });
-  }
-}
-
-TransactionManager::ref_iertr::future<
-  TransactionManager::_remove_mapping_result_t>
+TransactionManager::ref_iertr::future<LBAMapping>
 TransactionManager::_remove(
   Transaction &t,
   LBAMapping mapping)
 {
   LOG_PREFIX(TransactionManager::_remove);
-  if (mapping.is_indirect()) {
-    return _remove_indirect_mapping(t, std::move(mapping));
-  } else if (mapping.get_val().is_real_location()) {
-    return _remove_direct_mapping(t, std::move(mapping));
-  } else {
-    return lba_manager->remove_mapping(t, std::move(mapping)
-    ).si_then([&t, FNAME](auto result) {
-      auto &primary_result = result.result;
-      ceph_assert(primary_result.refcount == 0);
-      ceph_assert(primary_result.addr.is_paddr());
-      ceph_assert(primary_result.addr.get_paddr().is_zero());
-      DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
-             t, primary_result.addr,
-             primary_result.length,
-             primary_result.refcount,
-             primary_result.key);
-      return ref_iertr::make_ready_future<
-        _remove_mapping_result_t>(std::move(result));
-    });
+  DEBUGT("{}", t, mapping);
+  mapping = co_await complete_mapping(t, mapping);
+
+  if (!mapping.is_zero_reserved() &&
+      mapping.direct_cursor->get_refcount() == 1) {
+    auto maybe_mapped_extent = get_extent_if_linked(t, *(mapping.direct_cursor));
+    if (maybe_mapped_extent.has_child()) {
+      DEBUGT("waiting for child fut for {}", t, mapping);
+      auto extent = co_await maybe_mapped_extent.get_child_fut_as<
+	LogicalChildNode
+	>();
+      ceph_assert(extent);
+      cache->retire_extent(t, std::move(extent));
+    } else {
+      auto retired_placeholder = cache->retire_absent_extent_addr(
+	t, mapping.get_key(), mapping.get_val(), mapping.get_length()
+      )->template cast<RetiredExtentPlaceholder>();
+      maybe_mapped_extent.get_child_pos().link_child(retired_placeholder.get());
+    }
   }
+
+  LBACursorRef indirect_cursor;
+  if (mapping.is_indirect()) {
+    DEBUGT("removing indirect mapping {}~0x{:x} refcount={} -- offset={}",
+	   t,
+	   mapping.indirect_cursor->get_intermediate_key(),
+	   mapping.indirect_cursor->get_length(),
+	   mapping.indirect_cursor->get_refcount(),
+	   mapping.indirect_cursor->get_laddr());
+    ceph_assert(mapping.indirect_cursor->get_refcount() == 1);
+    indirect_cursor = co_await lba_manager->update_mapping_refcount(
+      t, mapping.indirect_cursor, -1);
+    co_await mapping.direct_cursor->refresh();
+  }
+
+  DEBUGT("removing direct mapping {}~0x{:x} refcount={} -- offset={}",
+	 t,
+	 mapping.direct_cursor->get_paddr(),
+	 mapping.direct_cursor->get_length(),
+	 mapping.direct_cursor->get_refcount(),
+	 mapping.direct_cursor->get_laddr());
+
+  ceph_assert(mapping.direct_cursor->get_refcount() >= 1);
+
+  LBACursorRef direct_cursor = co_await lba_manager->update_mapping_refcount(
+    t, mapping.direct_cursor, -1);
+
+  auto ret = co_await resolve_cursor_to_mapping(
+    t,
+    indirect_cursor ? std::move(indirect_cursor) : std::move(direct_cursor)
+  );
+  DEBUGT("returning {}", t, ret);
+  ceph_assert(ret.is_viewable());
+  co_return ret;
+}
+
+using resolve_cursor_to_mapping_iertr = base_iertr;
+resolve_cursor_to_mapping_iertr::future<LBAMapping>
+TransactionManager::resolve_cursor_to_mapping(
+  Transaction &t,
+  LBACursorRef cursor)
+{
+  if (cursor->is_end() || !cursor->is_indirect()) {
+    auto ret = LBAMapping::create_direct(std::move(cursor));
+    co_await ret.mapping_refresh();
+    co_return ret;
+  }
+
+  assert(cursor->val->refcount == EXTENT_DEFAULT_REF_COUNT);
+  assert(cursor->val->checksum == 0);
+
+  auto direct_cursors = co_await lba_manager->get_cursors(
+    t,
+    cursor->get_intermediate_key(),
+    cursor->get_length()
+  );
+
+  ceph_assert(direct_cursors.size() == 1);
+  auto& direct_cursor = direct_cursors.front();
+  auto intermediate_key = cursor->get_intermediate_key();
+  assert(!direct_cursor->is_indirect());
+  assert(direct_cursor->get_laddr() <= intermediate_key);
+  assert(direct_cursor->get_laddr() + direct_cursor->get_length()
+	 >= intermediate_key + cursor->get_length());
+  auto ret = LBAMapping::create_indirect(
+    std::move(direct_cursor),
+    std::move(cursor));
+  co_await ret.mapping_refresh();
+  co_return ret;
 }
 
 TransactionManager::refs_ret TransactionManager::remove(
@@ -690,96 +632,80 @@ TransactionManager::rewrite_logical_extent(
      * extents since we're going to do it again once we either do the ool write
      * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
      * avoid this complication. */
-    return lba_manager->get_mapping(t, *extent
-    ).si_then([this, &t, extent, nextent](auto mapping) {
-      return lba_manager->update_mapping(
-        t,
-        std::move(mapping),
-        extent->get_length(),
-        extent->get_paddr(),
-        *nextent
-      ).discard_result();
-    }).handle_error_interruptible(
+    auto cursor = co_await lba_manager->get_cursor(
+      t, *extent
+    ).handle_error_interruptible(
       rewrite_extent_iertr::pass_further{},
       crimson::ct_error::assert_all{"unexpected enoent"}
     );
+    co_await lba_manager->update_mapping(
+      t,
+      std::move(cursor),
+      extent->get_length(),
+      extent->get_paddr(),
+      *nextent
+    );
   } else {
     assert(get_extent_category(extent->get_type()) == data_category_t::DATA);
-    auto length = extent->get_length();
-    return cache->read_extent_maybe_partial(
-      t, std::move(extent), 0, length
-    ).si_then([this, FNAME, &t](auto extent) {
-      assert(extent->is_fully_loaded());
-      cache->retire_extent(t, extent);
-      auto extents = cache->alloc_new_data_extents_by_type(
-        t,
-        extent->get_type(),
-        extent->get_length(),
-        extent->get_user_hint(),
-        // get target rewrite generation
-        extent->get_rewrite_generation());
-      return seastar::do_with(
-        std::move(extents),
-        0,
-        extent->get_length(),
-        extent_ref_count_t(0),
-        [this, FNAME, extent, &t]
-        (auto &extents, auto &off, auto &left, auto &refcount)
-      {
-        return trans_intr::do_for_each(
-          extents,
-          [extent, this, FNAME, &t, &off, &left, &refcount](auto &_nextent)
-        {
-          auto nextent = _nextent->template cast<LogicalChildNode>();
-          bool first_extent = (off == 0);
-          ceph_assert(left >= nextent->get_length());
-          nextent->rewrite(t, *extent, off);
-          DEBUGT("rewriting data -- {} to {}", t, *extent, *nextent);
 
-          /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
-           * extents since we're going to do it again once we either do the ool write
-           * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
-           * avoid this complication. */
-          auto fut = base_iertr::now();
-          if (first_extent) {
-            assert(off == 0);
-            fut = lba_manager->get_mapping(t, *extent
-            ).si_then([this, &t, extent, nextent,
-                      &refcount](auto mapping) {
-              return lba_manager->update_mapping(
-                t,
-                std::move(mapping),
-                extent->get_length(),
-                extent->get_paddr(),
-                *nextent
-              ).si_then([&refcount](auto c) {
-                refcount = c;
-              });
-            }).handle_error_interruptible(
-              rewrite_extent_iertr::pass_further{},
-              crimson::ct_error::assert_all{"unexpected enoent"}
-            );
-          } else {
-            ceph_assert(refcount != 0);
-            fut = lba_manager->alloc_extent(
-              t,
-              (extent->get_laddr() + off).checked_to_laddr(),
-              *nextent,
-              refcount
-            ).si_then([extent, nextent, off](auto mapping) {
-              ceph_assert(mapping.get_key() == extent->get_laddr() + off);
-              ceph_assert(mapping.get_val() == nextent->get_paddr());
-              return seastar::now();
-            });
-          }
-          return fut.si_then([&off, &left, nextent] {
-            off += nextent->get_length();
-            left -= nextent->get_length();
-            return seastar::now();
-          });
-        });
-      });
-    });
+    auto length = extent->get_length();
+    extent = co_await cache->read_extent_maybe_partial(
+      t, std::move(extent), 0, length);
+    assert(extent->is_fully_loaded());
+    cache->retire_extent(t, extent);
+    auto extents = cache->alloc_new_data_extents_by_type(
+      t,
+      extent->get_type(),
+      extent->get_length(),
+      extent->get_user_hint(),
+      // get target rewrite generation
+      extent->get_rewrite_generation());
+    extent_len_t off = 0;
+    auto left = extent->get_length();
+    extent_ref_count_t refcount = 0;
+    for (auto &_nextent : extents) {
+      auto nextent = _nextent->template cast<LogicalChildNode>();
+      bool first_extent = (off == 0);
+      ceph_assert(left >= nextent->get_length());
+      nextent->rewrite(t, *extent, off);
+      DEBUGT("rewriting data -- {} to {}", t, *extent, *nextent);
+
+      /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
+       * extents since we're going to do it again once we either do the ool write
+       * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
+       * avoid this complication. */
+      if (first_extent) {
+	assert(off == 0);
+	auto cursor = co_await lba_manager->get_cursor(
+	  t, *extent
+	).handle_error_interruptible(
+	  rewrite_extent_iertr::pass_further{},
+	  crimson::ct_error::assert_all{"unexpected enoent"}
+	);
+	refcount = co_await lba_manager->update_mapping(
+	  t,
+	  std::move(cursor),
+	  extent->get_length(),
+	  extent->get_paddr(),
+	  *nextent
+	).handle_error_interruptible(
+	  rewrite_extent_iertr::pass_further{},
+	  crimson::ct_error::assert_all{"unexpected enoent"}
+	);
+      } else {
+	ceph_assert(refcount != 0);
+	auto cursor = co_await lba_manager->alloc_extent(
+	  t,
+	  (extent->get_laddr() + off).checked_to_laddr(),
+	  *nextent,
+	  refcount
+	);
+	ceph_assert(cursor->get_laddr() == extent->get_laddr() + off);
+	ceph_assert(cursor->get_paddr() == nextent->get_paddr());
+      }
+      off += nextent->get_length();
+      left -= nextent->get_length();
+    }
   }
 }
 
@@ -873,106 +799,73 @@ TransactionManager::get_extents_if_live(
   // as parallel transactions may split the extent at the same time.
   ceph_assert(paddr.is_absolute_segmented());
 
-  return cache->get_extent_if_cached(t, paddr, len, type
-  ).si_then([this, FNAME, type, paddr, laddr, len, &t](auto extent)
-	    -> get_extents_if_live_ret {
-    if (extent) {
-      DEBUGT("{} {}~0x{:x} {} is cached and alive -- {}",
-             t, type, laddr, len, paddr, *extent);
-      assert(extent->get_length() == len);
-      std::list<CachedExtentRef> res;
-      res.emplace_back(std::move(extent));
-      return get_extents_if_live_ret(
-	interruptible::ready_future_marker{},
-	res);
+  auto extent = co_await cache->get_extent_if_cached(t, paddr, len, type);
+  std::list<CachedExtentRef> res;
+  if (extent) {
+    DEBUGT("{} {}~0x{:x} {} is cached and alive -- {}",
+	   t, type, laddr, len, paddr, *extent);
+    assert(extent->get_length() == len);
+    std::list<CachedExtentRef> res;
+    res.emplace_back(std::move(extent));
+  } else if (is_logical_type(type)) {
+    auto pin_list = co_await lba_manager->get_cursors(
+      t,
+      laddr,
+      len
+    );
+    auto paddr_seg_id = paddr.as_seg_paddr().get_segment_id();
+    for (auto &pin : pin_list) {
+      ceph_assert(pin->is_direct());
+      DEBUGT("got pin, try read in parallel ... -- {}", t, *pin);
+      auto pin_paddr = pin->get_paddr();
+      if (!pin_paddr.is_absolute_segmented()) {
+	continue;
+      }
+      auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
+      auto pin_paddr_seg_id = pin_seg_paddr.get_segment_id();
+      // auto pin_len = pin->get_length();
+      if (pin_paddr_seg_id != paddr_seg_id) {
+	continue;
+      }
+
+      // pin may be out of the range paddr~len, consider the following scene:
+      // 1. Trans.A writes the final record of Segment S, in which it overwrite
+      //    another extent E in the same segment S;
+      // 2. Before Trans.A "complete_commit", Trans.B tries to rewrite new
+      //    records and roll the segments, which closes Segment S;
+      // 3. Before Trans.A "complete_commit", a new cleaner Transaction C tries
+      //    to clean the segment;
+      //
+      // In this scenario, C might see a part of extent E's laddr space mapped
+      // to another location within the same segment S.
+      //
+      // FIXME: this assert should be re-enabled once we have space reclaiming
+      //        recognize committed segments: https://tracker.ceph.com/issues/66941
+      // ceph_assert(pin_seg_paddr >= paddr &&
+      //             pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
+      auto ret = co_await read_cursor_by_type(t, std::move(pin), type);
+      res.emplace_back(std::move(ret));
     }
-
-    if (is_logical_type(type)) {
-      return lba_manager->get_mappings(
-	t,
-	laddr,
-	len
-      ).si_then([this, FNAME, type, paddr, laddr, len, &t](lba_mapping_list_t pin_list) {
-	return seastar::do_with(
-	  std::list<CachedExtentRef>(),
-	  std::move(pin_list),
-	  [this, FNAME, type, paddr, laddr, len, &t]
-          (std::list<CachedExtentRef> &extent_list, auto& pin_list)
-        {
-          auto paddr_seg_id = paddr.as_seg_paddr().get_segment_id();
-          return trans_intr::parallel_for_each(
-            pin_list,
-            [this, FNAME, type, paddr_seg_id, &extent_list, &t](
-              LBAMapping& pin) -> Cache::get_extent_iertr::future<>
-          {
-            DEBUGT("got pin, try read in parallel ... -- {}", t, pin);
-            auto pin_paddr = pin.get_val();
-            if (!pin_paddr.is_absolute_segmented()) {
-              return seastar::now();
-            }
-            auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
-            auto pin_paddr_seg_id = pin_seg_paddr.get_segment_id();
-            // auto pin_len = pin->get_length();
-            if (pin_paddr_seg_id != paddr_seg_id) {
-              return seastar::now();
-            }
-
-            // pin may be out of the range paddr~len, consider the following scene:
-            // 1. Trans.A writes the final record of Segment S, in which it overwrite
-            //    another extent E in the same segment S;
-            // 2. Before Trans.A "complete_commit", Trans.B tries to rewrite new
-            //    records and roll the segments, which closes Segment S;
-            // 3. Before Trans.A "complete_commit", a new cleaner Transaction C tries
-            //    to clean the segment;
-            //
-            // In this scenario, C might see a part of extent E's laddr space mapped
-            // to another location within the same segment S.
-            //
-            // FIXME: this assert should be re-enabled once we have space reclaiming
-            //        recognize committed segments: https://tracker.ceph.com/issues/66941
-            // ceph_assert(pin_seg_paddr >= paddr &&
-            //             pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
-            return read_pin_by_type(t, std::move(pin), type
-            ).si_then([&extent_list](auto ret) {
-              extent_list.emplace_back(std::move(ret));
-              return seastar::now();
-            });
-          }).si_then([&extent_list, &t, FNAME, type, laddr, len, paddr] {
-            DEBUGT("{} {}~0x{:x} {} is alive as {} extents",
-                   t, type, laddr, len, paddr, extent_list.size());
-            return get_extents_if_live_ret(
-              interruptible::ready_future_marker{},
-              std::move(extent_list));
-          });
-        });
-      }).handle_error_interruptible(crimson::ct_error::enoent::handle([] {
-        return get_extents_if_live_ret(
-            interruptible::ready_future_marker{},
-            std::list<CachedExtentRef>());
-      }), crimson::ct_error::pass_further_all{});
+    DEBUGT("{} {}~0x{:x} {} is alive as {} extents",
+	   t, type, laddr, len, paddr, res.size());
+  } else {
+    auto ext = co_await lba_manager->get_physical_extent_if_live(
+      t,
+      type,
+      paddr,
+      laddr,
+      len
+    );
+    if (ext) {
+      DEBUGT("{} {}~0x{:x} {} is absent and alive as physical extent -- {}",
+	     t, type, laddr, len, paddr, *ext);
+      res.emplace_back(std::move(ext));
     } else {
-      return lba_manager->get_physical_extent_if_live(
-	t,
-	type,
-	paddr,
-	laddr,
-	len
-      ).si_then([=, &t](auto ret) {
-        std::list<CachedExtentRef> res;
-        if (ret) {
-          DEBUGT("{} {}~0x{:x} {} is absent and alive as physical extent -- {}",
-                 t, type, laddr, len, paddr, *ret);
-          res.emplace_back(std::move(ret));
-        } else {
-          DEBUGT("{} {}~0x{:x} {} is not alive as physical extent",
-                 t, type, laddr, len, paddr);
-        }
-        return get_extents_if_live_ret(
-	  interruptible::ready_future_marker{},
-	  std::move(res));
-      });
+      DEBUGT("{} {}~0x{:x} {} is not alive as physical extent",
+	     t, type, laddr, len, paddr);
     }
-  });
+  }
+  co_return res;
 }
 
 TransactionManager::~TransactionManager() {}
