@@ -666,7 +666,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
   }
 
   {
-    uint8_t target_v = 9; // if bumping this, be aware of allow_crimson 12
+    uint8_t target_v = 9; // if bumping this, be aware of osd_crush_scaling_factor 13
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -737,6 +737,9 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     }
     if (target_v >= 12) {
       encode(mutate_allow_crimson, bl);
+    }
+    if (target_v >= 13) {
+      encode(new_osd_crush_scaling_factor, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -951,7 +954,7 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(12, bl); // extended, osd-only data
+    DECODE_START(13, bl); // extended, osd-only data
     decode(new_hb_back_up, bl);
     decode(new_up_thru, bl);
     decode(new_last_clean_interval, bl);
@@ -1023,6 +1026,11 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
     if (struct_v >= 12) {
       decode(mutate_allow_crimson, bl);
     }
+    if (struct_v >= 13) {
+      decode(new_osd_crush_scaling_factor, bl);
+    } else {
+      new_osd_crush_scaling_factor = -1.0;
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -1072,6 +1080,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->dump_int("new_require_min_compat_client", to_integer<int>(new_require_min_compat_client));
   f->dump_int("new_require_osd_release", to_integer<int>(new_require_osd_release));
   f->dump_unsigned("mutate_allow_crimson", static_cast<unsigned>(mutate_allow_crimson));
+  f->dump_float("new_osd_crush_scaling_factor", new_osd_crush_scaling_factor);
 
   if (fullmap.length()) {
     f->open_object_section("full_map");
@@ -2628,6 +2637,10 @@ int OSDMap::apply_incremental(const Incremental &inc)
     break;
   }
 
+  if (inc.new_osd_crush_scaling_factor >= 0) {
+    osd_crush_scaling_factor = inc.new_osd_crush_scaling_factor;
+  }
+
   calc_num_osds();
   _calc_up_osd_features();
   return 0;
@@ -3441,7 +3454,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 9; // when bumping this, be aware of allow_crimson
+    uint8_t target_v = 9; // when bumping this, be aware of osd_crush_scaling_factor 13
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -3457,6 +3470,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (allow_crimson) {
       target_v = std::max((uint8_t)12, target_v);
+    }
+    if (osd_crush_scaling_factor != 1.0) {
+      target_v = std::max((uint8_t)13, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -3518,6 +3534,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (target_v >= 12) {
       ::encode(allow_crimson, bl);
+    }
+    if (target_v >= 13) {
+      encode(osd_crush_scaling_factor, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -3784,7 +3803,7 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(12, bl); // extended, osd-only data
+    DECODE_START(13, bl); // extended, osd-only data
     decode(osd_addrs->hb_back_addrs, bl);
     decode(osd_info, bl);
     decode(blocklist, bl);
@@ -3872,6 +3891,11 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
     }
     if (struct_v >= 12) {
       decode(allow_crimson, bl);
+    }
+    if (struct_v >= 13) {
+      decode(osd_crush_scaling_factor, bl);
+    } else {
+      osd_crush_scaling_factor = 1.0;
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -4445,6 +4469,7 @@ void OSDMap::print(CephContext *cct, ostream& out) const
   if (allow_crimson) {
     out << "allow_crimson=true\n";
   }
+  out << "osd_crush_scaling_factor " << osd_crush_scaling_factor << "\n";
   out << "\n";
 
   print_pools(cct, out);
