@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "rgw_common.h"
 
 typedef const std::map<int,const std::pair<int, const char*>> rgw_http_errors;
@@ -14,6 +16,16 @@ extern rgw_http_errors rgw_http_swift_errors;
 extern rgw_http_errors rgw_http_sts_errors;
 
 extern rgw_http_errors rgw_http_iam_errors;
+
+static inline std::string rgw_errno_to_code(const rgw_http_errors& errs, int err_no)
+{
+  auto r = errs.find(err_no);
+  if (r != errs.end()) {
+    return r->second.second;
+  } else {
+    return "";
+  }
+}
 
 static inline int rgw_http_error_to_errno(int http_err)
 {
