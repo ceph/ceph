@@ -280,6 +280,66 @@ TEST(TestRGWLua, URI)
   ASSERT_EQ(rc, 0);
 }
 
+TEST(TestRGWLua, RGWDebugLog2)
+{
+  const std::string script = R"(
+    RGWDebugLog2("Testing {} {}", "hello", 1234567890)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLog2TooManyArguments)
+{
+  const std::string script = R"(
+    RGWDebugLog2("Testing {}", "hello", 1234567890)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLog2TooFewArguments)
+{
+  const std::string script = R"(
+    RGWDebugLog2("Testing {} {}", 1234567890)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLog2NoArguments)
+{
+  const std::string script = R"(
+    RGWDebugLog2("Hello World")
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, RGWDebugLog2InvalidArguments)
+{
+  const std::string script = R"(
+    RGWDebugLog2("Testing {} {}", 1234567890, true)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
 TEST(TestRGWLua, Response)
 {
   const std::string script = R"(

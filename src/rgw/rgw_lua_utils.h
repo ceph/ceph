@@ -277,6 +277,16 @@ struct EmptyMetaTable {
 //
 void create_debug_action(lua_State* L, CephContext* cct);
 
+// create a formatted debug log action
+// it expects CephContext to be captured
+// it expects the first string parameter to specify the format followed by
+// strings/numbers which will replace the instances of "{}" in the format string.
+// could be executed from any context that has CephContext
+// e.g.
+//    RGWDebugLog2("Added object {}", Request.Object.Name)
+//
+void create_debug_action2(lua_State* L, CephContext* cct);
+
 // set the packages search path according to:
 // package.path  = "<install_dir>/share/lua/5.3/?.lua"
 // package.cpath = "<install_dir>/lib/lua/5.3/?.so"

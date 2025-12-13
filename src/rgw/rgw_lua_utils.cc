@@ -1,6 +1,8 @@
 #include <charconv> // for std::to_chars()
 #include <string>
 #include <lua.hpp>
+#include <fmt/args.h>
+#include <fmt/core.h>
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "rgw_lua_utils.h"
@@ -16,6 +18,7 @@ namespace rgw::lua {
 // lua_push(lua_State* L, const ceph::real_time& tp)
 
 constexpr const char* RGWDebugLogAction{"RGWDebugLog"};
+constexpr const char* RGWDebugLogAction2{"RGWDebugLog2"};
 
 int RGWDebugLog(lua_State* L) 
 {
@@ -23,6 +26,47 @@ int RGWDebugLog(lua_State* L)
 
   auto message = luaL_checkstring(L, 1);
   ldout(cct, 20) << "Lua INFO: " << message << dendl;
+  return 0;
+
+}
+
+int RGWDebugLog2(lua_State* L)
+{
+  auto cct = reinterpret_cast<CephContext*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
+  std::string format = luaL_checkstring(L, 1);
+
+  int num_args = 0;
+  size_t pstart = 0, pend = 0;
+
+  // Does not handle escaping or positional arguments
+
+  pend = format.find("{}");
+  while(pend != std::string::npos) {
+    num_args++;
+    pstart = pend + 1;
+    pend = format.find("{}", pstart);
+  }
+
+  auto num_vals = lua_gettop(L);
+  if (num_vals <= num_args) {
+    ldout(cct, 20) << "Lua ERROR: RGWDebugLog2:" << "Not enough arguments. num_args="
+                   << num_args << ", num_vals=" << num_vals << dendl;
+    return -1;
+  }
+
+  for (auto i = 1; i <= num_args; i++) {
+    if (!lua_isstring(L, i + 1)) {
+      ldout(cct, 20) << "Lua ERROR: RGWDebugLog2: " << "arg[" << i << "] is not a string" << dendl;
+      return -1;
+    }
+    std::string arg = lua_tostring(L, 1 + i);
+    store.push_back(arg);
+  }
+  auto message = fmt::vformat(format, store);
+  ldout(cct, 20) << "Lua INFO: " << message << dendl;
+
   return 0;
 }
 
@@ -32,6 +76,11 @@ void create_debug_action(lua_State* L, CephContext* cct) {
   lua_setglobal(L, RGWDebugLogAction);
 }
 
+void create_debug_action2(lua_State* L, CephContext* cct) {
+  lua_pushlightuserdata(L, cct);
+  lua_pushcclosure(L, RGWDebugLog2, ONE_UPVAL);
+  lua_setglobal(L, RGWDebugLogAction2);
+}
 
 void stack_dump(lua_State* L) {
   const auto top = lua_gettop(L);
