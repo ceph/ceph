@@ -50,6 +50,18 @@ public:
   // returns a copy of the next clear extent starting at @offset
   extent_t get_next_clr_extent(uint64_t offset);
 
+  // Sets a bit range (@length~@offset).
+  // This variant is safe for multithread operations.
+  // Can be intermixed with clr_atomic, but not with set or clr.
+  // Returns: count of bits set
+  uint64_t set_atomic(uint64_t offset, uint64_t length);
+
+  // Clears a bit range (@length~@offset).
+  // This variant is safe for multithread operations.
+  // Can be intermixed with set_atomic, but not with set or clr.
+  // Returns: count of bits set
+  uint64_t clr_atomic(uint64_t offset, uint64_t length);
+
   //----------------------------------------------------------------------------
   inline uint64_t get_size() {
     return m_num_bits;
@@ -138,6 +150,7 @@ private:
   constexpr static uint64_t      BITS_IN_WORD        = (BYTES_IN_WORD * 8);
   constexpr static uint64_t      BITS_IN_WORD_MASK   = (BITS_IN_WORD - 1);
   constexpr static uint64_t      BITS_IN_WORD_SHIFT  = 6;
+  constexpr static uint64_t      MAX_BIT_NO          = BITS_IN_WORD - 1;
   constexpr static uint64_t      FULL_MASK           = (~((uint64_t)0));
 
   CephContext *cct;
