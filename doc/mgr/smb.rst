@@ -532,6 +532,60 @@ remote_control
     ca_cert
         Optional object. The fields are described in :ref:`tls source
         fields<tls-source-fields>`
+keybridge
+    Optional object. This object configures an smb cluster to deploy an extra
+    ``keybridge`` service. This service acts as a bridge between the Samba file
+    server and external cryptographic and key management services. This can
+    then be used to unlock cephfs subvolumes protected with fscrypt. The
+    configuration of the keybridge is based on ``scopes``. Each scope maps to
+    a different mechanism for fetching keys.
+    Fields:
+
+    enabled
+        Optional boolean. If explicitly set to ``true`` or ``false`` this
+        field will enable or disable the keybridge service. If left
+        unset the ``scopes`` fields will be checked - if scopes are defined
+        this will automatically enable the service.
+    scopes
+        Optional list of objects. Each object in the list defines and configures
+        a new keybridge scope. A scope of the type ``mem`` stores keys in
+        memory and is only for testing and debugging. A scope of the type
+        ``kmip`` proxies requests to KMIP servers.
+        Fields:
+
+        name
+            String. The name of the scope defines the type and identification
+            of the scope. The name takes the form ``<type>[.<sub_name>]``.
+            Each name must be unique. Current types are ``mem`` and ``kmip``.
+            Sub-names are only supported for ``kmip`` scope. The ``mem``
+            scope is unique per-cluster. If the sub-name is left off the
+            system will implcitly name the scope. This can be done only once
+            per-type.
+        kmip_hosts
+            Optional list of strings. Required for type ``kmip``.
+            Specify the hosts the ``kmip`` scope will proxy to. The host values
+            may be DNS names or IPv4 or IPv6 addresses. An optional port value
+            following a colon (``:``) is supported. For IPv6 addresses only:
+            surround the address with square brackets before specificying the
+            port (example: ``[2001:db8::cafe]:9999``).
+        kmip_port
+            Optional integer. Required for type ``kmip`` unless all host
+            values include ports. Specify the port used for KMIP connections
+            for host entries that do not specify a port.
+        kmip_cert
+            Optional object. Required for type ``kmip``.
+            The fields are described in :ref:`tls source fields<tls-source-fields>`
+        kmip_key
+            Optional object. Required for type ``kmip``.
+            The fields are described in :ref:`tls source fields<tls-source-fields>`
+        kmip_ca_cert
+            Optional object. Required for type ``kmip``.
+            The fields are described in :ref:`tls source fields<tls-source-fields>`
+   peer_policy
+        Optional, one of ``restricted`` or ``unrestricted``.
+        Used to control what processes the keybridge server will permit
+        for access. This option is meant for testing and development only.
+        If left unspecified the default behavior is ``restricted``.
 custom_smb_global_options
     Optional mapping. Specify key-value pairs that will be directly added to
     the global ``smb.conf`` options (or equivalent) of a Samba server.  Do
@@ -702,6 +756,19 @@ cephfs
         based implementation, currently ``samba-vfs/proxied``. This option is
         suitable for the majority of use cases and can be left unspecified for most
         shares.
+    fscrypt_key
+        Optional object. Configures the CephFS storage used by the share to
+        enable FSCrypt. The FSCrypt key will be acquired using the keybridge
+        service. The fields select the keybridge scope to use and the name
+        of the key.
+        Fields:
+
+        scope
+            String. A value matching one of the keybridge scopes defined for
+            the cluster this share belongs to.
+        name
+            String. A value indicating what fscrypt key to fetch. The specific
+            value of the name depends on the scope being used.
 restrict_access
     Optional boolean, defaulting to false. If true the share will only permit
     access by users explicitly listed in ``login_control``.
