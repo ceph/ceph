@@ -961,3 +961,15 @@ groups:
         labels:
           severity: "warning"
           type: "ceph_default"
+  - name: "certmgr"
+    rules:
+      - alert: "CephCertificateWarning"
+        annotations:
+          description: "{{ $labels.message }}. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue."
+          summary: "Ceph certificate error detected on cluster {{ $labels.cluster }}"
+        expr: "ceph_health_detail{name=\"CEPHADM_CERT_ERROR\"} == 1"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+
