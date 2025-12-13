@@ -44,6 +44,7 @@ protected:
   int custom_http_ret = 0;
   bool checksum_mode{false};
   std::map<std::string, std::string> crypt_http_responses;
+  std::string decrypt_mode;
   int override_range_hdr(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y);
 public:
   RGWGetObj_ObjStore_S3() {}
