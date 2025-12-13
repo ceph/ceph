@@ -9,7 +9,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     'now-15m',
     '10s',
     '39',
-    $._config.dashboardTags,
+    $._config.dashboardTags + ['protocol'],
     ''
   )
                                   .addAnnotation(

@@ -569,11 +569,13 @@
         },
         {
           alert: 'CephNodeInconsistentMTU',
-          expr: 'node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==  scalar(    max by (cluster,device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=      quantile by (cluster,device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))  )or node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==  scalar(    min by (cluster,device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=      quantile by (cluster,device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))  )',
+          expr: 'node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)\n          != on (cluster, device) group_left\n            quantile by (cluster, device) (\n              0.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)\n            )',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'MTU settings across Ceph hosts are inconsistent%(cluster)s' % $.MultiClusterSummary(),
-            description: 'Node {{ $labels.instance }} has a different MTU size ({{ $value }}) than the median of devices named {{ $labels.device }}.',
+            summary: 'Node {{ $labels.instance }} has inconsistent MTU settings in cluster {{ $labels.cluster }}',
+            description: 'Network interface {{ $labels.device }} on node {{ $labels.instance }} has MTU {{ $value }} which differs from the cluster median.',
+            impact: '\n            - May cause packet fragmentation or packet drops\n            - Risk of degraded cluster communication and performance\n            - Potential instability in services relying on consistent networking (e.g., Ceph, Kubernetes)',
+            fix: '\n            - Check the MTU of interface `{{ $labels.device }}` on node `{{ $labels.instance }}`:\n              ip link show {{ $labels.device }}\n\n            - Find the median MTU value across the cluster by running this PromQL query in Prometheus:\n              quantile by (cluster, device) (0.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))\n\n            - Standardize MTU across all nodes to match the median (commonly 1500 or 9000):\n              ip link set dev {{ $labels.device }} mtu <median-value>\n\n            - Make MTU setting persistent:\n              - RHEL/CentOS: edit `/etc/sysconfig/network-scripts/ifcfg-<device>`\n              - Debian/Ubuntu: edit `/etc/netplan/*.yaml` and apply with `netplan apply`\n\n            - Restart the affected interface or node if required.',
           },
         },
       ],
