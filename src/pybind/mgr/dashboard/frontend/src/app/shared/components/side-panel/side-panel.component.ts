@@ -9,7 +9,7 @@ export class SidePanelComponent {
   @Input() expanded = false;
   @Input() headerText = '';
   @Input() overlay = true;
-  @Input() size: 'sm' | 'md' | 'lg' = 'lg';
+  @Input() size: 'sm' | 'md' | 'lg' | 'xl' | '2xl' = 'lg';
 
   @Output() closed = new EventEmitter<void>();
 
