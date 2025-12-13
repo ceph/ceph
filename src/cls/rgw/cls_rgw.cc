@@ -104,20 +104,6 @@ static int bi_entry_type(const string& s)
   return -EINVAL;
 }
 
-static bool bi_entry_gt(const string& first, const string& second)
-{
-  int fi = bi_entry_type(first);
-  int si = bi_entry_type(second);
-
-  if (fi > si) {
-    return true;
-  } else if (fi < si) {
-    return false;
-  }
-
-  return first > second;
-}
-
 /**
  * return: Plain, Instance, OLH or Invalid
  */
@@ -378,22 +364,28 @@ static std::string cls_rgw_after_versions(const std::string& key)
   return key + '\1'; // suffix "\1" sorts after suffixes like "\0v123\0iabc"
 }
 
-static void encode_obj_versioned_data_key(const cls_rgw_obj_key& key, string *index_key, bool append_delete_marker_suffix = false)
+static void encode_obj_versioned_data_key(const cls_rgw_obj_key& key,
+					  std::string* index_key,
+					  bool append_delete_marker_suffix = false)
 {
+  static const std::string delim("\0i", 2);
+  static const std::string dm("\0d", 2);
+
   *index_key = BI_PREFIX_CHAR;
   index_key->append(bucket_index_prefixes[BI_BUCKET_OBJ_INSTANCE_INDEX]);
   index_key->append(key.name);
-  string delim("\0i", 2);
   index_key->append(delim);
   index_key->append(key.instance);
   if (append_delete_marker_suffix) {
-    string dm("\0d", 2);
     index_key->append(dm);
   }
 }
 
 static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key)
 {
+  // NB -- something doesn't seem right; if there's no instance then
+  // we just get the plain name, but if there is an instance we get
+  // the BI_PREFIX_CHAR and the instance code and so forth....
   if (key.instance.empty()) {
     *index_key = key.name;
   } else {
@@ -3108,8 +3100,10 @@ static int list_plain_entries(cls_method_context_t hctx,
                               bool* pmore,
 			      const PlainEntriesRegion region = PlainEntriesRegion::Both)
 {
-  CLS_LOG(10, "entered %s: name_filter=\"%s\", marker=\"%s\", max=%d, region=%d",
-	  __func__, escape_str(name_filter).c_str(), escape_str(marker).c_str(), max, static_cast<int>(region));
+  CLS_LOG(10, "entered %s: name_filter=\"%s\", marker=\"%s\", max=%d, "
+	  "region=%d",
+	  __func__, escape_str(name_filter).c_str(),
+	  escape_str(marker).c_str(), max, static_cast<int>(region));
   int r = 0;
   bool end_key_reached = false;
   bool more = false;
@@ -3117,7 +3111,8 @@ static int list_plain_entries(cls_method_context_t hctx,
 
   if (region <= PlainEntriesRegion::Both && marker < BI_PREFIX_BEGIN) {
     // listing ascii plain namespace
-    int r = list_plain_entries_help(hctx, name_filter, marker, BI_PREFIX_BEGIN, max,
+    int r = list_plain_entries_help(hctx, name_filter, marker,
+				    BI_PREFIX_BEGIN, max,
 				    entries, end_key_reached, more);
     CLS_LOG(20, "%s: first list_plain_entries_help r=%d, end_key_reached=%d, more=%d",
 	    __func__, r, end_key_reached, more);
@@ -3158,34 +3153,44 @@ static int list_plain_entries(cls_method_context_t hctx,
 }
 
 static int list_instance_entries(cls_method_context_t hctx,
-				 const string& name,
-				 const string& marker,
+				 const std::string& name, // filters entries for this obj
+				 const std::string& marker,
 				 uint32_t max,
-                                 list<rgw_cls_bi_entry> *entries,
-				 bool *pmore)
+                                 std::list<rgw_cls_bi_entry>* entries,
+				 bool* pmore)
 {
-  cls_rgw_obj_key key(name);
+  CLS_LOG(20, "%s: entry name=\"%s\" marker=\"%s\" max=%d",
+	  __func__, escape_str(name).c_str(),
+	  escape_str(marker).c_str(), (int)max);
+
+  // make first_instance_idx of the form \801000_[name]\00[instance]
+  cls_rgw_obj_key key(name); // includes name, instance, and namespace, latter two empty
   string first_instance_idx;
   encode_obj_versioned_data_key(key, &first_instance_idx);
-  string start_after_key;
 
+  std::string start_after_key; // where we start after
   if (!name.empty()) {
     start_after_key = first_instance_idx;
   } else {
     start_after_key = BI_PREFIX_CHAR;
     start_after_key.append(bucket_index_prefixes[BI_BUCKET_OBJ_INSTANCE_INDEX]);
   }
-  string filter = start_after_key;
-  if (bi_entry_gt(marker, start_after_key)) {
-    start_after_key = marker;
-  }
+
+  // if a name was provided then it will be used to filter index
+  // entries; otherwise will filter my the instance prefix
+  std::string filter = start_after_key;
+
+  // advance to marker if it's after our current start_after_key
+  start_after_key = std::max(start_after_key, marker);
+
   int count = 0;
-  map<string, bufferlist> keys;
+  std::map<std::string, bufferlist> keys;
   bufferlist k;
   int ret = cls_cxx_map_get_val(hctx, start_after_key, &k);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
+
   // we need to include the exact match if a filter (name) is
   // specified and the marker has not yet advanced (i.e., been set)
   bool found_first = (ret == 0) && (start_after_key != marker);
@@ -3195,7 +3200,8 @@ static int list_instance_entries(cls_method_context_t hctx,
   if (max > 0) {
     ret = cls_cxx_map_get_vals(hctx, start_after_key, string(), max,
 			       &keys, pmore);
-    CLS_LOG(20, "%s: start_after_key=\"%s\" first_instance_idx=\"%s\" keys.size()=%d",
+    CLS_LOG(20, "%s: start_after_key=\"%s\" first_instance_idx=\"%s\" "
+	    "keys.size()=%d",
 	    __func__, escape_str(start_after_key).c_str(),
 	    escape_str(first_instance_idx).c_str(), (int)keys.size());
     if (ret < 0) {
@@ -3212,6 +3218,8 @@ static int list_instance_entries(cls_method_context_t hctx,
     entry.idx = iter->first;
     entry.data = iter->second;
 
+    // check if we're past the range of the prefix filter and if so,
+    // we're done
     if (!filter.empty() && entry.idx.compare(0, filter.size(), filter) != 0) {
       /* we are skipping the rest of the entries */
       if (pmore) {
@@ -3220,7 +3228,8 @@ static int list_instance_entries(cls_method_context_t hctx,
       return count;
     }
 
-    CLS_LOG(20, "%s: entry.idx=\"%s\"", __func__, escape_str(entry.idx).c_str());
+    CLS_LOG(20, "%s: entry.idx=\"%s\"",
+	    __func__, escape_str(entry.idx).c_str());
 
     auto biter = entry.data.cbegin();
 
@@ -3228,7 +3237,8 @@ static int list_instance_entries(cls_method_context_t hctx,
     try {
       decode(e, biter);
     } catch (ceph::buffer::error& err) {
-      CLS_LOG(0, "ERROR: %s: failed to decode buffer (size=%d)", __func__, entry.data.length());
+      CLS_LOG(0, "ERROR: %s: failed to decode buffer (size=%d)",
+	      __func__, entry.data.length());
       return -EIO;
     }
 
@@ -3246,32 +3256,40 @@ static int list_instance_entries(cls_method_context_t hctx,
   }
 
   return count;
-}
+} // list_instance_entries
 
 static int list_olh_entries(cls_method_context_t hctx,
-			    const string& name,
-			    const string& marker,
+			    const std::string& name, // filters entries for this obj
+			    const std::string& marker,
 			    uint32_t max,
-                            list<rgw_cls_bi_entry> *entries,
-			    bool *pmore)
+                            std::list<rgw_cls_bi_entry>* entries,
+			    bool* pmore)
 {
-  cls_rgw_obj_key key(name);
-  string first_instance_idx;
-  encode_olh_data_key(key, &first_instance_idx);
-  string start_after_key;
+  CLS_LOG(20, "%s: entry name=\"%s\" marker=\"%s\" max=%d",
+	  __func__, escape_str(name).c_str(),
+	  escape_str(marker).c_str(), (int)max);
 
+  // make first_instance_idx of the form \801000_[name]\00[instance]
+  cls_rgw_obj_key key(name); // includes name, instance, and namespace, latter two empty
+  std::string first_instance_idx;
+  encode_olh_data_key(key, &first_instance_idx);
+
+  std::string start_after_key;
   if (!name.empty()) {
     start_after_key = first_instance_idx;
   } else {
     start_after_key = BI_PREFIX_CHAR;
     start_after_key.append(bucket_index_prefixes[BI_BUCKET_OLH_DATA_INDEX]);
   }
-  string filter = start_after_key;
-  if (bi_entry_gt(marker, start_after_key)) {
-    start_after_key = marker;
-  }
+
+  // if a name was provided then it will be used to filter index
+  // entries; otherwise will filter my the olh prefix
+  std::string filter = start_after_key;
+
+  start_after_key = std::max(start_after_key, marker);
+
   int count = 0;
-  map<string, bufferlist> keys;
+  std::map<std::string, bufferlist> keys;
   int ret;
   bufferlist k;
   ret = cls_cxx_map_get_val(hctx, start_after_key, &k);
@@ -3287,14 +3305,14 @@ static int list_olh_entries(cls_method_context_t hctx,
   if (max > 0) {
     ret = cls_cxx_map_get_vals(hctx, start_after_key, string(), max,
 			       &keys, pmore);
-    CLS_LOG(20, "%s: start_after_key=\"%s\", first_instance_idx=\"%s\", keys.size()=%d",
+    CLS_LOG(20, "%s: start_after_key=\"%s\", first_instance_idx=\"%s\", "
+	    "keys.size()=%d",
 	    __func__, escape_str(start_after_key).c_str(),
 	    escape_str(first_instance_idx).c_str(), (int)keys.size());
     if (ret < 0) {
       return ret;
     }
   }
-
   if (found_first) {
     keys[start_after_key] = std::move(k);
   }
@@ -3305,15 +3323,17 @@ static int list_olh_entries(cls_method_context_t hctx,
     entry.idx = iter->first;
     entry.data = iter->second;
 
+    // check if we're past the range of the prefix filter and if so,
+    // we're done
     if (!filter.empty() && entry.idx.compare(0, filter.size(), filter) != 0) {
-      /* we are skipping the rest of the entries */
       if (pmore) {
 	*pmore = false;
       }
       return count;
     }
 
-    CLS_LOG(20, "%s: entry.idx=\"%s\"", __func__, escape_str(entry.idx).c_str());
+    CLS_LOG(20, "%s: entry.idx=\"%s\"",
+	    __func__, escape_str(entry.idx).c_str());
 
     auto biter = entry.data.cbegin();
 
@@ -3321,7 +3341,8 @@ static int list_olh_entries(cls_method_context_t hctx,
     try {
       decode(e, biter);
     } catch (ceph::buffer::error& err) {
-      CLS_LOG(0, "ERROR: %s: failed to decode buffer (size=%d)", __func__, entry.data.length());
+      CLS_LOG(0, "ERROR: %s: failed to decode buffer (size=%d)",
+	      __func__, entry.data.length());
       return -EIO;
     }
 
@@ -3339,7 +3360,7 @@ static int list_olh_entries(cls_method_context_t hctx,
   }
 
   return count;
-}
+} // list_olh_entries
 
 static int reshard_log_list_entries(cls_method_context_t hctx, const string& marker,
                                     uint32_t max, list<rgw_cls_bi_entry>& entries, bool *truncated)
@@ -3535,8 +3556,8 @@ int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist
  * indicate error conditions.
  */
 static int rgw_bi_list_op(cls_method_context_t hctx,
-			  bufferlist *in,
-			  bufferlist *out)
+			  bufferlist* in,
+			  bufferlist* out)
 {
   CLS_LOG(10, "entered %s", __func__);
   // decode request
@@ -3552,8 +3573,10 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
   constexpr uint32_t MAX_BI_LIST_ENTRIES = 1000;
   const uint32_t max = std::min(op.max, MAX_BI_LIST_ENTRIES);
 
-  CLS_LOG(20, "%s: op.marker=\"%s\", op.name_filter=\"%s\", op.max=%u max=%u, op.reshardlog=%d",
-	  __func__, escape_str(op.marker).c_str(), escape_str(op.name_filter).c_str(),
+  CLS_LOG(20, "%s: op.marker=\"%s\", op.name_filter=\"%s\", op.max=%u "
+	  "max=%u, op.reshardlog=%d",
+	  __func__, escape_str(op.marker).c_str(),
+	  escape_str(op.name_filter).c_str(),
 	  op.max, max, op.reshardlog);
 
   int ret;
@@ -3562,10 +3585,14 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
   rgw_cls_bi_list_ret op_ret;
 
   if (op.reshardlog) {
-    ret = reshard_log_list_entries(hctx, op.marker, op.max, op_ret.entries, &op_ret.is_truncated);
-    if (ret < 0)
+    ret = reshard_log_list_entries(hctx, op.marker, op.max,
+				   op_ret.entries,
+				   &op_ret.is_truncated);
+    if (ret < 0) {
       return ret;
-    CLS_LOG(20, "%s: returning %lu entries, is_truncated=%d", __func__, op_ret.entries.size(), op_ret.is_truncated);
+    }
+    CLS_LOG(20, "%s: returning %lu entries, is_truncated=%d",
+	    __func__, op_ret.entries.size(), op_ret.is_truncated);
     encode(op_ret, *out);
     return 0;
   }
@@ -3573,29 +3600,37 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
   ret = list_plain_entries(hctx, op.name_filter, op.marker, max,
 			   &op_ret.entries, &more, PlainEntriesRegion::Low);
   if (ret < 0) {
-    CLS_LOG(0, "ERROR: %s: list_plain_entries (low) returned ret=%d, marker=\"%s\", filter=\"%s\", max=%d",
-	    __func__, ret, escape_str(op.marker).c_str(), escape_str(op.name_filter).c_str(), max);
+    CLS_LOG(0, "ERROR: %s: list_plain_entries (low) returned ret=%d, "
+	    "marker=\"%s\", filter=\"%s\", max=%d",
+	    __func__, ret, escape_str(op.marker).c_str(),
+	    escape_str(op.name_filter).c_str(), max);
     return ret;
   }
 
   count = ret;
-  CLS_LOG(20, "%s: found %d plain ascii (low) entries, count=%u", __func__, ret, count);
+  CLS_LOG(20, "%s: found %d plain ascii (low) entries, count=%u",
+	  __func__, ret, count);
 
   if (!more) {
-    ret = list_instance_entries(hctx, op.name_filter, op.marker, max - count, &op_ret.entries, &more);
+    ret = list_instance_entries(hctx, op.name_filter, op.marker,
+				max - count, &op_ret.entries, &more);
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: %s: list_instance_entries returned ret=%d", __func__, ret);
+      CLS_LOG(0, "ERROR: %s: list_instance_entries returned ret=%d",
+	      __func__, ret);
       return ret;
     }
 
     count += ret;
-    CLS_LOG(20, "%s: found %d instance entries, count=%u", __func__, ret, count);
+    CLS_LOG(20, "%s: found %d instance entries, count=%u",
+	    __func__, ret, count);
   }
 
   if (!more) {
-    ret = list_olh_entries(hctx, op.name_filter, op.marker, max - count, &op_ret.entries, &more);
+    ret = list_olh_entries(hctx, op.name_filter, op.marker, max - count,
+			   &op_ret.entries, &more);
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: %s: list_olh_entries returned ret=%d", __func__, ret);
+      CLS_LOG(0, "ERROR: %s: list_olh_entries returned ret=%d",
+	      __func__, ret);
       return ret;
     }
 
@@ -3605,15 +3640,19 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
 
   if (!more) {
     ret = list_plain_entries(hctx, op.name_filter, op.marker, max - count,
-			     &op_ret.entries, &more, PlainEntriesRegion::High);
+			     &op_ret.entries, &more,
+			     PlainEntriesRegion::High);
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: %s: list_plain_entries (high) returned ret=%d, marker=\"%s\", filter=\"%s\", max=%d",
-	      __func__, ret, escape_str(op.marker).c_str(), escape_str(op.name_filter).c_str(), max);
+      CLS_LOG(0, "ERROR: %s: list_plain_entries (high) returned ret=%d, "
+	      "marker=\"%s\", filter=\"%s\", max=%d",
+	      __func__, ret, escape_str(op.marker).c_str(),
+	      escape_str(op.name_filter).c_str(), max);
       return ret;
     }
 
     count += ret;
-    CLS_LOG(20, "%s: found %d non-ascii (high) plain entries, count=%u", __func__, ret, count);
+    CLS_LOG(20, "%s: found %d non-ascii (high) plain entries, count=%u",
+	    __func__, ret, count);
   }
 
   op_ret.is_truncated = (count > max) || more;
@@ -3622,7 +3661,8 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
     count--;
   }
 
-  CLS_LOG(20, "%s: returning %lu entries, is_truncated=%d", __func__, op_ret.entries.size(), op_ret.is_truncated);
+  CLS_LOG(20, "%s: returning %lu entries, is_truncated=%d",
+	  __func__, op_ret.entries.size(), op_ret.is_truncated);
   encode(op_ret, *out);
 
   return 0;
