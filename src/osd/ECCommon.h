@@ -29,6 +29,7 @@
 #include "os/Transaction.h"
 #include "osd/OSDMap.h"
 #include "osd/osd_op_util.h"
+#include "osd/ECOmapJournal.h"
 
 struct ECTransaction {
   struct WritePlan {
@@ -56,7 +57,11 @@ struct ECSubRead;
 struct PGLog;
 struct RecoveryMessages;
 
+extern bool omap_journal_frozen;
+
 struct ECCommon {
+  ECOmapJournal ec_omap_journal;
+
   struct ec_extent_t {
     int err;
     extent_map emap;

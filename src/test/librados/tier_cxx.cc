@@ -6280,7 +6280,7 @@ protected:
 
 std::string LibRadosTwoPoolsECPP::cache_pool_name;
 
-TEST_F(LibRadosTierECPP, Dirty) {
+TEST_P(LibRadosTierECPP, Dirty) {
   SKIP_IF_CRIMSON();
   {
     ObjectWriteOperation op;
@@ -7836,7 +7836,7 @@ TEST_F(LibRadosTwoPoolsECPP, FlushSnap) {
   ioctx.selfmanaged_snap_remove(my_snaps[0]);
 }
 
-TEST_F(LibRadosTierECPP, FlushWriteRaces) {
+TEST_P(LibRadosTierECPP, FlushWriteRaces) {
   SKIP_IF_CRIMSON();
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
@@ -8181,7 +8181,7 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlushReadRace) {
   cond.wait(locker, [] { return num_reads == 0;});
 }
 
-TEST_F(LibRadosTierECPP, CallForcesPromote) {
+TEST_P(LibRadosTierECPP, CallForcesPromote) {
   SKIP_IF_CRIMSON();
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
@@ -8298,7 +8298,7 @@ TEST_F(LibRadosTierECPP, CallForcesPromote) {
   ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, cluster));
 }
 
-TEST_F(LibRadosTierECPP, HitSetNone) {
+TEST_P(LibRadosTierECPP, HitSetNone) {
   SKIP_IF_CRIMSON();
   {
     list< pair<time_t,time_t> > ls;
@@ -8384,7 +8384,7 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetRead) {
 
 // disable this test until hitset-get reliably works on EC pools
 #if 0
-TEST_F(LibRadosTierECPP, HitSetWrite) {
+TEST_P(LibRadosTierECPP, HitSetWrite) {
   int num_pg = _get_pg_num(cluster, pool_name);
   ceph_assert(num_pg > 0);
 
@@ -9238,3 +9238,4 @@ TEST_F(LibRadosTwoPoolsPP, TierFlushDuringUnsetDedupTier) {
   }
 }
 
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosTierECPP);

@@ -4269,6 +4269,18 @@ void OSD::final_init()
   ceph_assert(r == 0);
 
   r = admin_socket->register_command(
+    "freezeomapjournal",
+    test_ops_hook,
+    "freeze EC omap journal (Set ECCommon::omap_journal_frozen = true)");
+    ceph_assert(r == 0);
+
+  r = admin_socket->register_command(
+    "unfreezeomapjournal",
+    test_ops_hook,
+    "unfreeze EC omap journal (Set ECCommon::omap_journal_frozen = false)");
+    ceph_assert(r == 0);
+
+  r = admin_socket->register_command(
     "truncobj " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
@@ -6477,6 +6489,19 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
   //Test support
   //Support changing the omap on a single osd by using the Admin Socket to
   //directly request the osd make a change.
+
+  // Simple commands to control the EC Omap Journal freezing
+  if (command == "freezeomapjournal") {
+    omap_journal_frozen = true;
+    ss << "omap_journal_frozen set to true";
+    return;
+  }
+  if (command == "unfreezeomapjournal") {
+    omap_journal_frozen = false;
+    ss << "omap_journal_frozen set to false";
+    return;
+  }
+
   if (command == "setomapval" || command == "rmomapkey" ||
       command == "setomapheader" || command == "getomap" ||
       command == "truncobj" ||
