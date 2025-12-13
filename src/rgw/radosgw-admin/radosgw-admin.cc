@@ -34,6 +34,7 @@ extern "C" {
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/fault_injector.h"
+#include "common/keyring.h"
 
 #include "common/async/blocked_completion.h"
 
@@ -82,6 +83,7 @@ extern "C" {
 #include "rgw_account.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_dedup_cluster.h"
+#include "rgw_kms.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
