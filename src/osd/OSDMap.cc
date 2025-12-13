@@ -7147,6 +7147,8 @@ public:
     tbl->define_column("META", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("%USE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("EST AVAIL", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("EST CAPAC", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("VAR", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("PGS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("STATUS", TextTable::LEFT, TextTable::RIGHT);
@@ -7168,6 +7170,8 @@ public:
 	 << byte_u_t(sum.statfs.internal_metadata)
 	 << byte_u_t(sum.statfs.available)
 	 << lowprecision_t(average_util)
+	 << byte_u_t(sum.statfs.est_available)
+	 << byte_u_t(sum.statfs.est_capacity)
 	 << ""
 	 << TextTable::endrow;
   }
