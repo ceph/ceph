@@ -320,7 +320,9 @@ public:
     BAL_RANK_MASK_TYPE_NONE = 2,
   } bal_rank_mask_type_t;
 
-  const bool check_special_bal_rank_mask(std::string val, bal_rank_mask_type_t type) const;
+  bool check_special_bal_rank_mask(
+      const std::string& val,
+      bal_rank_mask_type_t type) const;
 
   mds_rank_t get_tableserver() const { return tableserver; }
   mds_rank_t get_root() const { return root; }
