@@ -76,7 +76,7 @@ function wait_for_state() {
 function wait_for_recovery_toofull() {
     local timeout=$1
     wait_for_state recovery_toofull $timeout
-    if [ $ret -ne 0 ]; then
+    if [ $? -ne 0 ]; then
       echo "Error: Recovery toofull timeout"
       return 1
     fi
