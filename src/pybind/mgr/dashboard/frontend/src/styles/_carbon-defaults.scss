@@ -157,8 +157,16 @@ Forms
   @include type.type-style('heading-03');
 }
 
+.heading-03 {
+  @include type.type-style('heading-03');
+}
+
 .spacing-03 {
   margin: 0.5rem;
+}
+
+.body-01 {
+  @include type.type-style('body-01');
 }
 
 .cds--col-md-4 {

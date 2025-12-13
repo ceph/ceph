@@ -1,4 +1,4 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { BehaviorSubject, forkJoin, Observable, of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 import { GatewayGroup, NvmeofService } from '~/app/shared/api/nvmeof.service';
@@ -13,6 +13,12 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
 import { NvmeofGatewayGroup } from '~/app/shared/models/nvmeof';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-nvmeof-gateway-group',
@@ -43,11 +49,17 @@ export class NvmeofGatewayGroupComponent implements OnInit {
   icons = Icons;
 
   iconSize = IconSize;
+  @ViewChild('deleteTpl', { static: true })
+  deleteTpl: TemplateRef<any>;
+  @Input() isNvme: boolean = false;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
-    private nvmeofService: NvmeofService
+    private nvmeofService: NvmeofService,
+    public modalService: ModalCdsService,
+    private cephServiceService: CephServiceService,
+    public taskWrapper: TaskWrapperService
   ) {}
 
   ngOnInit(): void {
@@ -74,6 +86,22 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       }
     ];
 
+    const editAction: CdTableAction = {
+      permission: 'read',
+      icon: Icons.edit,
+      disable: () => this.selection.hasMultiSelection,
+
+      name: this.actionLabels.VIEW_DETAILS
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: Icons.destroy,
+      click: () => this.deleteGatewayGroupModal(),
+      disable: () => !this.selection.hasSelection,
+      name: this.actionLabels.DELETE,
+      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
+    };
+    this.tableActions = [editAction, deleteAction];
     this.gatewayGroup$ = this.subject.pipe(
       switchMap(() =>
         this.nvmeofService.listGatewayGroups().pipe(
@@ -114,5 +142,30 @@ export class NvmeofGatewayGroupComponent implements OnInit {
 
   updateSelection(selection: CdTableSelection): void {
     this.selection = selection;
+  }
+
+  deleteGatewayGroupModal() {
+    const selectedGroup = this.selection.first();
+    if (!selectedGroup) {
+      return;
+    }
+    const {
+      service_name: serviceName,
+      spec: { group }
+    } = selectedGroup;
+
+    this.modalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.high,
+      itemNames: [group],
+      itemDescription: $localize`gateway group`,
+      subHeading: $localize`Confirm delete`,
+      showActionDescription: false,
+      bodyTemplate: this.deleteTpl,
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('nvmeof/service/delete', { serviceName }),
+          call: this.cephServiceService.delete(serviceName)
+        })
+    });
   }
 }

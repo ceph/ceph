@@ -29,8 +29,12 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
     @Optional() @Inject('submitAction') public submitAction?: Function,
     @Optional() @Inject('backAction') public backAction?: Function,
     @Optional() @Inject('bodyTemplate') public bodyTemplate?: TemplateRef<any>,
-    @Optional() @Inject('bodyContext') public bodyContext?: object,
+    @Optional() @Inject('subHeading') public subHeading?: string,
+    @Optional()
+    @Inject('bodyContext')
+    public bodyContext?: { warningMessage?: string; [key: string]: any },
     @Optional() @Inject('infoMessage') public infoMessage?: string,
+    @Optional() @Inject('showActionDescription') public showActionDescription: boolean = true,
     @Optional()
     @Inject('submitActionObservable')
     public submitActionObservable?: () => Observable<any>,
