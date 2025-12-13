@@ -801,10 +801,10 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         return pending_clones_info
 
-    def remove_snapshot(self, snapname, force=False):
+    def remove_snapshot(self, snapname, force=False, uuid=None):
         if self.has_pending_clones(snapname):
             raise VolumeException(-errno.EAGAIN, "snapshot '{0}' has pending clones".format(snapname))
-        snappath = self.snapshot_path(snapname)
+        snappath = self.snapshot_path(snapname, uuid=uuid)
         try:
             self.metadata_mgr.remove_section(self.get_snap_section_name(snapname))
             self.metadata_mgr.flush()
