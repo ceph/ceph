@@ -505,6 +505,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default='169.254.1.1',
             desc="Default IP address for RedFish API (OOB management)."
         ),
+        Option(
+            'ssh_hardening',
+            type='bool',
+            default=False,
+            desc='Enable SSH hardening by routing all command execution through invoker.py. '
+                 'When enabled, cephadm and bash commands are validated and executed via '
+                 'the secure invoker wrapper.'
+        ),
     ]
     for image in DefaultImages:
         MODULE_OPTIONS.append(Option(image.key, default=image.image_ref, desc=image.desc))
@@ -531,6 +539,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.paused = True
         else:
             self.paused = False
+
+        self.ssh_hardening = False
+        self.invoker_path = '/usr/libexec/cephadm_invoker.py'
 
         # for mypy which does not run the code
         if TYPE_CHECKING:
@@ -610,6 +621,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.oob_default_addr = ''
             self.ssh_keepalive_interval = 0
             self.ssh_keepalive_count_max = 0
+            self.ssh_hardening = False
+            self.invoker_path = '/usr/libexec/cephadm_invoker.py'
             self.certificate_duration_days = 0
             self.certificate_renewal_threshold_days = 0
             self.certificate_automated_rotation_enabled = False

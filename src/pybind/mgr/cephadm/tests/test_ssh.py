@@ -79,15 +79,12 @@ class TestWithSSH:
                     with with_host(cephadm_module, host):
                         CephadmServe(cephadm_module)._check_host(host)
 
-        # Test case 1: command failure
-        run_test('test1', FakeConn(returncode=1), "Command .+ failed")
+        # Test case 1: connection error
+        run_test('test1', FakeConn(exception=asyncssh.ChannelOpenError(1, "", "")), "Unable to reach remote host test1")
 
-        # Test case 2: connection error
-        run_test('test2', FakeConn(exception=asyncssh.ChannelOpenError(1, "", "")), "Unable to reach remote host test2.")
-
-        # Test case 3: asyncssh ProcessError
+        # Test case 2: asyncssh ProcessError
         stderr = "my-process-stderr"
-        run_test('test3', FakeConn(exception=asyncssh.ProcessError(returncode=3,
+        run_test('test2', FakeConn(exception=asyncssh.ProcessError(returncode=3,
                                                                    env="",
                                                                    command="",
                                                                    subsystem="",
@@ -95,8 +92,8 @@ class TestWithSSH:
                                                                    exit_signal="",
                                                                    stderr=stderr,
                                                                    stdout="")), f"Cannot execute the command.+{stderr}")
-        # Test case 4: generic error
-        run_test('test4', FakeConn(exception=Exception), "Generic error while executing command.+")
+        # Test case 3: generic error
+        run_test('test3', FakeConn(exception=Exception), "Generic error while executing command.+")
 
 
 @pytest.mark.skipif(ConnectionLost is not None, reason='asyncssh')

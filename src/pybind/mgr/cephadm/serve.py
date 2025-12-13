@@ -45,7 +45,6 @@ logger = logging.getLogger(__name__)
 
 REQUIRES_POST_ACTIONS = ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'rgw', 'nvmeof', 'mgmt-gateway']
 
-WHICH = ssh.RemoteExecutable('which')
 CEPHADM_EXE = ssh.RemoteExecutable('/usr/bin/cephadm')
 
 
@@ -1751,30 +1750,36 @@ class CephadmServe:
             if stdin and 'agent' not in str(entity):
                 self.log.debug('stdin: %s' % stdin)
 
-            cmd = ssh.RemoteCommand(WHICH, ['python3'])
-            try:
-                # when connection was broken/closed, retrying resets the connection
-                python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
-            except ssh.HostConnectionError:
-                python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
-
-            # N.B. because the python3 executable is based on the results of the
-            # which command we can not know it ahead of time and must be converted
-            # into a RemoteExecutable.
-            cmd = ssh.RemoteCommand(
-                ssh.RemoteExecutable(python),
-                [self.mgr.cephadm_binary_path] + final_args
-            )
+            # If SSH hardening is enabled, call invoker directly without which python
+            if self.mgr.ssh_hardening and self.mgr.invoker_path:
+                # For invoker, pass all args as a single string
+                cmd = ssh.RemoteCommand(
+                    ssh.Executables.INVOKER,
+                    ['run', self.mgr.cephadm_binary_path, '--'] + final_args
+                )
+            else:
+                # cephadm_binary_path must be converted into a RemoteExecutable.
+                cmd = ssh.RemoteCommand(
+                    ssh.RemoteExecutable(self.mgr.cephadm_binary_path),
+                    final_args
+                )
 
             try:
                 out, err, code = await self.mgr.ssh._execute_command(
                     host, cmd, stdin=stdin, addr=addr)
-                if code == 2:
-                    ls_cmd = ssh.RemoteCommand(
-                        ssh.Executables.LS,
-                        [self.mgr.cephadm_binary_path]
-                    )
-                    out_ls, err_ls, code_ls = await self.mgr.ssh._execute_command(host, ls_cmd, addr=addr,
+                if code == 2 or code == 127:
+                    # Use invoker to check file existence when SSH hardening is enabled
+                    if self.mgr.ssh_hardening and self.mgr.invoker_path:
+                        check_cmd = ssh.RemoteCommand(
+                            ssh.Executables.INVOKER,
+                            ['check_existence', self.mgr.cephadm_binary_path]
+                        )
+                    else:
+                        check_cmd = ssh.RemoteCommand(
+                            ssh.Executables.LS,
+                            [self.mgr.cephadm_binary_path]
+                        )
+                    out_ls, err_ls, code_ls = await self.mgr.ssh._execute_command(host, check_cmd, addr=addr,
                                                                                   log_command=log_output)
                     if code_ls == 2:
                         await self._deploy_cephadm_binary(host, addr)
@@ -1794,7 +1799,14 @@ class CephadmServe:
 
         elif self.mgr.mode == 'cephadm-package':
             try:
-                cmd = ssh.RemoteCommand(CEPHADM_EXE, final_args)
+                # Wrap with invoker if SSH hardening is enabled
+                if self.mgr.ssh_hardening and self.mgr.invoker_path:
+                    cmd = ssh.RemoteCommand(
+                        ssh.Executables.INVOKER,
+                        ['run', str(CEPHADM_EXE), '--'] + final_args
+                    )
+                else:
+                    cmd = ssh.RemoteCommand(CEPHADM_EXE, final_args)
                 out, err, code = await self.mgr.ssh._execute_command(
                     host, cmd, stdin=stdin, addr=addr)
             except Exception as e:
@@ -1866,8 +1878,15 @@ class CephadmServe:
     async def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
         # Use tee (from coreutils) to create a copy of cephadm on the target machine
         self.log.info(f"Deploying cephadm binary to {host}")
-        await self.mgr.ssh._write_remote_file(host, self.mgr.cephadm_binary_path,
-                                              self.mgr._cephadm, addr=addr, bypass_cephadm_exec=True)
+        if self.mgr.ssh_hardening and self.mgr.invoker_path:
+            # Use invoker for secure deployment when SSH hardening is enabled
+            await self.mgr.ssh._deploy_cephadm_binary_via_invoker(
+                host, self.mgr.cephadm_binary_path, self.mgr._cephadm, addr=addr)
+        else:
+            await self.mgr.ssh._write_remote_file(host, self.mgr.cephadm_binary_path,
+                                                  self.mgr._cephadm, addr=addr, mode=0o744,
+                                                  bypass_cephadm_exec=True)
+
     async def run_cephadm_exec(self,
                                host: str,
                                cmd: List[str],

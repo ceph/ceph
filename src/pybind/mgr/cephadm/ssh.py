@@ -111,6 +111,7 @@ class Executables(RemoteExecutable, enum.Enum):
     SYSCTL = RemoteExecutable('sysctl')
     TOUCH = RemoteExecutable('touch')
     TRUE = RemoteExecutable('true')
+    INVOKER = RemoteExecutable('/usr/libexec/cephadm_invoker.py')
 
     def __str__(self) -> str:
         return self.value
@@ -229,6 +230,27 @@ class SSHManager:
         with self.mgr.async_timeout_handler(host, f'ssh {host} (addr {addr})'):
             return self.mgr.wait_async(self._remote_connection(host, addr))
 
+    def _enforce_ssh_hardening(self,
+                               host: str,
+                               cmd_components: RemoteCommand) -> None:
+        """
+        Enforce that commands are wrapped with invoker when SSH hardening
+        is enabled.
+        """
+        if not self.mgr.ssh_hardening:
+            return
+
+        is_wrapped = (
+            isinstance(cmd_components.exe, RemoteExecutable)
+            and str(cmd_components.exe) == str(Executables.INVOKER)
+        )
+        if not is_wrapped:
+            msg = (f'SSH hardening is enabled but command is not '
+                   f'wrapped with invoker for host {host}. '
+                   f'Command: {cmd_components}')
+            logger.error(msg)
+            raise OrchestratorError(msg)
+
     async def _execute_command(self,
                                host: str,
                                cmd_components: RemoteCommand,
@@ -244,6 +266,9 @@ class SSHManager:
         use_sudo = (self.mgr.ssh_user != 'root') and not is_host_being_added
         if is_host_being_added:
             logger.debug(f'Host {host} is being added, using root user without sudo')
+
+        # Enforce invoker usage if SSH hardening is enabled
+        self._enforce_ssh_hardening(host, cmd_components)
 
         rcmd = RemoteSudoCommand.wrap(cmd_components, use_sudo=use_sudo)
         try:
@@ -429,13 +454,14 @@ class SSHManager:
                 conn = await self._remote_connection(host, addr)
                 async with conn.start_sftp_client() as sftp:
                     await sftp.put(f.name, tmp_path)
-            if uid is not None and gid is not None and mode is not None:
+            if uid is not None and gid is not None:
                 # shlex quote takes str or byte object, not int
                 chown = RemoteCommand(
                     Executables.CHOWN,
                     ['-R', str(uid) + ':' + str(gid), tmp_path]
                 )
                 await execute_method(host, chown, addr=addr)
+            if mode is not None:
                 chmod = RemoteCommand(Executables.CHMOD, [oct(mode)[2:], tmp_path])
                 await execute_method(host, chmod, addr=addr)
             mv = RemoteCommand(Executables.MV, ['-Z', tmp_path, path])
@@ -444,6 +470,42 @@ class SSHManager:
             msg = f"Unable to write {host}:{path}: {e}"
             logger.exception(msg)
             raise OrchestratorError(msg)
+
+    async def _deploy_cephadm_binary_via_invoker(
+        self,
+        host: str,
+        cephadm_path: str,
+        cephadm_content: bytes,
+        addr: Optional[str] = None
+    ) -> None:
+        """
+        Deploy cephadm binary using the invoker for secure operations.
+        This creates a temp file locally, copies it to remote host, then
+        calls the invoker to perform all deployment operations.
+        """
+        with NamedTemporaryFile(prefix='cephadm-deploy-', delete=False) as local_tmp:
+            local_tmp.write(cephadm_content)
+            local_tmp.flush()
+            local_tmp_path = local_tmp.name
+
+        try:
+            remote_tmp_path = f'/tmp/cephadm-{self.mgr._cluster_fsid}.new'
+
+            conn = await self._remote_connection(host, addr)
+            async with conn.start_sftp_client() as sftp:
+                await sftp.put(local_tmp_path, remote_tmp_path)
+
+            invoker_cmd = RemoteCommand(
+                Executables.INVOKER,
+                ['deploy_cephadm_binary', remote_tmp_path, cephadm_path]
+            )
+            await self._execute_command(host, invoker_cmd, addr=addr)
+
+        finally:
+            try:
+                os.unlink(local_tmp_path)
+            except OSError:
+                pass
 
     def write_remote_file(self,
                           host: str,
