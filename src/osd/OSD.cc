@@ -2781,6 +2781,7 @@ void OSD::asok_command(
       prefix == "list_unfound" ||
       prefix == "scrub" ||
       prefix == "deep-scrub" ||
+      prefix == "scrub-abort" ||
       prefix == "schedule-scrub" ||      ///< dev/tests only!
       prefix == "schedule-deep-scrub"    ///< dev/tests only!
     ) {
@@ -4544,6 +4545,12 @@ void OSD::final_init()
     "name=pgid,type=CephPgid,req=false",
     asok_hook,
     "Trigger a deep scrub");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "scrub-abort "
+    "name=pgid,type=CephPgid,req=false",
+    asok_hook,
+    "Abort an ongoing scrub. Cancel any operator-initiated scrub");
   ceph_assert(r == 0);
   // debug/test commands (faking the timestamps)
   r = admin_socket->register_command(
