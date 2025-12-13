@@ -15,112 +15,27 @@
 #ifndef DAEMON_STATE_H_
 #define DAEMON_STATE_H_
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <memory>
 #include <shared_mutex> // for std::shared_lock
 #include <set>
-#include <boost/circular_buffer.hpp>
 
 #include "common/ceph_mutex.h"
-#include "common/perf_counters.h" // for enum perfcounter_type_d
 #include "common/RefCountedObj.h"
-#include "include/str_map.h"
 #include "include/utime.h"
 
 #include "msg/msg_types.h"
 
-// For PerfCounterType
-#include "messages/MMgrReport.h"
-#include "DaemonHealthMetric.h"
 #include "DaemonKey.h"
+#include "DaemonPerfCounters.h"
 
 namespace ceph {
   class Formatter;
 }
 
-// An instance of a performance counter type, within
-// a particular daemon.
-class PerfCounterInstance
-{
-  class DataPoint
-  {
-    public:
-    utime_t t;
-    uint64_t v;
-    DataPoint(utime_t t_, uint64_t v_)
-      : t(t_), v(v_)
-    {}
-  };
-
-  class AvgDataPoint
-  {
-    public:
-    utime_t t;
-    uint64_t s;
-    uint64_t c;
-    AvgDataPoint(utime_t t_, uint64_t s_, uint64_t c_)
-      : t(t_), s(s_), c(c_)
-    {}
-  };
-
-  boost::circular_buffer<DataPoint> buffer;
-  boost::circular_buffer<AvgDataPoint> avg_buffer;
-
-  uint64_t get_current() const;
-
-  public:
-  const boost::circular_buffer<DataPoint> & get_data() const
-  {
-    return buffer;
-  }
-  const DataPoint& get_latest_data() const
-  {
-    return buffer.back();
-  }
-  const boost::circular_buffer<AvgDataPoint> & get_data_avg() const
-  {
-    return avg_buffer;
-  }
-  const AvgDataPoint& get_latest_data_avg() const
-  {
-    return avg_buffer.back();
-  }
-  void push(utime_t t, uint64_t const &v);
-  void push_avg(utime_t t, uint64_t const &s, uint64_t const &c);
-
-  PerfCounterInstance(enum perfcounter_type_d type)
-  {
-    if (type & PERFCOUNTER_LONGRUNAVG)
-      avg_buffer = boost::circular_buffer<AvgDataPoint>(20);
-    else
-      buffer = boost::circular_buffer<DataPoint>(20);
-  };
-};
-
-
-typedef std::map<std::string, PerfCounterType> PerfCounterTypes;
-
-// Performance counters for one daemon
-class DaemonPerfCounters
-{
-  public:
-  // The record of perf stat types, shared between daemons
-  PerfCounterTypes &types;
-
-  explicit DaemonPerfCounters(PerfCounterTypes &types_)
-    : types(types_)
-  {}
-
-  std::map<std::string, PerfCounterInstance> instances;
-
-  void update(const MMgrReport& report);
-
-  void clear()
-  {
-    instances.clear();
-  }
-};
+class DaemonHealthMetric;
 
 // The state that we store about one daemon
 class DaemonState
@@ -165,10 +80,9 @@ class DaemonState
   // The perf counters received in MMgrReport messages
   DaemonPerfCounters perf_counters;
 
-  explicit DaemonState(PerfCounterTypes &types_)
-    : perf_counters(types_)
-  {
-  }
+  explicit DaemonState(PerfCounterTypes &types_);
+  ~DaemonState() noexcept;
+
   void set_metadata(const std::map<std::string,std::string>& m);
   const std::map<std::string,std::string>& _get_config_defaults();
 };
@@ -244,7 +158,8 @@ private:
   }
 
 public:
-  DaemonStateIndex() {}
+  DaemonStateIndex();
+  ~DaemonStateIndex();
 
   // FIXME: shouldn't really be public, maybe construct DaemonState
   // objects internally to avoid this.
