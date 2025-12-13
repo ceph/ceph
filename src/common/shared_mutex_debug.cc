@@ -38,6 +38,11 @@ shared_mutex_debug::shared_mutex_debug(std::string group,
   ANNOTATE_BENIGN_RACE_SIZED(&nrlock, sizeof(nrlock), "shared_mutex_debug nrlock");
 }
 
+shared_mutex_debug::~shared_mutex_debug()
+{
+  pthread_rwlock_destroy(&rwlock);
+}
+
 // exclusive
 void shared_mutex_debug::lock()
 {
