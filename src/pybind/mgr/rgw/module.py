@@ -181,6 +181,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  zonegroup_name: Optional[str] = None,
                                  zone_name: Optional[str] = None,
                                  port: Optional[int] = None,
+                                 secondary_port: Optional[int] = None,
                                  placement: Optional[str] = None,
                                  zone_endpoints: Optional[str] = None,
                                  start_radosgw: Optional[bool] = True,
@@ -199,6 +200,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  rgw_zonegroup=zonegroup_name,
                                  rgw_zone=zone_name,
                                  rgw_frontend_port=port,
+                                 rgw_frontend_secondary_port=secondary_port,
                                  placement=placement_spec,
                                  zone_endpoints=zone_endpoints)]
         else:
@@ -440,6 +442,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                              zone_name: Optional[str] = None,
                              realm_token: Optional[str] = None,
                              port: Optional[int] = None,
+                             secondary_port: Optional[int] = None,
                              placement: Optional[str] = None,
                              start_radosgw: Optional[bool] = True,
                              zone_endpoints: Optional[str] = None,
@@ -447,7 +450,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Bootstrap new rgw zone that syncs with zone on another cluster in the same realm"""
 
         try:
-            created_zones = self.rgw_zone_create(zone_name, realm_token, port, placement,
+            created_zones = self.rgw_zone_create(zone_name, realm_token, port, secondary_port, placement,
                                                  start_radosgw, zone_endpoints, self.secondary_zone_period_retry_limit, inbuf)
             return HandleCommandResult(retval=0, stdout=f"Zones {', '.join(created_zones)} created successfully")
         except RGWAMException as e:
@@ -457,6 +460,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         zone_name: Optional[str] = None,
                         realm_token: Optional[str] = None,
                         port: Optional[int] = None,
+                        secondary_port: Optional[int] = None,
                         placement: Optional[Union[str, Dict[str, Any]]] = None,
                         start_radosgw: Optional[bool] = True,
                         zone_endpoints: Optional[str] = None,
@@ -478,6 +482,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  rgw_zone=zone_name,
                                  rgw_realm_token=realm_token,
                                  rgw_frontend_port=port,
+                                 rgw_frontend_secondary_port=secondary_port,
                                  placement=placement_spec,
                                  zone_endpoints=zone_endpoints)]
         else:
@@ -527,9 +532,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                            zone_name: Optional[str] = None,
                            realm_token: Optional[str] = None,
                            port: Optional[int] = None,
+                           secondary_port: Optional[int] = None,
                            placement: Optional[dict] = None,
                            start_radosgw: Optional[bool] = True,
                            zone_endpoints: Optional[str] = None) -> None:
         placement_spec = placement.get('placement') if placement else None
-        self.rgw_zone_create(zone_name, realm_token, port, placement_spec, start_radosgw,
+        self.rgw_zone_create(zone_name, realm_token, port, secondary_port, placement_spec, start_radosgw,
                              zone_endpoints, secondary_zone_period_retry_limit=5)
