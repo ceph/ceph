@@ -2382,21 +2382,21 @@ class MgmtGatewaySpec(ServiceSpec):
             extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs
         )
-        #: Is a flag to enable/disable HTTPS. By default set to True.
+        #: Flag to enable or disable HTTPS. By default set to True.
         self.ssl = ssl
-        #: Is a flag to enable SSO auth. Requires oauth2-proxy to be active for SSO authentication.
+        #: Flag to enable SSO auth. Requires oauth2-proxy to be active for SSO authentication.
         self.enable_auth = enable_auth
         #: The port number on which the server will listen
         self.port = port
         #: Prefer server ciphers over client ciphers: on | off
         self.ssl_prefer_server_ciphers = ssl_prefer_server_ciphers
-        #: A multioption flag to control session tickets: on | off
+        #: Flag to control session tickets: on | off
         self.ssl_session_tickets = ssl_session_tickets
         #: The duration for SSL session timeout. Syntax: time (i.e: 5m)
         self.ssl_session_timeout = ssl_session_timeout
-        #: Duration an SSL/TLS session is cached: off | none | [builtin[:size]] [shared:name:size]
+        #: Nginx SSL/TLS session cache settings: off | none | [builtin[:size]] [shared:name:size]
         self.ssl_session_cache = ssl_session_cache
-        #: Flag control server tokens in responses:  on | off | build | string
+        #: Flag to control server tokens in responses: on | off | build | string
         self.server_tokens = server_tokens
         #: Flag to enable or disable SSL stapling: on | off
         self.ssl_stapling = ssl_stapling
