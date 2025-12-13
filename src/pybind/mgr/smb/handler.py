@@ -16,7 +16,8 @@ import contextlib
 import logging
 import time
 
-from ceph.deployment.service_spec import SMBSpec
+from ceph.deployment.service_spec import CustomConfig, SMBSpec
+from ceph.fs.earmarking import EarmarkTopScope
 
 from . import config_store, external, resources
 from .enums import (
@@ -30,6 +31,7 @@ from .enums import (
 )
 from .internal import (
     ClusterEntry,
+    ExternalCephClusterEntry,
     JoinAuthEntry,
     ShareEntry,
     TLSCredentialEntry,
@@ -50,6 +52,7 @@ from .staging import (
     Staging,
     auth_refs,
     cross_check_resource,
+    ext_cluster_refs,
     tls_refs,
     ug_refs,
 )
@@ -81,12 +84,14 @@ class ClusterChangeGroup:
         join_auths: List[resources.JoinAuth],
         users_and_groups: List[resources.UsersAndGroups],
         tls_credentials: List[resources.TLSCredential],
+        ext_ceph_clusters: List[resources.ExternalCephCluster],
     ):
         self.cluster = cluster
         self.shares = shares
         self.join_auths = join_auths
         self.users_and_groups = users_and_groups
         self.tls_credentials = tls_credentials
+        self.ext_ceph_clusters = ext_ceph_clusters
         # a cache for modified entries
         self.cache = config_store.EntryCache()
 
@@ -119,6 +124,20 @@ class _FakePathResolver:
     resolve_exists = resolve
 
 
+class ExoResolver:
+    def __init__(self, cluster: resources.Cluster) -> None:
+        self._cluster = cluster
+
+    def resolve(
+        self, volume: str, subvolumegroup: str, subvolume: str, path: str
+    ) -> str:
+        assert not subvolumegroup
+        assert not subvolume
+        return path
+
+    resolve_exists = resolve
+
+
 class _FakeEarmarkResolver:
     """A stub EarmarkResolver for unit testing."""
 
@@ -131,7 +150,9 @@ class _FakeEarmarkResolver:
     def set_earmark(self, path: str, volume: str, earmark: str) -> None:
         pass
 
-    def check_earmark(self, earmark: str, top_level_scope: str) -> bool:
+    def check_earmark(
+        self, earmark: str, top_level_scope: EarmarkTopScope
+    ) -> bool:
         return True
 
 
@@ -404,11 +425,15 @@ class ClusterConfigHandler:
                     msg='a resource with the same ID already exists',
                 )
         try:
+            path_resolver = self._choose_path_resolver(resource, staging)
+            earmark_resolver = self._choose_earmark_resolver(
+                resource, staging
+            )
             cross_check_resource(
                 resource,
                 staging,
-                path_resolver=self._path_resolver,
-                earmark_resolver=self._earmark_resolver,
+                path_resolver=path_resolver,
+                earmark_resolver=earmark_resolver,
             )
         except ErrorResult as err:
             log.debug('rejected resource: %r', resource)
@@ -416,6 +441,24 @@ class ClusterConfigHandler:
         log.debug('checked resource: %r', resource)
         result = Result(resource, success=True, status={'checked': True})
         return result
+
+    def _choose_path_resolver(
+        self, resource: SMBResource, staging: Staging
+    ) -> PathResolver:
+        if isinstance(resource, resources.Share):
+            cluster = staging.get_cluster(resource.cluster_id)
+            if ext_cluster_refs(cluster):
+                return ExoResolver(cluster)
+        return self._path_resolver
+
+    def _choose_earmark_resolver(
+        self, resource: SMBResource, staging: Staging
+    ) -> EarmarkResolver:
+        if isinstance(resource, resources.Share):
+            cluster = staging.get_cluster(resource.cluster_id)
+            if ext_cluster_refs(cluster):
+                return _FakeEarmarkResolver()
+        return self._earmark_resolver
 
     def _sync_clusters(
         self, modified_cluster_ids: Optional[Collection[str]] = None
@@ -464,6 +507,12 @@ class ClusterConfigHandler:
                     ).get_tls_credential()
                     for _id in tls_refs(cluster)
                 ],
+                [
+                    ExternalCephClusterEntry.from_store(
+                        self.internal_store, _id
+                    ).get_external_ceph_cluster()
+                    for _id in ext_cluster_refs(cluster)
+                ],
             )
             change_groups.append(change_group)
         for change_group in change_groups:
@@ -498,6 +547,7 @@ class ClusterConfigHandler:
         chg_join_ids: Set[str] = set()
         chg_ug_ids: Set[str] = set()
         chg_tls_ids: Set[str] = set()
+        chg_extc_ids: Set[str] = set()
         for result in updated:
             state = (result.status or {}).get('state', None)
             if state in (State.PRESENT, State.NOT_PRESENT):
@@ -518,11 +568,13 @@ class ClusterConfigHandler:
                 chg_ug_ids.add(result.src.users_groups_id)
             elif isinstance(result.src, resources.TLSCredential):
                 chg_tls_ids.add(result.src.tls_credential_id)
+            elif isinstance(result.src, resources.ExternalCephCluster):
+                chg_extc_ids.add(result.src.external_ceph_cluster_id)
 
         # TODO: here's a lazy bit. if any join auths or users/groups changed we
         # will regen all clusters because these can be shared by >1 cluster.
         # In future, make this only pick clusters using the named resources.
-        if chg_join_ids or chg_ug_ids or chg_tls_ids:
+        if chg_join_ids or chg_ug_ids or chg_tls_ids or chg_extc_ids:
             chg_cluster_ids.update(ClusterEntry.ids(self.internal_store))
         return chg_cluster_ids
 
@@ -534,10 +586,12 @@ class ClusterConfigHandler:
             'saving external store for cluster: %s',
             change_group.cluster.cluster_id,
         )
+        cluster = change_group.cluster
+        assert isinstance(cluster, resources.Cluster)
         # vols: hold the cephfs volumes our shares touch. some operations are
         # disabled/skipped unless we touch volumes.
         vols = {share.checked_cephfs.volume for share in change_group.shares}
-        data_entity = _cephx_data_entity(change_group.cluster.cluster_id)
+        data_entity = _cephx_data_entity(cluster)
         # save the various object types
         previous_info = _swap_pending_cluster_info(
             self.public_store,
@@ -561,16 +615,15 @@ class ClusterConfigHandler:
         )
 
         # ensure a entity exists with access to the volumes
-        for volume in vols:
-            self._authorizer.authorize_entity(volume, data_entity)
+        if data_entity:
+            for volume in vols:
+                self._authorizer.authorize_entity(volume, data_entity)
         if not vols:
             # there were no volumes, and thus nothing to authorize. set data_entity
             # to an empty string to avoid adding it to the svc spec later.
             data_entity = ''
 
         # build a service spec for smb cluster
-        cluster = change_group.cluster
-        assert isinstance(cluster, resources.Cluster)
         config_entries = [
             change_group.cache[external.config_key(cluster.cluster_id)],
             self.public_store[
@@ -599,6 +652,10 @@ class ClusterConfigHandler:
             ]
             for tc in change_group.tls_credentials
         }
+        ext_ceph_cluster = None
+        if change_group.ext_ceph_clusters:
+            assert len(change_group.ext_ceph_clusters) == 1
+            ext_ceph_cluster = change_group.ext_ceph_clusters[0]
         smb_spec = _generate_smb_service_spec(
             cluster,
             config_entries=config_entries,
@@ -607,6 +664,7 @@ class ClusterConfigHandler:
             tls_credential_entries=tls_credential_entries,
             data_entity=data_entity,
             needs_proxy=_has_proxied_vfs(change_group),
+            ext_ceph_cluster=ext_ceph_cluster,
         )
         _save_pending_spec_backup(self.public_store, change_group, smb_spec)
         # if orch was ever needed in the past we must "re-orch", but if we have
@@ -644,8 +702,10 @@ class ClusterConfigHandler:
     def _users_and_groups_entry(self, ug_id: str) -> UsersAndGroupsEntry:
         return UsersAndGroupsEntry.from_store(self.internal_store, ug_id)
 
-    def generate_config(self, cluster_id: str) -> Dict[str, Any]:
+    def _x_generate_config(self, cluster_id: str) -> Dict[str, Any]:
         """Demo function that generates a config on demand."""
+        raise NotImplementedError()
+        """
         cluster = self._cluster_entry(cluster_id).get_cluster()
         shares = [
             self._share_entry(cluster_id, shid).get_share()
@@ -657,6 +717,7 @@ class ClusterConfigHandler:
             self._path_resolver,
             _cephx_data_entity(cluster_id),
         )
+        """
 
 
 def order_resources(
@@ -681,7 +742,10 @@ def order_resources(
 
 
 def _generate_share(
-    share: resources.Share, resolver: PathResolver, cephx_entity: str
+    share: resources.Share,
+    resolver: PathResolver,
+    cephx_entity: str,
+    exo: bool = False,
 ) -> Dict[str, Dict[str, str]]:
     cephfs = share.checked_cephfs
     assert cephfs.provider.is_vfs(), "not a vfs provider"
@@ -707,13 +771,16 @@ def _generate_share(
         }[cephfs.provider.expand()]
     except KeyError:
         raise ValueError(f'unsupported provider: {cephfs.provider}')
+    ceph_config_file = (
+        '/etc/ceph/exo.ceph.conf' if exo else '/etc/ceph/ceph.conf'
+    )
     cfg = {
         # smb.conf options
         'options': {
             'path': path,
             "vfs objects": f"acl_xattr ceph_snapshots {ceph_vfs}",
             'acl_xattr:security_acl_name': 'user.NTACL',
-            f'{ceph_vfs}:config_file': '/etc/ceph/ceph.conf',
+            f'{ceph_vfs}:config_file': ceph_config_file,
             f'{ceph_vfs}:filesystem': cephfs.volume,
             f'{ceph_vfs}:user_id': cephx_entity,
             'read only': ynbool(share.readonly),
@@ -783,6 +850,7 @@ def _generate_config(
     shares: Iterable[resources.Share],
     resolver: PathResolver,
     cephx_entity: str = "",
+    external_ceph_cluster: Optional[resources.ExternalCephCluster] = None,
 ) -> Dict[str, Any]:
     cluster_global_opts = {}
     if cluster.auth_mode == AuthMode.ACTIVE_DIRECTORY:
@@ -796,8 +864,13 @@ def _generate_config(
         cluster_global_opts['idmap config * : range'] = '2000-9999999'
     cluster_global_opts['smb ports'] = str(_smb_port(cluster))
 
+    exo = False
+    if external_ceph_cluster:
+        exo = True
+        resolver = ExoResolver(cluster)
+        cephx_entity = checked(external_ceph_cluster.cluster).cephfs_user.name
     share_configs = {
-        share.name: _generate_share(share, resolver, cephx_entity)
+        share.name: _generate_share(share, resolver, cephx_entity, exo=exo)
         for share in shares
     }
 
@@ -849,6 +922,7 @@ def _generate_smb_service_spec(
     tls_credential_entries: Dict[str, ConfigEntry],
     data_entity: str = '',
     needs_proxy: bool = False,
+    ext_ceph_cluster: Optional[resources.ExternalCephCluster],
 ) -> SMBSpec:
     features = []
     if cluster.auth_mode == AuthMode.ACTIVE_DIRECTORY:
@@ -890,6 +964,32 @@ def _generate_smb_service_spec(
         rc_ca_cert = _tls_uri(
             cluster.remote_control.ca_cert, tls_credential_entries
         )
+    custom_configs = None
+    if ext_ceph_cluster:
+        exo = checked(ext_ceph_cluster.cluster)
+        assert exo.fsid
+        assert exo.mon_host
+        assert exo.cephfs_user
+        conf_txt = '\n'.join(
+            (
+                '[global]',
+                f'fsid = {exo.fsid}',
+                f'mon_host = {exo.mon_host}',
+                '',
+            )
+        )
+        keys_txt = '\n'.join(
+            [
+                f'[{exo.cephfs_user.name}]',
+                f'key = {exo.cephfs_user.key}',
+                '',
+            ]
+        )
+        custom_configs = [
+            CustomConfig(conf_txt, mount_path='/etc/ceph/exo.ceph.conf'),
+            CustomConfig(keys_txt, mount_path='/etc/ceph/exo.ceph.keyring'),
+        ]
+
     return SMBSpec(
         service_id=cluster.cluster_id,
         placement=cluster.placement,
@@ -906,6 +1006,7 @@ def _generate_smb_service_spec(
         remote_control_ssl_cert=rc_cert,
         remote_control_ssl_key=rc_key,
         remote_control_ca_cert=rc_ca_cert,
+        custom_configs=custom_configs,
     )
 
 
@@ -1017,8 +1118,16 @@ def _save_pending_config(
 ) -> None:
     assert isinstance(change_group.cluster, resources.Cluster)
     # generate the cluster configuration and save it in the public store
+    extcc = None
+    if change_group.ext_ceph_clusters:
+        assert len(change_group.ext_ceph_clusters) == 1
+        extcc = change_group.ext_ceph_clusters[0]
     cconfig = _generate_config(
-        change_group.cluster, change_group.shares, resolver, cephx_entity
+        change_group.cluster,
+        shares=change_group.shares,
+        resolver=resolver,
+        cephx_entity=cephx_entity,
+        external_ceph_cluster=extcc,
     )
     centry = store[external.config_key(change_group.cluster.cluster_id)]
     centry.set(cconfig)
@@ -1033,11 +1142,13 @@ def _save_pending_spec_backup(
     change_group.cache_updated_entry(ssentry)
 
 
-def _cephx_data_entity(cluster_id: str) -> str:
+def _cephx_data_entity(cluster: resources.Cluster) -> str:
     """Generate a name for the (default?) cephx key that a cluster (smbd) will
     use for data access.
     """
-    return f'client.smb.fs.cluster.{cluster_id}'
+    if cluster.external_ceph_cluster:
+        return ''
+    return f'client.smb.fs.cluster.{cluster.cluster_id}'
 
 
 @contextlib.contextmanager

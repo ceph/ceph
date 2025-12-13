@@ -328,8 +328,7 @@ def test_generate_config_basic(thandler):
         }
     )
 
-    cfg = thandler.generate_config('foo')
-    assert cfg
+    thandler._sync_clusters(['foo'])
 
 
 def test_generate_config_ad(thandler):
@@ -390,7 +389,8 @@ def test_generate_config_ad(thandler):
         }
     )
 
-    cfg = thandler.generate_config('foo')
+    thandler._sync_clusters(['foo'])
+    cfg = thandler.public_store['foo', 'config.smb'].get()
     assert cfg
     assert cfg['globals']['foo']['options']['realm'] == 'dom1.example.com'
 
@@ -471,7 +471,8 @@ def test_generate_config_with_login_control(thandler):
         }
     )
 
-    cfg = thandler.generate_config('foo')
+    thandler._sync_clusters(['foo'])
+    cfg = thandler.public_store['foo', 'config.smb'].get()
     assert cfg
     assert cfg['shares']['Ess One']['options']
     shopts = cfg['shares']['Ess One']['options']
@@ -543,7 +544,8 @@ def test_generate_config_with_login_control_restricted(thandler):
         }
     )
 
-    cfg = thandler.generate_config('foo')
+    thandler._sync_clusters(['foo'])
+    cfg = thandler.public_store['foo', 'config.smb'].get()
     assert cfg
     assert cfg['shares']['Ess One']['options']
     shopts = cfg['shares']['Ess One']['options']

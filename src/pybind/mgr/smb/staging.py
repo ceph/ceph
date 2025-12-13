@@ -22,6 +22,7 @@ from .enums import (
     Intent,
     JoinSourceType,
     SMBClustering,
+    SourceReferenceType,
     State,
     UserGroupSourceType,
 )
@@ -342,6 +343,7 @@ def _check_share_resource(
             status={"cluster_id": share.cluster_id},
         )
     assert share.cephfs is not None
+
     try:
         volpath = path_resolver.resolve_exists(
             share.cephfs.volume,
@@ -353,42 +355,39 @@ def _check_share_resource(
         raise ErrorResult(
             share, msg="path is not a valid directory in volume"
         )
-    if earmark_resolver:
-        earmark = earmark_resolver.get_earmark(
+    earmark = earmark_resolver.get_earmark(
+        volpath,
+        share.cephfs.volume,
+    )
+    if not earmark:
+        smb_earmark = (
+            f"{EarmarkTopScope.SMB.value}.cluster.{share.cluster_id}"
+        )
+        earmark_resolver.set_earmark(
             volpath,
             share.cephfs.volume,
+            smb_earmark,
         )
-        if not earmark:
-            smb_earmark = (
-                f"{EarmarkTopScope.SMB.value}.cluster.{share.cluster_id}"
-            )
-            earmark_resolver.set_earmark(
-                volpath,
-                share.cephfs.volume,
-                smb_earmark,
-            )
-        else:
-            parsed_earmark = _parse_earmark(earmark)
+    else:
+        parsed_earmark = _parse_earmark(earmark)
 
-            # Check if the top-level scope is not SMB
-            if not earmark_resolver.check_earmark(
-                earmark, EarmarkTopScope.SMB
-            ):
-                raise ErrorResult(
-                    share,
-                    msg=f"earmark has already been set by {parsed_earmark['scope']}",
-                )
+        # Check if the top-level scope is not SMB
+        if not earmark_resolver.check_earmark(earmark, EarmarkTopScope.SMB):
+            raise ErrorResult(
+                share,
+                msg=f"earmark has already been set by {parsed_earmark['scope']}",
+            )
 
-            # Check if the earmark is set by a different cluster
-            if (
-                parsed_earmark['cluster_id']
-                and parsed_earmark['cluster_id'] != share.cluster_id
-            ):
-                raise ErrorResult(
-                    share,
-                    msg="earmark has already been set by smb cluster "
-                    f"{parsed_earmark['cluster_id']}",
-                )
+        # Check if the earmark is set by a different cluster
+        if (
+            parsed_earmark['cluster_id']
+            and parsed_earmark['cluster_id'] != share.cluster_id
+        ):
+            raise ErrorResult(
+                share,
+                msg="earmark has already been set by smb cluster "
+                f"{parsed_earmark['cluster_id']}",
+            )
 
     name_used_by = _share_name_in_use(staging, share)
     if name_used_by:
@@ -580,6 +579,31 @@ def _check_tls_credential_present(
             )
 
 
+@cross_check_resource.register
+def _check_external_ceph_cluster_resource(
+    ext_cluster: resources.ExternalCephCluster, staging: Staging, **_: Any
+) -> None:
+    """Check that the external ceph cluster resource is valid."""
+    if ext_cluster.intent == Intent.PRESENT:
+        return
+    cids = set(ClusterEntry.ids(staging))
+    refs_in_use: Dict[str, List[str]] = {}
+    for cluster_id in cids:
+        cluster = staging.get_cluster(cluster_id)
+        for ref in ext_cluster_refs(cluster):
+            refs_in_use.setdefault(ref, []).append(cluster_id)
+    log.debug('ext cluster refs in use: %r', refs_in_use)
+    my_id = ext_cluster.external_ceph_cluster_id
+    if my_id in refs_in_use:
+        raise ErrorResult(
+            ext_cluster,
+            msg='external ceph cluster resource in use by clusters',
+            status={
+                'clusters': refs_in_use[my_id],
+            },
+        )
+
+
 def _tls_ref(src: Optional[resources.TLSSource]) -> str:
     if src and src.source_type == UserGroupSourceType.RESOURCE and src.ref:
         return src.ref
@@ -598,6 +622,17 @@ def tls_refs(cluster: resources.Cluster) -> Collection[str]:
         )
     )
     return {ref for ref in refs if ref}
+
+
+def ext_cluster_refs(cluster: resources.Cluster) -> Collection[str]:
+    if (
+        cluster.external_ceph_cluster
+        and cluster.external_ceph_cluster.source_type
+        == SourceReferenceType.RESOURCE
+        and cluster.external_ceph_cluster.ref
+    ):
+        return [cluster.external_ceph_cluster.ref]
+    return []
 
 
 def _parse_earmark(earmark: str) -> dict:
