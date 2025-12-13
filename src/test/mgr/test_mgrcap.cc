@@ -299,3 +299,107 @@ TEST(MgrCap, Profile) {
   ASSERT_TRUE(cap.is_capable(nullptr, {}, "", "rbd_support", "", {}, true,
                              false, false, {}));
 }
+
+/* Begin Negative Tests */
+
+TEST(MgrCap, ParseEmptyString)
+{
+  MgrCap cap;
+  ASSERT_FALSE(cap.parse("", nullptr));
+  ASSERT_TRUE(cap.grants.empty());
+}
+
+TEST(MgrCap, ParseWhitespace) {
+  MgrCap cap;
+  ASSERT_FALSE(cap.parse("   ", nullptr));
+  ASSERT_TRUE(cap.grants.empty());
+}
+
+TEST(MgrCap, CommandEmptyName) {
+  MgrCap cap;
+  ASSERT_FALSE(cap.parse("allow command \"\"", nullptr));
+}
+
+TEST(MgrCap, ServiceEmptyName) {
+  MgrCap cap;
+  ASSERT_FALSE(cap.parse("allow service \"\" r", nullptr));
+}
+
+TEST(MgrCap, ModuleEmptyName) {
+  MgrCap cap;
+  ASSERT_FALSE(cap.parse("allow module \"\" r", nullptr));
+}
+
+TEST(MgrCap, InvalidNetworkCIDR) {
+  MgrCap cap;
+  ASSERT_TRUE(cap.parse("allow * network 999.999.999.999/33", nullptr));
+  /* 
+    Parser accepts doesn't evaluate semantics, maybe a problem later?
+    Both of these issues are ignored:
+      * 999 is out of  0 to 255 range
+      * /33 is out of /0 to /32 range
+  */
+}
+
+TEST(MgrCap, IsCapableEmptyCommand) {
+  MgrCap cap;
+  ASSERT_TRUE(cap.parse("allow command abc", nullptr));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "", "", {}, true, false, false,
+                              {}));
+}
+
+TEST(MgrCap, IsCapableEmptyModule) {
+  MgrCap cap;
+  ASSERT_TRUE(cap.parse("allow module xyz r", nullptr));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "", "", {}, true, false, false,
+                              {}));
+}
+
+TEST(MgrCap, IsCapableEmptyService) {
+  MgrCap cap;
+  ASSERT_TRUE(cap.parse("allow service foo r", nullptr));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "", "", {}, true, false, false,
+                              {}));
+}
+
+TEST(MgrCap, CommandEmptyArguments) {
+  MgrCap cap;
+  ASSERT_TRUE(cap.parse("allow command abc with arg=foo", nullptr));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "", "abc", {}, true, false,
+                              false, {}));
+}
+
+TEST(MgrCap, CommandMismatchedArguments) {
+  MgrCap cap;
+  ASSERT_TRUE(cap.parse("allow command abc with arg=foo arg2=bar", nullptr));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "", "abc", {{"arg", "foo"}},
+                              true, false, false, {}));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "", "abc",
+                              {{"arg", "wrong"}, {"arg2", "bar"}},
+                              true, false, false, {}));
+}
+
+TEST(MgrCap, RegexWithInvalidPattern) {
+  MgrCap cap;
+  // Invalid regex should be accepted during parse but fail during matching
+  ASSERT_TRUE(cap.parse("allow command abc with arg regex \"[*\"", nullptr));
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "", "abc", {{"arg", "test"}},
+                              true, false, false, {}));
+}
+
+TEST(MgrCap, PermissionsWithNoCapability) {
+  MgrCap cap;
+  ASSERT_TRUE(cap.parse("allow r", nullptr));
+  // Asking for write when only read is granted
+  ASSERT_FALSE(cap.is_capable(nullptr, {}, "", "", "", {}, false, true, false,
+                              {}));
+}
+
+TEST(MgrCap, ProfileInvalidParameters) {
+  MgrCap cap;
+  ASSERT_FALSE(cap.parse("profile rbd pool", nullptr));
+  ASSERT_FALSE(cap.parse("profile rbd pool=", nullptr));
+  ASSERT_FALSE(cap.parse("profile rbd =value", nullptr));
+}
+
+/* End Negative Tests */
