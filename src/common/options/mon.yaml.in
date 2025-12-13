@@ -668,6 +668,14 @@ options:
   - mon
   min: 2
   max: 4
+- name: mon_stretch_max_bucket_weight_delta
+  type: float
+  level: dev
+  desc: Max difference allowed between the CRUSH weight of buckets when in stretch mode.
+    The value is a fraction between 0 and 1.
+  default: 0.1
+  services:
+  - mon
 - name: mon_clock_drift_allowed
   type: float
   level: advanced

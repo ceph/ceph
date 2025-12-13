@@ -15536,23 +15536,26 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     return;
   }
   __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
-
-  int weight1 = crush.get_item_weight(subtrees[0]);
-  int weight2 = crush.get_item_weight(subtrees[1]);
-  if (weight1 != weight2) {
-    // TODO: I'm really not sure this is a good idea?
-    ss << "the 2 " << dividing_bucket
-       << "instances in the cluster have differing weights "
-       << weight1 << " and " << weight2
-       <<" but stretch mode currently requires they be the same!";
-    *errcode = -EINVAL;
-    ceph_assert(!commit || (weight1 == weight2));
-    return;
-  }
   if (bucket_count != 2) {
     ss << "currently we only support 2-site stretch clusters!";
     *errcode = -EINVAL;
     ceph_assert(!commit || bucket_count == 2);
+    return;
+  }
+  double stretch_max_weight_delta = g_conf().get_val<double>("mon_stretch_max_bucket_weight_delta");
+  int weight1 = crush.get_item_weight(subtrees[0]);
+  int weight2 = crush.get_item_weight(subtrees[1]);
+  bool exceed_threshold = abs(weight1 - weight2) >
+      (stretch_max_weight_delta * std::min(weight1, weight2));
+  if (exceed_threshold) {
+    ss << "the 2 " << dividing_bucket
+       << "instances in the cluster have differing weights "
+       << weight1 << " and " << weight2
+       << " but stretch mode currently" 
+       <<" requires the difference to be no greater than "
+       << stretch_max_weight_delta * 100 << "%";
+    *errcode = -EINVAL;
+    ceph_assert(!commit || !exceed_threshold);
     return;
   }
   // TODO: check CRUSH rules for pools so that we are appropriately divided
