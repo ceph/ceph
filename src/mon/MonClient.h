@@ -807,6 +807,12 @@ public:
     return std::forward<Callback>(cb)(monmap, std::forward<Args>(args)...);
   }
 
+  mon_feature_t get_monmap_required_features() {
+    return with_monmap([](const auto &monmap) {
+      return monmap.get_required_features();
+    });
+  }
+
   void register_config_callback(md_config_t::config_callback fn);
   void register_config_notify_callback(std::function<void(void)> f) {
     config_notify_cb = f;
