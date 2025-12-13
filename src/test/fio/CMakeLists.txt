@@ -1,3 +1,7 @@
+if(HAVE_PPC64LE)
+  add_compile_definitions(BITS_PER_LONG=64)
+endif()
+
 # ObjectStore
 add_library(fio_ceph_objectstore SHARED fio_ceph_objectstore.cc)
 target_link_libraries(fio_ceph_objectstore fio)
