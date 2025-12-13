@@ -305,6 +305,29 @@ Resume cephadm work by running the following command:
 
   ceph orch resume
 
+CEPHADM_HOST_PAUSED
+~~~~~~~~~~~~~~~~~~~
+
+This indicates that one or more hosts have been paused with
+``ceph orch host pause <hostname>``. When a host is paused, cephadm
+excludes it from all orchestrator operations and freezes
+any pending cephadm operations until the host is resumed. Existing
+daemons continue to run normally and serve client I/O operations.
+
+This feature is useful for temporarily isolating a host from cephadm's
+background management during troubleshooting or host-level work while
+keeping services operational. For example, ``ceph orch daemon restart osd.5``
+will not execute if the host containing ``osd.5`` is paused.
+
+This is similar to the ``ceph orch pause`` command but instead of pausing
+all orchestrator operations cluster-wide, it only affects the specific host.
+
+To resume orchestrator operations on a paused host:
+
+.. prompt:: bash #
+
+  ceph orch host resume <hostname>
+
 .. _cephadm-stray-host:
 
 CEPHADM_STRAY_HOST

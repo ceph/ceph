@@ -2310,6 +2310,20 @@ Usage:
         self.resume()
         return HandleCommandResult()
 
+    @_cli_write_command('orch pause host')
+    def _pause_host(self, hostname: str) -> HandleCommandResult:
+        """Pause orchestrator operations on a host"""
+        completion = self.pause_host(hostname)
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command('orch resume host')
+    def _resume_host(self, hostname: str) -> HandleCommandResult:
+        """Resume orchestrator operations on a host"""
+        completion = self.resume_host(hostname)
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_cli_write_command('orch unpause')
     def _unpause(self) -> HandleCommandResult:
         """Alias to orch resume"""
