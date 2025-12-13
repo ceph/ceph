@@ -103,3 +103,25 @@ options:
   - cephfs-mirror
   min: 0
   max: 11
+- name: cephfs_mirror_file_sync_thread
+  type: uint
+  level: advanced
+  desc: number of threads running for file transfers per peer
+  long_desc: number of threads running for file transfers per peer.
+    Each thread is responsible for transfering file.
+  default: 3
+  services:
+  - cephfs-mirror
+  min: 1
+  with_legacy: true
+- name: cephfs_mirror_dir_scanning_thread
+  type: uint
+  level: advanced
+  desc: number of threads running for concurrently scanning directory
+  long_desc: number of threads running associated for each sync.
+    Each thread is responsible for several libcephfs operations.
+  default: 3
+  services:
+  - cephfs-mirror
+  min: 1
+  with_legacy: true
