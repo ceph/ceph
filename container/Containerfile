@@ -46,6 +46,23 @@ CEPH_GIT_REPO=${CEPH_GIT_REPO} \
 GANESHA_REPO_BASEURL=${GANESHA_REPO_BASEURL} \
 OSD_FLAVOR=${OSD_FLAVOR}
 
+# Use bash so var setting works.
+SHELL ["/bin/bash", "-c"]
+
+# Derive EL_VER (el9/el10) and DIST_PATH (centos/9|rocky/10|almalinux/X)
+# from /etc/os-release for later use in repo URLs.
+RUN set -euo pipefail; \
+    source /etc/os-release; \
+    MAJOR="${VERSION_ID%%.*}"; \
+    case "${ID}" in \
+      centos)    DIST_PATH="centos/${MAJOR}" ;; \
+      rocky)     DIST_PATH="rocky/${MAJOR}" ;; \
+      almalinux) DIST_PATH="almalinux/${MAJOR}" ;; \
+      *) echo "Unsupported base: ID=${ID} VERSION_ID=${VERSION_ID}" >&2; exit 1 ;; \
+    esac; \
+    EL_VER="el${MAJOR}"; \
+    printf 'EL_VER=%s\nDIST_PATH=%s\nID=%s\nVERSION_ID=%s\nMAJOR=%s\n' \
+           "$EL_VER" "$DIST_PATH" "$ID" "$VERSION_ID" "$MAJOR" > /etc/ceph-distro.env
 
 #===================================================================================================
 # Install ceph and dependencies, and clean up
@@ -65,28 +82,37 @@ RUN \
 # Pre-reqs
 RUN dnf install -y --setopt=install_weak_deps=False epel-release jq
 
-# Add NFS-Ganesha repo
-RUN \
-    echo "[ganesha]" > /etc/yum.repos.d/ganesha.repo && \
-    echo "name=ganesha" >> /etc/yum.repos.d/ganesha.repo && \
-    echo "baseurl=${GANESHA_REPO_BASEURL}" >> /etc/yum.repos.d/ganesha.repo && \
-    echo "gpgcheck=0" >> /etc/yum.repos.d/ganesha.repo && \
-    echo "enabled=1" >> /etc/yum.repos.d/ganesha.repo
+# NFS-Ganesha repo
+RUN set -eux; \
+    source /etc/ceph-distro.env; \
+    if [[ "${DIST_PATH}" == rocky/* ]]; then \
+        curl -fs -L "https://shaman.ceph.com/api/repos/nfs-ganesha/main/latest/${DIST_PATH}/repo?arch=$(arch)" -o /etc/yum.repos.d/ganesha.repo; \
+    else \
+      { \
+        printf '%s\n' '[ganesha]'; \
+        printf '%s\n' 'name=ganesha'; \
+        printf '%s\n' "baseurl=${GANESHA_REPO_BASEURL}"; \
+        printf '%s\n' 'gpgcheck=0'; \
+        printf '%s\n' 'enabled=1'; \
+      } > /etc/yum.repos.d/ganesha.repo; \
+    fi
 
 # ISCSI repo
-RUN set -ex && \
-    curl -s -L https://shaman.ceph.com/api/repos/tcmu-runner/main/latest/centos/9/repo?arch=$(arch) -o /etc/yum.repos.d/tcmu-runner.repo && \
+RUN set -eux && \
+    source /etc/ceph-distro.env && \
+    curl -s -L https://shaman.ceph.com/api/repos/tcmu-runner/main/latest/${DIST_PATH}/repo?arch=$(arch) -o /etc/yum.repos.d/tcmu-runner.repo && \
     case "${CEPH_REF}" in \
         quincy|reef) \
-            curl -fs -L https://download.ceph.com/ceph-iscsi/3/rpm/el9/ceph-iscsi.repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
+            curl -fs -L https://download.ceph.com/ceph-iscsi/3/rpm/${EL_VER}/ceph-iscsi.repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
             ;;\
         main|*) \
-            curl -fs -L https://shaman.ceph.com/api/repos/ceph-iscsi/main/latest/centos/9/repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
+            curl -fs -L https://shaman.ceph.com/api/repos/ceph-iscsi/main/latest/${DIST_PATH}/repo -o /etc/yum.repos.d/ceph-iscsi.repo ;\
             ;;\
     esac
 
 # Ceph repo
 RUN --mount=type=secret,id=prerelease_creds set -ex && \
+    source /etc/ceph-distro.env && \
     if [ "$CUSTOM_CEPH_REPO_URL" ]; then \
         curl -L -o /tmp/custom-ceph.repo "$CUSTOM_CEPH_REPO_URL" && \
         mv /tmp/custom-ceph.repo  /etc/yum.repos.d/custom-ceph.repo && \
@@ -97,13 +123,13 @@ RUN --mount=type=secret,id=prerelease_creds set -ex && \
     IS_RELEASE=0 ;\
     if [[ "${CI_CONTAINER}" == "true" ]] ; then \
         # TODO: this can return different ceph builds (SHA1) for x86 vs. arm runs. is it important to fix?
-        REPO_URL=$(curl -fs "https://shaman.ceph.com/api/search/?project=ceph&distros=centos/9/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
+        REPO_URL=$(curl -fs "https://shaman.ceph.com/api/search/?project=ceph&distros=${DIST_PATH}/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
     else \
         IS_RELEASE=1 ;\
         source /run/secrets/prerelease_creds; \
-        REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/el9/" ;\
+        REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/${EL_VER}/" ;\
     fi && \
-    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.el9.noarch.rpm" ; \
+    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.${EL_VER}.noarch.rpm" ; \
     if [[ "$IS_RELEASE" == 1 ]] ; then \
         sed -i "s;http://download.ceph.com/;https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/;" /etc/yum.repos.d/ceph.repo ; \
         dnf clean expire-cache ; \
@@ -113,9 +139,12 @@ RUN --mount=type=secret,id=prerelease_creds set -ex && \
 # Copr repos
 # scikit for mgr-diskprediction-local
 # ref: https://github.com/ceph/ceph-container/pull/1821
-RUN \
-    dnf install -y --setopt=install_weak_deps=False dnf-plugins-core && \
-    dnf copr enable -y tchaikov/python-scikit-learn
+RUN set -euo pipefail; \
+    source /etc/ceph-distro.env; \
+    if [ "$MAJOR" -le 9 ]; then \
+        dnf install -y --setopt=install_weak_deps=False dnf-plugins-core && \
+        dnf copr enable -y tchaikov/python-scikit-learn; \
+    fi
 
 # Update package mgr
 RUN dnf update -y --setopt=install_weak_deps=False
@@ -151,7 +180,13 @@ rbd-mirror" \
 >> packages.txt
 
 # Ceph "Recommends"
-RUN echo "nvme-cli python3-saml smartmontools" >> packages.txt
+RUN set -euo pipefail; \
+    echo "nvme-cli smartmontools" >> packages.txt; \
+    source /etc/ceph-distro.env; \
+    if [ "$MAJOR" -le 9 ]; then \
+        echo "python3-saml" >> packages.txt; \
+    fi
+
 # NFS-Ganesha
 RUN echo "\
 dbus-daemon \
