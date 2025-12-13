@@ -235,13 +235,25 @@ groups:
           type: "ceph_default"
       - alert: "CephPGImbalance"
         annotations:
-          description: "OSD {{ $labels.ceph_daemon }} on {{ $labels.hostname }} deviates by more than 30% from average PG count."
+          description: "OSD {{ $labels.ceph_daemon }} on {{ $labels.hostname }} deviates by more than 30% from average PG count in the device class {{ $labels.device_class }}."
           summary: "PGs are not balanced across OSDs on cluster {{ $labels.cluster }}"
         expr: |
           abs(
-            ((ceph_osd_numpg > 0) - on (cluster,job) group_left avg(ceph_osd_numpg > 0) by (cluster,job)) /
-            on (job) group_left avg(ceph_osd_numpg > 0) by (job)
-          ) * on (cluster,ceph_daemon) group_left(hostname) ceph_osd_metadata > 0.30
+            (
+              (
+                (ceph_osd_numpg > 0)
+                * on (cluster, job, ceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+              )
+              - on (cluster, job, device_class) group_left avg(
+                  (ceph_osd_numpg > 0)
+                  * on (cluster, job, ceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+                ) by (cluster, job, device_class)
+            )
+            / on (cluster, job, device_class) group_left avg(
+                (ceph_osd_numpg > 0)
+                * on (cluster, job, ceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+              ) by (cluster, job, device_class)
+          ) > 0.30
         for: "5m"
         labels:
           oid: "1.3.6.1.4.1.50495.1.2.1.4.5"

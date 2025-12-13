@@ -176,35 +176,36 @@ tests:
       values: '100 100 100 100 100 160'
     - series: 'ceph_osd_numpg{ceph_daemon="osd.3",instance="ceph:9283",job="ceph",cluster="mycluster"}'
       values: '100 100 100 100 100 160'
-    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.0",ceph_version="ceph version 17.0.0-189-g3558fd72
-        (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
-        hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",public_addr="172.20.0.2",cluster="mycluster"}'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.0",device_class="hdd",hostname="ceph",instance="ceph:9283",job="ceph",cluster="mycluster"}'
       values: '1 1 1 1 1 1'
-    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.1",ceph_version="ceph version 17.0.0-189-g3558fd72
-        (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
-        hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",public_addr="172.20.0.2",cluster="mycluster"}'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.1",device_class="hdd",hostname="ceph",instance="ceph:9283",job="ceph",cluster="mycluster"}'
       values: '1 1 1 1 1 1'
-    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.2",ceph_version="ceph version 17.0.0-189-g3558fd72
-        (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
-        hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",public_addr="172.20.0.2",cluster="mycluster"}'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.2",device_class="hdd",hostname="ceph",instance="ceph:9283",job="ceph",cluster="mycluster"}'
       values: '1 1 1 1 1 1'
-    - series: 'ceph_osd_metadata{back_iface="eth0",ceph_daemon="osd.3",ceph_version="ceph version 17.0.0-189-g3558fd72
-        (3558fd7291855971aa6481a2ade468ad61fbb346) pacific (dev)",cluster_addr="172.20.0.2",device_class="hdd",front_iface="eth0",
-        hostname="ceph",instance="ceph:9283",job="ceph",objectstore="bluestore",public_addr="172.20.0.2",cluster="mycluster"}'
+    - series: 'ceph_osd_metadata{ceph_daemon="osd.3",device_class="hdd",hostname="ceph",instance="ceph:9283",job="ceph",cluster="mycluster"}'
       values: '1 1 1 1 1 1'
    promql_expr_test:
      - expr: |
          abs(
            (
-             (ceph_osd_numpg > 0) - on (job) group_left avg(ceph_osd_numpg > 0)
-             by (job)
-           ) / on (job) group_left avg(ceph_osd_numpg > 0) by (job)
-         ) * on(ceph_daemon) group_left(hostname) ceph_osd_metadata > 0.30
-
+             (
+               (ceph_osd_numpg > 0)
+               * on (cluster, job, ceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+             )
+             - on (cluster, job, device_class) group_left avg(
+                (ceph_osd_numpg > 0)
+                * on (cluster, job, ceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+              ) by (cluster, job, device_class)
+           )
+           / on (cluster, job, device_class) group_left avg(
+              (ceph_osd_numpg > 0)
+              * on (cluster, job, ceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+           ) by (cluster, job, device_class)
+          ) > 0.30
        eval_time: 5m
        exp_samples:
-         - labels: '{ceph_daemon="osd.1", hostname="ceph", instance="ceph:9283",job="ceph",cluster="mycluster"}'
-           value: 6E-01
+        - labels: '{ceph_daemon="osd.1", hostname="ceph", device_class="hdd", instance="ceph:9283", job="ceph", cluster="mycluster"}'
+          value: 0.60
    alert_rule_test:
      - eval_time: 10m
        alertname: CephPGImbalance
@@ -212,15 +213,16 @@ tests:
        - exp_labels:
            ceph_daemon: osd.1
            hostname: ceph
+           device_class: hdd
            instance: ceph:9283
            job: ceph
+           cluster: mycluster
            oid: 1.3.6.1.4.1.50495.1.2.1.4.5
            severity: warning
-           cluster: mycluster
            type: ceph_default
          exp_annotations:
            summary: PGs are not balanced across OSDs on cluster mycluster
-           description: "OSD osd.1 on ceph deviates by more than 30% from average PG count."
+           description: "OSD osd.1 on ceph deviates by more than 30% from average PG count in the device class hdd."
 
  # pgs inactive
  - interval: 1m
