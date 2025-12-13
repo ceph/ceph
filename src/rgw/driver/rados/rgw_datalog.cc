@@ -890,7 +890,7 @@ void RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
 				  const rgw::bucket_log_layout_generation& gen,
 				  int shard_id, asio::yield_context y)
 {
-  if (!log_data) {
+  if (!log_data || down_flag) {
     return;
   }
 
