@@ -26,6 +26,7 @@ namespace crimson::os::seastore::journal {
 class SegmentedJournal : public Journal {
 public:
   SegmentedJournal(
+      unsigned int store_index,
       SegmentProvider &segment_provider,
       JournalTrimmer &trimmer);
   ~SegmentedJournal() {}
@@ -73,6 +74,7 @@ private:
     OrderingHandle &handle,
     on_submission_func_t &&on_submission);
 
+  unsigned int store_index;
   SegmentSeqAllocatorRef segment_seq_allocator;
   SegmentAllocator journal_segment_allocator;
   RecordSubmitter record_submitter;

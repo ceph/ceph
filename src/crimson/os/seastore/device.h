@@ -90,15 +90,16 @@ class Device {
 public:
   virtual ~Device() {}
 
-  virtual seastar::future<> start() {
+  virtual seastar::future<> start(unsigned int shard_nums) {
     return seastar::now();
   }
 
   virtual seastar::future<> stop() {
     return seastar::now();
   }
+
   // called on the shard to get this shard device;
-  virtual Device& get_sharded_device() {
+  virtual Device& get_sharded_device(unsigned int store_index = 0) {
     return *this;
   }
 
@@ -165,6 +166,9 @@ public:
     ).safe_then([ptrref=std::move(ptrref)]() mutable {
       return read_ertr::make_ready_future<bufferptr>(std::move(*ptrref));
     });
+  }
+  virtual read_ertr::future<unsigned int> get_shard_nums() {
+    return read_ertr::make_ready_future<unsigned int>(seastar::smp::count);
   }
 };
 

@@ -289,7 +289,7 @@ public:
   // open for write, generate the correct print name, and register metrics
   using open_ertr = base_ertr;
   using open_ret = open_ertr::future<journal_seq_t>;
-  open_ret open(bool is_mkfs);
+  open_ret open(unsigned int store_index, bool is_mkfs);
 
   using close_ertr = base_ertr;
   close_ertr::future<> close();
