@@ -25,6 +25,7 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_request_uri
 .. confval:: rgw_print_continue
 .. confval:: rgw_remote_addr_param
+.. confval:: rgw_trusted_proxy_count
 .. confval:: rgw_op_thread_timeout
 .. confval:: rgw_op_thread_suicide_timeout
 .. confval:: rgw_thread_pool_size
