@@ -285,6 +285,166 @@ public:
   }
 
   template <typename T>
+  struct read_pin_t {
+    LBAMapping mapping;
+    const extent_len_t partial_off = 0;
+    const extent_len_t partial_len = 0;
+    read_pin_t(
+      LBAMapping mapping,
+      extent_len_t partial_off,
+      extent_len_t partial_len)
+    : mapping(std::move(mapping)),
+      partial_off(partial_off),
+      partial_len(partial_len) {}
+    maybe_indirect_extent_t<T> get_result() const {
+      bool is_clone = mapping.is_clone();
+      std::optional<indirect_info_t> maybe_indirect_info;
+      if (mapping.is_indirect()) {
+	auto intermediate_offset = mapping.get_intermediate_offset();
+	maybe_indirect_info = indirect_info_t{
+	  intermediate_offset, mapping.get_length()};
+      }
+      return maybe_indirect_extent_t<T>{
+	extent, std::move(maybe_indirect_info), is_clone};
+    }
+  private:
+    TCachedExtentRef<T> extent;
+    std::function<void (T &)> on_read;
+
+    inline extent_len_t maybe_get_direct_partial_off() const {
+      extent_len_t direct_partial_off = partial_off;
+      if (mapping.is_indirect()) {
+	auto intermediate_offset = mapping.get_intermediate_offset();
+	direct_partial_off = intermediate_offset + partial_off;
+      }
+      return direct_partial_off;
+    }
+    Cache::read_extent_t<T> get_read_extent_param(bool full_extent) const {
+      return Cache::read_extent_t<T>{
+	extent,
+	full_extent ? 0 : maybe_get_direct_partial_off(),
+	full_extent ? extent->get_length() : partial_len};
+    }
+    void read_succeeded() {
+      if (on_read) {
+	on_read(*extent);
+      }
+    }
+    friend class TransactionManager;
+  };
+  template <typename T, typename U>
+  requires std::is_base_of_v<read_pin_t<T>, U>
+  base_iertr::future<> read_pins(
+    Transaction &t,
+    std::vector<U> &pins,
+    lextent_init_func_t<T> maybe_init = [](T&) {})
+  {
+    LOG_PREFIX(TransactionManager::read_pins);
+    static_assert(is_logical_type(T::TYPE));
+    co_await trans_intr::parallel_for_each(
+      pins,
+      seastar::coroutine::lambda(
+	[this, &t, FNAME, maybe_init=std::move(maybe_init)](auto &pin)
+	-> get_child_iertr::future<> {
+	assert(is_aligned(pin.partial_off, get_block_size()));
+	assert(is_aligned(pin.partial_len, get_block_size()));
+	// must be user-oriented required by maybe_init
+	assert(is_user_transaction(t.get_src()));
+	if (pin.mapping.is_zero_reserved()) {
+	  co_return;
+	}
+
+	pin.mapping = co_await pin.mapping.refresh();
+	if (pin.mapping.is_indirect()) {
+	  pin.mapping = co_await lba_manager->complete_indirect_lba_mapping(
+	    t, std::move(pin.mapping));
+	}
+	SUBTRACET(seastore_tm, "{} {}~{}",
+	  t, pin.mapping, pin.partial_off, pin.partial_len);
+	auto ret = get_extent_if_linked<T>(t, pin.mapping);
+	if (ret.index() == 1) {
+	  auto extent = co_await std::move(std::get<1>(ret));
+	  pin.extent = std::move(extent);
+	  pin.on_read = [maybe_init=std::move(maybe_init)](auto &extent) {
+	    if (!extent.is_seen_by_users()) {
+	      maybe_init(extent);
+	      extent.set_seen_by_users();
+	    }
+	  };
+	  co_return;
+	} else {
+	  auto &r = std::get<0>(ret);
+	  pin.extent = cache->prepare_absent_extent<T>(
+	    t,
+	    pin.mapping.get_val(),
+	    pin.mapping.get_intermediate_length(),
+	    pin.maybe_get_direct_partial_off(),
+	    pin.partial_len,
+	    [laddr=pin.mapping.get_intermediate_base(),
+	     maybe_init=std::move(maybe_init),
+	     child_pos=std::move(r.child_pos),
+	     &t, this]
+	    (T &extent) mutable {
+	      assert(extent.is_logical());
+	      assert(!extent.has_laddr());
+	      assert(!extent.has_been_invalidated());
+	      child_pos.link_child(&extent);
+	      child_pos.invalidate_retired_placeholder(t, *cache, extent);
+	      extent.set_laddr(laddr);
+	      maybe_init(extent);
+	      extent.set_seen_by_users();
+	    });
+	  pin.on_read = [FNAME, &t, pin=pin.mapping, this](auto &ref) mutable {
+	    if (ref.is_fully_loaded()) {
+	      auto crc = ref.calc_crc32c();
+	      SUBTRACET(
+		seastore_tm,
+		"got extent -- {}, chksum in the lba tree: "
+		"0x{:x}, actual chksum: 0x{:x}",
+		t,
+		ref,
+		pin.get_checksum(),
+		crc);
+	      bool inconsistent = false;
+	      if (full_extent_integrity_check) {
+		inconsistent = (pin.get_checksum() != crc);
+	      } else { // !full_extent_integrity_check: remapped extent may be skipped
+		inconsistent = !(pin.get_checksum() == 0 ||
+				 pin.get_checksum() == crc);
+	      }
+	      if (unlikely(inconsistent)) {
+		SUBERRORT(seastore_tm,
+		  "extent checksum inconsistent, recorded:"
+		  " 0x{:x}, actual: 0x{:x}, {}",
+		  t,
+		  pin.get_checksum(),
+		  crc,
+		  ref);
+		ceph_abort();
+	      }
+	    } else {
+	      assert(!full_extent_integrity_check);
+	    }
+	  };
+	  co_return;
+	}
+      })
+    );
+    std::vector<Cache::read_extent_t<T>> extents;
+    for (auto &pin : pins) {
+      if (pin.mapping.is_zero_reserved()) {
+	continue;
+      }
+      extents.emplace_back(pin.get_read_extent_param(
+	full_extent_integrity_check));
+    }
+    co_await cache->read_extents_maybe_partial(t, std::move(extents));
+    for (auto &pin : pins) {
+      pin.read_succeeded();
+    }
+  }
+
+  template <typename T>
   base_iertr::future<maybe_indirect_extent_t<T>> read_pin(
     Transaction &t,
     LBAMapping pin,
