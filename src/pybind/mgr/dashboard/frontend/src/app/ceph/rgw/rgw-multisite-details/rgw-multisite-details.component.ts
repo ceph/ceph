@@ -189,9 +189,7 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
     const initialState = {
       multisiteInfo: this.multisiteInfo
     };
-    this.bsModalRef = this.modalService.show(RgwMultisiteImportComponent, initialState, {
-      size: 'lg'
-    });
+    this.cdsModalService.show(RgwMultisiteImportComponent, initialState);
   }
 
   openExportModal() {
