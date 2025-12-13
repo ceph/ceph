@@ -10,6 +10,8 @@ from mgr_util import CLIWarning
 from ..controllers.cephfs import CephFS
 from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi
+from ..controllers.nvmeof import NVMeoFGateway, NVMeoFHost, NVMeoFListener, \
+    NVMeoFNamespace, NVMeoFSubsystem
 from ..controllers.rbd import Rbd, RbdSnapshot, RbdTrash
 from ..controllers.rbd_mirroring import RbdMirroringPoolMode, \
     RbdMirroringPoolPeer, RbdMirroringSummary
@@ -26,6 +28,7 @@ class Features(Enum):
     CEPHFS = 'cephfs'
     RGW = 'rgw'
     NFS = 'nfs'
+    NVME_OF = 'nvmeof'
 
     # if we want to add any custom warning message when enabling a feature
     # we can add it here as key-value pair in warn_msg.
@@ -46,6 +49,10 @@ Feature2Controller = {
     Features.CEPHFS: [CephFS],
     Features.RGW: [Rgw, RgwDaemon, RgwBucket, RgwUser],
     Features.NFS: [NFSGaneshaUi, NFSGaneshaExports],
+    Features.NVME_OF: [
+        NVMeoFGateway, NVMeoFSubsystem, NVMeoFHost, NVMeoFNamespace,
+        NVMeoFListener
+    ],
 }
 
 
