@@ -8,6 +8,7 @@
 #include "DataGenerator.h"
 #include "IoOp.h"
 #include "common/ceph_json.h"
+#include "common/io_exerciser/IoSequence.h"
 #include "common/json/OSDStructures.h"
 #include "librados/librados_asio.h"
 
@@ -255,7 +256,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       ceph_assert(ec == boost::system::errc::success);
       for (int i = 0; i < N; i++) {
         ceph_assert(db->validate(op_info->bufferlist[i], op_info->offset[i],
-                                 op_info->length[i]));
+                                 op_info->length[i], pool, curseq, step));
       }
       finish_io();
     };
