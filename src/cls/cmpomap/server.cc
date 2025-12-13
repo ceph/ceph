@@ -291,12 +291,11 @@ CLS_INIT(cmpomap)
   cls_method_handle_t h_cmp_set_vals;
   cls_method_handle_t h_cmp_rm_keys;
 
-  cls_register("cmpomap", &h_class);
+  using namespace cls::cmpomap;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  cls_register_cxx_method(h_class, "cmp_vals", CLS_METHOD_RD,
-                          cmp_vals, &h_cmp_vals);
-  cls_register_cxx_method(h_class, "cmp_set_vals", CLS_METHOD_RD | CLS_METHOD_WR,
-                          cmp_set_vals, &h_cmp_set_vals);
-  cls_register_cxx_method(h_class, "cmp_rm_keys", CLS_METHOD_RD | CLS_METHOD_WR,
-                          cmp_rm_keys, &h_cmp_rm_keys);
+  cls.register_cxx_method(method::cmp_vals,     cmp_vals,     &h_cmp_vals);
+  cls.register_cxx_method(method::cmp_set_vals, cmp_set_vals, &h_cmp_set_vals);
+  cls.register_cxx_method(method::cmp_rm_keys,  cmp_rm_keys,  &h_cmp_rm_keys);
 }

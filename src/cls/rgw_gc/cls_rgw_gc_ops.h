@@ -4,6 +4,8 @@
 #pragma once
 
 #include "cls/rgw/cls_rgw_types.h"
+#include "cls_rgw_gc_const.h"
+#include "include/rados/cls_traits.h"
 
 struct cls_rgw_gc_queue_init_op {
   uint64_t size;
@@ -79,3 +81,16 @@ struct cls_rgw_gc_queue_defer_entry_op {
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_queue_defer_entry_op)
+
+namespace cls::rgw_gc {
+struct ClassId {
+  static constexpr auto name = RGW_GC_CLASS;
+};
+namespace method {
+constexpr auto init = ClsMethod<RdWrTag, ClassId>(RGW_GC_QUEUE_INIT);
+constexpr auto enqueue = ClsMethod<RdWrTag, ClassId>(RGW_GC_QUEUE_ENQUEUE);
+constexpr auto list_entries = ClsMethod<RdTag, ClassId>(RGW_GC_QUEUE_LIST_ENTRIES);
+constexpr auto remove_entries = ClsMethod<RdWrTag, ClassId>(RGW_GC_QUEUE_REMOVE_ENTRIES);
+constexpr auto update_entry = ClsMethod<RdWrTag, ClassId>(RGW_GC_QUEUE_UPDATE_ENTRY);
+}
+}

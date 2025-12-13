@@ -11,11 +11,14 @@
 #include "include/stringify.h"
 #include "include/utime.h"
 #include "msg/msg_types.h"
+#include "include/rados/cls_traits.h"
 #include <iosfwd>
 #include <map>
 #include <string>
 #include <set>
 #include <variant>
+
+#include "cls_rbd_ops.h"
 
 #define RBD_GROUP_REF "rbd_group_ref"
 
@@ -1034,6 +1037,7 @@ inline void decode(AssertSnapcSeqState &state, ceph::buffer::list::const_iterato
 std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state);
 
 void sanitize_entity_inst(entity_inst_t* entity_inst);
+
 
 } // namespace rbd
 } // namespace cls

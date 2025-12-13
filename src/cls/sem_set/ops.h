@@ -12,6 +12,7 @@
 #include <boost/container/flat_map.hpp>
 
 #include "include/encoding.h"
+#include "include/rados/cls_traits.h"
 
 namespace cls::sem_set {
 using namespace std::literals;
@@ -162,5 +163,15 @@ inline constexpr auto INCREMENT = "increment";
 inline constexpr auto DECREMENT = "decrement";
 inline constexpr auto RESET = "reset";
 inline constexpr auto LIST = "list";
+
+struct ClassId {
+  static constexpr auto name = CLASS;
+};
+namespace method {
+constexpr auto increment = ClsMethod<RdWrTag, ClassId>(INCREMENT);
+constexpr auto decrement = ClsMethod<RdWrTag, ClassId>(DECREMENT);
+constexpr auto reset = ClsMethod<RdWrTag, ClassId>(RESET);
+constexpr auto list = ClsMethod<RdTag, ClassId>(LIST);
+}
 
 } // namespace cls::sem_set

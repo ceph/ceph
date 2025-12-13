@@ -114,7 +114,7 @@ public:
     } else {
       expect_is_lock_owner(mock_image_ctx);
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                  exec_internal(mock_image_ctx.header_oid, _, StrEq("rbd"),
                        StrEq("set_size"), _, _, _, _))
                     .WillOnce(Return(r));
     }

@@ -12,6 +12,7 @@
 #include "common/Formatter.h"
 #include "include/encoding.h"
 #include "include/types.h"
+#include "include/rados/cls_traits.h"
 
 
 class JSONObj;
@@ -124,6 +125,5 @@ struct obj_version_cond {
   }
 };
 WRITE_CLASS_ENCODER(obj_version_cond)
-
 
 #endif
