@@ -126,4 +126,8 @@ export class CephfsService {
   getUsedPools(): Observable<number[]> {
     return this.http.get<number[]>(`${this.baseUiURL}/used-pools`);
   }
+
+  listPeersStatus(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUiURL}/mirror/peers-status`);
+  }
 }
