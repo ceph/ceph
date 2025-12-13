@@ -162,6 +162,7 @@ export interface PlacementTarget {
   tier_targets?: TierTarget[];
   data_pool?: string;
   placement_target?: string;
+  storage_classes?: string[];
 }
 
 export interface TierConfigRm {
@@ -190,6 +191,11 @@ export interface TextLabels {
   restoreDaysText: string;
   readthroughrestoreDaysText: string;
   restoreStorageClassText: string;
+}
+
+export interface ZoneItem {
+  value?: string;
+  content?: string;
 }
 
 export const CLOUD_TIER_REQUIRED_FIELDS = [
