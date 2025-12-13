@@ -132,11 +132,11 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
         [host]).stdout == f"Created osd(s) 1 on host '{host}'"
     assert _run_cephadm.mock_calls == [
         mock.call(host, 'osd', 'ceph-volume',
-                  ['--', 'lvm', 'list', '--format', 'json'],
+                  ['--', '--log-level', 'debug', 'lvm', 'list', '--format', 'json'],
                   no_fsid=False, error_ok=False, image='', log_output=True, use_current_daemon_image=False),
         mock.call(host, f'osd.{osd_id}', ['_orch', 'deploy'], [], stdin=mock.ANY, error_ok=True, use_current_daemon_image=False),
         mock.call(host, 'osd', 'ceph-volume',
-                  ['--', 'raw', 'list', '--format', 'json'],
+                  ['--', '--log-level', 'debug', 'raw', 'list', '--format', 'json'],
                   no_fsid=False, error_ok=False, image='', log_output=True, use_current_daemon_image=False),
     ]
     dd = cephadm_module.cache.get_daemon(f'osd.{osd_id}', host=host)
@@ -1131,16 +1131,16 @@ class TestCephadm(object):
 
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
-                ['--config-json', '-', '--', 'lvm', 'batch',
+                ['--config-json', '-', '--', '--log-level', 'debug', 'lvm', 'batch',
                     '--no-auto', '/dev/sdb', '--objectstore', 'bluestore', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True,
                 stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'],
+                'test', 'osd', 'ceph-volume', ['--', '--log-level', 'debug', 'lvm', 'list', '--format', 'json'],
                 image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
             )
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'],
+                'test', 'osd', 'ceph-volume', ['--', '--log-level', 'debug', 'raw', 'list', '--format', 'json'],
                 image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
             )
 
@@ -1176,18 +1176,18 @@ class TestCephadm(object):
 
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
-                ['--config-json', '-', '--', 'lvm', 'batch',
+                ['--config-json', '-', '--', '--log-level', 'debug', 'lvm', 'batch',
                     '--no-auto', '/dev/sdb', '--db-devices', '/dev/sdc',
                     '--wal-devices', '/dev/sdd', '--objectstore', 'bluestore', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=noncollocated'],
                 error_ok=True, stdin='{"config": "", "keyring": ""}',
             )
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'],
+                'test', 'osd', 'ceph-volume', ['--', '--log-level', 'debug', 'lvm', 'list', '--format', 'json'],
                 image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
             )
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'],
+                'test', 'osd', 'ceph-volume', ['--', '--log-level', 'debug', 'raw', 'list', '--format', 'json'],
                 image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
             )
 
@@ -2332,10 +2332,10 @@ Traceback (most recent call last):
 
             assert _run_cephadm.mock_calls == [
                 mock.call('test', 'osd', 'ceph-volume',
-                          ['--', 'inventory', '--format=json-pretty', '--filter-for-batch'], image='',
+                          ['--', '--log-level', 'debug', 'inventory', '--format=json-pretty', '--filter-for-batch'], image='',
                           no_fsid=False, error_ok=False, log_output=False, use_current_daemon_image=False),
                 mock.call('test', 'osd', 'ceph-volume',
-                          ['--', 'inventory', '--format=json-pretty'], image='',
+                          ['--', '--log-level', 'debug', 'inventory', '--format=json-pretty'], image='',
                           no_fsid=False, error_ok=False, log_output=False, use_current_daemon_image=False),
             ]
 
