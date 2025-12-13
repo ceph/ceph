@@ -26,7 +26,7 @@ describe('Muti-cluster management page', () => {
   });
 
   it('should edit the second cluster', () => {
-    multiCluster.edit(alias, editedAlias);
+    multiCluster.edit(alias, editedAlias, password);
     multiCluster.existTableCell(editedAlias);
   });
 

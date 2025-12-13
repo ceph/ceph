@@ -39,7 +39,11 @@ export enum URLVerbs {
   EXPIRE = 'expire',
 
   /* Daemons */
-  RESTART = 'Restart'
+  RESTART = 'Restart',
+
+  /* Multi-cluster */
+  CONNECT = 'connect',
+  RECONNECT = 'reconnect'
 }
 
 export enum ActionLabels {
@@ -78,7 +82,11 @@ export enum ActionLabels {
   START = 'Start',
   STOP = 'Stop',
   REDEPLOY = 'Redeploy',
-  RESTART = 'Restart'
+  RESTART = 'Restart',
+
+  /* Multi-cluster */
+  CONNECT = 'connect',
+  RECONNECT = 'reconnect'
 }
 
 @Injectable({
