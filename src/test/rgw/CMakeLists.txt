@@ -350,6 +350,59 @@ target_link_libraries(unittest_log_backing
   ${rgw_libs})
 endif()
 
+# Adding the usage cache unit test
+if(WITH_TESTS)
+
+  add_executable(unittest_rgw_usage_cache test_rgw_usage_cache.cc)
+
+  target_include_directories(unittest_rgw_usage_cache PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/rgw
+    ${LMDB_INCLUDE_DIR}
+  )
+
+  target_link_libraries(unittest_rgw_usage_cache
+    rgw_common
+    global
+    gtest
+    gtest_main
+    gmock_main
+    gmock
+    ${LMDB_LIBRARIES}
+    ceph-common
+    ${CMAKE_DL_LIBS}
+  )
+
+  add_ceph_unittest(unittest_rgw_usage_cache)
+
+# Test for usage perf counters  
+add_executable(unittest_rgw_usage_perf_counters
+                test_rgw_usage_perf_counters.cc
+                ${CMAKE_SOURCE_DIR}/src/rgw/rgw_usage_cache.cc
+                ${CMAKE_SOURCE_DIR}/src/rgw/rgw_usage_perf.cc)
+
+target_include_directories(unittest_rgw_usage_perf_counters PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/rgw
+  ${CMAKE_SOURCE_DIR}/src/rgw/services
+  ${CMAKE_SOURCE_DIR}/src/rgw/driver/rados
+  ${CMAKE_SOURCE_DIR}/src/rgw/store/rados
+  ${CMAKE_SOURCE_DIR}/src/dmclock/support/src
+  ${CMAKE_SOURCE_DIR}/src/dmclock/src
+  ${LUA_INCLUDE_DIR}
+)
+
+target_link_libraries(unittest_rgw_usage_perf_counters
+                      rgw_common
+                      ${rgw_libs}
+                      ${UNITTEST_LIBS}
+                      global
+                      ceph-common
+                      lmdb
+                      ${LUA_LIBRARIES})
+
+add_ceph_unittest(unittest_rgw_usage_perf_counters)
+endif()
+
 if(WITH_RADOSGW_RADOS)
 add_executable(unittest_rgw_lua test_rgw_lua.cc)
 add_ceph_unittest(unittest_rgw_lua)
