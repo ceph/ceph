@@ -77,6 +77,12 @@ class LazyOmapStatsTest
       std::string&& command = R"({"prefix": "pg dump"})",
       const bool silent = false,
       const CommandTarget target = CommandTarget::TARGET_MGR);
+  const std::string get_output(
+      const std::string& command,
+      const bool silent = false,
+      const CommandTarget target = CommandTarget::TARGET_MGR) {
+    return get_output(std::string(command), silent, target);  // delegate to rvalue version
+  }
   void get_pool_id(const std::string& pool);
   std::map<std::string, std::string> get_scrub_stamps();
   void wait_for_active_clean();
