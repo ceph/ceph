@@ -17,6 +17,7 @@
 #include "common/debug.h"
 #include "include/intarith.h"
 #include "os/bluestore/bluestore_types.h"
+#include "os/bluestore/BlueStore_objects.h"
 
 std::ostream& operator<<(std::ostream& out, const BlueStore::Writer::blob_data_printer& printer)
 {
@@ -114,8 +115,8 @@ BlueStore::extent_map_t::iterator BlueStore::_punch_hole_2(
 /// Collects allocation units that became unused into *released_disk.
 /// Returns:
 ///   disk space size to release
-uint32_t BlueStore::Blob::put_ref_accumulate(
-  Collection *coll,
+uint32_t bluestore::Blob::put_ref_accumulate(
+  BlueStore::Collection *coll,
   uint32_t offset,
   uint32_t length,
   PExtentVector *released_disk)
@@ -131,7 +132,7 @@ uint32_t BlueStore::Blob::put_ref_accumulate(
   return res;
 }
 
-inline void BlueStore::Blob::add_tail(
+inline void bluestore::Blob::add_tail(
   uint32_t new_blob_size,
   uint32_t min_release_size)
 {
