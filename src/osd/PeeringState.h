@@ -1711,6 +1711,7 @@ private:
     std::vector<int> *want,
     std::set<pg_shard_t> *backfill,
     std::set<pg_shard_t> *acting_backfill,
+    const OSDMapRef osdmap,
     std::ostream &ss);
 
   static std::pair<std::map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
