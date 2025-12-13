@@ -23,34 +23,34 @@ TEST(WorkQueue, StartStop)
 
 TEST(WorkQueue, Resize)
 {
-  ThreadPool tp(g_ceph_context, "bar", "tp_bar", 2, "filestore_op_threads");
+  ThreadPool tp(g_ceph_context, "bar", "tp_bar", 2, "osd_op_num_threads_per_shard");
   
   tp.start();
 
   sleep(1);
   ASSERT_EQ(2, tp.get_num_threads());
 
-  g_conf().set_val("filestore op threads", "5");
+  g_conf().set_val("osd_op_num_threads_per_shard", "5");
   g_conf().apply_changes(&cout);
   sleep(1);
   ASSERT_EQ(5, tp.get_num_threads());
 
-  g_conf().set_val("filestore op threads", "3");
+  g_conf().set_val("osd_op_num_threads_per_shard", "3");
   g_conf().apply_changes(&cout);
   sleep(1);
   ASSERT_EQ(3, tp.get_num_threads());
 
-  g_conf().set_val("filestore op threads", "0");
+  g_conf().set_val("osd_op_num_threads_per_shard", "0");
   g_conf().apply_changes(&cout);
   sleep(1);
   ASSERT_EQ(0, tp.get_num_threads());
 
-  g_conf().set_val("filestore op threads", "15");
+  g_conf().set_val("osd_op_num_threads_per_shard", "15");
   g_conf().apply_changes(&cout);
   sleep(1);
   ASSERT_EQ(15, tp.get_num_threads());
 
-  g_conf().set_val("filestore op threads", "-1");
+  g_conf().set_val("osd_op_num_threads_per_shard", "-1");
   g_conf().apply_changes(&cout);
   sleep(1);
   ASSERT_EQ(15, tp.get_num_threads());
@@ -85,7 +85,7 @@ public:
 };
 
 TEST(WorkQueue, change_timeout){
-    ThreadPool tp(g_ceph_context, "bar", "tp_bar", 2, "filestore_op_threads");
+    ThreadPool tp(g_ceph_context, "bar", "tp_bar", 2, "osd_op_num_threads_per_shard");
     tp.start();
     twq wq(2, 20, &tp);
     // check timeout and suicide
