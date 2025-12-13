@@ -3,8 +3,6 @@ import yaml
 
 from ceph.deployment.inventory import Device
 from ceph.deployment.service_spec import (  # noqa: F401 (type comments)
-    CustomConfig,
-    GeneralArgList,
     PlacementSpec,
     ServiceSpec,
 )
@@ -194,29 +192,17 @@ class DriveGroupSpec(ServiceSpec):
                  block_wal_size=None,  # type: Union[int, str, None]
                  journal_size=None,  # type: Union[int, str, None]
                  service_type=None,  # type: Optional[str]
-                 unmanaged=False,  # type: bool
                  filter_logic='AND',  # type: str
-                 preview_only=False,  # type: bool
-                 extra_container_args: Optional[GeneralArgList] = None,
-                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  data_allocate_fraction=None,  # type: Optional[float]
                  method=None,  # type: Optional[OSDMethod]
-                 config=None,  # type: Optional[Dict[str, str]]
-                 custom_configs=None,  # type: Optional[List[CustomConfig]]
                  crush_device_class=None,  # type: Optional[str]
-                 termination_grace_period_seconds: Optional[int] = 30,
+                 **svc_spec_kwargs: Any
                  ):
         assert service_type is None or service_type == 'osd'
-        super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
+        super(DriveGroupSpec, self).__init__('osd',
                                              placement=placement,
-                                             config=config,
-                                             unmanaged=unmanaged,
-                                             preview_only=preview_only,
-                                             extra_container_args=extra_container_args,
-                                             extra_entrypoint_args=extra_entrypoint_args,
-                                             custom_configs=custom_configs,
-                                             termination_grace_period_seconds=(
-                                                 termination_grace_period_seconds))
+                                             service_id=service_id,
+                                             **svc_spec_kwargs)
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
         self.data_devices = data_devices
@@ -269,9 +255,6 @@ class DriveGroupSpec(ServiceSpec):
         #: The logic gate we use to match disks with filters.
         #: defaults to 'AND'
         self.filter_logic = filter_logic.upper()
-
-        #: If this should be treated as a 'preview' spec
-        self.preview_only = preview_only
 
         #: Allocate a fraction of the data device (0,1.0]
         self.data_allocate_fraction = data_allocate_fraction
