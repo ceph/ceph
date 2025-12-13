@@ -744,7 +744,6 @@ export class RbdFormComponent extends CdForm implements OnInit {
         namespace: request.namespace,
         image_name: request.name,
         schedule_interval: request.schedule_interval,
-        start_time: request.start_time,
         mirror_mode: request.mirror_mode
       }),
       call: this.rbdService.create(request)

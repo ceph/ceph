@@ -4,15 +4,13 @@ import rados
 import rbd
 import re
 
-from dateutil.parser import parse
-from typing import cast, Any, Callable, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING
 
 from .common import get_rbd_pools
 if TYPE_CHECKING:
     from .module import Module
 
 SCHEDULE_INTERVAL = "interval"
-SCHEDULE_START_TIME = "start_time"
 
 
 class LevelSpec:
@@ -267,67 +265,26 @@ class Interval:
         return Interval(minutes)
 
 
-class StartTime:
-
-    def __init__(self,
-                 hour: int,
-                 minute: int,
-                 tzinfo: Optional[datetime.tzinfo]) -> None:
-        self.time = datetime.time(hour, minute, tzinfo=tzinfo)
-        self.minutes = self.time.hour * 60 + self.time.minute
-        if self.time.tzinfo:
-            utcoffset = cast(datetime.timedelta, self.time.utcoffset())
-            self.minutes += int(utcoffset.seconds / 60)
-
-    def __eq__(self, start_time: Any) -> bool:
-        return self.minutes == start_time.minutes
-
-    def __hash__(self) -> int:
-        return hash(self.minutes)
-
-    def to_string(self) -> str:
-        return self.time.isoformat()
-
-    @classmethod
-    def from_string(cls, start_time: Optional[str]) -> Optional['StartTime']:
-        if not start_time:
-            return None
-
-        try:
-            t = parse(start_time).timetz()
-        except ValueError as e:
-            raise ValueError("Invalid start time {}: {}".format(start_time, e))
-
-        return StartTime(t.hour, t.minute, tzinfo=t.tzinfo)
-
-
 class Schedule:
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self.items: Set[Tuple[Interval, Optional[StartTime]]] = set()
+        self.intervals: Set[Interval] = set()
 
     def __len__(self) -> int:
-        return len(self.items)
+        return len(self.intervals)
 
-    def add(self,
-            interval: Interval,
-            start_time: Optional[StartTime] = None) -> None:
-        self.items.add((interval, start_time))
+    def add(self, interval: Interval) -> None:
+        self.intervals.add(interval)
 
-    def remove(self,
-               interval: Interval,
-               start_time: Optional[StartTime] = None) -> None:
-        self.items.discard((interval, start_time))
+    def remove(self, interval: Interval) -> None:
+        self.intervals.discard(interval)
 
     def next_run(self, now: datetime.datetime) -> str:
         schedule_time = None
-        for interval, opt_start in self.items:
+        for interval in self.intervals:
             period = datetime.timedelta(minutes=interval.minutes)
             start_time = datetime.datetime(1970, 1, 1)
-            if opt_start:
-                start = cast(StartTime, opt_start)
-                start_time += datetime.timedelta(minutes=start.minutes)
             time = start_time + \
                 (int((now - start_time) / period) + 1) * period
             if schedule_time is None or time < schedule_time:
@@ -336,17 +293,9 @@ class Schedule:
             raise ValueError('no items is added')
         return datetime.datetime.strftime(schedule_time, "%Y-%m-%d %H:%M:00")
 
-    def to_list(self) -> List[Dict[str, Optional[str]]]:
-        def item_to_dict(interval: Interval,
-                         start_time: Optional[StartTime]) -> Dict[str, Optional[str]]:
-            if start_time:
-                schedule_start_time: Optional[str] = start_time.to_string()
-            else:
-                schedule_start_time = None
-            return {SCHEDULE_INTERVAL: interval.to_string(),
-                    SCHEDULE_START_TIME: schedule_start_time}
-        return [item_to_dict(interval, start_time)
-                for interval, start_time in self.items]
+    def to_list(self) -> List[Dict[str, str]]:
+        return [{SCHEDULE_INTERVAL: interval.to_string()}
+                for interval in self.intervals]
 
     def to_json(self) -> str:
         return json.dumps(self.to_list(), indent=4, sort_keys=True)
@@ -358,9 +307,7 @@ class Schedule:
             schedule = Schedule(name)
             for item in items:
                 interval = Interval.from_string(item[SCHEDULE_INTERVAL])
-                start_time = item[SCHEDULE_START_TIME] and \
-                    StartTime.from_string(item[SCHEDULE_START_TIME]) or None
-                schedule.add(interval, start_time)
+                schedule.add(interval)
             return schedule
         except json.JSONDecodeError as e:
             raise ValueError("Invalid JSON ({})".format(str(e)))
@@ -497,32 +444,26 @@ class Schedules:
                     ioctx.remove_omap_keys(write_op, (level_spec.id, ))
                 ioctx.operate_write_op(write_op, self.handler.SCHEDULE_OID)
 
-    def add(self,
-            level_spec: LevelSpec,
-            interval: str,
-            start_time: Optional[str]) -> None:
+    def add(self, level_spec: LevelSpec, interval: str) -> None:
         schedule = self.schedules.get(level_spec.id, Schedule(level_spec.name))
-        schedule.add(Interval.from_string(interval),
-                     StartTime.from_string(start_time))
+        schedule.add(Interval.from_string(interval))
         self.schedules[level_spec.id] = schedule
         self.level_specs[level_spec.id] = level_spec
         self.save(level_spec, schedule)
 
     def remove(self,
                level_spec: LevelSpec,
-               interval_str: Optional[str],
-               start_time_str: Optional[str]) -> None:
+               interval_str: Optional[str]) -> None:
         # from_string() may raise, so call it before popping the schedule (and
         # unconditionally to ensure that invalid interval or start time always
         # leads to an error)
         interval = Interval.from_string(interval_str) if interval_str else None
-        start_time = StartTime.from_string(start_time_str)
         schedule = self.schedules.pop(level_spec.id, None)
         if schedule:
             if interval is None:
                 schedule = None
             else:
-                schedule.remove(interval, start_time)
+                schedule.remove(interval)
                 if schedule:
                     self.schedules[level_spec.id] = schedule
             if not schedule:
