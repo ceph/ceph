@@ -176,10 +176,20 @@ public:
     void decode_json(JSONObj *obj);
   };
 
+  class ApplicationCredential {
+  public:
+    ApplicationCredential() : restricted(false) { }
+    std::string id;
+    std::string name;
+    bool restricted;
+    void decode_json(JSONObj *obj);
+  };
+
   Token token;
   Project project;
   User user;
   std::list<Role> roles;
+  std::optional<ApplicationCredential> app_cred;
 
   void decode(JSONObj* obj);
 
