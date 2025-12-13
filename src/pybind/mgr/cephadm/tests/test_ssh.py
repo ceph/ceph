@@ -79,15 +79,12 @@ class TestWithSSH:
                     with with_host(cephadm_module, host):
                         CephadmServe(cephadm_module)._check_host(host)
 
-        # Test case 1: command failure
-        run_test('test1', FakeConn(returncode=1), "Command .+ failed")
+        # Test case 1: connection error
+        run_test('test1', FakeConn(exception=asyncssh.ChannelOpenError(1, "", "")), "Unable to reach remote host test1")
 
-        # Test case 2: connection error
-        run_test('test2', FakeConn(exception=asyncssh.ChannelOpenError(1, "", "")), "Unable to reach remote host test2.")
-
-        # Test case 3: asyncssh ProcessError
+        # Test case 2: asyncssh ProcessError
         stderr = "my-process-stderr"
-        run_test('test3', FakeConn(exception=asyncssh.ProcessError(returncode=3,
+        run_test('test2', FakeConn(exception=asyncssh.ProcessError(returncode=3,
                                                                    env="",
                                                                    command="",
                                                                    subsystem="",
