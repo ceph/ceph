@@ -8357,8 +8357,8 @@ next:
 
     int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
-      ldpp_dout(dpp(), 0) << "ERROR: could not init bucket: " << cpp_strerror(-ret) <<
-	dendl;
+      ldpp_dout(dpp(), 0) << "ERROR: could not init bucket: " <<
+	cpp_strerror(-ret) << dendl;
       return -ret;
     }
 
@@ -8370,42 +8370,49 @@ next:
       max_entries = 1000;
     }
 
-    ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": max_entries=" << max_entries <<
-      ", index=" << index << ", max_shards=" << max_shards << dendl;
+    ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": max_entries=" <<
+      max_entries << ", index=" << index << ", max_shards=" << max_shards <<
+      dendl;
 
     formatter->open_array_section("entries");
 
+    auto rados = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
     int i = (specified_shard_id ? shard_id : 0);
     for (; i < max_shards; i++) {
-      ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": starting shard=" << i << dendl;
+      ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": starting shard=" <<
+	i << dendl;
       marker.clear();
 
-      RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(driver)->getRados());
+      RGWRados::BucketShard bs(rados);
       int ret = bs.init(dpp(), bucket->get_info(), index, i, null_yield);
       if (ret < 0) {
-	ldpp_dout(dpp(), 0) << "ERROR: bs.init(bucket=" << bucket << ", shard=" << i <<
-	  "): " << cpp_strerror(-ret) << dendl;
+	ldpp_dout(dpp(), 0) << "ERROR: bs.init(bucket=" << bucket <<
+	  ", shard=" << i << "): " << cpp_strerror(-ret) << dendl;
         return -ret;
       }
 
       do {
         entries.clear();
-	// if object is specified, we use that as a filter to only retrieve some entries
-        ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bi_list(bs, object, marker, max_entries, &entries, &is_truncated, false, null_yield);
+	// if object is specified, we use that as a filter to only
+	// retrieve some entries
+        ret = rados->bi_list(bs, object, marker, max_entries, &entries,
+			     &is_truncated, false, null_yield);
         if (ret < 0) {
-          ldpp_dout(dpp(), 0) << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
+          ldpp_dout(dpp(), 0) << "ERROR: bi_list(): " <<
+	    cpp_strerror(-ret) << dendl;
           return -ret;
         }
-	ldpp_dout(dpp(), 20) << "INFO: " << __func__ <<
-	  ": bi_list() returned without error; entries.size()=" <<
-	  entries.size() << ", is_truncated=" << is_truncated <<
-	  ", marker=" << marker << dendl;
 
 	for (const auto& entry : entries) {
           encode_json("entry", entry, formatter.get());
           marker = entry.idx;
         }
         formatter->flush(cout);
+
+	ldpp_dout(dpp(), 20) << "INFO: " << __func__ <<
+	  ": bi_list() returned without error; entries.size()=" <<
+	  entries.size() << ", is_truncated=" << is_truncated <<
+	  ", next_marker=" << marker << dendl;
       } while (is_truncated);
 
       formatter->flush(cout);
