@@ -1000,6 +1000,28 @@ TRACEPOINT_EVENT(librados, rados_read_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_get_object_osd_position_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        int*, acting_primary),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer(int, acting_primary, acting_primary)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_get_object_osd_position_exit,
+    TP_ARGS(
+        int, ret,
+        int*, acting_primary),
+    TP_FIELDS(
+        ctf_integer(int, ret, ret)
+        ctf_integer(int, acting_primary, acting_primary)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_checksum_enter,
     TP_ARGS(
         rados_ioctx_t, ioctx,
