@@ -15,11 +15,7 @@
 #include <shared_mutex>
 #include <boost/circular_buffer.hpp>
 
-#define SSTR(o) ({      \
-  std::stringstream ss; \
-  ss << o;              \
-  ss.str();             \
-})
+#define SSTR(o) ((std::ostringstream{} << o).str())
 
 #define RGW_SNS_FLAG_ACTIVE   1
 #define RGW_SNS_FLAG_ERROR    2
