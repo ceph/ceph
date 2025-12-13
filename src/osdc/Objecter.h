@@ -3243,8 +3243,9 @@ public:
   }
 
   // caller owns a ref
-  LingerOp *linger_register(const object_t& oid, const object_locator_t& oloc,
-			    int flags);
+  auto linger_register(const object_t& oid, const object_locator_t& oloc,
+		       int flags)
+      -> boost::intrusive_ptr<LingerOp>;
   ceph_tid_t linger_watch(LingerOp *info,
 			  ObjectOperation& op,
 			  const SnapContext& snapc, ceph::real_time mtime,
