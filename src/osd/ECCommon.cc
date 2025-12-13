@@ -500,6 +500,9 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   std::optional<ECSubRead> local_read_op;
   std::vector<std::pair<int, Message*>> m;
   m.reserve(messages.size());
+  std::pair<int, int> subchunk_info =
+    std::make_pair(ec_impl->get_sub_chunk_count(),
+      sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count());
   for (auto &&[pg_shard, read]: messages) {
     rop.in_progress.insert(pg_shard);
     shard_to_read_map[pg_shard].insert(rop.tid);
@@ -523,6 +526,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       msg->trace.init("ec sub read", nullptr, &rop.trace);
       msg->trace.keyval("shard", pg_shard.shard.id);
     }
+    msg->compute_cost(cct, subchunk_info);
     m.push_back(std::make_pair(pg_shard.osd, msg));
     dout(10) << __func__ << ": will send msg " << *msg
              << " to osd." << pg_shard << dendl;
@@ -825,7 +829,15 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     op.hoid,
     op.delta_stats);
 
-  shard_id_map<ObjectStore::Transaction> trans(sinfo.get_k_plus_m());
+  /**
+   * Map to hold the shard specific transactions. The second member
+   * of the pair is used to store the cost of each shard transaction.
+   * This is used later below when creating the subOpWrites messages.
+   * The cost is used to make scheduling decisions by the mClock
+   * scheduler on the target OSD.
+   */
+  shard_id_map<
+    pair<ObjectStore::Transaction, uint64_t> > trans(sinfo.get_k_plus_m());
   for (auto &&shard: get_parent()->
        get_acting_recovery_backfill_shard_id_set()) {
     trans[shard];
@@ -859,7 +871,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     oid_to_version[op.hoid] = op.version;
   }
   for (auto &&pg_shard: get_parent()->get_acting_recovery_backfill_shards()) {
-    ObjectStore::Transaction &transaction = trans.at(pg_shard.shard);
+    ObjectStore::Transaction &transaction = trans.at(pg_shard.shard).first;
     shard_id_t shard = pg_shard.shard;
     if (transaction.empty()) {
       dout(20) << __func__ << " Transaction for osd." << pg_shard.osd << " shard " << shard << " is empty" << dendl;
@@ -934,6 +946,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, pg_shard.shard);
       r->map_epoch = get_osdmap_epoch();
       r->min_epoch = get_parent()->get_interval_start_epoch();
+      r->set_cost(cct, trans.at(shard).second);
       r->trace = trace;
       messages.push_back(std::make_pair(pg_shard.osd, r));
     }
@@ -970,7 +983,7 @@ struct ECDummyOp final : ECCommon::RMWPipeline::Op {
       pg_t pgid,
       const ECUtil::stripe_info_t &sinfo,
       map<hobject_t, ECUtil::shard_extent_map_t> *written,
-      shard_id_map<ObjectStore::Transaction> *transactions,
+      shard_id_map<pair<ObjectStore::Transaction, uint64_t> > *transactions,
       DoutPrefixProvider *dpp,
       const OSDMapRef &osdmap
     ) override {
