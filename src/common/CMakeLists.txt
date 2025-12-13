@@ -94,6 +94,7 @@ set(common_srcs
   perf_counters_key.cc
   perf_histogram.cc
   pick_address.cc
+  prime.cc
   random_string.cc
   reverse.c
   run_cmd.cc
