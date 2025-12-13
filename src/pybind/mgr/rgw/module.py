@@ -6,9 +6,10 @@ import base64
 import functools
 import sys
 
+from .cli import RGWCLICommand
+
 from mgr_module import (
     MgrModule,
-    CLICommand,
     HandleCommandResult,
     Option,
     MonCommandFailed,
@@ -111,6 +112,7 @@ def check_orchestrator(func: FuncT) -> FuncT:
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
+    CLICommand = RGWCLICommand
     MODULE_OPTIONS: List[Option] = [
         Option(
             'secondary_zone_period_retry_limit',
@@ -163,7 +165,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))  # type: ignore
 
-    @CLICommand('rgw admin', perm='rw')
+    @RGWCLICommand('rgw admin', perm='rw')
     def _cmd_rgw_admin(self, params: Sequence[str]) -> HandleCommandResult:
         """rgw admin"""
         cmd, returncode, out, err = self.env.mgr.tool_exec('radosgw-admin', params or [])
@@ -174,7 +176,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=returncode, stdout=out, stderr=err)
 
-    @CLICommand('rgw realm bootstrap', perm='rw')
+    @RGWCLICommand('rgw realm bootstrap', perm='rw')
     @check_orchestrator
     def _cmd_rgw_realm_bootstrap(self,
                                  realm_name: Optional[str] = None,
@@ -355,7 +357,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                     f'with attrs {profile_attrs}: {str(e)}')
         return profile_name
 
-    @CLICommand('rgw realm zone-creds create', perm='rw')
+    @RGWCLICommand('rgw realm zone-creds create', perm='rw')
     def _cmd_rgw_realm_new_zone_creds(self,
                                       realm_name: Optional[str] = None,
                                       endpoints: Optional[str] = None,
@@ -370,7 +372,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
-    @CLICommand('rgw realm zone-creds remove', perm='rw')
+    @RGWCLICommand('rgw realm zone-creds remove', perm='rw')
     def _cmd_rgw_realm_rm_zone_creds(self, realm_token: Optional[str] = None) -> HandleCommandResult:
         """Create credentials for new zone creation"""
 
@@ -382,7 +384,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
-    @CLICommand('rgw realm tokens', perm='r')
+    @RGWCLICommand('rgw realm tokens', perm='r')
     def list_realm_tokens(self) -> HandleCommandResult:
         try:
             realms_info = self.get_realm_tokens()
@@ -409,7 +411,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 realms_info.append({'realm': realm_info['realm_name'], 'token': realm_token_s})
         return realms_info
 
-    @CLICommand('rgw zone modify', perm='rw')
+    @RGWCLICommand('rgw zone modify', perm='rw')
     def update_zone_info(self, realm_name: str, zonegroup_name: str, zone_name: str, realm_token: str, zone_endpoints: List[str]) -> HandleCommandResult:
         try:
             retval, out, err = RGWAM(self.env).zone_modify(realm_name,
@@ -422,7 +424,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
             return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
-    @CLICommand('rgw zonegroup modify', perm='rw')
+    @RGWCLICommand('rgw zonegroup modify', perm='rw')
     def update_zonegroup_info(self, realm_name: str, zonegroup_name: str, zone_name: str, hostnames: List[str]) -> HandleCommandResult:
         try:
             retval, out, err = RGWAM(self.env).zonegroup_modify(realm_name,
@@ -434,7 +436,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
             return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
-    @CLICommand('rgw zone create', perm='rw')
+    @RGWCLICommand('rgw zone create', perm='rw')
     @check_orchestrator
     def _cmd_rgw_zone_create(self,
                              zone_name: Optional[str] = None,
@@ -497,7 +499,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             raise e
         return created_zones
 
-    @CLICommand('rgw realm reconcile', perm='rw')
+    @RGWCLICommand('rgw realm reconcile', perm='rw')
     def _cmd_rgw_realm_reconcile(self,
                                  realm_name: Optional[str] = None,
                                  zonegroup_name: Optional[str] = None,
