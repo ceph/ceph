@@ -7,6 +7,9 @@ openstack:
     size: 10 # GB
 tasks:
 - install:
+      extra_system_packages:
+        deb: ['jq', 'python3']
+        rpm: ['jq', 'python']
 - ceph:
     conf:
       client:
@@ -17,5 +20,9 @@ tasks:
         debug objclass : 20
 - rgw:
     client.0:
+- workunit:
+    clients:
+      client.0:
+        - rgw/test_account_migration.sh
 - radosgw-admin:
 - radosgw-admin-rest:
