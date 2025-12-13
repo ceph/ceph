@@ -10,7 +10,7 @@ using std::list;
 void cls_refcount_get_op::dump(ceph::Formatter *f) const
 {
   f->dump_string("tag", tag);
-  f->dump_int("implicit_ref", (int)implicit_ref);
+  f->dump_string("src_tag", src_tag);
 }
 
 list<cls_refcount_get_op> cls_refcount_get_op::generate_test_instances()
@@ -19,7 +19,7 @@ list<cls_refcount_get_op> cls_refcount_get_op::generate_test_instances()
   ls.emplace_back();
   ls.emplace_back();
   ls.back().tag = "foo";
-  ls.back().implicit_ref = true;
+  ls.back().src_tag = "bar";
   return ls;
 }
 
@@ -27,7 +27,6 @@ list<cls_refcount_get_op> cls_refcount_get_op::generate_test_instances()
 void cls_refcount_put_op::dump(ceph::Formatter *f) const
 {
   f->dump_string("tag", tag);
-  f->dump_int("implicit_ref", (int)implicit_ref);
 }
 
 list<cls_refcount_put_op> cls_refcount_put_op::generate_test_instances()
@@ -36,7 +35,6 @@ list<cls_refcount_put_op> cls_refcount_put_op::generate_test_instances()
   ls.emplace_back();
   ls.emplace_back();
   ls.back().tag = "foo";
-  ls.back().implicit_ref = true;
   return ls;
 }
 
@@ -60,7 +58,7 @@ list<cls_refcount_set_op> cls_refcount_set_op::generate_test_instances()
 
 void cls_refcount_read_op::dump(ceph::Formatter *f) const
 {
-  f->dump_int("implicit_ref", (int)implicit_ref);
+  // there are no data members to dump
 }
 
 list<cls_refcount_read_op> cls_refcount_read_op::generate_test_instances()
