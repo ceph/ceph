@@ -59,10 +59,11 @@ ActivePyModules::ActivePyModules(
   MonClient &mc, LogChannelRef clog_,
   LogChannelRef audit_clog_, Objecter &objecter_,
   Finisher &f, DaemonServer &server,
-  PyModuleRegistry &pmr)
+  PyModuleRegistry &pmr, ThreadMonitor *monitor_)
 : module_config(module_config_), daemon_state(ds), cluster_state(cs),
   monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
   finisher(f),
+  m_thread_monitor(monitor_),
   cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
   server(server), py_module_registry(pmr)
 {
@@ -74,7 +75,17 @@ ActivePyModules::ActivePyModules(
   cmd_finisher.start();
 }
 
-ActivePyModules::~ActivePyModules() = default;
+ActivePyModules::~ActivePyModules() {
+  dout(10) << "ActivePyModules destructor called" << dendl;
+
+  // Stop the thread monitor if it was started
+  if (m_thread_monitor) {
+    m_thread_monitor->stop_monitoring();
+  }
+
+  // Stop the finisher thread
+  cmd_finisher.stop();
+}
 
 void ActivePyModules::dump_server(const std::string &hostname,
                       const DaemonStateCollection &dmc,
@@ -124,7 +135,6 @@ PyObject *ActivePyModules::get_server_python(const std::string &hostname)
   dump_server(hostname, dmc, &f);
   return f.get();
 }
-
 
 PyObject *ActivePyModules::list_servers_python()
 {
@@ -534,12 +544,12 @@ void ActivePyModules::start_one(PyModuleRef py_module)
   std::lock_guard l(lock);
 
   const auto name = py_module->get_name();
-  auto active_module = std::make_shared<ActivePyModule>(py_module, clog);
+  auto active_module = std::make_shared<ActivePyModule>(py_module, clog, m_thread_monitor);
 
   pending_modules.insert(name);
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
-  finisher.queue(new LambdaContext([this, active_module, name](int) {
+  finisher.queue(new LambdaContext([this, active_module, name, py_module](int) {
     int r = active_module->load(this);
     std::lock_guard l(lock);
     pending_modules.erase(name);
@@ -549,12 +559,18 @@ void ActivePyModules::start_one(PyModuleRef py_module)
     } else {
       auto em = modules.emplace(name, active_module);
       ceph_assert(em.second); // actually inserted
-
-      dout(4) << "Starting thread for " << name << dendl;
       active_module->thread.create(active_module->get_thread_name());
-      dout(4) << "Starting active module " << name <<" finisher thread "
-        << active_module->get_fin_thread_name() << dendl;
+      py_module->perf_counter_build(g_ceph_context);
       active_module->finisher.start();
+      auto& fut = active_module->finisher.on_started();
+      if (fut.wait_for(std::chrono::milliseconds(100)) == std::future_status::ready) {
+        active_module->set_native_tid(active_module->finisher.get_tid());
+        if (m_thread_monitor) {
+          m_thread_monitor->register_thread(active_module->get_native_tid(), 
+            active_module->thread.get_tid(),
+            name, py_module);
+        }
+      }
     }
   }));
 }
