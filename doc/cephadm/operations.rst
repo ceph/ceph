@@ -107,6 +107,45 @@ new key) with the following command:
 For MDS, OSD, and MGR daemons, this does not require a daemon restart.  For other
 daemons, however (e.g., RGW), the daemon may be restarted to switch to the new key.
 
+Listing scheduled daemon actions
+--------------------------------
+
+Daemons and services can undergo actions including restarts can be performed on daemons and services.
+
+.. prompt:: bash #
+
+   ceph orch restart osd.all-available-devices
+
+::
+
+   Scheduled to restart osd.5 on host 'cephadm-2'
+   Scheduled to restart osd.2 on host 'cephadm-2'
+   Scheduled to restart osd.0 on host 'cephadm-3'
+   Scheduled to restart osd.3 on host 'cephadm-3'
+   Scheduled to restart osd.1 on host 'cephadm-4'
+   Scheduled to restart osd.4 on host 'cephadm-4'
+
+These scheduled actions are processed by cephadm asynchronously and we can list
+the ongoing actions with ``action ls`` command:
+
+.. prompt:: bash #
+
+   ceph orch action ls
+
+::
+
+   HOST      DAEMON  ACTION   FORCED
+   cephadm-2  osd.5   restart  No
+   cephadm-2  osd.2   restart  No
+   cephadm-3  osd.0   restart  No
+   cephadm-3  osd.3   restart  No
+   cephadm-4  osd.1   restart  No
+   cephadm-4  osd.4   restart  No
+
+By default, these scheduled actions are not forced and verify that it is safe to proceed by checking the daemon's internal ``ok-to-stop`` command.
+For example, ``osd.5`` will restart successfully if ``ceph osd ok-to-stop osd.5`` is true, which means no PGs will become inactive. This safety check is performed
+for the following actions: ``redeploy``, ``stop``, and ``restart``. Other actions such as ``start``, ``rotate-key``, and ``reconfig`` do not perform this safety check
+and ignore the force flag by default.
 
 Ceph daemon logs
 ================
