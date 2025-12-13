@@ -282,6 +282,7 @@ if(WITH_LIBURING)
 
   if(CMAKE_SYSTEM_VERSION VERSION_GREATER_EQUAL "5.10")
     add_compile_definitions("BOOST_ASIO_HAS_IO_URING")
+    add_compile_definitions("BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
   endif()
 endif()
 
