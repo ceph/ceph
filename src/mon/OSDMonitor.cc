@@ -5734,11 +5734,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->dump_string("host", p->second);
     }
 
-    // try to find logical address
+    // try to find backing devices
     if (auto p = m.find("devices"); p != m.end()) {
-      f->dump_string("logical_address", p->second);
-    } else if (auto p = m.find("bluestore_bdev_devices"); p != m.end()) {
-      f->dump_string("logical_address", p->second);
+      f->dump_string("devices", p->second);
     }
 
     for (auto& k : {
