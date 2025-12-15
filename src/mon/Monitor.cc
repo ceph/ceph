@@ -7083,3 +7083,57 @@ void Monitor::disconnect_disallowed_stretch_sessions()
     session_stretch_allowed(*j, blank);
   }
 }
+
+int Monitor::get_total_up_mons_by_bucket_name(const std::string& bucket_name)
+{
+  /**
+   * Get the total number of up monitors in the specified bucket.
+   * @param bucket_name The name of the bucket to check.
+   * @return The total number of up monitors in the specified bucket.
+   */
+  int total = 0;
+  // loop through monmap for mons.
+  for (const auto& mon_info : monmap->mon_info) {
+    // get crush loc for this mon, see if it matches bucket_name
+    auto crush_loc = monmap->get_crush_location_by_name(mon_info.first);
+    for (const auto& [_ , value] : crush_loc) {
+      if (value == bucket_name) {
+        // check if mon is up (in quorum)
+        int mon_rank = monmap->get_rank(mon_info.first);
+        if (quorum.count(mon_rank)) {
+          total++;
+        }
+      }
+    }
+  }
+  dout(20) << __func__ << " " << bucket_name
+           << ": " << total << dendl;
+  return total;
+}
+
+double Monitor::get_total_mon_connection_score_by_bucket_name(const std::string& bucket_name)
+{
+  /**
+   * Get the total connection score of up monitors in the specified bucket.
+   * @param bucket_name The name of the bucket to check.
+   * @return The total connection score of up monitors in the specified bucket.
+   */
+  double total = 0.0;
+  // loop through monmap for mons.
+  for (const auto& mon_info : monmap->mon_info) {
+    // get crush loc for this mon, see if it matches bucket_name
+    auto crush_loc = monmap->get_crush_location_by_name(mon_info.first);
+    for (const auto& [_ , value] : crush_loc) {
+      if (value == bucket_name) {
+        int mon_rank = monmap->get_rank(mon_info.first);
+        // check if mon is up (in quorum)
+        if (quorum.count(mon_rank)) {
+          total += elector.get_connection_score_by_rank(mon_rank);
+        }
+      }
+    }
+  }
+  dout(20) << __func__ << " " << bucket_name
+           << ": " << total << dendl;
+  return total;
+}

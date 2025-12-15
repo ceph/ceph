@@ -780,6 +780,8 @@ public:
   int get_mon_metadata(int mon, ceph::Formatter *f, std::ostream& err);
   int print_nodes(ceph::Formatter *f, std::ostream& err);
 
+  int get_total_up_mons_by_bucket_name(const std::string& bucket_name);
+  double get_total_mon_connection_score_by_bucket_name(const std::string& bucket_name);
   // track metadata reported by win_election()
   std::map<int, Metadata> mon_metadata;
   std::map<int, Metadata> pending_metadata;

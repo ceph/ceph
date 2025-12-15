@@ -353,6 +353,7 @@ public:
    */
   epoch_t get_epoch() const { return epoch; }
   int get_election_winner() { return last_election_winner; }
+  double get_connectivity_election_score(int rank);
 
 private:
   /**
