@@ -1,5 +1,4 @@
 export interface NvmeofGateway {
-  cli_version: string;
   version: string;
   name: string;
   group: string;
