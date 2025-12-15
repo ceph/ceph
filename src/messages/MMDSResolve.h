@@ -16,6 +16,9 @@
 #ifndef CEPH_MMDSRESOLVE_H
 #define CEPH_MMDSRESOLVE_H
 
+#include "include/encoding_list.h"
+#include "include/encoding_map.h"
+#include "include/encoding_vector.h"
 #include "include/types.h"
 #include "mds/Capability.h"
 #include "messages/MMDSOp.h"

@@ -20,6 +20,7 @@ set(mds_srcs
   CDir.cc
   CInode.cc
   LogEvent.cc
+  LogSegment.cc
   MDSTable.cc
   InoTable.cc
   JournalPointer.cc
@@ -47,8 +48,7 @@ set(mds_srcs
   MDSRankQuiesce.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
-  ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc)
+  ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
 add_library(mds STATIC ${mds_srcs})
 target_link_libraries(mds PRIVATE
   legacy-option-headers Boost::url

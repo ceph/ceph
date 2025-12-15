@@ -16,7 +16,7 @@
 #ifndef CEPH_RGW_ESCAPE_H
 #define CEPH_RGW_ESCAPE_H
 
-#include <ostream>
+#include <iosfwd>
 #include <string_view>
 
 /* Returns the length of a buffer that would be needed to escape 'buf'

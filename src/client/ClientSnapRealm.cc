@@ -3,6 +3,7 @@
 
 #include "ClientSnapRealm.h"
 #include "common/Formatter.h"
+#include "include/container_ios.h"
 
 using std::set;
 using std::vector;
@@ -60,4 +61,15 @@ void SnapRealm::dump(Formatter *f) const
   for (set<SnapRealm*>::const_iterator p = pchildren.begin(); p != pchildren.end(); ++p)
     f->dump_stream("child") << (*p)->ino;
   f->close_section();
+}
+
+std::ostream& operator<<(std::ostream& out, const SnapRealm& r) {
+  return out << "snaprealm(" << r.ino << " nref=" << r.nref << " c=" << r.created << " seq=" << r.seq
+	     << " parent=" << r.parent
+	     << " my_snaps=" << r.my_snaps
+	     << " cached_snapc=" << r.cached_snap_context
+	     << " last_modified=" << r.last_modified
+	     << " change_attr=" << r.change_attr
+             << " is_snapdir_visible=" << r.is_snapdir_visible
+	     << ")";
 }

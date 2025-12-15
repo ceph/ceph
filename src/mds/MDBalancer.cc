@@ -27,6 +27,7 @@
 #include "MDCache.h"
 #include "Migrator.h"
 #include "Mantle.h"
+#include "mdstypes.h" // for dirfrag_t, mds_load_t
 
 #include "include/Context.h"
 #include "msg/Messenger.h"
@@ -103,6 +104,8 @@ MDBalancer::MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc) :
   bal_unreplicate_threshold = g_conf().get_val<double>("mds_bal_unreplicate_threshold");
   num_bal_times = g_conf().get_val<int64_t>("mds_bal_max");
 }
+
+MDBalancer::~MDBalancer() noexcept = default;
 
 void MDBalancer::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map)
 {
@@ -757,6 +760,10 @@ void MDBalancer::queue_merge(CDir *dir)
   } else {
     dout(20) << " dir already in queue " << *dir << dendl;
   }
+}
+
+bool MDBalancer::is_fragment_pending(dirfrag_t df) {
+  return split_pending.count(df) || merge_pending.count(df);
 }
 
 void MDBalancer::prep_rebalance(int beat)

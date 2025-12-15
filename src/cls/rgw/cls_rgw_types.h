@@ -9,6 +9,8 @@
 #include <boost/container/flat_map.hpp>
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
+#include "include/encoding_flat_map.h"
+#include "include/encoding_set.h"
 
 #include <fmt/format.h>
 
@@ -68,12 +70,16 @@ struct rgw_zone_set {
   std::set<rgw_zone_set_entry> entries;
 
   void encode(ceph::buffer::list &bl) const {
+    using ceph::encode;
+
     /* no ENCODE_START, ENCODE_END for backward compatibility */
-    ceph::encode(entries, bl);
+    encode(entries, bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
+    using ceph::decode;
+
     /* no DECODE_START, DECODE_END for backward compatibility */
-    ceph::decode(entries, bl);
+    decode(entries, bl);
   }
   void dump(ceph::Formatter *f) const;
   static std::list<rgw_zone_set> generate_test_instances();

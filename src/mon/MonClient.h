@@ -581,21 +581,8 @@ private:
     CommandCompletion onfinish;
     std::optional<boost::asio::steady_timer> cancel_timer;
 
-    MonCommand(MonClient& monc, uint64_t t, CommandCompletion&& onfinish)
-      : tid(t), onfinish(std::move(onfinish)) {
-      auto timeout =
-          monc.cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
-      if (timeout.count() > 0) {
-	cancel_timer.emplace(monc.service, timeout);
-	cancel_timer->async_wait(
-          [this, &monc](boost::system::error_code ec) {
-	    if (ec)
-	      return;
-	    std::scoped_lock l(monc.monc_lock);
-	    monc._cancel_mon_command(tid);
-	  });
-      }
-    }
+    MonCommand(MonClient& monc, uint64_t t, CommandCompletion&& onfinish);
+    ~MonCommand() noexcept;
 
     bool is_tell() const {
       return target_name.size() || target_rank >= 0;
@@ -619,31 +606,7 @@ public:
   auto start_mon_command(std::vector<std::string>&& cmd,
                          ceph::buffer::list&& inbl,
 			 CompletionToken&& token) {
-    namespace asio = boost::asio;
-    ldout(cct,10) << __func__ << " cmd=" << cmd << dendl;
-    auto consigned = asio::consign(
-      std::forward<CompletionToken>(token), asio::make_work_guard(
-	asio::get_associated_executor(token, service.get_executor())));
-    return asio::async_initiate<decltype(consigned), CommandSig>(
-      [this, cmd = std::move(cmd),
-       inbl = std::move(inbl)](auto handler) mutable {
-	std::scoped_lock l(monc_lock);
-	if (!initialized || stopping) {
-	  asio::dispatch(
-	    asio::get_associated_immediate_executor(handler,
-						    service.get_executor()),
-	    asio::append(std::move(handler),
-			 make_error_code(monc_errc::shutting_down),
-			 std::string{}, bufferlist{}));
-	} else {
-	  auto r = new MonCommand(*this, ++last_mon_command_tid,
-				  std::move(handler));
-	  r->cmd = std::move(cmd);
-	  r->inbl = std::move(inbl);
-	  mon_commands.emplace(r->tid, r);
-	  _send_command(r);
-	}
-      }, consigned);
+    return start_mon_command(-1, std::move(cmd), std::move(inbl), std::forward<CompletionToken>(token));
   }
 
   template<typename CompletionToken>
@@ -721,52 +684,18 @@ public:
       }, consigned);
   }
 
-  class ContextVerter {
-    std::string* outs;
-    ceph::bufferlist* outbl;
-    Context* onfinish;
+  class ContextVerter;
 
-  public:
-    ContextVerter(std::string* outs, ceph::bufferlist* outbl, Context* onfinish)
-      : outs(outs), outbl(outbl), onfinish(onfinish) {}
-    ~ContextVerter() = default;
-    ContextVerter(const ContextVerter&) = default;
-    ContextVerter& operator =(const ContextVerter&) = default;
-    ContextVerter(ContextVerter&&) = default;
-    ContextVerter& operator =(ContextVerter&&) = default;
-
-    void operator()(boost::system::error_code e,
-		    std::string&& s,
-		    ceph::bufferlist&& bl) {
-      if (outs)
-	*outs = std::move(s);
-      if (outbl)
-	*outbl = std::move(bl);
-      if (onfinish)
-	onfinish->complete(ceph::from_error_code(e));
-    }
-  };
-
-  void start_mon_command(std::vector<std::string> cmd, bufferlist&& inbl,
+  void start_mon_command(std::vector<std::string>&& cmd, bufferlist&& inbl,
 			 bufferlist *outbl, std::string *outs,
-			 Context *onfinish) {
-    start_mon_command(std::move(cmd), std::move(inbl),
-		      ContextVerter(outs, outbl, onfinish));
-  }
+			 Context *onfinish);
   void start_mon_command(int mon_rank, std::vector<std::string>&& cmd,
 			 bufferlist&& inbl, bufferlist *outbl, std::string *outs,
-			 Context *onfinish) {
-    start_mon_command(mon_rank, std::move(cmd), std::move(inbl),
-		      ContextVerter(outs, outbl, onfinish));
-  }
+			 Context *onfinish);
   void start_mon_command(std::string&& mon_name,  ///< mon name, with mon. prefix
 			 std::vector<std::string>&& cmd, bufferlist&& inbl,
 			 bufferlist *outbl, std::string *outs,
-			 Context *onfinish) {
-    start_mon_command(std::move(mon_name), std::move(cmd), std::move(inbl),
-		      ContextVerter(outs, outbl, onfinish));
-  }
-
+			 Context *onfinish);
 
   // version requests
 public:

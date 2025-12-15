@@ -33,14 +33,21 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"
+#include "include/byte_u_t.h"
 #include "include/ceph_features.h"
 #include "include/common_fwd.h"
 #include "include/str_map.h"
+#include "include/denc_flat_map.h"
+#include "include/encoding_set.h"
+#include "include/encoding_unordered_map.h"
+#include "include/encoding_vector.h"
+#include "include/weightf_t.h"
 
 #include "common/code_environment.h"
 #include "mon/health_check.h"
 
 #include "crush/CrushTreeDumper.h"
+#include "crush/CrushWrapper.h"
 #include "common/Clock.h"
 #include "mon/PGMap.h"
 #include "common/pick_address.h"
@@ -214,7 +221,100 @@ ostream& operator<<(ostream& out, const osd_xinfo_t& xi)
 }
 
 // ----------------------------------
+// PGTempMap
+
+#if 1
+
+PGTempMap::PGTempMap() noexcept = default;
+PGTempMap::~PGTempMap() noexcept = default;
+
+void PGTempMap::encode(ceph::buffer::list& bl) const {
+  using ceph::encode;
+  uint32_t n = map.size();
+  encode(n, bl);
+  for (auto &p : map) {
+    encode(p.first, bl);
+    bl.append((char*)p.second, (*p.second + 1) * sizeof(ceph_le32));
+  }
+}
+
+void PGTempMap::decode(ceph::buffer::list::const_iterator& p) {
+  using ceph::decode;
+  data.clear();
+  map.clear();
+  uint32_t n;
+  decode(n, p);
+  if (!n)
+    return;
+  auto pstart = p;
+  size_t start_off = pstart.get_off();
+  std::vector<std::pair<pg_t,size_t>> offsets;
+  offsets.resize(n);
+  for (unsigned i=0; i<n; ++i) {
+    pg_t pgid;
+    decode(pgid, p);
+    offsets[i].first = pgid;
+    offsets[i].second = p.get_off() - start_off;
+    uint32_t vn;
+    decode(vn, p);
+    p += vn * sizeof(int32_t);
+  }
+  size_t len = p.get_off() - start_off;
+  pstart.copy(len, data);
+  if (data.get_num_buffers() > 1) {
+    data.rebuild();
+  }
+  //map.reserve(n);
+  char *start = data.c_str();
+  for (auto i : offsets) {
+    map.insert(map.end(), std::make_pair(i.first, (ceph_le32*)(start + i.second)));
+  }
+}
+
+void PGTempMap::set(pg_t pgid, const mempool::osdmap::vector<int32_t>& v) {
+  using ceph::encode;
+  size_t need = sizeof(ceph_le32) * (1 + v.size());
+  if (need < data.get_append_buffer_unused_tail_length()) {
+    ceph::buffer::ptr z(data.get_append_buffer_unused_tail_length());
+    z.zero();
+    data.append(z.c_str(), z.length());
+  }
+  encode(v, data);
+  map[pgid] = (ceph_le32*)(data.back().end_c_str()) - (1 + v.size());
+}
+
+mempool::osdmap::vector<int32_t> PGTempMap::get(pg_t pgid) {
+  mempool::osdmap::vector<int32_t> v;
+  ceph_le32 *p = map[pgid];
+  size_t n = *p++;
+  v.resize(n);
+  for (size_t i = 0; i < n; ++i, ++p) {
+    v[i] = *p;
+  }
+  return v;
+}
+
+#endif
+
+// ----------------------------------
 // OSDMap::Incremental
+
+OSDMap::Incremental::Incremental(epoch_t e) :
+  encode_features(0),
+  epoch(e), new_pool_max(-1), new_flags(-1), new_max_osd(-1),
+  have_crc(false), full_crc(0), inc_crc(0) {
+}
+
+OSDMap::Incremental::Incremental(ceph::buffer::list &bl) {
+  auto p = std::cbegin(bl);
+  decode(p);
+}
+
+OSDMap::Incremental::Incremental(ceph::buffer::list::const_iterator &p) {
+  decode(p);
+}
+
+OSDMap::Incremental::~Incremental() noexcept = default;
 
 int OSDMap::Incremental::get_net_marked_out(const OSDMap *previous) const
 {
@@ -301,6 +401,81 @@ int OSDMap::Incremental::propagate_base_properties_to_tiers(CephContext *cct,
 
 // ----------------------------------
 // OSDMap
+
+OSDMap::OSDMap() : epoch(0), 
+	     pool_max(0),
+	     flags(0),
+	     num_osd(0), num_up_osd(0), num_in_osd(0),
+	     max_osd(0),
+	     osd_addrs(std::make_shared<addrs_s>()),
+	     pg_temp(std::make_shared<PGTempMap>()),
+	     primary_temp(std::make_shared<mempool::osdmap::map<pg_t,int32_t>>()),
+	     osd_uuid(std::make_shared<mempool::osdmap::vector<uuid_d>>()),
+	     cluster_snapshot_epoch(0),
+	     new_blocklist_entries(false),
+	     cached_up_osd_features(0),
+	     crc_defined(false), crc(0),
+	     crush(std::make_shared<CrushWrapper>()),
+	     stretch_mode_enabled(false), stretch_bucket_count(0),
+	     degraded_stretch_mode(0), recovering_stretch_mode(0), stretch_mode_bucket(0) {
+}
+
+OSDMap::~OSDMap() noexcept = default;
+
+OSDMap::OSDMap(const OSDMap& other) = default;
+OSDMap& OSDMap::operator=(const OSDMap& other) = default;
+
+bool OSDMap::is_noup(int osd) const {
+  if (test_flag(CEPH_OSDMAP_NOUP)) // global?
+    return true;
+  if (is_noup_by_osd(osd)) // by osd?
+    return true;
+  if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOUP) // by crush-node?
+    return true;
+  if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+      get_device_class_flags(class_id) & CEPH_OSD_NOUP) // by device-class?
+    return true;
+  return false;
+}
+
+bool OSDMap::is_nodown(int osd) const {
+  if (test_flag(CEPH_OSDMAP_NODOWN))
+    return true;
+  if (is_nodown_by_osd(osd))
+    return true;
+  if (get_osd_crush_node_flags(osd) & CEPH_OSD_NODOWN)
+    return true;
+  if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+      get_device_class_flags(class_id) & CEPH_OSD_NODOWN)
+    return true;
+  return false;
+}
+
+bool OSDMap::is_noin(int osd) const {
+  if (test_flag(CEPH_OSDMAP_NOIN))
+    return true;
+  if (is_noin_by_osd(osd))
+    return true;
+  if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOIN)
+    return true;
+  if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+      get_device_class_flags(class_id) & CEPH_OSD_NOIN)
+    return true;
+  return false;
+}
+
+bool OSDMap::is_noout(int osd) const {
+  if (test_flag(CEPH_OSDMAP_NOOUT))
+    return true;
+  if (is_noout_by_osd(osd))
+    return true;
+  if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOOUT)
+    return true;
+  if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+      get_device_class_flags(class_id) & CEPH_OSD_NOOUT)
+    return true;
+  return false;
+}
 
 bool OSDMap::subtree_is_down(int id, set<int> *down_cache) const
 {
@@ -3066,6 +3241,55 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   _apply_primary_affinity(pps, *pool, up, primary);
 }
 
+bool OSDMap::get_primary_shard(const pg_t& pgid, spg_t *out) const {
+  auto i = get_pools().find(pgid.pool());
+  if (i == get_pools().end()) {
+    return false;
+  }
+  if (!i->second.is_erasure()) {
+    *out = spg_t(pgid);
+    return true;
+  }
+  int primary;
+  std::vector<int> acting;
+  pg_to_acting_osds(pgid, &acting, &primary);
+  for (uint8_t i = 0; i < acting.size(); ++i) {
+    if (acting[i] == primary) {
+      *out = spg_t(pgid, shard_id_t(i));
+      return true;
+    }
+  }
+  return false;
+}
+
+bool OSDMap::get_primary_shard(const pg_t& pgid, int *primary, spg_t *out) const {
+  auto poolit = get_pools().find(pgid.pool());
+  if (poolit == get_pools().end()) {
+    return false;
+  }
+  std::vector<int> acting;
+  pg_to_acting_osds(pgid, &acting, primary);
+  if (poolit->second.is_erasure()) {
+    for (uint8_t i = 0; i < acting.size(); ++i) {
+      if (acting[i] == *primary) {
+	*out = spg_t(pgid, pgtemp_undo_primaryfirst(poolit->second, pgid, shard_id_t(i)));
+	return true;
+      }
+    }
+  } else {
+    *out = spg_t(pgid);
+    return true;
+  }
+  return false;
+}
+
+int64_t OSDMap::lookup_pg_pool_name(std::string_view name) const {
+  auto p = name_pool.find(name);
+  if (p == name_pool.end())
+    return -ENOENT;
+  return p->second;
+}
+
 void OSDMap::_pg_to_up_acting_osds(
   const pg_t& pg, vector<int> *up, int *up_primary,
   vector<int> *acting, int *acting_primary,
@@ -3116,6 +3340,16 @@ void OSDMap::_pg_to_up_acting_osds(
     *acting_primary = _acting_primary;
 }
 
+bool OSDMap::is_up_acting_osd_shard(spg_t pg, int osd) const {
+  std::vector<int> up, acting;
+  _pg_to_up_acting_osds(pg.pgid, &up, NULL, &acting, NULL, false);
+  if (calc_pg_role(pg_shard_t(osd, pg.shard), acting) >= 0 ||
+      calc_pg_role(pg_shard_t(osd, pg.shard), up) >= 0) {
+	return true;
+      }
+  return false;
+}
+
 int OSDMap::calc_pg_role_broken(int osd, const vector<int>& acting, int nrep)
 {
   // This implementation is broken for EC PGs since the osd may appear
@@ -3144,6 +3378,12 @@ int OSDMap::calc_pg_role(pg_shard_t who, const vector<int>& acting)
     }
   }
   return -1;
+}
+
+int OSDMap::get_pg_acting_role(spg_t pg, int osd) const {
+  std::vector<int> group;
+  pg_to_acting_osds(pg.pgid, group);
+  return calc_pg_role(pg_shard_t(osd, pg.shard), group);
 }
 
 bool OSDMap::primary_changed_broken(
@@ -3196,6 +3436,22 @@ uint64_t OSDMap::get_encoding_features() const
 	   CEPH_FEATURE_CRUSH_TUNABLES5);
   }
   return f;
+}
+
+void OSDMap::deepish_copy_from(const OSDMap& o) {
+  *this = o;
+  primary_temp.reset(new mempool::osdmap::map<pg_t,int32_t>(*o.primary_temp));
+  pg_temp.reset(new PGTempMap(*o.pg_temp));
+  osd_uuid.reset(new mempool::osdmap::vector<uuid_d>(*o.osd_uuid));
+
+  if (o.osd_primary_affinity)
+    osd_primary_affinity.reset(new mempool::osdmap::vector<__u32>(*o.osd_primary_affinity));
+
+  // NOTE: this still references shared entity_addrvec_t's.
+  osd_addrs.reset(new addrs_s(*o.osd_addrs));
+
+  // NOTE: we do not copy crush.  note that apply_incremental will
+  // allocate a new CrushWrapper, though.
 }
 
 // serialize, unserialize
@@ -3513,10 +3769,10 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
       encode(stretch_mode_bucket, bl);
     }
     if (target_v >= 11) {
-      ::encode(range_blocklist, bl, features);
+      encode(range_blocklist, bl, features);
     }
     if (target_v >= 12) {
-      ::encode(allow_crimson, bl);
+      encode(allow_crimson, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -6881,6 +7137,15 @@ int OSDMap::calc_read_balance_score(CephContext *cct, int64_t pool_id,
 int OSDMap::get_osds_by_bucket_name(const string &name, set<int> *osds) const
 {
   return crush->get_leaves(name, osds);
+}
+
+void OSDMap::get_pool_ids_by_rule(int rule_id, std::set<int64_t> *pool_ids) const {
+  ceph_assert(pool_ids);
+  for (auto &p: pools) {
+    if (p.second.get_crush_rule() == rule_id) {
+      pool_ids->insert(p.first);
+    }
+  }
 }
 
 // get pools whose crush rules might reference the given osd

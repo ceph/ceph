@@ -24,6 +24,11 @@
 #include <variant>
 #include <vector>
 
+#include "rank.h"
+#include "frag_info.h"
+#include "nest_info.h"
+
+#include "include/client_t.h"
 #include "include/compact_set.h"
 #include "include/encoding.h"
 #include "include/fs_types.h"
@@ -33,210 +38,12 @@
 #include "include/utime.h"
 
 #include "include/ceph_assert.h"
-#include <boost/serialization/strong_typedef.hpp>
 
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
 #define MAX_MDS                   0x100
 
 namespace ceph { class Formatter; }
 class JSONObj;
-
-BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
-extern const mds_gid_t MDS_GID_NONE;
-
-template <>
-struct std::hash<mds_gid_t> {
-  size_t operator()(const mds_gid_t& gid) const
-  {
-    return hash<uint64_t> {}(gid);
-  }
-};
-
-inline void encode(const mds_gid_t &v, bufferlist& bl, uint64_t features = 0) {
-  uint64_t vv = v;
-  encode_raw(vv, bl);
-}
-
-inline void decode(mds_gid_t &v, bufferlist::const_iterator& p) {
-  uint64_t vv;
-  decode_raw(vv, p);
-  v = vv;
-}
-
-typedef int32_t fs_cluster_id_t;
-constexpr fs_cluster_id_t FS_CLUSTER_ID_NONE = -1;
-
-// The namespace ID of the anonymous default filesystem from legacy systems
-constexpr fs_cluster_id_t FS_CLUSTER_ID_ANONYMOUS = 0;
-
-typedef int32_t mds_rank_t;
-constexpr mds_rank_t MDS_RANK_NONE		= -1;
-constexpr mds_rank_t MDS_RANK_EPHEMERAL_DIST	= -2;
-constexpr mds_rank_t MDS_RANK_EPHEMERAL_RAND	= -3;
-
-struct scatter_info_t {
-  version_t version = 0;
-};
-
-struct frag_info_t : public scatter_info_t {
-  int64_t size() const { return nfiles + nsubdirs; }
-
-  void zero() {
-    *this = frag_info_t();
-  }
-
-  // *this += cur - acc;
-  void add_delta(const frag_info_t &cur, const frag_info_t &acc, bool *touched_mtime=0, bool *touched_chattr=0) {
-    if (cur.mtime > mtime) {
-      mtime = cur.mtime;
-      if (touched_mtime)
-	*touched_mtime = true;
-    }
-    if (cur.change_attr > change_attr) {
-      change_attr = cur.change_attr;
-      if (touched_chattr)
-	*touched_chattr = true;
-    }
-    nfiles += cur.nfiles - acc.nfiles;
-    nsubdirs += cur.nsubdirs - acc.nsubdirs;
-  }
-
-  void add(const frag_info_t& other) {
-    if (other.mtime > mtime)
-      mtime = other.mtime;
-    if (other.change_attr > change_attr)
-      change_attr = other.change_attr;
-    nfiles += other.nfiles;
-    nsubdirs += other.nsubdirs;
-  }
-
-  bool same_sums(const frag_info_t &o) const {
-    return mtime <= o.mtime &&
-	nfiles == o.nfiles &&
-	nsubdirs == o.nsubdirs;
-  }
-
-  void encode(ceph::buffer::list &bl) const;
-  void decode(ceph::buffer::list::const_iterator& bl);
-  void dump(ceph::Formatter *f) const;
-  void decode_json(JSONObj *obj);
-  static std::list<frag_info_t>  generate_test_instances();
-
-  // this frag
-  utime_t mtime;
-  uint64_t change_attr = 0;
-  int64_t nfiles = 0;        // files
-  int64_t nsubdirs = 0;      // subdirs
-};
-WRITE_CLASS_ENCODER(frag_info_t)
-
-inline bool operator==(const frag_info_t &l, const frag_info_t &r) {
-  return memcmp(&l, &r, sizeof(l)) == 0;
-}
-inline bool operator!=(const frag_info_t &l, const frag_info_t &r) {
-  return !(l == r);
-}
-
-std::ostream& operator<<(std::ostream &out, const frag_info_t &f);
-
-struct nest_info_t : public scatter_info_t {
-  int64_t rsize() const { return rfiles + rsubdirs; }
-
-  void zero() {
-    *this = nest_info_t();
-  }
-
-  void sub(const nest_info_t &other) {
-    add(other, -1);
-  }
-  void add(const nest_info_t &other, int fac=1) {
-    if (other.rctime > rctime)
-      rctime = other.rctime;
-    rbytes += fac*other.rbytes;
-    rfiles += fac*other.rfiles;
-    rsubdirs += fac*other.rsubdirs;
-    rsnaps += fac*other.rsnaps;
-  }
-
-  // *this += cur - acc;
-  void add_delta(const nest_info_t &cur, const nest_info_t &acc) {
-    if (cur.rctime > rctime)
-      rctime = cur.rctime;
-    rbytes += cur.rbytes - acc.rbytes;
-    rfiles += cur.rfiles - acc.rfiles;
-    rsubdirs += cur.rsubdirs - acc.rsubdirs;
-    rsnaps += cur.rsnaps - acc.rsnaps;
-  }
-
-  bool same_sums(const nest_info_t &o) const {
-    return rctime <= o.rctime &&
-        rbytes == o.rbytes &&
-        rfiles == o.rfiles &&
-        rsubdirs == o.rsubdirs &&
-        rsnaps == o.rsnaps;
-  }
-
-  void encode(ceph::buffer::list &bl) const;
-  void decode(ceph::buffer::list::const_iterator& bl);
-  void dump(ceph::Formatter *f) const;
-  void decode_json(JSONObj *obj);
-  static std::list<nest_info_t> generate_test_instances();
-
-  // this frag + children
-  utime_t rctime;
-  int64_t rbytes = 0;
-  int64_t rfiles = 0;
-  int64_t rsubdirs = 0;
-  int64_t rsnaps = 0;
-};
-WRITE_CLASS_ENCODER(nest_info_t)
-
-inline bool operator==(const nest_info_t &l, const nest_info_t &r) {
-  return memcmp(&l, &r, sizeof(l)) == 0;
-}
-inline bool operator!=(const nest_info_t &l, const nest_info_t &r) {
-  return !(l == r);
-}
-
-std::ostream& operator<<(std::ostream &out, const nest_info_t &n);
-
-struct vinodeno_t {
-  vinodeno_t() {}
-  vinodeno_t(inodeno_t i, snapid_t s) : ino(i), snapid(s) {}
-
-  void encode(ceph::buffer::list& bl) const {
-    using ceph::encode;
-    encode(ino, bl);
-    encode(snapid, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& p) {
-    using ceph::decode;
-    decode(ino, p);
-    decode(snapid, p);
-  }
-  void dump(ceph::Formatter *f) const;
-  static std::list<vinodeno_t> generate_test_instances() {
-    std::list<vinodeno_t> ls;
-    ls.emplace_back();
-    ls.push_back(vinodeno_t(1, 2));
-    return ls;
-  }
-  inodeno_t ino;
-  snapid_t snapid;
-};
-WRITE_CLASS_ENCODER(vinodeno_t)
-
-inline bool operator==(const vinodeno_t &l, const vinodeno_t &r) {
-  return l.ino == r.ino && l.snapid == r.snapid;
-}
-inline bool operator!=(const vinodeno_t &l, const vinodeno_t &r) {
-  return !(l == r);
-}
-inline bool operator<(const vinodeno_t &l, const vinodeno_t &r) {
-  return
-    l.ino < r.ino ||
-    (l.ino == r.ino && l.snapid < r.snapid);
-}
 
 template<template<typename> class Allocator>
 class charmap_md_t {
@@ -259,20 +66,8 @@ public:
     return *this;
   }
 
-  void encode(ceph::buffer::list& bl, uint64_t features) const {
-    ENCODE_START(STRUCT_V, COMPAT_V, bl);
-    ceph::encode(casesensitive, bl);
-    ceph::encode(normalization, bl);
-    ceph::encode(encoding, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& p) {
-    DECODE_START(STRUCT_V, p);
-    ceph::decode(casesensitive, p);
-    ceph::decode(normalization, p);
-    ceph::decode(encoding, p);
-    DECODE_FINISH(p);
-  }
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& p);
 
   void print(std::ostream& os) const {
     os << "charmap_md_t(s=" << casesensitive << " f=" << normalization << " e=" << encoding << ")";
@@ -329,18 +124,8 @@ typedef enum {
 
 struct quota_info_t
 {
-  void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(max_bytes, bl);
-    encode(max_files, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& p) {
-    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
-    decode(max_bytes, p);
-    decode(max_files, p);
-    DECODE_FINISH(p);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
 
   void dump(ceph::Formatter *f) const;
   static std::list<quota_info_t> generate_test_instances();
@@ -387,12 +172,6 @@ struct client_writeable_range_t {
   byte_range_t range;
   snapid_t follows = 0;     // aka "data+metadata flushed thru"
 };
-
-inline void decode(client_writeable_range_t::byte_range_t& range, ceph::buffer::list::const_iterator& bl) {
-  using ceph::decode;
-  decode(range.first, bl);
-  decode(range.last, bl);
-}
 
 WRITE_CLASS_ENCODER(client_writeable_range_t)
 
@@ -465,15 +244,8 @@ enum {
 template<template<typename> class Allocator>
 class unknown_md_t {
 public:
-  void encode(ceph::buffer::list& bl, uint64_t features) const {
-    encode_nohead(payload, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& p) {
-    bufferlist bl;
-    DECODE_UNKNOWN(bl, p);
-    auto blp = bl.cbegin();
-    blp.copy(blp.get_remaining(), payload);
-  }
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& p);
 
   void print(std::ostream& os) const {
     os << "unknown_md_t(len=" << payload.size() << ")";
@@ -555,17 +327,8 @@ struct optmetadata_singleton {
   }
   void dump(ceph::Formatter* f) const;
 
-  void encode(ceph::buffer::list& bl, uint64_t features) const {
-    // no versioning, use optmetadata
-    ceph::encode(u64kind, bl);
-    std::visit([&bl, features](auto& o) { o.encode(bl, features); }, optmetadata);
-  }
-
-  void decode(ceph::buffer::list::const_iterator& p) {
-    ceph::decode(u64kind, p);
-    *this = optmetadata_singleton((kind_t)u64kind);
-    std::visit([&p](auto& o) { o.decode(p); }, optmetadata);
-  }
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& p);
 
   bool operator<(const optmetadata_singleton& other) const {
     return u64kind < other.u64kind;
@@ -584,17 +347,8 @@ struct optmetadata_multiton {
   using optkind_t = typename Singleton::kind_t;
   using optvec_t = std::vector<Singleton,Allocator<Singleton>>;
 
-  void encode(ceph::buffer::list& bl, uint64_t features) const {
-    // no versioning, use payload
-    ENCODE_START(STRUCT_V, COMPAT_V, bl);
-    ceph::encode(opts, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& p) {
-    DECODE_START(STRUCT_V, p);
-    ceph::decode(opts, p);
-    DECODE_FINISH(p);
-  }
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& p);
 
   void print(std::ostream& os) const {
     os << "optm(len=" << opts.size() << " " << opts << ")";
@@ -648,32 +402,6 @@ struct optmetadata_multiton {
 private:
   optvec_t opts;
 };
-
-template<typename T, template<typename> class Allocator>
-static inline void encode(optmetadata_singleton<T, Allocator> const& o, ::ceph::buffer::list& bl, uint64_t features=0)
-{
-  ENCODE_DUMP_PRE();
-  o.encode(bl, features);
-  ENCODE_DUMP_POST(cl);
-}
-template<typename T, template<typename> class Allocator>
-static inline void decode(optmetadata_singleton<T, Allocator>& o, ::ceph::buffer::list::const_iterator& p)
-{
-  o.decode(p);
-}
-
-template<typename Singleton, template<typename> class Allocator>
-static inline void encode(optmetadata_multiton<Singleton,Allocator> const& o, ::ceph::buffer::list& bl, uint64_t features=0)
-{
-  ENCODE_DUMP_PRE();
-  o.encode(bl, features);
-  ENCODE_DUMP_POST(cl);
-}
-template<typename Singleton, template<typename> class Allocator>
-static inline void decode(optmetadata_multiton<Singleton,Allocator>& o, ::ceph::buffer::list::const_iterator& p)
-{
-  o.decode(p);
-}
 
 template<template<typename> class Allocator = std::allocator>
 struct inode_t {
@@ -935,204 +663,6 @@ private:
   bool older_is_consistent(const inode_t &other) const;
 };
 
-// These methods may be moved back to mdstypes.cc when we have pmr
-template<template<typename> class Allocator>
-void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
-{
-  ENCODE_START(21, 6, bl);
-
-  encode(ino, bl);
-  encode(rdev, bl);
-  encode(ctime, bl);
-
-  encode(mode, bl);
-  encode(uid, bl);
-  encode(gid, bl);
-
-  encode(nlink, bl);
-  {
-    // removed field
-    bool anchored = 0;
-    encode(anchored, bl);
-  }
-
-  encode(dir_layout, bl);
-  encode(layout, bl, features);
-  encode(size, bl);
-  encode(truncate_seq, bl);
-  encode(truncate_size, bl);
-  encode(truncate_from, bl);
-  encode(truncate_pending, bl);
-  encode(mtime, bl);
-  encode(atime, bl);
-  encode(time_warp_seq, bl);
-  encode(client_ranges, bl);
-
-  encode(dirstat, bl);
-  encode(rstat, bl);
-  encode(accounted_rstat, bl);
-
-  encode(version, bl);
-  encode(file_data_version, bl);
-  encode(xattr_version, bl);
-  encode(backtrace_version, bl);
-  encode(old_pools, bl);
-  encode(max_size_ever, bl);
-  encode(inline_data, bl);
-  encode(quota, bl);
-
-  encode(stray_prior_path, bl);
-
-  encode(last_scrub_version, bl);
-  encode(last_scrub_stamp, bl);
-
-  encode(btime, bl);
-  encode(change_attr, bl);
-
-  encode(export_pin, bl);
-
-  encode(export_ephemeral_random_pin, bl);
-  encode(flags, bl);
-
-  encode(!fscrypt_auth.empty(), bl);
-  encode(fscrypt_auth, bl);
-  encode(fscrypt_file, bl);
-  encode(fscrypt_last_block, bl);
-
-  encode(optmetadata, bl, features);
-
-  encode(remote_ino, bl);
-  encode(referent_inodes, bl);
-
-  ENCODE_FINISH(bl);
-}
-
-template<template<typename> class Allocator>
-void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
-{
-  DECODE_START_LEGACY_COMPAT_LEN(19, 6, 6, p);
-
-  decode(ino, p);
-  decode(rdev, p);
-  decode(ctime, p);
-
-  decode(mode, p);
-  decode(uid, p);
-  decode(gid, p);
-
-  decode(nlink, p);
-  {
-    bool anchored;
-    decode(anchored, p);
-  }
-
-  if (struct_v >= 4)
-    decode(dir_layout, p);
-  else {
-    // FIPS zeroization audit 20191117: this memset is not security related.
-    memset(&dir_layout, 0, sizeof(dir_layout));
-  }
-  decode(layout, p);
-  decode(size, p);
-  decode(truncate_seq, p);
-  decode(truncate_size, p);
-  decode(truncate_from, p);
-  if (struct_v >= 5)
-    decode(truncate_pending, p);
-  else
-    truncate_pending = 0;
-  decode(mtime, p);
-  decode(atime, p);
-  decode(time_warp_seq, p);
-  if (struct_v >= 3) {
-    decode(client_ranges, p);
-  } else {
-    std::map<client_t, client_writeable_range_t::byte_range_t> m;
-    decode(m, p);
-    for (auto q = m.begin(); q != m.end(); ++q)
-      client_ranges[q->first].range = q->second;
-  }
-
-  decode(dirstat, p);
-  decode(rstat, p);
-  decode(accounted_rstat, p);
-
-  decode(version, p);
-  decode(file_data_version, p);
-  decode(xattr_version, p);
-  if (struct_v >= 2)
-    decode(backtrace_version, p);
-  if (struct_v >= 7)
-    decode(old_pools, p);
-  if (struct_v >= 8)
-    decode(max_size_ever, p);
-  if (struct_v >= 9) {
-    decode(inline_data, p);
-  } else {
-    inline_data.version = CEPH_INLINE_NONE;
-  }
-  if (struct_v < 10)
-    backtrace_version = 0; // force update backtrace
-  if (struct_v >= 11)
-    decode(quota, p);
-
-  if (struct_v >= 12) {
-    std::string tmp;
-    decode(tmp, p);
-    stray_prior_path = std::string_view(tmp);
-  }
-
-  if (struct_v >= 13) {
-    decode(last_scrub_version, p);
-    decode(last_scrub_stamp, p);
-  }
-  if (struct_v >= 14) {
-    decode(btime, p);
-    decode(change_attr, p);
-  } else {
-    btime = utime_t();
-    change_attr = 0;
-  }
-
-  if (struct_v >= 15) {
-    decode(export_pin, p);
-  } else {
-    export_pin = MDS_RANK_NONE;
-  }
-
-  if (struct_v >= 16) {
-    decode(export_ephemeral_random_pin, p);
-    decode(flags, p);
-  } else {
-    export_ephemeral_random_pin = 0;
-    flags = 0;
-  }
-
-  if (struct_v >= 17) {
-    bool fscrypt_flag;
-    decode(fscrypt_flag, p); // ignored
-  }
-
-  if (struct_v >= 18) {
-    decode(fscrypt_auth, p);
-    decode(fscrypt_file, p);
-  }
-
-  if (struct_v >= 19) {
-    decode(fscrypt_last_block, p);
-  }
-
-  if (struct_v >= 20) {
-    decode(optmetadata, p);
-  }
-
-  if (struct_v >= 21) {
-    decode(remote_ino, p);
-    decode(referent_inodes, p);
-  }
-  DECODE_FINISH(p);
-}
-
 template<template<typename> class Allocator>
 auto inode_t<Allocator>::generate_test_instances() -> std::list<inode_t>
 {
@@ -1210,19 +740,6 @@ bool inode_t<Allocator>::older_is_consistent(const inode_t<Allocator> &other) co
     return false;
   }
   return true;
-}
-
-template<template<typename> class Allocator>
-inline void encode(const inode_t<Allocator> &c, ::ceph::buffer::list &bl, uint64_t features)
-{
-  ENCODE_DUMP_PRE();
-  c.encode(bl, features);
-  ENCODE_DUMP_POST(cl);
-}
-template<template<typename> class Allocator>
-inline void decode(inode_t<Allocator> &c, ::ceph::buffer::list::const_iterator &p)
-{
-  c.decode(p);
 }
 
 #endif

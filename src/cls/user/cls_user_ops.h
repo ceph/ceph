@@ -5,6 +5,9 @@
 #define CEPH_CLS_USER_OPS_H
 
 #include "cls_user_types.h"
+#include "include/encoding_list.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 
 struct cls_user_set_buckets_op {
   std::list<cls_user_bucket_entry> entries;

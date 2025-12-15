@@ -409,7 +409,7 @@ RecoveryBackend::handle_scan_digest(
     auto p = m.get_data().cbegin();
     // take care to preserve ordering!
     bi.clear_objects();
-    ::decode_noclear(bi.objects, p);
+    decode_noclear(bi.objects, p);
   }
   auto recovery_handler = pg.get_recovery_handler();
   recovery_handler->dispatch_backfill_event(

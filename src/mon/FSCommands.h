@@ -17,19 +17,22 @@
 #ifndef FS_COMMANDS_H_
 #define FS_COMMANDS_H_
 
-#include "Monitor.h"
+#include "MonOpRequest.h"
 #include "CommandHandler.h"
 
-#include "include/cephfs/types.h" // for fs_cluster_id_t"
+#include "include/cephfs/cluster_id.h" // for fs_cluster_id_t"
 
 #include <iosfwd>
+#include <list>
 #include <memory>
 #include <string>
 #include <variant>
 
 class Filesystem;
 class FSMap;
+class Monitor;
 class OSDMap;
+class Paxos;
 
 class FileSystemCommandHandler : protected CommandHandler
 {

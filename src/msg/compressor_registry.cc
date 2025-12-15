@@ -2,8 +2,9 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "compressor_registry.h"
+#include "common/ceph_context.h"
 #include "common/dout.h"
-#include "include/types.h" // for operator<<(std::vector)
+#include "include/container_ios.h"
 
 using namespace std::literals;
 

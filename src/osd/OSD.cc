@@ -38,13 +38,14 @@
 #include <sys/mount.h>
 #endif
 
+#include "mgr/DaemonHealthMetric.h" // for enum daemon_metric
 #include "osd/PG.h"
 #include "osd/scrubber/scrub_machine.h"
 #include "osd/scrubber/pg_scrubber.h"
 #include "osd/ECCommon.h"
 #include "osd/ECInject.h"
 
-#include "include/types.h"
+#include "include/byte_u_t.h"
 #include "include/compat.h"
 #include "include/random.h"
 #include "include/scope_guard.h"

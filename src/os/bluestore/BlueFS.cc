@@ -15,6 +15,7 @@
 #include "common/perf_counters.h"
 #include "Allocator.h"
 #include "include/buffer_fwd.h"
+#include "include/byte_u_t.h"
 #include "include/ceph_assert.h"
 #include "common/admin_socket.h"
 #include "os/bluestore/bluefs_types.h"

@@ -32,7 +32,6 @@ set(osd_srcs
   Watch.cc
   Session.cc
   SnapMapper.cc
-  osd_types.cc
   scheduler/OpScheduler.cc
   scheduler/OpSchedulerItem.cc
   scheduler/mClockScheduler.cc
@@ -53,7 +52,6 @@ set(osd_srcs
   ECInject.cc
   ECInject.h
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
-  ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   ${osd_cyg_functions_src}
   ${osdc_osd_srcs}
   osd_tracer.cc)

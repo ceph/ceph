@@ -5,6 +5,9 @@
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
 #include "include/Context.h"
+#include "include/encoding_boost_optional.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
 #include "common/Cond.h"
 #include <errno.h>
 

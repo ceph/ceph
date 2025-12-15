@@ -18,6 +18,7 @@
 
 #include "msg/Message.h"
 
+#include "include/encoding_string.h"
 #include "include/types.h"
 
 /*

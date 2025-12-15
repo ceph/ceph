@@ -5,16 +5,22 @@
 #define CEPH_MGR_MDS_PERF_METRIC_TYPES_H
 
 #include <regex>
+#include <shared_mutex>
 #include <vector>
 #include <iosfwd>
 
-#include "include/cephfs/types.h" // for mds_rank_t
+#include "include/cephfs/rank.h" // for mds_rank_t
+#include "include/container_ios.h"
 #include "include/denc.h"
+#include "include/ceph_fs_encoder.h"
+#include "include/denc_map.h"
+#include "include/denc_set.h"
+#include "include/denc_string.h"
+#include "include/denc_vector.h"
 #include "include/stringify.h"
 #include "include/utime.h"
 #include "common/Formatter.h"
 
-#include "mds/mdstypes.h"
 #include "mgr/Types.h"
 
 typedef std::vector<std::string> MDSPerfMetricSubKey; // array of regex match
@@ -97,31 +103,7 @@ struct denc_traits<MDSPerfMetricKeyDescriptor> {
     }
   }
   static void decode(MDSPerfMetricKeyDescriptor& v,
-                     ceph::buffer::ptr::const_iterator& p) {
-    unsigned num;
-    denc_varint(num, p);
-    v.clear();
-    v.reserve(num);
-    for (unsigned i=0; i < num; ++i) {
-      MDSPerfMetricSubKeyDescriptor d;
-      denc(d, p);
-      if (!d.is_supported()) {
-        v.clear();
-        return;
-      }
-      try {
-        d.regex = d.regex_str.c_str();
-      } catch (const std::regex_error& e) {
-        v.clear();
-        return;
-      }
-      if (d.regex.mark_count() == 0) {
-        v.clear();
-        return;
-      }
-      v.push_back(std::move(d));
-    }
-  }
+                     ceph::buffer::ptr::const_iterator& p);
 };
 
 enum class MDSPerformanceCounterType : uint8_t {

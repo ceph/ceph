@@ -5,6 +5,7 @@
 #define CEPH_CLS_TIMEINDEX_OPS_H
 
 #include "common/ceph_json.h"
+#include "include/encoding_list.h"
 #include "cls_timeindex_types.h"
 
 struct cls_timeindex_add_op {

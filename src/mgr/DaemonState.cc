@@ -17,11 +17,14 @@
 #include <experimental/iterator>
 
 #include "MgrSession.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "messages/MMgrReport.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -36,6 +39,13 @@ using std::ostringstream;
 using std::string;
 using std::stringstream;
 using std::unique_ptr;
+
+DaemonState::DaemonState(PerfCounterTypes &types_)
+    : perf_counters(types_)
+{
+}
+
+DaemonState::~DaemonState() noexcept = default;
 
 void DeviceState::set_metadata(map<string,string>&& m)
 {
@@ -212,6 +222,9 @@ const std::map<std::string,std::string>& DaemonState::_get_config_defaults()
   return config_defaults;
 }
 
+DaemonStateIndex::DaemonStateIndex() = default;
+DaemonStateIndex::~DaemonStateIndex() = default;
+
 void DaemonStateIndex::insert(DaemonStatePtr dm)
 {
   std::unique_lock l{lock};
@@ -373,66 +386,4 @@ void DaemonStateIndex::cull_services(const std::set<std::string>& types_exist)
     dout(4) << "Removing data for " << i << dendl;
     _erase(i);
   }
-}
-
-void DaemonPerfCounters::update(const MMgrReport& report)
-{
-  dout(20) << "loading " << report.declare_types.size() << " new types, "
-	   << report.undeclare_types.size() << " old types, had "
-	   << types.size() << " types, got "
-           << report.packed.length() << " bytes of data" << dendl;
-
-  // Retrieve session state
-  auto priv = report.get_connection()->get_priv();
-  auto session = static_cast<MgrSession*>(priv.get());
-
-  // Load any newly declared types
-  for (const auto &t : report.declare_types) {
-    types.insert(std::make_pair(t.path, t));
-    session->declared_types.insert(t.path);
-  }
-  // Remove any old types
-  for (const auto &t : report.undeclare_types) {
-    session->declared_types.erase(t);
-  }
-
-  const auto now = ceph_clock_now();
-
-  // Parse packed data according to declared set of types
-  auto p = report.packed.cbegin();
-  DECODE_START(1, p);
-  for (const auto &t_path : session->declared_types) {
-    const auto &t = types.at(t_path);
-    auto instances_it = instances.find(t_path);
-    // Always check the instance exists, as we don't prevent yet
-    // multiple sessions from daemons with the same name, and one
-    // session clearing stats created by another on open.
-    if (instances_it == instances.end()) {
-      instances_it = instances.insert({t_path, t.type}).first;
-    }
-    uint64_t val = 0;
-    uint64_t avgcount = 0;
-    uint64_t avgcount2 = 0;
-
-    decode(val, p);
-    if (t.type & PERFCOUNTER_LONGRUNAVG) {
-      decode(avgcount, p);
-      decode(avgcount2, p);
-      instances_it->second.push_avg(now, val, avgcount);
-    } else {
-      instances_it->second.push(now, val);
-    }
-  }
-  DECODE_FINISH(p);
-}
-
-void PerfCounterInstance::push(utime_t t, uint64_t const &v)
-{
-  buffer.push_back({t, v});
-}
-
-void PerfCounterInstance::push_avg(utime_t t, uint64_t const &s,
-                                   uint64_t const &c)
-{
-  avg_buffer.push_back({t, s, c});
 }
