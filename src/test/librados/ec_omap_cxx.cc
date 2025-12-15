@@ -191,8 +191,113 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
 
 }
 
-TEST_P(LibRadosOmapECPP, ErrorInject) {
+// This test is destructive to other tests running in parallel
+// Do not merge this into the main branch
+TEST_P(LibRadosOmapECPP, OmapRecovery) {
   SKIP_IF_CRIMSON();
+  turn_balancing_off();
+  bufferlist bl_write, omap_val_bl;
+  const std::string omap_key_1 = "key_a";
+  const std::string omap_key_2 = "key_b";
+  const std::string omap_value = "val_c";
+  encode(omap_value, omap_val_bl);
+  std::map<std::string, bufferlist> omap_map = {
+  {omap_key_1, omap_val_bl},
+  {omap_key_2, omap_val_bl}
+  };
+  bl_write.append("ceph");
+
+  // 1. Write to OMAP
+  ObjectWriteOperation write1;
+  write1.write(0, bl_write);
+  write1.omap_set(omap_map);
+  int ret = ioctx.operate("omap_recovery_oid", &write1);
+  EXPECT_EQ(ret, 0);
+
+  // 2. Find Primary OSD
+  ceph::messaging::osd::OSDMapReply reply;
+  int res = request_osd_map(pool_name, "omap_recovery_oid", nspace, &reply);
+  EXPECT_EQ(res, 0);
+  int victim_osd = reply.acting_primary;
+  std::string pgid = reply.pgid;
+
+  std::cout << "Target Object in PG " << pgid << " on Primary OSD." << victim_osd << std::endl;
+
+  // 3. Mark Primary OSD as Down and Out
+  std::cout << "Marking OSD." << victim_osd << " down and out..." << std::endl;
+  bufferlist inbl, outbl;
+  std::ostringstream cmd_down, cmd_out;
+  cmd_out << "{\"prefix\": \"osd out\", \"ids\": [\"" << victim_osd << "\"]}";
+  ret = cluster.mon_command(cmd_out.str(), std::move(inbl), &outbl, nullptr);
+  EXPECT_EQ(ret, 0);
+  cmd_down << "{\"prefix\": \"osd down\", \"ids\": [\"" << victim_osd << "\"]}";
+  ret = cluster.mon_command(cmd_down.str(), std::move(inbl), &outbl, nullptr);
+  EXPECT_EQ(ret, 0);
+
+  // 4. Wait for PG to be Active + Clean
+  std::cout << "Waiting for PG " << pgid << " to recover (active+clean)..." << std::endl;
+
+  bool recovered = false;
+  for (int i = 0; i < 120; ++i) {
+    std::string state;
+    bufferlist inbl2, outbl2;
+    std::string cmd = "{\"prefix\": \"pg dump\", \"pgid\": \"" + pgid + "\"}";
+    cluster.mon_command(std::move(cmd), std::move(inbl2), &outbl2, nullptr);
+    std::string out_str = outbl2.to_str();
+    if (out_str.find("active+clean") != std::string::npos) {
+      recovered = true;
+      break;
+    }
+    sleep(1);
+  }
+  EXPECT_TRUE(recovered) << "Timed out waiting for recovery on " << pgid;
+
+  // 5. Read OMAP
+  check_omap_read("omap_recovery_oid", omap_key_1, omap_value, 2, 0);
+
+  // 6. Deep Scrub the PG
+  std::cout << "Forcing Deep Scrub to verify OMAP integrity..." << std::endl;
+  std::ostringstream cmd_scrub;
+  cmd_scrub << "{\"prefix\": \"pg deep-scrub\", \"pgid\": \"" << pgid << "\"}";
+  cluster.mon_command(cmd_scrub.str(), bufferlist(), &outbl, nullptr);
+
+  // 7. Wait for deep scrub to finish
+  sleep(5);
+  bool clean_after_scrub = false;
+  for (int i = 0; i < 60; ++i) {
+    bufferlist in, out;
+    std::string cmd = "{\"prefix\": \"pg dump\", \"pgid\": \"" + pgid + "\"}";
+    cluster.mon_command(std::move(cmd), std::move(in), &out, nullptr);
+    if (out.to_str().find("active+clean") != std::string::npos) {
+      clean_after_scrub = true;
+      break;
+    }
+    sleep(1);
+  }
+  EXPECT_TRUE(clean_after_scrub);
+
+  // 8. Check for inconsistency
+  bufferlist q_in, q_out;
+  std::string q_cmd = "{\"prefix\": \"pg query\", \"pgid\": \"" + pgid + "\"}";
+  cluster.mon_command(std::move(q_cmd), std::move(q_in), &q_out, nullptr);
+  std::string query_res = q_out.to_str();
+  if (query_res.find("inconsistent") != std::string::npos) {
+    ADD_FAILURE() << "PG " << pgid << " is inconsistent after OMAP recovery! Scrub failed.";
+  }
+
+  // 7. Bring Old Primary OSD Back In
+  std::ostringstream cmd_in;
+  bufferlist inbl3;
+  cmd_in << "{\"prefix\": \"osd in\", \"ids\": [\"" << victim_osd << "\"]}";
+  ret = cluster.mon_command(cmd_in.str(), std::move(inbl3), &outbl, nullptr);
+  EXPECT_EQ(ret, 0);
+
+  turn_balancing_on();
+}
+
+TEST_P(LibRadosOmapECPP, ChangeUpmap) {
+  SKIP_IF_CRIMSON();
+  turn_balancing_off();
   bufferlist bl_write, omap_val_bl, xattr_val_bl;
   const std::string omap_key_1 = "key_a";
   const std::string omap_key_2 = "key_b";
@@ -207,34 +312,22 @@ TEST_P(LibRadosOmapECPP, ErrorInject) {
   encode(xattr_value, xattr_val_bl);
   bl_write.append("ceph");
   
-  // 1a. Write data to omap
+  // 1. Write data to omap
   ObjectWriteOperation write1;
   write1.write(0, bl_write);
   write1.omap_set(omap_map);
-  int ret = ioctx.operate("error_inject_oid", &write1);
+  int ret = ioctx.operate("change_upmap_oid", &write1);
   EXPECT_EQ(ret, 0);
 
-  // 1b. Write data to xattrs
-  write1.setxattr(xattr_key.c_str(), xattr_val_bl);
-  ret = ioctx.operate("error_inject_oid", &write1);
-  EXPECT_EQ(ret, 0);
-
-  // 2. Set osd_debug_reject_backfill_probability to 1.0
-  CephContext* cct = static_cast<CephContext*>(cluster.cct());
-  cct->_conf->osd_debug_reject_backfill_probability = 1.0;
-
-  // 3. Read xattrs before switching primary osd
-  check_xattr_read("error_inject_oid", xattr_key, xattr_value, 1, 1, 0);
-
-  // 4. Find up osds
+  // 2. Find up osds
   ceph::messaging::osd::OSDMapReply reply;
-  int res = request_osd_map(pool_name, "error_inject_oid", nspace, &reply);
+  int res = request_osd_map(pool_name, "change_upmap_oid", nspace, &reply);
   EXPECT_TRUE(res == 0);
   std::vector<int> prev_up_osds = reply.up;
   std::string pgid = reply.pgid;
   print_osd_map("Previous up osds: ", prev_up_osds);
   
-  // 5. Find unused osd to be new primary
+  // 3. Find unused osd to be new primary
   int prev_primary = prev_up_osds[0];
   int new_primary = 0;
   while (true) {
@@ -250,30 +343,18 @@ TEST_P(LibRadosOmapECPP, ErrorInject) {
   std::cout << "New primary osd: " << new_primary << std::endl;
   print_osd_map("Desired up osds: ", new_up_osds);
 
-  // 6. Set new up map
+  // 4. Set new up map
   int rc = set_osd_upmap(pgid, new_up_osds);
   EXPECT_TRUE(rc == 0);
 
-  // 7. Wait for new upmap to appear as acting set of osds
-  int res2 = wait_for_upmap(pool_name, "error_inject_oid", nspace, new_primary, 30s);
+  // 5. Wait for new upmap to appear as acting set of osds
+  int res2 = wait_for_upmap(pool_name, "change_upmap_oid", nspace, new_primary, 30s);
   EXPECT_TRUE(res2 == 0);
   
-  // 8a. Read omap
-  check_omap_read("error_inject_oid", omap_key_1, omap_value, 2, 0);
+  // 6. Read omap
+  check_omap_read("change_upmap_oid", omap_key_1, omap_value, 2, 0);
 
-  // 8b. Read xattrs after switching primary osd
-  check_xattr_read("error_inject_oid", xattr_key, xattr_value, 1, 1, 0);
-
-  // 9. Set osd_debug_reject_backfill_probability to 0.0
-  cct->_conf->osd_debug_reject_backfill_probability = 0.0;
-
-  // 10. Reset up map to previous values
-  int rc2 = set_osd_upmap(pgid, prev_up_osds);
-  EXPECT_TRUE(rc2 == 0);
-
-  // 11. Wait for prev upmap to appear as acting set of osds
-  int res3 = wait_for_upmap(pool_name, "error_inject_oid", nspace, prev_primary, 30s);
-  EXPECT_TRUE(res3 == 0);
+  turn_balancing_on();
 }
 
 

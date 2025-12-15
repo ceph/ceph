@@ -132,6 +132,8 @@ protected:
   static librados::Rados s_cluster;
   void set_allow_ec_overwrites();
   std::vector<int> get_osd_ids();
+  void turn_balancing_off();
+  void turn_balancing_on();
   void freeze_omap_journal();
   void unfreeze_omap_journal();
   void write_omap_keys(
@@ -144,15 +146,6 @@ protected:
     std::string oid, 
     std::set<std::string> &keys_read,
     int max_keys = -1
-  );
-  void check_returned_keys(
-    std::list<std::pair<std::string, std::string>> expected_ranges,
-    std::set<std::string> returned_keys
-  );
-  void remove_omap_range(
-    std::string oid, 
-    std::string start, 
-    std::string end
   );
   int request_osd_map(
     std::string pool_name, 

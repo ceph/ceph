@@ -51,6 +51,44 @@ std::vector<int> RadosTestECPP::get_osd_ids() {
   return osd_ids;
 }
 
+void RadosTestECPP::turn_balancing_off()
+{
+  int rc;
+  std::ostringstream oss;
+  bufferlist outbl;
+
+  oss.str("");
+  bufferlist inbl_autoscaler;
+  oss << "{\"prefix\": \"osd set\", \"key\": \"noautoscale\"}";
+  rc = cluster.mon_command(oss.str(), std::move(inbl_autoscaler), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"balancer off\"}";
+  bufferlist inbl_balancer;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_balancer), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+}
+
+void RadosTestECPP::turn_balancing_on()
+{
+  int rc;
+  std::ostringstream oss;
+  bufferlist outbl;
+
+  oss.str("");
+  bufferlist inbl_autoscaler;
+  oss << "{\"prefix\": \"osd unset\", \"key\": \"noautoscale\"}";
+  rc = cluster.mon_command(oss.str(), std::move(inbl_autoscaler), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"balancer on\"}";
+  bufferlist inbl_balancer;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_balancer), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+}
+
 void RadosTestECPP::freeze_omap_journal() {
   std::vector<int> osd_ids = get_osd_ids();
 
@@ -680,11 +718,14 @@ void RadosTestECPP::check_omap_read(
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(err, expected_err);
   EXPECT_EQ(vals_read.size(), expected_size);
-  EXPECT_NE(vals_read.find(omap_key), vals_read.end());
-  bufferlist val_read_bl = vals_read[omap_key];
-  std::string val_read;
-  decode(val_read, val_read_bl);
-  EXPECT_EQ(omap_value, val_read);
+  if (vals_read.find(omap_key) == vals_read.end()) {
+    ADD_FAILURE() << "Missing key " << omap_key;
+  } else {
+    bufferlist val_read_bl = vals_read[omap_key];
+    std::string val_read;
+    decode(val_read, val_read_bl);
+    EXPECT_EQ(omap_value, val_read);
+  }
 }
 
 void RadosTestECPP::print_osd_map(std::string message, std::vector<int> osd_vec) {
