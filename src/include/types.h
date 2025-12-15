@@ -61,6 +61,11 @@ extern "C" {
 
 #include "acconfig.h"
 
+#include <fmt/core.h> // for FMT_VERSION
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
+
 // DARWIN compatibility
 #ifdef __APPLE__
 typedef long long loff_t;
