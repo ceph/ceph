@@ -9996,17 +9996,20 @@ void OSD::dequeue_peering_evt(
       derr << __func__ << " unrecognized pg-less event " << evt->get_desc() << dendl;
       ceph_abort();
     }
-  } else if (PeeringCtx rctx;
-	     advance_pg(curmap->get_epoch(), pg, handle, rctx)) {
-    pg->do_peering_event(evt, rctx);
-    if (pg->is_deleted()) {
+  } else {
+    PeeringCtx rctx;
+    rctx.handle = &handle;
+    if (advance_pg(curmap->get_epoch(), pg, handle, rctx)) {
+      pg->do_peering_event(evt, rctx);
+      if (pg->is_deleted()) {
+	pg->unlock();
+	return;
+      }
+      dispatch_context(rctx, pg, curmap, &handle);
+      need_up_thru = pg->get_need_up_thru();
+      same_interval_since = pg->get_same_interval_since();
       pg->unlock();
-      return;
     }
-    dispatch_context(rctx, pg, curmap, &handle);
-    need_up_thru = pg->get_need_up_thru();
-    same_interval_since = pg->get_same_interval_since();
-    pg->unlock();
   }
 
   if (need_up_thru) {
