@@ -1194,7 +1194,10 @@ protected:
   std::set<hobject_t> pool_migrations_in_flight;
   /// last pool migration operation started
   hobject_t last_pool_migration_started;
-  bool new_pool_migration;
+  /// set for 1st object migration after activate
+  bool new_pool_migration_interval;
+  /// set while migrating 1st object after activate
+  bool new_pool_migration_interval_in_flight;
 
   hobject_t earliest_pool_migration();
   void update_migration_watermark(const hobject_t &watermark) override
@@ -1367,7 +1370,7 @@ protected:
 
   void scan_range_migration(
     int min, int max, PoolMigrationInterval *pmi,
-    ThreadPool::TPHandle &handle
+    HBHandle *handle
     );
 
   /// Update a hash range to reflect changes since the last scan
@@ -1378,7 +1381,7 @@ protected:
 
   void update_range(
     PoolMigrationInterval *pmi,
-    ThreadPool::TPHandle &handle
+    HBHandle *handle
     );
 
   int prep_backfill_object_push(
@@ -1994,9 +1997,9 @@ public:
   void plpg_on_pool_change() override;
   void clear_async_reads();
   void on_change(ObjectStore::Transaction &t) override;
-  void _on_activate_committed();
-  void on_activate_committed() override;
-  void on_activate_complete() override;
+  void _on_activate_committed(HBHandle *handle);
+  void on_activate_committed(HBHandle *handle) override;
+  void on_activate_complete(HBHandle *handle) override;
   void on_flushed() override;
   void on_removal(ObjectStore::Transaction &t) override;
   void on_shutdown() override;

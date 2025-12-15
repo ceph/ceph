@@ -686,6 +686,14 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 	last_backfill_started >= soid &&
 	backfills_in_flight.count(soid))
       return true;
+    // Special case - at the start of a new interval writes to the
+    // migration watermark object are blocked until it can be migrated.
+    // This ensures the target pool cleans up (deletes) any interrupted
+    // migrations from prior intervals before a delete object in the
+    // source pool could progress the watermark
+    if (pool_migration_watermark == soid &&
+	new_pool_migration_interval)
+      return true;
     // Object is degraded if we are migrating it to another pool
     if (pool_migration_watermark <= soid &&
 	last_pool_migration_started >= soid &&
@@ -1786,7 +1794,8 @@ PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
       _pool.info, ec_profile, this, coll_t(p), ch, o->store, cct, ec_extent_cache_lru)),
   object_contexts(o->cct, o->cct->_conf->osd_pg_object_context_cache_count),
   new_backfill(false),
-  new_pool_migration(false),
+  new_pool_migration_interval(false),
+  new_pool_migration_interval_in_flight(false),
   temp_seq(0),
   snap_trimmer_machine(this)
 {
@@ -13174,7 +13183,7 @@ hobject_t PrimaryLogPG::earliest_pool_migration()
   return current;
 }
 
-void PrimaryLogPG::_on_activate_committed()
+void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
 {
   // waiters
   if (!recovery_state.needs_flush()) {
@@ -13188,9 +13197,17 @@ void PrimaryLogPG::_on_activate_committed()
     waiting_for_flush.swap(waiting_for_peered);
   }
 
+  pool_migrations_in_flight.clear();
+  new_pool_migration_interval_in_flight = false;
   if (pool.info.is_pg_migrating(info.pgid.pgid)) {
     update_migration_watermark(earliest_pool_migration());
-    new_pool_migration = true;
+    pool_migration_info.reset(last_pool_migration_started);
+    update_range(&pool_migration_info, handle);
+    new_pool_migration_interval = true;
+    //BILL:FIXME: If we transition from migrating back to recovery/backfill we currently block I/O to the
+    //migration watermark object until we get back to migrating and migrate that object. That is wrong - we
+    //need to schedule cleanup on the target (empty copy from message?) and then clear new_pool_migration_interval
+    //and call on_global_recover to kick the queues rather than leaving I/O stalled until recovery/backfill completes.
   } else if (pool.info.has_pg_migrated(info.pgid.pgid)) {
     update_migration_watermark(hobject_t::get_max());
   } else {
@@ -13198,16 +13215,16 @@ void PrimaryLogPG::_on_activate_committed()
   }
 }
 
-void PrimaryLogPG::on_activate_committed()
+void PrimaryLogPG::on_activate_committed(HBHandle *handle)
 {
   ceph_assert(!is_primary());
-  _on_activate_committed();
+  _on_activate_committed(handle);
 }
 
-void PrimaryLogPG::on_activate_complete()
+void PrimaryLogPG::on_activate_complete(HBHandle *handle)
 {
   check_local();
-  _on_activate_committed();
+  _on_activate_committed(handle);
 
   // all clean?
   if (needs_recovery()) {
@@ -14612,7 +14629,7 @@ void PrimaryLogPG::update_range(
 
 void PrimaryLogPG::update_range(
   PoolMigrationInterval *pmi,
-  ThreadPool::TPHandle &handle)
+  HBHandle *handle)
 {
   int local_min = cct->_conf->osd_backfill_scan_min;
   int local_max = cct->_conf->osd_backfill_scan_max;
@@ -14777,7 +14794,7 @@ void PrimaryLogPG::scan_range_replica(
 
 void PrimaryLogPG::scan_range_migration(
   int min, int max, PoolMigrationInterval *pmi,
-  ThreadPool::TPHandle &handle)
+  HBHandle *handle)
 {
   ceph_assert(is_locked());
   dout(10) << "scan_range_migration from " << pmi->begin << dendl;
@@ -14791,7 +14808,7 @@ void PrimaryLogPG::scan_range_migration(
   dout(20) << ls << dendl;
 
   for (vector<hobject_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
-    handle.reset_tp_timeout();
+    handle->reset_tp_timeout();
 
     ceph_assert(is_primary());
 
@@ -14882,30 +14899,23 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 {
   dout(10) << __func__ << " (" << max << ")"
 	   << " last_pool_migration_started " << last_pool_migration_started
-	   << (new_pool_migration ? " new_pool_migration":"")
+	   << (new_pool_migration_interval ? " new_pool_migration_interval":"")
 	   << dendl;
-
-  // Initialize from prior migration state
-  if (new_pool_migration) {
-    // on_activate_complete() was called prior to getting here
-    ceph_assert(last_pool_migration_started == earliest_pool_migration());
-    new_pool_migration = false;
-
-    //BILL:FIXME: initialize PoolMigrationIntervals? Maybe we need to move
-    //all of the code in this if into earliest_pool_migration as we need to
-    //calculate pool_migration_watermark before allowing I/O to start.
-    pool_migration_info.reset(last_pool_migration_started);
-    update_range(&pool_migration_info, handle);
-
-    pool_migrations_in_flight.clear();
-  }
 
   //BILL:FIXME: Simple implementation, we only migrate one object
   //at a time - so can use last_pool_migration_started as the next
   //object to be migrated
+  if (!pool_migrations_in_flight.empty()) {
+    *work_started = true;
+    return 0;
+  }
 
   if (last_pool_migration_started.is_max()) {
     // Finished pool migration
+    if (!pool_migrations_in_flight.empty()) {
+      // but still waiting for in flight migrations
+      *work_started = true;
+    }
     return 0;
   }
   // Start next pool migration
@@ -14926,6 +14936,19 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 	     << "; could not get rw_manager lock" << dendl;
     return 0;
   }
+  // Writes to the migration watermark object are blocked at the start of each
+  // new interval. This ensures that any in flight migrations that got disrupted
+  // in the previous epoch can be cleaned up on the target. In particular a
+  // previous interrupted attempt at copying the object to the target pool
+  // followed by a new interval and the object being deleted in the source pool
+  // must not leave the object in the target pool.
+  // BILL:FIXME: Need to pass this flag on the copy_from request. Target pool
+  // needs to scan for objects >= copy from object and delete them if this flag
+  // is set.
+  if (new_pool_migration_interval) {
+    new_pool_migration_interval = false;
+    new_pool_migration_interval_in_flight = true;
+  }
   start_recovery_op(soid);
   ceph_assert(!recovering.count(soid));
   recovering.insert(make_pair(soid, obc));
@@ -14937,6 +14960,7 @@ uint64_t PrimaryLogPG::recover_pool_migration(
       auto i = recovering.find(soid);
       ceph_assert(i != recovering.end());
       object_stat_sum_t stat_diff;
+      new_pool_migration_interval_in_flight = false;
       on_global_recover(soid, stat_diff, false);
     });
   ctx->at_version = get_next_version();

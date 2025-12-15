@@ -391,7 +391,7 @@ void PG::on_replica_activate()
   scrubber.on_replica_activate();
 }
 
-void PG::on_activate_complete()
+void PG::on_activate_complete(HBHandle *handle)
 {
   /* Confusingly, on_activate_complete is invoked when the primary and replicas
    * have recorded the current interval.  At that point, the PG may either become
