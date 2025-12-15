@@ -121,9 +121,10 @@ length and segment alignment fields are zeroed.
 
 The reserved bytes are zeroed.
 
-The preamble checksum is CRC32-C.  It covers everything up to
-itself (28 bytes) and is calculated and verified irrespective of
-the connection mode (i.e. even if the frame is encrypted).
+The preamble checksum is CRC32-C (see :ref:`crc`).  It covers
+everything up to itself (28 bytes) and is calculated and verified
+irrespective of the connection mode (i.e. even if the frame is
+encrypted).
 
 ### msgr2.0-crc mode
 
@@ -152,8 +153,9 @@ back to the user immediately, without making a copy or blocking
 until the whole frame is transmitted.  Currently this is used only
 by the kernel client, see ceph_msg_revoke().
 
-The segment checksum is CRC32-C.  For "used" empty segments, it is
-set to (__le32)-1.  For unused (trailing) segments, it is zeroed.
+The segment checksum is CRC32-C (see :ref:`crc`).  For "used"
+empty segments, it is initialized with (__le32)-1. For unused
+(trailing) segments, it is zeroed.
 
 The crcs are calculated just to protect against bit errors.
 No authenticity guarantees are provided, unlike in msgr1 which
@@ -954,3 +956,20 @@ _____________________________________
      session_accepting -> ready [label = "client ident", tooltip = "set connection features"];
      ready -> ready [label = "keep alive"];
    }
+
+
+.. _crc:
+
+CRC Calculation
+---------------
+
+The CRC algorithm used in this section has the following parameters:
+
+* Width: 32 bits
+* Poly: ``0x1EDC6F41``
+* Init: ``0`` (for preamble CRC), ``(__le32)-1`` = ``0xFFFFFFFF`` (for segment data CRC)
+* Refin: ``true``
+* Refout: ``true``
+* Xorout: ``0``
+* Check: ``0``
+* Residue: ``0``
