@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, AfterViewInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ChangeDetectorRef, AfterViewChecked } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { CdNotification } from '~/app/shared/models/cd-notification';
@@ -12,7 +12,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
   templateUrl: './notifications-page.component.html',
   styleUrls: ['./notifications-page.component.scss']
 })
-export class NotificationsPageComponent implements OnInit, OnDestroy, AfterViewInit {
+export class NotificationsPageComponent implements OnInit, OnDestroy, AfterViewInit, AfterViewChecked {
   notifications: CdNotification[] = [];
   selectedNotification: CdNotification | null = null;
   searchText: string = '';
@@ -24,7 +24,8 @@ export class NotificationsPageComponent implements OnInit, OnDestroy, AfterViewI
     private notificationService: NotificationService,
     private prometheusAlertService: PrometheusAlertService,
     private prometheusNotificationService: PrometheusNotificationService,
-    private authStorageService: AuthStorageService
+    private authStorageService: AuthStorageService,
+    private changeDetectorRef: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -159,5 +160,9 @@ export class NotificationsPageComponent implements OnInit, OnDestroy, AfterViewI
 
   ngAfterViewInit(): void {
     this.sub.add(this.notificationService.data$.subscribe(() => {}));
+  }
+
+  ngAfterViewChecked() {
+    this.changeDetectorRef.detectChanges();
   }
 }
