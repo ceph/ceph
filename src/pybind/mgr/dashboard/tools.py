@@ -30,8 +30,9 @@ except ImportError:
     pass  # For typing only
 
 
-_cert_tmp = None
-_key_tmp = None
+_cert_tmp: Optional[str] = None
+_key_tmp: Optional[str] = None
+_root_ca_fname: Optional[str] = None
 
 
 class RequestLoggingTool(cherrypy.Tool):
@@ -925,9 +926,11 @@ def configure_ssl_certs(restart_engine=False):
         os.remove(_cert_tmp)
     if _key_tmp and os.path.exists(_key_tmp):
         os.remove(_key_tmp)
+    if _root_ca_fname and os.path.exists(_root_ca_fname):
+        os.remove(_root_ca_fname)
 
     # SSL initialization
-    config = {}
+    config: dict[str, object] = {}
     cert = mgr.get_localized_store("crt")  # type: ignore
     if cert is not None:
         cert_tmp = tempfile.NamedTemporaryFile(delete=False)
@@ -946,21 +949,32 @@ def configure_ssl_certs(restart_engine=False):
     else:
         _key_tmp = mgr.get_localized_module_option('key_file')  # type: ignore
 
+    if not (_cert_tmp and _key_tmp):
+        logger.error("Cannot generate cert/key pair for the Dashboard.")
+        return
+
     verify_tls_files(_cert_tmp, _key_tmp)
 
-    # Create custom SSL context to disable TLS 1.0 and 1.1.
-    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    context.load_cert_chain(_cert_tmp, _key_tmp)
-
     root_ca = mgr.get_localized_store("root_ca")  # type: ignore
-    if root_ca is not None:
+    if root_ca is not None and root_ca.strip(): # TODO: redo double check this line
         root_ca_tmp = tempfile.NamedTemporaryFile()
         root_ca_tmp.write(root_ca.encode('utf-8'))
         root_ca_tmp.flush()  # root_ca_tmp must not be gc'ed
         _root_ca_fname = root_ca_tmp.name
+    else:
+        _root_ca_fname = mgr.get_localized_module_option('root_ca_file')  # type: ignore
+
+    # Create custom SSL context to disable TLS 1.0 and 1.1.
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    context.load_cert_chain(_cert_tmp, _key_tmp)
+    if _root_ca_fname:
         # enforce mTLS check
+        logger.info(f"Loading root-ca from {_root_ca_fname}")
         context.verify_mode = ssl.CERT_REQUIRED
         context.load_verify_locations(_root_ca_fname)
+    else:
+        logger.warning(f"root-ca file '{_root_ca_fname}' not found; disabling mTLS")
+        context.verify_mode = ssl.CERT_NONE
 
     if sys.version_info >= (3, 7):
         context.minimum_version = ssl.TLSVersion.TLSv1_3

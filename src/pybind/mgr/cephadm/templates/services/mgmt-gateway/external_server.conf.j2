@@ -78,6 +78,12 @@ server {
     location / {
         proxy_pass {{ dashboard_scheme }}://dashboard_servers;
         proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+
+        proxy_ssl_certificate /etc/nginx/ssl/nginx_internal.crt;
+        proxy_ssl_certificate_key /etc/nginx/ssl/nginx_internal.key;
+        proxy_ssl_trusted_certificate /etc/nginx/ssl/ca.crt;
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 2;
         {% if enable_oauth2_proxy %}
         auth_request /oauth2/auth;
         error_page 401 = /oauth2/sign_in;
