@@ -25,6 +25,7 @@ export interface CephServiceAdditionalSpec {
   api_port: number;
   api_secure: boolean;
   rgw_frontend_port: number;
+  rgw_frontend_secondary_port: number;
   trusted_ip_list: string[];
   virtual_ip: string;
   frontend_port: number;

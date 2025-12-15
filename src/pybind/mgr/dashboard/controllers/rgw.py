@@ -44,6 +44,7 @@ RGW_DAEMON_SCHEMA = {
     "zonegroup_name": (str, "Zone Group"),
     "zone_name": (str, "Zone"),
     "port": (int, "Port"),
+    "secondary_port": (int, "Secondary Port")
 }
 
 RGW_USER_SCHEMA = {
@@ -304,14 +305,23 @@ class RgwDaemon(RESTController):
                 metadata = service['metadata']
 
                 frontend_config = metadata['frontend_config#0']
-                port_match = re.search(r"port=(\d+)", frontend_config)
+
+                port_match = re.search(r"(?<!ssl_)port=(\d+)", frontend_config)
+                match_from_endpoint = re.search(r"(?<!ssl_)endpoint=\S+:(\d+)", frontend_config)
+
+                ssl_port_match = re.search(r"ssl_port=(\d+)", frontend_config)
+                ssl_match_from_endpoint = re.search(r"ssl_endpoint=\S+:(\d+)", frontend_config)
+
                 port = None
-                if port_match:
-                    port = port_match.group(1)
+                secondary_port = None
+
+                if ssl_port_match or ssl_match_from_endpoint:
+                    port = ssl_port_match.group(1) if ssl_port_match else ssl_match_from_endpoint.group(1)
+                    if port_match or match_from_endpoint:
+                        secondary_port = port_match.group(1) if port_match else match_from_endpoint.group(1)
                 else:
-                    match_from_endpoint = re.search(r"endpoint=\S+:(\d+)", frontend_config)
-                    if match_from_endpoint:
-                        port = match_from_endpoint.group(1)
+                    if port_match or match_from_endpoint:
+                       port = port_match.group(1) if port_match else match_from_endpoint.group(1)                    
 
                 # extract per-daemon service data and health
                 daemon = {
@@ -324,7 +334,8 @@ class RgwDaemon(RESTController):
                     'zonegroup_id': metadata['zonegroup_id'],
                     'zone_name': metadata['zone_name'],
                     'default': instance.daemon.name == metadata['id'],
-                    'port': int(port) if port else None
+                    'port': int(port) if port else None,
+                    'secondary_port': int(secondary_port) if secondary_port else None,
                 }
 
                 daemons.append(daemon)

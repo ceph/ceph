@@ -271,6 +271,64 @@ describe('ServiceFormComponent', () => {
         formHelper.expectError('rgw_frontend_port', 'pattern');
       });
 
+      it('should submit rgw with port, secondary port and ssl enabled', () => {
+        formHelper.setValue('rgw_frontend_port', 1234);
+        formHelper.setValue('rgw_frontend_secondary_port', 1235);
+        formHelper.setValue('ssl', true);
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'rgw',
+          service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
+          placement: {},
+          unmanaged: false,
+          rgw_frontend_port: 1234,
+          rgw_frontend_secondary_port: 1235,
+          rgw_frontend_ssl_certificate: '',
+          ssl: true
+        });
+      });
+
+      it('should submit valid rgw secondary port (1)', () => {        
+        formHelper.setValue('rgw_frontend_secondary_port', 1);        
+        component.onSubmit();
+        formHelper.expectValid('rgw_frontend_secondary_port');
+      });
+
+      it('should submit valid rgw secondary port (2)', () => {        
+        formHelper.setValue('rgw_frontend_secondary_port', 65535);        
+        component.onSubmit();
+        formHelper.expectValid('rgw_frontend_secondary_port');
+      });
+
+      it('should submit invalid rgw secondary port (1)', () => {        
+        formHelper.setValue('rgw_frontend_secondary_port', 0);
+        fixture.detectChanges();
+        formHelper.expectError('rgw_frontend_secondary_port', 'min');
+      });
+
+      it('should submit invalid rgw secondary port (2)', () => {
+        formHelper.setValue('rgw_frontend_secondary_port', 65536);
+        fixture.detectChanges();
+        formHelper.expectError('rgw_frontend_secondary_port', 'max');
+      });
+
+      it('should submit invalid rgw secondary port (3)', () => {
+        formHelper.setValue('rgw_frontend_secondary_port', 'abc');
+        component.onSubmit();
+        formHelper.expectError('rgw_frontend_secondary_port', 'pattern');
+      });
+
+      it('should submit invalid rgw when ssl is enabled and frontend_port and secondary_port are the same', () => {
+        formHelper.setValue('rgw_frontend_port', 1234);
+        formHelper.setValue('rgw_frontend_secondary_port', 1234);
+        formHelper.setValue('ssl', true);
+        component.onSubmit();
+        formHelper.expectError('rgw_frontend_secondary_port', 'donotmatch');
+      });
+
       it('should submit rgw w/o port', () => {
         formHelper.setValue('ssl', false);
         component.onSubmit();

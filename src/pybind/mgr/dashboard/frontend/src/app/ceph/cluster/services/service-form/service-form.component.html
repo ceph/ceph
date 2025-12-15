@@ -363,6 +363,35 @@
           </div>
         </ng-container>
 
+        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'rgw'">
+          <!-- rgw_frontend_secondary_port -->
+          <div class="form-group row" *ngIf="serviceForm.controls.ssl.value">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="rgw_frontend_secondary_port">Secondary port</label>
+            <div class="cd-col-form-input">
+              <input id="rgw_frontend_secondary_port"
+                     class="form-control"
+                     type="number"
+                     formControlName="rgw_frontend_secondary_port"
+                     min="1"
+                     max="65535">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('rgw_frontend_secondary_port', frm, 'pattern')"
+                    i18n>The entered value needs to be a number.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('rgw_frontend_secondary_port', frm, 'min')"
+                    i18n>The value must be at least 1.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('rgw_frontend_secondary_port', frm, 'max')"
+                    i18n>The value cannot exceed 65535.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('rgw_frontend_secondary_port', frm, 'donotmatch')"
+                    i18n>Port and Secondary port cannot have the same value.</span>
+            </div>
+          </div>
+        </ng-container>
+
         <!-- iSCSI -->
         <!-- pool -->
         <div class="form-group row"
