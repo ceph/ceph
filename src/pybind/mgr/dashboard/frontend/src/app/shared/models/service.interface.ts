@@ -62,6 +62,7 @@ export interface CephServiceAdditionalSpec {
   client_secret: string;
   oidc_issuer_url: string;
   enable_auth: boolean;
+  qat: QatSepcs;
 }
 
 export interface CephServicePlacement {
@@ -69,4 +70,14 @@ export interface CephServicePlacement {
   placement?: string;
   hosts?: string[];
   label?: string | string[];
+}
+
+export interface QatSepcs {
+  [key: string]: string;
+}
+
+export enum QatOptions {
+  hw = 'hw',
+  sw = 'sw',
+  none = 'none'
 }
