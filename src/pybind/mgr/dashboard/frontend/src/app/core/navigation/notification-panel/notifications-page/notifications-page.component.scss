@@ -1,24 +1,8 @@
 // Main container
-.notifications-page-container {
-  padding: var(--cds-spacing-05);
+.notifications-page__container {
+  padding-top: var(--cds-spacing-05);
   background-color: var(--cds-layer-01);
-  min-height: 100vh;
-}
-
-// Section headings
-.notification-section-heading {
-  font-size: var(--cds-productive-heading-03-font-size);
-  line-height: var(--cds-productive-heading-03-line-height);
-  font-weight: var(--cds-productive-heading-03-font-weight);
-  color: var(--cds-text-primary);
-  margin-bottom: var(--cds-spacing-05);
-}
-
-// Search container
-.search-container {
-  cds-search {
-    width: 100%;
-  }
+  column-gap: 1rem;
 }
 
 // Notifications list
@@ -97,14 +81,6 @@
   border: 1px solid var(--cds-border-subtle);
   border-radius: var(--cds-border-radius);
   background-color: var(--cds-layer-01);
-
-  h4 {
-    margin: 0 0 var(--cds-spacing-05) 0;
-    font-size: var(--cds-productive-heading-03-font-size);
-    line-height: var(--cds-productive-heading-03-line-height);
-    font-weight: var(--cds-productive-heading-03-font-weight);
-    color: var(--cds-text-primary);
-  }
 }
 
 // Details list
@@ -125,7 +101,6 @@
     color: var(--cds-text-secondary);
     font-weight: var(--cds-font-weight-semibold);
     font-size: var(--cds-body-compact-01-font-size);
-    min-width: 120px;
   }
 
   cds-list-column:last-child {
@@ -167,13 +142,6 @@
 }
 
 // Typography
-h1 {
-  font-size: var(--cds-productive-heading-05-font-size);
-  line-height: var(--cds-productive-heading-05-line-height);
-  font-weight: var(--cds-productive-heading-05-font-weight);
-  color: var(--cds-text-primary);
-  margin-bottom: var(--cds-spacing-03);
-}
 
 h3 {
   font-size: var(--cds-productive-heading-03-font-size);
@@ -200,21 +168,4 @@ p {
 
 .mt-5 {
   margin-top: var(--cds-spacing-06);
-}
-
-// Responsive design
-@media (width <= 768px) {
-  .notifications-page-container {
-    padding: var(--cds-spacing-04);
-  }
-
-  .notification-details {
-    padding: var(--cds-spacing-04);
-  }
-
-  .details-list {
-    .detail-label {
-      min-width: auto;
-    }
-  }
 }

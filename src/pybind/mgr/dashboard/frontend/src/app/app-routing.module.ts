@@ -106,8 +106,7 @@ const routes: Routes = [
     children: [
       { path: 'dashboard', component: DashboardComponent },
       { path: 'error', component: ErrorComponent },
-
-      // Notifications
+      // Cluster
       {
         path: 'notifications',
         data: {
@@ -115,7 +114,6 @@ const routes: Routes = [
         },
         component: NotificationsPageComponent
       },
-      // Cluster
       {
         path: 'expand-cluster',
         component: CreateClusterComponent,
