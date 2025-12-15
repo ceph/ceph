@@ -14,6 +14,17 @@ describe('Host Page', () => {
     hosts.navigateTo();
   });
 
+  describe('should have all host details', () => {
+    it('should have hostname'),
+      () => {
+        cy.get('[data-testid="hostname"]').should('not.be.empty');
+      };
+    it('should have IP address'),
+      () => {
+        cy.get('[data-testid="ip-address"]').should('not.be.empty');
+      };
+  });
+
   // rgw is needed for testing the force maintenance
   it('should create rgw services', () => {
     services.navigateTo('create');
