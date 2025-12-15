@@ -292,7 +292,7 @@ These metrics have the following labels:
 
 * ``instance``: The IP address of the exporter providing the metric
 * ``instance_id``: Identifier of the RGW daemon instance
-* ``job``: Orometheus scrape job name
+* ``job``: Prometheus scrape job name
 
 Example:
 
