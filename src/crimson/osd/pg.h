@@ -551,12 +551,13 @@ public:
   void on_change(ceph::os::Transaction &t) final;
   void on_activate(interval_set<snapid_t> to_trim) final;
   void on_replica_activate() final;
-  void on_activate_complete() final;
+  void on_activate_complete(HBHandle *handle) final;
   void on_new_interval() final {
     recovery_finisher = nullptr;
   }
   Context *on_clean() final;
-  void on_activate_committed() final {
+
+  void on_activate_committed(HBHandle *handle) final {
     // As in on_activate_complete(): ActivateCommitted may have left
     // the PG in PG_STATE_PEERED (acting_set_writeable() returned
     // false) rather than PG_STATE_ACTIVE.  Only unblock when we

@@ -400,10 +400,10 @@ public:
     virtual void on_change(ObjectStore::Transaction &t) = 0;
     virtual void on_activate(interval_set<snapid_t> to_trim) = 0;
     virtual void on_replica_activate() {}
-    virtual void on_activate_complete() = 0;
+    virtual void on_activate_complete(HBHandle *handle) = 0;
     virtual void on_new_interval() = 0;
     virtual Context *on_clean() = 0;
-    virtual void on_activate_committed() = 0;
+    virtual void on_activate_committed(HBHandle *handle) = 0;
     virtual void on_active_exit() = 0;
 
     // ====================== PG deletion =======================
