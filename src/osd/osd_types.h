@@ -5230,8 +5230,7 @@ public:
     return it->second.need;
   }
 
-  void claim(pg_missing_set&& o) {
-    static_assert(!TrackChanges, "Can't use claim with TrackChanges");
+  void claim(pg_missing_set&& o) requires(!TrackChanges) {
     missing = std::move(o.missing);
     rmissing = std::move(o.rmissing);
   }
