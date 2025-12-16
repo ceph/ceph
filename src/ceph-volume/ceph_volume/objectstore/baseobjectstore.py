@@ -50,6 +50,7 @@ class BaseObjectStore:
                 self.cephx_lockbox_secret = prepare_utils.create_key()
                 self.secrets['cephx_lockbox_secret'] = \
                     self.cephx_lockbox_secret
+        self.disable_bluestore_discard: bool = False
 
     def get_ptuuid(self, argument: str) -> str:
         uuid = disk.get_partuuid(argument)
@@ -154,6 +155,8 @@ class BaseObjectStore:
             '-i', self.osd_id,
             '--monmap', self.monmap,
         ]
+        if self.disable_bluestore_discard and self.objectstore == 'bluestore':
+            self.osd_mkfs_cmd.extend(['--bluestore-discard-on-mkfs', 'false'])
         if self.cephx_secret is not None:
             self.osd_mkfs_cmd.extend(['--keyfile', '-'])
 
