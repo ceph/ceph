@@ -17,6 +17,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
@@ -53,6 +54,8 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   poolConfigurationSourceTpl: TemplateRef<any>;
 
   pools: Pool[];
+  showHiddenPools = false;
+  filters: CdTableColumn[] = [];
   columns: CdTableColumn[];
   selection = new CdTableSelection();
   executingTasks: ExecutingTask[] = [];
@@ -112,6 +115,13 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
           this.monAllowPoolDelete = monSection.value === 'true' ? true : false;
         }
       });
+    }
+  }
+
+  toggleShowHiddenPools(): void {
+    this.showHiddenPools = !this.showHiddenPools;
+    if (this.taskListService) {
+      this.taskListService.fetch();
     }
   }
 
@@ -195,6 +205,24 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       }
     ];
 
+    const yesLabel = $localize`Yes`;
+    const noLabel = $localize`No`;
+    this.filters = [
+      {
+        name: $localize`Show internal pools`,
+        prop: 'pool_name',
+        filterOptions: [noLabel, yesLabel],
+        filterInitValue: this.showHiddenPools ? yesLabel : noLabel,
+        filterPredicate: (row, value) => {
+          if (value === noLabel) {
+            const name = _.get(row, 'pool_name') || _.get(row, 'name') || '';
+            return !name.startsWith('.');
+          }
+          return true;
+        }
+      }
+    ];
+
     this.taskListService.init(
       () =>
         this.ecpService.list().pipe(
@@ -205,7 +233,8 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         ),
       undefined,
       (pools) => {
-        this.pools = this.transformPoolsData(pools);
+        const items = pools || [];
+        this.pools = this.transformPoolsData(items);
         this.tableStatus = new TableStatusViewCache();
       },
       () => {
@@ -267,6 +296,16 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     const emptyStat: PoolStat = { latest: 0, rate: 0, rates: [] };
 
     _.forEach(pools, (pool: Pool) => {
+      if (Array.isArray(pool.application_metadata)) {
+        const APP_LABELS: { [k: string]: string } = {
+          rbd: $localize`Block`,
+          rgw: $localize`Object`,
+          cephfs: $localize`Filesystem`
+        };
+        pool.application_metadata = pool.application_metadata.map((app: string) =>
+          APP_LABELS[(app || '').toLowerCase()] || app
+        );
+      }
       pool['pg_status'] = this.transformPgStatus(pool['pg_status']);
       const stats: PoolStats = {};
       _.forEach(requiredStats, (stat) => {
@@ -330,5 +369,15 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   setExpandedRow(expandedRow: any) {
     super.setExpandedRow(expandedRow);
     this.getSelectionTiers();
+  }
+
+  onColumnFiltersChanged(event: CdTableColumnFiltersChange) {
+    const filterName = $localize`Show internal pools`;
+    const allLabel = $localize`All`;
+    const found = (event.filters || []).find((f) => f.name === filterName);
+    if (found && found.value) {
+      const raw = found.value.raw;
+      this.showHiddenPools = raw === allLabel;
+    }
   }
 }

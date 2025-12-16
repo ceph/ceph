@@ -1292,6 +1292,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       }
 
       this.rows = rows;
+      this.doSorting();
     }
   }
 
