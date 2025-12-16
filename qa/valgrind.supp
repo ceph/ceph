@@ -582,6 +582,14 @@
         fun:(below main)
 }
 {
+        rocksdb mismatched free bluestore close
+        Memcheck:Free
+        fun:_ZdaPvmSt11align_val_t
+        fun:_ZN12RocksDBStore5closeEv
+        fun:_ZN12RocksDBStoreD*Ev
+        fun:_ZN9BlueStore9_close_dbEv
+}
+{
 	libstdc++ leak on xenial
 	Memcheck:Leak
 	fun:malloc
