@@ -518,9 +518,11 @@ void Replayer<I>::scan_local_mirror_snapshots(
         // the first non-primary snapshot since we know its snapshot is
         // well-formed because otherwise the mirror-image-state would have
         // forced an image deletion.
-        m_prune_snap_ids.clear();
-        m_prune_snap_ids.insert(local_snap_id);
-        break;
+        if (!mirror_ns->group_spec.is_valid()) {
+          m_prune_snap_ids.clear();
+          m_prune_snap_ids.insert(local_snap_id);
+          break;
+        }
       } else {
         // start snap will be last complete mirror snapshot or initial
         // image revision
