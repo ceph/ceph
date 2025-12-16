@@ -245,9 +245,6 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 #define dout_prefix *_dout << " SplitOp::"
 
 int SplitOp::assemble_rc() {
-  for (auto & [id, sub_read] : sub_reads) {
-    std::cout << "Shard: " << (int)id.id << " rc: " << sub_read.rc << std::endl;
-  }
   int rc = 0;
   bool eagain = false;
 
