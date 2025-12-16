@@ -13093,38 +13093,21 @@ void PrimaryLogPG::on_shutdown()
   }
 }
 
-std::optional<hobject_t> PrimaryLogPG::consider_updating_migration_watermark(std::set<hobject_t> &deleted)
+/**
+ * Calculate the next object to be migrated. Objects are migrated in
+ * order of ascending hash (hobject). If start is std::nullopt then
+ * find the object with the lowest hash, otherwise find the next
+ * object after start. Migration only runs after backfill and
+ * recovery have completed, but it can be necessary to set the
+ * migration watermark while these are running so pending updates
+ * in the missing list need to be considered.
+ */
+hobject_t PrimaryLogPG::next_pool_migration(std::optional<hobject_t> start)
 {
-  if (deleted.contains(pool_migration_watermark)) {
-    hobject_t current(pool_migration_watermark);
-    hobject_t next;
-    do {
-      //BILL:FIXME: This is very inefficient, it isn't looking at the missing list either...
-      dout(20) << __func__ << " deleting object " << current << dendl;
-      vector<hobject_t> sentries;
-      int r = pgbackend->objects_list_partial(
-	    current,
-	    1,
-	    1,
-	    &sentries,
-	    &next);
-      if (r != 0) {
-	// Object store should always be able to list objects for a valid colleciton
-	derr << __func__ << ": objects_list_partial failed " << r << dendl;
-	return {};
-      }
-      current = next;
-    } while (deleted.contains(current));
-    dout(20) << __func__ << " new pool migration watermark will be " << current << dendl;
-    return current;
-  }
-  return {};
-}
-
-hobject_t PrimaryLogPG::earliest_pool_migration()
-{
-  vector<hobject_t> sentries;
   hobject_t current;
+  if (start) {
+    current = *start;
+  }
   hobject_t next;
   hobject_t _max = hobject_t::get_max();
   auto missing_iter_end = recovery_state.get_pg_log().get_missing().get_items().end();
@@ -13132,8 +13115,9 @@ hobject_t PrimaryLogPG::earliest_pool_migration()
   // Find the lowest object in the PG searching both the object store and the
   // missing list
   while (true) {
-    //BILL::FIXME: Listing one object at a time is expensive. We should cache a
-    //list of objects like update_range and scan_range_primary do
+    //BILL:FIXME: Listing one object at a time is expensive. Refactor this to use
+    //update_range/scan_range_migration
+    vector<hobject_t> sentries;
     map<hobject_t, pg_missing_item>::const_iterator missing_iter =
       recovery_state.get_pg_log().get_missing().get_items().lower_bound(current);
 
@@ -13151,6 +13135,10 @@ hobject_t PrimaryLogPG::earliest_pool_migration()
 
     if (sentries.empty()) {
       current = _max;
+    } else if (start) {
+      // Entry after start
+      current = next;
+      start.reset();
     } else {
       current = sentries.front();
     }
@@ -13183,6 +13171,20 @@ hobject_t PrimaryLogPG::earliest_pool_migration()
   return current;
 }
 
+std::optional<hobject_t> PrimaryLogPG::consider_updating_migration_watermark(std::set<hobject_t> &deleted)
+{
+  if (deleted.contains(pool_migration_watermark)) {
+    hobject_t current(pool_migration_watermark);
+    do {
+      dout(20) << __func__ << " deleting object " << current << dendl;
+      current = next_pool_migration(current);
+    } while (deleted.contains(current));
+    dout(20) << __func__ << " new pool migration watermark will be " << current << dendl;
+    return current;
+  }
+  return {};
+}
+
 void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
 {
   // waiters
@@ -13200,9 +13202,18 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
   pool_migrations_in_flight.clear();
   new_pool_migration_interval_in_flight = false;
   if (pool.info.is_pg_migrating(info.pgid.pgid)) {
-    update_migration_watermark(earliest_pool_migration());
-    pool_migration_info.reset(last_pool_migration_started);
+    pool_migration_info.reset(hobject_t());
+    pool_migration_info.end = hobject_t::get_max();
     update_range(&pool_migration_info, handle);
+    pool_migration_info.trim();
+    update_migration_watermark(earliest_pool_migration());
+    //If there are no missing objects pool_migration_info is returning the same
+    //answer as earliest_pool_migration on the primary. It doesn't work on/the
+    //other shards because projected_last_update isn't being set on those shards
+    //dout(10) << __func__ << " " << pool_migration_info.begin << " " << pool_migration_watermark << dendl;
+    //if (is_primary()) {
+    //  ceph_assert(pool_migration_info.begin == pool_migration_watermark);
+    //}
     new_pool_migration_interval = true;
     //BILL:FIXME: If we transition from migrating back to recovery/backfill we currently block I/O to the
     //migration watermark object until we get back to migrating and migrate that object. That is wrong - we
@@ -13213,6 +13224,7 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
   } else {
     update_migration_watermark(hobject_t());
   }
+  last_pool_migration_started = pool_migration_watermark;
 }
 
 void PrimaryLogPG::on_activate_committed(HBHandle *handle)
@@ -14902,14 +14914,6 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 	   << (new_pool_migration_interval ? " new_pool_migration_interval":"")
 	   << dendl;
 
-  //BILL:FIXME: Simple implementation, we only migrate one object
-  //at a time - so can use last_pool_migration_started as the next
-  //object to be migrated
-  if (!pool_migrations_in_flight.empty()) {
-    *work_started = true;
-    return 0;
-  }
-
   if (last_pool_migration_started.is_max()) {
     // Finished pool migration
     if (!pool_migrations_in_flight.empty()) {
@@ -14924,7 +14928,8 @@ uint64_t PrimaryLogPG::recover_pool_migration(
   //BILL:FIXME: Currently we just delete the object from the source
   //pool, we should be copying it to the target pool first!
   hobject_t soid = last_pool_migration_started;
-  ceph_assert(!is_degraded_or_backfilling_object(soid));
+  ceph_assert(new_pool_migration_interval ||
+	      !is_degraded_or_backfilling_object(soid));
   ObjectContextRef obc = get_object_context(soid, false);
   ceph_assert(obc);
   OpContextUPtr ctx = simple_opc_create(obc);
@@ -14953,6 +14958,7 @@ uint64_t PrimaryLogPG::recover_pool_migration(
   ceph_assert(!recovering.count(soid));
   recovering.insert(make_pair(soid, obc));
   pool_migrations_in_flight.insert(soid);
+  last_pool_migration_started = next_pool_migration(last_pool_migration_started);
 
   ctx->register_on_finish(
     [this,soid]() {

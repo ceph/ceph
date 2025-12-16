@@ -1199,7 +1199,11 @@ protected:
   /// set while migrating 1st object after activate
   bool new_pool_migration_interval_in_flight;
 
-  hobject_t earliest_pool_migration();
+  hobject_t next_pool_migration(std::optional<hobject_t> start);
+  hobject_t earliest_pool_migration()
+  {
+    return next_pool_migration(std::nullopt);
+  }
   void update_migration_watermark(const hobject_t &watermark) override
   {
     pool_migration_watermark = watermark;
