@@ -3299,7 +3299,7 @@ void Objecter::_session_op_remove(OSDSession *from, Op *op)
     num_homeless_ops--;
   }
 
-  from->ops.erase(op->tid);
+  ceph_assert(from->ops.erase(op->tid));
   put_session(from);
   op->session = NULL;
 
@@ -3709,8 +3709,7 @@ bs::error_code Objecter::handle_osd_op_reply2(Op *op, vector<OSDOp> &out_ops) {
 
 
 /* This function DOES put the passed message before returning */
-void Objecter::handle_osd_op_reply(MOSDOpReply *m)
-{
+void Objecter::handle_osd_op_reply(MOSDOpReply *m) {
   ldout(cct, 10) << "in handle_osd_op_reply" << dendl;
 
   // get pio
@@ -3736,21 +3735,21 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   map<ceph_tid_t, Op *>::iterator iter = s->ops.find(tid);
   if (iter == s->ops.end()) {
     ldout(cct, 7) << "handle_osd_op_reply " << tid
-		  << (m->is_ondisk() ? " ondisk" : (m->is_onnvram() ?
-						    " onnvram" : " ack"))
-		  << " ... stray" << dendl;
+                  << (m->is_ondisk() ? " ondisk" : (m->is_onnvram() ?
+                                                    " onnvram" : " ack"))
+                  << " ... stray" << dendl;
     sl.unlock();
     m->put();
     return;
   }
 
   ldout(cct, 7) << "handle_osd_op_reply " << tid
-		<< (m->is_ondisk() ? " ondisk" :
-		    (m->is_onnvram() ? " onnvram" : " ack"))
-		<< " uv " << m->get_user_version()
-		<< " in " << m->get_pg()
-		<< " attempt " << m->get_retry_attempt()
-		<< dendl;
+                << (m->is_ondisk() ? " ondisk" :
+                    (m->is_onnvram() ? " onnvram" : " ack"))
+                << " uv " << m->get_user_version()
+                << " in " << m->get_pg()
+                << " attempt " << m->get_retry_attempt()
+                << dendl;
   Op *op = iter->second;
   op->trace.event("osd op reply");
 
@@ -3771,10 +3770,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (m->get_retry_attempt() >= 0) {
     if (m->get_retry_attempt() != (op->attempts - 1)) {
       ldout(cct, 7) << " ignoring reply from attempt "
-		    << m->get_retry_attempt()
-		    << " from " << m->get_source_inst()
-		    << "; last attempt " << (op->attempts - 1) << " sent to "
-		    << op->session->con->get_peer_addr() << dendl;
+                    << m->get_retry_attempt()
+                    << " from " << m->get_source_inst()
+                    << "; last attempt " << (op->attempts - 1) << " sent to "
+                    << op->session->con->get_peer_addr() << dendl;
       m->put();
       sl.unlock();
       return;
@@ -3784,8 +3783,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     // just accept this one.  we may do ACK callbacks we shouldn't
     // have, but that is better than doing callbacks out of order.
   }
-
-  decltype(op->onfinish) onfinish;
 
   int rc = m->get_result();
 
@@ -3800,23 +3797,23 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
     op->tid = 0;
     m->get_redirect().combine_with_locator(op->target.target_oloc,
-					   op->target.target_oid.name);
+                                           op->target.target_oid.name);
     op->target.flags |= (CEPH_OSD_FLAG_REDIRECTED |
-			 CEPH_OSD_FLAG_IGNORE_CACHE |
-			 CEPH_OSD_FLAG_IGNORE_OVERLAY);
+                         CEPH_OSD_FLAG_IGNORE_CACHE |
+                         CEPH_OSD_FLAG_IGNORE_OVERLAY);
     _op_submit(op, sul, NULL);
     m->put();
     return;
   }
 
   if (op->target.flags & (CEPH_OSD_FLAG_BALANCE_READS |
-			  CEPH_OSD_FLAG_LOCALIZE_READS)) {
+                          CEPH_OSD_FLAG_LOCALIZE_READS)) {
     if (rc == -EAGAIN) {
       logger->inc(l_osdc_replica_read_bounced);
     } else {
       logger->inc(l_osdc_replica_read_completed);
     }
-  }
+                          }
 
   if (rc == -EAGAIN && (op->target.flags & CEPH_OSD_FLAG_FAIL_ON_EAGAIN) == 0) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
@@ -3855,21 +3852,21 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 #endif
     auto& bl = m->get_data();
     if (op->outbl->length() == bl.length() &&
-	bl.get_num_buffers() <= 1) {
+        bl.get_num_buffers() <= 1) {
       // this is here to keep previous users to *relied* on getting data
       // read into existing buffers happy.  Notably,
       // libradosstriper::RadosStriperImpl::aio_read().
       ldout(cct,10) << __func__ << " copying resulting " << bl.length()
-		    << " into existing ceph::buffer of length " << op->outbl->length()
-		    << dendl;
+                    << " into existing ceph::buffer of length " << op->outbl->length()
+                    << dendl;
       cb::list t;
       t = std::move(*op->outbl);
       t.invalidate_crc();  // we're overwriting the raw buffers via c_str()
       bl.begin().copy(bl.length(), t.c_str());
       op->outbl->substr_of(t, 0, bl.length());
-    } else {
-      m->claim_data(*op->outbl);
-    }
+        } else {
+          m->claim_data(*op->outbl);
+        }
     op->outbl = 0;
   }
 
@@ -3879,27 +3876,47 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   if (out_ops.size() != op->ops.size())
     ldout(cct, 0) << "WARNING: tid " << op->tid << " reply ops " << out_ops
-		  << " != request ops " << op->ops
-		  << " from " << m->get_source_inst() << dendl;
+                  << " != request ops " << op->ops
+                  << " from " << m->get_source_inst() << dendl;
 
   bs::error_code handler_error = handle_osd_op_reply2(op, out_ops);
 
+  logger->inc(l_osdc_op_reply);
+  logger->tinc(l_osdc_op_latency, ceph::coarse_mono_time::clock::now() - op->stamp);
+  logger->set(l_osdc_op_inflight, num_in_flight);
+
+  // This function unlocks sl.
+  handle_osd_op_reply3(op, handler_error, s, sl, rc);
+  m->put();
+}
+
+void Objecter::op_post_complete(Op* op, bs::error_code ec, int rc) {
+  boost::asio::post(service, [this, op, ec, rc]() {
+    OSDSession *s;
+    shunique_lock rl(rwlock, ceph::acquire_shared);
+    int r = _get_session(op->target.osd, &s, rl);
+    ceph_assert(r == 0);
+    unique_lock sl(s->lock);
+    op->trace.event("post op complete");
+    // This function unlocks sl.
+    handle_osd_op_reply3(op, ec, s, sl, rc);
+  });
+}
+
+void Objecter::handle_osd_op_reply3(Op *op, bs::error_code handler_error, OSDSession *s, unique_lock<std::shared_mutex> &sl, int rc) {
+
   // NOTE: we assume that since we only request ONDISK ever we will
   // only ever get back one (type of) ack ever.
-
+  decltype(op->onfinish) onfinish;
   if (op->has_completion()) {
     num_in_flight--;
     onfinish = std::move(op->onfinish);
     op->onfinish = nullptr;
   }
-  logger->inc(l_osdc_op_reply);
-  logger->tinc(l_osdc_op_latency, ceph::coarse_mono_time::clock::now() - op->stamp);
-  logger->set(l_osdc_op_inflight, num_in_flight);
-
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
 
-  ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
+  ldout(cct, 15) << "handle_osd_op_reply completed tid " << op->tid << dendl;
   _finish_op(op, 0);
 
   ldout(cct, 5) << num_in_flight << " in flight" << dendl;
@@ -3923,8 +3940,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (completion_lock.mutex()) {
     completion_lock.unlock();
   }
-
-  m->put();
 }
 
 void Objecter::handle_osd_backoff(MOSDBackoff *m)

@@ -345,8 +345,6 @@ void SplitOp::complete() {
     return;
   }
   ldout(cct, 20) << __func__ << " entry this=" << this << dendl;
-
-  bool complete = true;
   boost::system::error_code handler_error;
 
   int rc = assemble_rc();
@@ -425,31 +423,14 @@ void SplitOp::complete() {
 
     handler_error = objecter.handle_osd_op_reply2(orig_op, out_ops);
     ldout(cct, DBG_LVL) << __func__ << " success this=" << this << " rc=" << rc << dendl;
-  } else if (rc == -EAGAIN) {
+  }
+
+  if (rc != -EAGAIN) {
+    objecter.op_post_complete(orig_op, handler_error, rc);
+  } else {
     ldout(cct, DBG_LVL) << __func__ << " retry this=" << this << " rc=" << rc << dendl;
     orig_op->split_op_tids.reset();
     objecter.op_post_redrive(orig_op);
-    complete = false;
-  }
-
-
-  if (complete) {
-    decltype(orig_op->onfinish) onfinish;
-    if (orig_op->has_completion()) {
-      onfinish = std::move(orig_op->onfinish);
-      orig_op->onfinish = nullptr;
-    }
-
-    objecter._finish_op(orig_op, rc);
-    if (Objecter::Op::has_completion(onfinish)) {
-      if (rc == 0 && handler_error) {
-        Objecter::Op::complete(std::move(onfinish), handler_error, -EIO, objecter.service.get_executor());
-      } else if (handler_error) {
-        Objecter::Op::complete(std::move(onfinish), handler_error, rc, objecter.service.get_executor());
-      } else {
-        Objecter::Op::complete(std::move(onfinish), osdcode(rc), rc, objecter.service.get_executor());
-      }
-    }
   }
 }
 
