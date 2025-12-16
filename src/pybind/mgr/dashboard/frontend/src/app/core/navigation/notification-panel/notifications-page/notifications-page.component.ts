@@ -1,4 +1,11 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, ChangeDetectorRef, AfterViewChecked } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  AfterViewInit,
+  ChangeDetectorRef,
+  AfterViewChecked
+} from '@angular/core';
 import { Subscription } from 'rxjs';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { CdNotification } from '~/app/shared/models/cd-notification';
@@ -10,9 +17,11 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 @Component({
   selector: 'cd-notifications-page',
   templateUrl: './notifications-page.component.html',
-  styleUrls: ['./notifications-page.component.scss']
+  styleUrls: ['./notifications-page.component.scss'],
+  standalone: false
 })
-export class NotificationsPageComponent implements OnInit, OnDestroy, AfterViewInit, AfterViewChecked {
+export class NotificationsPageComponent
+  implements OnInit, OnDestroy, AfterViewInit, AfterViewChecked {
   notifications: CdNotification[] = [];
   selectedNotification: CdNotification | null = null;
   searchText: string = '';
