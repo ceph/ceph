@@ -2360,13 +2360,24 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
-
-void Objecter::op_post_redrive(Op* op) {
-  boost::asio::post(service, [this, op]() {
+void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
+  boost::asio::post(service, [this, op, ec, rc]() {
     shunique_lock rl(rwlock, ceph::acquire_shared);
-    ceph_tid_t tid = 0;
-    op->trace.event("op submit");
-    _op_submit(op, rl, &tid);
+    ceph_assert(op->session);
+    unique_lock sl(op->session->lock);
+
+    if (rc != -EAGAIN) {
+      op->trace.event("post op complete");
+
+      // This function unlocks sl.
+      handle_osd_op_reply3(op, ec, op->session, sl, rc);
+    } else {
+      _session_op_remove(op->session, op);
+      sl.unlock();
+      op->split_op_tids.reset();
+      ceph_tid_t tid = 0;
+      _op_submit(op, rl, &tid);
+    }
   });
 }
 
@@ -3888,19 +3899,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m) {
   // This function unlocks sl.
   handle_osd_op_reply3(op, handler_error, s, sl, rc);
   m->put();
-}
-
-void Objecter::op_post_complete(Op* op, bs::error_code ec, int rc) {
-  boost::asio::post(service, [this, op, ec, rc]() {
-    OSDSession *s;
-    shunique_lock rl(rwlock, ceph::acquire_shared);
-    int r = _get_session(op->target.osd, &s, rl);
-    ceph_assert(r == 0);
-    unique_lock sl(s->lock);
-    op->trace.event("post op complete");
-    // This function unlocks sl.
-    handle_osd_op_reply3(op, ec, s, sl, rc);
-  });
 }
 
 void Objecter::handle_osd_op_reply3(Op *op, bs::error_code handler_error, OSDSession *s, unique_lock<std::shared_mutex> &sl, int rc) {

@@ -2786,7 +2786,6 @@ private:
   void handle_osd_op_reply(class MOSDOpReply *m);
   boost::system::error_code handle_osd_op_reply2(Op *op, std::vector<OSDOp> &out_ops);
   void handle_osd_op_reply3(Op *op, boost::system::error_code handler_error, OSDSession *s, std::unique_lock<std::shared_mutex> &sl, int rc);
-  void op_post_complete(Op* op, boost::system::error_code ec, int rc);
   void handle_osd_backoff(class MOSDBackoff *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
@@ -2851,7 +2850,7 @@ private:
 			      int *ctx_budget = NULL);
   // public interface
 public:
-  void op_post_redrive(Op *op);
+  void op_post_split_op_complete(Op* op, boost::system::error_code ec, int rc);
   void op_submit(Op *op, ceph_tid_t *ptid = NULL, int *ctx_budget = NULL);
   bool is_active() {
     std::shared_lock l(rwlock);

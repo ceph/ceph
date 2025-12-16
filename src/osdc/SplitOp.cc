@@ -424,14 +424,8 @@ void SplitOp::complete() {
     handler_error = objecter.handle_osd_op_reply2(orig_op, out_ops);
     ldout(cct, DBG_LVL) << __func__ << " success this=" << this << " rc=" << rc << dendl;
   }
-
-  if (rc != -EAGAIN) {
-    objecter.op_post_complete(orig_op, handler_error, rc);
-  } else {
-    ldout(cct, DBG_LVL) << __func__ << " retry this=" << this << " rc=" << rc << dendl;
-    orig_op->split_op_tids.reset();
-    objecter.op_post_redrive(orig_op);
-  }
+  ldout(cct, DBG_LVL) << __func__ << " retry this=" << this << " rc=" << rc << dendl;
+  objecter.op_post_split_op_complete(orig_op, handler_error, rc);
 }
 
 void SplitOp::protect_torn_reads() {
