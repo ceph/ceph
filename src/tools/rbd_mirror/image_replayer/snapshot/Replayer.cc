@@ -521,8 +521,7 @@ void Replayer<I>::scan_local_mirror_snapshots(
              (mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED &&
               peer_uuids.size() == 1 &&
               peer_uuids.count(m_local_mirror_peer_uuid) == 1)) &&
-            (!mirror_ns->group_spec.is_valid() &&
-             mirror_ns->group_snap_id.empty())) {
+            !mirror_ns->group_spec.is_valid()) {
           // no other peer will attempt to sync to this snapshot so store as
           // a candidate for removal
           m_prune_snap_ids.insert(local_snap_id);
@@ -678,8 +677,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
                       m_state_builder->remote_mirror_uuid);
 
         if (m_remote_snap_id_end == CEPH_NOSNAP &&
-            (!mirror_ns->group_spec.is_valid() &&
-             mirror_ns->group_snap_id.empty())) {
+            !mirror_ns->group_spec.is_valid()) {
           // haven't found the end snap so treat this as a candidate for unlink
           unlink_snap_ids.insert(remote_snap_id);
         }
@@ -781,8 +779,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
           get_local_image_state();
         } else {
           // Standalone image mirroring
-          if (!m_remote_mirror_snap_ns.group_spec.is_valid() &&
-              m_remote_mirror_snap_ns.group_snap_id.empty()) {
+          if (!m_remote_mirror_snap_ns.group_spec.is_valid()) {
             copy_snapshots();
             return;
           }
@@ -830,8 +827,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
     handle_replay_complete(locker, -EEXIST, "split-brain");
     return;
   } else if (remote_demoted &&
-      (!m_remote_mirror_snap_ns.group_spec.is_valid() &&
-       m_remote_mirror_snap_ns.group_snap_id.empty())) {
+             !m_remote_mirror_snap_ns.group_spec.is_valid()) {
     dout(10) << "remote image demoted" << dendl;
     handle_replay_complete(locker, -EREMOTEIO, "remote image demoted");
     return;
@@ -1373,8 +1369,7 @@ void Replayer<I>::handle_notify_image_update(int r) {
         cls::rbd::MirrorSnapshotNamespace>(&snap_ns);
       if (mirror_ns == nullptr || !mirror_ns->complete) {
         continue;
-      } else if (mirror_ns->group_spec.is_valid() ||
-          !mirror_ns->group_snap_id.empty()) {
+      } else if (mirror_ns->group_spec.is_valid()) {
         unlink = false;
       }
       break;
