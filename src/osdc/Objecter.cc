@@ -2364,9 +2364,6 @@ void Objecter::resend_mon_ops()
 void Objecter::op_post_redrive(Op* op) {
   boost::asio::post(service, [this, op]() {
     shunique_lock rl(rwlock, ceph::acquire_shared);
-    // This is a redrive, so the op throttlling has already
-    // been driven once.
-    op->ctx_budgeted = true;
     ceph_tid_t tid = 0;
     op->trace.event("op submit");
     _op_submit(op, rl, &tid);
@@ -3605,6 +3602,7 @@ void Objecter::_throttle_op(Op *op,
 {
   ceph_assert(sul && sul.mutex() == &rwlock);
   bool locked_for_write = sul.owns_lock();
+  ldout(cct, 20) << __func__ << " " << dendl;
 
   if (!op_budget)
     op_budget = calc_op_budget(op->ops);
