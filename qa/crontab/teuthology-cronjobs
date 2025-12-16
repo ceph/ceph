@@ -64,6 +64,7 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 ## main branch runs - weekly
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
 00 20 * * 0        $CW $SS 100000 --ceph main --suite      rados -p 101 --force-priority
+04 20 * * 0        $CW $SS 100000 --ceph main --suite      rados -p 101  --flavor debug --force-priority
 08 20 * * 1        $CW $SS     64 --ceph main --suite       orch -p 950
 16 20 * * 2        $CW $SS    128 --ceph main --suite        rbd -p 950
 24 20 1 * *        $CW $SS    512 --ceph main --suite         fs -p 700
@@ -71,7 +72,7 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 # RGW is easy to get to under 50 runs, use a higher priority so we have recent baselines
 40 20 * * 5        $CW $SS      1 --ceph main --suite        rgw -p 150 --subset "$(($RANDOM % 30000))/30000"
 48 20 * * 6        $CW $SS      4 --ceph main --suite       krbd -p 950 --kernel testing
-56 20 * * 2,6      $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor crimson-debug
+56 20 * * 2,6      $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor debug
 04 21 * * 2,6      $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority
 
 ## tentacle branch runs - weekly
