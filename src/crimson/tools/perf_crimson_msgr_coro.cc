@@ -272,6 +272,8 @@ static seastar::future<> run(
           server.msgr->set_auth_client(&server.dummy_auth);
           server.msgr->set_auth_server(&server.dummy_auth);
           server.is_fixed_cpu = is_fixed_cpu;
+            // Is there an equivalent of safe_then into co_await?
+            //TBC
           return server.msgr->bind(entity_addrvec_t{addr}
           ).safe_then([&server] {
             return server.msgr->start({&server});
@@ -340,12 +342,15 @@ static seastar::future<> run(
       void start_report() {
         seastar::promise<> pr_report;
         fut_report = pr_report.get_future();
-        seastar::do_with(
+        auto apr = co_await seastar::do_with(
             TimerReport(seastar::smp::count),
+            // This lambda passes a reference to 'report' to the inner lambda, within a coroutine, how can we refactory it in a safe way?
             [this](auto &report) {
           return seastar::do_until(
             [this] { return is_stopped; },
             [&report, this] {
+                // co_await seastar::sleep(2s); 
+                // co_return <the body inside then()>;
               return seastar::sleep(2s
               ).then([&report, this] {
                 report.elapsed += 2;
@@ -429,13 +434,14 @@ static seastar::future<> run(
                     std::cout << sout.str() << std::endl;
                   });
                 }
-              });
-            }
+              }); // then
+            } // do_until lambda
           );
-        }).then([] {
-          logger().info("report is stopped!");
-        }).forward_to(std::move(pr_report));
-      }
+        }); // do_with() lambda
+        //.then([] {
+        logger().info("report is stopped!");
+        apr.forward_to(std::move(pr_report));
+      } // start_report
     };
 
     struct Client final
