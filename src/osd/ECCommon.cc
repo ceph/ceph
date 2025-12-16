@@ -471,11 +471,21 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   map<pg_shard_t, ECSubRead> messages;
   for (auto &&[hoid, read_request]: rop.to_read) {
     bool need_attrs = read_request.want_attrs;
-
+    bool need_omap_header = read_request.want_omap_header;
+    bool need_omap_keys = read_request.want_omap_keys;
+    
     for (auto &&[shard, shard_read]: read_request.shard_reads) {
       if (need_attrs && !sinfo.is_nonprimary_shard(shard)) {
         messages[shard_read.pg_shard].attrs_to_read.insert(hoid);
         need_attrs = false;
+      }
+      if (need_omap_header && !sinfo.is_nonprimary_shard(shard)) {
+        messages[shard_read.pg_shard].omap_headers_to_read.insert(hoid);
+        need_omap_header = false;
+      }
+      if (need_omap_keys && !sinfo.is_nonprimary_shard(shard)) {
+        messages[shard_read.pg_shard].omap_read_from.insert({hoid, read_request.omap_read_from});
+        need_omap_keys = false;
       }
       if (shard_read.subchunk) {
         messages[shard_read.pg_shard].subchunks[hoid] = *shard_read.subchunk;
@@ -497,6 +507,8 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       }
     }
     ceph_assert(!need_attrs);
+    ceph_assert(!need_omap_header);
+    ceph_assert(!need_omap_keys);
     ceph_assert(reads_sent);
   }
 
@@ -694,7 +706,7 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
       get_want_to_read_shards(to_read, want_shard_reads);
     }
 
-    read_request_t read_request(to_read, want_shard_reads, false, object_size);
+    read_request_t read_request(to_read, want_shard_reads, false, false, false, "", object_size);
     const int r = get_min_avail_to_read_shards(
       hoid,
       false,
@@ -1446,6 +1458,9 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
 
       read_request_t read_request(std::move(want),
                                   op.recovery_progress.first && !op.obc,
+                                  op.recovery_progress.first && !op.recovery_progress.omap_complete,
+                                  !op.recovery_progress.omap_complete,
+                                  op.recovery_progress.omap_recovered_to,
                                   op.obc
                                     ? op.obc->obs.oi.size
                                     : get_recovery_chunk_size());
@@ -1630,6 +1645,7 @@ ECCommon::RecoveryBackend::recover_object(
       ceph_abort_msg("neither obc nor head set for a snap object");
     }
   }
+
   op.recovery_progress.omap_complete = true;
   for (set<pg_shard_t>::const_iterator i =
          get_parent()->get_acting_recovery_backfill_shards().begin();

@@ -123,26 +123,37 @@ struct ECCommon {
     ECUtil::shard_extent_set_t zeros_for_decode;
     shard_id_map<shard_read_t> shard_reads;
     bool want_attrs = false;
+    bool want_omap_header = false;
+    bool want_omap_keys = false;
+    std::string omap_read_from = "";
     uint64_t object_size;
 
     read_request_t(
         const std::list<ec_align_t> &to_read,
         const ECUtil::shard_extent_set_t &shard_want_to_read,
-        bool want_attrs, uint64_t object_size) :
+        bool want_attrs, bool want_omap_header, bool want_omap_keys, 
+        std::string omap_read_from, uint64_t object_size) :
       to_read(to_read),
       flags(to_read.front().flags),
       shard_want_to_read(shard_want_to_read),
       zeros_for_decode(shard_want_to_read.get_max_shards()),
       shard_reads(shard_want_to_read.get_max_shards()),
       want_attrs(want_attrs),
+      want_omap_header(want_omap_header),
+      want_omap_keys(want_omap_keys),
+      omap_read_from(omap_read_from),
       object_size(object_size) {}
 
     read_request_t(const ECUtil::shard_extent_set_t &shard_want_to_read,
-               bool want_attrs, uint64_t object_size) :
+                   bool want_attrs, bool want_omap_header, bool want_omap_keys, 
+                   std::string omap_read_from, uint64_t object_size) :
       shard_want_to_read(shard_want_to_read),
       zeros_for_decode(shard_want_to_read.get_max_shards()),
       shard_reads(shard_want_to_read.get_max_shards()),
       want_attrs(want_attrs),
+      want_omap_header(want_omap_header),
+      want_omap_keys(want_omap_keys),
+      omap_read_from(omap_read_from),
       object_size(object_size) {}
 
     bool operator==(const read_request_t &other) const;
@@ -154,6 +165,9 @@ struct ECCommon {
           << ", zeros_for_decode=" << zeros_for_decode
           << ", shard_reads=" << shard_reads
           << ", want_attrs=" << want_attrs
+          << ", want_omap_header=" << want_omap_header
+          << ", want_omap_keys=" << want_omap_keys
+          << ", omap_read_from=" << omap_read_from
           << ")";
     }
   };
@@ -593,7 +607,7 @@ struct ECCommon {
     void backend_read(hobject_t oid, ECUtil::shard_extent_set_t const &request,
                       uint64_t object_size) override {
       std::map<hobject_t, read_request_t> to_read;
-      to_read.emplace(oid, read_request_t(request, false, object_size));
+      to_read.emplace(oid, read_request_t(request, false, false, false, "", object_size));
 
       objects_read_async_no_cache(
         std::move(to_read),
