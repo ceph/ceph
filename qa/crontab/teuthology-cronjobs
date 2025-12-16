@@ -83,7 +83,6 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 32 22 * * 4        $CW $SS      4 --ceph tentacle --suite powercycle -p 830
 40 22 * * 5        $CW $SS      1 --ceph tentacle --suite        rgw -p 830
 48 22 * * 6        $CW $SS      4 --ceph tentacle --suite       krbd -p 830 --kernel testing
-56 22 * * 6        $CW $SS      1 --ceph tentacle --suite crimson-rados -p 830 --flavor crimson-debug
 
 ## squid branch runs - weekly
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
