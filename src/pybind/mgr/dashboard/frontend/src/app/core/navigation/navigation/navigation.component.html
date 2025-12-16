@@ -1,8 +1,5 @@
 <div class="cd-navbar-main">
-  <!-- ************************ -->
-  <!-- NOTIFICATIONS     -->
-  <!-- ************************ -->
-  <cd-notifications-sidebar></cd-notifications-sidebar>
+  <cd-notification-panel *ngIf="isNotifPanelOpen"></cd-notification-panel>
   <!-- ************************ -->
   <!-- HEADER                   -->
   <!-- ************************ -->
@@ -28,15 +25,15 @@
         </ng-container>
       </cds-header-menu>
     </cds-header-navigation>
-
     <cds-header-global>
       <cds-header-navigation>
         <cd-language-selector class="d-flex"></cd-language-selector>
       </cds-header-navigation>
-      <div class="cds--btn cds--btn--icon-only cds--header__action"
-           (click)="toggleSidebar()">
-        <cd-notifications></cd-notifications>
-      </div>
+      <cds-header-action
+        description=""
+        [(active)]="isNotifPanelOpen">
+          <cd-notifications></cd-notifications>
+      </cds-header-action>
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-dashboard-help></cd-dashboard-help>
       </div>

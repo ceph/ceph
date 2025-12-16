@@ -43,6 +43,7 @@ import SettingsIcon from '@carbon/icons/es/settings/20';
 import HelpIcon from '@carbon/icons/es/help/20';
 import NotificationIcon from '@carbon/icons/es/notification/20';
 import NotificationOffIcon from '@carbon/icons/es/notification--off/20';
+import NotificationNewIcon from '@carbon/icons/es/notification--new/20';
 import LaunchIcon from '@carbon/icons/es/launch/16';
 import DashboardIcon from '@carbon/icons/es/template/20';
 import ClusterIcon from '@carbon/icons/es/web-services--cluster/20';
@@ -150,6 +151,7 @@ export class NavigationModule {
       InformationFilledIcon,
       WarningFilledIcon,
       NotificationFilledIcon,
+      NotificationNewIcon,
       CloseIcon,
       CircleDashIcon20,
       CheckmarkOutlineIcon20,
