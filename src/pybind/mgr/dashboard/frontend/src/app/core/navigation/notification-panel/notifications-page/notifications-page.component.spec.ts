@@ -1,82 +1,147 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, Subscription } from 'rxjs';
 import {
   IconModule,
   SearchModule,
   StructuredListModule,
-  TagModule
+  TagModule,
+  GridModule
 } from 'carbon-components-angular';
 
 import { NotificationsPageComponent } from './notifications-page.component';
-import { NotificationService } from '~/app/shared/services/notification.service';
 import { CdNotification } from '~/app/shared/models/cd-notification';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-import { SharedModule } from '~/app/shared/shared.module';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
+import { PrometheusNotificationService } from '~/app/shared/services/prometheus-notification.service';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ChangeDetectorRef } from '@angular/core';
 
 describe('NotificationsPageComponent', () => {
   let component: NotificationsPageComponent;
   let fixture: ComponentFixture<NotificationsPageComponent>;
-  let notificationService: NotificationService;
   let mockNotifications: CdNotification[];
   let dataSourceSubject: BehaviorSubject<CdNotification[]>;
+  let notificationService: any;
 
-  // Mock notification service
+  // Create mocks
   const createMockNotificationService = () => {
     dataSourceSubject = new BehaviorSubject<CdNotification[]>([]);
     return {
       data$: dataSourceSubject.asObservable(),
-      dataSource: dataSourceSubject,
+      dataSource: {
+        getValue: () => dataSourceSubject.getValue(),
+        next: (value: CdNotification[]) => dataSourceSubject.next(value)
+      },
       remove: jasmine.createSpy('remove')
     };
   };
 
+  const mockPrometheusAlertService = {
+    refresh: jasmine.createSpy('refresh')
+  };
+
+  const mockPrometheusNotificationService = {
+    refresh: jasmine.createSpy('refresh')
+  };
+
+  const mockAuthStorageService = {
+    getPermissions: jasmine.createSpy('getPermissions').and.returnValue({
+      prometheus: { read: false },
+      configOpt: { read: false }
+    })
+  };
+
+  const mockChangeDetectorRef = {
+    detectChanges: jasmine.createSpy('detectChanges')
+  };
+
+  // Create mock notifications
+  const createMockNotification = (overrides: any): CdNotification => {
+    return {
+      title: overrides.title || '',
+      message: overrides.message || '',
+      application: overrides.application || '',
+      timestamp: overrides.timestamp || new Date().toISOString(),
+      type: overrides.type || NotificationType.info,
+      priority: 'normal',
+      textClass: '',
+      iconClass: '',
+      duration: 0,
+      borderClass: '',
+      timeout: 0,
+      id: '',
+      isError: false,
+      isFinishedTask: false,
+      progress: 0,
+      progressText: '',
+      task: undefined,
+      error: undefined,
+      isSilent: false,
+      silentNotifications: [],
+      userData: undefined,
+      alertSilenced: false,
+      ...overrides
+    } as CdNotification;
+  };
+
   beforeEach(async () => {
     mockNotifications = [
-      {
+      createMockNotification({
         title: 'Success Notification',
         message: 'Operation completed successfully',
-        timestamp: new Date().toISOString(),
         type: NotificationType.success,
-        application: 'TestApp'
-      },
-      {
+        application: 'TestApp',
+        timestamp: new Date().toISOString()
+      }),
+      createMockNotification({
         title: 'Error Notification',
         message: 'An error occurred',
-        timestamp: new Date(Date.now() - 86400000).toISOString(), // Yesterday
         type: NotificationType.error,
-        application: 'TestApp'
-      },
-      {
+        application: 'TestApp',
+        timestamp: new Date(Date.now() - 86400000).toISOString()
+      }),
+      createMockNotification({
         title: 'Info Notification',
         message: 'System update available',
-        timestamp: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
         type: NotificationType.info,
-        application: 'Updates'
-      }
+        application: 'Updates',
+        timestamp: new Date(Date.now() - 172800000).toISOString()
+      })
     ];
 
-    await TestBed.configureTestingModule({
-      imports: [
-        FormsModule,
-        SharedModule,
-        IconModule,
-        SearchModule,
-        StructuredListModule,
-        TagModule
-      ],
-      declarations: [NotificationsPageComponent],
-      providers: [{ provide: NotificationService, useFactory: createMockNotificationService }]
-    }).compileComponents();
+    const mockNotificationService = createMockNotificationService();
+    notificationService = mockNotificationService; // Store reference
 
-    notificationService = TestBed.inject(NotificationService);
+    await TestBed.configureTestingModule({
+      imports: [FormsModule, GridModule, IconModule, SearchModule, StructuredListModule, TagModule],
+      declarations: [NotificationsPageComponent],
+      providers: [
+        { provide: NotificationService, useValue: mockNotificationService },
+        { provide: PrometheusAlertService, useValue: mockPrometheusAlertService },
+        { provide: PrometheusNotificationService, useValue: mockPrometheusNotificationService },
+        { provide: AuthStorageService, useValue: mockAuthStorageService },
+        { provide: ChangeDetectorRef, useValue: mockChangeDetectorRef }
+      ]
+    }).compileComponents();
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NotificationsPageComponent);
     component = fixture.componentInstance;
+
+    // Update the data source with mock notifications BEFORE ngOnInit
     dataSourceSubject.next(mockNotifications);
+
+    // Initialize the component
     fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    if (component['interval']) {
+      window.clearInterval(component['interval']);
+    }
   });
 
   it('should create', () => {
@@ -133,15 +198,11 @@ describe('NotificationsPageComponent', () => {
         preventDefault: jasmine.createSpy('preventDefault')
       };
 
-      // Set up the dataSource with notifications
-      dataSourceSubject.next(mockNotifications);
-      fixture.detectChanges();
-
       component.removeNotification(notification, mockEvent as any);
 
       expect(mockEvent.stopPropagation).toHaveBeenCalled();
       expect(mockEvent.preventDefault).toHaveBeenCalled();
-      expect(notificationService.remove).toHaveBeenCalledWith(0); // Should be called with index 0
+      expect(notificationService.remove).toHaveBeenCalledWith(0); // FIXED: use notificationService
     });
 
     it('should clear selection if removed notification was selected', () => {
@@ -151,10 +212,6 @@ describe('NotificationsPageComponent', () => {
         stopPropagation: jasmine.createSpy('stopPropagation'),
         preventDefault: jasmine.createSpy('preventDefault')
       };
-
-      // Set up the dataSource with notifications
-      dataSourceSubject.next(mockNotifications);
-      fixture.detectChanges();
 
       component.removeNotification(notification, mockEvent as any);
 
@@ -231,9 +288,33 @@ describe('NotificationsPageComponent', () => {
     });
   });
 
+  it('should set up interval for Prometheus alerts when permissions exist', () => {
+    mockAuthStorageService.getPermissions.and.returnValue({
+      prometheus: { read: true },
+      configOpt: { read: true }
+    });
+
+    // Re-initialize component to trigger ngOnInit with new permissions
+    fixture = TestBed.createComponent(NotificationsPageComponent);
+    component = fixture.componentInstance;
+    dataSourceSubject.next(mockNotifications);
+    fixture.detectChanges();
+
+    expect(component['interval']).toBeDefined();
+  });
+
   it('should unsubscribe on destroy', () => {
+    component['sub'] = new Subscription();
     const unsubscribeSpy = spyOn(component['sub'], 'unsubscribe');
+
+    if (!component['interval']) {
+      component['interval'] = window.setInterval(() => {}, 5000);
+    }
+    const clearIntervalSpy = spyOn(window, 'clearInterval');
+
     component.ngOnDestroy();
+
     expect(unsubscribeSpy).toHaveBeenCalled();
+    expect(clearIntervalSpy).toHaveBeenCalled();
   });
 });

@@ -31,7 +31,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
   clusterTokenStatus: object = {};
   summaryData: any;
 
-  rightSidebarOpen = false; // rightSidebar only opens when width is less than 768px
+  isNotifPanelOpen = false;
   showMenuSidebar = true;
 
   simplebar = {
@@ -142,8 +142,8 @@ export class NavigationComponent implements OnInit, OnDestroy {
     this.displayedSubMenu[menu] = !this.displayedSubMenu[menu];
   }
 
-  toggleRightSidebar() {
-    this.rightSidebarOpen = !this.rightSidebarOpen;
+  toggleSidebar() {
+    this.isNotifPanelOpen = !this.isNotifPanelOpen;
   }
 
   onClusterSelection(value: object) {
@@ -191,9 +191,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
       }
     );
   }
-  toggleSidebar() {
-    this.notificationService.toggleSidebar(true, true);
-  }
+
   trackByFn(item: any) {
     return item;
   }
