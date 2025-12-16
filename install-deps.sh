@@ -272,7 +272,7 @@ EOF
 function setup_lab_extras_repo() {
     # NOTE This repo should be temporary while we work to get the
     # needed deps into EPEL, etc.
-    local baseurlprefix="http://apt-mirror.front.sepia.ceph.com/lab-extras"
+    local baseurlprefix="https://apt-mirror.sepia.ceph.com/lab-extras"
     local path="/etc/yum.repos.d/ceph-lab-extras.repo"
     $SUDO tee "${path}" <<EOF
 [ceph-lab-extras]
