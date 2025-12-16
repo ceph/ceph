@@ -1,4 +1,4 @@
-<div 
+<div
   cdsGrid
   [useCssGrid]="true"
   [fullWidth]="true"
@@ -61,7 +61,7 @@
           cdsRow>
         <svg
           cdsIcon="notification"
-          size="48"
+          size="20"
           class="empty-icon"></svg>
         <p *ngIf="searchText">No notifications match your search</p>
         <p *ngIf="!searchText">No notifications available</p>
@@ -70,7 +70,7 @@
   <!-- Right Panel - Notifications Details -->
   <div cdsCol
        [columnNumbers]="{sm: 12, md: 12, lg: 9}">
-    <div 
+    <div
       cdsGrid
       [fullWidth]="true"
       *ngIf="selectedNotification"

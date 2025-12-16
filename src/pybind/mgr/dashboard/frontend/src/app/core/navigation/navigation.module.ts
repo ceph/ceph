@@ -41,6 +41,7 @@ import SettingsIcon from '@carbon/icons/es/settings/20';
 import HelpIcon from '@carbon/icons/es/help/20';
 import NotificationIcon from '@carbon/icons/es/notification/20';
 import NotificationOffIcon from '@carbon/icons/es/notification--off/20';
+import NotificationNewIcon from '@carbon/icons/es/notification--new/20';
 import LaunchIcon from '@carbon/icons/es/launch/16';
 import DashboardIcon from '@carbon/icons/es/template/20';
 import ClusterIcon from '@carbon/icons/es/web-services--cluster/20';
@@ -57,6 +58,7 @@ import ErrorFilledIcon from '@carbon/icons/es/error--filled/16';
 import InformationFilledIcon from '@carbon/icons/es/information--filled/16';
 import WarningFilledIcon from '@carbon/icons/es/warning--filled/16';
 import NotificationFilledIcon from '@carbon/icons/es/notification--filled/16';
+
 import CloseIcon from '@carbon/icons/es/close/16';
 import { NotificationPanelComponent } from './notification-panel/notification-panel/notification-panel.component';
 import { NotificationHeaderComponent } from './notification-panel/notification-header/notification-header.component';
@@ -137,6 +139,7 @@ export class NavigationModule {
       InformationFilledIcon,
       WarningFilledIcon,
       NotificationFilledIcon,
+      NotificationNewIcon,
       CloseIcon
     ]);
   }

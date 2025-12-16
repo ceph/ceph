@@ -1,8 +1,8 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit } from '@angular/core';
 
 import { Subscription } from 'rxjs';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum';
 import { CdNotification } from '~/app/shared/models/cd-notification';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
@@ -14,11 +14,11 @@ import { SummaryService } from '~/app/shared/services/summary.service';
   standalone: false
 })
 export class NotificationsComponent implements OnInit, OnDestroy {
-  icons = Icons;
+  @Input() isPanelOpen: boolean = false;
+  icons = ICON_TYPE;
+  iconSize = IconSize.size20;
   hasRunningTasks = false;
   hasNotifications = false;
-  isPanelOpen = false;
-  useNewPanel = true;
   notificationCount = 0;
   isMuted = false;
   private subs = new Subscription();
@@ -43,22 +43,10 @@ export class NotificationsComponent implements OnInit, OnDestroy {
     );
 
     this.subs.add(
-      this.notificationService.panelState$.subscribe((state) => {
-        this.isPanelOpen = state.isOpen;
-        this.useNewPanel = state.useNewPanel;
-      })
-    );
-    this.subs.add(
       this.notificationService.muteState$.subscribe((isMuted) => {
         this.isMuted = isMuted;
       })
     );
-  }
-
-  togglePanel(event: Event) {
-    event.preventDefault();
-    event.stopPropagation();
-    this.notificationService.toggleSidebar(!this.isPanelOpen, this.useNewPanel);
   }
 
   ngOnDestroy(): void {

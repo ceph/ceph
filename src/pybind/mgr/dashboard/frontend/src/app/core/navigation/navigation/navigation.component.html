@@ -1,8 +1,5 @@
 <div class="cd-navbar-main">
-  <!-- ************************ -->
-  <!-- NOTIFICATIONS     -->
-  <!-- ************************ -->
-  <cd-notifications-sidebar></cd-notifications-sidebar>
+  <cd-notification-panel *ngIf="isNotifPanelOpen"></cd-notification-panel>
   <!-- ************************ -->
   <!-- HEADER                   -->
   <!-- ************************ -->
@@ -34,7 +31,7 @@
       </cds-header-navigation>
       <cds-header-action
         description=""
-        (click)="toggleSidebar()">
+        [(active)]="isNotifPanelOpen">
           <cd-notifications></cd-notifications>
       </cds-header-action>
       <div class="cds--btn cds--btn--icon-only cds--header__action">
