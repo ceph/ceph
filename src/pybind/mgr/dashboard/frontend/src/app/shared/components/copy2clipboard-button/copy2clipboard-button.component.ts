@@ -1,4 +1,4 @@
-import { Component, HostListener, Input } from '@angular/core';
+import { Component, EventEmitter, HostListener, Input, Output } from '@angular/core';
 
 import { detect } from 'detect-browser';
 
@@ -33,6 +33,12 @@ export class Copy2ClipboardButtonComponent {
   @Input()
   text?: string;
 
+  @Output()
+  toastSuccess = new EventEmitter<void>();
+
+  @Output()
+  toastError = new EventEmitter<void>();
+
   icons = Icons;
 
   constructor(private notificationService: NotificationService) {}
@@ -53,9 +59,11 @@ export class Copy2ClipboardButtonComponent {
           SUCCESS_TITLE,
           CLIPBOARD_SUCCESS_MESSAGE
         );
+        this.toastSuccess.emit();
       };
       const showError = () => {
         this.notificationService.show(NotificationType.error, ERROR_TITLE, CLIPBOARD_ERROR_MESSAGE);
+        this.toastError.emit();
       };
       if (['firefox', 'ie', 'ios', 'safari'].includes(browser.name)) {
         // Various browsers do not support the `Permissions API`.
@@ -80,6 +88,7 @@ export class Copy2ClipboardButtonComponent {
       }
     } catch (_) {
       this.notificationService.show(NotificationType.error, ERROR_TITLE, CLIPBOARD_ERROR_MESSAGE);
+      this.toastError.emit();
     }
   }
 }
