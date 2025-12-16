@@ -4,21 +4,19 @@ import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { RgwRealm } from '../models/rgw-multisite';
+import { RgwRealmToken } from '../models/rgw-multisite';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdForm } from '~/app/shared/forms/cd-form';
 
 @Component({
   selector: 'cd-rgw-multisite-export',
   templateUrl: './rgw-multisite-export.component.html',
   styleUrls: ['./rgw-multisite-export.component.scss']
 })
-export class RgwMultisiteExportComponent implements OnInit, AfterViewChecked {
+export class RgwMultisiteExportComponent extends CdForm implements OnInit, AfterViewChecked {
   exportTokenForm: CdFormGroup;
-  realms: any;
-  realmList: RgwRealm[];
-  multisiteInfo: any;
+  realms: RgwRealmToken[];
   tokenValid = false;
-  loading = true;
   icons = Icons;
 
   constructor(
@@ -28,6 +26,7 @@ export class RgwMultisiteExportComponent implements OnInit, AfterViewChecked {
     public notificationService: NotificationService,
     private readonly changeDetectorRef: ChangeDetectorRef
   ) {
+    super();
     this.createForm();
   }
 
@@ -36,17 +35,17 @@ export class RgwMultisiteExportComponent implements OnInit, AfterViewChecked {
   }
 
   onSubmit() {
-    this.activeModal.close();
+    this.closeModal();
   }
 
   ngOnInit(): void {
-    this.rgwRealmService.getRealmTokens().subscribe((data: object[]) => {
-      this.loading = false;
+    this.rgwRealmService.getRealmTokens().subscribe((data: RgwRealmToken[]) => {
+      this.loadingReady();
       this.realms = data;
       var base64Matcher = new RegExp(
         '^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$'
       );
-      this.realms.forEach((realmInfo: any) => {
+      this.realms.forEach((realmInfo: RgwRealmToken) => {
         if (base64Matcher.test(realmInfo.token)) {
           this.tokenValid = true;
         } else {
