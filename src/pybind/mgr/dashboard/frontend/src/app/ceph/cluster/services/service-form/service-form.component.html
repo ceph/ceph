@@ -51,10 +51,13 @@
                     (change)="onServiceTypeChange($event.target.value)">
               <option i18n
                       [ngValue]="null">-- Select a service type --</option>
-              <option *ngFor="let serviceType of serviceTypes"
-                      [value]="serviceType">
-                {{ serviceType }}
-              </option>
+              <ng-container *ngFor="let group of serviceTypeOptionGroups">
+                <optgroup [label]="group.label">
+                  <option *ngFor="let opt of group.options" [value]="opt.value" [disabled]="isTypeDisabled(opt.value)">
+                    {{ opt.label }}
+                  </option>
+                </optgroup>
+              </ng-container>
             </select>
             <span class="invalid-feedback"
                   *ngIf="serviceForm.showError('service_type', frm, 'required')"
