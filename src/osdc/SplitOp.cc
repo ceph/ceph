@@ -469,29 +469,6 @@ void SplitOp::protect_torn_reads() {
   }
 }
 
-static bool validate_call(const OSDOp &op, std::string_view cls, std::string_view method) {
-  if (cls.size() != op.op.cls.class_len) {
-    return false;
-  }
-  if (method.size() != op.op.cls.method_len) {
-    return false;
-  }
-
-  std::string cname, mname;
-  auto bp = op.indata.begin();
-  bp.copy(op.op.cls.class_len, cname);
-  bp.copy(op.op.cls.method_len, mname);
-
-  if (cname != cls) {
-    return false;
-  }
-  if (mname != method) {
-    return false;
-  }
-
-  return true;
-}
-
 void SplitOp::init(OSDOp &op, int ops_index) {
   switch (op.op.op) {
   case CEPH_OSD_OP_SPARSE_READ: {
