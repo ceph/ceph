@@ -619,6 +619,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Get snapdir visibility for subvolume",
             'perm': 'rw'
         },
+        {
+            'cmd': 'fs purge status '
+                   'name=vol_name,type=CephString ',
+            'desc': "Get status of a purging of volume trashcan",
+            'perm': 'r'
+        },
         # volume ls [recursive]
         # subvolume ls <volume>
         # volume authorize/deauthorize
@@ -666,7 +672,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'pause_cloning',
             type='bool',
             default=False,
-            desc='Pause asynchronous cloner threads')
+            desc='Pause asynchronous cloner threads'),
+        Option(
+            'disable_purge_progress_bars',
+            type='bool',
+            default=False,
+            desc='Don\'t print progress bar for purge threads')
     ]
 
     def __init__(self, *args, **kwargs):
@@ -678,6 +689,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.snapshot_clone_no_wait = None
         self.pause_purging = False
         self.pause_cloning = False
+        self.disable_purge_progress_bars = False
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
         # Initialize config option members
@@ -724,6 +736,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                             self.vc.cloner.pause()
                         else:
                             self.vc.cloner.resume()
+                    elif opt['name'] == "disable_purge_progress_bars":
+                        self.vc.purge_queue.reconfigure_disable_purge_progress_bars(self.disable_purge_progress_bars)
 
 
     def handle_command(self, inbuf, cmd):
@@ -1144,6 +1158,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_clone_cancel(self, inbuf, cmd):
         return self.vc.clone_cancel(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'], group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_purge_status(self, inbuf, cmd):
+        return self.vc.purge_status(vol_name=cmd['vol_name'])
 
     # remote method
     def subvolume_getpath(self, vol_name, subvol, group_name):
