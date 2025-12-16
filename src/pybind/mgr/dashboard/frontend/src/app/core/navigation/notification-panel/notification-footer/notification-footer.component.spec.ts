@@ -1,5 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NotificationFooterComponent } from './notification-footer.component';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+
+class MockNotificationService {
+  toggleSidebar = () => {};
+}
 
 describe('NotificationFooterComponent', () => {
   let component: NotificationFooterComponent;
@@ -7,7 +13,9 @@ describe('NotificationFooterComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [NotificationFooterComponent]
+      declarations: [NotificationFooterComponent],
+      providers: [{ provide: NotificationService, useClass: MockNotificationService }],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();
   });
 
