@@ -118,7 +118,7 @@ struct ECSubRead {
   std::set<hobject_t> attrs_to_read;
   std::map<hobject_t, std::vector<std::pair<int, int>>> subchunks;
   std::set<hobject_t> omap_headers_to_read;
-  std::map<hobject_t, std::string> omap_read_from;
+  std::map<hobject_t, std::pair<std::string, uint64_t>> omap_read_from;
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;

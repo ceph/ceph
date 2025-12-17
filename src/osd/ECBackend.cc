@@ -591,6 +591,53 @@ void ECBackend::handle_sub_read(
       reply->errors[*i] = r;
     }
   }
+
+  for (auto const& [hoid, read_from] : op.omap_read_from) {
+    auto const&[start_key, max_bytes] = read_from;
+    dout(10) << __func__ << ": fulfilling omap read request on " << hoid
+            << " from key " << start_key << dendl;
+
+    if (reply->errors.contains(hoid))
+      continue;
+
+    std::map<std::string, ceph::buffer::list> current_batch;
+    reply->omaps_complete[hoid] = false;
+
+    uint64_t available = max_bytes;
+    const auto result = switcher->store->omap_iterate(
+      switcher->ch,
+      ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+      ObjectStore::omap_iter_seek_t{
+      .seek_position = start_key,
+      .seek_type = ObjectStore::omap_iter_seek_t::LOWER_BOUND
+      },
+      [max_entries=cct->_conf->osd_recovery_max_omap_entries_per_chunk, &available, &current_batch]
+      (const std::string_view key, const std::string_view value) {
+        const auto num_new_bytes = key.size() + value.size(); 
+        if (auto cur_num_entries = current_batch.size(); cur_num_entries > 0) {
+	  if (max_entries > 0 && cur_num_entries >= max_entries) {
+            return ObjectStore::omap_iter_ret_t::STOP;
+	  }
+	  if (num_new_bytes >= available) {
+            return ObjectStore::omap_iter_ret_t::STOP;
+	  }
+        }
+        bufferlist val_bl;
+        val_bl.append(value);
+        current_batch.insert(make_pair(key, val_bl));
+        available -= std::min(available, num_new_bytes);
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      });
+
+    if (result < 0) {
+      reply->errors[hoid] = result;
+      current_batch.clear();
+    } else if (const auto more = static_cast<bool>(result); !more) {
+      reply->omaps_complete[hoid] = true;
+    }
+    reply->omap_entries_read[hoid] = std::move(current_batch);
+  }
+
   reply->from = get_parent()->whoami_shard();
   reply->tid = op.tid;
 }

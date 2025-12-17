@@ -309,9 +309,10 @@ void ECSubRead::dump(Formatter *f) const
   // 'omap_read_from' (map<hobject_t, string>)
   f->with_obj_array_section(
       "object"sv, omap_read_from,
-      [](Formatter& f, const hobject_t& oid, const std::string& start_after) {
+      [](Formatter& f, const hobject_t& oid, const std::pair<std::string, uint64_t>& read_from) {
 	f.dump_stream("oid") << oid;
-	f.dump_string("start_after", start_after);
+	f.dump_string("start_after", read_from.first);
+        f.dump_unsigned("max_bytes", read_from.second);
       });
 }
 
