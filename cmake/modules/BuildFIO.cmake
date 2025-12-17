@@ -15,6 +15,17 @@ function(build_fio)
   include(FindMake)
   find_make("MAKE_EXECUTABLE" "make_cmd")
 
+  include(CheckTypeSize)
+  check_type_size("void*" SIZEOF_VOID_P)
+
+  if(SIZEOF_VOID_P EQUAL 8)
+    set(WORD_SIZE 64)
+  elseif(SIZEOF_VOID_P EQUAL 4)
+    set(WORD_SIZE 32)
+  else()
+    message(FATAL_ERROR "Unknown wordsize")
+  endif()
+
   set(source_dir ${CMAKE_BINARY_DIR}/src/fio)
   file(MAKE_DIRECTORY ${source_dir})
   ExternalProject_Add(fio_ext
@@ -39,5 +50,6 @@ function(build_fio)
   set_target_properties(fio PROPERTIES
     CXX_EXTENSIONS ON
     INTERFACE_INCLUDE_DIRECTORIES ${source_dir}
-    INTERFACE_COMPILE_OPTIONS "-include;${source_dir}/config-host.h;$<$<COMPILE_LANGUAGE:C>:-std=gnu99>")
+    INTERFACE_COMPILE_OPTIONS "-include;${source_dir}/config-host.h;$<$<COMPILE_LANGUAGE:C>:-std=gnu99>"
+    INTERFACE_COMPILE_DEFINITIONS "BITS_PER_LONG=${WORD_SIZE}")
 endfunction()
