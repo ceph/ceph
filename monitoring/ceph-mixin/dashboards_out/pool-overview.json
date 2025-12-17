@@ -98,7 +98,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "count(ceph_pool_metadata{cluster=~\"$cluster\", })",
+               "expr": "count(ceph_pool_metadata{cluster=~\"$cluster|\", })",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -181,7 +181,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "count(ceph_pool_metadata{compression_mode!=\"none\", cluster=~\"$cluster\", })",
+               "expr": "count(ceph_pool_metadata{compression_mode!=\"none\", cluster=~\"$cluster|\", })",
                "format": "",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -263,7 +263,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(ceph_osd_stat_bytes{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_osd_stat_bytes{cluster=~\"$cluster|\", })",
                "format": "",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -345,7 +345,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(ceph_pool_bytes_used{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pool_bytes_used{cluster=~\"$cluster|\", })",
                "format": "",
                "instant": true,
                "intervalFactor": 1,
@@ -428,7 +428,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(ceph_pool_stored{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pool_stored{cluster=~\"$cluster|\", })",
                "format": "",
                "instant": true,
                "intervalFactor": 1,
@@ -511,7 +511,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(\n  ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } -\n    ceph_pool_compress_bytes_used{cluster=~\"$cluster\", }\n)\n",
+               "expr": "sum(\n  ceph_pool_compress_under_bytes{cluster=~\"$cluster|\", } -\n    ceph_pool_compress_bytes_used{cluster=~\"$cluster|\", }\n)\n",
                "format": "",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -593,7 +593,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "(\n  sum(ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0) /\n    sum(ceph_pool_stored_raw{cluster=~\"$cluster\", } and ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0)\n) * 100\n",
+               "expr": "(\n  sum(ceph_pool_compress_under_bytes{cluster=~\"$cluster|\", } > 0) /\n    sum(ceph_pool_stored_raw{cluster=~\"$cluster|\", } and ceph_pool_compress_under_bytes{cluster=~\"$cluster|\", } > 0)\n) * 100\n",
                "format": "table",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -675,7 +675,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(\n  ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0)\n    / sum(ceph_pool_compress_bytes_used{cluster=~\"$cluster\", } > 0\n)\n",
+               "expr": "sum(\n  ceph_pool_compress_under_bytes{cluster=~\"$cluster|\", } > 0)\n    / sum(ceph_pool_compress_bytes_used{cluster=~\"$cluster|\", } > 0\n)\n",
                "format": "",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -1174,7 +1174,7 @@
          "styles": "",
          "targets": [
             {
-               "expr": "(\n  ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } /\n    ceph_pool_compress_bytes_used{cluster=~\"$cluster\", } > 0\n) and on(pool_id) (\n  (\n    (ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0) /\n      ceph_pool_stored_raw{cluster=~\"$cluster\", }\n  ) * 100 > 0.5\n)\n",
+               "expr": "(\n  ceph_pool_compress_under_bytes{cluster=~\"$cluster|\", } /\n    ceph_pool_compress_bytes_used{cluster=~\"$cluster|\", } > 0\n) and on(pool_id) (\n  (\n    (ceph_pool_compress_under_bytes{cluster=~\"$cluster|\", } > 0) /\n      ceph_pool_stored_raw{cluster=~\"$cluster|\", }\n  ) * 100 > 0.5\n)\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1182,7 +1182,7 @@
                "refId": "A"
             },
             {
-               "expr": "ceph_pool_max_avail{cluster=~\"$cluster\", } *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", }\n",
+               "expr": "ceph_pool_max_avail{cluster=~\"$cluster|\", } *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster|\", }\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1190,7 +1190,7 @@
                "refId": "B"
             },
             {
-               "expr": "(\n  (ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0) /\n    ceph_pool_stored_raw{cluster=~\"$cluster\", }\n) * 100\n",
+               "expr": "(\n  (ceph_pool_compress_under_bytes{cluster=~\"$cluster|\", } > 0) /\n    ceph_pool_stored_raw{cluster=~\"$cluster|\", }\n) * 100\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1198,7 +1198,7 @@
                "refId": "C"
             },
             {
-               "expr": "ceph_pool_percent_used{cluster=~\"$cluster\", } *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster\", }\n",
+               "expr": "ceph_pool_percent_used{cluster=~\"$cluster|\", } *\n  on(pool_id) group_left(name) ceph_pool_metadata{cluster=~\"$cluster|\", }\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1206,7 +1206,7 @@
                "refId": "D"
             },
             {
-               "expr": "ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } -\n  ceph_pool_compress_bytes_used{cluster=~\"$cluster\", } > 0\n",
+               "expr": "ceph_pool_compress_under_bytes{cluster=~\"$cluster|\", } -\n  ceph_pool_compress_bytes_used{cluster=~\"$cluster|\", } > 0\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1214,7 +1214,7 @@
                "refId": "E"
             },
             {
-               "expr": "delta(ceph_pool_stored{cluster=~\"$cluster\", }[5d])",
+               "expr": "delta(ceph_pool_stored{cluster=~\"$cluster|\", }[5d])",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1222,7 +1222,7 @@
                "refId": "F"
             },
             {
-               "expr": "rate(ceph_pool_rd{cluster=~\"$cluster\", }[$__rate_interval])\n  + rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval])\n",
+               "expr": "rate(ceph_pool_rd{cluster=~\"$cluster|\", }[$__rate_interval])\n  + rate(ceph_pool_wr{cluster=~\"$cluster|\", }[$__rate_interval])\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1230,7 +1230,7 @@
                "refId": "G"
             },
             {
-               "expr": "rate(ceph_pool_rd_bytes{cluster=~\"$cluster\", }[$__rate_interval]) +\n  rate(ceph_pool_wr_bytes{cluster=~\"$cluster\", }[$__rate_interval])\n",
+               "expr": "rate(ceph_pool_rd_bytes{cluster=~\"$cluster|\", }[$__rate_interval]) +\n  rate(ceph_pool_wr_bytes{cluster=~\"$cluster|\", }[$__rate_interval])\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1238,7 +1238,7 @@
                "refId": "H"
             },
             {
-               "expr": "ceph_pool_metadata{cluster=~\"$cluster\", }",
+               "expr": "ceph_pool_metadata{cluster=~\"$cluster|\", }",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1246,7 +1246,7 @@
                "refId": "I"
             },
             {
-               "expr": "ceph_pool_stored{cluster=~\"$cluster\", } * on(pool_id) group_left ceph_pool_metadata{cluster=~\"$cluster\", }",
+               "expr": "ceph_pool_stored{cluster=~\"$cluster|\", } * on(pool_id) group_left ceph_pool_metadata{cluster=~\"$cluster|\", }",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1254,7 +1254,7 @@
                "refId": "J"
             },
             {
-               "expr": "ceph_pool_metadata{compression_mode!=\"none\", cluster=~\"$cluster\", }",
+               "expr": "ceph_pool_metadata{compression_mode!=\"none\", cluster=~\"$cluster|\", }",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -1378,14 +1378,14 @@
          "seriesOverrides": [ ],
          "targets": [
             {
-               "expr": "topk($topk,\n  round(\n    (\n      rate(ceph_pool_rd{cluster=~\"$cluster\", }[$__rate_interval]) +\n      rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval])\n    ), 1\n  ) * on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\", }\n)\n",
+               "expr": "topk($topk,\n  round(\n    (\n      rate(ceph_pool_rd{cluster=~\"$cluster|\", }[$__rate_interval]) +\n      rate(ceph_pool_wr{cluster=~\"$cluster|\", }[$__rate_interval])\n    ), 1\n  ) * on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster|\", }\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}}",
                "refId": "A"
             },
             {
-               "expr": "topk($topk,\n  rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval]) +\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\", }\n)\n",
+               "expr": "topk($topk,\n  rate(ceph_pool_wr{cluster=~\"$cluster|\", }[$__rate_interval]) +\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster|\", }\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}} - write",
@@ -1464,7 +1464,7 @@
          "seriesOverrides": [ ],
          "targets": [
             {
-               "expr": "topk($topk,\n  (\n    rate(ceph_pool_rd_bytes{cluster=~\"$cluster\", }[$__rate_interval]) +\n    rate(ceph_pool_wr_bytes{cluster=~\"$cluster\", }[$__rate_interval])\n  ) * on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\", }\n)\n",
+               "expr": "topk($topk,\n  (\n    rate(ceph_pool_rd_bytes{cluster=~\"$cluster|\", }[$__rate_interval]) +\n    rate(ceph_pool_wr_bytes{cluster=~\"$cluster|\", }[$__rate_interval])\n  ) * on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster|\", }\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}}",
@@ -1543,7 +1543,7 @@
          "seriesOverrides": [ ],
          "targets": [
             {
-               "expr": "ceph_pool_bytes_used{cluster=~\"$cluster\", } * on(pool_id) group_right ceph_pool_metadata{cluster=~\"$cluster\", }",
+               "expr": "ceph_pool_bytes_used{cluster=~\"$cluster|\", } * on(pool_id) group_right ceph_pool_metadata{cluster=~\"$cluster|\", }",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}}",
