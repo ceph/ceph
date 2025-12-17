@@ -230,8 +230,7 @@ BtreeOMapManager::omap_rm_key_range(
   omap_root_t &omap_root,
   Transaction &t,
   const std::string &first,
-  const std::string &last,
-  omap_list_config_t config)
+  const std::string &last)
 {
   LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
   DEBUGT("{} ~ {}", t, first, last);
