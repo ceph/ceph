@@ -1187,6 +1187,59 @@ BtreeLBAManager::_update_mapping(
     });
 }
 
+BtreeLBAManager::scan_mapped_space_ret
+BtreeLBAManager::scan_mapped_space(
+  Transaction &t,
+  BtreeLBAManager::scan_mapped_space_func_t &&f)
+{
+  LOG_PREFIX(BtreeLBAManager::scan_mapped_space);
+  DEBUGT("scan lba tree", t);
+  auto c = get_context(t);
+  auto scan_visitor = std::move(f);
+  auto btree = co_await get_btree<LBABtree>(c);
+  auto block_size = cache.get_block_size();
+  auto pos = co_await btree.lower_bound(c, L_ADDR_MIN);
+  while (!pos.is_end()) {
+    if (pos.get_val().pladdr.is_laddr() ||
+        pos.get_val().pladdr.get_paddr().is_zero()) {
+      pos = co_await pos.next(c);
+      continue;
+    }
+    TRACET("tree value {}~{} {}~{} used",
+           c.trans,
+           pos.get_key(),
+           pos.get_val().len,
+           pos.get_val().pladdr.get_paddr(),
+           pos.get_val().len);
+    ceph_assert(pos.get_val().len > 0 &&
+                pos.get_val().len % block_size == 0);
+    ceph_assert(pos.get_val().pladdr != L_ADDR_NULL);
+    scan_visitor(
+        pos.get_val().pladdr.get_paddr(),
+        pos.get_val().len,
+        extent_types_t::NONE,
+        pos.get_key());
+    pos = co_await pos.next(c);
+  }
+
+  LBABtree::mapped_space_visitor_t tree_visitor =
+    [&scan_visitor, block_size, FNAME, c](
+      paddr_t paddr, laddr_t key, extent_len_t len,
+      depth_t depth, extent_types_t type, LBABtree::iterator&) {
+    TRACET("tree node {}~{} {}, depth={} used",
+           c.trans, paddr, len, type, depth);
+    ceph_assert(paddr.is_absolute());
+    ceph_assert(len > 0 && len % block_size == 0);
+    ceph_assert(depth >= 1);
+    return scan_visitor(paddr, len, type, key);
+  };
+
+  pos = co_await btree.lower_bound(c, L_ADDR_MIN, &tree_visitor);
+  while (!pos.is_end()) {
+    pos = co_await pos.next(c, &tree_visitor);
+  }
+}
+
 BtreeLBAManager::_get_cursor_ret
 BtreeLBAManager::get_containing_cursor(
   op_context_t c,

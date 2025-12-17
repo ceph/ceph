@@ -338,6 +338,21 @@ public:
     Transaction &t,
     LBAMapping mapping) = 0;
 
+  /*
+   * scan all extents in the tree, including logical extents
+   * and lba extents, visit them with scan_mapped_space_func_t.
+   * 
+   * Note that it's only when both the main and secondary devices
+   * are RBMs that this method can be used to scan the disk space
+   */
+  using scan_mapped_space_iertr = base_iertr;
+  using scan_mapped_space_ret = scan_mapped_space_iertr::future<>;
+  using scan_mapped_space_func_t = std::function<
+    void(paddr_t, extent_len_t, extent_types_t, laddr_t)>;
+  virtual scan_mapped_space_ret scan_mapped_space(
+    Transaction &t,
+    scan_mapped_space_func_t &&f) = 0;
+
   virtual ~LBAManager() {}
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;

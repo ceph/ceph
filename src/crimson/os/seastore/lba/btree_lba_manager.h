@@ -358,6 +358,10 @@ public:
     Transaction &t,
     LBAMapping mapping) final;
 
+  scan_mapped_space_ret scan_mapped_space(
+    Transaction &t,
+    scan_mapped_space_func_t &&f) final;
+
 private:
   Cache &cache;
 

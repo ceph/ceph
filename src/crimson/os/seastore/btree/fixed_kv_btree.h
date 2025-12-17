@@ -8,6 +8,7 @@
 #include <memory>
 #include <string.h>
 
+#include "crimson/common/coroutine.h"
 #include "crimson/os/seastore/logging.h"
 
 #include "crimson/os/seastore/cache.h"
@@ -2361,6 +2362,13 @@ private:
 
 template <typename T>
 struct is_fixed_kv_tree : std::false_type {};
+
+template <typename tree_type_t>
+Cache::get_root_iertr::future<tree_type_t>
+get_btree(op_context_t c) {
+  auto cache_root = co_await c.cache.get_root(c.trans);
+  co_return tree_type_t(cache_root);
+}
 
 template <
   typename node_key_t,
