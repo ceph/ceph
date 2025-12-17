@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Dump radosgw bucket usage as labeled prometheus metrics.
+#
+# dependencies:
+#   radosgw-admin, jq
+
+cat <<EOF
+# TYPE rgw_bucket_usage_objects guage
+# HELP rgw_bucket_usage_objects Total number of objects stored in the bucket
+# TYPE rgw_bucket_usage_bytes guage
+# HELP rgw_bucket_usage_bytes Total size in bytes of object data stored in the bucket
+EOF
+radosgw-admin bucket stats | jq -c '.[]' | while read entry; do
+	tenant=`echo $entry | jq -r '.tenant'`
+	bucket=`echo $entry | jq -r '.bucket'`
+	owner=`echo $entry | jq -r '.owner'`
+	objects=`echo $entry | jq '.usage."rgw.main".num_objects // 0'`
+	bytes=`echo $entry | jq '.usage."rgw.main".size // 0'`
+	cat <<EOF
+rgw_bucket_usage_objects{tenant="$tenant",owner="$owner",bucket="$bucket"} $objects
+rgw_bucket_usage_bytes{tenant="$tenant",owner="$owner",bucket="$bucket"} $bytes
+EOF
+done
