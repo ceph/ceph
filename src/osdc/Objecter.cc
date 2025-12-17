@@ -2696,8 +2696,11 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r,
       ldout(cct, 10) << __func__ << " SplitOp:: cancel tid " << tid
                << " sub_tid " << sub_tid
                << " in session " << s->osd << dendl;
-      //FIXME - don't want assert here...
-      ceph_assert(0 == _op_cancel(sub_tid, r));
+      int ret = _op_cancel(sub_tid, r);
+      if (ret != 0) {
+        ldout(cct, 20) << __func__ << " unexpected error canceling sub_tid "
+                      << sub_tid << ": " << ret << dendl;
+      }
     }
     return 0;
   }
