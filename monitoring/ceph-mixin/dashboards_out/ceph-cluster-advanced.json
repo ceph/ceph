@@ -162,7 +162,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "ceph_health_status{cluster=~\"$cluster\", }",
+               "expr": "ceph_health_status{cluster=~\"$cluster|\", }",
                "format": "time_series",
                "instant": true,
                "interval": "$interval",
@@ -240,7 +240,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "(ceph_cluster_total_bytes{cluster=~\"$cluster\", }-ceph_cluster_total_used_bytes{cluster=~\"$cluster\", })/ceph_cluster_total_bytes{cluster=~\"$cluster\", }",
+               "expr": "(ceph_cluster_total_bytes{cluster=~\"$cluster|\", }-ceph_cluster_total_used_bytes{cluster=~\"$cluster|\", })/ceph_cluster_total_bytes{cluster=~\"$cluster|\", }",
                "format": "time_series",
                "instant": true,
                "interval": "$interval",
@@ -320,7 +320,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "ceph_cluster_total_bytes{cluster=~\"$cluster\", }",
+               "expr": "ceph_cluster_total_bytes{cluster=~\"$cluster|\", }",
                "format": "time_series",
                "instant": true,
                "interval": "$interval",
@@ -391,7 +391,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(rate(ceph_osd_op_w_in_bytes{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum(rate(ceph_osd_op_w_in_bytes{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "instant": true,
                "interval": "$interval",
@@ -469,7 +469,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(rate(ceph_osd_op_r_out_bytes{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum(rate(ceph_osd_op_r_out_bytes{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "instant": true,
                "interval": "$interval",
@@ -614,7 +614,7 @@
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ceph_osd_metadata{cluster=~\"$cluster\", })",
+               "expr": "count(ceph_osd_metadata{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -631,7 +631,7 @@
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "sum(ceph_osd_in{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_osd_in{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -648,7 +648,7 @@
                "displayAliasType": "Warning / Critical",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "sum(ceph_osd_in{cluster=~\"$cluster\", } == bool 0)",
+               "expr": "sum(ceph_osd_in{cluster=~\"$cluster|\", } == bool 0)",
                "format": "time_series",
                "interval": "",
                "intervalFactor": 1,
@@ -666,7 +666,7 @@
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "sum(ceph_osd_up{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_osd_up{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "",
                "intervalFactor": 1,
@@ -683,7 +683,7 @@
                "displayAliasType": "Warning / Critical",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "sum(ceph_osd_up{cluster=~\"$cluster\", } == bool 0)",
+               "expr": "sum(ceph_osd_up{cluster=~\"$cluster|\", } == bool 0)",
                "format": "time_series",
                "interval": "",
                "intervalFactor": 1,
@@ -770,7 +770,7 @@
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ceph_mgr_status{cluster=~\"$cluster\", } == 1) or vector(0)",
+               "expr": "count(ceph_mgr_status{cluster=~\"$cluster|\", } == 1) or vector(0)",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -787,7 +787,7 @@
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ceph_mgr_status{cluster=~\"$cluster\", } == 0) or vector(0)",
+               "expr": "count(ceph_mgr_status{cluster=~\"$cluster|\", } == 0) or vector(0)",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -905,7 +905,7 @@
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ALERTS{alertstate=\"firing\",alertname=~\"^Ceph.+\", severity=\"critical\", cluster=~\"$cluster\", }) OR vector(0)",
+               "expr": "count(ALERTS{alertstate=\"firing\",alertname=~\"^Ceph.+\", severity=\"critical\", cluster=~\"$cluster|\", }) OR vector(0)",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -922,7 +922,7 @@
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ALERTS{alertstate=\"firing\",alertname=~\"^Ceph.+\", severity=\"warning\", cluster=~\"$cluster\", }) OR vector(0)",
+               "expr": "count(ALERTS{alertstate=\"firing\",alertname=~\"^Ceph.+\", severity=\"warning\", cluster=~\"$cluster|\", }) OR vector(0)",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -1003,7 +1003,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "ceph_cluster_total_used_bytes{cluster=~\"$cluster\", }",
+               "expr": "ceph_cluster_total_used_bytes{cluster=~\"$cluster|\", }",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -1074,7 +1074,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(rate(ceph_osd_op_w{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum(rate(ceph_osd_op_w{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -1153,7 +1153,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(rate(ceph_osd_op_r{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum(rate(ceph_osd_op_r{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -1237,7 +1237,7 @@
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "sum(ceph_mon_quorum_status{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_mon_quorum_status{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "In Quorum",
@@ -1254,7 +1254,7 @@
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ceph_mon_quorum_status{cluster=~\"$cluster\", })",
+               "expr": "count(ceph_mon_quorum_status{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Total",
@@ -1272,7 +1272,7 @@
                "displayAliasType": "Warning / Critical",
                "displayType": "Annotation",
                "displayValueWithAlias": "Never",
-               "expr": "count(ceph_mon_quorum_status{cluster=~\"$cluster\", }) - sum(ceph_mon_quorum_status{cluster=~\"$cluster\", })",
+               "expr": "count(ceph_mon_quorum_status{cluster=~\"$cluster|\", }) - sum(ceph_mon_quorum_status{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "MONs out of Quorum",
@@ -1321,7 +1321,7 @@
          "limit": 10,
          "onlyAlertsOnDashboard": true,
          "options": {
-            "alertInstanceLabelFilter": "{alertname=~\"^Ceph.+\", cluster=~\"$cluster\", }",
+            "alertInstanceLabelFilter": "{alertname=~\"^Ceph.+\", cluster=~\"$cluster|\", }",
             "alertName": "",
             "dashboardAlerts": false,
             "groupBy": [ ],
@@ -1469,7 +1469,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "ceph_cluster_total_bytes{cluster=~\"$cluster\", }",
+               "expr": "ceph_cluster_total_bytes{cluster=~\"$cluster|\", }",
                "format": "time_series",
                "instant": false,
                "interval": "$interval",
@@ -1481,7 +1481,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "ceph_cluster_total_used_bytes{cluster=~\"$cluster\", }",
+               "expr": "ceph_cluster_total_used_bytes{cluster=~\"$cluster|\", }",
                "format": "time_series",
                "instant": false,
                "interval": "$interval",
@@ -1580,7 +1580,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(rate(ceph_osd_op_w_in_bytes{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum(rate(ceph_osd_op_w_in_bytes{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1591,7 +1591,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(rate(ceph_osd_op_r_out_bytes{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum(rate(ceph_osd_op_r_out_bytes{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1689,7 +1689,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(rate(ceph_osd_op_w{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum(rate(ceph_osd_op_w{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1700,7 +1700,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(rate(ceph_osd_op_r{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum(rate(ceph_osd_op_r{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1793,7 +1793,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "(ceph_pool_bytes_used{cluster=~\"$cluster\", }) *on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster\", })",
+               "expr": "(ceph_pool_bytes_used{cluster=~\"$cluster|\", }) *on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1897,7 +1897,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "(ceph_pool_stored_raw{cluster=~\"$cluster\", }) *on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster\", })",
+               "expr": "(ceph_pool_stored_raw{cluster=~\"$cluster|\", }) *on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "hide": false,
                "interval": "",
@@ -1991,7 +1991,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "(ceph_pool_quota_objects{cluster=~\"$cluster\", }) *on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster\", })",
+               "expr": "(ceph_pool_quota_objects{cluster=~\"$cluster|\", }) *on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "",
                "intervalFactor": 1,
@@ -2083,7 +2083,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "(ceph_pool_quota_bytes{cluster=~\"$cluster\", }) *on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster\", })",
+               "expr": "(ceph_pool_quota_bytes{cluster=~\"$cluster|\", }) *on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "",
                "intervalFactor": 1,
@@ -2175,7 +2175,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "(ceph_pool_objects{cluster=~\"$cluster\", }) * on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster\", })",
+               "expr": "(ceph_pool_objects{cluster=~\"$cluster|\", }) * on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "",
                "intervalFactor": 1,
@@ -2300,7 +2300,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pool_objects{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pool_objects{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2410,7 +2410,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_active{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_active{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2420,7 +2420,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_clean{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_clean{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2430,7 +2430,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_peering{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_peering{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2440,7 +2440,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_degraded{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_degraded{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2451,7 +2451,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_stale{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_stale{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2462,7 +2462,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_unclean_pgs{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_unclean_pgs{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2473,7 +2473,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_undersized{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_undersized{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2484,7 +2484,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_incomplete{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_incomplete{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2494,7 +2494,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_forced_backfill{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_forced_backfill{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2504,7 +2504,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_forced_recovery{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_forced_recovery{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2514,7 +2514,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_creating{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_creating{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2524,7 +2524,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_wait_backfill{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_wait_backfill{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2534,7 +2534,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_deep{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_deep{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2544,7 +2544,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_scrubbing{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_scrubbing{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2554,7 +2554,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_recovering{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_recovering{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2564,7 +2564,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_repair{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_repair{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2574,7 +2574,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_down{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_down{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2584,7 +2584,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_peered{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_peered{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2594,7 +2594,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_backfill{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_backfill{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2604,7 +2604,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_remapped{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_remapped{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2614,7 +2614,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_backfill_toofull{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_backfill_toofull{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2724,7 +2724,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_degraded{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_degraded{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2735,7 +2735,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_stale{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_stale{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2746,7 +2746,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_pg_undersized{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_pg_undersized{cluster=~\"$cluster|\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2838,7 +2838,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(rate(ceph_osd_recovery_ops{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum(rate(ceph_osd_recovery_ops{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2953,7 +2953,7 @@
                "targets": [
                   {
                      "datasource": "$datasource",
-                     "expr": "ceph_osd_apply_latency_ms{cluster=~\"$cluster\", }",
+                     "expr": "ceph_osd_apply_latency_ms{cluster=~\"$cluster|\", }",
                      "format": "time_series",
                      "instant": false,
                      "interval": "$interval",
@@ -3077,7 +3077,7 @@
                "targets": [
                   {
                      "datasource": "$datasource",
-                     "expr": "ceph_osd_commit_latency_ms{cluster=~\"$cluster\", }",
+                     "expr": "ceph_osd_commit_latency_ms{cluster=~\"$cluster|\", }",
                      "format": "time_series",
                      "instant": false,
                      "interval": "$interval",
@@ -3202,7 +3202,7 @@
                "targets": [
                   {
                      "datasource": "$datasource",
-                     "expr": "rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) / rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) >= 0",
+                     "expr": "rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster|\", }[$__rate_interval]) / rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster|\", }[$__rate_interval]) >= 0",
                      "format": "time_series",
                      "instant": false,
                      "interval": "$interval",
@@ -3327,7 +3327,7 @@
                "targets": [
                   {
                      "datasource": "$datasource",
-                     "expr": "rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) / rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) >= 0",
+                     "expr": "rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster|\", }[$__rate_interval]) / rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster|\", }[$__rate_interval]) >= 0",
                      "format": "time_series",
                      "instant": false,
                      "interval": "$interval",
@@ -3439,7 +3439,7 @@
                "targets": [
                   {
                      "datasource": "$datasource",
-                     "expr": "avg(rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) / rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) >= 0)",
+                     "expr": "avg(rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster|\", }[$__rate_interval]) / rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster|\", }[$__rate_interval]) >= 0)",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "Read",
@@ -3447,7 +3447,7 @@
                   },
                   {
                      "datasource": "$datasource",
-                     "expr": "avg(rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) / rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) >= 0)",
+                     "expr": "avg(rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster|\", }[$__rate_interval]) / rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster|\", }[$__rate_interval]) >= 0)",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "Write",
@@ -3539,7 +3539,7 @@
                "targets": [
                   {
                      "datasource": "$datasource",
-                     "expr": "avg(ceph_osd_apply_latency_ms{cluster=~\"$cluster\", })",
+                     "expr": "avg(ceph_osd_apply_latency_ms{cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "interval": "$interval",
                      "intervalFactor": 1,
@@ -3550,7 +3550,7 @@
                   },
                   {
                      "datasource": "$datasource",
-                     "expr": "avg(ceph_osd_commit_latency_ms{cluster=~\"$cluster\", })",
+                     "expr": "avg(ceph_osd_commit_latency_ms{cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "interval": "$interval",
                      "intervalFactor": 1,
@@ -3655,7 +3655,7 @@
             {
                "datasource": "$datasource",
                "exemplar": false,
-               "expr": "count by (ceph_version)(ceph_osd_metadata{cluster=~\"$cluster\", })",
+               "expr": "count by (ceph_version)(ceph_osd_metadata{cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -3668,7 +3668,7 @@
             {
                "datasource": "$datasource",
                "exemplar": false,
-               "expr": "count by (ceph_version)(ceph_mon_metadata{cluster=~\"$cluster\", })",
+               "expr": "count by (ceph_version)(ceph_mon_metadata{cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -3681,7 +3681,7 @@
             {
                "datasource": "$datasource",
                "exemplar": false,
-               "expr": "count by (ceph_version)(ceph_mds_metadata{cluster=~\"$cluster\", })",
+               "expr": "count by (ceph_version)(ceph_mds_metadata{cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -3693,7 +3693,7 @@
             {
                "datasource": "$datasource",
                "exemplar": false,
-               "expr": "count by (ceph_version)(ceph_rgw_metadata{cluster=~\"$cluster\", })",
+               "expr": "count by (ceph_version)(ceph_rgw_metadata{cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -3706,7 +3706,7 @@
             {
                "datasource": "$datasource",
                "exemplar": false,
-               "expr": "count by (ceph_version)(ceph_mgr_metadata{cluster=~\"$cluster\", })",
+               "expr": "count by (ceph_version)(ceph_mgr_metadata{cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
