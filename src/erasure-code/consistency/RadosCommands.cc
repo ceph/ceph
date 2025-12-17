@@ -47,6 +47,47 @@ int RadosCommands::get_primary_osd(const std::string& pool_name,
 }
 
 /**
+ * Return the OSD for a specific shard of the given pool and object.
+ * Assert on failure.
+ *
+ * @param pool_name string Name of the pool
+ * @param oid string OID of the object
+ * @param shard_id shard_id_t The shard ID to get the OSD for
+ * @param nspace string Namespace (optional)
+ * @returns int ID of the OSD for the specified shard
+ */
+int RadosCommands::get_shard_osd(const std::string& pool_name,
+                                 const std::string& oid,
+                                 shard_id_t shard_id,
+                                 const std::string& nspace)
+{
+  ceph::messaging::osd::OSDMapRequest osd_map_request{pool_name, oid, nspace};
+  encode_json("OSDMapRequest", osd_map_request, formatter.get());
+
+  std::ostringstream oss;
+  formatter.get()->flush(oss);
+
+  ceph::bufferlist outbl;
+  int rc = rados.mon_command(oss.str(), {}, &outbl, nullptr);
+  ceph_assert(rc == 0);
+
+  JSONParser p;
+  bool success = p.parse(outbl.c_str(), outbl.length());
+  ceph_assert(success);
+
+  ceph::messaging::osd::OSDMapReply reply;
+  reply.decode_json(&p);
+  
+  ceph_assert(shard_id.id >= 0);
+  ceph_assert((size_t)shard_id.id < reply.acting.size());
+  
+  int osd = reply.acting[shard_id.id];
+  ceph_assert(osd >= 0);
+
+  return osd;
+}
+
+/**
  * Send a mon command to fetch the value of the 'allow_ec_optimizations' flag for the
  * specified pool and return it.
  *

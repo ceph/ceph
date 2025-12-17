@@ -20,6 +20,7 @@
 
 #include "erasure-code/consistency/RadosCommands.h"
 #include "common/json/OSDStructures.h"
+#include "crush/crush.h"
 
 using namespace librados;
 
@@ -508,6 +509,173 @@ void RadosTestECPP::clear_ec_read_error(const std::string &objname) {
   f.flush(oss);
   int rc = s_cluster.osd_command(osd, oss.str(), {}, {}, nullptr);
   ASSERT_EQ(0, rc);
+}
+
+void RadosTestECPP::wait_for_stable_acting_set(const std::string &objname) {
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+  
+  // Get EC profile to determine expected number of shards
+  ceph::ErasureCodeProfile profile = ec_commands.get_ec_profile_for_pool(pool_name);
+  int k = std::stoi(profile["k"]);
+  int m = std::stoi(profile["m"]);
+  int num_shards = k + m;
+  
+  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+  while (std::chrono::steady_clock::now() < end) {
+    // Get OSD map information
+    ceph::messaging::osd::OSDMapRequest osd_map_request{pool_name, objname, nspace};
+    JSONFormatter f;
+    encode_json("OSDMapRequest", osd_map_request, &f);
+    
+    std::ostringstream oss;
+    f.flush(oss);
+    
+    ceph::bufferlist outbl;
+    int rc = s_cluster.mon_command(oss.str(), {}, &outbl, nullptr);
+    ASSERT_EQ(0, rc);
+    
+    JSONParser p;
+    bool success = p.parse(outbl.c_str(), outbl.length());
+    ASSERT_TRUE(success);
+    
+    ceph::messaging::osd::OSDMapReply reply;
+    reply.decode_json(&p);
+    
+    // Check if acting set is stable:
+    // 1. Acting set size matches expected
+    // 2. All OSDs in acting set are valid (not CRUSH_ITEM_NONE)
+    // 3. Acting set equals up set
+    // 4. Primary OSD is shard 0
+    bool stable = true;
+    
+    if (reply.acting.size() != (size_t)num_shards) {
+      stable = false;
+    } else {
+      for (int osd : reply.acting) {
+        if (osd == CRUSH_ITEM_NONE) {
+          std::cout << "OSD " << osd << " not valid " << std::endl;
+          stable = false;
+          break;
+        }
+      }
+      
+      if (stable && reply.acting != reply.up) {
+        std::cout << "acting != up" << std::endl;
+        stable = false;
+      }
+      
+      if (stable && reply.acting_primary != reply.acting[0]) {
+        std::cout << "acting_primary != acting[0]" << std::endl;
+        stable = false;
+      }
+      if (stable && reply.acting_primary != reply.up_primary) {
+        std::cout << "acting_primary != up_primary" << std::endl;
+        stable = false;
+      }
+    }
+    
+    if (stable) {
+      std::cout << "Acting set is stable for " << objname << std::endl;
+      return;
+    } else {
+      std::cout << "Unstable for " << objname << " reply=" << p << std::endl;
+
+    }
+    
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  
+  FAIL() << "Timeout waiting for stable acting set for " << objname;
+}
+
+void RadosTestECPP::inject_ec_write_error(const std::string &objname, int error_type, shard_id_t shard) {
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+  int primary_osd = ec_commands.get_primary_osd(pool_name, objname, nspace);
+
+  ceph::messaging::osd::InjectECErrorRequest<
+    io_exerciser::InjectOpType::WriteFailAndRollback>
+  injectErrorRequest(pool_name, "*", shard.id, error_type, 0, std::numeric_limits<int64_t>::max());
+
+  JSONFormatter f;
+  encode_json("WriteFailAndRollbackInject", injectErrorRequest, &f);
+
+  std::ostringstream oss;
+  f.flush(oss);
+  std::cout << " Inject primary OSD "<< primary_osd << " for shard " << shard.id << " with: \"" << oss.str() << "\"" << std::endl;
+  int rc = s_cluster.osd_command(primary_osd, oss.str(), {}, {}, nullptr);
+  ASSERT_EQ(0, rc);
+}
+
+void RadosTestECPP::inject_ec_write_error_all_osds(const std::string &objname, int error_type) {
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+  ceph::ErasureCodeProfile profile = ec_commands.get_ec_profile_for_pool(pool_name);
+  int k = std::stoi(profile["k"]);
+  int m = std::stoi(profile["m"]);
+  int num_shards = k + m;
+  
+  // Inject on all OSDs, each affecting its local shard
+  for (int i = 0; i < num_shards; i++) {
+    shard_id_t shard(i);
+    int osd = ec_commands.get_shard_osd(pool_name, objname, shard, nspace);
+    
+    ceph::messaging::osd::InjectECErrorRequest<
+      io_exerciser::InjectOpType::WriteFailAndRollback>
+    injectErrorRequest(pool_name, "*", shard.id, error_type, 0, std::numeric_limits<int64_t>::max());
+    
+    JSONFormatter f;
+    encode_json("WriteFailAndRollbackInject", injectErrorRequest, &f);
+    
+    std::ostringstream oss;
+    f.flush(oss);
+    std::cout << " Inject OSD "<< osd << " with: \"" << oss.str() << "\"" << std::endl;
+    int rc = s_cluster.osd_command(osd, oss.str(), {}, {}, nullptr);
+    ASSERT_EQ(0, rc);
+  }
+}
+
+void RadosTestECPP::clear_ec_write_error(const std::string &objname, int error_type, shard_id_t shard) {
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+  int primary_osd = ec_commands.get_primary_osd(pool_name, objname, nspace);
+
+  ceph::messaging::osd::InjectECClearErrorRequest<
+      io_exerciser::InjectOpType::WriteFailAndRollback>
+      clearErrorInject{pool_name, "*", shard.id, error_type};
+
+  JSONFormatter f;
+  encode_json("WriteFailAndRollbackInject", clearErrorInject, &f);
+
+  std::ostringstream oss;
+  f.flush(oss);
+  std::cout << " Clear error on primary OSD " << primary_osd << " for shard " << shard.id << ": " << oss.str() << std::endl;
+  int rc = s_cluster.osd_command(primary_osd, oss.str(), {}, {}, nullptr);
+  ASSERT_EQ(0, rc);
+}
+
+void RadosTestECPP::clear_ec_write_error_all_osds(const std::string &objname, int error_type) {
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+  ceph::ErasureCodeProfile profile = ec_commands.get_ec_profile_for_pool(pool_name);
+  int k = std::stoi(profile["k"]);
+  int m = std::stoi(profile["m"]);
+  int num_shards = k + m;
+  
+  // Clear on all OSDs, each affecting its local shard
+  for (int i = 0; i < num_shards; i++) {
+    shard_id_t shard(i);
+    int osd = ec_commands.get_shard_osd(pool_name, objname, shard, nspace);
+    
+    ceph::messaging::osd::InjectECClearErrorRequest<
+        io_exerciser::InjectOpType::WriteFailAndRollback>
+        clearErrorInject{pool_name, "*", shard.id, error_type};
+    
+    JSONFormatter f;
+    encode_json("WriteFailAndRollbackInject", clearErrorInject, &f);
+    
+    std::ostringstream oss;
+    f.flush(oss);
+    std::cout << " Inject " << oss.str() << std::endl;
+    int rc = s_cluster.osd_command(osd, oss.str(), {}, {}, nullptr);
+    ASSERT_EQ(0, rc);
+  }
 }
 
 uint64_t RadosTestPPBase::get_perf_counter_by_path(std::string_view path) {

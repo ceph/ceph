@@ -22,6 +22,7 @@
 #include "global/global_context.h"
 #include "test/librados/testcase_cxx.h"
 #include "test/librados/test_cxx.h"
+#include "erasure-code/consistency/RadosCommands.h"
 
 #include "crimson_utils.h"
 
@@ -964,7 +965,96 @@ TEST_P(LibRadosMiscPP, NoVer) {
   // last version should now have been corrected.
   ASSERT_EQ(version, ioctx.get_last_version());
 }
+TEST_P(LibRadosMiscECPP, InjectECWriteError) {
+  SKIP_IF_CRIMSON();
+  
+  // Prevent backfill from making progress
+  std::string no_backfill_cmd = "{\"prefix\": \"osd set\",\"key\":\"nobackfill\"}";
+  ASSERT_EQ(0, s_cluster.mon_command(std::move(no_backfill_cmd), {}, nullptr, nullptr));
+  std::cout << "Set nobackfill flag" << std::endl;
+  
+  // Enable EC overwrites
+  set_allow_ec_overwrites();
 
+  // Step 1: Perform a write_full
+  bufferlist bl;
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bl.append(buf, sizeof(buf));
+
+  std::string objname = "write_error_test_obj";
+  ASSERT_EQ(0, ioctx.write_full(objname, bl));
+
+  // Step 2: Wait for acting set to stabilize
+  wait_for_stable_acting_set(objname);
+
+  // Step 3: Get the OSD for shard 2
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+
+  shard_id_t shard_0(0), shard_1(1), shard_2(2);
+  int primary_osd = ec_commands.get_shard_osd(pool_name, objname, shard_0, nspace);
+  int shard_1_osd = ec_commands.get_shard_osd(pool_name, objname, shard_1, nspace);
+  int shard_2_osd = ec_commands.get_shard_osd(pool_name, objname, shard_2, nspace);
+
+  std::cout << "Object: " << objname << std::endl;
+  std::cout << "OSD " << primary_osd << " is primary" << std::endl;
+  std::cout << "Shard " << shard_1 << " is on OSD " << shard_1_osd << std::endl;
+  std::cout << "Shard " << shard_2 << " is on OSD " << shard_2_osd << std::endl;
+
+  // Step 3: Inject error type 1 (discard sub write) on shard 2
+  inject_ec_write_error(objname, 1, shard_2);
+  std::cout << "Successfully injected write error type 1 on shard " << shard_2 << std::endl;
+  
+  // Step 4: Inject error type 4 (set pg_committed_to to eversion_t()) on all OSDs
+  inject_ec_write_error_all_osds(objname, 4);
+  std::cout << "Successfully injected write error type 4 on all OSDs" << std::endl;
+
+  // Ensure cleanup happens even if test fails
+  auto cleanup_guard = make_scope_guard([this, &objname, &shard_1_osd, &shard_2] {
+    std::cout << "Running cleanup..." << std::endl;
+
+    // Clear error injections
+    clear_ec_write_error(objname, 1, shard_2);
+    clear_ec_write_error_all_osds(objname, 4);
+    std::cout << "Cleared error injections" << std::endl;
+
+    // Mark OSD back in
+    std::string in_cmd = "{\"prefix\": \"osd in\", \"ids\": [\"" +
+                         std::to_string(shard_1_osd) + "\"]}";
+    s_cluster.mon_command(std::move(in_cmd), {}, nullptr, nullptr);
+    std::cout << "Marked OSD " << shard_1_osd << " back in" << std::endl;
+
+    // Unset nobackfill flag
+    std::string unset_nobackfill_cmd = "{\"prefix\": \"osd unset\",\"key\":\"nobackfill\"}";
+    s_cluster.mon_command(std::move(unset_nobackfill_cmd), {}, nullptr, nullptr);
+    std::cout << "Unset nobackfill flag" << std::endl;
+  });
+
+  // Perform a second write using aio
+  auto my_completion = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ASSERT_TRUE(my_completion);
+  bufferlist bl2;
+  char buf2[128];
+  memset(buf2, 0xdd, sizeof(buf2));
+  bl2.append(buf2, sizeof(buf2));
+  ASSERT_EQ(0, ioctx.aio_write(objname, my_completion.get(), bl2, sizeof(buf2), 0));
+
+  sleep(1);
+  ASSERT_FALSE(my_completion->is_complete());
+
+
+  // Step 5: Mark OSD on shard 1 as out
+  std::string out_cmd = "{\"prefix\": \"osd out\", \"ids\": [\"" +
+                        std::to_string(shard_1_osd) + "\"]}";
+  ASSERT_EQ(0, s_cluster.mon_command(std::move(out_cmd), {}, nullptr, nullptr));
+  std::cout << "Marked OSD " << shard_1_osd << " (shard " << shard_1.id << ") as out" << std::endl;
+
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+}
 
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosMiscPP);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosMiscECPP);

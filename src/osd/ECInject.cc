@@ -29,6 +29,7 @@ namespace ECInject {
   static std::map<ghobject_t,std::pair<int64_t,int64_t>> write_failures1;
   static std::map<ghobject_t,std::pair<int64_t,int64_t>> write_failures2;
   static std::map<ghobject_t,std::pair<int64_t,int64_t>> write_failures3;
+  static std::map<ghobject_t,std::pair<int64_t,int64_t>> write_failures4;
   static std::map<ghobject_t,shard_id_t> write_failures0_shard;
   static std::set<osd_reqid_t> write_failures0_reqid;
   static std::set<hobject_t> parity_reads;
@@ -130,6 +131,10 @@ namespace ECInject {
       failures = &write_failures3;
       result = "ok - write abort OSDs";
       break;
+    case 4:
+      failures = &write_failures4;
+      result = "ok - Never committing log";
+      break;
     default:
       return "unrecognized error inject type";
     }
@@ -230,6 +235,9 @@ namespace ECInject {
       break;
     case 3:
       failures = &write_failures3;
+      break;
+    case 4:
+      failures = &write_failures4;
       break;
     default:
       return "unrecognized error inject type";
@@ -363,6 +371,12 @@ namespace ECInject {
     return test_error(
       ghobject_t(o, ghobject_t::NO_GEN, shard_id_t::NO_SHARD),
       &write_failures3);
+  }
+
+  bool test_write_error4(const hobject_t& o) {
+    return test_error(
+      ghobject_t(o, ghobject_t::NO_GEN, shard_id_t::NO_SHARD),
+      &write_failures4);
   }
 
   /**

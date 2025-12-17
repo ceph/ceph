@@ -433,6 +433,13 @@ void ECBackend::handle_sub_write(
       dout(30) << " entry is_delete " << e.is_delete() << dendl;
     }
   }
+  // Check for write error inject type 4
+  if (cct->_conf->bluestore_debug_inject_read_err &&
+      ECInject::test_write_error4(op.soid)) {
+    dout(0) << __func__ << " Error inject - setting pg_committed_to to trim_to" << dendl;
+    op.pg_committed_to = op.trim_to;
+  }
+  
   get_parent()->log_operation(
     std::move(op.log_entries),
     op.updated_hit_set_history,

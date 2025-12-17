@@ -35,6 +35,7 @@ namespace ECInject {
   bool test_write_error1(const ghobject_t& o);
   bool test_write_error2(const hobject_t& o);
   bool test_write_error3(const hobject_t& o);
+  bool test_write_error4(const hobject_t& o);
   bool test_parity_read(const hobject_t& o);
 
 } // ECInject

@@ -7,6 +7,7 @@
 
 #include "gtest/gtest.h"
 #include "include/rados/librados.hpp"
+#include "include/types.h"
 
 using namespace std::literals::string_view_literals;
 
@@ -198,6 +199,11 @@ protected:
   static std::string pool_name_fast_split;
   void inject_ec_read_error(const std::string &objname);
   void clear_ec_read_error(const std::string &objname);
+  void inject_ec_write_error(const std::string &objname, int error_type, shard_id_t shard);
+  void inject_ec_write_error_all_osds(const std::string &objname, int error_type);
+  void clear_ec_write_error(const std::string &objname, int error_type, shard_id_t shard);
+  void clear_ec_write_error_all_osds(const std::string &objname, int error_type);
+  void wait_for_stable_acting_set(const std::string &objname);
 
   std::string pool_name;
   void SetUp() override;
