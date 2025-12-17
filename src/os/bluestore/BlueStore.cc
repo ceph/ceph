@@ -7281,7 +7281,7 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
           << std::dec << dendl;
   if (!fm->validate(min_alloc_size)) {
     derr << __func__ << " freelist validation failed, unable to proceed." << dendl;
-    ceph_assert(false);
+    ceph_abort();
   }
   // if space size tracked by free list manager is that higher than actual
   // dev size one can hit out-of-space allocation which will result

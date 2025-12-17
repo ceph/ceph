@@ -543,7 +543,7 @@ void Scan::candidate(const Extent* e)
       derr << "candidate blob not scanned before! " << h_Blob->print(P::NICK + P::SUSE) << dendl;
       // This blob was seen, but removed as completely consumed?
       // Is it even possible?
-      ceph_assert(false);
+      ceph_abort();
     }
   } else {
     // not compressed

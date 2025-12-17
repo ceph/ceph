@@ -413,7 +413,7 @@ class PgScrubber : public ScrubPgIF,
   void stats_of_handled_objects(const object_stat_sum_t& delta_stats,
 				const hobject_t& soid) override
   {
-    ceph_assert(false);
+    ceph_abort();
   }
 
   /**

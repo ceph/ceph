@@ -399,7 +399,7 @@ found:
     return allocated;
   }
   // should never get here
-  ceph_assert(false);
+  ceph_abort();
   return -EFAULT;
 }
 

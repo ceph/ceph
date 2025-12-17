@@ -3829,7 +3829,7 @@ ceph_tid_t PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soi
     ::encode(get_call, in);
     obj_op.call("cas", "chunk_create_or_get_ref", in);
   } else {
-    ceph_assert(0 == "unrecognized type");
+    ceph_abort_msg("unrecognized type");
   }
 
   Context *c = nullptr;
@@ -10760,7 +10760,7 @@ std::pair<int, hobject_t> PrimaryLogPG::get_fpoid_from_chunk(
       case pg_pool_t::TYPE_FINGERPRINT_SHA512:
 	return ceph::crypto::digest<ceph::crypto::SHA512>(chunk).to_str();
       default:
-	ceph_assert(0 == "unrecognized fingerprint type");
+        ceph_abort_msg("unrecognized fingerprint type");
 	return {};
     }
   }();    
