@@ -2579,6 +2579,8 @@ public:
   void _send_op_account(Op *op);
   void _cancel_linger_op(Op *op);
   void _finish_op(Op *op, int r);
+  boost::system::error_code process_op_reply_handlers(Op *op, std::vector<OSDOp> &out_ops);
+  void complete_op_reply(Op *op, boost::system::error_code handler_error, OSDSession *s, std::unique_lock<std::shared_mutex> &sl, int rc);
   static bool is_pg_changed(
     int oldprimary,
     const std::vector<int>& oldacting,
@@ -2784,8 +2786,6 @@ private:
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);
-  boost::system::error_code handle_osd_op_reply2(Op *op, std::vector<OSDOp> &out_ops);
-  void handle_osd_op_reply3(Op *op, boost::system::error_code handler_error, OSDSession *s, std::unique_lock<std::shared_mutex> &sl, int rc);
   void handle_osd_backoff(class MOSDBackoff *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);

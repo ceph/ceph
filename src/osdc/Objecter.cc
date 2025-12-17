@@ -2370,7 +2370,7 @@ void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
       op->trace.event("post op complete");
 
       // This function unlocks sl.
-      handle_osd_op_reply3(op, ec, op->session, sl, rc);
+      complete_op_reply(op, ec, op->session, sl, rc);
     } else {
       _session_op_remove(op->session, op);
       sl.unlock();
@@ -3646,7 +3646,7 @@ int Objecter::take_linger_budget(LingerOp *info)
   return 1;
 }
 
-bs::error_code Objecter::handle_osd_op_reply2(Op *op, vector<OSDOp> &out_ops) {
+bs::error_code Objecter::process_op_reply_handlers(Op *op, vector<OSDOp> &out_ops) {
 
   ceph_assert(op->ops.size() == op->out_bl.size());
   ceph_assert(op->ops.size() == op->out_rval.size());
@@ -3893,18 +3893,18 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m) {
                   << " != request ops " << op->ops
                   << " from " << m->get_source_inst() << dendl;
 
-  bs::error_code handler_error = handle_osd_op_reply2(op, out_ops);
+  bs::error_code handler_error = process_op_reply_handlers(op, out_ops);
 
   logger->inc(l_osdc_op_reply);
   logger->tinc(l_osdc_op_latency, ceph::coarse_mono_time::clock::now() - op->stamp);
   logger->set(l_osdc_op_inflight, num_in_flight);
 
   // This function unlocks sl.
-  handle_osd_op_reply3(op, handler_error, s, sl, rc);
+  complete_op_reply(op, handler_error, s, sl, rc);
   m->put();
 }
 
-void Objecter::handle_osd_op_reply3(Op *op, bs::error_code handler_error, OSDSession *s, unique_lock<std::shared_mutex> &sl, int rc) {
+void Objecter::complete_op_reply(Op *op, bs::error_code handler_error, OSDSession *s, unique_lock<std::shared_mutex> &sl, int rc) {
 
   // NOTE: we assume that since we only request ONDISK ever we will
   // only ever get back one (type of) ack ever.

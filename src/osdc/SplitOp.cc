@@ -421,7 +421,7 @@ void SplitOp::complete() {
       orig_op->outbl = 0;
     }
 
-    handler_error = objecter.handle_osd_op_reply2(orig_op, out_ops);
+    handler_error = objecter.process_op_reply_handlers(orig_op, out_ops);
     ldout(cct, DBG_LVL) << __func__ << " success this=" << this << " rc=" << rc << dendl;
   }
   ldout(cct, DBG_LVL) << __func__ << " retry this=" << this << " rc=" << rc << dendl;
