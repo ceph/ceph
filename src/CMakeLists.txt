@@ -767,6 +767,7 @@ if(NOT CEPH_BUILD_VIRTUALENV)
 endif()
 
 option(WITH_CEPHADM "Flag to determine if cephadm should be built" ON)
+option(WITH_UCA "Determines if uca (based on cephadm) should be built" OFF)
 
 if(NOT WIN32)
 add_subdirectory(pybind)
