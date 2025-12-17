@@ -2,7 +2,7 @@ import ipaddress
 import logging
 import re
 import socket
-from typing import cast, Dict, List, Any, Union, Optional, TYPE_CHECKING
+from typing import cast, Dict, List, Any, Optional, TYPE_CHECKING
 
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
@@ -227,57 +227,169 @@ class NFSCluster:
             log.exception("Failed to list NFS Cluster")
             raise ErrorResponse.wrap(e)
 
+    def _get_daemon_role(
+            self,
+            hostname: str,
+            daemon_running: bool,
+            sorted_running_hosts: List[str]
+    ) -> str:
+        """
+        Determine the role of an NFS daemon for active/standby display.
+
+        Role definitions:
+        - "active": Primary daemon (first running host sorted alphabetically)
+        - "standby": Secondary daemon ready to take over if active fails
+        - "stopped": Daemon is not running
+        - "error": Daemon is in error state
+        - "starting": Daemon is starting up
+        - "unknown": Status cannot be determined
+
+        The first running daemon (sorted alphabetically by hostname) is designated
+        as "active". While HAProxy load-balances across all running daemons, this
+        provides a consistent primary/secondary view for operational clarity.
+
+        For standalone NFS (no ingress):
+            First running daemon is "active", others are "standby".
+        """
+        if not daemon_running:
+            return "stopped"
+
+        # First running host (sorted alphabetically) is active, others are standby
+        if sorted_running_hosts and hostname == sorted_running_hosts[0]:
+            return "active"
+        return "standby"
+
     def _show_nfs_cluster_info(self, cluster_id: str) -> Dict[str, Any]:
+        """
+        Retrieve and format NFS cluster information including daemon status,
+        placement, and ingress configuration.
+        """
+        from orchestrator import DaemonDescriptionStatus
+
+        # Get all NFS daemons
         completion = self.mgr.list_daemons(daemon_type='nfs')
-        # Here completion.result is a list DaemonDescription objects
-        clusters = orchestrator.raise_if_exception(completion)
-        backends: List[Dict[str, Union[Any]]] = []
+        all_nfs_daemons = orchestrator.raise_if_exception(completion)
 
-        for cluster in clusters:
-            if cluster_id == cluster.service_id():
-                assert cluster.hostname
-                try:
-                    if cluster.ip:
-                        ip = cluster.ip
-                    else:
-                        c = self.mgr.get_hosts()
-                        orchestrator.raise_if_exception(c)
-                        hosts = [h for h in c.result or []
-                                 if h.hostname == cluster.hostname]
-                        if hosts:
-                            ip = resolve_ip(hosts[0].addr)
-                        else:
-                            # sigh
-                            ip = resolve_ip(cluster.hostname)
-                    backends.append({
-                        "hostname": cluster.hostname,
-                        "ip": ip,
-                        "port": cluster.ports[0] if cluster.ports else None
-                    })
-                except orchestrator.OrchestratorError:
-                    continue
+        # Filter daemons for this cluster
+        cluster_daemons = [d for d in all_nfs_daemons if d.service_id() == cluster_id]
 
-        r: Dict[str, Any] = {
-            'virtual_ip': None,
-            'backend': backends,
-        }
+        # Determine ingress configuration (HAProxy modes only)
+        ingress_mode: Optional[IngressType] = None
+        virtual_ip: Optional[str] = None
+        ingress_port: Optional[int] = None
+        monitor_port: Optional[int] = None
+
         sc = self.mgr.describe_service(service_type='ingress')
-        services = orchestrator.raise_if_exception(sc)
-        for i in services:
-            spec = cast(IngressSpec, i.spec)
+        ingress_services = orchestrator.raise_if_exception(sc)
+        for svc in ingress_services:
+            spec = cast(IngressSpec, svc.spec)
             if spec.backend_service == f'nfs.{cluster_id}':
-                r['virtual_ip'] = i.virtual_ip.split('/')[0] if i.virtual_ip else None
-                if i.ports:
-                    r['port'] = i.ports[0]
-                    if len(i.ports) > 1:
-                        r['monitor_port'] = i.ports[1]
-                if spec.keepalive_only:
-                    ingress_mode = IngressType.keepalive_only
-                elif spec.enable_haproxy_protocol:
+                virtual_ip = svc.virtual_ip.split('/')[0] if svc.virtual_ip else None
+                if spec.enable_haproxy_protocol:
                     ingress_mode = IngressType.haproxy_protocol
                 else:
                     ingress_mode = IngressType.haproxy_standard
-                r['ingress_mode'] = ingress_mode.value
+                if svc.ports:
+                    ingress_port = svc.ports[0]
+                    if len(svc.ports) > 1:
+                        monitor_port = svc.ports[1]
+                break
+
+        # Build sorted list of running daemon hostnames for active/passive role assignment
+        # First host (sorted alphabetically) is designated as "active"
+        sorted_running_hosts: List[str] = sorted([
+            d.hostname for d in cluster_daemons
+            if d.hostname and d.status == DaemonDescriptionStatus.running
+        ])
+
+        # Build backend list with role information
+        backends: List[Dict[str, Any]] = []
+        for daemon in cluster_daemons:
+            if not daemon.hostname:
+                continue
+
+            try:
+                # Resolve daemon IP
+                if daemon.ip:
+                    ip = daemon.ip
+                else:
+                    hosts_completion = self.mgr.get_hosts()
+                    orchestrator.raise_if_exception(hosts_completion)
+                    matching_hosts = [
+                        h for h in hosts_completion.result or []
+                        if h.hostname == daemon.hostname
+                    ]
+                    if matching_hosts:
+                        ip = resolve_ip(matching_hosts[0].addr)
+                    else:
+                        ip = resolve_ip(daemon.hostname)
+
+                # Determine daemon role based on status
+                daemon_running = daemon.status == DaemonDescriptionStatus.running
+                if daemon.status == DaemonDescriptionStatus.error:
+                    role = "error"
+                elif daemon.status == DaemonDescriptionStatus.starting:
+                    role = "starting"
+                elif daemon.status == DaemonDescriptionStatus.stopped:
+                    role = "stopped"
+                elif daemon.status is None:
+                    role = "unknown"
+                else:
+                    role = self._get_daemon_role(
+                        daemon.hostname,
+                        daemon_running,
+                        sorted_running_hosts
+                    )
+
+                backends.append({
+                    "hostname": daemon.hostname,
+                    "ip": ip,
+                    "port": daemon.ports[0] if daemon.ports else None,
+                    "status": role
+                })
+            except orchestrator.OrchestratorError:
+                log.warning(f"Failed to get info for NFS daemon on {daemon.hostname}")
+                continue
+
+        # Sort backends by hostname for consistent output
+        backends.sort(key=lambda x: x["hostname"])
+
+        # Build result dictionary
+        r: Dict[str, Any] = {
+            'virtual_ip': virtual_ip,
+            'backend': backends,
+            'placement': None,
+        }
+
+        # Get NFS service spec for placement information
+        nfs_sc = self.mgr.describe_service(
+            service_type='nfs',
+            service_name=f'nfs.{cluster_id}'
+        )
+        nfs_services = orchestrator.raise_if_exception(nfs_sc)
+        for svc in nfs_services:
+            if svc.spec.service_id == cluster_id:
+                placement = svc.spec.placement
+                if placement:
+                    placement_info: Dict[str, Any] = {}
+                    if placement.hosts:
+                        placement_info['hosts'] = [str(h) for h in placement.hosts]
+                    if placement.count is not None:
+                        placement_info['count'] = placement.count
+                    if placement.label:
+                        placement_info['label'] = placement.label
+                    if placement.host_pattern:
+                        placement_info['host_pattern'] = str(placement.host_pattern)
+                    r['placement'] = placement_info if placement_info else str(placement)
+                break
+
+        # Add ingress configuration to result
+        if ingress_mode:
+            r['ingress_mode'] = ingress_mode.value
+        if ingress_port:
+            r['port'] = ingress_port
+        if monitor_port:
+            r['monitor_port'] = monitor_port
 
         log.debug("Successfully fetched %s info: %s", cluster_id, r)
         return r
