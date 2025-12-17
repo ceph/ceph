@@ -202,6 +202,9 @@ struct ECCommon {
     int r;
     std::map<pg_shard_t, int> errors;
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>>> attrs;
+    std::optional<ceph::buffer::list> omap_header;
+    std::optional<std::map<std::string, ceph::buffer::list>> omap_entries;
+    bool omap_complete;
     ECUtil::shard_extent_map_t buffers_read;
     ECUtil::shard_extent_set_t processed_read_requests;
     shard_id_set zero_length_reads;
@@ -217,6 +220,17 @@ struct ECCommon {
       } else {
         os << ", noattrs";
       }
+      if (omap_header) {
+        os << ", omap_header=" << *(omap_header);
+      } else {
+        os << ", no_omap_header";
+      }
+      if (omap_entries) {
+        os << ", omap_entries_len=" << omap_entries->size();
+      } else {
+        os << ", no_omap_entries";
+      }
+      os << ", omap_complete=" << omap_complete;
       os << ", buffers_read=" << buffers_read;
       os << ", processed_read_requests=" << processed_read_requests;
       os << ", zero_length_reads=" << zero_length_reads << ")";

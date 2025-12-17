@@ -571,6 +571,26 @@ void ECBackend::handle_sub_read(
       reply->errors[*i] = r;
     }
   }
+  for (set<hobject_t>::iterator i = op.omap_headers_to_read.begin();
+       i != op.omap_headers_to_read.end();
+       ++i) {
+    dout(10) << __func__ << ": fulfilling omap header request on "
+             << *i << dendl;
+    if (reply->errors.contains(*i)) {
+      continue;
+    }
+    bufferlist bl;
+    int r = omap_get_header(
+      switcher->ch,
+      ghobject_t(*i, ghobject_t::NO_GEN, shard),
+      &reply->omap_headers_read[*i], false, switcher->store);
+    if (r < 0) {
+      // If we read error, we should not return the omap header too.
+      reply->omap_headers_read.erase(*i);
+      reply->buffers_read.erase(*i);
+      reply->errors[*i] = r;
+    }
+  }
   reply->from = get_parent()->whoami_shard();
   reply->tid = op.tid;
 }
@@ -698,6 +718,47 @@ void ECBackend::handle_sub_read_reply(
     }
     rop.complete.at(hoid).attrs.emplace();
     (*(rop.complete.at(hoid).attrs)).swap(attr);
+  }
+  for (auto &&[hoid, header]: op.omap_headers_read) {
+    ceph_assert(!op.errors.count(hoid));
+    // if read error better not have sent an attribute
+    if (!rop.to_read.contains(hoid)) {
+      // We canceled this read! @see filter_read_op
+      dout(20) << __func__ << " to_read skipping" << dendl;
+      continue;
+    }
+    if (!rop.complete.contains(hoid)) {
+      rop.complete.emplace(hoid, &sinfo);
+    }
+    rop.complete.at(hoid).omap_header.emplace();
+    (*(rop.complete.at(hoid).omap_header)).swap(header);
+  }
+  for (auto &&[hoid, entries]: op.omap_entries_read) {
+    ceph_assert(!op.errors.count(hoid));
+    // if read error better not have sent any entries
+    if (!rop.to_read.contains(hoid)) {
+      // We canceled this read! @see filter_read_op
+      dout(20) << __func__ << " to_read skipping" << dendl;
+      continue;
+    }
+    if (!rop.complete.contains(hoid)) {
+      rop.complete.emplace(hoid, &sinfo);
+    }
+    rop.complete.at(hoid).omap_entries.emplace();
+    (*(rop.complete.at(hoid).omap_entries)).swap(entries);
+  }
+  for (auto &&[hoid, omap_complete]: op.omaps_complete) {
+    ceph_assert(!op.errors.count(hoid));
+    // if read error better not have sent any entries
+    if (!rop.to_read.contains(hoid)) {
+      // We canceled this read! @see filter_read_op
+      dout(20) << __func__ << " to_read skipping" << dendl;
+      continue;
+    }
+    if (!rop.complete.contains(hoid)) {
+      rop.complete.emplace(hoid, &sinfo);
+    }
+    rop.complete.at(hoid).omap_complete = omap_complete;
   }
   for (auto &&[hoid, err]: op.errors) {
     if (!rop.complete.contains(hoid)) {

@@ -134,6 +134,7 @@ struct ECSubReadReply {
   std::map<hobject_t, int> errors;
   std::map<hobject_t, ceph::buffer::list> omap_headers_read;
   std::map<hobject_t, std::map<std::string, ceph::buffer::list>> omap_entries_read;
+  std::map<hobject_t, bool> omaps_complete;
   void encode(ceph::buffer::list &bl) const;
   void encode(ceph::buffer::list &p_bl,
 	      ceph::buffer::list &d_pl,

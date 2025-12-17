@@ -373,6 +373,7 @@ void ECSubReadReply::encode(bufferlist &p_bl,
   encode(errors, p_bl);
   encode(omap_headers_read, p_bl);
   encode(omap_entries_read, p_bl);
+  encode(omaps_complete, p_bl);
   ENCODE_FINISH(p_bl);
 }
 
@@ -419,9 +420,11 @@ void ECSubReadReply::decode(bufferlist::const_iterator &p_bl,
   if (struct_v >= 2) {
     decode(omap_headers_read, p_bl);
     decode(omap_entries_read, p_bl);
+    decode(omaps_complete, p_bl);
   } else {
     omap_headers_read.clear();
     omap_entries_read.clear();
+    omaps_complete.clear();
   }
 
   DECODE_FINISH(p_bl);
@@ -503,6 +506,14 @@ void ECSubReadReply::dump(Formatter* f) const
 	      f.dump_string("omap_key", key);
 	      f.dump_unsigned("val_len", bl.length());
 	    });
+      });
+
+  // "omap_complete": map<hobject_t, bool>
+  f->with_obj_array_section(
+      "object_omaps_complete"sv, omaps_complete,
+      [](Formatter& f, const hobject_t& oid, const bool complete) {
+	f.dump_stream("oid") << oid;
+        f.dump_unsigned("omap_complete", complete);
       });
 }
 
