@@ -1173,7 +1173,19 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
       coll,
       tobj,
       op.attrset);
+    m->t.omap_clear(
+      coll,
+      tobj);
+    m->t.omap_setheader(
+      coll,
+      tobj,
+      op.omap_header);
   }
+
+  m->t.omap_setkeys(
+    coll,
+    tobj,
+    op.omap_entries);
 
   if (op.after_progress.data_complete) {
     uint64_t shard_size = sinfo.object_size_to_shard_size(op.recovery_info.size,
@@ -1307,6 +1319,19 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
   }
   ceph_assert(op.xattrs.size());
   ceph_assert(op.obc);
+
+  if (res.omap_header) {
+    op.omap_header = std::move(res.omap_header);
+  }
+  if (res.omap_entries) {
+    op.omap_entries = std::move(res.omap_entries);
+    op.recovery_info.num_omap_keys += res.omap_entries->size();
+    if (res.omap_complete) {
+      op.recovery_progress.omap_complete = true;
+    } else if (!res.omap_entries->empty()) {
+      op.recovery_progress.omap_recovered_to = res.omap_entries->rbegin()->first;
+    }
+  }
 
   op.returned_data.emplace(std::move(res.buffers_read));
   uint64_t aligned_size = ECUtil::align_next(op.obc->obs.oi.size);
@@ -1549,13 +1574,19 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
           } else {
             dout(10) << __func__ << ": push all attrs (not nonprimary)" << dendl;
             pop.attrset = op.xattrs;
+            if (op.omap_header) {
+              pop.omap_header = *(op.omap_header);
+            }
           }
-
+          
           // Following an upgrade, or turning of overwrites, we can take this
           // opportunity to clean up hinfo.
           if (pop.attrset.contains(ECUtil::get_hinfo_key())) {
             pop.attrset.erase(ECUtil::get_hinfo_key());
           }
+        }
+        if (op.omap_entries) {
+          pop.omap_entries = *(op.omap_entries);
         }
         pop.recovery_info = op.recovery_info;
         pop.before_progress = op.recovery_progress;
@@ -1575,7 +1606,8 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
     }
     case RecoveryOp::WRITING: {
       if (op.waiting_on_pushes.empty()) {
-        if (op.recovery_progress.data_complete) {
+        if (op.recovery_progress.data_complete && 
+            op.recovery_progress.omap_complete) {
           op.state = RecoveryOp::COMPLETE;
           for (set<pg_shard_t>::iterator i = op.missing_on.begin();
                i != op.missing_on.end();
@@ -1591,7 +1623,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
           }
           object_stat_sum_t stat;
           stat.num_bytes_recovered = op.recovery_info.size;
-          stat.num_keys_recovered = 0; // ??? op ... omap_entries.size(); ?
+          stat.num_keys_recovered = op.recovery_info.num_omap_keys;
           stat.num_objects_recovered = 1;
           // TODO: not in crimson yet
           if (get_parent()->pg_is_repair())

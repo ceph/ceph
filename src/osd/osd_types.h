@@ -6456,13 +6456,14 @@ struct ObjectRecoveryInfo {
   hobject_t soid;
   eversion_t version;
   uint64_t size;
+  uint64_t num_omap_keys;
   object_info_t oi;
   SnapSet ss;   // only populated if soid is_snap()
   interval_set<uint64_t> copy_subset;
   std::map<hobject_t, interval_set<uint64_t>> clone_subset;
   bool object_exist;
 
-  ObjectRecoveryInfo() : size(0), object_exist(true) { }
+  ObjectRecoveryInfo() : size(0), num_omap_keys(0), object_exist(true) { }
 
   static std::list<ObjectRecoveryInfo> generate_test_instances();
   void encode(ceph::buffer::list &bl, uint64_t features) const;

@@ -806,6 +806,9 @@ struct ECCommon {
       // must be filled if state == WRITING
       std::optional<ECUtil::shard_extent_map_t> returned_data;
       std::map<std::string, ceph::buffer::list, std::less<>> xattrs;
+      std::optional<ceph::buffer::list> omap_header;
+      std::optional<std::map<std::string, ceph::buffer::list>> omap_entries;
+      
       ObjectContextRef obc;
       std::set<pg_shard_t> waiting_on_pushes;
 
