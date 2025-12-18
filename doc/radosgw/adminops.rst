@@ -398,16 +398,16 @@ Request Parameters
 :Description: The ID of the account to be created.
 :Type: String
 :Example: ``RGW00000000000000001``
-:Required: Yes
+:Required: No
 
-An account ID must be 20 characters long, and in the format of the string "RGW" followed by 17 numeric characters.
+An account ID must be 20 characters long, and in the format of the string "RGW" followed by 17 numeric characters. If not specified, a random unique one will be generated.
 
 ``name``
 
 :Description: The name of the account to be created.
 :Type: String
 :Example: ``account_name``
-:Required: Yes
+:Required: No
 
 ``email``
 
