@@ -46,6 +46,7 @@ export class CdNotificationConfig {
 }
 
 export class CdNotification extends CdNotificationConfig {
+  id!: string;
   timestamp: string;
   textClass: string;
   iconClass: string;
@@ -67,6 +68,8 @@ export class CdNotification extends CdNotificationConfig {
     }
 
     delete this.config;
+
+    this.id = this.generateID();
     /* string representation of the Date object so it can be directly compared
     with the timestamps parsed from localStorage */
     this.timestamp = new Date().toJSON();
@@ -74,5 +77,9 @@ export class CdNotification extends CdNotificationConfig {
     this.textClass = this.textClasses[this.type];
     this.borderClass = this.borderClasses[this.type];
     this.isFinishedTask = config.isFinishedTask;
+  }
+
+  private generateID(): string {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
   }
 }

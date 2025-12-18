@@ -45,7 +45,14 @@ describe('ApiInterceptorService', () => {
     httpError(error, errorOpts);
     httpTesting.verify();
     expect(notificationService.show).toHaveBeenCalled();
-    expect(notificationService.save).toHaveBeenCalledWith(expectedCallParams);
+    expect(notificationService.save).toHaveBeenCalledWith(
+      jasmine.objectContaining({
+        type: expectedCallParams.type,
+        title: expectedCallParams.title,
+        message: expectedCallParams.message,
+        application: expectedCallParams.application
+      })
+    );
   };
 
   const createCdNotification = (
@@ -73,7 +80,7 @@ describe('ApiInterceptorService', () => {
 
   beforeEach(() => {
     const baseTime = new Date('2022-02-22');
-    spyOn(global, 'Date').and.returnValue(baseTime);
+    spyOn(Date, 'now').and.returnValue(baseTime.getTime());
 
     httpClient = TestBed.inject(HttpClient);
     httpTesting = TestBed.inject(HttpTestingController);

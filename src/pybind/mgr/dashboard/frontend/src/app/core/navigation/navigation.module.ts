@@ -95,7 +95,7 @@ import { NotificationFooterComponent } from './notification-panel/notification-f
     PlaceholderModule,
     ProgressBarModule,
     StructuredListModule,
-    SearchModule,
+    SearchModule
   ],
   declarations: [
     AboutComponent,
