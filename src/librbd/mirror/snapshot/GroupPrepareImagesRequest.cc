@@ -67,6 +67,10 @@ void GroupPrepareImagesRequest<I>::send() {
 
 template <typename I>
 void GroupPrepareImagesRequest<I>::get_mirror_peer_list() {
+  if (m_api_name == "disable") {
+    list_group_images();
+    return;
+  }
   ldout(m_cct, 10) << dendl;
 
   m_default_ns_ioctx.dup(m_group_ioctx);
