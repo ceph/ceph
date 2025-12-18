@@ -1,9 +1,8 @@
-import { Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import { Subscription } from 'rxjs';
 
 import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum';
-import { CdNotification } from '~/app/shared/models/cd-notification';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 
@@ -14,12 +13,10 @@ import { SummaryService } from '~/app/shared/services/summary.service';
   standalone: false
 })
 export class NotificationsComponent implements OnInit, OnDestroy {
-  @Input() isPanelOpen: boolean = false;
   icons = ICON_TYPE;
   iconSize = IconSize.size20;
   hasRunningTasks = false;
   hasNotifications = false;
-  notificationCount = 0;
   isMuted = false;
   private subs = new Subscription();
 
@@ -32,13 +29,7 @@ export class NotificationsComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.summaryService.subscribe((summary) => {
         this.hasRunningTasks = summary.executing_tasks.length > 0;
-      })
-    );
-
-    this.subs.add(
-      this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
-        this.hasNotifications = notifications.length > 0;
-        this.notificationCount = notifications.length;
+        // TODO: when notifications are mute - show unread icon too
       })
     );
 
