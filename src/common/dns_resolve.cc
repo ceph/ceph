@@ -16,6 +16,7 @@
 #include "dns_resolve.h"
 
 #include <arpa/inet.h>
+#include <netdb.h>
 
 #include "include/scope_guard.h"
 #include "common/debug.h"
@@ -369,6 +370,153 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
       (*srv_hosts)[target] = {priority, weight, addr};
     }
   }
+  return 0;
+}
+
+int DNSResolver::resolve_all_addrs(CephContext *cct,
+                                   const string& hostname,
+                                   std::vector<entity_addr_t>* addrs)
+{
+#ifdef HAVE_RES_NQUERY
+  res_state res;
+  int r = get_state(cct, &res);
+  if (r < 0) {
+    return r;
+  }
+
+  auto put_state_guard = make_scope_guard([this, res] {
+    this->put_state(res);
+  });
+
+  return resolve_all_addrs(cct, &res, hostname, addrs);
+#else
+  return resolve_all_addrs(cct, nullptr, hostname, addrs);
+#endif
+}
+
+int DNSResolver::resolve_all_addrs(CephContext *cct,
+                                   res_state *res,
+                                   const string& hostname,
+                                   std::vector<entity_addr_t>* addrs)
+{
+  ceph_assert(addrs != nullptr);
+  addrs->clear();
+
+  struct query_spec {
+    int family;
+    int type;
+  };
+
+  const query_spec queries[] = {
+    { AF_INET,  ns_t_a    },
+    { AF_INET6, ns_t_aaaa }
+  };
+
+  int last_err = 0;
+
+  for (const auto& q : queries) {
+    auto nsbuf = std::make_unique<std::array<u_char, NS_MAXMSG>>();
+    const char* type_name = (q.type == ns_t_a) ? "A(IPv4)" :
+                            (q.type == ns_t_aaaa) ? "AAAA(IPv6)" : "unknown";
+    int len;
+
+#ifdef HAVE_RES_NQUERY
+    len = resolv_h->res_nquery(*res, hostname.c_str(),
+                               ns_c_in, q.type,
+                               nsbuf->data(), nsbuf->size());
+#else
+    {
+# ifndef HAVE_THREAD_SAFE_RES_QUERY
+      std::lock_guard l(lock);
+# endif
+      len = resolv_h->res_query(hostname.c_str(),
+                                ns_c_in, q.type,
+                                nsbuf->data(), nsbuf->size());
+    }
+#endif
+
+    if (len < 0) {
+      // Differentiate DNS error types for better diagnostics
+      int dns_err = h_errno;
+      if (dns_err == HOST_NOT_FOUND) {
+        lderr(cct) << "resolve_all_addrs: hostname=" << hostname
+          << " does not exist (NXDOMAIN)" << dendl;
+      } else if (dns_err == NO_DATA) {
+        // No records of this type - expected for IPv6 on IPv4-only hosts
+        ldout(cct, 5) << "resolve_all_addrs: no " << type_name
+          << " records for " << hostname << dendl;
+      } else if (dns_err == TRY_AGAIN) {
+        lderr(cct) << "resolve_all_addrs: DNS server temporarily unavailable"
+          << " for " << hostname << " (" << type_name << ")" << dendl;
+      } else if (dns_err == NO_RECOVERY) {
+        lderr(cct) << "resolve_all_addrs: unrecoverable DNS error for "
+          << hostname << dendl;
+      } else {
+        lderr(cct) << "resolve_all_addrs: DNS query failed for " << hostname
+          << " (" << type_name << "), h_errno=" << dns_err << dendl;
+      }
+      last_err = len;
+      continue;
+    } else if (len == 0) {
+      ldout(cct, 1) << "resolve_all_addrs: empty response for " << type_name
+        << " query on " << hostname << dendl;
+      continue;
+    }
+
+    ns_msg handle;
+    ns_initparse(nsbuf->data(), len, &handle);
+
+    int ancount = ns_msg_count(handle, ns_s_an);
+    if (ancount == 0) {
+      ldout(cct, 20) << "resolve_all_addrs: no " << type_name
+        << " answer records for " << hostname << dendl;
+      continue;
+    }
+
+    ns_rr rr;
+    for (int i = 0; i < ancount; ++i) {
+      int r = ns_parserr(&handle, ns_s_an, i, &rr);
+      if (r != 0) {
+        lderr(cct) << "resolve_all_addrs: error parsing " << type_name
+          << " record " << i << " of " << ancount
+          << " for " << hostname << dendl;
+        last_err = r;
+        break;
+      }
+
+      char addr_buf[64];
+      // FIPS zeroization audit 20191115: this memset is not security related.
+      memset(addr_buf, 0, sizeof(addr_buf));
+
+      if (!inet_ntop(q.family, ns_rr_rdata(rr),
+                     addr_buf, sizeof(addr_buf))) {
+        lderr(cct) << "resolve_all_addrs: inet_ntop failed for "
+          << type_name << " record, hostname=" << hostname << dendl;
+        continue;
+      }
+
+      entity_addr_t ea;
+      if (!ea.parse(addr_buf)) {
+        lderr(cct) << "resolve_all_addrs: failed to parse " << type_name
+          << " address '" << addr_buf << "'" << dendl;
+        continue;
+      }
+
+      addrs->push_back(ea);
+    }
+  }
+
+  if (addrs->empty()) {
+    if (last_err < 0) {
+      return last_err;
+    }
+    lderr(cct) << "resolve_all_addrs: no A/AAAA addresses found for hostname=" << hostname << dendl;
+    return -1;
+  }
+
+  ldout(cct, 1) << "resolve_all_addrs: hostname \"" << hostname
+    << "\" -> " << addrs->size() << " address(es)" << dendl;
+
   return 0;
 }
 
