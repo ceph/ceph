@@ -45,16 +45,7 @@ private:
    * GET_MIRROR_GROUP  * * * * * * * * * * *
    *    |                                  *
    *    v                                  *
-   * GET_MIRROR_PEERS  * * * * * * * * * * *
-   *    |                                  *
-   *    v                                  *
-   * LIST_GROUP_IMAGES * * * * * * * * * * *
-   *    |                                  *
-   *    v  (skip if not needed)            *
-   * CHECK_MIRROR_IMAGES_DISABLED  * * * * *
-   *    |                                  *
-   *    v  (skip if not needed)            *
-   * OPEN_IMAGES   * * * * * * * * * * * * *
+   * PREPARE_GROUP_IMAGES  * * * * * * * * *
    *    |                                  *
    *    v  (skip if not needed)            *
    * VALIDATE_IMAGES   * * * * * * * * * * *
@@ -104,13 +95,11 @@ private:
   cls::rbd::MirrorGroup m_mirror_group;
 
   int m_ret_val = 0;
-  librados::IoCtx m_default_ns_ioctx;
 
   std::vector<ImageCtxT *> m_image_ctxs;
   std::vector<cls::rbd::MirrorImage> m_mirror_images;
 
   std::set<std::string> m_mirror_peer_uuids;
-  cls::rbd::GroupImageSpec m_start_after;
   std::vector<cls::rbd::GroupImageStatus> m_images;
 
   cls::rbd::GroupSnapshot m_group_snap;
@@ -123,17 +112,8 @@ private:
   void get_mirror_group();
   void handle_get_mirror_group(int r);
 
-  void get_mirror_peer_list();
-  void handle_get_mirror_peer_list(int r);
-
-  void list_group_images();
-  void handle_list_group_images(int r);
-
-  void check_mirror_images_disabled();
-  void handle_check_mirror_images_disabled(int r);
-
-  void open_images();
-  void handle_open_images(int r);
+  void prepare_group_images();
+  void handle_prepare_group_images(int r);
 
   void validate_images();
 
