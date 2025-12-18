@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -719,13 +720,6 @@ public:
     const ghobject_t &oid,   ///< [in] Object containing omap
     ceph::buffer::list *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
-    ) = 0;
-
-  /// Get keys defined on oid
-  virtual int omap_get_keys(
-    CollectionHandle &c,   ///< [in] Collection containing oid
-    const ghobject_t &oid, ///< [in] Object containing omap
-    std::set<std::string> *keys      ///< [out] Keys defined on oid
     ) = 0;
 
   /// Get key values

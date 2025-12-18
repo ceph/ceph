@@ -14,7 +14,7 @@ overrides:
     log-only-match:
       - CEPHADM_
 tasks:
-- cephadm.deploy_samba_ad_dc:
+- smb.deploy_samba_ad_dc:
     role: host.b
 - cephadm:
 
@@ -59,6 +59,7 @@ tasks:
           "disable spoolss" = "yes"
           "guest ok" = "no"
           "smbd profiling level" = "on"
+          "posix locking" = "no"
           [globals.domain.options]
           security = "ads"
           workgroup = "DOMAIN1"

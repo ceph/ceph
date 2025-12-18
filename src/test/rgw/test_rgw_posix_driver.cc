@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -1541,6 +1541,7 @@ TEST_F(POSIXObjectTest, ObjectCopy)
 	   &tag,
 	   nullptr,
 	   nullptr,
+	   nullptr,
 	   env->dpp,
 	   null_yield);
   EXPECT_EQ(ret, 0);
@@ -1847,6 +1848,7 @@ TEST_F(POSIXMPObjectTest, MPUploadCopy)
 	   nullptr,
 	   &tag, /* use req_id as tag */
 	   &tag,
+	   nullptr,
 	   nullptr,
 	   nullptr,
 	   env->dpp,
@@ -2298,6 +2300,7 @@ TEST_F(POSIXVerObjectTest, ObjectCopy)
 	   &tag,
 	   nullptr,
 	   nullptr,
+	   nullptr,
 	   env->dpp,
 	   null_yield);
   EXPECT_EQ(ret, 0);
@@ -2373,6 +2376,7 @@ TEST_F(POSIXVerObjectTest, CopyVersion)
 	   nullptr,
 	   &tag, /* use req_id as tag */
 	   &tag,
+	   nullptr,
 	   nullptr,
 	   nullptr,
 	   env->dpp,

@@ -3,7 +3,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 (import 'utils.libsonnet') {
   'rgw-s3-analytics.json':
     $.dashboardSchema(
-      'RGW S3 Analytics',
+      'Ceph Object - S3 Analytics',
       '',
       'BnxelG7Sz',
       'now-1h',

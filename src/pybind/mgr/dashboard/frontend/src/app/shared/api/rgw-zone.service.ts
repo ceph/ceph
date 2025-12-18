@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { RgwRealm, RgwZone, RgwZonegroup } from '~/app/ceph/rgw/models/rgw-multisite';
 import { Icons } from '../enum/icons.enum';
+import { USER } from '~/app/shared/constants/app.constants';
 
 @Injectable({
   providedIn: 'root'
@@ -48,14 +49,16 @@ export class RgwZoneService {
     zoneName: string,
     deletePools: boolean,
     pools: Set<string>,
-    zonegroupName: string
+    zonegroupName: string,
+    realmName: string
   ): Observable<any> {
     let params = new HttpParams();
     params = params.appendAll({
       zone_name: zoneName,
       delete_pools: deletePools,
       pools: Array.from(pools.values()),
-      zonegroup_name: zonegroupName
+      zonegroup_name: zonegroupName,
+      realm_name: realmName
     });
     return this.http.delete(`${this.url}/${zoneName}`, { params: params });
   }
@@ -128,7 +131,7 @@ export class RgwZoneService {
       const secret_key = zoneInfo[0].system_key['secret_key'];
       nodes['access_key'] = access_key ? access_key : '';
       nodes['secret_key'] = secret_key ? secret_key : '';
-      nodes['user'] = access_key && access_key !== '' ? true : false;
+      nodes[USER] = access_key && access_key !== '' ? true : false;
     }
     if (nodes['access_key'] === '' || nodes['access_key'] === 'null') {
       nodes['show_warning'] = true;

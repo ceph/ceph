@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "seastore.h"
 
@@ -445,10 +445,11 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     // hmm?
     auto lister = rdir.experimental_list_directory();
     while (auto de = co_await lister()) {
-      DEBUG("found file: {}", de->name);
-      if (de->name.find("block.") == 0 && de->name.length() > 6 ) {
+      auto& entry = de->get();
+      DEBUG("found file: {}", entry.name);
+      if (entry.name.find("block.") == 0 && entry.name.length() > 6 ) {
       // 6 for "block."
-        std::string entry_name = de->name;
+        std::string entry_name = entry.name;
         auto dtype_end = entry_name.find_first_of('.', 6);
         device_type_t dtype =
           string_to_device_type(
@@ -1419,9 +1420,9 @@ SeaStore::Shard::fiemap(
   });
 }
 
-void SeaStore::Shard::on_error(ceph::os::Transaction &t) {
-  LOG_PREFIX(SeaStoreS::on_error);
-  ERROR(" transaction dump:\n");
+void SeaStore::Shard::transaction_dump(ceph::os::Transaction &t) {
+  LOG_PREFIX(SeaStoreS::transaction_dump);
+  ERROR("");
   JSONFormatter f(true);
   f.open_object_section("transaction");
   t.dump(&f);
@@ -1429,7 +1430,6 @@ void SeaStore::Shard::on_error(ceph::os::Transaction &t) {
   std::stringstream str;
   f.flush(str);
   ERROR("{}", str.str());
-  abort();
 }
 
 seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
@@ -1501,8 +1501,9 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
       co_await transaction_manager->submit_transaction(*ctx.transaction);
     })
   ).handle_error(
-    crimson::ct_error::all_same_way([&ctx](auto e) {
-      on_error(ctx.ext_transaction);
+    crimson::ct_error::all_same_way([FNAME, &ctx](auto e) {
+      transaction_dump(ctx.ext_transaction);
+      ceph_abort_msg(fmt::format("{} unexpected error: {}", FNAME, e));
       return seastar::now();
     })
   );

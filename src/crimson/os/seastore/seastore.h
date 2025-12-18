@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -243,7 +243,7 @@ public:
     TransactionManager::read_extent_iertr::future<std::optional<unsigned>>
     get_coll_bits(CollectionRef ch, Transaction &t) const;
 
-    static void on_error(ceph::os::Transaction &t);
+    static void transaction_dump(ceph::os::Transaction &t);
 
     template <typename Ret, typename F>
     auto repeat_with_onode(

@@ -50,7 +50,7 @@
     <ng-template ngbNavContent>
       <cd-grafana i18n-title
                   title="Host overview"
-                  [grafanaPath]="'host-overview?'"
+                  [grafanaPath]="'ceph-hosts-overview?'"
                   [type]="'metrics'"
                   uid="y0KGL0iZz"
                   grafanaStyle="two">
@@ -72,7 +72,7 @@
 
 <ng-template #hostNameTpl
              let-row="data.row">
-  <span [ngClass]="row">
+  <span>
     {{ row.hostname }}
   </span><br>
   <span class="text-muted fst-italic"

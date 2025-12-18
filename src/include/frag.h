@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -99,6 +100,18 @@ public:
   unsigned mask_shift() const { return ceph_frag_mask_shift(_enc); }
 
   operator _frag_t() const { return _enc; }
+
+  bool is_frag_valid() const {
+    if (bits() > 24) {
+      /* bits must be in range [0,24] */
+      return false;
+    } else if ((value() & ~mask()) != 0) {
+      /* unused bits must be 0 */
+      return false;
+    } else {
+      return true;
+    }
+  }
 
   // tests
   bool contains(unsigned v) const { return ceph_frag_contains_value(_enc, v); }

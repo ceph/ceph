@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -510,6 +510,8 @@ public:
 };
 
 class RGWCompleteMultipart_ObjStore_S3 : public RGWCompleteMultipart_ObjStore {
+private:
+  std::map<std::string, std::string> crypt_http_responses;
 public:
   RGWCompleteMultipart_ObjStore_S3() {}
   ~RGWCompleteMultipart_ObjStore_S3() override {}
@@ -958,13 +960,14 @@ public:
     static constexpr size_t DIGEST_SIZE_V2 = CEPH_CRYPTO_HMACSHA1_DIGESTSIZE;
     static constexpr size_t DIGEST_SIZE_V4 = CEPH_CRYPTO_HMACSHA256_DIGESTSIZE;
 
+  public:
+
     /* Knowing the signature max size allows us to employ the sstring, and thus
      * avoid dynamic allocations. The multiplier comes from representing digest
      * in the base64-encoded form. */
     static constexpr size_t SIGNATURE_MAX_SIZE = \
       std::max(DIGEST_SIZE_V2, DIGEST_SIZE_V4) * 2 + sizeof('\0');
 
-  public:
     virtual ~VersionAbstractor() {};
 
     using access_key_id_t = std::string_view;

@@ -8,6 +8,8 @@ on:
 jobs:
   stale:
     runs-on: ubuntu-latest
+    # Stale PR checks need not run on forks
+    if: github.repository == 'ceph/ceph'
     steps:
       - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9.1.0
         with:

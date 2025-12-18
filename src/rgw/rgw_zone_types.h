@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -495,6 +495,7 @@ struct RGWZoneGroupPlacementTierS3 {
   std::string region;
   HostStyle host_style{PathStyle};
   std::string target_storage_class;
+  std::string location_constraint;
 
   /* Should below be bucket/zone specific?? */
   std::string target_path;
@@ -507,7 +508,7 @@ struct RGWZoneGroupPlacementTierS3 {
   int clear_params(const JSONFormattable& config);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(endpoint, bl);
     encode(key, bl);
     encode(region, bl);
@@ -517,11 +518,12 @@ struct RGWZoneGroupPlacementTierS3 {
     encode(acl_mappings, bl);
     encode(multipart_sync_threshold, bl);
     encode(multipart_min_part_size, bl);
+    encode(location_constraint, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(endpoint, bl);
     decode(key, bl);
     decode(region, bl);
@@ -535,6 +537,11 @@ struct RGWZoneGroupPlacementTierS3 {
     decode(acl_mappings, bl);
     decode(multipart_sync_threshold, bl);
     decode(multipart_min_part_size, bl);
+
+    if (struct_v >= 2) {
+      decode(location_constraint, bl);
+    }
+
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -545,6 +552,7 @@ WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTierS3)
 enum GlacierRestoreTierType : uint8_t {
   Standard = 0,
   Expedited = 1,
+  NoTier = 2,
 };
 
 struct RGWZoneGroupTierS3Glacier {

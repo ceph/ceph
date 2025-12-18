@@ -50,14 +50,14 @@ export class DeviceListComponent implements OnChanges, OnInit {
         prop: 'state',
         name: $localize`State of Health`,
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            good: { value: $localize`Good`, class: 'badge-success' },
-            warning: { value: $localize`Warning`, class: 'badge-warning' },
-            bad: { value: $localize`Bad`, class: 'badge-danger' },
-            stale: { value: $localize`Stale`, class: 'badge-info' },
-            unknown: { value: $localize`Unknown`, class: 'badge-dark' }
+            good: { value: $localize`Good`, class: 'tag-success' },
+            warning: { value: $localize`Warning`, class: 'tag-warning' },
+            bad: { value: $localize`Bad`, class: 'tag-danger' },
+            stale: { value: $localize`Stale`, class: 'tag-info' },
+            unknown: { value: $localize`Unknown`, class: 'tag-dark' }
           }
         }
       },

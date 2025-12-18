@@ -1,4 +1,4 @@
-# vim: expandtab smarttab shiftwidth=4 softtabstop=4
+# vim: expandtab shiftwidth=4 softtabstop=4
 import base64
 import copy
 import errno

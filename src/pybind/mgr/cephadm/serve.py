@@ -1156,7 +1156,19 @@ class CephadmServe:
                     # the daemon is written, which we rewrite on redeploy, but not
                     # on reconfig.
                     action = 'redeploy'
-
+                elif dd.daemon_type == 'nfs':
+                    # check what has changed, based on that decide action
+                    only_kmip_updated = all(s.startswith('kmip') for s in list(sym_diff))
+                    if not only_kmip_updated:
+                        action = 'redeploy'
+            elif dd.daemon_type == 'haproxy':
+                if spec and hasattr(spec, 'backend_service'):
+                    backend_spec = self.mgr.spec_store[spec.backend_service].spec
+                    if backend_spec.service_type == 'nfs':
+                        svc = service_registry.get_service('ingress')
+                        if svc.has_placement_changed(deps, spec):
+                            self.log.debug(f'Redeploy {spec.service_name()} as placement has changed')
+                            action = 'redeploy'
             elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
                 self.log.debug(
                     f'{dd.name()} container cli args {dd.extra_container_args} -> {spec.extra_container_args}')
@@ -1178,6 +1190,7 @@ class CephadmServe:
                     dd.daemon_type in CEPH_TYPES:
                 self.log.info('Reconfiguring %s (extra config changed)...' % dd.name())
                 action = 'reconfig'
+
             if action:
                 if self.mgr.cache.get_scheduled_daemon_action(dd.hostname, dd.name()) == 'redeploy' \
                         and action == 'reconfig':
@@ -1422,6 +1435,14 @@ class CephadmServe:
                 self.log.info('%s daemon %s on %s' % (
                     'Reconfiguring' if reconfig else 'Deploying',
                     daemon_spec.name(), daemon_spec.host))
+
+                termination_grace_period = None
+                if daemon_spec.service_name in self.mgr.spec_store:
+                    svc_spec = self.mgr.spec_store[daemon_spec.service_name].spec
+                    termination_grace_period = getattr(svc_spec, 'termination_grace_period_seconds', None)
+
+                if termination_grace_period is not None:
+                    daemon_params['termination_grace_period_seconds'] = int(termination_grace_period)
 
                 out, err, code = await self._run_cephadm(
                     daemon_spec.host,

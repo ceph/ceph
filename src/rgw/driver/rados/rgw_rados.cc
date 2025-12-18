@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "include/compat.h"
 #include <errno.h>
@@ -57,7 +57,9 @@
 #include "rgw_etag_verifier.h"
 #include "rgw_worker.h"
 #include "rgw_notify.h"
+#include "rgw_bl_rados.h"
 #include "rgw_http_errors.h"
+#include "rgw_multipart_meta_filter.h"
 
 #undef fork // fails to compile RGWPeriod::fork() below
 
@@ -1141,17 +1143,21 @@ void RGWRados::finalize()
     reshard->stop_processor();
   }
   delete reshard;
-  delete index_completion_manager;
 
   if (run_notification_thread) {
     rgw::notify::shutdown();
     v1_topic_migration.stop();
   }
 
+  if (run_bucket_logging_thread) {
+    rgw::bucketlogging::shutdown();
+  }
+
   if (use_restore_thread) {
     restore->stop_processor();
   }
   restore = NULL;
+  delete index_completion_manager;
 }
 
 /** 
@@ -1275,7 +1281,13 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   if (ret < 0)
     return ret;
 
+  ret = open_logging_pool_ctx(dpp);
+  if (ret < 0)
+    return ret;
+
   pools_initialized = true;
+
+  index_completion_manager = new RGWIndexCompletionManager(this);
 
   if (use_gc) {
     gc = new RGWGC();
@@ -1425,8 +1437,12 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
     reshard->start_processor();
   }
 
-  index_completion_manager = new RGWIndexCompletionManager(this);
-
+  if (run_bucket_logging_thread) {
+    if (!rgw::bucketlogging::init(dpp, this->driver, *svc.site)) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to initialize bucket logging manager" << dendl;
+    }
+      ldpp_dout(dpp, 0) << "INFO: initialized bucket logging manager" << dendl;
+  }
   if (run_notification_thread) {
     if (!rgw::notify::init(dpp, driver, *svc.site)) {
       ldpp_dout(dpp, 0) << "ERROR: failed to initialize notification manager" << dendl;
@@ -1447,7 +1463,6 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
       v1_topic_migration.start(1);
     }
   }
-
   return ret;
 }
 
@@ -1549,6 +1564,11 @@ int RGWRados::open_reshard_pool_ctx(const DoutPrefixProvider *dpp)
 int RGWRados::open_notif_pool_ctx(const DoutPrefixProvider *dpp)
 {
   return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().notif_pool, notif_pool_ctx, true, true);
+}
+
+int RGWRados::open_logging_pool_ctx(const DoutPrefixProvider *dpp)
+{
+  return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().bucket_logging_pool, logging_pool_ctx, true, true);
 }
 
 int RGWRados::open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx& io_ctx,
@@ -3086,6 +3106,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                NULL, /* string *petag */
                NULL, /* void (*progress_cb)(off_t, void *) */
                NULL, /* void *progress_data */
+               NULL, /* rgw::sal::DataProcessorFactory *dp_factory */
                dpp,
                y,
                no_trace);
@@ -3186,6 +3207,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                        nullptr,       /* string *petag */
                        nullptr,       /* void (*progress_cb)(off_t, void *) */
                        nullptr,       /* void *progress_data */
+                       nullptr,       /* rgw::sal::DataProcessorFactory *dp_factory */
                        dpp,
                        y,
                        no_trace);
@@ -3896,7 +3918,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
   return copy_obj_data(octx, owner, dest_bucket_info,
                        dest_bucket_info.placement_rule,
                        read_op, obj_size - 1, obj, NULL, mtime,
-                       attrset, 0, real_time(), NULL, dpp, y);
+                       attrset, 0, real_time(), NULL, NULL, dpp, y);
 }
 
 
@@ -4958,6 +4980,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
+               rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
                jspan_context& trace)
@@ -5033,15 +5056,6 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   if (ret < 0) {
     return ret;
   }
-  if (src_attrs.count(RGW_ATTR_CRYPT_MODE)) {
-    // Current implementation does not follow S3 spec and even
-    // may result in data corruption silently when copying
-    // multipart objects across pools. So reject COPY operations
-    //on encrypted objects before it is fully functional.
-    ldpp_dout(dpp, 0) << "ERROR: copy op for encrypted object " << src_obj
-                  << " has not been implemented." << dendl;
-    return -ERR_NOT_IMPLEMENTED;
-  }
 
   src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
   src_attrs.erase(RGW_ATTR_DELETE_AT);
@@ -5061,9 +5075,20 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     src_attrs.erase(RGW_ATTR_OLH_VER);
   }
 
+  src_attrs.erase(RGW_ATTR_STORAGE_CLASS);
+
   src_attrs.erase(RGW_ATTR_OBJ_REPLICATION_TRACE);
   src_attrs.erase(RGW_ATTR_OBJ_REPLICATION_TIMESTAMP);
   src_attrs.erase(RGW_ATTR_OBJ_REPLICATION_STATUS);
+
+  // drop encryption attributes
+  // will be generated by copy_obj_data() if encryption is requested
+  src_attrs.erase(RGW_ATTR_CRYPT_KEYSEL);
+  src_attrs.erase(RGW_ATTR_CRYPT_CONTEXT);
+  src_attrs.erase(RGW_ATTR_CRYPT_MODE);
+  src_attrs.erase(RGW_ATTR_CRYPT_KEYID);
+  src_attrs.erase(RGW_ATTR_CRYPT_KEYMD5);
+  src_attrs.erase(RGW_ATTR_CRYPT_DATAKEY);
 
   set_copy_attrs(src_attrs, attrs, attrs_mod);
   attrs.erase(RGW_ATTR_ID_TAG);
@@ -5146,6 +5171,10 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     }
   }
 
+  if (dp_factory && dp_factory->need_copy_data()) {
+    copy_data = true;
+  }
+
   if (petag) {
     const auto iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
@@ -5156,7 +5185,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
     return copy_obj_data(dest_obj_ctx, owner, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
-                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y);
+                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dp_factory, dpp, y);
   }
 
   /* This has been in for 2 years, so we can safely assume amanifest is not NULL */
@@ -5324,6 +5353,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                uint64_t olh_epoch,
 	       real_time delete_at,
                string *petag,
+               rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
                bool log_op)
@@ -5334,36 +5364,45 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
   using namespace rgw::putobj;
   jspan_context no_trace{false, false};
-  AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info,
-                                  &dest_placement, owner,
-                                  obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
-  int ret = processor.prepare(y);
+  AtomicObjectProcessor aoproc(aio.get(), this, dest_bucket_info,
+                               &dest_placement, owner,
+                               obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
+
+  DataProcessorFilter aoproc_filter(&aoproc);
+  RGWGetObj_Filter *filter = &aoproc_filter;
+  if (dp_factory) {
+    int ret = dp_factory->set_writer(&aoproc, attrs, dpp, y);
+    if (ret < 0) {
+      return ret;
+    }
+
+    filter = dp_factory->get_filter();
+  }
+
+  int ret = aoproc.prepare(y);
   if (ret < 0)
     return ret;
 
   off_t ofs = 0;
 
-  do {
-    bufferlist bl;
-    ret = read_op.read(ofs, end, bl, y, dpp);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: fail to read object data, ret = " << ret << dendl;
-      return ret;
-    }
+  ret = read_op.iterate(dpp, ofs, end, filter, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to read object data ret=" << ret << dendl;
+    return ret;
+  }
 
-    uint64_t read_len = ret;
-    ret = processor.process(std::move(bl), ofs);
-    if (ret < 0) {
-      return ret;
-    }
-
-    ofs += read_len;
-  } while (ofs <= end);
+  // set ofs to the total bytes read
+  // `end` is always the last byte offset, so add 1
+  ofs = end + 1;
 
   // flush
-  ret = processor.process({}, ofs);
+  ret = filter->flush();
   if (ret < 0) {
     return ret;
+  }
+
+  if (dp_factory) {
+    dp_factory->finalize_attrs(attrs);
   }
 
   string etag;
@@ -5390,10 +5429,39 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   }
 
   const req_context rctx{dpp, y, nullptr};
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+  return aoproc.complete(accounted_size, etag, mtime, set_mtime, attrs,
 			    rgw::cksum::no_cksum, delete_at,
                             nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
                             log_op ? rgw::sal::FLAG_LOG_OP : 0);
+}
+
+int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &src_attrs) {
+  auto iter = src_attrs.find(RGW_ATTR_MANIFEST);
+  if (iter == src_attrs.end()) {
+    return 0;
+  }
+
+  bufferlist &manifest_bl { iter->second };
+
+  // if the source object was encrypted, preserve the part lengths from
+  // the original object's manifest in RGW_ATTR_CRYPT_PARTS. if the object
+  // already replicated and has the RGW_ATTR_CRYPT_PARTS attr, preserve it
+  if (src_attrs.count(RGW_ATTR_CRYPT_MODE) &&
+      !src_attrs.count(RGW_ATTR_CRYPT_PARTS)) {
+    std::vector<size_t> parts_len;
+    int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
+							parts_len);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "failed to read part lengths from the manifest r=" << r << dendl;
+      return r;
+    }
+    // store the encoded part lenghts in RGW_ATTR_CRYPT_PARTS
+    bufferlist parts_bl;
+    encode(parts_len, parts_bl);
+    src_attrs[RGW_ATTR_CRYPT_PARTS] = std::move(parts_bl);
+  }
+
+  return 0;
 }
 
 int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
@@ -5419,6 +5487,11 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   read_op.params.obj_size = &obj_size;
 
   int ret = read_op.prepare(y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = fixup_manifest_to_parts_len(dpp, attrs);
   if (ret < 0) {
     return ret;
   }
@@ -5455,6 +5528,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       olh_epoch,
                       real_time(),
                       nullptr /* petag */,
+                      nullptr, /* dp_factory */
                       dpp,
                       y,
                       log_op);
@@ -5472,6 +5546,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                              RGWObjTier& tier_config,
                              std::optional<uint64_t> days,
 			     bool& in_progress,
+			     uint64_t& size,
                              const DoutPrefixProvider *dpp,
                              optional_yield y) {
 
@@ -5693,7 +5768,9 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     return ret;
   }
 
-  return ret; 
+  // set size to be used to send bucket notification
+  size = accounted_size;
+  return 0;
 }
 
 int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y)
@@ -7726,6 +7803,9 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       if (boost::algorithm::starts_with(iter.first, RGW_ATTR_CRYPT_PREFIX)) {
         ldpp_dout(dpp, 4) << "get src crypt attr: " << iter.first << dendl;
         src_attrset[iter.first] = iter.second;
+      } else if (iter.first == RGW_ATTR_ETAG) {
+        ldpp_dout(dpp, 4) << "copy src etag attr: " << iter.first << dendl;
+        src_attrset[iter.first] = iter.second;
       }
     }
     int parts_count = 0;
@@ -7756,6 +7836,11 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       if (astate->attrset.find(iter.first) == astate->attrset.end()) {
         astate->attrset[iter.first] = std::move(iter.second);
       }
+    }
+    auto etag_iter = src_attrset.find(RGW_ATTR_ETAG);
+    if (etag_iter != src_attrset.end()) {
+      ldpp_dout(dpp, 4) << "overwrite etag to " << etag_iter->second << dendl;
+      astate->attrset[RGW_ATTR_ETAG] = etag_iter->second;
     }
   }
 
@@ -11206,8 +11291,11 @@ int RGWRados::remove_objs_from_index(const DoutPrefixProvider *dpp,
   std::map<int, std::set<std::string>> sharded_removals;
   for (const auto& entry_key : entry_key_list) {
     const rgw_obj_key obj_key(entry_key);
-    const uint32_t shard =
-      RGWSI_BucketIndex_RADOS::bucket_shard_index(obj_key, num_shards);
+    const uint32_t shard = [&obj_key, num_shards]() -> uint32_t {
+      int32_t temp = RGWSI_BucketIndex_RADOS::bucket_shard_index(obj_key, num_shards);
+      return (-1 == temp) ? 0 : (uint32_t) temp;
+    }();
+
 
     // entry_key already combines namespace and name, so we first have
     // to break that apart before we can then combine with instance
@@ -11598,7 +11686,10 @@ librados::Rados* RGWRados::get_rados_handle()
   return &rados;
 }
 
-int RGWRados::delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, list<librados::AioCompletion *>& handles)
+int RGWRados::delete_tail_obj_aio(const DoutPrefixProvider *dpp,
+                                  const rgw_raw_obj& obj,
+                                  const std::string& tag,
+                                  list<librados::AioCompletion *>& handles)
 {
   rgw_rados_ref ref;
   int ret = get_raw_obj_ref(dpp, obj, &ref);
@@ -11608,8 +11699,7 @@ int RGWRados::delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_ob
   }
 
   ObjectWriteOperation op;
-  list<string> prefixes;
-  cls_rgw_remove_obj(op, prefixes);
+  cls_refcount_put(op, tag, true);
 
   AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
   ret = ref.ioctx.aio_operate(ref.obj.oid, c, &op);

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -88,25 +89,28 @@ struct CB_notify_Finish {
 
 struct CB_aio_linger_cancel {
   Objecter *objecter;
-  Objecter::LingerOp *linger_op;
+  boost::intrusive_ptr<Objecter::LingerOp> linger_op;
 
-  CB_aio_linger_cancel(Objecter *_objecter, Objecter::LingerOp *_linger_op)
-    : objecter(_objecter), linger_op(_linger_op)
+  CB_aio_linger_cancel(Objecter *_objecter,
+                       boost::intrusive_ptr<Objecter::LingerOp> op)
+    : objecter(_objecter), linger_op(std::move(op))
   {
   }
 
   void operator()() {
-    objecter->linger_cancel(linger_op);
+    objecter->linger_cancel(linger_op.get());
   }
 };
 
 struct C_aio_linger_Complete : public Context {
   AioCompletionImpl *c;
-  Objecter::LingerOp *linger_op;
+  boost::intrusive_ptr<Objecter::LingerOp> linger_op;
   bool cancel;
 
-  C_aio_linger_Complete(AioCompletionImpl *_c, Objecter::LingerOp *_linger_op, bool _cancel)
-    : c(_c), linger_op(_linger_op), cancel(_cancel)
+  C_aio_linger_Complete(AioCompletionImpl *_c,
+                        boost::intrusive_ptr<Objecter::LingerOp> op,
+                        bool _cancel)
+    : c(_c), linger_op(std::move(op)), cancel(_cancel)
   {
     c->get();
   }
@@ -115,7 +119,7 @@ struct C_aio_linger_Complete : public Context {
     if (cancel || r < 0)
       boost::asio::defer(c->io->client->finish_strand,
 			 CB_aio_linger_cancel(c->io->objecter,
-					      linger_op));
+					      std::move(linger_op)));
 
     c->lock.lock();
     c->rval = r;
@@ -136,8 +140,9 @@ struct C_aio_notify_Complete : public C_aio_linger_Complete {
   bool finished = false;
   int ret_val = 0;
 
-  C_aio_notify_Complete(AioCompletionImpl *_c, Objecter::LingerOp *_linger_op)
-    : C_aio_linger_Complete(_c, _linger_op, false) {
+  C_aio_notify_Complete(AioCompletionImpl *_c,
+                        boost::intrusive_ptr<Objecter::LingerOp> op)
+    : C_aio_linger_Complete(_c, std::move(op), false) {
   }
 
   void handle_ack(int r) {
@@ -1741,8 +1746,11 @@ int librados::IoCtxImpl::notify_ack(
 
 int librados::IoCtxImpl::watch_check(uint64_t cookie)
 {
-  auto linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-  auto r = objecter->linger_check(linger_op);
+  boost::intrusive_ptr linger_op = objecter->linger_by_cookie(cookie);
+  if (!linger_op) {
+    return -ENOTCONN;
+  }
+  auto r = objecter->linger_check(linger_op.get());
   if (r)
     return 1 + std::chrono::duration_cast<
       std::chrono::milliseconds>(*r).count();
@@ -1752,7 +1760,11 @@ int librados::IoCtxImpl::watch_check(uint64_t cookie)
 
 int librados::IoCtxImpl::unwatch(uint64_t cookie)
 {
-  Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
+  boost::intrusive_ptr linger_op = objecter->linger_by_cookie(cookie);
+  if (!linger_op) {
+    return -ENOTCONN;
+  }
+
   C_SaferCond onfinish;
   version_t ver = 0;
 
@@ -1762,7 +1774,7 @@ int librados::IoCtxImpl::unwatch(uint64_t cookie)
   objecter->mutate(linger_op->target.base_oid, oloc, wr,
 		   snapc, ceph::real_clock::now(), extra_op_flags,
 		   &onfinish, &ver);
-  objecter->linger_cancel(linger_op);
+  objecter->linger_cancel(linger_op.get());
 
   int r = onfinish.wait();
   set_sync_op_version(ver);
@@ -1772,7 +1784,10 @@ int librados::IoCtxImpl::unwatch(uint64_t cookie)
 int librados::IoCtxImpl::aio_unwatch(uint64_t cookie, AioCompletionImpl *c)
 {
   c->io = this;
-  Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
+  boost::intrusive_ptr linger_op = objecter->linger_by_cookie(cookie);
+  if (!linger_op) {
+    return -ENOTCONN;
+  }
   Context *oncomplete = new C_aio_linger_Complete(c, linger_op, true);
 
   ::ObjectOperation wr;
@@ -2107,10 +2122,7 @@ void librados::IoCtxImpl::application_enable_async(const std::string& app_name,
   }
   cmd << "}";
 
-  std::vector<std::string> cmds;
-  cmds.push_back(cmd.str());
-  bufferlist inbl;
-  client->mon_command_async(cmds, inbl, nullptr, nullptr,
+  client->mon_command_async({cmd.str()}, {}, nullptr, nullptr,
                             make_lambda_context(CB_PoolAsync_Safe(c)));
 }
 
@@ -2174,10 +2186,7 @@ int librados::IoCtxImpl::application_metadata_set(const std::string& app_name,
       << "\"value\":\"" << value << "\""
       << "}";
 
-  std::vector<std::string> cmds;
-  cmds.push_back(cmd.str());
-  bufferlist inbl;
-  int r = client->mon_command(cmds, inbl, nullptr, nullptr);
+  int r = client->mon_command({cmd.str()}, {}, nullptr, nullptr);
   if (r < 0) {
     return r;
   }
@@ -2197,10 +2206,7 @@ int librados::IoCtxImpl::application_metadata_remove(const std::string& app_name
       << "\"key\":\"" << key << "\""
       << "}";
 
-  std::vector<std::string> cmds;
-  cmds.push_back(cmd.str());
-  bufferlist inbl;
-  int r = client->mon_command(cmds, inbl, nullptr, nullptr);
+  int r = client->mon_command({cmd.str()}, {}, nullptr, nullptr);
   if (r < 0) {
     return r;
   }

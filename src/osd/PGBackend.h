@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -293,7 +294,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual void send_message_osd_cluster(
        Message *m, const ConnectionRef& con) = 0;
      virtual void start_mon_command(
-       const std::vector<std::string>& cmd, const bufferlist& inbl,
+       std::vector<std::string>&& cmd, bufferlist&& inbl,
        bufferlist *outbl, std::string *outs,
        Context *onfinish) = 0;
      virtual ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) = 0;
@@ -609,6 +610,11 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      return -EOPNOTSUPP;
    }
 
+   virtual std::pair<uint64_t, uint64_t> extent_to_shard_extent(
+       uint64_t off, uint64_t len) {
+     return std::pair(off, len);
+   }
+
    virtual void objects_read_async(
      const hobject_t &hoid,
      uint64_t object_size,
@@ -624,7 +630,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      ScrubMapBuilder &pos);
 
    virtual uint64_t be_get_ondisk_size(uint64_t logical_size,
-                                       shard_id_t shard_id) const = 0;
+                                       shard_id_t shard_id,
+                                       bool object_is_legacy_ec) const = 0;
 
    virtual int be_deep_scrub(
      [[maybe_unused]] const Scrub::ScrubCounterSet& io_counters,

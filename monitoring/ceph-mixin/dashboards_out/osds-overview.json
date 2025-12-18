@@ -1224,7 +1224,8 @@
    "schemaVersion": 16,
    "style": "dark",
    "tags": [
-      "ceph-mixin"
+      "ceph-mixin",
+      "overview"
    ],
    "templating": {
       "list": [
@@ -1294,7 +1295,7 @@
       ]
    },
    "timezone": "",
-   "title": "OSD Overview",
+   "title": "Ceph OSDs - Overview",
    "uid": "lo02I1Aiz",
    "version": 0
 }

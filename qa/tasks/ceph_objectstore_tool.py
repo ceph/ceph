@@ -310,7 +310,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
     log.info("Test --op list by generating json for all objects")
     
     if CRIMSON:
-        prefix = ("sudo ceph-objectstore-tool "
+        prefix = ("sudo crimson-objectstore-tool "
                   "--data-path {fpath} "
                   "--device-type {device_t} ").format(fpath=FSPATH, device_t=CRIMSON_DEVICE_TYPE)
     else:

@@ -1559,7 +1559,8 @@
    "schemaVersion": 22,
    "style": "dark",
    "tags": [
-      "ceph-mixin"
+      "ceph-mixin",
+      "overview"
    ],
    "templating": {
       "list": [
@@ -1650,7 +1651,7 @@
       ]
    },
    "timezone": "",
-   "title": "Ceph Pools Overview",
+   "title": "Ceph Pools - Overview",
    "uid": "z99hzWtmk",
    "version": 0
 }

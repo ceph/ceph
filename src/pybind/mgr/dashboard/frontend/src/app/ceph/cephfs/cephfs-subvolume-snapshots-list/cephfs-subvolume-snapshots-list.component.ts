@@ -91,11 +91,11 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
         name: $localize`Pending Clones`,
         prop: 'info.has_pending_clones',
         flexGrow: 0.5,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            no: { class: 'badge-success' },
-            yes: { class: 'badge-info' }
+            no: { class: 'tag-success' },
+            yes: { class: 'tag-info' }
           }
         }
       }

@@ -1,4 +1,4 @@
-# vim: expandtab smarttab shiftwidth=4 softtabstop=4
+# vim: expandtab shiftwidth=4 softtabstop=4
 import pytest
 from assertions import assert_raises, assert_equal
 import rgw as librgwfs

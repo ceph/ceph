@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #include <asm-generic/errno-base.h>
 #include <chrono>
 #include <fmt/compile.h>
@@ -257,6 +258,9 @@ void BlueFS::_init_logger()
   b.add_u64(l_bluefs_slow_used_bytes, "slow_used_bytes",
 	    "Used bytes (slow device)",
 	    "slou", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64(l_bluefs_meta_ratio, "meta_ratio_micros",
+	    "Actual metadata/userdata ratio * 1e3",
+	    "mera", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_u64(l_bluefs_num_files, "num_files", "File count",
 	    "f", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_log_bytes, "log_bytes", "Size of the metadata log",
@@ -484,6 +488,22 @@ void BlueFS::_update_logger_stats()
     logger->set(l_bluefs_slow_total_bytes, _get_block_device_size(BDEV_SLOW));
     logger->set(l_bluefs_slow_used_bytes, _get_used(BDEV_SLOW));
   }
+  double r = 0.0;
+  int64_t in_data = 0;
+  int64_t in_meta = 0;
+  in_data = get_used_non_bluefs();
+  in_meta = _get_used(BDEV_SLOW) + _get_used(BDEV_DB) + _get_used(BDEV_WAL);
+  if (in_data > 0) {
+    dout(10) << __func__ << " got meta ratio parameters, "
+            << "data: " << in_data << ", meta: " << in_meta
+            << dendl;
+    r = double(in_meta) / double(in_data);
+  } else {
+    dout(5) << __func__ << " got weird meta ratio parameters, "
+            << "data: " << in_data << ", meta: " << in_meta
+            << dendl;
+  }
+  logger->set(l_bluefs_meta_ratio, r * 1000);
 }
 
 int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
@@ -573,6 +593,17 @@ uint64_t BlueFS::get_used()
   return used;
 }
 
+int64_t BlueFS::get_used_non_bluefs()
+{
+  uint64_t ret = 0;
+  if (shared_alloc_id > 0 && shared_alloc && shared_alloc->a) {
+    ret = (int64_t)_get_block_device_size(shared_alloc_id) -
+          shared_alloc->a->get_free() -
+          shared_alloc->bluefs_used;
+  }
+  return ret;
+}
+
 uint64_t BlueFS::_get_used(unsigned id) const
 {
   uint64_t used = 0;
@@ -656,12 +687,25 @@ void BlueFS::dump_block_extents(ostream& out)
     }
     auto total = get_block_device_size(i);
     auto free = get_free(i);
-
-    out << i << " : device size 0x" << std::hex << total
-        << "(" << byte_u_t(total) << ")"
-        << " : using 0x" << total - free
-        << "(" << byte_u_t(total - free) << ")"
-        << std::dec << std::endl;
+    if (i != shared_alloc_id) {
+      out << i << " : device size 0x" << std::hex << total
+            << "(" << byte_u_t(total) << ")"
+          << " : using 0x" << total - free
+            << "(" << byte_u_t(total - free) << ")"
+          << std::dec << std::endl;
+    } else {
+      auto bluefs_used = get_used(i);
+      auto non_bluefs_used = get_used_non_bluefs();
+      out << i << " : device size 0x" << std::hex << total
+            << "(" << byte_u_t(total) << ")"
+          << " : using 0x" << total - free
+            << "(" << byte_u_t(total - free) << ")"
+          << " : bluefs used 0x" << bluefs_used
+            << "(" << byte_u_t(bluefs_used) << ")"
+          << " : non-bluefs used 0x" << non_bluefs_used
+            << "(" << byte_u_t(non_bluefs_used) << ")"
+          << std::dec << std::endl;
+    }
   }
 }
 
@@ -2436,7 +2480,7 @@ int64_t BlueFS::_read_random(
            << " got 0x" << ret
            << std::dec  << dendl;
   --h->file->num_reading;
-  logger->tinc(l_bluefs_read_random_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_read_random_lat, mono_clock::now() - t0);
   return ret;
 }
 
@@ -2754,7 +2798,7 @@ int64_t BlueFS::_read(
            << std::dec  << dendl;
   ceph_assert(!outbl || (int)outbl->length() == ret);
   --h->file->num_reading;
-  logger->tinc(l_bluefs_read_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_read_lat, mono_clock::now() - t0);
   return ret;
 }
 
@@ -3179,7 +3223,7 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool permit_dev_fallback,
       dirty.pending_release[r.bdev].insert(r.offset, r.length);
     }
   }
-  logger->tinc(l_bluefs_compaction_lock_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_compaction_lock_lat, mono_clock::now() - t0);
 }
 
 /*
@@ -3326,7 +3370,7 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   // now state is captured to compacted_meta_t,
   // current log can be used to write to,
   //ops in log will be continuation of captured state
-  logger->tinc(l_bluefs_compaction_lock_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_compaction_lock_lat, mono_clock::now() - t0);
   log.lock.unlock();
 
   // 2.2 Allocate the space required for the compacted meta transaction
@@ -3926,7 +3970,7 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
   }
   dout(20) << __func__ << " file now, unflushed " << h->file->fnode << dendl;
   int res = _flush_data(h, offset, length, buffered);
-  logger->tinc(l_bluefs_flush_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_flush_lat, mono_clock::now() - t0);
   return res;
 }
 
@@ -3995,7 +4039,7 @@ int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool bu
     }
     h->dirty_devs[p->bdev] = true;
     if (p->bdev == BDEV_SLOW) {
-      bytes_written_slow += t.length();
+      bytes_written_slow += x_len;
     }
 
     bloff += x_len;
@@ -4244,7 +4288,7 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
     }
     vselector->add_usage(h->file->vselector_hint, fnode);
   }
-  logger->tinc(l_bluefs_truncate_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_truncate_lat, mono_clock::now() - t0);
   return 0;
 }
 
@@ -4283,7 +4327,7 @@ int BlueFS::_fsync(FileWriter *h, bool force_dirty)/*_F_D_LD_LNF_NF*/
     _flush_and_sync_log_LD(old_dirty_seq);
   }
   _maybe_compact_log_LNF_NF_LD_D();
-  logger->tinc(l_bluefs_fsync_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_fsync_lat, mono_clock::now() - t0);
   return 0;
 }
 
@@ -4553,7 +4597,7 @@ void BlueFS::_maybe_compact_log_LNF_NF_LD_D()
     } else {
       _compact_log_async_LD_LNF_D();
     }
-    logger->tinc(l_bluefs_compaction_lat, mono_clock::now() - t0);
+    logger->tinc_with_max(l_bluefs_compaction_lat, mono_clock::now() - t0);
   }
 }
 
@@ -4728,6 +4772,7 @@ void BlueFS::collect_alerts(osd_alert_list_t& alerts) {
   if (bdev[BDEV_WAL]) {
     bdev[BDEV_WAL]->collect_alerts(alerts, "WAL");
   }
+  _update_logger_stats(); // just to have it updated more frequently
 }
 
 int BlueFS::open_for_read(
@@ -5003,7 +5048,7 @@ int BlueFS::unlink(std::string_view dirname, std::string_view filename)/*_LND*/
   dir->file_map.erase(q);
   log.t.op_dir_unlink(dirname, filename);
   _drop_link_DF(file);
-  logger->tinc(l_bluefs_unlink_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_unlink_lat, mono_clock::now() - t0);
 
   return 0;
 }
@@ -5338,10 +5383,7 @@ void OriginalVolumeSelector::get_paths(const std::string& base, paths& res) cons
 #define dout_prefix *_dout << "OriginalVolumeSelector: "
 
 void OriginalVolumeSelector::dump(ostream& sout) {
-  sout<< "wal_total:" << wal_total
-    << ", db_total:" << db_total
-    << ", slow_total:" << slow_total
-    << std::endl;
+  sout << "*** no stats ***" << std::endl;
 }
 
 // ===============================================

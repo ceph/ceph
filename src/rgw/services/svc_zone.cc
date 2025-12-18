@@ -1,11 +1,11 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "svc_zone.h"
 #include "svc_sys_obj.h"
 #include "svc_sync_modules.h"
 
-#include "rgw_tools.h"
+#include "driver/rados/rgw_tools.h"
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_bucket_sync.h"

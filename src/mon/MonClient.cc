@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -967,6 +968,11 @@ void MonClient::_finish_hunting(int auth_err)
 void MonClient::tick()
 {
   ldout(cct, 10) << __func__ << dendl;
+
+  if (stopping) {
+    ldout(cct, 1) << "skipping tick on shutdown" << dendl;
+    return;
+  }
 
   utime_t now = ceph_clock_now();
 

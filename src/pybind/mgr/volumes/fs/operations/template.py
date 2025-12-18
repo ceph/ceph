@@ -73,6 +73,10 @@ class SubvolumeOpType(Enum):
     EARMARK_GET           = 'earmark-get'
     EARMARK_SET           = 'earmark-set'
     EARMARK_CLEAR          = 'earmark-clear'
+    SNAPSHOT_VISIBILITY   = 'snapshot-visibility'
+    ENCTAG_GET            = 'enctag-get'
+    ENCTAG_SET            = 'enctag-set'
+    ENCTAG_CLEAR          = 'enctag-clear'
 
 class SubvolumeTemplate(object):
     VERSION = None # type: int

@@ -154,7 +154,7 @@ class SubvolumeV2(SubvolumeV1):
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, qpath)
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, initial_state.value)
 
-    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive):
+    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive, enctag):
         subvolume_type = SubvolumeTypes.TYPE_NORMAL
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
@@ -179,6 +179,7 @@ class SubvolumeV2(SubvolumeV1):
                 'earmark': earmark,
                 'normalization': normalization,
                 'casesensitive': casesensitive,
+                'enctag': enctag,
             }
             self.set_attrs(subvol_path, attrs)
 

@@ -1,0 +1,17 @@
+roles:
+- [mon.a, mon.c, mgr.x, osd.0, osd.1, osd.2, osd.3]
+- [mon.b, mgr.y, osd.4, osd.5, osd.6, osd.7]
+- [client.0]
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+        crimson cpu num: 3
+      global:
+        ms cluster mode: crc
+        ms service mode: crc
+        ms client mode: crc
+        ms mon service mode: crc
+        ms mon cluster mode: crc
+        ms mon client mode: crc

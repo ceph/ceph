@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef CEPH_OS_BLUESTORE_BLUEFS_TYPES_H
 #define CEPH_OS_BLUESTORE_BLUEFS_TYPES_H
 
@@ -102,7 +103,7 @@ struct bluefs_fnode_delta_t {
     DENC_FINISH(p);
   }
   void encode(ceph::buffer::list::contiguous_appender& p) const {
-    DENC_DUMP_PRE(bluefs_fnode_t);
+    DENC_DUMP_PRE(bluefs_fnode_delta_t);
     uint8_t version = 1, compat = 1;
     if (encoding == ENVELOPE  || encoding == ENVELOPE_FIN) {
       version = 2;

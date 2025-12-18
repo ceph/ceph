@@ -19,13 +19,21 @@ ELSE:
     from c_cephfs cimport *
     from rados cimport Rados
 
-from collections import namedtuple
+from collections import namedtuple, deque
 from datetime import datetime
 import os
 import time
+import stat
 from typing import Any, Dict, Optional
+from logging import getLogger
+
+
+log = getLogger(__name__)
+
 
 AT_SYMLINK_NOFOLLOW = 0x0100
+AT_REMOVEDIR = 0x200
+AT_FDCWD = -100
 AT_STATX_SYNC_TYPE  = 0x6000
 AT_STATX_SYNC_AS_STAT = 0x0000
 AT_STATX_FORCE_SYNC = 0x2000
@@ -62,47 +70,47 @@ CEPH_SETATTR_BTIME = 0x200
 
 CEPH_NOSNAP = -2
 
-# errno definitions
-cdef enum:
-    EBLOCKLISTED = 108
-    EPERM = 1
-    ESTALE = 116
-    ENOSPC = 28
-    ETIMEDOUT = 110
-    EIO = 5
-    ENOTCONN = 107
-    EEXIST = 17
-    EINTR = 4
-    EINVAL = 22
-    EBADF = 9
-    EROFS = 30
-    EAGAIN = 11
-    EACCES = 13
-    ELOOP = 40
-    EISDIR = 21
-    ENOENT = 2
-    ENOTDIR = 20
-    ENAMETOOLONG = 36
-    EBUSY = 16
-    EDQUOT = 122
-    EFBIG = 27
-    ERANGE = 34
-    ENXIO = 6
-    ECANCELED = 125
-    ENODATA = 61
-    EOPNOTSUPP = 95
-    EXDEV = 18
-    ENOMEM = 12
-    ENOTRECOVERABLE = 131
-    ENOSYS = 38
-    EWOULDBLOCK = EAGAIN
-    ENOTEMPTY = 39
-    EDEADLK = 35
-    EDEADLOCK = EDEADLK
-    EDOM = 33
-    EMLINK = 31
-    ETIME = 62
-    EOLDSNAPC = 85
+# XXX: errno definitions, hard-coded numbers here are errnos defined by Linux
+# that are used for the Ceph on-the-wire status codes.
+EBLOCKLISTED = ceph_to_hostos_errno(108)
+EPERM = ceph_to_hostos_errno(1)
+ESTALE = ceph_to_hostos_errno(116)
+ENOSPC = ceph_to_hostos_errno(28)
+ETIMEDOUT = ceph_to_hostos_errno(110)
+EIO = ceph_to_hostos_errno(5)
+ENOTCONN = ceph_to_hostos_errno(107)
+EEXIST = ceph_to_hostos_errno(17)
+EINTR = ceph_to_hostos_errno(4)
+EINVAL = ceph_to_hostos_errno(22)
+EBADF = ceph_to_hostos_errno(9)
+EROFS = ceph_to_hostos_errno(30)
+EAGAIN = ceph_to_hostos_errno(11)
+EWOULDBLOCK = EAGAIN
+EACCES = ceph_to_hostos_errno(13)
+ELOOP = ceph_to_hostos_errno(40)
+EISDIR = ceph_to_hostos_errno(21)
+ENOENT = ceph_to_hostos_errno(2)
+ENOTDIR = ceph_to_hostos_errno(20)
+ENAMETOOLONG = ceph_to_hostos_errno(36)
+EBUSY = ceph_to_hostos_errno(16)
+EDQUOT = ceph_to_hostos_errno(122)
+EFBIG = ceph_to_hostos_errno(27)
+ERANGE = ceph_to_hostos_errno(34)
+ENXIO = ceph_to_hostos_errno(6)
+ECANCELED = ceph_to_hostos_errno(125)
+ENODATA = ceph_to_hostos_errno(61)
+EOPNOTSUPP = ceph_to_hostos_errno(95)
+EXDEV = ceph_to_hostos_errno(18)
+ENOMEM = ceph_to_hostos_errno(12)
+ENOTRECOVERABLE = ceph_to_hostos_errno(131)
+ENOSYS = ceph_to_hostos_errno(38)
+ENOTEMPTY = ceph_to_hostos_errno(39)
+EDEADLK = ceph_to_hostos_errno(35)
+EDEADLOCK = EDEADLK
+EDOM = ceph_to_hostos_errno(33)
+EMLINK = ceph_to_hostos_errno(31)
+ETIME = ceph_to_hostos_errno(62)
+EOLDSNAPC = ceph_to_hostos_errno(85)
 
 cdef extern from "Python.h":
     # These are in cpython/string.pxd, but use "object" types instead of
@@ -198,6 +206,17 @@ class DiskQuotaExceeded(OSError):
     pass
 class PermissionDenied(OSError):
     pass
+
+class OpCanceled(OSError):
+    def __init__(self, op_name):
+        '''
+        op_name should be the name of (FS) operation that has been cancelled.
+        '''
+        self.errno = 125 # ECANCELED
+        self.strerror = f'CephFS op {op_name} was cancelled by the user'
+
+        super(OpCanceled, self).__init__(self.errno, self.strerror)
+
 
 cdef errno_to_exception =  {
     EPERM      : PermissionError,
@@ -512,7 +531,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_create_from_rados(&self.cluster, rados_inst.cluster)
         if ret != 0:
-            raise Error("libcephfs_initialize failed with error code: %d" % ret)
+            raise Error(f"libcephfs_initialize failed with error code: {ret}")
         self.state = "configuring"
 
     NO_CONF_FILE = -1
@@ -541,7 +560,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_create(&self.cluster, <const char*>_auth_id)
         if ret != 0:
-            raise Error("libcephfs_initialize failed with error code: %d" % ret)
+            raise Error(f"libcephfs_initialize failed with error code: {ret}")
 
         self.state = "configuring"
         if conffile in (self.NO_CONF_FILE, None):
@@ -1017,6 +1036,23 @@ cdef class LibCephFS(object):
         d.handle = handle
         return d
 
+    def fdopendir(self, dirfd):
+        self.require_state("mounted")
+
+        cdef:
+            int dirfd_ = dirfd
+            ceph_dir_result* handle
+
+        with nogil:
+            ret = ceph_fdopendir(self.cluster, dirfd_, &handle)
+        if ret < 0:
+            raise make_ex(ret, f'error in fdopendir when it was called for fd "{dirfd_}"')
+
+        d = DirResult()
+        d.lib = self
+        d.handle = handle
+        return d
+
     def readdir(self, DirResult handle) -> Optional[DirEntry]:
         """
         Get the next entry in an open directory.
@@ -1433,6 +1469,23 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in open {}".format(path.decode('utf-8')))
         return ret
+
+    def openat(self, dirfd, relpath, flags, mode):
+        self.require_state("mounted")
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            int dirfd_ = dirfd
+            int flags_ = flags
+            char* relpath_ = relpath
+            int mode_ = mode
+
+        with nogil:
+            ret = ceph_openat(self.cluster, dirfd_, relpath_, flags_, mode_)
+        if ret < 0:
+            raise make_ex(ret, f'error in openat {relpath}')
+        return ret
+
 
     def close(self, fd):
         """
@@ -1970,6 +2023,29 @@ cdef class LibCephFS(object):
 
         return self.listxattr(path, size=size, follow_symlink=False)
 
+    def fcopyfile(self, spath, dpath, mode=0):
+        """
+        Copy a file to another file.
+
+       :param spath: the path to the source file.
+       :param dpath: the path to the destination file.
+       :param mode: the permissions the file should have once created.
+       """
+        self.require_state("mounted")
+
+        spath = cstr(spath, 'spath')
+        dpath = cstr(dpath, 'dpath')
+
+        cdef:
+            char *_spath = spath
+            char *_dpath = dpath
+            mode_t _mode = mode
+
+            ret = ceph_fcopyfile(self.cluster, _spath, _dpath, _mode)
+
+        if ret < 0:
+            raise make_ex(ret, "error in fcopyfile")
+
     def stat(self, path, follow_symlink=True):
         """
         Get a file's extended statistics and attributes.
@@ -2274,6 +2350,20 @@ cdef class LibCephFS(object):
             ret = ceph_unlink(self.cluster, _path)
         if ret < 0:
             raise make_ex(ret, "error in unlink: {}".format(path.decode('utf-8')))
+
+    def unlinkat(self, dirfd, relpath, flags):
+        self.require_state("mounted")
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            int dirfd_ = dirfd
+            char* relpath_ = relpath
+            int flags_ = flags
+
+        with nogil:
+            ret = ceph_unlinkat(self.cluster, dirfd_, relpath_, flags_)
+        if ret < 0:
+            raise make_ex(ret, f"error in unlinkat: {relpath.decode('utf-8')}")
 
     def rename(self, src, dst):
         """
@@ -2836,3 +2926,285 @@ cdef class LibCephFS(object):
 
         finally:
            free(buf)
+
+    def rmtree(self, trash_path, should_cancel, suppress_errors=False):
+        '''
+        Delete entire file hierarchy present under trash_path when trash_path is
+        a dir. Do this deletion using depth-first (to prevent excessive memory
+        consumption) and non-recursive (to prevent hitting Python's max recursion
+        limit error) approach.
+
+        If trash_path is a path to regfile, symlink or something else, delete
+        them and return.
+        '''
+        # st_b = stat buffer
+        st_b = self.stat(trash_path, AT_SYMLINK_NOFOLLOW)
+        if stat.S_ISDIR(st_b.st_mode):
+            unlink_tree_worker = UnlinkTreeWorker(self, trash_path,
+                                                  should_cancel,
+                                                  suppress_errors)
+            unlink_tree_worker.start()
+        else:
+            try:
+                self.unlink(trash_path)
+                return
+            except Exception as e:
+                log.info('Following exception occurred while unlinking '
+                         f'file at path {trash_path}: {e}')
+                raise
+
+
+class UnlinkTreeWorker:
+    '''
+    Contains code to delete entire file tree under a directory with a
+    depth-first, non-recursive approach along with some helper code.
+
+    Primary focus of this class is to traverse the file hierarchy by operating
+    on the stack while using class RmTreeDir for running opendir(), rmdir() and
+    unlink() (in a safe way) and recording failures.
+    '''
+
+    def __init__(self, fs, trash_path, should_cancel, suppress_errors=False):
+        self.fs = fs
+        self.trash_path = trash_path
+        if isinstance(self.trash_path, str):
+            self.trash_path = self.trash_path.encode('utf-8')
+
+        self.should_cancel = should_cancel
+        self.suppress_errors = suppress_errors
+
+        # Stack needed for traversing the file heirarchy under trash_path in
+        # depth-first, non-recursive fashion. Each stack member is an instance
+        # of class RmtreeDir.
+        self.stack = deque([])
+
+        # Current directory, dir entries of which are being currently removed.
+        # It should always be the directory at the top of stack, it should
+        # always be an instance of class RmtreeDir.
+        self.curr_dir = None
+
+    def add_dir_to_stack(self, de_name):
+        '''
+        Add new dir to stack and start traversing it. If it fails, add this
+        new dir to current dir's ignorelist since most likely we don't have
+        permissions for it.
+        '''
+        # ensure we are dealing with the dir at the top of the stack.
+        assert self.curr_dir is self.stack[-1]
+
+        try:
+            self.stack.append(RmtreeDir(self.fs, de_name, self.curr_dir.fd))
+            return True
+        except Error as e:
+            if self.suppress_errors:
+                # add to ignore list, traversal should continue for current dir.
+                log.info(f'dir "{de_name}" couldn\'t be opened and therefore '
+                          'it can\'t be remvoved. perhaps permissions for it '
+                          'are not granted.')
+                self.curr_dir.add_to_de_ignore_list(de_name)
+
+                return False
+            else:
+                raise
+
+    def notify_parent_dir(self):
+        '''
+        Add current dir's name to parent dir's "de_ignore_list". This is
+        necessary since parent dir can't be deleted when current dir can't be
+        deleted.
+        '''
+        # ensure we are dealing with the dir at the top of the stack.
+        assert self.curr_dir is self.stack[-1]
+
+        if len(self.stack) < 2:
+            return
+        parent_dir = self.stack[-2]
+        parent_dir.add_to_de_ignore_list(self.curr_dir.name)
+
+    def start(self):
+        '''
+        This is where depth-first, non-recursive traversal is done.
+        '''
+        try:
+            self.stack.append(RmtreeDir(self.fs, self.trash_path, AT_FDCWD))
+        except Exception as e:
+            log.error('opening root dir of the file tree failed with exception '
+                      f'"{e}", exiting.')
+            if self.suppress_errors:
+                return
+            else:
+                raise
+
+        while self.stack:
+            if self.should_cancel():
+                raise OpCanceled('rmtree')
+
+            self.curr_dir = self.stack[-1]
+            finished_traversing_curr_dir = True
+
+            # de = directory entry
+            de = self.curr_dir.read_dir()
+            while de:
+                if self.should_cancel():
+                    raise OpCanceled('rmtree')
+
+                if de.is_dir():
+                    if self.add_dir_to_stack(de.d_name):
+                        # since adding new dir to stack was successful, stop
+                        # traversing the current dir and start traversing
+                        # the new dir that has been freshly added to the
+                        # stack.
+                        finished_traversing_curr_dir = False
+                        break
+                else:
+                    self.curr_dir.try_unlink(de.d_name, self.suppress_errors)
+
+                de = self.curr_dir.read_dir()
+
+            if finished_traversing_curr_dir:
+                if self.curr_dir.has_any_fs_op_failed():
+                    self.notify_parent_dir()
+
+                if self.curr_dir.is_empty:
+                    try:
+                        self.curr_dir.try_rmdir(self.suppress_errors)
+                    except ObjectNotEmpty:
+                        log.info(f'removing "{self.curr_dir.name}" failed with '
+                                  'with ObjectNotEmpty even though dir empty '
+                                  'implying it contains a snapshot in its snap'
+                                  'dir')
+                        self.notify_parent_dir()
+
+                self.stack.pop()
+
+
+class RmtreeDir:
+    '''
+    Holds the path, name and handle of the directory being traversed for
+    rmtree() along with some helper code.
+
+    Primary focus of this class is to run rmtree() and unlink() in a safe way
+    and record failures to prevent hitting them again in future. It serves as
+    helper for class NonRecursiveRmtree.
+    '''
+
+    def __init__(self, fs, name, parent_dir_fd=AT_FDCWD):
+        self.fs = fs
+
+        self.name = name
+
+        self.parent_dir_fd = parent_dir_fd
+        # XXX: exception (if) raised in following two lines should be handled by
+        # caller based on the context.
+        self.fd = self.fs.openat(self.parent_dir_fd, self.name,
+                                 os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        self.handle = self.fs.fdopendir(self.fd)
+
+        # Is this directory empty? It will be set by self.read_dir().
+        self.is_empty = None
+
+        # List of dir entries to be ignored instead of calling rmdir()
+        # or unlink() for them.
+        self.de_ignore_list = []
+
+        # Indicates whether an error occured during call to readdir().
+        self.has_readdir_failed = False
+
+        # If a dir entry has been removed and readdir() returns None,
+        # rewinddir() should be called since POSIX doesn't guarantee
+        # anything regarding behaviour of readdir() when readdir() and
+        # unlink()/rmdir() calls are interleaved. Whenever calls to
+        # unlink()/rmdir() are made, reading dir might've to be
+        # restarted.
+        self.de_has_been_removed = False
+
+    def __str__(self):
+        return self.name
+
+    def add_to_de_ignore_list(self, de_name):
+        self.de_ignore_list.append(de_name)
+
+    def set_readdir_error(self):
+        self.has_readdir_failed = True
+
+    def should_skip_d_name(self, de_name):
+        return de_name in self.de_ignore_list
+
+    def has_any_fs_op_failed(self):
+        return self.has_readdir_failed or len(self.de_ignore_list) > 0
+
+    def read_dir(self):
+        '''
+        Read this dir, return a dentry besides . and .. and ignorelist-ed
+        dentries.
+
+        If a dentry was removed and return value of readdir() is None, rewind
+        the dir and staring read the dir again.
+        '''
+        # Assuming True for now, if it's not empty it will be set to
+        # False by the following loop.
+        self.is_empty = True
+
+        try:
+            de = self.fs.readdir(self.handle)
+            while de:
+                if de.d_name in (b'.', b'..'):
+                    pass
+                elif de.d_name in self.de_ignore_list:
+                    self.is_empty = False
+                else:
+                    self.is_empty = False
+                    return de
+
+                de = self.fs.readdir(self.handle)
+                if self.de_has_been_removed:
+                    log.debug('rewinding and restarting reading current dir '
+                              f'"{self.name}", since a dentry has been '
+                              'removed.')
+                    self.handle.rewinddir()
+                    # reset de_has_been_removed flag
+                    self.de_has_been_removed = False
+
+                    de = self.fs.readdir(self.handle)
+        except Error as e:
+            log.error(f'Exception occured: "{e}"')
+            self.set_readdir_error()
+
+    def try_rmdir(self, suppress_errors=False):
+        '''
+        Remove given directory. If that fails because its not empty, raise the
+        exception, the caller should handle it.
+
+        In case of a failure for some other reason, add it to the ignorelist
+        and tell caller whether to continue or break loop based through the
+        return value.
+        '''
+        try:
+            self.fs.unlinkat(self.parent_dir_fd, self.name, AT_REMOVEDIR)
+
+            self.de_has_been_removed = True
+        except ObjectNotEmpty:
+            # XXX: push this dir to stack, done in the caller method
+            raise
+        except Error as e:
+            log.error('Following exception occured while calling rmdir() for '
+                      f'dir "{self.name}": "{e}"')
+            self.add_to_de_ignore_list(self.name)
+
+            if not suppress_errors:
+                raise
+
+    def try_unlink(self, de_name, suppress_errors=False):
+        '''
+        Unlink given file and add it to the ignore list if that fails.
+        '''
+        try:
+            self.fs.unlinkat(self.fd, de_name, 0)
+            self.de_has_been_removed = True
+        except Error as e:
+            log.error('Following exception occured while calling unlink() for '
+                      f'file "{de_name}": "{e}"')
+            self.add_to_de_ignore_list(de_name)
+
+            if not suppress_errors:
+                raise

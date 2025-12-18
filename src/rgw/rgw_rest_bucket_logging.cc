@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "common/dout.h"
 #include "rgw_op.h"
@@ -311,6 +311,12 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       // conf changed - do cleanup
       RGWObjVersionTracker objv_tracker;
       std::string obj_name;
+      if (int ret = target_bucket->get_logging_object_name(obj_name, old_conf->target_prefix, y, this, nullptr); ret < 0 && ret != -ENOENT) {
+        ldpp_dout(this, 1) << "ERROR: failed to get name of logging object of logging bucket '" <<
+        target_bucket_id << "' and prefix '" << configuration.target_prefix << "', ret = " << ret << dendl;
+        op_ret = ret;
+        return;
+      }
       const auto region = driver->get_zone()->get_zonegroup().get_api_name();
       if (const auto ret = rollover_logging_object(*old_conf,
             target_bucket,
@@ -321,11 +327,11 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
             y,
             false, // rollover should happen even if commit failed
             &objv_tracker,
+            false,
             &old_obj); ret < 0) {
         ldpp_dout(this, 1) << "WARNING: failed to flush pending logging object '" << obj_name << "'"
             << " to target bucket '" << target_bucket_id << "'. "
-            << " last committed object is '" << old_obj <<
-            "' when updating logging configuration of bucket '" << src_bucket->get_key() << ". error: " << ret << dendl;
+            << "' when updating logging configuration of bucket '" << src_bucket->get_key() << ". error: " << ret << dendl;
       } else {
         ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << old_obj
           << "' to target bucket '" << target_bucket_id << "' when updating logging configuration of bucket '"
@@ -412,6 +418,11 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
 
   void execute(optional_yield y) override {
     const auto& target_bucket_id = target_bucket->get_key();
+    // make sure that the logging source attribute is up-to-date
+    if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, target_bucket, source_bucket->get_key(), true, y); ret < 0) {
+      ldpp_dout(this, 5) << "WARNING: failed to update logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
+        << "' in logging target '" << target_bucket_id << "'. error: " << ret << dendl;
+    }
     std::string obj_name;
     RGWObjVersionTracker objv_tracker;
     op_ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, y, this, &objv_tracker);
@@ -425,7 +436,7 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
       ldpp_dout(this, 5) << "INFO: no pending logging object in logging bucket '" << target_bucket_id << "'. new object should be created" << dendl;
     }
     const auto region = driver->get_zone()->get_zonegroup().get_api_name();
-    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, y, true, &objv_tracker, &old_obj);
+    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, y, true, &objv_tracker, false, &old_obj);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to flush pending logging object '" << obj_name << "'"
           << " to logging bucket '" << target_bucket_id << "'. "

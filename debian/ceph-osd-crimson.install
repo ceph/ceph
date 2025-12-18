@@ -1,0 +1,6 @@
+#! /usr/bin/dh-exec
+
+usr/bin/crimson-objectstore-tool
+usr/bin/crimson-osd => /usr/bin/ceph-osd-crimson
+usr/bin/crimson-store-bench
+usr/bin/crimson-store-nbd

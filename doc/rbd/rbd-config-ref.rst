@@ -212,6 +212,11 @@ creating images or the default features can be configured via
 :KRBD support: no
 
 
+Clone Settings
+==============
+
+.. confval:: rbd_default_clone_format
+
 QoS Settings
 ============
 

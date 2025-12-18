@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -2755,7 +2755,11 @@ int POSIXBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 {
   return dir->for_each(dpp, [](const char* name) {
     /* for_each filters out "." and "..", so reaching here is not empty */
-    return -ENOTEMPTY;
+    std::string_view check_name = name;
+    if (!check_name.starts_with(".multipart")) { // incomplete uploads can be deleted
+      return -ENOTEMPTY;
+    }
+    return 0;
   });
 }
 
@@ -2976,6 +2980,7 @@ int POSIXObject::copy_object(const ACLOwner& owner,
                               std::string* etag,
                               void (*progress_cb)(off_t, void *),
                               void* progress_data,
+                              rgw::sal::DataProcessorFactory* dp_factory,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
@@ -3129,8 +3134,7 @@ int POSIXObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
   return 0;
 }
 
-int POSIXObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
-                                rgw_obj* target_obj)
+int POSIXObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 {
   //int fd;
 
@@ -3244,6 +3248,7 @@ int POSIXObject::restore_obj_from_cloud(Bucket* bucket,
 	  CephContext* cct,
           std::optional<uint64_t> days,
           bool& in_progress,
+	  uint64_t& size,
           const DoutPrefixProvider* dpp, 
           optional_yield y)
 {

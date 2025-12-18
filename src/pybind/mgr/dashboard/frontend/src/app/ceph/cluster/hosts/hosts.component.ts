@@ -97,7 +97,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   isExecuting = false;
   errorMessage: string;
   enableMaintenanceBtn: boolean;
-  enableDrainBtn: boolean;
+  draining: boolean = false;
   bsModalRef: NgbModalRef;
 
   icons = Icons;
@@ -133,6 +133,9 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
+  }
+
+  ngOnInit() {
     this.expandClusterActions = [
       {
         name: this.actionLabels.EXPAND_CLUSTER,
@@ -169,18 +172,14 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         permission: 'update',
         icon: Icons.exit,
         click: () => this.hostDrain(),
-        disable: (selection: CdTableSelection) =>
-          this.getDisable('drain', selection) || !this.enableDrainBtn,
-        visible: () => !this.showGeneralActionsOnly && this.enableDrainBtn
+        visible: () => !this.showGeneralActionsOnly && !this.draining
       },
       {
         name: this.actionLabels.STOP_DRAIN,
         permission: 'update',
         icon: Icons.exit,
         click: () => this.hostDrain(true),
-        disable: (selection: CdTableSelection) =>
-          this.getDisable('drain', selection) || this.enableDrainBtn,
-        visible: () => !this.showGeneralActionsOnly && !this.enableDrainBtn
+        visible: () => !this.showGeneralActionsOnly && this.draining
       },
       {
         name: this.actionLabels.REMOVE,
@@ -212,9 +211,6 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         visible: () => !this.showGeneralActionsOnly && this.enableMaintenanceBtn
       }
     ];
-  }
-
-  ngOnInit() {
     this.columns = [
       {
         name: $localize`Hostname`,
@@ -226,20 +222,20 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         name: $localize`Labels`,
         prop: 'labels',
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
-          class: 'badge-dark'
+          class: 'tag-dark'
         }
       },
       {
         name: $localize`Status`,
         prop: 'status',
         flexGrow: 0.8,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            maintenance: { class: 'badge-warning' },
-            available: { class: 'badge-success' }
+            maintenance: { class: 'tag-warning' },
+            available: { class: 'tag-success' }
           }
         }
       },
@@ -305,24 +301,26 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
     this.enableMaintenanceBtn = false;
-    this.enableDrainBtn = false;
     if (this.selection.hasSelection) {
       if (this.selection.first().status === 'maintenance') {
         this.enableMaintenanceBtn = true;
       }
 
-      if (!this.selection.first().labels.includes('_no_schedule')) {
-        this.enableDrainBtn = true;
-      }
+      this.selection.first().labels.includes('_no_schedule')
+        ? (this.draining = true)
+        : (this.draining = false);
     }
   }
 
   editAction() {
-    this.hostService.getLabels().subscribe((resp: string[]) => {
-      const host = this.selection.first();
-      const labels = new Set(resp.concat(this.hostService.predefinedLabels));
+    const host = this.selection.first();
+    this.hostService.getLabels().subscribe((resp) => {
+      const hostLabels: string[] = Array.isArray(host['labels'])
+        ? [...(host['labels'] as string[])]
+        : [];
+      const labels = new Set(resp.concat(this.hostService.predefinedLabels).concat(hostLabels));
       const allLabels = Array.from(labels).map((label) => {
-        return { content: label, selected: host['labels'].includes(label) };
+        return { content: label, selected: hostLabels.includes(label) };
       });
       this.cdsModalService.show(FormModalComponent, {
         titleText: $localize`Edit Host: ${host.hostname}`,
@@ -330,7 +328,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
           {
             type: 'select-badges',
             name: 'labels',
-            value: host['labels'],
+            value: hostLabels,
             label: $localize`Labels`,
             typeConfig: {
               customBadges: true,
@@ -346,6 +344,11 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         submitButtonText: $localize`Edit Host`,
         onSubmit: (values: any) => {
           this.hostService.update(host['hostname'], true, values.labels).subscribe(() => {
+            const selectedHost = this.selection.first();
+            if (selectedHost && selectedHost['hostname'] === host.hostname) {
+              host['labels'] = values.labels;
+              Object.assign(selectedHost, host);
+            }
             this.notificationService.show(
               NotificationType.success,
               $localize`Updated Host "${host.hostname}"`

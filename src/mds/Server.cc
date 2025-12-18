@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -63,6 +64,7 @@
 
 #include "include/stringify.h"
 #include "include/filepath.h"
+#include "common/strescape.h"
 #include "common/ceph_json.h"
 #include "common/debug.h"
 #include "common/Timer.h"
@@ -651,7 +653,11 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
     if (!session->client_opened) {
       session->client_opened = true;
     }
-    if (session->is_opening() ||
+    if (session->is_closing()) {
+      mdlog->wait_for_safe(
+        new MDSInternalContextWrapper(mds, new C_MDS_RetryMessage(mds, m)));
+      return;
+    } else if (session->is_opening() ||
 	session->is_open() ||
 	session->is_stale() ||
 	session->is_killing() ||
@@ -2786,7 +2792,6 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
   if (is_full) {
     if (req->get_op() == CEPH_MDS_OP_SETLAYOUT ||
         req->get_op() == CEPH_MDS_OP_SETDIRLAYOUT ||
-        req->get_op() == CEPH_MDS_OP_SETLAYOUT ||
         req->get_op() == CEPH_MDS_OP_RMXATTR ||
         req->get_op() == CEPH_MDS_OP_SETXATTR ||
         req->get_op() == CEPH_MDS_OP_CREATE ||
@@ -5566,6 +5571,8 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
       auto bl = req->get_data().cbegin();
       DECODE_START(1, bl);
       decode(header.change_attr, bl);
+      decode(header.file_offset, bl);
+      decode(header.block_size, bl);
       DECODE_FINISH(bl);
 
       dout(20) << __func__ << " mdr->retry:" << mdr->retry
@@ -5644,6 +5651,12 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
     }
   }
 
+  bool allow_all = mdr->session->auth_caps.allow_all();
+  if (mask & (CEPH_SETATTR_FSCRYPT_FILE|CEPH_SETATTR_FSCRYPT_AUTH) && !allow_all) {
+    respond_to_request(mdr, -EACCES);
+    return;
+  }
+
   if (mask & CEPH_SETATTR_FSCRYPT_AUTH)
     pi.inode->fscrypt_auth.assign(req->fscrypt_auth.begin(), req->fscrypt_auth.end());
   if (mask & CEPH_SETATTR_FSCRYPT_FILE)
@@ -5694,6 +5707,10 @@ void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
 
   uint64_t old_size = std::max<uint64_t>(pi.inode->size, mdr->client_request->head.args.open.old_size);
   if (old_size > 0) {
+    // data struct size will be uint64_t or greater if inode is
+    // fscrypt/encrypted; make sure to truncate logical size
+    if (pi.inode->fscrypt_file.size() >= sizeof(uint64_t))
+      *(ceph_le64 *)pi.inode->fscrypt_file.data() = 0;
     pi.inode->truncate(old_size, 0);
     le->metablob.add_truncate_start(in->ino());
   }
@@ -6518,6 +6535,96 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     mdr->no_early_reply = true;
     pip = pi.inode.get();
     adjust_realm = true;
+  } else if (name == "ceph.dir.subvolume.snaps.visible"sv) {
+    if (!cur->is_dir()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    bool val = true;
+    try {
+      std::string errstr;
+      val = strict_strtob(value, &errstr);
+      if (!errstr.empty()) {
+        dout(10) << "bad vxattr value, unable to parse bool for " << name
+                 << ": " << errstr << dendl;
+        respond_to_request(mdr, -EINVAL);
+        return;
+      }
+    } catch (boost::bad_lexical_cast const& e) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name
+               << ": " << e.what() << dendl;
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    // perform few checks with lightweight rdlock
+    if (!mdr->more()->rdonly_checks) {
+      lov.add_rdlock(&cur->snaplock);
+      if (!mds->locker->acquire_locks(mdr, lov)) {
+        dout(20) << "handle_client_getvxattr could not acquire rdlock on "
+                 << *cur << dendl;
+        return;
+      }
+
+      const auto srnode = cur->get_projected_srnode();
+      if (!srnode) {
+        dout(10) << "no-op since no snaprealm node found for "
+                 << req->get_filepath() << dendl;
+        respond_to_request(mdr, 0);
+        return; 
+      }
+      // check if visibility already matches the desired value
+      if (val == srnode->is_snapdir_visible()) {
+        dout(20) << "snapdir visibility for " << req->get_filepath()
+                 << " is already set to " << std::boolalpha << val << dendl;
+        respond_to_request(mdr, 0);
+        return;
+      }
+      
+      mdr->more()->rdonly_checks = true;
+      dout(20) << "dropping rdlock on " << *cur << dendl;
+      mds->locker->drop_locks(mdr.get());
+    }
+
+    if (!xlock_policylock(mdr, cur, false, true)) {
+      return;
+    }
+
+    /* Repeat rdlocks checks to see if anything changed b/w rdlock release and
+    *  xlock policylock acquisition
+    */ 
+    {
+      const auto srnode = cur->get_projected_srnode();
+      if (!srnode) {
+        dout(10) << "no-op since no snaprealm node found for "
+                 << req->get_filepath() << dendl;
+        respond_to_request(mdr, 0);
+        return; 
+      }
+
+      if (val == srnode->is_snapdir_visible()) {
+        dout(20) << "snapdir visibility for " << req->get_filepath()
+                 << " is already set to " << std::boolalpha << val << dendl;
+        respond_to_request(mdr, 0);
+        return;
+      }
+    }
+
+    adjust_realm = true;
+    auto pi = cur->project_inode(mdr, false, adjust_realm);
+    dout(20) << "setting snapdir visibility to " << std::boolalpha
+               << val << " for " << req->get_filepath() << dendl;
+    if (val) {
+      pi.snapnode->set_snapdir_visibility();
+    } else {
+      pi.snapnode->unset_snapdir_visibility();
+    }
+    pi.snapnode->last_modified = mdr->get_op_stamp();
+    pi.snapnode->change_attr++;
+
+    mdr->no_early_reply = true;
+    pip = pi.inode.get();
   } else if (name == "ceph.dir.pin"sv) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
@@ -7283,6 +7390,22 @@ void Server::handle_client_getvxattr(const MDRequestRef& mdr)
       // otherwise respond as invalid request
       // since we only handle ceph vxattrs here
       r = -ENODATA; // no such attribute
+    }
+  } else if (xattr_name == "ceph.dir.subvolume"sv) {
+    const auto* srnode = cur->get_projected_srnode();
+    *css << (srnode && srnode->is_subvolume() ? "1"sv : "0"sv);
+  } else if (xattr_name == "ceph.dir.subvolume.snaps.visible"sv) {
+    if (!cur->is_dir()) {
+      r = -ENOTDIR;
+    } else {
+      const auto srnode = cur->get_projected_srnode();
+      if (!srnode) {
+        dout(10) << "no-op since no snaprealm node found for "
+                 << mdr->client_request->get_filepath() << dendl;
+        r = 0;
+      } else {
+        *css << srnode->is_snapdir_visible();
+      }
     }
   } else {
     // otherwise respond as invalid request
@@ -9226,7 +9349,7 @@ void Server::_rmdir_rollback_finish(const MDRequestRef& mdr, metareqid_t reqid, 
  */
 bool Server::_dir_is_nonempty_unlocked(const MDRequestRef& mdr, CInode *in)
 {
-  dout(10) << "dir_is_nonempty_unlocked " << *in << dendl;
+  dout(10) << __func__ << " " << *in << dendl;
   ceph_assert(in->is_auth());
 
   if (in->filelock.is_cached())
@@ -9239,7 +9362,7 @@ bool Server::_dir_is_nonempty_unlocked(const MDRequestRef& mdr, CInode *in)
     // is the frag obviously non-empty?
     if (dir->is_auth()) {
       if (dir->get_projected_fnode()->fragstat.size()) {
-	dout(10) << "dir_is_nonempty_unlocked dirstat has " 
+	dout(10) << __func__ << " dirstat has "
 		 << dir->get_projected_fnode()->fragstat.size() << " items " << *dir << dendl;
 	return true;
       }
@@ -10190,7 +10313,10 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       {
         std::string t;
         destdn->make_path_string(t, true);
-        dout(20) << " stray_prior_path = " << t << dendl;
+
+	/* Log only 10 final components fo the path to since logging entire
+	 * path is not useful and also reduces readability. */
+        dout(20) << " stray_prior_path = " << get_trimmed_path_str(t) << dendl;
         tpi->stray_prior_path = std::move(t);
       }
       tpi->nlink--;
@@ -10205,8 +10331,11 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       {
         std::string t;
         destdn->make_path_string(t, true);
-        dout(20) << __func__ << " referent stray_prior_path = " << t << dendl;
-        trpi->stray_prior_path = std::move(t);
+
+	/* Log only 10 final components fo the path to since logging entire
+	 * path is not useful and also reduces readability. */
+	dout(20) << __func__ << " referent stray_prior_path = " << get_trimmed_path_str(t) << dendl;
+	trpi->stray_prior_path = std::move(t);
       }
     }
   }

@@ -25,12 +25,6 @@ tasks:
     conf:
       osd:
         osd min pg log entries: 5
-        crimson bluestore cpu set: 6-7
-      osd.0:
-        crimson cpu set: 0-1
-      osd.1:
-        crimson cpu set: 2-3
-      osd.2:
-        crimson cpu set: 4-5
+        crimson cpu num: 2
       global:
 - osd_backfill:

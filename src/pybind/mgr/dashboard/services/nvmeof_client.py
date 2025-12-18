@@ -68,7 +68,7 @@ else:
             if enable_auth:
                 client_key = NvmeofGatewaysConfig.get_client_key(service_name)
                 client_cert = NvmeofGatewaysConfig.get_client_cert(service_name)
-                server_cert = NvmeofGatewaysConfig.get_server_cert(service_name)
+                server_cert = NvmeofGatewaysConfig.get_ssl_cert(service_name)
                 logger.info('Securely connecting to: %s', self.gateway_addr)
                 credentials = grpc.ssl_channel_credentials(
                     root_certificates=server_cert,
@@ -189,7 +189,7 @@ else:
         yield namedtuple_instance
 
     def obj_to_namedtuple(data: Any, target_type: Type[NamedTuple],
-                          max_depth: int = 4) -> NamedTuple:
+                          max_depth: int = 7) -> NamedTuple:
         """
         Convert an object or dict to a NamedTuple, handling nesting and lists lazily.
         This will raise an error if nesting depth exceeds the max depth (default 4)

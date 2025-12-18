@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -29,6 +29,7 @@ struct RGWLCCloudTierCtx {
 
   /* Remote */
   RGWRESTConn& conn;
+  std::string location_constraint;
   std::string target_bucket_name;
   std::string target_storage_class;
 

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #include <errno.h>
 #include <map>
 #include <sstream>
@@ -549,7 +550,7 @@ TEST_F(LibRadosTwoPoolsECPP, CopyFrom) {
 
 TEST_F(LibRadosMiscPP, CopyScrubPP) {
   SKIP_IF_CRIMSON();
-  bufferlist inbl, bl, x;
+  bufferlist bl, x;
   for (int i=0; i<100; ++i)
     x.append("barrrrrrrrrrrrrrrrrrrrrrrrrr");
   bl.append(buffer::create(g_conf()->osd_copyfrom_max_chunk * 3));
@@ -590,7 +591,7 @@ TEST_F(LibRadosMiscPP, CopyScrubPP) {
       ss << "{\"prefix\": \"pg deep-scrub\", \"pgid\": \""
 	 << ioctx.get_id() << "." << i
 	 << "\"}";
-      cluster.mon_command(ss.str(), inbl, NULL, NULL);
+      cluster.mon_command(ss.str(), {}, NULL, NULL);
     }
 
     // give it a few seconds to go.  this is sloppy but is usually enough time
@@ -630,7 +631,7 @@ TEST_F(LibRadosMiscPP, CopyScrubPP) {
       ss << "{\"prefix\": \"pg deep-scrub\", \"pgid\": \""
 	 << ioctx.get_id() << "." << i
 	 << "\"}";
-      cluster.mon_command(ss.str(), inbl, NULL, NULL);
+      cluster.mon_command(ss.str(), {}, NULL, NULL);
     }
 
     // give it a few seconds to go.  this is sloppy but is usually enough time
@@ -822,10 +823,10 @@ TEST_F(LibRadosMiscPP, CmpExtPP) {
 }
 
 TEST_F(LibRadosMiscPP, Applications) {
-  bufferlist inbl, outbl;
+  bufferlist outbl;
   string outs;
   ASSERT_EQ(0, cluster.mon_command("{\"prefix\": \"osd dump\"}",
-				   inbl, &outbl, &outs));
+				   {}, &outbl, &outs));
   ASSERT_LT(0u, outbl.length());
   ASSERT_LE(0u, outs.length());
   if (!std::regex_search(outbl.to_str(),

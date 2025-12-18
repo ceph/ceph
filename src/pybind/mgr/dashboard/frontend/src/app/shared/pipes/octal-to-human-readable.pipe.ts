@@ -29,28 +29,28 @@ export class OctalToHumanReadablePipe implements PipeTransform {
     if (fileType !== 'directory') {
       permissionSummary.push({
         content: fileType,
-        class: 'badge-primary me-1'
+        class: 'tag-primary me-1'
       });
     }
 
     if (owner !== '---') {
       permissionSummary.push({
         content: `owner: ${owner}`,
-        class: 'badge-primary me-1'
+        class: 'tag-primary me-1'
       });
     }
 
     if (group !== '---') {
       permissionSummary.push({
         content: `group: ${group}`,
-        class: 'badge-primary me-1'
+        class: 'tag-primary me-1'
       });
     }
 
     if (others !== '---') {
       permissionSummary.push({
         content: `others: ${others}`,
-        class: 'badge-primary me-1'
+        class: 'tag-primary me-1'
       });
     }
 
@@ -58,7 +58,7 @@ export class OctalToHumanReadablePipe implements PipeTransform {
       return [
         {
           content: 'no permissions',
-          class: 'badge-warning me-1',
+          class: 'tag-warning me-1',
           toolTip: `owner: ${owner}, group: ${group}, others: ${others}`
         }
       ];

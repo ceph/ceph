@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/os/seastore/cache.h"
 
@@ -1078,6 +1078,21 @@ void Cache::on_transaction_destruct(Transaction& t)
     assert(t.omap_tree_stats.is_clear());
     assert(t.lba_tree_stats.is_clear());
     assert(t.backref_tree_stats.is_clear());
+  }
+}
+
+void Cache::check_full_extent_integrity(
+  uint32_t ref_crc, uint32_t pin_crc)
+{
+  LOG_PREFIX(Cache::check_full_extent_integrity);;
+  DEBUG("checksum in the lba tree: 0x{:x}, actual checksum: 0x{:x}",
+    pin_crc,
+    ref_crc);
+  if (unlikely(pin_crc != ref_crc)) {
+    ERROR("extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}",
+      pin_crc,
+      ref_crc);
+      ceph_abort_msg("extent checksum inconsistent");
   }
 }
 
@@ -2284,7 +2299,8 @@ Cache::_get_absent_extent_by_type(
   paddr_t offset,
   laddr_t laddr,
   extent_len_t length,
-  extent_init_func_t &&extent_init_func)
+  extent_init_func_t &&extent_init_func,
+  uint32_t pin_crc)
 {
   LOG_PREFIX(Cache::_get_absent_extent_by_type);
 
@@ -2379,7 +2395,7 @@ Cache::_get_absent_extent_by_type(
   t.add_to_read_set(CachedExtentRef(ret));
   touch_extent_fully(*ret, &t_src, t.get_cache_hint());
   return trans_intr::make_interruptible(
-    read_extent(std::move(ret), 0, length, &t_src
+    read_extent(std::move(ret), 0, length, &t_src, pin_crc
     ).safe_then([laddr](auto extent) {
       if (extent->is_logical()) {
 	extent->template cast<LogicalCachedExtent>()->set_laddr(laddr);

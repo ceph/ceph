@@ -111,12 +111,36 @@ Carbon Overrides
 /******************************************
 Form Controls
 ******************************************/
+
+// Ref: https://carbondesignsystem.com/components/form/style/#recommended-for-default-forms/
+
+form {
+  // Overriding to remove extra space which is getting added when cdsGrid is used.
+  // If we use grid in app shell, then we dont need to set this.
+  // @TODO: Add grid layout for the app shell
+  .cds--grid {
+    padding-inline: 0;
+  }
+}
+
+.form-heading {
+  h3 {
+    @include type.type-style('heading-03');
+  }
+
+  display: block;
+  margin-bottom: var(--cds-spacing-08);
+}
+
 .form-item {
   @extend .cds--form-item;
 
   display: block;
-  margin-bottom: 32px;
-  margin-top: 32px;
+  margin-bottom: var(--cds-spacing-07);
+}
+
+.form-button {
+  margin-top: var(--cds-spacing-09);
 }
 
 .form-item-append {

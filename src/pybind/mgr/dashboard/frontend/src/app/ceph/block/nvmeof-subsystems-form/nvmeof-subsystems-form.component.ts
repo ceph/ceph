@@ -10,7 +10,10 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ActivatedRoute, Router } from '@angular/router';
-import { MAX_NAMESPACE, NvmeofService } from '~/app/shared/api/nvmeof.service';
+import {
+  DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM,
+  NvmeofService
+} from '~/app/shared/api/nvmeof.service';
 
 @Component({
   selector: 'cd-nvmeof-subsystems-form',
@@ -23,7 +26,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   action: string;
   resource: string;
   pageURL: string;
-  defaultMaxNamespace: number = MAX_NAMESPACE;
+  defaultMaxNamespace: number = DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM;
   group: string;
 
   constructor(
@@ -81,11 +84,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
         ]
       }),
       max_namespaces: new UntypedFormControl(this.defaultMaxNamespace, {
-        validators: [
-          CdValidators.number(false),
-          Validators.max(this.defaultMaxNamespace),
-          Validators.min(1)
-        ]
+        validators: [CdValidators.number(false), Validators.min(1)]
       })
     });
   }

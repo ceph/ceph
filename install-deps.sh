@@ -39,8 +39,8 @@ function munge_ceph_spec_in {
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
-    if $with_crimson; then
-        sed -i -e 's/%bcond_with crimson/%bcond_without crimson/g' $OUTFILE
+    if ! $with_crimson; then
+        sed -i -e 's/%bcond_without crimson/%bcond_with crimson/g' $OUTFILE
     fi
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
@@ -94,6 +94,28 @@ msyaQpNl/m/lNtOLhR64v5ZybofB2EWkMxUzX8D/FQ==
 ENDOFKEY
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
+
+        # From ceph-build.git:src/scripts/build_utils.sh:setup_gcc_hook.
+        # Do this here instead of in the hook when running in a container
+        # (like build-with-container.py).  Test if pid1 is init or systemd.
+
+        if ! ps -p 1 -o comm= | grep -qE "init|systemd"; then
+            $SUDO update-alternatives --remove-all gcc
+
+            $SUDO update-alternatives \
+              --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
+              --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
+
+            $SUDO update-alternatives \
+              --install /usr/bin/gcc gcc /usr/bin/gcc-\${old} 10 \
+              --slave   /usr/bin/g++ g++ /usr/bin/g++-\${old}
+
+            $SUDO update-alternatives --auto gcc
+
+            # cmake uses the latter by default
+            $SUDO ln -nsf /usr/bin/gcc /usr/bin/\${ARCH}-linux-gnu-gcc
+            $SUDO ln -nsf /usr/bin/g++ /usr/bin/\${ARCH}-linux-gnu-g++
+        fi
     fi
 }
 
@@ -320,13 +342,22 @@ function preload_wheels_for_tox() {
 }
 
 for_make_check=false
-if tty -s; then
+if [ "$FOR_MAKE_CHECK" ]; then
+    case "$FOR_MAKE_CHECK" in
+        true|1|yes)
+            for_make_check=true
+        ;;
+        false|0|no)
+            for_make_check=false
+        ;;
+        *)
+            echo "error: unexpected FOR_MAKE_CHECK value: ${FOR_MAKE_CHECK}"
+            exit 2
+        ;;
+    esac
+elif tty -s; then
     # interactive
     for_make_check=true
-elif [ $FOR_MAKE_CHECK ]; then
-    for_make_check=true
-else
-    for_make_check=false
 fi
 
 if [ x$(uname)x = xFreeBSDx ]; then
@@ -491,33 +522,12 @@ else
                     $SUDO dnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                if test $ID = centos -a $MAJOR_VERSION = 8 ; then
-                    # for grpc-devel
-                    # See https://copr.fedorainfracloud.org/coprs/ceph/grpc/
-                    # epel is enabled for all major versions couple of lines above
-                    $SUDO dnf copr enable -y ceph/grpc
-
-                    # Enable 'powertools' or 'PowerTools' repo
-                    $SUDO dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
-                    dts_ver=11
-                    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
-                    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
-                    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
-                    $SUDO dnf -y module enable javapackages-tools
-                elif { [ "$ID" = centos ] || [ "$ID" = rocky ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
+                if { [ "$ID" = centos ] || [ "$ID" = rocky ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
+                    dts_ver=13
                     $SUDO dnf config-manager --set-enabled crb
                     if [ "$MAJOR_VERSION" -eq 10 ]; then
                         setup_lab_extras_repo
                     fi
-                elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
-                    dts_ver=11
-                    $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
-                    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
-                    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
-                    $SUDO dnf -y module enable javapackages-tools
-
-                    # Enable ceph/grpc from copr for el8, this is needed for nvmeof management.
-                    $SUDO dnf copr enable -y ceph/grpc
                 fi
                 ;;
         esac

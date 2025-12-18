@@ -4,7 +4,11 @@
   <cds-table-header *ngIf="headerTitle">
     <h4 cdsTableHeaderTitle
         i18n>
-      {{headerTitle}}
+      @if (isHeaderTitleString) {
+        {{ headerTitle }}
+    } @else {
+      <ng-container *ngTemplateOutlet="headerTitle"></ng-container>
+    }
     </h4>
     <p cdsTableHeaderDescription
        i18n
@@ -298,8 +302,9 @@
 
 <ng-template #checkIconTpl
              let-value="data.value">
-  <i [ngClass]="[icons.check]"
-     [hidden]="!(value | boolean)"></i>
+@if (value | boolean) {
+  <cd-icon type="check"></cd-icon>
+}
 </ng-template>
 
 <ng-template #perSecondTpl
@@ -320,21 +325,28 @@
   <span *ngIf="row.cdExecuting"
         [ngClass]="column?.customTemplateConfig?.executingClass ? column?.customTemplateConfig.executingClass : 'text-muted italic'">({{ row.cdExecuting }})</span>
 </ng-template>
-
 <ng-template #classAddingTpl
              let-value="data.value">
-  <span class="{{ value | pipeFunction:useCustomClass:this }}">{{ value }}</span>
+  <span *ngIf="value">
+    <span *ngIf="!(value=='active')||(value=='expired')||(value=='pending')">
+      {{ value }}
+    </span>
+    <cds-tag *ngIf="(value==='active')||(value=== 'expired')||(value=== 'pending')"
+             class="{{ value | pipeFunction:useCustomClass:this }}">
+       {{value}}
+    </cds-tag>
+  </span>
 </ng-template>
-
-<ng-template #badgeTpl
+<ng-template #tagTpl
              let-column="data.column"
              let-value="data.value">
   <span *ngFor="let item of (value | array); last as last">
-    <span class="badge"
-          [ngClass]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'badge-primary')"
-          *ngIf="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item">
-      {{ (column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
-    </span>
+    <cds-tag [size]="'md'"
+             class="table-tag"
+             [class]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'tag-primary')"
+             *ngIf="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item">
+      {{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
+    </cds-tag>
     <span *ngIf="!last">&nbsp;</span>
   </span>
 </ng-template>
@@ -349,13 +361,13 @@
              let-column="data.column"
              let-value="data.value">
   <span *ngFor="let item of (value | array);">
-    <span
+    <cds-tag
       i18n
       i18n-ngbTooltip
       class="{{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : ''}}"
       ngbTooltip="{{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.tooltip) ? column.customTemplateConfig.map[item].tooltip : ''}}">
       {{value}}
-    </span>
+  </cds-tag>
   </span>
 </ng-template>
 
@@ -426,12 +438,12 @@
                  [invalid]="formGroup.controls[row?.[identifier] + '-' + column?.prop]?.invalid && formGroup.controls[row?.[identifier] + '-' + column?.prop]?.dirty">
         </cds-text-label>
         <ng-template #errorTpl>
-          <span *ngIf="formGroup?.showError(row?.[identifier] + '-' + column?.prop, formDir, 'required')">
-            <ng-container i18n>This field is required.</ng-container>
-          </span>
-          <span *ngIf="column?.customTemplateConfig?.formGroup?.showError(row?.[identifier] + '-' + column?.prop, formDir, 'pattern')">
-            <ng-container i18n>The field format is invalid.</ng-container>
-          </span>
+          @for (errorKey of formGroup?.get(row?.[identifier] + '-' + column?.prop)?.errors | keyvalue; track $index) {
+          @if (formGroup?.showError(row?.[identifier] + '-' + column?.prop, formDir, errorKey.key)) {
+          <ng-container i18n>
+            {{ column.customTemplateConfig?.errorMessages?.[errorKey.key] || ('Invalid ' + column.name) }}
+          </ng-container>
+          }}
         </ng-template>
       </div>
       <div cdsCol
@@ -465,4 +477,17 @@
     </div>
   </div>
   }
+</ng-template>
+
+<ng-template #redirectTpl
+             let-value="data.value"
+             let-row="data.row"
+             let-column="data.column">
+@if (column.customTemplateConfig?.customRowProperty && row[column.customTemplateConfig?.customRowProperty]) {
+  <a [routerLink]="row[column.customTemplateConfig?.customRowProperty]">{{value}}</a>
+} @else if (column.customTemplateConfig?.redirectLink) {
+  <a [routerLink]="column.customTemplateConfig?.redirectLink | redirectLinkResolver:value">{{value}}</a>
+} @else {
+  {{ value }}
+}
 </ng-template>

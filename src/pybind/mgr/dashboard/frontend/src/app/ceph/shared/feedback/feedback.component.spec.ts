@@ -11,6 +11,8 @@ import { FeedbackService } from '~/app/shared/api/feedback.service';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { FeedbackComponent } from './feedback.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { SelectModule } from 'carbon-components-angular';
 
 describe('FeedbackComponent', () => {
   let component: FeedbackComponent;
@@ -24,7 +26,9 @@ describe('FeedbackComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule,
       ReactiveFormsModule,
-      ToastrModule.forRoot()
+      ToastrModule.forRoot(),
+      SharedModule,
+      SelectModule
     ],
     declarations: [FeedbackComponent],
     providers: [NgbActiveModal]
@@ -43,7 +47,7 @@ describe('FeedbackComponent', () => {
 
   it('should open the form in a modal', () => {
     const nativeEl = fixture.debugElement.nativeElement;
-    expect(nativeEl.querySelector('cd-modal')).not.toBe(null);
+    expect(nativeEl.querySelector('cds-modal')).not.toBe(null);
   });
 
   it('should redirect to mgr-modules if feedback module is not enabled', () => {

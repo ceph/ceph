@@ -24,7 +24,7 @@ from mgr_util import verify_tls_files
 import tempfile
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmAgent
-from cephadm.tlsobject_types import CertKeyPair
+from cephadm.tlsobject_types import TLSCredentials
 
 from urllib.error import HTTPError, URLError
 from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO
@@ -77,13 +77,13 @@ class AgentEndpoint:
         verify_tls_files(self.cert_file.name, self.key_file.name)
         server.ssl_certificate, server.ssl_private_key = self.cert_file.name, self.key_file.name
 
-    def _get_agent_certificates(self) -> CertKeyPair:
+    def _get_agent_certificates(self) -> TLSCredentials:
         host = self.mgr.get_hostname()
-        tls_pair = self.mgr.cert_mgr.get_self_signed_cert_key_pair(CephadmAgent.TYPE, host)
-        if not tls_pair:
-            tls_pair = self.mgr.cert_mgr.generate_cert(host, self.mgr.get_mgr_ip(), duration_in_days=CEPHADM_AGENT_CERT_DURATION)
-            self.mgr.cert_mgr.save_self_signed_cert_key_pair(CephadmAgent.TYPE, tls_pair, host=host)
-        return tls_pair
+        tls_creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(CephadmAgent.TYPE, host)
+        if not tls_creds:
+            tls_creds = self.mgr.cert_mgr.generate_cert(host, self.mgr.get_mgr_ip(), duration_in_days=CEPHADM_AGENT_CERT_DURATION)
+            self.mgr.cert_mgr.save_self_signed_cert_key_pair(CephadmAgent.TYPE, tls_creds, host=host)
+        return tls_creds
 
     def find_free_port(self) -> None:
         max_port = self.server_port + 150

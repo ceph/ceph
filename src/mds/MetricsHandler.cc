@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "MetricsHandler.h"
 
@@ -368,7 +368,9 @@ std::chrono::steady_clock::now().time_since_epoch()).count());
     auto& vec = subvolume_metrics_map[path];
 
     dout(20) << " accumulating subv_metric " << payload.subvolume_metrics[i] << dendl;
-    vec.emplace_back(std::move(payload.subvolume_metrics[i]));
+    // std::move of the const expression of the trivially-copyable type 'const value_type'
+    // (aka 'const AggregatedIOMetrics') has no effect; remove std::move()
+    vec.emplace_back(payload.subvolume_metrics[i]);
     vec.back().time_stamp = now_ms;
   }
 }

@@ -47,7 +47,7 @@ def _validate_access_type(access_type: str) -> None:
 
 
 def _validate_sec_type(sec_type: str) -> None:
-    valid_sec_types = ["none", "sys", "krb5", "krb5i", "krb5p"]
+    valid_sec_types = ["none", "sys", "krb5", "krb5i", "krb5p", "tls", "mtls"]
     if not isinstance(sec_type, str) or sec_type not in valid_sec_types:
         raise NFSInvalidOperation(
             f"SecType {sec_type} invalid, valid types are {valid_sec_types}")

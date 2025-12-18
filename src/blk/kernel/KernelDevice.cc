@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -582,6 +583,11 @@ void KernelDevice::_discard_update_threads(bool discard_stop)
 
   uint64_t oldcount = discard_threads.size();
   uint64_t newcount = cct->_conf.get_val<uint64_t>("bdev_async_discard_threads");
+  if (newcount == 0) {
+    //backward compatibility mode to make sure legacy "bdev_async_discard" is
+    // taken into account if set.
+    newcount = cct->_conf.get_val<bool>("bdev_async_discard") ? 1 : 0;
+  }
   if (!cct->_conf.get_val<bool>("bdev_enable_discard") || !support_discard || discard_stop) {
     newcount = 0;
   }
@@ -1616,14 +1622,16 @@ std::vector<std::string> KernelDevice::get_tracked_keys()
 {
   return {
     "bdev_async_discard_threads"s,
-    "bdev_enable_discard"s
+    "bdev_async_discard"s,
+    "bdev_enable_discard"s,
   };
 }
 
 void KernelDevice::handle_conf_change(const ConfigProxy& conf,
 			     const std::set <std::string> &changed)
 {
-  if (changed.count("bdev_async_discard_threads") || changed.count("bdev_enable_discard")) {
+  if (changed.count("bdev_async_discard_threads") || changed.count("bdev_async_discard") ||
+      changed.count("bdev_enable_discard")) {
     _discard_update_threads();
   }
 }

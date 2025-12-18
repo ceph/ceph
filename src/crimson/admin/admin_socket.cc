@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/admin/admin_socket.h"
 
@@ -155,14 +155,14 @@ seastar::future<> AdminSocket::execute_line(std::string cmdline,
   LOG_PREFIX(AdminSocket::execute_line);
   INFO("");
   return execute_command({std::move(cmdline)}, {}).then([FNAME, &out, this](auto result) {
-     auto [ret, stderr, stdout] = std::move(result);
+     auto [ret, err_out, out_str] = std::move(result);
      if (ret < 0) {
        ERROR("{}", cpp_strerror(ret));
-       stdout.append(fmt::format("ERROR: {}\n", cpp_strerror(ret)));
-       stdout.append(stderr);
+       out_str.append(fmt::format("ERROR: {}\n", cpp_strerror(ret)));
+       out_str.append(err_out);
      }
      DEBUG("finalizing response");
-     return finalize_response(out, std::move(stdout));
+     return finalize_response(out, std::move(out_str));
   });
 }
 

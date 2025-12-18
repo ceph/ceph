@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -193,7 +194,7 @@ class co_throttle_impl :
           to_cancel = std::move(outstanding);
         }
 
-        for (auto i = to_cancel.begin(); i != to_cancel.end(); ++i) {
+        for (auto i = to_cancel.begin(); i != to_cancel.end();) {
           child& c = *i;
           i = to_cancel.erase(i);
 

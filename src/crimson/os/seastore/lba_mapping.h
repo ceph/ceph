@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -182,11 +182,15 @@ public:
 
   LogicalChildNodeRef peek_logical_extent(Transaction &t) const;
 
+  // [[deprecated]]
   //TODO: should be changed to return future<> once all calls
   //	  to refresh are through co_await. We return LBAMapping
   //	  for now to avoid mandating the callers to make sure
   //	  the life of the lba mapping survives the refresh.
   base_iertr::future<LBAMapping> refresh();
+
+  // once the deprecated refresh is removed we can rename this to refresh
+  base_iertr::future<> co_refresh();
 
   base_iertr::future<LBAMapping> next();
 

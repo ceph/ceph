@@ -966,6 +966,7 @@ def deploy_daemon(
                     endpoints=endpoints,
                     init_containers=init_containers,
                     sidecars=sidecars,
+                    stop_timeout=getattr(ctx, 'termination_grace_period_seconds', None),
                 )
             else:
                 raise RuntimeError('attempting to deploy a daemon without a container image')
@@ -1032,6 +1033,7 @@ def deploy_daemon_units(
     endpoints: Optional[List[EndPoint]] = None,
     init_containers: Optional[List[InitContainer]] = None,
     sidecars: Optional[List[SidecarContainer]] = None,
+    stop_timeout: Optional[int] = None,
 ) -> None:
     data_dir = ident.data_dir(ctx.data_dir)
     pre_start_commands: List[runscripts.Command] = []
@@ -1065,7 +1067,7 @@ def deploy_daemon_units(
         endpoints=endpoints,
         pre_start_commands=pre_start_commands,
         post_stop_commands=post_stop_commands,
-        timeout=30 if ident.daemon_type == 'osd' else None,
+        timeout=stop_timeout,
     )
 
     # sysctl
@@ -1692,6 +1694,7 @@ def command_version(ctx):
     # type: (CephadmContext) -> int
     import importlib
     import zipimport
+    import zipfile
     import types
 
     vmod: Optional[types.ModuleType]
@@ -1748,10 +1751,17 @@ def command_version(ctx):
             out['bundled_packages'] = deps_info
         except OSError:
             pass
-        files = getattr(loader, '_files', {})
-        out['zip_root_entries'] = sorted(
-            {p.split('/')[0] for p in files.keys()}
-        )
+        # Use zipfile module to properly read the archive contents
+        # loader.archive contains the path to the zip file
+        try:
+            with zipfile.ZipFile(loader.archive, 'r') as zf:
+                files = zf.namelist()
+                out['zip_root_entries'] = sorted(
+                    {p.split('/')[0] for p in files if p}
+                )
+        except (OSError, zipfile.BadZipFile):
+            # Fallback to empty list if we can't read the zip
+            out['zip_root_entries'] = []
 
     json.dump(out, sys.stdout, indent=2)
     print()
@@ -2973,6 +2983,7 @@ def apply_deploy_config_to_ctx(
         if key not in facade.defaults:
             logger.warning('unexpected parameter: %r=%r', key, value)
         setattr(ctx, key, value)
+
     update_default_image(ctx)
     logger.debug('Determined image: %r', ctx.image)
 
@@ -4537,6 +4548,12 @@ def _add_deploy_parser_args(
         action='append',
         default=[],
         help='Additional entrypoint arguments to apply to deamon'
+    )
+    parser_deploy.add_argument(
+        '--termination-grace-period-seconds',
+        type=int,
+        default=None,
+        help='Time in seconds to wait for graceful service shutdown before forcefully killing it'
     )
 
 

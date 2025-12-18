@@ -86,7 +86,7 @@ class Environment : public ::testing::Environment {
 class SSDDriverFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
-        rgw::cache::Partition partition_info{.name = "d4n", .type = "read-cache", .location = "rgw_d4n_datacache", .size = 5368709120};
+        rgw::cache::Partition partition_info{.name = "d4n", .type = "read-cache", .location = "rgw_d4n_datacache", .reserve_size = 1073741824};
         cacheDriver = new rgw::cache::SSDDriver{partition_info, false};
 
         ASSERT_NE(cacheDriver, nullptr);

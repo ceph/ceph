@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -583,6 +583,7 @@ class RadosObject : public StoreObject {
 	       boost::optional<ceph::real_time> delete_at,
                std::string* version_id, std::string* tag, std::string* etag,
                void (*progress_cb)(off_t, void *), void* progress_data,
+               rgw::sal::DataProcessorFactory* dp_factory,
                const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
     virtual int set_acl(const RGWAccessControlPolicy& acl) override { acls = acl; return 0; }
@@ -612,7 +613,7 @@ class RadosObject : public StoreObject {
 			   optional_yield y) override;
 
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) override;
-    virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
+    virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) override;
     virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp,
                                  uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
     virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) override;
@@ -644,6 +645,7 @@ class RadosObject : public StoreObject {
 			   CephContext* cct,
   		           std::optional<uint64_t> days,
 			   bool& in_progress,
+			   uint64_t& size,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) override;
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
@@ -803,9 +805,11 @@ class RadosBucket : public StoreBucket {
         optional_yield y,
         const DoutPrefixProvider *dpp,
         RGWObjVersionTracker* objv_tracker) override;
-    int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed) override;
-    int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override;
-    int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override;
+    int commit_logging_object(const std::string& obj_name, optional_yield y,
+	const DoutPrefixProvider *dpp, const std::string& prefix,
+	std::string* last_committed, bool async) override;
+    int remove_logging_object(const std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) override;
+    int write_logging_object(const std::string& obj_name, const std::string& record, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override;
 
   private:
     int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);

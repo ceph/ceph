@@ -244,6 +244,19 @@ For example, a key pair can be generated with a command similar to:
    -subj "/O=IT/CN=ceph-mgr-dashboard" -days 3650 \
    -keyout dashboard.key -out dashboard.crt -extensions v3_ca
 
+.. note::
+
+   Currently, the Ceph Dashboard supports only RSA private keys for SSL/TLS
+   certificates. If you attempt to configure the dashboard with an ECDSA/EC
+   key, the module will fail to start with an error similar to:
+
+   ``MGR_MODULE_ERROR: Module 'dashboard' has failed: key type unsupported``
+
+   This limitation exists because the verification routine in the Ceph Manager
+   uses pyOpenSSL, which supports only RSA keys in its
+   ``PKey.check()`` method. Until this restriction is lifted, generate or
+   request certificates with RSA keys.
+
 The ``dashboard.crt`` file should then be signed by a CA. Once that is done, you
 can enable it for Ceph manager instances by running the following commands:
 

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1236,7 +1237,7 @@ void FSMap::erase_filesystem(fs_cluster_id_t fscid)
       });
     }
   }
-  for ([[maybe_unused]] auto& [fscid, fs] : filesystems) {
+  for ([[maybe_unused]] auto& [remaining_fscid, fs] : filesystems) {
     for (auto& [gid, info] : fs.mds_map.get_mds_info()) {
       if (info.join_fscid == fscid) {
         modify_daemon(gid, [](auto& info) {

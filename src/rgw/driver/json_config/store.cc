@@ -1,4 +1,4 @@
-// vim: ts=8 sw=2 smarttab ft=cpp
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system

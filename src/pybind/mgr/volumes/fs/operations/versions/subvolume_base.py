@@ -20,6 +20,7 @@ from .auth_metadata import AuthMetadataManager
 from .subvolume_attrs import SubvolumeStates
 
 from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException
+from ceph.fs.enctag import CephFSVolumeEncryptionTag, EncryptionTagException
 
 log = logging.getLogger(__name__)
 
@@ -216,6 +217,26 @@ class SubvolumeBase(object):
         except cephfs.NoData:
             attrs["casesensitive"] = True
 
+        try:
+            fs_enctag = CephFSVolumeEncryptionTag(self.fs, pathname)
+            attrs["enctag"] = fs_enctag.get_tag()
+        except cephfs.NoData:
+            attrs["enctag"] = ''
+        except EncryptionTagException:
+            attrs["enctag"] = ''
+
+        try:
+            attrs["fscrypt_auth"] = self.fs.getxattr(pathname,
+                                                       'ceph.fscrypt.auth')
+        except cephfs.NoData:
+            attrs["fscrypt_auth"] = None
+
+        try:
+            attrs["fscrypt_file"] = self.fs.getxattr(pathname,
+                                                       'ceph.fscrypt.file')
+        except cephfs.NoData:
+            attrs["fscrypt_file"] = None
+
         return attrs
 
     def set_attrs(self, path, attrs):
@@ -320,6 +341,35 @@ class SubvolumeBase(object):
                 self.fs.setxattr(path, "ceph.dir.casesensitive", "0".encode('utf-8'), 0)
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])
+
+        # set encryption tag string identifier
+        enctag = attrs.get("enctag", None)
+        if enctag is not None:
+            fs_enctag = CephFSVolumeEncryptionTag(self.fs, path)
+            try:
+                fs_enctag.set_tag(enctag)
+            except EncryptionTagException:
+                raise VolumeException(-errno.EINVAL,
+                                      "invalid enctag specified: length '{0} > {1}'".format(len(enctag), fs_enctag.ENCTAG_MAX))
+
+
+        fscrypt_auth = attrs.get("fscrypt_auth")
+        if fscrypt_auth is not None:
+            try:
+                self.fs.setxattr(path, 'ceph.fscrypt.auth',
+                                 fscrypt_auth, 0)
+            except cephfs.InvalidValue:
+                raise VolumeException(-errno.EINVAL,
+                                      "invalid fscrypt_auth specified: '{0}'".format(fscrypt_auth))
+
+        fscrypt_file = attrs.get("fscrypt_file")
+        if fscrypt_file is not None:
+            try:
+                self.fs.setxattr(path, 'ceph.fscrypt.file',
+                                 fscrypt_file, 0)
+            except cephfs.InvalidValue:
+                raise VolumeException(-errno.EINVAL,
+                                      "invalid fscrypt_file specified: '{0}'".format(fscrypt_file))
 
     def _resize(self, path, newsize, noshrink):
         try:
@@ -522,6 +572,14 @@ class SubvolumeBase(object):
         except cephfs.NoData:
             casesensitive = True
 
+        try:
+            fs_enctag = CephFSVolumeEncryptionTag(self.fs, subvolpath)
+            enctag = fs_enctag.get_tag()
+        except cephfs.NoData:
+            enctag = ''
+        except EncryptionTagException:
+            enctag = ''
+
         subvol_info = {
                 'path': subvolpath,
                 'type': etype.value,
@@ -544,6 +602,7 @@ class SubvolumeBase(object):
                 'earmark': earmark,
                 'normalization': normalization,
                 'casesensitive': casesensitive,
+                'enctag': enctag,
         }
 
         subvol_src_info = self._get_clone_source()
@@ -645,3 +704,62 @@ class SubvolumeBase(object):
                       f"subvolume={self.subvol_name} group={self.group_name} "
                       f"reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
             raise VolumeException(-me.args[0], me.args[1])
+
+    def snapshot_visibility_set(self, value):
+        if value not in ("true", "false"):
+            raise VolumeException(-errno.EINVAL, "snapshot visibility value invalid")
+
+        subvol_root_path = os.path.dirname(self.path)
+        subvol_v2_path = self.path
+        snaps_visibility_vxattr = "ceph.dir.subvolume.snaps.visible"
+        subvolume_size = 0
+        try:
+            self.fs.setxattr(subvol_root_path, snaps_visibility_vxattr,
+                             str(value).encode('utf-8'), 0)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+        # in case of a sized subvolume, a new srnode will be assigned to the
+        # volumes/<group-name>/<subvolume-name>/<uuid>/ path when applying
+        # ceph.quota.max_bytes which would assign it with the default value
+        # of is_snapdir_visible flag and right now the child snaprealm
+        # changes are not being compiled and sent to the client by MDS, so until
+        # that gets addressed, as a quick fix apply the vxattr on subvol root
+        # and the uuid path. Once the child snaprealm fix is in place, apply
+        # the vxattr only to subvolume root.
+        try:
+            subvolume_size = self.fs.getxattr(
+                subvol_v2_path, "ceph.quota.max_bytes").decode('utf-8')
+        except cephfs.NoData:
+            # should be non-sized subvol v2 path
+            pass
+        if int(subvolume_size) > 0:
+            try:
+                self.fs.setxattr(subvol_v2_path, snaps_visibility_vxattr,
+                                 str(value).encode('utf-8'), 0)
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
+
+            try:
+                 subvol_v2_path_snapshot_visibility = self.fs.getxattr(subvol_v2_path,
+                                        snaps_visibility_vxattr).decode('utf-8')
+                 if bool(subvol_v2_path_snapshot_visibility) != bool(value):
+                     raise VolumeException(-errno.EINVAL, "could not set "
+                                           f"{snaps_visibility_vxattr} to {value} "
+                                           f"on subvolume v2 path {subvol_v2_path}")
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
+
+        try:
+            return self.fs.getxattr(subvol_root_path,
+                                    snaps_visibility_vxattr).decode('utf-8')
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+    def snapshot_visibility_get(self):
+        subvol_parent_path = os.path.dirname(self.path)
+        try:
+            return self.fs.getxattr(subvol_parent_path,
+                                    "ceph.dir.subvolume.snaps.visible").decode('utf-8')
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])

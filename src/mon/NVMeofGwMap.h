@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -66,6 +67,8 @@ public:
     const BeaconSubsystems&  subs, bool &propose_pending);
   int cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   int cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
+  void check_all_gws_in_deleting_state(const NvmeGwId &gw_id,
+    const NvmeGroupKey& group_key);
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     epoch_t& last_osd_epoch,  bool &propose_pending);

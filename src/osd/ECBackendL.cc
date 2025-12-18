@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1207,7 +1208,7 @@ void ECBackendL::handle_sub_write_reply(
       "{ \"prefix\": \"osd down\", \"ids\": [\"" + std::to_string( get_parent()->whoami() ) + "\"] }";
     vector<std::string> vcmd{cmd};
     dout(0) << __func__ << " Error inject - marking OSD down" << dendl;
-    get_parent()->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
+    get_parent()->start_mon_command(std::move(vcmd), {}, nullptr, nullptr, nullptr);
   }
   rmw_pipeline.check_ops();
 }

@@ -171,7 +171,8 @@ class DriveGroupSpec(ServiceSpec):
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
         "journal_size", "unmanaged", "filter_logic", "preview_only", "extra_container_args",
-        "extra_entrypoint_args", "data_allocate_fraction", "method", "crush_device_class", "config",
+        "extra_entrypoint_args", "data_allocate_fraction", "method",
+        "termination_grace_period_seconds", "crush_device_class", "config",
     ]
 
     def __init__(self,
@@ -203,6 +204,7 @@ class DriveGroupSpec(ServiceSpec):
                  config=None,  # type: Optional[Dict[str, str]]
                  custom_configs=None,  # type: Optional[List[CustomConfig]]
                  crush_device_class=None,  # type: Optional[str]
+                 termination_grace_period_seconds: Optional[int] = 30,
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
@@ -212,7 +214,9 @@ class DriveGroupSpec(ServiceSpec):
                                              preview_only=preview_only,
                                              extra_container_args=extra_container_args,
                                              extra_entrypoint_args=extra_entrypoint_args,
-                                             custom_configs=custom_configs)
+                                             custom_configs=custom_configs,
+                                             termination_grace_period_seconds=(
+                                                 termination_grace_period_seconds))
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
         self.data_devices = data_devices

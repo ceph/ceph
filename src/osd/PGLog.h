@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1184,9 +1185,11 @@ protected:
       if (objiter->second->is_update() ||
 	  (missing.may_include_deletes && objiter->second->is_delete())) {
 	if (ec_optimizations_enabled) {
-	  // relax the assert for partial writes - missing may be newer than the
-	  // most recent log entry
-	  ceph_assert(missing.is_missing(hoid) &&
+	  // relax the assert for partial writes. The log may not contain any
+	  // updates for this object, in which case the object will not be in
+	  // the missing list. If it is in the missing list, then the need version
+	  // had better be higher or equal to the log version
+	  ceph_assert(!missing.is_missing(hoid) ||
 		      missing.get_items().at(hoid).need >= objiter->second->version);
 	} else {
 	  ceph_assert(missing.is_missing(hoid) &&

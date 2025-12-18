@@ -59,7 +59,8 @@
             </div>
             <div cdsToggletipContent>
               <div class="cds--popover-scroll-container">
-                <cd-health-checks [healthData]="healthData.health.checks"></cd-health-checks>
+                <cd-health-checks [healthData]="healthData.health.checks"
+                                  [legacyHealthChecks]="true"></cd-health-checks>
               </div>
             </div>
           </cds-toggletip>

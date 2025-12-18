@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -474,8 +475,24 @@ private:
     ScrubMapBuilder &pos,
     ScrubMap::object &o) override;
 
+  /**
+   * an auxiliary used by ReplicatedBackend::be_deep_scrub(), to
+   * read the data of the object being scrubbed, and calculate
+   * its digest (CRC).
+   * If a value other than std::nullopt is returned, the calling function
+   * is expected to return immediately with that value. The possible
+   * return values are -EINPROGRESS (indicating that we have not reached the
+   * end of the object yet), or 0 (indicating a read error).
+   */
+  std::optional<int32_t> be_deep_scrub_read_data(
+    const Scrub::ScrubCounterSet& io_counters,
+    const hobject_t& poid,
+    ScrubMapBuilder& pos,
+    ScrubMap::object& smap_object);
+
   uint64_t be_get_ondisk_size(uint64_t logical_size,
-                              shard_id_t unused) const final {
+                              shard_id_t unused,
+                              bool unused2) const final {
     return logical_size;
   }
 };

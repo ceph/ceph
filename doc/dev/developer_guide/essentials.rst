@@ -90,7 +90,7 @@ Mailing lists
 
 Ceph developers and users discuss the project on `Ceph-related mailing lists`_.
 
-.. _`Ceph-related mailing lists`: https://ceph.com/en/community/connect
+.. _`Ceph-related mailing lists`: https://ceph.io/en/community/connect/
 
 Ceph Development Mailing List
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

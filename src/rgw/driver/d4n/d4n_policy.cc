@@ -83,7 +83,7 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
     req.push("MULTI");
     req.push("HSET", "lfuda", "minLocalWeights_sum", std::to_string(weightSum), /* New cache node will always have the minimum average weight */
               "minLocalWeights_size", std::to_string(entries_map.size()), 
-              "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
+              "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
     req.push("HSETNX", "lfuda", "age", age); /* Only set maximum age if it doesn't exist */
     req.push("EXEC");
   
@@ -176,7 +176,7 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
 	request req;
 	req.push("HSET", "lfuda", "minLocalWeights_sum", std::to_string(weightSum), 
                   "minLocalWeights_size", std::to_string(entries_map.size()), 
-                  "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
+                  "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
 
 	redis_exec(conn, ec, req, resp, y);
 
@@ -197,7 +197,7 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
     boost::system::error_code ec;
     response<ignore_t> resp;
     request req;
-    req.push("HSET", dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address, "avgLocalWeight_sum", std::to_string(weightSum), 
+    req.push("HSET", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address, "avgLocalWeight_sum", std::to_string(weightSum), 
               "avgLocalWeight_size", std::to_string(entries_map.size()));
 
     redis_exec(conn, ec, req, resp, y);
@@ -277,8 +277,9 @@ bool LFUDAPolicy::invalidate_dirty_object(const DoutPrefixProvider* dpp, const s
 }
 
 CacheBlock* LFUDAPolicy::get_victim_block(const DoutPrefixProvider* dpp, optional_yield y) {
-  if (entries_heap.empty())
+  if (entries_heap.empty()) {
     return nullptr;
+  }
 
   /* Get victim cache block */
   LFUDAEntry* entry = entries_heap.top();
@@ -321,7 +322,7 @@ int LFUDAPolicy::exist_key(const std::string& key) {
 
 int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) {
   int ret = -1;
-  uint64_t freeSpace = cacheDriver->get_free_space(dpp);
+  uint64_t freeSpace = cacheDriver->get_free_space(dpp, y);
 
   while (freeSpace < size) { // TODO: Think about parallel reads and writes; can this turn into an infinite loop?
     std::unique_lock<std::mutex> l(lfuda_lock);
@@ -346,7 +347,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     /* the following part takes care of updating the weight (globalWeight) of the block if this is the last copy in a remote setup
        and is pushed out to a remote cache where space is available */
 #if 0
-    if (victim->cacheObj.hostsList.size() == 1 && *(victim->cacheObj.hostsList.begin()) == dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address) { /* Last copy */
+    if (victim->cacheObj.hostsList.size() == 1 && *(victim->cacheObj.hostsList.begin()) == dpp->get_cct()->_conf->rgw_d4n_local_rgw_address) { /* Last copy */
       if (victim->globalWeight) {
 	it->second->localWeight += victim->globalWeight;
         (*it->second->handle)->localWeight = it->second->localWeight;
@@ -380,7 +381,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     l.unlock();
 
     //Need to get and then update the host atomically in a remote setup
-    if ((ret = blockDir->remove_host(dpp, victim, dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address, y)) < 0) {
+    if ((ret = blockDir->remove_host(dpp, victim, dpp->get_cct()->_conf->rgw_d4n_local_rgw_address, y)) < 0) {
       delete victim;
       return ret;
     }
@@ -396,7 +397,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     if (perfcounter) {
       perfcounter->inc(l_rgw_d4n_cache_evictions);
     }
-    freeSpace = cacheDriver->get_free_space(dpp);
+    freeSpace = cacheDriver->get_free_space(dpp, y);
   }
   
   return 0;
@@ -994,7 +995,7 @@ int LRUPolicy::exist_key(const std::string& key)
 int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y)
 {
   const std::lock_guard l(lru_lock);
-  uint64_t freeSpace = cacheDriver->get_free_space(dpp);
+  uint64_t freeSpace = cacheDriver->get_free_space(dpp, y);
 
   while (freeSpace < size) {
     auto p = entries_lru_list.front();
@@ -1006,7 +1007,7 @@ int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_y
       return ret;
     }
 
-    freeSpace = cacheDriver->get_free_space(dpp);
+    freeSpace = cacheDriver->get_free_space(dpp, y);
   }
 
   return 0;

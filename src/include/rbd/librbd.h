@@ -1,5 +1,6 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1279,6 +1280,16 @@ CEPH_RBD_API int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len,
 CEPH_RBD_API int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
                                 const char *buf, rbd_completion_t c,
                                 int op_flags);
+/*
+ * @param precomputed_crc32c: CRC32C checksum that was precomputed with -1
+ *        as the initial value (i.e. with the CRC "register" initialized to
+ *        0xFFFFFFFF)
+ * @param op_flags: see librados.h constants beginning with LIBRADOS_OP_FLAG
+ */
+CEPH_RBD_API int rbd_aio_write_with_crc32c(rbd_image_t image, uint64_t off,
+                                           size_t len, const char *buf,
+                                           uint32_t precomputed_crc32c,
+                                           rbd_completion_t c, int op_flags);
 CEPH_RBD_API int rbd_aio_writev(rbd_image_t image, const struct iovec *iov,
                                 int iovcnt, uint64_t off, rbd_completion_t c);
 CEPH_RBD_API int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len,

@@ -182,7 +182,7 @@ In order to modify cluster parameters (for example, the port or the placement),
 use the orchestrator interface to update the NFS service spec. The safest way
 to do that is to export the current spec, modify it, and then re-apply it. For
 example, to modify the ``nfs.foo`` service, run commands of the following
-forms: 
+forms:
 
 .. prompt:: bash #
 
@@ -318,7 +318,7 @@ value is ``no_root_squash``. See the `NFS-Ganesha Export Sample`_ for
 permissible values.
 
 ``<sectype>`` specifies which authentication methods will be used when
-connecting to the export. Valid values include "krb5p", "krb5i", "krb5", "sys",
+connecting to the export. Valid values include "krb5p", "krb5i", "krb5", "sys", "tls", "mtls"
 and "none". More than one value can be supplied. The flag may be specified
 multiple times (example: ``--sectype=krb5p --sectype=krb5i``) or multiple
 values may be separated by a comma (example: ``--sectype krb5p,krb5i``). The
@@ -350,7 +350,7 @@ There are two kinds of RGW exports:
 
 RGW bucket export
 ^^^^^^^^^^^^^^^^^
-  
+
 To export a *bucket*:
 
 .. prompt:: bash #

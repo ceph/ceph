@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "rgw_notify_event_type.h"
 #include "include/str_list.h"
@@ -66,6 +66,14 @@ namespace rgw::notify {
       return "s3:Replication:Delete";
     case ReplicationDeletionMarkerCreated:
       return "s3:Replication:DeletionMarkerCreated";
+    case ObjectRestore:
+      return "s3:ObjectRestore:*";
+    case ObjectRestoreInitiated:
+      return "s3:ObjectRestore:Post";
+    case ObjectRestoreCompleted:
+      return "s3:ObjectRestore:Completed";
+    case ObjectRestoreExpired:
+      return "s3:ObjectRestore:Delete";
     case UnknownEvent:
         return "s3:UnknownEvent";
     }
@@ -139,6 +147,14 @@ namespace rgw::notify {
       return ReplicationDelete;
     if (s == "s3:Replication:DeletionMarkerCreated")
       return ReplicationDeletionMarkerCreated;
+    if (s =="s3:ObjectRestore:*")
+      return ObjectRestore;
+    if (s == "s3:ObjectRestore:Post")
+      return ObjectRestoreInitiated;
+    if (s == "s3:ObjectRestore:Completed")
+      return ObjectRestoreCompleted;
+    if (s == "s3:ObjectRestore:Delete")
+      return ObjectRestoreExpired;
     return UnknownEvent;
   }
 

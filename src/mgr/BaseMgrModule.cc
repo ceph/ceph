@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -179,7 +180,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
     self->py_modules->get_monc().start_mon_command(
         name,
         {cmd_json},
-        inbuf,
+        std::move(inbuf),
         &command_c->outbl,
         &command_c->outs,
         new C_OnFinisher(c, &self->py_modules->cmd_finisher));
@@ -199,7 +200,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
     self->py_modules->get_objecter().osd_command(
         osd_id,
         {cmd_json},
-        inbuf,
+        std::move(inbuf),
         &tid,
 	[command_c, f = &self->py_modules->cmd_finisher]
 	(boost::system::error_code ec, std::string s, ceph::buffer::list bl) {
@@ -228,7 +229,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
     self->py_modules->get_objecter().pg_command(
         pgid,
         {cmd_json},
-        inbuf,
+        std::move(inbuf),
         &tid,
 	[command_c, f = &self->py_modules->cmd_finisher]
 	(boost::system::error_code ec, std::string s, ceph::buffer::list bl) {

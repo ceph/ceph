@@ -1,4 +1,4 @@
-<ng-container *ngIf="expandedRow">
+@if (expandedRow) {
   <nav
     ngbNav
     #nav="ngbNav"
@@ -7,7 +7,7 @@
     <ng-container ngbNavItem="flow">
       <a
         ngbNavLink
-        i18n>Flow</a>
+      i18n>Flow</a>
       <ng-template ngbNavContent>
         <legend>
           Symmetrical
@@ -82,30 +82,30 @@
           </cd-help-text>
         </legend>
         <cd-table
-        #table
-        [data]="pipeData"
-        [columns]="pipeCols"
-        selectionType="multiClick"
-        [searchableObjects]="true"
-        [hasDetails]="false"
-        [serverSide]="false"
-        [toolHeader]="true"
-        (updateSelection)="pipeSelection = $event"
-        (fetchData)="loadData($event)">
-        <div class="table-actions">
-          <cd-table-actions
-            [permission]="permission"
-            [selection]="pipeSelection"
-            class="btn-group"
-            [tableActions]="pipeTableActions">
-          </cd-table-actions>
-        </div>
+          #table
+          [data]="pipeData"
+          [columns]="pipeCols"
+          selectionType="multiClick"
+          [searchableObjects]="true"
+          [hasDetails]="false"
+          [serverSide]="false"
+          [toolHeader]="true"
+          (updateSelection)="pipeSelection = $event"
+          (fetchData)="loadData($event)">
+          <div class="table-actions">
+            <cd-table-actions
+              [permission]="permission"
+              [selection]="pipeSelection"
+              class="btn-group"
+              [tableActions]="pipeTableActions">
+            </cd-table-actions>
+          </div>
         </cd-table>
       </ng-template>
     </ng-container>
   </nav>
   <div [ngbNavOutlet]="nav"></div>
-</ng-container>
+}
 
 <ng-template #deleteTpl>
   <cd-alert-panel type="danger"

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -158,6 +159,11 @@ struct ObjectOperation {
 		    c.release()->complete(r);
 		  });
 
+  }
+
+  OSDOp& pass_thru_op(OSDOp& op) {
+    ops.emplace_back(op);
+    return ops.back();
   }
 
   OSDOp& add_op(int op) {
@@ -673,6 +679,7 @@ struct ObjectOperation {
   struct CB_ObjectOperation_decodevals {
     uint64_t max_entries;
     Vals* pattrs;
+    Vals ignore;
     bool* ptruncated;
     int* prval;
     boost::system::error_code* pec;
@@ -691,7 +698,6 @@ struct ObjectOperation {
 	  if (pattrs)
 	    decode(*pattrs, p);
 	  if (ptruncated) {
-	    Vals ignore;
 	    if (!pattrs) {
 	      decode(ignore, p);
 	      pattrs = &ignore;
@@ -718,6 +724,7 @@ struct ObjectOperation {
   struct CB_ObjectOperation_decodekeys {
     uint64_t max_entries;
     Keys* pattrs;
+    Keys ignore;
     bool *ptruncated;
     int *prval;
     boost::system::error_code* pec;
@@ -736,7 +743,6 @@ struct ObjectOperation {
 	  if (pattrs)
 	    decode(*pattrs, p);
 	  if (ptruncated) {
-	    Keys ignore;
 	    if (!pattrs) {
 	      decode(ignore, p);
 	      pattrs = &ignore;
@@ -1685,6 +1691,10 @@ inline std::ostream& operator <<(std::ostream& m, const ObjectOperation& oo) {
 // ----------------
 
 class Objecter : public md_config_obs_t, public Dispatcher {
+  friend class SplitOp;
+  friend class ECSplitOp;
+  friend class ReplicaSplitOp;
+
   using MOSDOp = _mosdop::MOSDOp<osdc_opvec>;
 public:
   using OpSignature = void(boost::system::error_code);
@@ -1873,6 +1883,7 @@ public:
     bool paused = false;
 
     int osd = -1;      ///< the final target osd, or -1
+    std::optional<shard_id_t> force_shard; // If set, only this shard may be used.
 
     epoch_t last_force_resend = 0;
 
@@ -2116,6 +2127,26 @@ public:
 
     bool operator<(const Op& other) const {
       return tid < other.tid;
+    }
+
+    void pass_thru_op(::ObjectOperation &other, unsigned index, bufferlist *bl, int *rval) {
+      ceph_assert(index < ops.size());
+
+      other.pass_thru_op(ops[index]);
+      unsigned p = other.ops.size() - 1;
+      ceph_assert(out_bl.size() == ops.size());
+      ceph_assert(out_rval.size() == ops.size());
+      ceph_assert(out_ec.size() == ops.size());
+      ceph_assert(out_handler.size() == ops.size());
+
+      other.out_bl.resize(p + 1);
+      other.out_rval.resize(p + 1);
+      other.out_ec.resize(p + 1);
+      other.out_handler.resize(p + 1);
+
+      other.out_bl[p] = bl;
+      other.out_rval[p] = rval;
+      // We don't copy the out handler here - it must be run by the copied-from op.
     }
 
   private:
@@ -2558,8 +2589,7 @@ public:
     Op *op);
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t, Connection *con,
-		   bool any_change = false);
+  int _calc_target(op_target_t *t, bool any_change = false);
   int _map_session(op_target_t *op, OSDSession **s,
 		   ceph::shunique_lock<ceph::shared_mutex>& lc);
 
@@ -2591,11 +2621,6 @@ public:
   friend class CB_Objecter_GetVersion;
   friend class CB_DoWatchError;
 public:
-
-  bool is_valid_watch(LingerOp* op) {
-    std::shared_lock l(rwlock);
-    return linger_ops_set.contains(op);
-  }
 
   template<typename CT>
   auto linger_callback_flush(CT&& ct) {
@@ -2748,6 +2773,7 @@ private:
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);
+  boost::system::error_code handle_osd_op_reply2(Op *op, std::vector<OSDOp> &out_ops);
   void handle_osd_backoff(class MOSDBackoff *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
@@ -2812,6 +2838,7 @@ private:
 			      int *ctx_budget = NULL);
   // public interface
 public:
+  void op_post_submit(Op *op);
   void op_submit(Op *op, ceph_tid_t *ptid = NULL, int *ctx_budget = NULL);
   bool is_active() {
     std::shared_lock l(rwlock);
@@ -2974,8 +3001,8 @@ public:
   epoch_t op_cancel_writes(int r, int64_t pool=-1);
 
   // commands
-  void osd_command_(int osd, std::vector<std::string> cmd,
-		   ceph::buffer::list inbl, ceph_tid_t *ptid,
+  void osd_command_(int osd, std::vector<std::string>&& cmd,
+		   ceph::buffer::list&& inbl, ceph_tid_t *ptid,
 		   decltype(CommandOp::onfinish)&& onfinish) {
     ceph_assert(osd >= 0);
     auto c = new CommandOp(
@@ -2986,22 +3013,22 @@ public:
     submit_command(c, ptid);
   }
   template<typename CompletionToken>
-  auto osd_command(int osd, std::vector<std::string> cmd,
-		   ceph::buffer::list inbl, ceph_tid_t *ptid,
+  auto osd_command(int osd, std::vector<std::string>&& cmd,
+		   ceph::buffer::list&& inbl, ceph_tid_t *ptid,
 		   CompletionToken&& token) {
     auto consigned = boost::asio::consign(
       std::forward<CompletionToken>(token), boost::asio::make_work_guard(
 	service.get_executor()));
     return boost::asio::async_initiate<decltype(consigned), CommandOp::OpSig>(
       [osd, cmd = std::move(cmd), inbl = std::move(inbl), ptid, this]
-      (auto handler) {
+      (auto handler) mutable {
 	osd_command_(osd, std::move(cmd), std::move(inbl), ptid,
 		     std::move(handler));
       }, consigned);
   }
 
-  void pg_command_(pg_t pgid, std::vector<std::string> cmd,
-		   ceph::buffer::list inbl, ceph_tid_t *ptid,
+  void pg_command_(pg_t pgid, std::vector<std::string>&& cmd,
+		   ceph::buffer::list&& inbl, ceph_tid_t *ptid,
 		   decltype(CommandOp::onfinish)&& onfinish) {
     auto *c = new CommandOp(
       pgid,
@@ -3012,14 +3039,14 @@ public:
   }
 
   template<typename CompletionToken>
-  auto pg_command(pg_t pgid, std::vector<std::string> cmd,
-		  ceph::buffer::list inbl, ceph_tid_t *ptid,
+  auto pg_command(pg_t pgid, std::vector<std::string>&& cmd,
+		  ceph::buffer::list&& inbl, ceph_tid_t *ptid,
 		  CompletionToken&& token) {
     auto consigned = boost::asio::consign(
       std::forward<CompletionToken>(token), boost::asio::make_work_guard(service.get_executor()));
     return async_initiate<decltype(consigned), CommandOp::OpSig> (
       [pgid, cmd = std::move(cmd), inbl = std::move(inbl), ptid, this]
-      (auto handler) {
+      (auto handler) mutable {
 	pg_command_(pgid, std::move(cmd), std::move(inbl), ptid,
 		    std::move(handler));
       }, consigned);
@@ -3252,6 +3279,14 @@ public:
 	       boost::system::error_code> linger_check(LingerOp *info);
   void linger_cancel(LingerOp *info);  // releases a reference
   void _linger_cancel(LingerOp *info);
+
+  // return the LingerOp associated with the given cookie.
+  // may return nullptr if the cookie is no longer valid
+  boost::intrusive_ptr<LingerOp> linger_by_cookie(uint64_t cookie);
+ private:
+  // internal version that expects the caller to hold rwlock
+  boost::intrusive_ptr<LingerOp> _linger_by_cookie(uint64_t cookie);
+ public:
 
   void _do_watch_notify(boost::intrusive_ptr<LingerOp> info,
                         boost::intrusive_ptr<MWatchNotify> m);

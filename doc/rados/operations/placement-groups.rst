@@ -153,7 +153,11 @@ The output will resemble the following::
 - **NEW PG_NUM** (if present) is the value that the system recommends that the
   ``pg_num`` of the pool should be. It is always a power of two, and it
   is present only if the recommended value varies from the current value by
-  more than the default factor of ``3``.
+  more than the scaling threshold. This threshold defaults to the configured
+  factor of ``3``. While scaling down uses only the configured factor, the
+  threshold is dynamically reduced when scaling up: it is set to 1.0 if the
+  recommended NEW PG_NUM is 512 or 1024, and to 2.0 if the recommended
+  NEW PG_NUM is 2048.
   To adjust this multiple (in the following example, it is changed
   to ``2``), run a command of the following form:
 
@@ -207,8 +211,10 @@ automatically scale each pool's ``pg_num`` in accordance with usage. Ceph consid
 total available storage, the target number of PG replicas for each OSD,
 and how much data is stored in each pool, then apportions PGs accordingly.
 The system is conservative with its approach, making changes to a pool only
-when the current number of PGs (``pg_num``) varies by more than a factor of 3
-from the recommended number.
+when the current number of PGs (``pg_num``) varies by more than the scaling threshold
+from the recommended number. When scaling down, only this configured factor is used.
+However, when scaling up, the threshold is dynamically reduced: it's automatically
+set to 1.0 when the recommended NEW PG_NUM is 512 or 1024, and to 2.0 when it is 2048.
 
 The target number of PGs per OSD is determined by the ``mon_target_pg_per_osd``
 parameter (default: 100), which can be adjusted by running the following

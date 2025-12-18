@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_realm_reloader.h"
 
@@ -7,7 +7,7 @@
 #include "rgw_bucket.h"
 #include "rgw_log.h"
 #include "rgw_rest.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_process_env.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
@@ -128,7 +128,10 @@ void RGWRealmReloader::reload()
           cct->_conf->rgw_enable_quota_threads,
           cct->_conf->rgw_run_sync_thread,
           cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
-	        true, true, null_yield, env.cfgstore, // run notification thread
+          true,
+          true, // run notification thread
+          true, // run bucket logging thread
+          null_yield, env.cfgstore,
           cct->_conf->rgw_cache_enabled);
     }
 

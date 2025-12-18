@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -1045,6 +1045,7 @@ int FilterObject::copy_object(const ACLOwner& owner,
 			      std::string* etag,
 			      void (*progress_cb)(off_t, void *),
 			      void* progress_data,
+			      rgw::sal::DataProcessorFactory* dp_factory,
 			      const DoutPrefixProvider* dpp,
 			      optional_yield y)
 {
@@ -1056,7 +1057,7 @@ int FilterObject::copy_object(const ACLOwner& owner,
 			   mod_ptr, unmod_ptr, high_precision_time, if_match,
 			   if_nomatch, attrs_mod, copy_if_newer, attrs,
 			   category, olh_epoch, delete_at, version_id, tag,
-			   etag, progress_cb, progress_data, dpp, y);
+			   etag, progress_cb, progress_data, dp_factory, dpp, y);
 }
 
 RGWAccessControlPolicy& FilterObject::get_acl()
@@ -1086,10 +1087,9 @@ int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
   return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
 }
 
-int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
-				rgw_obj* target_obj)
+int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  return next->get_obj_attrs(y, dpp, target_obj);
+  return next->get_obj_attrs(y, dpp);
 }
 
 int FilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
@@ -1151,11 +1151,12 @@ int FilterObject::restore_obj_from_cloud(Bucket* bucket,
 		          CephContext* cct,
 		          std::optional<uint64_t> days,
 			  bool& in_progress,
+		          uint64_t& size,
 		          const DoutPrefixProvider* dpp,
 		          optional_yield y)
 {
   return next->restore_obj_from_cloud(nextBucket(bucket), nextPlacementTier(tier),
-           cct, days, in_progress, dpp, y);
+           cct, days, in_progress, size, dpp, y);
 }
 
 bool FilterObject::placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2)

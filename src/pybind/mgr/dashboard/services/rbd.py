@@ -236,6 +236,7 @@ class RbdConfiguration(object):
         """
         Removes an option by name. Will not raise an error, if the option hasn't been found.
         :type option_name str
+
         """
         def _remove(ioctx):
             try:
@@ -267,7 +268,6 @@ class RbdConfiguration(object):
 
 class RbdService(object):
     _rbd_inst = rbd.RBD()
-
     # set of image features that can be enable on existing images
     ALLOW_ENABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "journaling"}
 
@@ -349,8 +349,7 @@ class RbdService(object):
             del stat['parent_pool']
             del stat['parent_name']
 
-            stat['timestamp'] = "{}Z".format(img.create_timestamp()
-                                             .isoformat())
+            stat['timestamp'] = img.create_timestamp().isoformat()
 
             stat['stripe_count'] = img.stripe_count()
             stat['stripe_unit'] = img.stripe_unit()
@@ -373,8 +372,7 @@ class RbdService(object):
                 if mirror_mode:
                     snap['mirror_mode'] = mirror_mode
 
-                snap['timestamp'] = "{}Z".format(
-                    img.get_snap_timestamp(snap['id']).isoformat())
+                snap['timestamp'] = img.get_snap_timestamp(snap['id']).isoformat()
 
                 snap['is_protected'] = None
                 if snap['namespace'] == rbd.RBD_SNAP_NAMESPACE_TYPE_USER:
@@ -471,8 +469,8 @@ class RbdService(object):
             img['unique_id'] = img_spec
             img['pool_name'] = pool_name
             img['namespace'] = namespace
-            img['deletion_time'] = "{}Z".format(img['deletion_time'].isoformat())
-            img['deferment_end_time'] = "{}Z".format(img['deferment_end_time'].isoformat())
+            img['deletion_time'] = img['deletion_time'].isoformat()
+            img['deferment_end_time'] = img['deferment_end_time'].isoformat()
             return img
         raise rbd.ImageNotFound('No image {} in status `REMOVING` found.'.format(img_spec),
                                 errno=errno.ENOENT)
@@ -695,6 +693,15 @@ class RbdService(object):
         pool_name, namespace, image_name = parse_image_spec(image_spec)
         rbd_inst = cls._rbd_inst
         return rbd_call(pool_name, namespace, rbd_inst.trash_move, image_name, delay)
+
+    @classmethod
+    def validate_namespace(cls, ioctx, namespace):
+        namespaces = cls._rbd_inst.namespace_list(ioctx)
+        if namespace and namespace not in namespaces:
+            raise DashboardException(
+                msg='Namespace not found',
+                code='namespace_not_found',
+                component='rbd')
 
 
 class RbdSnapshotService(object):

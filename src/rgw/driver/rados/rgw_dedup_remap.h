@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2;
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 sts=2 expandtab
 /*
  * Ceph - scalable distributed file system
  *

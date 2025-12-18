@@ -285,7 +285,7 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
   }
 
   goToCreateStorageClass() {
-    this.router.navigate(['rgw/tiering/create']);
+    this.router.navigate(['rgw/storage-class/create']);
     this.closeModal();
   }
 }

@@ -35,7 +35,8 @@ on:
 jobs:
   create-backports:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # Backport checks need to be run ONLY on the main branch on ceph/ceph (not forks)
+    if: github.ref == 'refs/heads/main' && github.repository == 'ceph/ceph'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:

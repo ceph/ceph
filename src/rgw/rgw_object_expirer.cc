@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <errno.h>
 #include <iostream>
@@ -23,7 +23,7 @@
 #include "include/utime.h"
 #include "include/str_list.h"
 
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
@@ -104,7 +104,7 @@ int main(const int argc, const char **argv)
     exit(1);
   }
 
-  driver = DriverManager::get_storage(&dp, g_ceph_context, cfg, context_pool, site, false, false, false, false, false, false, false, true, null_yield, cfgstore.get());
+  driver = DriverManager::get_storage(&dp, g_ceph_context, cfg, context_pool, site, false, false, false, false, false, false, false, false, true, null_yield, cfgstore.get());
   if (!driver) {
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;

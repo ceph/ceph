@@ -30,9 +30,10 @@ describe('RgwSyncMetadataInfoComponent', () => {
       timestamp: null
     };
     fixture.detectChanges();
-    const upToDateBadge = fixture.debugElement.query(By.css('.badge-success'));
+    const upToDateBadge = fixture.debugElement.query(By.css('cds-tag'));
     expect(upToDateBadge).toBeTruthy();
-    expect(upToDateBadge.nativeElement.textContent).toEqual('Up to Date');
+    expect(upToDateBadge.nativeElement.classList).toContain('tag-success');
+    expect(upToDateBadge.nativeElement.textContent.trim()).toEqual('Up to Date');
   });
 
   it('should display correct sync status and last synced time', () => {
@@ -47,8 +48,9 @@ describe('RgwSyncMetadataInfoComponent', () => {
 
     const lastSyncedElement = fixture.debugElement.query(By.css('li.mt-4.fw-bold'));
     expect(lastSyncedElement.nativeElement.textContent).toContain('Last Synced:');
-    const lastSyncedTimestamp = fixture.debugElement.query(By.css('.badge-info'));
-    expect(lastSyncedTimestamp.nativeElement.textContent).toEqual('10 minutes ago');
+    const lastSyncedTimestamp = fixture.debugElement.query(By.css('cds-tag'));
+    expect(lastSyncedTimestamp.nativeElement.classList).toContain('tag-info');
+    expect(lastSyncedTimestamp.nativeElement.textContent.trim()).toEqual('10 minutes ago');
   });
 
   it('should display sync status in the popover', () => {

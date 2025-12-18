@@ -131,6 +131,9 @@ service Gateway {
 
 	// Show gateway listeners info
 	rpc show_gateway_listeners_info(show_gateway_listeners_info_req) returns(gateway_listeners_info) {}
+
+	// Gets gateway's stats
+	rpc get_gateway_stats(get_gateway_stats_req) returns (gateway_stats_info) {}
 }
 
 // Request messages
@@ -338,6 +341,9 @@ message show_gateway_listeners_info_req {
 	string subsystem_nqn = 1;
 }
 
+message get_gateway_stats_req {
+}
+
 // From https://nvmexpress.org/wp-content/uploads/NVM-Express-1_4-2019.06.10-Ratified.pdf page 138
 // Asymmetric Namespace Access state for all namespaces in this ANA
 // Group when accessed through this controller.
@@ -481,6 +487,28 @@ message gw_version {
 	string version = 3;
 }
 
+message poll_group_transport_info {
+	string trtype = 1;
+}
+
+message poll_group_info {
+	string name = 1;
+	uint32 admin_qpairs = 2;
+	uint32 io_qpairs = 3;
+	uint32 current_admin_qpairs = 4;
+	uint32 current_io_qpairs = 5;
+	uint64 pending_bdev_io = 6;
+	uint64 completed_nvme_io = 7;
+        repeated poll_group_transport_info transports = 8;
+}
+
+message gateway_stats_info {
+	int32 status = 1;
+	string error_message = 2;
+	uint64 tick_rate = 3;
+        repeated poll_group_info poll_groups = 4;
+}
+
 message listener_info {
 	string host_name = 1;
 	string trtype = 2;
@@ -488,6 +516,7 @@ message listener_info {
 	string traddr = 4;
 	uint32 trsvcid = 5;
 	optional bool secure = 6;
+	optional bool active = 7;
 }
 
 message listeners_info {
@@ -564,6 +593,9 @@ message namespace_cli {
 	optional bool trash_image = 16;
 	optional bool disable_auto_resize = 17;
 	optional bool read_only = 18;
+        optional string cluster_name = 19;
+        optional uint32 configured_load_balancing_group = 20;
+	optional bool image_was_shrunk = 21;
 }
 
 message namespaces_info {
@@ -626,3 +658,4 @@ message gateway_log_level_info {
 	string error_message = 2;
 	GwLogLevel log_level = 3;
 }
+

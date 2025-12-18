@@ -713,6 +713,7 @@ overall throughput was roughly equal to the baseline throughput. Note that in
 general for HDDs, the bluestore throttle values are expected to be higher when
 compared to SSDs.
 
+.. _override_max_iops_capacity:
 
 Set or Override Max IOPS Capacity of an OSD
 -------------------------------------------

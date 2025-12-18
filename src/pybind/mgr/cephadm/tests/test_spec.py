@@ -130,7 +130,10 @@ def test_spec_octopus(spec_json):
         j_c.pop('rgw_exit_timeout_secs', None)
         return j_c
 
-    assert spec_json == convert_to_old_style_json(spec.to_json())
+    converted = convert_to_old_style_json(spec.to_json())
+    if spec_json.get('service_type') == 'osd':
+        spec_json['termination_grace_period_seconds'] = 30
+    assert spec_json == converted
 
 
 @pytest.mark.parametrize(

@@ -3,7 +3,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 (import 'utils.libsonnet') {
   'smb-overview.json':
     $.dashboardSchema(
-      'SMB Overview',
+      'Ceph SMB - Overview',
       'SMB Overview dashboard shows data across all clusters and hosts associated with the SMB service.',
       'feem6ehrmi2o0b',
       'now-6h',

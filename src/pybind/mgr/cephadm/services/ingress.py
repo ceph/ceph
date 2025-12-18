@@ -10,6 +10,8 @@ from cephadm import utils
 from orchestrator import OrchestratorError, DaemonDescription
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
 from .service_registry import register_cephadm_service
+from cephadm.tlsobject_types import TLSCredentials
+from cephadm.schedule import get_placement_hosts
 
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
@@ -120,7 +122,10 @@ class IngressService(CephService):
             if ssl_cert_key:
                 assert isinstance(ssl_cert_key, str)
                 deps.append(f'ssl-cert-key:{str(utils.md5_hash(ssl_cert_key))}')
-
+        backend_spec = mgr.spec_store[ingress_spec.backend_service].spec
+        if backend_spec.service_type == 'nfs':
+            hosts = get_placement_hosts(spec, mgr.cache.get_schedulable_hosts(), mgr.cache.get_draining_hosts())
+            deps.append(f'placement_hosts:{",".join(sorted(h.hostname for h in hosts))}')
         return sorted(deps)
 
     def haproxy_generate_config(
@@ -149,6 +154,7 @@ class IngressService(CephService):
         if spec.monitor_password:
             password = spec.monitor_password
 
+        peer_hosts = {}
         if backend_spec.service_type == 'nfs':
             mode = 'tcp'
             # we need to get the nfs daemon with the highest rank_generation for
@@ -201,8 +207,20 @@ class IngressService(CephService):
                         'ip': '0.0.0.0',
                         'port': 0,
                     })
+            # Get peer hosts for haproxy active-active configuration using placement hosts
+            hosts = get_placement_hosts(
+                spec,
+                self.mgr.cache.get_schedulable_hosts(),
+                self.mgr.cache.get_draining_hosts()
+            )
+            if hosts:
+                for host in hosts:
+                    peer_ip = self.mgr.inventory.get_addr(host.hostname)
+                    peer_hosts[host.hostname] = peer_ip
+                logger.debug(f"HAProxy peer hosts for {spec.service_name()}: {peer_hosts}")
+
         else:
-            mode = 'http'
+            mode = 'tcp' if spec.use_tcp_mode_over_rgw else 'http'
             servers = [
                 {
                     'name': d.name(),
@@ -256,6 +274,7 @@ class IngressService(CephService):
                 'health_check_interval': spec.health_check_interval or '2s',
                 'v4v6_flag': v4v6_flag,
                 'monitor_ssl_file': monitor_ssl_file,
+                'peer_hosts': peer_hosts,
             }
         )
         config_files = {
@@ -270,8 +289,8 @@ class IngressService(CephService):
             config_files['files']['haproxy.pem'] = combined_pem
 
         if spec.monitor_ssl and spec.monitor_cert_source != MonitorCertSource.REUSE_SERVICE_CERT.value:
-            stats_cert, stats_key = self.get_stats_certs(spec, daemon_spec, monitor_ips)
-            monitor_ssl_cert = [stats_cert, stats_key]
+            tls_creds = self.get_stats_certs(spec, daemon_spec, monitor_ips)
+            monitor_ssl_cert = [tls_creds.cert, tls_creds.key]
             config_files['files']['stats_haproxy.pem'] = '\n'.join(monitor_ssl_cert)
 
         return config_files, self.get_haproxy_dependencies(self.mgr, spec)
@@ -281,7 +300,7 @@ class IngressService(CephService):
         svc_spec: IngressSpec,
         daemon_spec: CephadmDaemonDeploySpec,
         ips: Optional[List[str]] = None,
-    ) -> Tuple[str, str]:
+    ) -> TLSCredentials:
         return self.get_certificates_generic(
             svc_spec=svc_spec,
             daemon_spec=daemon_spec,
@@ -508,3 +527,24 @@ class IngressService(CephService):
             if not monitor_addr:
                 logger.debug(f"No IP address found in the network {spec.monitor_networks} on host {host}.")
         return monitor_addr, monitor_port
+
+    def has_placement_changed(self, deps: List[str], spec: ServiceSpec) -> bool:
+        """Check if placement hosts have changed"""
+        def extract_hosts(deps: List[str]) -> List[str]:
+            for dep in deps:
+                if dep.startswith('placement_hosts:'):
+                    host_string = dep.split(':', 1)[1]
+                    return host_string.split(',') if host_string else []
+            return []
+
+        hosts = extract_hosts(deps)
+        current_hosts = get_placement_hosts(
+            spec,
+            self.mgr.cache.get_schedulable_hosts(),
+            self.mgr.cache.get_draining_hosts()
+        )
+        current_hosts = sorted(h.hostname for h in current_hosts)
+        if current_hosts != hosts:
+            logger.debug(f'Placement has changed for {spec.service_name()} from {hosts} -> {current_hosts}')
+            return True
+        return False

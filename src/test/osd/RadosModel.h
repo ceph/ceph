@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #include "include/int_types.h"
 
 #include "common/ceph_mutex.h"
@@ -269,11 +270,10 @@ public:
 	return r;
       }
     }
-    bufferlist inbl;
     r = rados.mon_command(
       "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
       "\", \"var\": \"write_fadvise_dontneed\", \"val\": \"" + (write_fadvise_dontneed ? "true" : "false") + "\"}",
-      inbl, NULL, NULL);
+      {}, NULL, NULL);
     if (r < 0) {
       rados.shutdown();
       return r;
@@ -282,7 +282,7 @@ public:
       r = rados.mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
 	"\", \"var\": \"fingerprint_algorithm\", \"val\": \"" + "sha256" + "\"}",
-	inbl, NULL, NULL);
+	{}, NULL, NULL);
       if (r < 0) {
 	rados.shutdown();
 	return r;
@@ -290,7 +290,7 @@ public:
       r = rados.mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
 	"\", \"var\": \"dedup_tier\", \"val\": \"" + low_tier_pool_name + "\"}",
-	inbl, NULL, NULL);
+	{}, NULL, NULL);
       if (r < 0) {
 	rados.shutdown();
 	return r;
@@ -298,7 +298,7 @@ public:
       r = rados.mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
 	"\", \"var\": \"dedup_chunk_algorithm\", \"val\": \"" + chunk_algo  + "\"}",
-	inbl, NULL, NULL);
+	{}, NULL, NULL);
       if (r < 0) {
 	rados.shutdown();
 	return r;
@@ -306,7 +306,7 @@ public:
       r = rados.mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
 	"\", \"var\": \"dedup_cdc_chunk_size\", \"val\": \"" + chunk_size + "\"}",
-	inbl, NULL, NULL);
+	{}, NULL, NULL);
       if (r < 0) {
 	rados.shutdown();
 	return r;

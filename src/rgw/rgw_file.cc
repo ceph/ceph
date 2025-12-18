@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "include/compat.h"
 #include "include/rados/rgw_file.h"
@@ -20,7 +20,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_os_lib.h"
 #include "rgw_auth_s3.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_zone.h"
 #include "rgw_file_int.h"

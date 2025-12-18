@@ -135,8 +135,8 @@ class NvmeofGatewaysConfig(object):
         return root_ca_cert.encode() if root_ca_cert else None
 
     @classmethod
-    def get_server_cert(cls, service_name: str):
-        server_cert = cls.from_cert_store('nvmeof_server_cert', service_name)
+    def get_ssl_cert(cls, service_name: str):
+        server_cert = cls.from_cert_store('nvmeof_ssl_cert', service_name)
         return server_cert.encode() if server_cert else None
 
     @classmethod

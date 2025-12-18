@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -450,8 +451,16 @@ int PyModule::load_notify_types()
 {
   PyObject *ls = PyObject_GetAttrString(pClass, "NOTIFY_TYPES");
   if (ls == nullptr) {
-    dout(10) << "Module " << get_name() << " has no NOTIFY_TYPES member" << dendl;
-    return 0;
+    // NOTIFY_TYPES is optional - clear expected AttributeError
+    if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
+      PyErr_Clear();
+      dout(10) << "Module " << get_name() << " has no NOTIFY_TYPES member" << dendl;
+      return 0;
+    }
+    // Unexpected error - report it
+    derr << "Error getting NOTIFY_TYPES from " << get_name() << ": "
+         << handle_pyerror(true, module_name, "load_notify_types") << dendl;
+    return -EINVAL;
   }
   if (!PyObject_TypeCheck(ls, &PyList_Type)) {
     // Relatively easy mistake for human to make, e.g. defining COMMANDS

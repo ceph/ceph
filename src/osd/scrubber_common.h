@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #pragma once
 
 #include <iosfwd>
@@ -266,7 +267,8 @@ struct PgScrubBeListener {
 
   // query the PG backend for the on-disk size of an object
   virtual uint64_t logical_to_ondisk_size(uint64_t logical_size,
-                                 shard_id_t shard_id) const = 0;
+                                 shard_id_t shard_id,
+                                 bool object_is_legacy_ec) const = 0;
 
   // used to verify our "cleanliness" before scrubbing
   virtual bool is_waiting_for_unreadable_object() const = 0;
@@ -322,6 +324,8 @@ struct ScrubCounterSet {
   osd_counter_idx_t successful_elapsed; ///< time to complete a successful scrub
   osd_counter_idx_t failed_cnt; ///< failed scrubs count
   osd_counter_idx_t failed_elapsed; ///< time from start to failure
+  osd_counter_idx_t write_intersects; ///< client write op intersects chunk range
+  osd_counter_idx_t write_blocked; ///< write op did not preempt the scrub
   // reservation process related:
   osd_counter_idx_t rsv_successful_cnt; ///< completed reservation processes
   osd_counter_idx_t rsv_successful_elapsed; ///< time to all-reserved

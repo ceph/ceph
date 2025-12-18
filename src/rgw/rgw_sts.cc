@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <errno.h>
 #include <ctime>
@@ -21,13 +21,14 @@
 #include "rgw_account.h"
 #include "rgw_b64.h"
 #include "rgw_common.h"
-#include "rgw_tools.h"
 #include "rgw_role.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_iam_policy.h"
 #include "rgw_sts.h"
 #include "rgw_sal.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
+#endif
 
 #define dout_subsys ceph_subsys_rgw
 

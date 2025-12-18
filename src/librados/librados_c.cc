@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <limits.h>
 
@@ -900,7 +900,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_mon_command)(
   }
 
   inbl.append(inbuf, inbuflen);
-  int ret = client->mon_command(cmdvec, inbl, &outbl, &outstring);
+  int ret = client->mon_command(std::move(cmdvec), std::move(inbl), &outbl, &outstring);
 
   do_out_buffer(outbl, outbuf, outbuflen);
   do_out_buffer(outstring, outs, outslen);
@@ -943,9 +943,9 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_mon_command_target)(
   inbl.append(inbuf, inbuflen);
   int ret;
   if (rank >= 0)
-    ret = client->mon_command(rank, cmdvec, inbl, &outbl, &outstring);
+    ret = client->mon_command(rank, std::move(cmdvec), std::move(inbl), &outbl, &outstring);
   else
-    ret = client->mon_command(name, cmdvec, inbl, &outbl, &outstring);
+    ret = client->mon_command(name, std::move(cmdvec), std::move(inbl), &outbl, &outstring);
 
   do_out_buffer(outbl, outbuf, outbuflen);
   do_out_buffer(outstring, outs, outslen);
@@ -974,7 +974,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_osd_command)(
   }
 
   inbl.append(inbuf, inbuflen);
-  int ret = client->osd_command(osdid, cmdvec, inbl, &outbl, &outstring);
+  int ret = client->osd_command(osdid, std::move(cmdvec), std::move(inbl), &outbl, &outstring);
 
   do_out_buffer(outbl, outbuf, outbuflen);
   do_out_buffer(outstring, outs, outslen);
@@ -1005,7 +1005,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_mgr_command)(
   }
 
   inbl.append(inbuf, inbuflen);
-  int ret = client->mgr_command(cmdvec, inbl, &outbl, &outstring);
+  int ret = client->mgr_command(std::move(cmdvec), std::move(inbl), &outbl, &outstring);
 
   do_out_buffer(outbl, outbuf, outbuflen);
   do_out_buffer(outstring, outs, outslen);
@@ -1039,7 +1039,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_mgr_command_target)(
   }
 
   inbl.append(inbuf, inbuflen);
-  int ret = client->mgr_command(name, cmdvec, inbl, &outbl, &outstring);
+  int ret = client->mgr_command(name, std::move(cmdvec), std::move(inbl), &outbl, &outstring);
 
   do_out_buffer(outbl, outbuf, outbuflen);
   do_out_buffer(outstring, outs, outslen);
@@ -1073,7 +1073,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_pg_command)(
   if (!pgid.parse(pgstr))
     return -EINVAL;
 
-  int ret = client->pg_command(pgid, cmdvec, inbl, &outbl, &outstring);
+  int ret = client->pg_command(pgid, std::move(cmdvec), std::move(inbl), &outbl, &outstring);
 
   do_out_buffer(outbl, outbuf, outbuflen);
   do_out_buffer(outstring, outs, outslen);

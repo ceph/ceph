@@ -1163,6 +1163,7 @@ class Module(MgrModule):
                             'eio',
                             'bulk',
                             'crimson',
+                            'ec_optimizations',
                             ]
 
                         pool_data['flags_names'] = [flag for flag in pool['flags_names'].split(',') if flag in flags_to_report]

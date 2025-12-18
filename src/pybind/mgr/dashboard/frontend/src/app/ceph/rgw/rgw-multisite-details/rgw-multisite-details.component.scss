@@ -18,7 +18,7 @@
   width: 100%;
 }
 
-::ng-deep cds-overflow-menu .cds--btn--icon-only {
+::ng-deep cd-table-actions.btn-group.multisite-actions cds-overflow-menu .cds--btn--icon-only {
   position: relative;
   top: 4px;
   width: auto;

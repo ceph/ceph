@@ -1,3 +1,5 @@
+* RGW: Bucket Logging suppports creating log buckets in EC pools.
+  Implicit logging object commits are now performed asynchronously.
 * RGW: OpenSSL engine support is deprecated in favor of provider support.
   - Removed the `openssl_engine_opts` configuration option. OpenSSL engine configuration in string format is no longer supported.
   - Added the `openssl_conf` configuration option for loading specified providers as default providers.
@@ -8,7 +10,13 @@
 * DASHBOARD: Removed the older landing page which was deprecated in Quincy.
   Admins can no longer enable the older, deprecated landing page layout by
   adjusting FEATURE_TOGGLE_DASHBOARD.
+* DASHBOARD: RGW Service form updated to take input regarding QAT compression.
+  - QAT compression is an optional field which can be set to 'Hardware' or 'Software' by selecting options from provided dropdwon. If 'None' is selected, compression is removed altogether.
 * CephFS: The `peer_add` command is deprecated in favor of the `peer_bootstrap` command.
+* RADOS: When objects are read during deep scrubs, the data is read in strides,
+  and the scrubbing process is delayed between each read in order to avoid monopolizing
+  the I/O capacity of the OSD.
+  The default stride size (``osd_deep_scrub_stride``) was 512 KBytes, and is now 4 MBytes.
 
 >=20.0.0
 
@@ -51,6 +59,7 @@
   normalized directory entry names. This is inheritable and
   applies to an entire directory tree. For more information, see
   https://docs.ceph.com/en/latest/cephfs/charmap/
+* RGW: "STS Lite" and the sts:GetSessionToken operation are now deprecated.
 * Based on tests performed at scale on an HDD based Ceph cluster, it was found
   that scheduling with mClock was not optimal with multiple OSD shards. For
   example, when multiple OSD nodes failed, client
@@ -166,6 +175,9 @@
   Tentacle or earlier release, the value of this field will be 'N/A'. Regular
   subvolumes don't have a source subvolume and therefore the output for them
   won't contain a "source" field regardless of the release.
+* RGW: The default value of `rgw_lc_max_wp_worker` has been raised from 3 to 128
+  to accelerate lifecycle processing. These workers now use coroutines instead of
+  separate threads.
 
 * RGW: Replication policies now validate permissions using `s3:ReplicateObject`,
   `s3:ReplicateDelete`, and `s3:ReplicateTags` for destination buckets. For source
@@ -179,8 +191,8 @@
   unavailable if any PG in the pool is not in active state or if there are unfound 
   objects. Otherwise the pool is considered available. The score is updated every 
   one second by default. This interval can be changed using the new config option
-  ``pool_availability_update_interval.``. The feature is on by default. A new config option 
-  ``enable_availability_tracking`` can be used to turn off the feature if required. 
+  ``pool_availability_update_interval.``. The feature is off by default. A new config option 
+  ``enable_availability_tracking`` can be used to turn on the feature if required. 
   Another command is added to clear the availability status for a specific pool, 
   ``ceph osd pool clear-availability-status <pool-name>``. 
   This feature is in tech preview. 
@@ -213,6 +225,10 @@
 * Dashboard: RGW granular bucket replication
 * Dashboard: SMB monitoring and management
 * Monitoring: New monitoring Dashboards for Application, NVMe, CephFS, and SMB Overview
+* RGW: Introduce the `rgw_usage_log_key_transition` configuration option to handle
+  the co-existence of old and new usage log keys. This option is enabled by default
+  to ensure compatibility during upgrades, but can be disabled once old usage logs
+  are no longer present to avoid performance overhead.
 
 >=19.2.1
 
@@ -603,6 +619,13 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
 * RGW: The serialized format of notification and topics has changed, so that 
   new/updated topics will be unreadable by old RGWs. We recommend completing 
   the RGW upgrades before creating or modifying any notification topics.
+* RGW: New rate limiting options have been added to control the number of
+  bucket listing requests (`radosgw-admin ratelimit set ... --max-list-ops=`)
+  and delete operations (`radosgw-admin ratelimit set ... --max-delete-ops=`)
+  per accumulation interval, along with the ability to configure the
+  accumulation interval duration (`rgw_ratelimit_interval`).
+  Their default value is `0`, which keeps backward compatibility to the
+  previous behavior of READ and WRITE operations rate limiting.
 * RBD: Trailing newline in passphrase files (`<passphrase-file>` argument in
   `rbd encryption format` command and `--encryption-passphrase-file` option
   in other commands) is no longer stripped.

@@ -3559,7 +3559,7 @@ options:
     decreases the likelihood of false positives at the expense of additional disk
     space and memory consumption when the filter is loaded into RAM.  The current
     default value of 20 was found to provide significant performance gains when getattr
-    calls are made (such as during new object creation in bluestore) without significant
+    calls are made (such as during new object creation in BlueStore) without significant
     memory overhead or cache pollution when combined with rocksdb partitioned index
     filters.  See: https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters
     for more information.'
@@ -3826,7 +3826,6 @@ options:
   - bluestore
   - filestore
   - memstore
-  - kstore
   - seastore
   - cyanstore
   flags:
@@ -4154,6 +4153,22 @@ options:
   see_also:
   - bdev_enable_discard
   - bdev_async_discard_max_pending
+- name: bdev_async_discard
+  long_desc: When set this works like an alias for 'bdev_async_discard_threads = 1"
+    mode to avoid implicit async discard mode disablement after upgrade.
+    Ignored if 'dev_asunc_discard_threads' is greater than zero.
+    This parameter is DEPRECATED and provided for backward compatibility for
+    Squid minor releases only.
+    PLEASE SWITCH TO 'bdev_async_discard_threads' USE.
+  type: bool
+  level: advanced
+  default: false
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bdev_enable_discard
+  - bdev_async_discard_threads
 - name: bdev_async_discard_max_pending
   desc: maximum number of pending discards
   long_desc: The maximum number of pending async discards that can be queued and not claimed by an
@@ -5238,7 +5253,7 @@ options:
 - name: bluestore_rocksdb_cf
   type: bool
   level: advanced
-  desc: Enable use of RocksDB column families for bluestore metadata
+  desc: Enable use of RocksDB column families for BlueStore metadata
   fmt_desc: Enables sharding of BlueStore's RocksDB.
     When ``true``, ``bluestore_rocksdb_cfs`` is used.
     Only applied when OSD is doing ``--mkfs``.
@@ -5846,64 +5861,6 @@ options:
   default: false
   flags:
   - runtime
-  with_legacy: true
-- name: kstore_max_ops
-  type: uint
-  level: advanced
-  default: 512
-  with_legacy: true
-- name: kstore_max_bytes
-  type: size
-  level: advanced
-  default: 64_M
-  with_legacy: true
-- name: kstore_backend
-  type: str
-  level: advanced
-  default: rocksdb
-  with_legacy: true
-- name: kstore_rocksdb_options
-  type: str
-  level: advanced
-  desc: Options to pass through when RocksDB is used as the KeyValueDB for kstore.
-  default: compression=kNoCompression
-  with_legacy: true
-- name: kstore_fsck_on_mount
-  type: bool
-  level: advanced
-  desc: Whether or not to run fsck on mount for kstore.
-  default: false
-  with_legacy: true
-- name: kstore_fsck_on_mount_deep
-  type: bool
-  level: advanced
-  desc: Whether or not to run deep fsck on mount for kstore
-  default: true
-  with_legacy: true
-- name: kstore_nid_prealloc
-  type: uint
-  level: advanced
-  default: 1_K
-  with_legacy: true
-- name: kstore_sync_transaction
-  type: bool
-  level: advanced
-  default: false
-  with_legacy: true
-- name: kstore_sync_submit_transaction
-  type: bool
-  level: advanced
-  default: false
-  with_legacy: true
-- name: kstore_onode_map_size
-  type: uint
-  level: advanced
-  default: 1_K
-  with_legacy: true
-- name: kstore_default_stripe_size
-  type: size
-  level: advanced
-  default: 64_K
   with_legacy: true
 # rocksdb options that will be used for omap(if omap_backend is rocksdb)
 - name: filestore_rocksdb_options

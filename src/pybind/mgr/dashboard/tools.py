@@ -8,7 +8,7 @@ import logging
 import threading
 import time
 import urllib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import cherrypy
 from ceph.utils import strtobool
@@ -491,13 +491,13 @@ class TaskManager(object):
         return [{
             'name': t.name,
             'metadata': t.metadata,
-            'begin_time': "{}Z".format(datetime.fromtimestamp(t.begin_time).isoformat()),
+            'begin_time': datetime.fromtimestamp(t.begin_time, tz=timezone.utc).isoformat(),
             'progress': t.progress
         } for t in ex_t if t.begin_time], [{
             'name': t.name,
             'metadata': t.metadata,
-            'begin_time': "{}Z".format(datetime.fromtimestamp(t.begin_time).isoformat()),
-            'end_time': "{}Z".format(datetime.fromtimestamp(t.end_time).isoformat()),
+            'begin_time': datetime.fromtimestamp(t.begin_time, tz=timezone.utc).isoformat(),
+            'end_time': datetime.fromtimestamp(t.end_time, tz=timezone.utc).isoformat(),
             'duration': t.duration,
             'progress': t.progress,
             'success': not t.exception,

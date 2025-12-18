@@ -54,9 +54,6 @@
                   *ngIf="subsystemForm.showError('max_namespaces', formDir, 'min')"
                   i18n>The value must be at least 1.</span>
             <span class="invalid-feedback"
-                  *ngIf="subsystemForm.showError('max_namespaces', formDir, 'max')"
-                  i18n>The value cannot be greater than {{defaultMaxNamespace}}.</span>
-            <span class="invalid-feedback"
                   *ngIf="subsystemForm.showError('max_namespaces', formDir, 'pattern')"
                   i18n>The value must be a positive integer.</span>
           </div>

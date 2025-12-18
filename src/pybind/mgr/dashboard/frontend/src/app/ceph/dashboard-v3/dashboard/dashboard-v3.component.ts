@@ -39,6 +39,7 @@ import {
   IscsiMap,
   PgStateCount
 } from '~/app/shared/models/health.interface';
+import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -175,7 +176,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     });
     this.subs.add(
       this.summaryService.subscribe((summary) => {
-        const version = summary.version.replace('ceph version ', '').split(' ');
+        const version = summary.version.replace(`${VERSION_PREFIX} `, '').split(' ');
         this.detailsCardData.cephVersion =
           version[0] + ' ' + version.slice(2, version.length).join(' ');
       })

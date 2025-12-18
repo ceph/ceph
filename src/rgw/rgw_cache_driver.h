@@ -32,7 +32,7 @@ struct Partition {
   std::string name;
   std::string type;
   std::string location;
-  uint64_t size;
+  uint64_t reserve_size;
 };
 
 class CacheDriver {
@@ -57,7 +57,7 @@ class CacheDriver {
 
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) = 0;
-    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) = 0;
+    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp, optional_yield y) = 0;
 
     /* Data Recovery from Cache */
     virtual int restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func) = 0;

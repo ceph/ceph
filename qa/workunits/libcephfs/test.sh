@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/sh -ex
 
 ceph_test_libcephfs
 ceph_test_libcephfs_access
@@ -9,5 +9,6 @@ ceph_test_libcephfs_suidsgid
 ceph_test_libcephfs_snapdiff
 ceph_test_libcephfs_vxattr
 ceph_test_libcephfs_perfcounters
+ceph_test_libcephfs_fscrypt
 
 exit 0

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -283,6 +284,7 @@ public:
     _fork_watchers.push_back(w);
   }
 
+  void drop_temp_messenger_obj();
   void notify_pre_fork();
   void notify_post_fork();
 

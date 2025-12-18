@@ -1,3 +1,5 @@
+.. _cephfs_mds_cache_configuration:
+
 =======================
 MDS Cache Configuration
 =======================
@@ -22,6 +24,7 @@ is how to configure the MDS recall settings for your workload's needs. This is
 necessary if the internal throttles on the MDS recall can not keep up with the
 client workload.
 
+.. _cephfs_cache_configuration_mds_cache_memory_limit:
 
 MDS Cache Size
 --------------

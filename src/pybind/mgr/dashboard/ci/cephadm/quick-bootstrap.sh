@@ -26,6 +26,7 @@ use_cached_image=false
 extra_args="-P quick_install=True"
 CLUSTERS=1
 NODES=3
+CEPH_DEV_FOLDER=""
 
 for arg in "$@"; do
   case "$arg" in
@@ -33,7 +34,8 @@ for arg in "$@"; do
       use_cached_image=true
       ;;
     -dir=*|--ceph-dir=*)
-      extra_args+=" -P ceph_dev_folder=${arg#*=}"
+      CEPH_DEV_FOLDER="${arg#*=}"
+      extra_args+=" -P ceph_dev_folder=${CEPH_DEV_FOLDER}"
       ;;
     -e|--expanded-cluster)
       extra_args+=" -P expanded_cluster=True"
@@ -69,6 +71,17 @@ rm -f ceph_image.tar
 
 printf "Saving the image: %s\n" "$image_name"
 podman save -o ceph_image.tar quay.ceph.io/ceph-ci/ceph:main
+
+# build cephadm binary if it does not exist
+printf "\nChecking for cephadm binary...\n"
+pushd ${CEPH_DEV_FOLDER}/src/cephadm/
+if [[ ! -f cephadm ]]; then
+    echo "Building cephadm binary..."
+    python3 build.py cephadm
+else
+    printf "\ncephadm binary already exists."
+fi
+popd
 
 NODE_IP_OFFSET=100
 PREFIX="ceph"

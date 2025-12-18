@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "osd/osd_op_util.h"
 
@@ -52,6 +52,9 @@ bool OpInfo::need_skip_promote() const {
 bool OpInfo::allows_returnvec() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_RETURNVEC);
 }
+bool OpInfo::ec_direct_read() const {
+  return check_rmw(CEPH_OSD_RMW_FLAG_EC_DIRECT_READ);
+}
 /**
  * may_read_data()
  * 
@@ -79,6 +82,7 @@ void OpInfo::set_skip_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE);
 void OpInfo::set_force_rwordered() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RWORDERED); }
 void OpInfo::set_returnvec() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RETURNVEC); }
 void OpInfo::set_read_data() { set_rmw_flags(CEPH_OSD_RMW_FLAG_READ_DATA); }
+void OpInfo::set_ec_direct_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_EC_DIRECT_READ); }
 
 
 int OpInfo::set_from_op(

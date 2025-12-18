@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -502,7 +503,7 @@ int global_init_prefork(CephContext *cct)
       chown_path(conf->pid_file, cct->get_set_uid(), cct->get_set_gid(),
 		 cct->get_set_uid_string(), cct->get_set_gid_string());
     }
-
+    cct->drop_temp_messenger_obj();
     return -1;
   }
 

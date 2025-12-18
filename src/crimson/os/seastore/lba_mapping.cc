@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/os/seastore/lba_mapping.h"
 #include "crimson/os/seastore/lba/btree_lba_manager.h"
@@ -127,6 +127,19 @@ base_iertr::future<LBAMapping> LBAMapping::refresh()
       return LBAMapping(direct_cursor, indirect_cursor);
     });
   });
+}
+
+base_iertr::future<> LBAMapping::co_refresh()
+{
+  if (is_viewable()) {
+    co_return;
+  }
+  if (direct_cursor) {
+    co_await direct_cursor->refresh();
+  }
+  if (indirect_cursor) {
+    co_await indirect_cursor->refresh();
+  }
 }
 
 bool LBAMapping::is_initial_pending() const {

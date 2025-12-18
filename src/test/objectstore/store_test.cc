@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -754,20 +755,16 @@ TEST_P(StoreTest, FiemapHoles) {
     decode(m, p);
     cout << " got " << m << std::endl;
     ASSERT_TRUE(!m.empty());
-    // kstore always returns [0, object_size] regardless of offset and length
-    // FIXME: if fiemap logic in kstore is refined
-    if (string(GetParam()) != "kstore") {
-      ASSERT_GE(m[SKIP_STEP], 3u);
-      auto last = m.crbegin();
-      if (m.size() == 1) {
-        ASSERT_EQ(SKIP_STEP, last->first);
-      } else if (m.size() == MAX_EXTENTS - 2) {
-        for (uint64_t i = 1; i < MAX_EXTENTS - 1; i++) {
-	  ASSERT_TRUE(m.count(SKIP_STEP*i));
-	}
+    ASSERT_GE(m[SKIP_STEP], 3u);
+    auto last = m.crbegin();
+    if (m.size() == 1) {
+      ASSERT_EQ(SKIP_STEP, last->first);
+    } else if (m.size() == MAX_EXTENTS - 2) {
+      for (uint64_t i = 1; i < MAX_EXTENTS - 1; i++) {
+        ASSERT_TRUE(m.count(SKIP_STEP*i));
       }
-      ASSERT_GT(last->first + last->second, SKIP_STEP * (MAX_EXTENTS - 1));
     }
+    ASSERT_GT(last->first + last->second, SKIP_STEP * (MAX_EXTENTS - 1));
   }
   {
     ObjectStore::Transaction t;
@@ -6140,10 +6137,6 @@ TEST_P(StoreTest, OMapTest) {
     ASSERT_EQ(cur_attrs.size(), size_t(1));
     ASSERT_TRUE(bl_eq(bl1, bl3));
  
-    set<string> keys;
-    r = store->omap_get_keys(ch, hoid, &keys);
-    ASSERT_EQ(r, 0);
-    ASSERT_EQ(keys.size(), size_t(1));
   }
 
   // test omap_clear, omap_rmkey_range
@@ -7222,33 +7215,33 @@ INSTANTIATE_TEST_SUITE_P(
   ObjectStore,
   StoreTest,
   ::testing::Values(
-    "memstore",
+    "memstore"
 #if defined(WITH_BLUESTORE)
-    "bluestore",
+    , "bluestore"
 #endif
-    "kstore"));
+    ));
 
 // Note: instantiate all stores to preserve store numbering order only
 INSTANTIATE_TEST_SUITE_P(
   ObjectStore,
   StoreTestSpecificAUSize,
   ::testing::Values(
-    "memstore",
+    "memstore"
 #if defined(WITH_BLUESTORE)
-    "bluestore",
+    , "bluestore"
 #endif
-    "kstore"));
+    ));
 
 // Note: instantiate all stores to preserve store numbering order only
 INSTANTIATE_TEST_SUITE_P(
   ObjectStore,
   StoreTestOmapUpgrade,
   ::testing::Values(
-    "memstore",
+    "memstore"
 #if defined(WITH_BLUESTORE)
-    "bluestore",
+    , "bluestore"
 #endif
-    "kstore"));
+    ));
 
 #if defined(WITH_BLUESTORE)
 INSTANTIATE_TEST_SUITE_P(

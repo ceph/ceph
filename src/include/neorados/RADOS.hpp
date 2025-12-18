@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1736,8 +1737,8 @@ public:
 			  std::string, ceph::buffer::list);
   using CommandComp = boost::asio::any_completion_handler<CommandSig>;
   template<boost::asio::completion_token_for<CommandSig> CompletionToken>
-  auto osd_command(int osd, std::vector<std::string> cmd,
-		   ceph::buffer::list in, CompletionToken&& token) {
+  auto osd_command(int osd, std::vector<std::string>&& cmd,
+		   ceph::buffer::list&& in, CompletionToken&& token) {
     auto consigned = consign(std::forward<CompletionToken>(token));
     return boost::asio::async_initiate<decltype(consigned), CommandSig>(
       [osd, this](auto&& handler, std::vector<std::string> cmd,
@@ -1747,8 +1748,8 @@ public:
       }, consigned, std::move(cmd), std::move(in));
   }
   template<boost::asio::completion_token_for<CommandSig> CompletionToken>
-  auto pg_command(PG pg, std::vector<std::string> cmd,
-		  ceph::buffer::list in, CompletionToken&& token) {
+  auto pg_command(PG pg, std::vector<std::string>&& cmd,
+		  ceph::buffer::list&& in, CompletionToken&& token) {
     auto consigned = consign(std::forward<CompletionToken>(token));
     return boost::asio::async_initiate<decltype(consigned), CommandSig>(
       [this](auto&& handler, PG pg, std::vector<std::string> cmd,
@@ -1759,8 +1760,8 @@ public:
   }
 
   template<boost::asio::completion_token_for<SimpleOpSig> CompletionToken>
-  auto mon_command(std::vector<std::string> command,
-		   ceph::buffer::list bl,
+  auto mon_command(std::vector<std::string>&& command,
+		   ceph::buffer::list&& bl,
 		   std::string* outs, ceph::buffer::list* outbl,
 		   CompletionToken&& token) {
     auto consigned = consign(std::forward<CompletionToken>(token));
@@ -1881,13 +1882,13 @@ private:
 			  Cursor end, std::uint32_t max,
 			  ceph::buffer::list filter,
 			  EnumerateComp c);
-  void osd_command_(int osd, std::vector<std::string> cmd,
-		    ceph::buffer::list in, CommandComp c);
-  void pg_command_(PG pg, std::vector<std::string> cmd,
-		   ceph::buffer::list in, CommandComp c);
+  void osd_command_(int osd, std::vector<std::string>&& cmd,
+		    ceph::buffer::list&& in, CommandComp c);
+  void pg_command_(PG pg, std::vector<std::string>&& cmd,
+		   ceph::buffer::list&& in, CommandComp c);
 
-  void mon_command_(std::vector<std::string> command,
-		    ceph::buffer::list bl,
+  void mon_command_(std::vector<std::string>&& command,
+		    ceph::buffer::list&& bl,
 		    std::string* outs, ceph::buffer::list* outbl,
 		    SimpleOpComp c);
 

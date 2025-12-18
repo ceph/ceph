@@ -65,7 +65,7 @@
          "repeatIteration": null,
          "repeatRowId": null,
          "showTitle": true,
-         "title": "RGW Overview - All Gateways",
+         "title": "Object Overview - All Gateways",
          "titleSize": "h6",
          "type": "row"
       },
@@ -668,7 +668,7 @@
          "repeatIteration": null,
          "repeatRowId": null,
          "showTitle": true,
-         "title": "RGW Overview - HAProxy Metrics",
+         "title": "Object Overview - HAProxy Metrics",
          "titleSize": "h6",
          "type": "row"
       },
@@ -1201,7 +1201,7 @@
          "repeatIteration": null,
          "repeatRowId": null,
          "showTitle": true,
-         "title": "RGW Overview - Bucket Notification",
+         "title": "Object Overview - Bucket Notification",
          "titleSize": "h6",
          "type": "row"
       },
@@ -1424,7 +1424,8 @@
    "style": "dark",
    "tags": [
       "ceph-mixin",
-      "overview"
+      "overview",
+      "protocol"
    ],
    "templating": {
       "list": [
@@ -1574,7 +1575,7 @@
       ]
    },
    "timezone": "",
-   "title": "RGW Overview",
+   "title": "Ceph Object - Overview",
    "uid": "WAkugZpiz",
    "version": 0
 }

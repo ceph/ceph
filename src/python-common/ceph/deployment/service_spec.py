@@ -56,6 +56,7 @@ class TLSBlock(TypedDict, total=False):
 class RequiresCertificatesEntry(TypedDict):
     user_cert_allowed: bool
     scope: Literal['service', 'host', 'global']
+    requires_ca_cert: bool
 
 
 class CertificateSource(Enum):
@@ -857,20 +858,21 @@ class ServiceSpec(object):
     REQUIRES_CERTIFICATES: Dict[str, RequiresCertificatesEntry] = {
 
         # Services that support user-provided certificates
-        'rgw': {'user_cert_allowed': True, 'scope': 'service'},
-        'ingress': {'user_cert_allowed': True, 'scope': 'service'},
-        'iscsi': {'user_cert_allowed': True, 'scope': 'service'},
-        'grafana': {'user_cert_allowed': True, 'scope': 'host'},
-        'oauth2-proxy': {'user_cert_allowed': True, 'scope': 'host'},
-        'mgmt-gateway': {'user_cert_allowed': True, 'scope': 'global'},
-        'nvmeof': {'user_cert_allowed': True, 'scope': 'service'},
+        'rgw': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': False},
+        'ingress': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': False},
+        'iscsi': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': False},
+        'grafana': {'user_cert_allowed': True, 'scope': 'host', 'requires_ca_cert': False},
+        'oauth2-proxy': {'user_cert_allowed': True, 'scope': 'host', 'requires_ca_cert': False},
+        'mgmt-gateway': {'user_cert_allowed': True, 'scope': 'global', 'requires_ca_cert': False},
+        'nvmeof': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': False},
+        'nfs': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': True},
 
         # Services that only support cephadm-signed certificates
-        'agent': {'user_cert_allowed': False, 'scope': 'host'},
-        'prometheus': {'user_cert_allowed': False, 'scope': 'host'},
-        'alertmanager': {'user_cert_allowed': False, 'scope': 'host'},
-        'ceph-exporter': {'user_cert_allowed': False, 'scope': 'host'},
-        'node-exporter': {'user_cert_allowed': False, 'scope': 'host'},
+        'agent': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
+        'prometheus': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
+        'alertmanager': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
+        'ceph-exporter': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
+        'node-exporter': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
         # 'loki'        : {'user_cert_allowed': False, 'scope': 'host'},
         # 'promtail'    : {'user_cert_allowed': False, 'scope': 'host'},
         # 'jaeger-agent': {'user_cert_allowed': False, 'scope': 'host'},
@@ -950,6 +952,8 @@ class ServiceSpec(object):
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ip_addrs: Optional[Dict[str, str]] = None,
+                 ssl_ca_cert: Optional[str] = None,
+                 termination_grace_period_seconds: Optional[int] = None,
                  ):
 
         #: See :ref:`orchestrator-cli-placement-spec`.
@@ -972,6 +976,7 @@ class ServiceSpec(object):
             self.ssl = ssl
             self.ssl_cert = ssl_cert
             self.ssl_key = ssl_key
+            self.ssl_ca_cert = ssl_ca_cert
             self.custom_sans = custom_sans
 
         if self.service_type in self.REQUIRES_SERVICE_ID or self.service_type == 'osd':
@@ -1009,6 +1014,15 @@ class ServiceSpec(object):
         # ip_addrs is a dict where each key is a hostname and the corresponding value
         # is the IP address {hostname: ip} that the NFS service should bind to on that host.
         self.ip_addrs = ip_addrs
+
+        self.termination_grace_period_seconds = termination_grace_period_seconds
+        if (
+            self.termination_grace_period_seconds is not None
+            and self.termination_grace_period_seconds < 0
+        ):
+            raise SpecValidationError(
+                'termination_grace_period_seconds must be >= 0'
+            )
 
     def __setattr__(self, name: str, value: Any) -> None:
         if value is not None and name in ('extra_container_args', 'extra_entrypoint_args'):
@@ -1168,6 +1182,9 @@ class ServiceSpec(object):
             if val:
                 c[key] = val
 
+        if getattr(self, 'termination_grace_period_seconds', None) is not None:
+            c['termination_grace_period_seconds'] = self.termination_grace_period_seconds
+
         if self.service_type in self.REQUIRES_CERTIFICATES:
 
             tls: TLSBlock = {}
@@ -1202,6 +1219,7 @@ class ServiceSpec(object):
 
         has_cert = bool(getattr(self, "ssl_cert", None))
         has_key = bool(getattr(self, "ssl_key", None))
+        has_ca_cert = bool(getattr(self, "ssl_ca_cert", None))
         has_cert_src = bool(getattr(self, "certificate_source", None))
 
         # Pairing rule for legacy inline specs
@@ -1220,16 +1238,20 @@ class ServiceSpec(object):
                 self.certificate_source = CertificateSource.CEPHADM_SIGNED.value
 
         # Per-source constraints
-        if (
-            self.certificate_source == CertificateSource.INLINE.value
-            and not (has_cert and has_key)
-        ):
-            raise SpecValidationError(
-                f"When using '{CertificateSource.INLINE.value}' certificate_source, "
-                "both an embedded certificate (ssl_cert) and private key"
-                "(ssl_key) must be provided."
-            )
-
+        if self.certificate_source == CertificateSource.INLINE.value:
+            if not (has_cert and has_key):
+                raise SpecValidationError(
+                    f"When using '{CertificateSource.INLINE.value}' certificate_source, "
+                    "both an embedded certificate (ssl_cert) and private key"
+                    "(ssl_key) must be provided."
+                )
+            if (
+                self.REQUIRES_CERTIFICATES[self.service_type].get('requires_ca_cert', False)
+                and not has_ca_cert
+            ):
+                raise SpecValidationError(
+                    f'CA certificate required for {self.service_type} service'
+                )
         if (
             self.certificate_source == CertificateSource.CEPHADM_SIGNED.value
             and (has_cert or has_key)
@@ -1315,6 +1337,16 @@ class NFSServiceSpec(ServiceSpec):
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  idmap_conf: Optional[Dict[str, Dict[str, str]]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 ssl: bool = False,
+                 ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
+                 ssl_ca_cert: Optional[str] = None,
+                 certificate_source: Optional[str] = None,
+                 custom_sans: Optional[List[str]] = None,
+                 tls_ktls: bool = False,
+                 tls_debug: bool = False,
+                 tls_min_version: Optional[str] = None,
+                 tls_ciphers: Optional[str] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1322,7 +1354,8 @@ class NFSServiceSpec(ServiceSpec):
             placement=placement, unmanaged=unmanaged, preview_only=preview_only,
             config=config, networks=networks, extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args, custom_configs=custom_configs,
-            ip_addrs=ip_addrs)
+            ip_addrs=ip_addrs, ssl=ssl, ssl_cert=ssl_cert, ssl_key=ssl_key, ssl_ca_cert=ssl_ca_cert,
+            certificate_source=certificate_source, custom_sans=custom_sans)
 
         self.port = port
 
@@ -1339,6 +1372,12 @@ class NFSServiceSpec(ServiceSpec):
         self.idmap_conf = idmap_conf
         self.enable_nlm = enable_nlm
 
+        # TLS fields
+        self.tls_ciphers = tls_ciphers
+        self.tls_ktls = tls_ktls
+        self.tls_debug = tls_debug
+        self.tls_min_version = tls_min_version
+
     def get_port_start(self) -> List[int]:
         if self.port:
             return [self.port]
@@ -1354,6 +1393,21 @@ class NFSServiceSpec(ServiceSpec):
         if self.virtual_ip and (self.ip_addrs or self.networks):
             raise SpecValidationError("Invalid NFS spec: Cannot set virtual_ip and "
                                       f"{'ip_addrs' if self.ip_addrs else 'networks'} fields")
+
+        # TLS certificate validation
+        if self.ssl and not self.certificate_source:
+            raise SpecValidationError('If SSL is enabled, a certificate source must be provided.')
+        if self.certificate_source == CertificateSource.INLINE.value:
+            tls_field_names = [
+                'ssl_cert',
+                'ssl_key',
+                'ssl_ca_cert',
+            ]
+            tls_fields = [getattr(self, tls_field) for tls_field in tls_field_names]
+            if any(tls_fields) and not all(tls_fields):
+                raise SpecValidationError(
+                    f'Either none or all of {tls_field_names} attributes must be set'
+                )
 
 
 yaml.add_representer(NFSServiceSpec, ServiceSpec.yaml_representer)
@@ -1636,7 +1690,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_namespaces: Optional[int] = 4096,
                  max_namespaces_per_subsystem: Optional[int] = 512,
                  max_hosts_per_subsystem: Optional[int] = 128,
-                 subsystem_cache_expiration: Optional[int] = 5,
+                 subsystem_cache_expiration: Optional[int] = 30,
                  force_tls: Optional[bool] = False,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
@@ -1659,6 +1713,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  transport_tcp_options: Optional[Dict[str, int]] =
                  {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
                  enable_dsa_acceleration: bool = False,
+                 rbd_with_crc32c: bool = False,
                  tgt_cmd_extra_args: Optional[str] = None,
                  iobuf_options: Optional[Dict[str, int]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
@@ -1851,6 +1906,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.transport_tcp_options: Optional[Dict[str, int]] = transport_tcp_options
         #: ``enable_dsa_acceleration`` enable  dsa acceleration
         self.enable_dsa_acceleration = enable_dsa_acceleration
+        #: ``rbd_with_crc32c`` enable RBD CRC32C checksum reuse optimization
+        self.rbd_with_crc32c = rbd_with_crc32c
         #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
         #: List of extra arguments for SPDK iobuf in the form opt=value
@@ -2016,6 +2073,10 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_positive_int(self.max_hosts, "Max hosts")
         verify_positive_int(self.max_namespaces, "Max namespaces")
         verify_positive_int(self.max_namespaces_per_subsystem, "Max namespaces per subsystem")
+        max_per_subsys = self.max_namespaces_per_subsystem
+        if max_per_subsys is not None and max_per_subsys > 2048:
+            raise SpecValidationError("Max namespaces per subsystem can't be "
+                                      "greater than 2048")
         verify_positive_int(self.max_hosts_per_subsystem, "Max hosts per subsystem")
         verify_non_negative_number(self.subsystem_cache_expiration,
                                    "Subsystem cache expiration period")
@@ -2041,6 +2102,8 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_boolean(self.log_files_rotation_enabled, "Log files rotation enabled")
         verify_boolean(self.verbose_log_messages, "Verbose log messages")
         verify_boolean(self.enable_monitor_client, "Enable monitor client")
+        verify_boolean(self.enable_dsa_acceleration, "Enable DSA acceleration")
+        verify_boolean(self.rbd_with_crc32c, "Enable RBD CRC32C checksum reuse")
         verify_positive_int(self.spdk_mem_size, "SPDK memory size")
         verify_positive_int(self.spdk_huge_pages, "SPDK huge pages count")
         if self.spdk_mem_size and self.spdk_huge_pages:
@@ -2172,6 +2235,7 @@ class IngressSpec(ServiceSpec):
                  monitor_cert_source: Optional[str] = MonitorCertSource.REUSE_SERVICE_CERT.value,
                  monitor_networks: Optional[List[str]] = None,
                  monitor_ip_addrs: Optional[Dict[str, str]] = None,
+                 use_tcp_mode_over_rgw: bool = False,
                  ):
         assert service_type == 'ingress'
 
@@ -2216,6 +2280,7 @@ class IngressSpec(ServiceSpec):
         self.monitor_cert_source = monitor_cert_source
         self.monitor_networks = monitor_networks
         self.monitor_ip_addrs = monitor_ip_addrs
+        self.use_tcp_mode_over_rgw = use_tcp_mode_over_rgw
 
     def get_port_start(self) -> List[int]:
         ports = []

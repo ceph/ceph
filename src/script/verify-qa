@@ -1,5 +1,8 @@
 #!/bin/bash
 
+printf 'Commit is:\n' >&2
+git log -1 >&2
+
 find qa/suites/ -type d -execdir ln -sfT ../.qa/ {}/.qa \;
 
 git add '*.qa'

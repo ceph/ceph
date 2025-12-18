@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "scrub_machine.h"
 
@@ -383,7 +383,6 @@ RangeBlocked::RangeBlocked(my_context ctx)
     m_timeout_token = machine.schedule_timer_event_after<RangeBlockedAlarm>(
       grace);
   }
-  context<Session>().m_perf_set->inc(scrbcnt_blocked);
 }
 
 sc::result RangeBlocked::react(const RangeBlockedAlarm&)
@@ -402,6 +401,7 @@ sc::result RangeBlocked::react(const RangeBlockedAlarm&)
     << ")";
 
   scrbr->set_scrub_blocked(utime_t{now_c, 0});
+  context<Session>().m_perf_set->inc(scrbcnt_blocked);
   return discard_event();
 }
 

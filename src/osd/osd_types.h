@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -116,14 +117,6 @@
 
 /// priority when more full
 #define OSD_DELETE_PRIORITY_FULL 255
-
-static std::map<int, int> max_prio_map = {
-	{OSD_BACKFILL_PRIORITY_BASE, OSD_BACKFILL_DEGRADED_PRIORITY_BASE - 1},
-	{OSD_BACKFILL_DEGRADED_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_BASE - 1},
-	{OSD_RECOVERY_PRIORITY_BASE, OSD_BACKFILL_INACTIVE_PRIORITY_BASE - 1},
-	{OSD_RECOVERY_INACTIVE_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_MAX},
-	{OSD_BACKFILL_INACTIVE_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_MAX}
-};
 
 typedef hobject_t collection_list_handle_t;
 
@@ -382,6 +375,7 @@ enum {
   CEPH_OSD_RMW_FLAG_RWORDERED         = (1 << 10),
   CEPH_OSD_RMW_FLAG_RETURNVEC = (1 << 11),
   CEPH_OSD_RMW_FLAG_READ_DATA  = (1 << 12),
+  CEPH_OSD_RMW_FLAG_EC_DIRECT_READ  = (1 << 13),
 };
 
 
@@ -985,6 +979,19 @@ inline std::ostream& operator<<(std::ostream& out, const eversion_t& e) {
   return out << e.epoch << "'" << e.version;
 }
 
+namespace std {
+template <>
+struct hash<eversion_t> {
+  size_t operator()(const eversion_t& ev) const noexcept
+  {
+    // Combine epoch and version with a simple shift-based mix
+    // This is fast and works well when differences are small
+    return (size_t)ev.epoch ^ ((size_t)ev.version << 8 |
+			       (size_t)ev.version >> (sizeof(size_t) * 8 - 8));
+  }
+};
+}  // namespace std
+
 /**
  * objectstore_perf_stat_t
  *
@@ -1317,6 +1324,7 @@ struct pg_pool_t {
     // Note, does not prohibit being created on classic osd.
     FLAG_CRIMSON = 1<<18,
     FLAG_EC_OPTIMIZATIONS = 1<<19, // enable optimizations, once enabled, cannot be disabled
+    FLAG_CLIENT_SPLIT_READS = 1<<20, // Optimized EC is permitted to do direct reads.
   };
 
   static const char *get_flag_name(uint64_t f) {
@@ -6633,26 +6641,9 @@ struct ScrubMapBuilder {
     omap_bytes = 0;
   }
 
-  friend std::ostream& operator<<(std::ostream& out, const ScrubMapBuilder& pos) {
-    out << "(" << pos.pos << "/" << pos.ls.size();
-    if (pos.pos < pos.ls.size()) {
-      out << " " << pos.ls[pos.pos];
-    }
-    out << " metadata_done " << pos.metadata_done;
-    if (pos.data_pos < 0) {
-      out << " byte " << pos.data_pos;
-    }
-    if (!pos.omap_pos.empty()) {
-      out << " key " << pos.omap_pos;
-    }
-    if (pos.deep) {
-      out << " deep";
-    }
-    if (pos.ret) {
-      out << " ret " << pos.ret;
-    }
-    return out << ")";
-  }
+  std::string fmt_print() const;
+
+  friend std::ostream& operator<<(std::ostream& out, const ScrubMapBuilder& pos);
 };
 
 struct watch_item_t {

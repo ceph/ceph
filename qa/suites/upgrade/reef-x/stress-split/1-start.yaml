@@ -16,7 +16,6 @@ overrides:
       - Reduced data availability
       - Degraded data redundancy
       - pg .* is stuck inactive
-      - pg .* is stuck peering
       - pg .* is .*degraded
       - FS_DEGRADED
       - OSDMAP_FLAGS
@@ -31,6 +30,7 @@ tasks:
     branch: reef
     exclude_packages:
       - ceph-volume
+      - ceph-osd-classic
 
 - cephadm:
     image: quay.ceph.io/ceph-ci/ceph:reef

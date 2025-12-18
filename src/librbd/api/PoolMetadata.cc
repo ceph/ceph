@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/api/PoolMetadata.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -33,9 +33,8 @@ void update_pool_timestamp(librados::IoCtx& io_ctx) {
     R"(})";
 
   librados::Rados rados(io_ctx);
-  bufferlist in_bl;
   std::string ss;
-  int r = rados.mon_command(cmd, in_bl, nullptr, &ss);
+  int r = rados.mon_command(std::move(cmd), {}, nullptr, &ss);
   if (r < 0) {
     lderr(cct) << "failed to notify clients of pool config update: "
                << cpp_strerror(r) << dendl;

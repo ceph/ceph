@@ -110,9 +110,9 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
         name: $localize`Data Pool`,
         prop: 'info.data_pool',
         flexGrow: 0.7,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
-          class: 'badge-background-primary'
+          class: 'tag-background-primary'
         }
       },
       {

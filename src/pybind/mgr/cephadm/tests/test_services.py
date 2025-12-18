@@ -36,7 +36,7 @@ from ceph.deployment.service_spec import (
     OAuth2ProxySpec
 )
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect, wait
-from cephadm.tlsobject_types import CertKeyPair
+from cephadm.tlsobject_types import TLSCredentials
 
 from ceph.utils import datetime_now
 
@@ -171,7 +171,7 @@ class TestISCSIService:
     mgr.spec_store.all_specs.get.return_value = iscsi_spec
 
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     def test_iscsi_client_caps(self):
 
         iscsi_daemon_spec = CephadmDaemonDeploySpec(
@@ -199,7 +199,7 @@ class TestISCSIService:
 
     @patch('cephadm.utils.resolve_ip')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     def test_iscsi_dashboard_config(self, mock_resolve_ip):
 
         self.mgr.check_mon_command = MagicMock()
@@ -322,7 +322,7 @@ log_to_file = False"""
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
     @patch("cephadm.services.iscsi.get_trusted_ips")
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     def test_iscsi_config_with_security_enabled(self, _get_trusted_ips, _get_name, _run_cephadm, cephadm_module: CephadmOrchestrator):
 
         iscsi_daemon_id = 'testpool.test.qwert'
@@ -496,7 +496,7 @@ max_hosts = 2048
 max_namespaces = 4096
 max_namespaces_per_subsystem = 512
 max_hosts_per_subsystem = 128
-subsystem_cache_expiration = 5
+subsystem_cache_expiration = 30
 force_tls = False
 
 [gateway-logs]
@@ -538,6 +538,7 @@ conn_retries = 10
 transports = tcp
 transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}
 enable_dsa_acceleration = False
+rbd_with_crc32c = False
 tgt_cmd_extra_args = {tgt_cmd_extra_args}
 qos_timeslice_in_usecs = 0
 notifications_interval = 60
@@ -779,7 +780,7 @@ class TestMonitoring:
     @patch("cephadm.services.monitoring.password_hash", lambda password: 'alertmanager_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None, fqdns=None: CertKeyPair('mycert', 'mykey'))
+           lambda instance, dspec, ips=None, fqdns=None: TLSCredentials('mycert', 'mykey'))
     def test_alertmanager_config_when_mgmt_gw_enabled(self, _get_fqdn, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
@@ -890,7 +891,7 @@ class TestMonitoring:
     @patch("cephadm.services.monitoring.password_hash", lambda password: 'alertmanager_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None, fqdns=None: CertKeyPair('mycert', 'mykey'))
+           lambda instance, dspec, ips=None, fqdns=None: TLSCredentials('mycert', 'mykey'))
     def test_alertmanager_config_security_enabled(self, _get_fqdn, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
@@ -1101,7 +1102,7 @@ class TestMonitoring:
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None, fqdns=None: CertKeyPair('mycert', 'mykey'))
+           lambda instance, dspec, ips=None, fqdns=None: TLSCredentials('mycert', 'mykey'))
     @patch('cephadm.services.cephadmservice.CephExporterService.get_keyring_with_caps', Mock(return_value='[client.ceph-exporter.test]\nkey = fake-secret\n'))
     def test_ceph_exporter_config_security_enabled(self, _get_fqdn, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
@@ -1188,7 +1189,7 @@ class TestMonitoring:
                 )
 
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None, fqdns=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None, fqdns=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("socket.getfqdn")
@@ -1403,7 +1404,7 @@ class TestMonitoring:
     @patch("cephadm.services.monitoring.password_hash", lambda password: 'prometheus_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None, fqdns=None: CertKeyPair('mycert', 'mykey'))
+           lambda instance, dspec, ips=None, fqdns=None: TLSCredentials('mycert', 'mykey'))
     def test_prometheus_config_security_enabled(self, _run_cephadm, _get_uname, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         _get_uname.return_value = 'test'
@@ -1677,11 +1678,11 @@ class TestMonitoring:
                   grpc_listen_port: 8080
 
                 common:
-                  path_prefix: /tmp/loki
+                  path_prefix: /loki
                   storage:
                     filesystem:
-                      chunks_directory: /tmp/loki/chunks
-                      rules_directory: /tmp/loki/rules
+                      chunks_directory: /loki/chunks
+                      rules_directory: /loki/rules
                   replication_factor: 1
                   ring:
                     instance_addr: 127.0.0.1
@@ -1803,7 +1804,7 @@ class TestMonitoring:
     @patch("cephadm.module.CephadmOrchestrator.get_fqdn", lambda a, b: 'host_fqdn')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None, fqdns=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None, fqdns=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     def test_grafana_config_with_mgmt_gw_and_ouath2_proxy(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
 
@@ -1907,7 +1908,13 @@ class TestMonitoring:
                           whitelist = 1::4
                           headers_encoded = false
                           enable_login_token = false
-                          headers = Role:X-WEBAUTH-ROLE\n""").lstrip(),  # noqa: W291
+                          headers = Role:X-WEBAUTH-ROLE
+                        [analytics]
+                          check_for_updates = false
+                          reporting_enabled = false
+                        [plugins]
+                          check_for_plugin_updates = false
+                          public_key_retrieval_disabled = true""").lstrip(),  # noqa: W291
                     "provisioning/datasources/ceph-dashboard.yml": y,
                     'certs/cert_file': dedent(f"""
                         # generated by cephadm\n{ceph_generated_cert}""").lstrip(),
@@ -1965,7 +1972,7 @@ class TestMonitoring:
     @patch("cephadm.module.CephadmOrchestrator.get_fqdn", lambda a, b: 'host_fqdn')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None, fqdns=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None, fqdns=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     def test_grafana_config_with_mgmt_gw(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
 
@@ -2024,7 +2031,7 @@ class TestMonitoring:
                 cephadm_module, GrafanaSpec("grafana")
             ) as _:
                 cephadm_module.cert_mgr.save_self_signed_cert_key_pair('grafana',
-                                                                       CertKeyPair(ceph_generated_cert, ceph_generated_key),
+                                                                       TLSCredentials(ceph_generated_cert, ceph_generated_key),
                                                                        host='test')
                 files = {
                     'grafana.ini': dedent("""
@@ -2050,7 +2057,13 @@ class TestMonitoring:
                           disable_initial_admin_creation = true
                           cookie_secure = true
                           cookie_samesite = none
-                          allow_embedding = true\n""").lstrip(),  # noqa: W291
+                          allow_embedding = true
+                        [analytics]
+                          check_for_updates = false
+                          reporting_enabled = false
+                        [plugins]
+                          check_for_plugin_updates = false
+                          public_key_retrieval_disabled = true""").lstrip(),  # noqa: W291
                     "provisioning/datasources/ceph-dashboard.yml": y,
                     'certs/cert_file': dedent(f"""
                         # generated by cephadm\n{ceph_generated_cert}""").lstrip(),
@@ -2107,7 +2120,7 @@ class TestMonitoring:
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1::4')
     @patch("cephadm.module.CephadmOrchestrator.get_fqdn", lambda a, b: 'host_fqdn')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None, fqdns=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None, fqdns=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     def test_grafana_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
 
@@ -2118,7 +2131,7 @@ class TestMonitoring:
                 cephadm_module, GrafanaSpec("grafana")
             ) as _:
                 cephadm_module.cert_mgr.save_self_signed_cert_key_pair('grafana',
-                                                                       CertKeyPair(ceph_generated_cert, ceph_generated_key),
+                                                                       TLSCredentials(ceph_generated_cert, ceph_generated_key),
                                                                        host='test')
                 files = {
                     'grafana.ini': dedent("""
@@ -2142,7 +2155,13 @@ class TestMonitoring:
                           disable_initial_admin_creation = true
                           cookie_secure = true
                           cookie_samesite = none
-                          allow_embedding = true\n""").lstrip(),  # noqa: W291
+                          allow_embedding = true
+                        [analytics]
+                          check_for_updates = false
+                          reporting_enabled = false
+                        [plugins]
+                          check_for_plugin_updates = false
+                          public_key_retrieval_disabled = true""").lstrip(),  # noqa: W291
                     'provisioning/datasources/ceph-dashboard.yml': dedent("""
                         # This file is generated by cephadm.
                         apiVersion: 1
@@ -2252,7 +2271,13 @@ class TestMonitoring:
                                     '  admin_password = secure\n'
                                     '  cookie_secure = true\n'
                                     '  cookie_samesite = none\n'
-                                    '  allow_embedding = true\n',
+                                    '  allow_embedding = true\n'
+                                    '[analytics]\n'
+                                    '  check_for_updates = false\n'
+                                    '  reporting_enabled = false\n'
+                                    '[plugins]\n'
+                                    '  check_for_plugin_updates = false\n'
+                                    '  public_key_retrieval_disabled = true',
                                 'provisioning/datasources/ceph-dashboard.yml':
                                     "# This file is generated by cephadm.\n"
                                     "apiVersion: 1\n\n"
@@ -2315,7 +2340,13 @@ class TestMonitoring:
                                     '  admin_password = secure\n'
                                     '  cookie_secure = true\n'
                                     '  cookie_samesite = none\n'
-                                    '  allow_embedding = true\n',
+                                    '  allow_embedding = true\n'
+                                    '[analytics]\n'
+                                    '  check_for_updates = false\n'
+                                    '  reporting_enabled = false\n'
+                                    '[plugins]\n'
+                                    '  check_for_plugin_updates = false\n'
+                                    '  public_key_retrieval_disabled = true',
                                 'provisioning/datasources/ceph-dashboard.yml':
                                     "# This file is generated by cephadm.\n"
                                     "apiVersion: 1\n\n"
@@ -2737,7 +2768,9 @@ class TestIngressService:
             monitor_password='12345',
             keepalived_password='12345',
             enable_haproxy_protocol=enable_haproxy_protocol,
-            enable_stats=True
+            enable_stats=True,
+            placement=PlacementSpec(
+                hosts=['host1'])
         )
 
         cephadm_module.spec_store._specs = {
@@ -2783,10 +2816,15 @@ class TestIngressService:
             '    monitor-uri /health\n\n'
             'frontend frontend\n'
             '    bind 192.168.122.100:2049\n'
+            '    option tcplog\n'
             '    default_backend backend\n\n'
+            'peers haproxy_peers\n'
+            '     peer host1 host1:1024\n\n'
             'backend backend\n'
             '    mode        tcp\n'
-            '    balance     source\n'
+            '    balance     roundrobin\n'
+            '    stick-table type ip size 200k expire 30m peers haproxy_peers\n'
+            '    stick on src\n'
             '    hash-type   consistent\n'
         )
         if enable_haproxy_protocol:
@@ -3095,6 +3133,83 @@ class TestIngressService:
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
                 exp_config_lines = [line.rstrip() for line in haproxy_expected_conf['files']['haproxy.cfg'].splitlines()]
                 assert gen_config_lines == exp_config_lines
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_haproxy_config_rgw_tcp_mode(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.cache.update_host_networks('test', {
+                '1.2.3.0/24': {
+                    'if0': ['1.2.3.1']
+                }
+            })
+
+            # the ingress backend
+            s = RGWSpec(service_id="foo", placement=PlacementSpec(count=1),
+                        rgw_frontend_type='beast', rgw_frontend_port=443, ssl=True)
+
+            ispec = IngressSpec(service_type='ingress',
+                                service_id='test',
+                                backend_service='rgw.foo',
+                                frontend_port=8089,
+                                monitor_port=8999,
+                                monitor_user='admin',
+                                monitor_password='12345',
+                                virtual_interface_networks=['1.2.3.0/24'],
+                                virtual_ip="1.2.3.4/32",
+                                use_tcp_mode_over_rgw=True,
+                                enable_stats=True)
+            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+                # generate the haproxy conf based on the specified spec
+                haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
+
+                haproxy_expected_conf = {
+                    'files':
+                        {
+                            'haproxy.cfg':
+                                '# This file is generated by cephadm.'
+                                '\nglobal\n    log         '
+                                '127.0.0.1 local2\n    '
+                                'chroot      /var/lib/haproxy\n    '
+                                'pidfile     /var/lib/haproxy/haproxy.pid\n    '
+                                'maxconn     8000\n    '
+                                'daemon\n    '
+                                'stats socket /var/lib/haproxy/stats\n'
+                                '\ndefaults\n    '
+                                'mode                    tcp\n    '
+                                'log                     global\n    '
+                                'timeout queue           1m\n    '
+                                'timeout connect         10s\n    '
+                                'timeout client          1m\n    '
+                                'timeout server          1m\n    '
+                                'timeout check           10s\n    '
+                                'maxconn                 8000\n'
+                                '\nfrontend stats\n    '
+                                'mode http\n    '
+                                'bind 1.2.3.4:8999\n    '
+                                'bind 1::4:8999\n    '
+                                'stats enable\n    '
+                                'stats uri /stats\n    '
+                                'stats refresh 10s\n    '
+                                'stats auth admin:12345\n    '
+                                'http-request use-service prometheus-exporter if { path /metrics }\n    '
+                                'monitor-uri /health\n'
+                                '\nfrontend frontend\n    '
+                                'bind 1.2.3.4:8089 \n    '
+                                'option tcplog\n    '
+                                'default_backend backend\n\n'
+                                'backend backend\n    '
+                                'mode        tcp\n    '
+                                'balance     roundrobin\n    '
+                                'hash-type   consistent\n    '
+                                'option ssl-hello-chk\n    '
+                                'server '
+                                + haproxy_generated_conf[1][0] + ' 1::4:443 check weight 100 inter 2s\n'
+                        }
+                }
+
+                assert haproxy_generated_conf[0] == haproxy_expected_conf
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_ingress_config_multi_vips(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -3561,7 +3676,10 @@ class TestIngressService:
             monitor_password='12345',
             keepalived_password='12345',
             enable_haproxy_protocol=True,
-            enable_stats=True
+            enable_stats=True,
+            placement=PlacementSpec(
+                count=1,
+                hosts=['host1', 'host2']),
         )
 
         cephadm_module.spec_store._specs = {
@@ -3603,10 +3721,16 @@ class TestIngressService:
             '    monitor-uri /health\n\n'
             'frontend frontend\n'
             '    bind 192.168.122.100:2049\n'
+            '    option tcplog\n'
             '    default_backend backend\n\n'
+            'peers haproxy_peers\n'
+            '     peer host1 192.168.122.111:1024\n'
+            '     peer host2 192.168.122.222:1024\n\n'
             'backend backend\n'
             '    mode        tcp\n'
-            '    balance     source\n'
+            '    balance     roundrobin\n'
+            '    stick-table type ip size 200k expire 30m peers haproxy_peers\n'
+            '    stick on src\n'
             '    hash-type   consistent\n'
             '    default-server send-proxy-v2\n'
             '    server nfs.foo.0 192.168.122.111:12049 check\n'
@@ -3790,6 +3914,10 @@ class TestIngressService:
             monitor_password='12345',
             keepalived_password='12345',
             enable_haproxy_protocol=True,
+            placement=PlacementSpec(
+                count=1,
+                hosts=['host1', 'host2']),
+
         )
         cephadm_module.spec_store._specs = {
             'nfs.foo': nfs_service,
@@ -4293,6 +4421,44 @@ class TestNFS:
 
                 assert gen_config_lines == exp_config_lines
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_tls(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test', addr='1.2.3.7'):
+            cephadm_module.cache.update_host_networks('test', {
+                '1.2.3.0/24': {
+                    'if0': ['1.2.3.1']
+                }
+            })
+
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
+                                      ssl=True, ssl_cert=ceph_generated_cert, ssl_key=ceph_generated_key,
+                                      ssl_ca_cert=cephadm_root_ca, certificate_source='inline', tls_ktls=True,
+                                      tls_debug=True, tls_min_version='TLSv1.3',
+                                      tls_ciphers='ECDHE-ECDSA-AES256')
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                expected_tls_block = (
+                    'TLS_CONFIG{\n'
+                    '        Enable_TLS = True;\n'
+                    '        TLS_Cert_File = /etc/ganesha/tls/tls_cert.pem;\n'
+                    '        TLS_Key_File = /etc/ganesha/tls/tls_key.pem;\n'
+                    '        TLS_CA_File = /etc/ganesha/tls/tls_ca_cert.pem;\n'
+                    '        TLS_Ciphers = "ECDHE-ECDSA-AES256";\n'
+                    '        TLS_Min_Version = "TLSv1.3";\n'
+                    '        Enable_KTLS = True;\n'
+                    '        Enable_debug = True;\n'
+                    '}\n'
+                )
+                assert expected_tls_block in ganesha_conf
+
 
 class TestCephFsMirror:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -4489,7 +4655,7 @@ class TestJaeger:
 class TestAgent:
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None, fqdns=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None, fqdns=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_deploy_cephadm_agent(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
@@ -4823,9 +4989,9 @@ class TestMgmtGateway:
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_discovery_endpoints")
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_self_signed_certificates_with_label",
-           lambda instance, svc_spec, dspec, label: (ceph_generated_cert, ceph_generated_key))
+           lambda instance, svc_spec, dspec, label, ip: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
@@ -5069,9 +5235,9 @@ class TestMgmtGateway:
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_discovery_endpoints")
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_self_signed_certificates_with_label",
-           lambda instance, svc_spec, dspec, label: (ceph_generated_cert, ceph_generated_key))
+           lambda instance, svc_spec, dspec, label, ip: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
@@ -5411,10 +5577,64 @@ class TestMgmtGateway:
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_discovery_endpoints")
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_self_signed_certificates_with_label")
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
+    @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
+    @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints",
+           lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
+    def test_mgmt_gateway_internal_cert_san_includes_vip(
+        self,
+        get_self_signed_mock,
+        get_service_discovery_endpoints_mock,
+        get_service_endpoints_mock,
+        _run_cephadm,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        vip = "10.0.0.200"
+
+        def get_services_endpoints(name):
+            if name == 'prometheus':
+                return ["192.168.100.100:9095", "192.168.100.101:9095"]
+            if name == 'grafana':
+                return ["ceph-node-2:3000", "ceph-node-2:3000"]
+            if name == 'alertmanager':
+                return ["192.168.100.100:9093", "192.168.100.102:9093"]
+            if name == 'oauth2-proxy':
+                return []
+            return []
+
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        get_service_endpoints_mock.side_effect = get_services_endpoints
+        get_service_discovery_endpoints_mock.return_value = ["ceph-node-0:8765", "ceph-node-2:8765"]
+        get_self_signed_mock.return_value = TLSCredentials(ceph_generated_cert, ceph_generated_key)
+
+        server_port = 5555
+        spec = MgmtGatewaySpec(
+            port=server_port,
+            virtual_ip=vip,  # HA mode
+            ssl_cert=ceph_generated_cert,
+            ssl_key=ceph_generated_key,
+        )
+
+        with with_host(cephadm_module, 'ceph-node'):
+            with with_service(cephadm_module, spec):
+                # Ensure VIP was used when minting the internal cert (so it goes into SANs)
+                # get_self_signed_certificates_with_label(svc_spec, daemon_spec, label, ip)
+                args, _ = get_self_signed_mock.call_args
+                assert args[2] == 'internal'
+                assert args[3] == vip
+                deployed = json.loads(_run_cephadm.call_args.kwargs['stdin'])
+                assert deployed['config_blobs']['files']['nginx_internal.crt'] == ceph_generated_cert
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
+    @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_self_signed_certificates_with_label",
-           lambda instance, svc_spec, dspec, label: (ceph_generated_cert, ceph_generated_key))
+           lambda instance, svc_spec, dspec, label, ip: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
@@ -5424,11 +5644,11 @@ class TestMgmtGateway:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
-           lambda instance, dspec, ips=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.services.oauth2_proxy.OAuth2ProxyService.get_certificates",
-           lambda instance, dspec, ips=None: CertKeyPair(ceph_generated_cert, ceph_generated_key))
+           lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_self_signed_certificates_with_label",
-           lambda instance, svc_spec, dspec, label: (ceph_generated_cert, ceph_generated_key))
+           lambda instance, svc_spec, dspec, label, ip: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))

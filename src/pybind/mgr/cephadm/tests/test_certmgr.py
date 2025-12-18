@@ -5,7 +5,7 @@ import json
 from tests import mock
 import logging
 
-from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObjectProtocol, CertKeyPair
+from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObjectProtocol, TLSCredentials
 from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSObjectScope
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
@@ -305,12 +305,16 @@ class TestCertMgr(object):
         nvmeof_root_ca_cert = 'fake-nvmeof-root-ca-cert'
         grafana_cert_host_1 = 'grafana-cert-host-1'
         grafana_cert_host_2 = 'grafana-cert-host-2'
+        nfs_ssl_cert = 'nfs-ssl-cert'
+        nfs_ssl_ca_cert = 'nfs-ssl-ca-cert'
         cephadm_module.cert_mgr.save_cert('rgw_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
         cephadm_module.cert_mgr.save_cert('nvmeof_ssl_cert', nvmeof_ssl_cert, service_name='nvmeof.self-signed.foo', user_made=False)
         cephadm_module.cert_mgr.save_cert('nvmeof_client_cert', nvmeof_client_cert, service_name='nvmeof.foo', user_made=True)
         cephadm_module.cert_mgr.save_cert('nvmeof_root_ca_cert', nvmeof_root_ca_cert, service_name='nvmeof.foo', user_made=True)
         cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', grafana_cert_host_1, host='host-1', user_made=True)
         cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', grafana_cert_host_2, host='host-2', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nfs_ssl_cert', nfs_ssl_cert, service_name='nfs.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nfs_ssl_ca_cert', nfs_ssl_ca_cert, service_name='nfs.foo', user_made=True)
 
         expected_calls = [
             mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}rgw_ssl_cert', json.dumps({'rgw.foo': Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json()})),
@@ -319,7 +323,9 @@ class TestCertMgr(object):
             mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_root_ca_cert', json.dumps({'nvmeof.foo': Cert(nvmeof_root_ca_cert, True).to_json()})),
             mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}grafana_ssl_cert', json.dumps({'host-1': Cert(grafana_cert_host_1, True).to_json()})),
             mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}grafana_ssl_cert', json.dumps({'host-1': Cert(grafana_cert_host_1, True).to_json(),
-                                                                                    'host-2': Cert(grafana_cert_host_2, True).to_json()}))
+                                                                                    'host-2': Cert(grafana_cert_host_2, True).to_json()})),
+            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nfs_ssl_cert', json.dumps({'nfs.foo': Cert(nfs_ssl_cert, True).to_json()})),
+            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nfs_ssl_ca_cert', json.dumps({'nfs.foo': Cert(nfs_ssl_ca_cert, True).to_json()})),
         ]
         _set_store.assert_has_calls(expected_calls)
 
@@ -424,6 +430,24 @@ class TestCertMgr(object):
         }
         compare_certls_dicts(expected_ls)
 
+        cephadm_module.cert_mgr.save_cert('nfs_ssl_cert', CEPHADM_SELF_GENERATED_CERT_1, service_name='nfs.foo', user_made=True)
+        expected_ls["nfs_ssl_cert"] = {
+            "scope": "service",
+            "certificates": {
+                "nfs.foo": get_generated_cephadm_cert_info_1(),
+            },
+        }
+        compare_certls_dicts(expected_ls)
+
+        cephadm_module.cert_mgr.save_cert('nfs_ssl_ca_cert', CEPHADM_SELF_GENERATED_CERT_2, service_name='nfs.foo', user_made=True)
+        expected_ls["nfs_ssl_ca_cert"] = {
+            "scope": "service",
+            "certificates": {
+                "nfs.foo": get_generated_cephadm_cert_info_2(),
+            },
+        }
+        compare_certls_dicts(expected_ls)
+
         # Services with host target/scope
         cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', CEPHADM_SELF_GENERATED_CERT_1, host='host1', user_made=True)
         cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', CEPHADM_SELF_GENERATED_CERT_2, host='host2', user_made=True)
@@ -493,7 +517,7 @@ class TestCertMgr(object):
         # Save (simulate cephadm-generated) cert/key at host target
         cm.save_self_signed_cert_key_pair(
             svc,
-            CertKeyPair(CEPHADM_SELF_GENERATED_CERT_1, CEPHADM_SELF_GENERATED_KEY_2048),
+            TLSCredentials(CEPHADM_SELF_GENERATED_CERT_1, CEPHADM_SELF_GENERATED_KEY_2048),
             host=host,
             label=cert_label,
         )
@@ -586,6 +610,8 @@ class TestCertMgr(object):
             'grafana_ssl_cert': ('host1', 'grafana-cert', TLSObjectScope.HOST),
             'oauth2_proxy_ssl_cert': ('host1', 'oauth2-proxy', TLSObjectScope.HOST),
             'mgmt_gateway_ssl_cert': ('mgmt-gateway', 'mgmt-gw-cert', TLSObjectScope.GLOBAL),
+            'nfs_ssl_cert': ('nfs.foo', 'nfs-ssl-cert', TLSObjectScope.SERVICE),
+            'nfs_ssl_ca_cert': ('nfs.foo', 'nfs-ssl-ca-cert', TLSObjectScope.SERVICE),
         }
         unknown_certs = {
             'unknown_per_service_cert': ('unknown-svc.foo', 'unknown-cert', TLSObjectScope.SERVICE),
@@ -602,6 +628,7 @@ class TestCertMgr(object):
             'oauth2_proxy_ssl_key': ('host1', 'oauth2-proxy', TLSObjectScope.HOST),
             'ingress_ssl_key': ('ingress', 'ingress-ssl-key', TLSObjectScope.SERVICE),
             'iscsi_ssl_key': ('iscsi', 'iscsi-ssl-key', TLSObjectScope.SERVICE),
+            'nfs_ssl_key': ('nfs.foo', 'nfs-ssl-key', TLSObjectScope.SERVICE),
         }
         unknown_keys = {
             'unknown_per_service_key': ('unknown-svc.foo', 'unknown-key', TLSObjectScope.SERVICE),
@@ -674,9 +701,12 @@ class TestCertMgr(object):
         good_certs = {
             'rgw_ssl_cert': ('rgw.foo', 'good-cert', TLSObjectScope.SERVICE),
             'mgmt_gateway_ssl_cert': ('mgmt-gateway', 'good-global-cert', TLSObjectScope.GLOBAL),
+            'nfs_ssl_cert': ('nfs.foo', 'nfs-ssl-cert', TLSObjectScope.SERVICE),
+            'nfs_ssl_ca_cert': ('nfs.foo', 'nfs-ssl-ca-cert', TLSObjectScope.SERVICE),
         }
         good_keys = {
             'rgw_ssl_key': ('rgw.foo', 'good-key', TLSObjectScope.SERVICE),
+            'nfs_ssl_key': ('nfs.foo', 'nfs-ssl-key', TLSObjectScope.SERVICE),
         }
 
         # Helpers to dump valid JSON structures
@@ -723,10 +753,16 @@ class TestCertMgr(object):
         # Good entries loaded correctly
         assert 'rgw_ssl_cert' in cert_store
         assert cert_store['rgw_ssl_cert']['rgw.foo'] == Cert('good-cert', True)
+        assert 'nfs_ssl_cert' in cert_store
+        assert cert_store['nfs_ssl_cert']['nfs.foo'] == Cert('nfs-ssl-cert', True)
+        assert 'nfs_ssl_ca_cert' in cert_store
+        assert cert_store['nfs_ssl_ca_cert']['nfs.foo'] == Cert('nfs-ssl-ca-cert', True)
         assert 'mgmt_gateway_ssl_cert' in cert_store
         assert cert_store['mgmt_gateway_ssl_cert'] == Cert('good-global-cert', True)
         assert 'rgw_ssl_key' in key_store
         assert key_store['rgw_ssl_key']['rgw.foo'] == PrivKey('good-key')
+        assert 'nfs_ssl_key' in key_store
+        assert key_store['nfs_ssl_key']['nfs.foo'] == PrivKey('nfs-ssl-key')
 
         # Bad ones: object names exist (pre-registered), but **no targets** were added
         # Service / Host scoped => dict should be empty
@@ -737,13 +773,12 @@ class TestCertMgr(object):
         assert 'iscsi_ssl_key' in key_store
         assert isinstance(key_store['iscsi_ssl_key'], dict) and len(key_store['iscsi_ssl_key']) == 0
 
-        # Global-scoped key with bad JSON should also not be instantiated (no PrivKey object)
-        # Depending on how you seed known names, it might be absent OR present but falsy.
-        # Accept either: absent OR not a PrivKey instance.
-        if 'mgmt_gateway_ssl_key' in key_store:
-            assert not isinstance(key_store['mgmt_gateway_ssl_key'], PrivKey)
-        else:
-            assert 'mgmt_gateway_ssl_key' not in key_store
+        # Global-scoped key with bad JSON should NOT be hydrated
+        assert 'mgmt_gateway_ssl_key' in key_store
+        obj = key_store.get('mgmt_gateway_ssl_key')
+        # It should be a PrivKey (because globals are pre-seeded) but remain empty/falsy
+        assert isinstance(obj, PrivKey)
+        assert not bool(obj)  # still the tombstone, not parsed content
 
         messages = [r.getMessage() for r in caplog.records
                     if r.levelno >= logging.WARNING and r.name == "cephadm.tlsobject_store"]
@@ -1127,3 +1162,107 @@ class TestTLSObjectStore(unittest.TestCase):
             self.store._validate_tlsobject_name("per_host1")
         with self.assertRaises(TLSObjectException):
             self.store._validate_tlsobject_name("per_service1")
+
+    def test_register_does_not_double_write_on_second_call(self):
+        """
+        Calling register_object_name() twice for the same name should not create a new KV value
+        nor change the existing one (basic idempotency).
+        """
+        name = "per_service_twice"
+        key = f"{self.store.store_prefix}{name}"
+
+        # First register → writes {}
+        self.store.register_object_name(name, TLSObjectScope.SERVICE)
+        first_val = self.mgr.store.get(key)
+        assert first_val is not None
+        assert json.loads(first_val) == {}
+
+        # Second register → value should remain exactly the same
+        self.store.register_object_name(name, TLSObjectScope.SERVICE)
+        second_val = self.mgr.store.get(key)
+        assert second_val == first_val
+
+    def test_register_writes_tombstone_for_all_scopes(self):
+        """
+        register_object_name() must persist a tombstone for any scope:
+          - SERVICE/HOST → "{}" (empty per-target map)
+          - GLOBAL       → minimal JSON for an empty TLS object
+        """
+        # Fresh names (not present in objects_by_name yet)
+        svc_name = "per_service_new"
+        host_name = "per_host_new"
+        glob_name = "global_cert_new"
+
+        svc_key = f"{self.store.store_prefix}{svc_name}"
+        host_key = f"{self.store.store_prefix}{host_name}"
+        glob_key = f"{self.store.store_prefix}{glob_name}"
+
+        # Sanity: no keys yet
+        assert svc_key not in self.mgr.store
+        assert host_key not in self.mgr.store
+        assert glob_key not in self.mgr.store
+
+        # Act
+        self.store.register_object_name(svc_name, TLSObjectScope.SERVICE)
+        self.store.register_object_name(host_name, TLSObjectScope.HOST)
+        self.store.register_object_name(glob_name, TLSObjectScope.GLOBAL)
+
+        # Assert KV tombstones
+        assert svc_key in self.mgr.store
+        assert host_key in self.mgr.store
+        assert glob_key in self.mgr.store
+
+        # SERVICE/HOST → empty dict
+        assert json.loads(self.mgr.store[svc_key]) == {}
+        assert json.loads(self.mgr.store[host_key]) == {}
+
+        # GLOBAL → minimal JSON for empty MockTLSObject
+        expected_global_min = MockTLSObject.to_json(MockTLSObject())
+        assert json.loads(self.mgr.store[glob_key]) == expected_global_min
+
+        # Also assert scope lists updated & in-memory skeletons created
+        assert svc_name in self.store.service_scoped_objects
+        assert host_name in self.store.host_scoped_objects
+        assert glob_name in self.store.global_scoped_objects
+
+        assert isinstance(self.store.objects_by_name[svc_name], dict) and self.store.objects_by_name[svc_name] == {}
+        assert isinstance(self.store.objects_by_name[host_name], dict) and self.store.objects_by_name[host_name] == {}
+        # For globals, register() seeds an entry; it will be assigned the empty object later when loaded/saved.
+        # We only need to ensure the name exists in the registry.
+        assert glob_name in self.store.objects_by_name
+
+    def test_register_is_idempotent_and_does_not_overwrite_existing_kv(self):
+        """
+        If a store key already has content, register_object_name() must not clobber it.
+        """
+        # Pre-seed non-empty SERVICE and HOST entries, and a GLOBAL entry
+        svc_name = "per_service_existing"
+        host_name = "per_host_existing"
+        glob_name = "global_existing"
+
+        svc_key = f"{self.store.store_prefix}{svc_name}."
+        host_key = f"{self.store.store_prefix}{host_name}."
+        glob_key = f"{self.store.store_prefix}{glob_name}."
+
+        pre_svc_val = {"svcA": MockTLSObject.to_json(MockTLSObject("svc-seed", True, False))}
+        pre_host_val = {"hostA": MockTLSObject.to_json(MockTLSObject("host-seed", True, False))}
+        pre_glob_val = MockTLSObject.to_json(MockTLSObject("glob-seed", True, False))
+
+        self.mgr.set_store(svc_key, json.dumps(pre_svc_val))
+        self.mgr.set_store(host_key, json.dumps(pre_host_val))
+        self.mgr.set_store(glob_key, json.dumps(pre_glob_val))
+
+        # Act: register (should be a no-op on KV content)
+        self.store.register_object_name(svc_name, TLSObjectScope.SERVICE)
+        self.store.register_object_name(host_name, TLSObjectScope.HOST)
+        self.store.register_object_name(glob_name, TLSObjectScope.GLOBAL)
+
+        # Assert KV unchanged
+        assert json.loads(self.mgr.store[svc_key]) == pre_svc_val
+        assert json.loads(self.mgr.store[host_key]) == pre_host_val
+        assert json.loads(self.mgr.store[glob_key]) == pre_glob_val
+
+        # And registry entries exist
+        assert svc_name in self.store.objects_by_name
+        assert host_name in self.store.objects_by_name
+        assert glob_name in self.store.objects_by_name

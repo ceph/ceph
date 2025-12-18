@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "test/librados/test.h"
 #include "test/librbd/test_fixture.h"
@@ -1103,8 +1103,6 @@ TEST_F(TestMigration, CloneFlatten)
 
 TEST_F(TestMigration, TriggerAssertSnapcSeq)
 {
-  // https://tracker.ceph.com/issues/72041
-  SKIP_IF_CRIMSON();
   auto size = m_ictx->size;
 
   write((size >> 1) + 0, 10, 'A');
@@ -1165,8 +1163,6 @@ TEST_F(TestMigration, AbortWithoutSnapshots) {
 }
 
 TEST_F(TestMigration, AbortWithSnapshots) {
-  // https://tracker.ceph.com/issues/72650
-  SKIP_IF_CRIMSON();
   test_snaps();
   migration_prepare(m_ioctx, m_image_name);
   migration_status(RBD_IMAGE_MIGRATION_STATE_PREPARED);
@@ -1390,15 +1386,11 @@ TEST_F(TestMigration, Stress)
 
 TEST_F(TestMigration, Stress2)
 {
-  // https://tracker.ceph.com/issues/72705
-  SKIP_IF_CRIMSON();
   test_stress2(false);
 }
 
 TEST_F(TestMigration, StressLive)
 {
-  // https://tracker.ceph.com/issues/72709
-  SKIP_IF_CRIMSON();
   test_stress2(true);
 }
 

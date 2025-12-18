@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -8,10 +8,9 @@
 
 #include <boost/logic/tribool.hpp>
 
-#include "rgw_service.h"
 #include "rgw_common.h"
 #include "rgw_auth.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 
 namespace rgw {
 namespace auth {

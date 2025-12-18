@@ -9,7 +9,7 @@ These are exciting times in the Ceph community! Get involved!
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 |Channel               | Description                                     | Contact Info                                  |
 +======================+=================================================+===============================================+
-| **Blog**             | Check the Ceph Blog_ periodically to keep track | https://ceph.com/community/blog/              |
+| **Blog**             | Check the Ceph Blog_ periodically to keep track | https://ceph.io/en/news/blog/                 |
 |                      | of Ceph progress and important announcements.   |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **Planet Ceph**      | Check the blog aggregation on Planet Ceph for   | https://old.ceph.com/category/planet/         |
@@ -95,7 +95,7 @@ These are exciting times in the Ceph community! Get involved!
 .. _User Archives: https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/
 .. _Kernel Client Archives: https://www.spinics.net/lists/ceph-devel/
 .. _Mailing list archives: http://lists.ceph.com/
-.. _Blog: http://ceph.com/community/blog/
+.. _Blog: https://ceph.io/en/news/blog/
 .. _Tracker: http://tracker.ceph.com/
 .. _Ceph Source Code: http://github.com/ceph/ceph
 .. _Ceph Slack Invite: https://join.slack.com/t/ceph-storage/shared_invite/zt-32hkefbs5-f6qZDZLd5U8CYj7drBTHFw

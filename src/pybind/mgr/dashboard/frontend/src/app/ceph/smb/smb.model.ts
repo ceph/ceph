@@ -1,4 +1,5 @@
 import { CephServicePlacement } from '~/app/shared/models/service.interface';
+import { USER } from '~/app/shared/constants/app.constants';
 
 export interface SMBCluster {
   resource_type: typeof CLUSTER_RESOURCE;
@@ -32,7 +33,7 @@ interface SMBCephfs {
 interface SMBShareLoginControl {
   name: string;
   access: 'read' | 'read-write' | 'none' | 'admin';
-  category?: 'user' | 'group';
+  category?: typeof USER | 'group';
 }
 
 export interface Filesystem {
@@ -67,7 +68,7 @@ export const RESOURCE = {
 };
 
 export const AUTHMODE = {
-  User: 'user',
+  User: USER,
   ActiveDirectory: 'active-directory'
 };
 
@@ -100,7 +101,7 @@ interface SMBCephfs {
 interface SMBShareLoginControl {
   name: string;
   access: 'read' | 'read-write' | 'none' | 'admin';
-  category?: 'user' | 'group';
+  category?: typeof USER | 'group';
 }
 
 export interface SMBJoinAuth {

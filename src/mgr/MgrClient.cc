@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -484,7 +485,7 @@ bool MgrClient::handle_mgr_close(ref_t<MMgrClose> m)
   return true;
 }
 
-int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
+int MgrClient::start_command(vector<string>&& cmd, bufferlist&& inbl,
 			     bufferlist *outbl, string *outs,
 			     Context *onfinish)
 {
@@ -498,8 +499,8 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
   }
 
   auto &op = command_table.start_command();
-  op.cmd = cmd;
-  op.inbl = inbl;
+  op.cmd = std::move(cmd);
+  op.inbl = std::move(inbl);
   op.outbl = outbl;
   op.outs = outs;
   op.on_finish = onfinish;
@@ -518,8 +519,8 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 }
 
 int MgrClient::start_tell_command(
-  const string& name,
-  const vector<string>& cmd, const bufferlist& inbl,
+  string&& name,
+  vector<string>&& cmd, bufferlist&& inbl,
   bufferlist *outbl, string *outs,
   Context *onfinish)
 {
@@ -534,9 +535,9 @@ int MgrClient::start_tell_command(
 
   auto &op = command_table.start_command();
   op.tell = true;
-  op.name = name;
-  op.cmd = cmd;
-  op.inbl = inbl;
+  op.name = std::move(name);
+  op.cmd = std::move(cmd);
+  op.inbl = std::move(inbl);
   op.outbl = outbl;
   op.outs = outs;
   op.on_finish = onfinish;

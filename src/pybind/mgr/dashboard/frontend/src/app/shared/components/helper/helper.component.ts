@@ -8,9 +8,12 @@ import { HelperType } from '../../enum/cd-helper.enum';
   styleUrls: ['./helper.component.scss']
 })
 export class HelperComponent {
+  private static nextId = 0;
   icons = Icons;
   isPopoverOpen = false;
   helperType = HelperType;
+  // Generating unique ID for tooltip to avoid duplicate-id accessibility violations
+  tooltipId = `cd-tooltip-${++HelperComponent.nextId}`;
 
   // Tooltip: Displayed on hover or focus and contains contextual, helpful, and nonessential information.
   // Popover: Displayed on click and can contain varying text and interactive elements

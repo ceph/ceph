@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 /*
  * Ceph - scalable distributed file system
  *
@@ -535,15 +535,15 @@ public:
       projected_log.skip_can_rollback_to_to_head();
       projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
     }
-    if (!is_primary() && !is_ec_pg()) {
-      replica_clear_repop_obc(logv, t);
+    if (!is_primary()) {
+      clear_repop_obc(logv, t);
     }
     recovery_state.append_log(
       std::move(logv), trim_to, roll_forward_to, pg_committed_to,
       t, transaction_applied, async);
   }
 
-  void replica_clear_repop_obc(
+  void clear_repop_obc(
     const std::vector<pg_log_entry_t> &logv,
     ObjectStore::Transaction &t);
 
@@ -633,10 +633,10 @@ public:
     osd->send_message_osd_cluster(m, con);
   }
   void start_mon_command(
-    const std::vector<std::string>& cmd, const bufferlist& inbl,
+    std::vector<std::string>&& cmd, bufferlist&& inbl,
     bufferlist *outbl, std::string *outs,
     Context *onfinish) override {
-    osd->monc->start_mon_command(cmd, inbl, outbl, outs, onfinish);
+    osd->monc->start_mon_command(std::move(cmd), std::move(inbl), outbl, outs, onfinish);
   }
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) override;
   entity_name_t get_cluster_msgr_name() override {

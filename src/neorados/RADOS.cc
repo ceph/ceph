@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1570,8 +1571,8 @@ void RADOS::watch_(Object o, IOContext _ioc, WatchComp c,
 }
 
 void RADOS::next_notification_(uint64_t cookie, NextNotificationComp c) {
-  Objecter::LingerOp* linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-  if (!impl->objecter->is_valid_watch(linger_op)) {
+  boost::intrusive_ptr linger_op = impl->objecter->linger_by_cookie(cookie);
+  if (!linger_op) {
     dispatch(asio::append(std::move(c),
 			  bs::error_code(ENOTCONN, bs::generic_category()),
 			  Notification{}));
@@ -1611,9 +1612,9 @@ void RADOS::notify_ack_(Object o, IOContext _ioc,
 
 tl::expected<ceph::timespan, bs::error_code> RADOS::check_watch(uint64_t cookie)
 {
-  auto linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-  if (impl->objecter->is_valid_watch(linger_op)) {
-    return impl->objecter->linger_check(linger_op);
+  boost::intrusive_ptr linger_op = impl->objecter->linger_by_cookie(cookie);
+  if (linger_op) {
+    return impl->objecter->linger_check(linger_op.get());
   } else {
     return tl::unexpected(bs::error_code(ENOTCONN, bs::generic_category()));
   }
@@ -1624,7 +1625,12 @@ void RADOS::unwatch_(uint64_t cookie, IOContext _ioc,
 {
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
 
-  Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
+  boost::intrusive_ptr linger_op = impl->objecter->linger_by_cookie(cookie);
+  if (!linger_op) {
+    dispatch(asio::append(std::move(c),
+			  bs::error_code(ENOTCONN, bs::generic_category())));
+    return;
+  }
 
   ObjectOperation op;
   op.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
@@ -1637,7 +1643,7 @@ void RADOS::unwatch_(uint64_t cookie, IOContext _ioc,
 			   [objecter = impl->objecter,
 			    linger_op, c = std::move(c)]
 			   (bs::error_code ec) mutable {
-			     objecter->linger_cancel(linger_op);
+			     objecter->linger_cancel(linger_op.get());
 			     asio::dispatch(asio::append(std::move(c), ec));
 			   }));
 }
@@ -1868,8 +1874,8 @@ void RADOS::enumerate_objects_(IOContext _ioc, Cursor begin, Cursor end,
     });
 }
 
-void RADOS::osd_command_(int osd, std::vector<std::string> cmd,
-			 ceph::bufferlist in, CommandComp c) {
+void RADOS::osd_command_(int osd, std::vector<std::string>&& cmd,
+			 ceph::bufferlist&& in, CommandComp c) {
   impl->objecter->osd_command(
     osd, std::move(cmd), std::move(in), nullptr,
     [c = std::move(c)]
@@ -1879,8 +1885,8 @@ void RADOS::osd_command_(int osd, std::vector<std::string> cmd,
     });
 }
 
-void RADOS::pg_command_(PG pg, std::vector<std::string> cmd,
-			ceph::bufferlist in, CommandComp c) {
+void RADOS::pg_command_(PG pg, std::vector<std::string>&& cmd,
+			ceph::bufferlist&& in, CommandComp c) {
   impl->objecter->pg_command(
     pg_t{pg.seed, pg.pool}, std::move(cmd), std::move(in), nullptr,
     [c = std::move(c)]
@@ -1950,12 +1956,12 @@ void RADOS::wait_for_latest_osd_map_(SimpleOpComp c) {
   impl->objecter->wait_for_latest_osdmap(std::move(c));
 }
 
-void RADOS::mon_command_(std::vector<std::string> command,
-			 cb::list bl, std::string* outs, cb::list* outbl,
+void RADOS::mon_command_(std::vector<std::string>&& command,
+			 cb::list&& bl, std::string* outs, cb::list* outbl,
 			 SimpleOpComp c) {
 
   impl->monclient.start_mon_command(
-    command, bl,
+    std::move(command), std::move(bl),
     [c = std::move(c), outs, outbl](bs::error_code e,
 				    std::string s, cb::list bl) mutable {
       if (outs)

@@ -29,8 +29,8 @@ int RadosCommands::get_primary_osd(const std::string& pool_name,
   std::ostringstream oss;
   formatter.get()->flush(oss);
 
-  ceph::bufferlist inbl, outbl;
-  int rc = rados.mon_command(oss.str(), inbl, &outbl, nullptr);
+  ceph::bufferlist outbl;
+  int rc = rados.mon_command(oss.str(), {}, &outbl, nullptr);
   ceph_assert(rc == 0);
 
   JSONParser p;
@@ -60,8 +60,8 @@ bool RadosCommands::get_pool_allow_ec_optimizations(const std::string& pool_name
   std::ostringstream oss;
   formatter.get()->flush(oss);
 
-  ceph::bufferlist inbl, outbl;
-  int rc = rados.mon_command(oss.str(), inbl, &outbl, nullptr);
+  ceph::bufferlist outbl;
+  int rc = rados.mon_command(oss.str(), {}, &outbl, nullptr);
   ceph_assert(rc == 0);
 
   JSONParser p;
@@ -89,8 +89,8 @@ std::string RadosCommands::get_pool_ec_profile_name(const std::string& pool_name
   std::ostringstream oss;
   formatter.get()->flush(oss);
 
-  ceph::bufferlist inbl, outbl;
-  int rc = rados.mon_command(oss.str(), inbl, &outbl, nullptr);
+  ceph::bufferlist outbl;
+  int rc = rados.mon_command(oss.str(), {}, &outbl, nullptr);
   ceph_assert(rc == 0);
 
   JSONParser p;
@@ -123,8 +123,8 @@ ceph::ErasureCodeProfile RadosCommands::get_ec_profile_for_pool(const std::strin
   std::ostringstream oss;
   formatter.get()->flush(oss);
 
-  ceph::bufferlist inbl, outbl;
-  int rc = rados.mon_command(oss.str(), inbl, &outbl, nullptr);
+  ceph::bufferlist outbl;
+  int rc = rados.mon_command(oss.str(), {}, &outbl, nullptr);
   ceph_assert(rc == 0);
 
   // Parse the string output into an ErasureCodeProfile
@@ -170,8 +170,8 @@ void RadosCommands::inject_parity_read_on_primary_osd(const std::string& pool_na
   std::ostringstream oss;
   formatter.get()->flush(oss);
 
-  ceph::bufferlist inbl, outbl;
-  int rc = rados.osd_command(primary_osd, oss.str(), inbl, &outbl, nullptr);
+  ceph::bufferlist outbl;
+  int rc = rados.osd_command(primary_osd, oss.str(), {}, &outbl, nullptr);
   ceph_assert(rc == 0);
 }
 
@@ -192,7 +192,7 @@ void RadosCommands::inject_clear_parity_read_on_primary_osd(const std::string& p
   std::ostringstream oss;
   formatter.get()->flush(oss);
 
-  ceph::bufferlist inbl, outbl;
-  int rc = rados.osd_command(primary_osd, oss.str(), inbl, &outbl, nullptr);
+  ceph::bufferlist outbl;
+  int rc = rados.osd_command(primary_osd, oss.str(), {}, &outbl, nullptr);
   ceph_assert(rc == 0);
 }

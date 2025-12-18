@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -18,6 +18,19 @@ public:
   bool have_new() const;
   auto get_subs() const {
     return sub_new;
+  }
+  // get the requested start epoch for a subscription
+  // search first in "new" subs - subs that have not yet been sent
+  // but requested and going to be sent, then in "sent" subs.
+  // if not found, return 0
+  version_t get_start(const std::string& what) const {
+    if (auto i = sub_new.find(what); i != sub_new.end()) {
+      return i->second.start;
+    }
+    if (auto i = sub_sent.find(what); i != sub_sent.end()) {
+      return i->second.start;
+    }
+    return 0;
   }
   bool need_renew() const;
   // change the status of "new" subscriptions to "sent"

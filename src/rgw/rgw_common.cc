@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <errno.h>
 #include <vector>
@@ -18,7 +18,6 @@
 #include "rgw_string.h"
 #include "rgw_http_errors.h"
 #include "rgw_arn.h"
-#include "rgw_data_sync.h"
 
 #include "global/global_init.h"
 #include "common/ceph_crypto.h"
@@ -33,8 +32,6 @@
 #include "rgw_crypt_sanitize.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_sync_policy.h"
-
-#include "services/svc_zone.h"
 
 #include <sstream>
 
@@ -2853,6 +2850,8 @@ void RGWRateLimitInfo::dump(Formatter *f) const
 {
   f->dump_int("max_read_ops", max_read_ops);
   f->dump_int("max_write_ops", max_write_ops);
+  f->dump_int("max_list_ops", max_list_ops);
+  f->dump_int("max_delete_ops", max_delete_ops);
   f->dump_int("max_read_bytes", max_read_bytes);
   f->dump_int("max_write_bytes", max_write_bytes);
   f->dump_bool("enabled", enabled);

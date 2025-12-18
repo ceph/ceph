@@ -24,8 +24,8 @@ import { BaseModal } from 'carbon-components-angular';
   styleUrls: ['./crud-table.component.scss']
 })
 export class CRUDTableComponent implements OnInit {
-  @ViewChild('badgeDictTpl')
-  public badgeDictTpl: TemplateRef<any>;
+  @ViewChild('tagDictTpl')
+  public tagDictTpl: TemplateRef<any>;
   @ViewChild('dateTpl')
   public dateTpl: TemplateRef<any>;
   @ViewChild('durationTpl')
@@ -89,7 +89,7 @@ export class CRUDTableComponent implements OnInit {
         );
     this.permission = this.permissions[toCamelCase(meta.permissions[0])];
     const templates = {
-      badgeDict: this.badgeDictTpl,
+      badgeDict: this.tagDictTpl,
       date: this.dateTpl,
       duration: this.durationTpl
     };

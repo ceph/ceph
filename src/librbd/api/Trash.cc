@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/api/Trash.h"
 #include "include/rados/librados.hpp"
@@ -407,12 +407,11 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
       return -EINVAL;
     }
 
-    librados::bufferlist inbl;
     librados::bufferlist outbl;
     std::string pool_name = io_ctx.get_pool_name();
 
     librados::Rados rados(io_ctx);
-    rados.mon_command(R"({"prefix": "df", "format": "json"})", inbl,
+    rados.mon_command(R"({"prefix": "df", "format": "json"})", {},
                       &outbl, nullptr);
 
     json_spirit::mValue json;

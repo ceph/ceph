@@ -8,7 +8,7 @@ CephFS provides the cluster admin (operator) to check consistency of a file syst
 via a set of scrub commands. Scrub can be classified into two parts:
 
 #. Forward Scrub: In which the scrub operation starts at the root of the file system
-   (or a sub directory) and looks at everything that can be touched in the hierarchy
+   (or a subdirectory) and looks at everything that can be touched in the hierarchy
    to ensure consistency.
 
 #. Backward Scrub: In which the scrub operation looks at every RADOS object in the
@@ -25,7 +25,7 @@ scrub thereafter).
 Initiate File System Scrub
 ==========================
 
-To start a scrub operation for a directory tree use the following command::
+To start a scrub operation for a directory tree, run a command of the following form::
 
    ceph tell mds.<fsname>:0 scrub start <path> [scrubopts] [tag]
 
@@ -57,7 +57,7 @@ rank 0 and distributed across MDS as appropriate.
 Monitor (ongoing) File System Scrubs
 ====================================
 
-Status of ongoing scrubs can be monitored and polled using in `scrub status`
+Status of ongoing scrubs can be monitored and polled using the ``scrub status``
 command. This commands lists out ongoing scrubs (identified by the tag) along
 with the path and options used to initiate the scrub::
 
@@ -72,10 +72,10 @@ with the path and options used to initiate the scrub::
        }
    }
 
-`status` shows the number of inodes that are scheduled to be scrubbed at any point in time,
-hence, can change on subsequent `scrub status` invocations. Also, a high level summary of
+``status`` shows the number of inodes that are scheduled to be scrubbed at any point in time.
+Hence, it can change on subsequent ``scrub status`` invocations. Also, a high level summary of
 scrub operation (which includes the operation state and paths on which scrub is triggered)
-gets displayed in `ceph status`::
+gets displayed in ``ceph status``::
 
    ceph status
    [...]
@@ -87,7 +87,8 @@ gets displayed in `ceph status`::
    [...]
 
 A scrub is complete when it no longer shows up in this list (although that may
-change in future releases). Any damage will be reported via cluster health warnings.
+change in future releases). Any damage will be reported via
+:ref:`cluster health warnings <cephfs-health-messages>`.
 
 Control (ongoing) File System Scrubs
 ====================================
@@ -116,7 +117,7 @@ Control (ongoing) File System Scrubs
        }
    }
 
-- Resume: Resuming kick starts a paused scrub operation::
+- Resume: Resuming kick-starts a paused scrub operation::
 
    ceph tell mds.cephfs:0 scrub resume
    {
@@ -143,32 +144,32 @@ The types of damage that can be reported and repaired by File System Scrub are:
 
 * BACKTRACE : Inode's backtrace in the data pool is corrupted.
 
-These above named MDS damages can be repaired by using the following command::
+These above named MDS damage types can be repaired by running a command of the following form::
 
     ceph tell mds.<fsname>:0 scrub start /path recursive, repair, force
 
 If scrub is able to repair the damage, the corresponding entry is automatically
 removed from the damage table.
 
-Note: A scrub invoked with the ``repair`` option can identify an damaged hard link but not repair it.
+.. note:: A scrub invoked with the ``repair`` option can identify a damaged hard link but not repair it.
 
 
-Evaluate strays using recursive scrub
+Evaluate Strays Using Recursive Scrub
 =====================================
 
-- In order to evaluate strays i.e. purge stray directories in ``~mdsdir`` use the following command::
+To evaluate strays i.e. purge stray directories in ``~mdsdir``, run a command of the following form::
 
     ceph tell mds.<fsname>:0 scrub start ~mdsdir recursive
 
-- ``~mdsdir`` is not enqueued by default when scrubbing at the CephFS root. In order to perform stray evaluation
-  at root, run scrub with flags ``scrub_mdsdir`` and ``recursive``::
+``~mdsdir`` is not enqueued by default when scrubbing at the CephFS root. To perform stray evaluation
+at root, run scrub with flags ``scrub_mdsdir`` and ``recursive``::
 
     ceph tell mds.<fsname>:0 scrub start / recursive,scrub_mdsdir
 
-Dump stray folder content
-=====================================
+Dump Stray Folder Content
+=========================
 
-- In order to dump stray folder content on a specific MDS, use the following command::
+To dump stray folder content on a specific MDS, run a command of the following form::
 
     ceph tell mds.<fsname>:0 dump stray
     {

@@ -61,20 +61,21 @@ describe('RgwMultisiteRealmFormComponent', () => {
     });
 
     it('should validate name', () => {
-      component.action = 'create';
+      component.action = 'Create';
       component.createForm();
       const control = component.multisiteRealmForm.get('realmName');
       expect(_.isFunction(control.validator)).toBeTruthy();
     });
 
     it('should not validate name', () => {
-      component.action = 'edit';
+      component.action = 'Edit';
       component.createForm();
       const control = component.multisiteRealmForm.get('realmName');
       expect(control.asyncValidator).toBeNull();
     });
 
     it('tests create success notification', () => {
+      component.action = 'Create';
       spyOn(rgwRealmService, 'create').and.returnValue(observableOf([]));
       component.multisiteRealmForm.markAsDirty();
       component.submit();
@@ -86,7 +87,7 @@ describe('RgwMultisiteRealmFormComponent', () => {
 
     it('tests update success notification', () => {
       spyOn(rgwRealmService, 'update').and.returnValue(observableOf([]));
-      component.action = 'edit';
+      component.action = 'Edit';
       component.info = {
         data: { name: 'null' }
       };

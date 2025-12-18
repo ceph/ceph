@@ -10,7 +10,7 @@ import { IscsiService } from '~/app/shared/api/iscsi.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, USER } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -460,7 +460,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
 
   setAuthValidator(fg: CdFormGroup) {
     CdValidators.validateIf(
-      fg.get('user'),
+      fg.get(USER),
       () => fg.getValue('password') || fg.getValue('mutual_user') || fg.getValue('mutual_password'),
       [Validators.required],
       [Validators.pattern(this.USER_REGEX)],
@@ -469,10 +469,10 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
 
     CdValidators.validateIf(
       fg.get('password'),
-      () => fg.getValue('user') || fg.getValue('mutual_user') || fg.getValue('mutual_password'),
+      () => fg.getValue(USER) || fg.getValue('mutual_user') || fg.getValue('mutual_password'),
       [Validators.required],
       [Validators.pattern(this.PASSWORD_REGEX)],
-      [fg.get('user'), fg.get('mutual_user'), fg.get('mutual_password')]
+      [fg.get(USER), fg.get('mutual_user'), fg.get('mutual_password')]
     );
 
     CdValidators.validateIf(
@@ -480,7 +480,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
       () => fg.getValue('mutual_password'),
       [Validators.required],
       [Validators.pattern(this.USER_REGEX)],
-      [fg.get('user'), fg.get('password'), fg.get('mutual_password')]
+      [fg.get(USER), fg.get('password'), fg.get('mutual_password')]
     );
 
     CdValidators.validateIf(
@@ -488,7 +488,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
       () => fg.getValue('mutual_user'),
       [Validators.required],
       [Validators.pattern(this.PASSWORD_REGEX)],
-      [fg.get('user'), fg.get('password'), fg.get('mutual_user')]
+      [fg.get(USER), fg.get('password'), fg.get('mutual_user')]
     );
   }
 
@@ -658,8 +658,8 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
     // Target level authentication was introduced in ceph-iscsi config v11
     if (this.cephIscsiConfigVersion > 10) {
       const targetAuth: CdFormGroup = this.targetForm.get('auth') as CdFormGroup;
-      if (!targetAuth.getValue('user')) {
-        targetAuth.get('user').setValue('');
+      if (!targetAuth.getValue(USER)) {
+        targetAuth.get(USER).setValue('');
       }
       if (!targetAuth.getValue('password')) {
         targetAuth.get('password').setValue('');
@@ -672,7 +672,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
       }
       const acl_enabled = this.targetForm.getValue('acl_enabled');
       request['auth'] = {
-        user: acl_enabled ? '' : targetAuth.getValue('user'),
+        user: acl_enabled ? '' : targetAuth.getValue(USER),
         password: acl_enabled ? '' : targetAuth.getValue('password'),
         mutual_user: acl_enabled ? '' : targetAuth.getValue('mutual_user'),
         mutual_password: acl_enabled ? '' : targetAuth.getValue('mutual_password')

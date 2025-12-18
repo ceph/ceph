@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -113,9 +113,15 @@ class PerShardState {
   bool stopping = false;
   seastar::future<> stop_registry() {
     assert_core();
-    crimson::get_logger(ceph_subsys_osd).info("PerShardState::{}", __func__);
+    auto& logger = crimson::get_logger(ceph_subsys_osd);
+    logger.info("PerShardState::{}", __func__);
     stopping = true;
-    return registry.stop();
+
+    // First throttler stop and then call registry stop
+    return throttler.stop().then([this, &logger] {
+      logger.debug("Throttler stopped for shard {}", seastar::this_shard_id());
+      return registry.stop();
+    });
   }
 
   // PGMap state
@@ -209,6 +215,12 @@ public:
     PerfCounters *recoverystate_perf,
     crimson::os::FuturizedStore &store,
     OSDState& osd_state);
+
+  void initialize_scheduler(CephContext* cct, bool is_rotational) {
+    throttler.initialize_scheduler(cct, crimson::common::local_conf(), is_rotational, whoami);
+    throttler.start();
+ }
+
 };
 
 /**

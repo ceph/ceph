@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef _MSG_ASYNC_PROTOCOL_V2_
 #define _MSG_ASYNC_PROTOCOL_V2_
@@ -83,7 +83,7 @@ private:
 
   uint64_t client_cookie;
   uint64_t server_cookie;
-  uint64_t global_seq;
+  uint64_t global_seq; // Snapshot of AsyncMessenger::global_seq
   uint64_t connect_seq;
   uint64_t peer_global_seq;
   uint64_t message_seq;

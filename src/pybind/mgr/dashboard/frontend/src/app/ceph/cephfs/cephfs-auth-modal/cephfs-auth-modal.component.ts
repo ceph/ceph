@@ -18,6 +18,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { PERMISSION_NAMES } from '~/app/shared/models/cephfs.model';
 
 const DEBOUNCE_TIMER = 300;
 
@@ -35,26 +36,27 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit, AfterVie
   action: string;
   resource: string;
   icons = Icons;
+  readonly defaultdir: string = '/';
 
   clientPermissions = [
     {
-      name: 'read',
+      name: PERMISSION_NAMES.READ,
       description: $localize`Read permission is the minimum givable access`
     },
     {
-      name: 'write',
+      name: PERMISSION_NAMES.WRITE,
       description: $localize`Permission to set layouts or quotas, write access needed`
     },
     {
-      name: 'quota',
+      name: PERMISSION_NAMES.QUOTA,
       description: $localize`Permission to set layouts or quotas, write access needed`
     },
     {
-      name: 'snapshot',
+      name: PERMISSION_NAMES.SNAPSHOT,
       description: $localize`Permission to create or delete snapshots, write access needed`
     },
     {
-      name: 'rootSquash',
+      name: PERMISSION_NAMES.ROOTSQUASH,
       description: $localize`Safety measure to prevent scenarios such as accidental sudo rm -rf /path`
     }
   ];
@@ -83,11 +85,6 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit, AfterVie
     this.directoryStore.loadDirectories(this.id, '/', 3);
     this.createForm();
     this.loadingReady();
-    if (this.directoryStore?.isLoading) {
-      this.form.get('directory').disable();
-    } else {
-      this.form.get('directory').disable();
-    }
   }
 
   createForm() {
@@ -98,10 +95,13 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit, AfterVie
           validators: [Validators.required]
         }
       ),
-      directory: new FormControl(undefined, {
-        updateOn: 'blur',
-        validators: [Validators.required]
-      }),
+      directory: new FormControl(
+        { value: this.defaultdir, disabled: false },
+        {
+          updateOn: 'blur',
+          validators: [Validators.required]
+        }
+      ),
       userId: new FormControl(undefined, {
         validators: [Validators.required]
       }),
@@ -134,7 +134,7 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit, AfterVie
   onSubmit() {
     const clientId: number = this.form.getValue('userId');
     const caps: string[] = [this.form.getValue('directory'), this.transformPermissions()];
-    const rootSquash: boolean = this.form.getValue('rootSquash');
+    const rootSquash: boolean = this.form.getValue(PERMISSION_NAMES.ROOTSQUASH);
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('cephfs/auth', {
@@ -151,16 +151,23 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit, AfterVie
   }
 
   transformPermissions(): string {
-    const write = this.form.getValue('write');
-    const snapshot = this.form.getValue('snapshot');
-    const quota = this.form.getValue('quota');
+    const write = this.form.getValue(PERMISSION_NAMES.WRITE);
+    const snapshot = this.form.getValue(PERMISSION_NAMES.SNAPSHOT);
+    const quota = this.form.getValue(PERMISSION_NAMES.QUOTA);
     return `r${write ? 'w' : ''}${quota ? 'p' : ''}${snapshot ? 's' : ''}`;
   }
 
-  toggleFormControl() {
-    const snapshot = this.form.get('snapshot');
-    const quota = this.form.get('quota');
-    snapshot.disabled ? snapshot.enable() : snapshot.disable();
-    quota.disabled ? quota.enable() : quota.disable();
+  toggleFormControl(_event?: boolean, permisson?: string) {
+    const snapshot = this.form.get(PERMISSION_NAMES.SNAPSHOT);
+    const quota = this.form.get(PERMISSION_NAMES.QUOTA);
+    if (_event && permisson == PERMISSION_NAMES.WRITE) {
+      snapshot.disabled ? snapshot.enable() : snapshot.disable();
+      quota.disabled ? quota.enable() : quota.disable();
+    } else if (!_event && permisson == PERMISSION_NAMES.WRITE) {
+      snapshot.setValue(false);
+      quota.setValue(false);
+      snapshot.disable();
+      quota.disable();
+    }
   }
 }

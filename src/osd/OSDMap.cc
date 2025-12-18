@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -373,7 +374,7 @@ bool OSDMap::subtree_type_is_down(
 {
   if (id >= 0) {
     bool is_down_ret = is_down(id);
-    if (!is_out(id)) {
+    if (!is_out(id) && !(osd_state[id] & CEPH_OSD_NEW)) {
       if (is_down_ret) {
         down_in_osds->insert(id);
       } else {
@@ -2145,20 +2146,19 @@ bool OSDMap::check_pg_upmaps(
       continue;
     }
     // below we check against crush-topology changing..
-    map<int, float> weight_map;
-    auto it = rule_weight_map.find(crush_rule);
-    if (it == rule_weight_map.end()) {
-      auto r = crush->get_rule_weight_osd_map(crush_rule, &weight_map);
+    auto rule_entry = rule_weight_map.find(crush_rule);
+    if (rule_entry == rule_weight_map.end()) {
+      rule_entry = rule_weight_map.emplace(crush_rule, map<int, float>()).first;
+      auto r = crush->get_rule_weight_osd_map(crush_rule, &rule_entry->second);
       if (r < 0) {
         lderr(cct) << __func__ << " unable to get crush weight_map for "
                    << "crush_rule " << crush_rule
                    << dendl;
+        rule_weight_map.erase(rule_entry);
         continue;
       }
-      rule_weight_map[crush_rule] = weight_map;
-    } else {
-      weight_map = it->second;
     }
+    const map<int, float> &weight_map = rule_entry->second;
     ldout(cct, 10) << __func__ << " pg " << pg
                    << " weight_map " << weight_map
                    << dendl;

@@ -441,12 +441,12 @@ options:
 - name: rgw_lc_max_wp_worker
   type: int
   level: advanced
-  desc: Number of workpool threads per LCWorker
-  long_desc: Number of threads in per-LCWorker workpools--used to accelerate per-bucket
+  desc: Number of workpool coroutines per LCWorker
+  long_desc: Number of coroutines in per-LCWorker workpools--used to accelerate per-bucket
     processing
-  fmt_desc: This option specifies the number of threads in each lifecycle
+  fmt_desc: This option specifies the number of coroutines in each lifecycle
     workers work pool. This option can help accelerate processing each bucket.
-  default: 3
+  default: 128
   services:
   - rgw
   with_legacy: true
@@ -3660,12 +3660,12 @@ options:
 - name: rgw_scheduler_type
   type: str
   level: advanced
-  desc: Set the type of dmclock scheduler, defaults to throttler Other valid values
-    are dmclock which is experimental
+  desc: Set the type of dmclock scheduler, defaults to throttler. Other valid value
+    is dmclock which is experimental.
   fmt_desc: |
-    The RGW scheduler to use. Valid values are ``throttler` and
+    The RGW scheduler to use. Valid values are ``throttler`` and
     ``dmclock``. Currently defaults to ``throttler`` which throttles Beast
-    frontend requests. ``dmclock` is *experimental* and requires the
+    frontend requests. ``dmclock`` is *experimental* and requires
     ``dmclock`` to be included in the ``experimental_feature_enabled``
     configuration option.
 
@@ -3894,12 +3894,12 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_d4n_l1_datacache_size
+- name: rgw_d4n_l1_datacache_disk_reserve
   type: size
   level: advanced
-  desc: maximum size on disk for datacache
-  long_desc: The local SSD cache uses this option to configure its size in bytes. This 
-    option is not used by the Redis cache backend. 
+  desc: amount of disk space to keep free for datacache
+  long_desc: The local SSD cache uses this option to determine how much disk space to 
+    reserve. The cache can grow until disk usage reaches (total disk space - reserved space).
   default: 1_G
   services:
   - rgw
@@ -4444,6 +4444,18 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_d4n_local_rgw_address
+  type: str
+  level: advanced
+  desc: local RGW address 
+  long_desc: This is the address used to represent the local RGW in a distributed D4N
+    system that involves remote RGWs. 
+  default: 127.0.0.1:8000
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_d4n_l1_datacache_address
   type: str
   level: advanced
@@ -4508,6 +4520,20 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_ratelimit_interval
+  type: uint
+  level: advanced
+  desc: Time window for rate limiting in seconds
+  long_desc: This option sets the time window for rate limiting accumulation in seconds.
+    Requests that exceed the configured rate limits within this time window will be rejected.
+    The default is a 60 second token bucket.
+  default: 60
+  min: 1
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_redis_connection_pool_size
   type: int
   level: basic
@@ -4530,3 +4556,19 @@ options:
   default: 11
   services: 
     - rgw
+- name: rgw_usage_log_key_transition
+  type: bool
+  level: advanced
+  desc: Hhandle the co-existence of both old and new name-by-user keys
+  long_desc: The new usage log keyed by owner/payer ID has the prefix of "~"
+    for IDs starting with '0'.  This prefix is absent from the old scheme.
+    This option instructs RGW to handle the old keys if they still exist.
+    It should be set false when the old keys no longer exist to avoid
+    performance penalty.
+  fmt_desc: To handle the co-existence of both old and new name-by-user keys
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_usage_log
+  with_legacy: true

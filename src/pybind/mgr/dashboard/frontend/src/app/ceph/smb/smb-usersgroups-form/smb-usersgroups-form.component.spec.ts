@@ -10,13 +10,14 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { USERSGROUPS_RESOURCE } from '../smb.model';
 import { of } from 'rxjs';
+import { USER } from '~/app/shared/constants/app.constants';
 
 export const FOO_USERSGROUPS = {
   users_groups_id: 'foo',
   values: {
     users: [
       {
-        name: 'user',
+        name: USER,
         password: 'pass'
       }
     ],
@@ -65,7 +66,7 @@ describe('SmbUsersgroupsFormComponent', () => {
     const user = component.users.controls[0] as FormGroup;
     component.form.controls['usersGroupsId'].setValue('foo');
     component.form.controls['linkedToCluster'].setValue(undefined);
-    user.controls['name'].setValue('user');
+    user.controls['name'].setValue(USER);
     user.controls['password'].setValue('pass');
     component.addGroup();
     const group = component.groups.controls[0] as FormGroup;
@@ -90,7 +91,7 @@ describe('SmbUsersgroupsFormComponent', () => {
         usersGroupsId: 'foo',
         users: [
           {
-            name: 'user',
+            name: USER,
             password: 'pass'
           }
         ],

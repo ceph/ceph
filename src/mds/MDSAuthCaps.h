@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -272,7 +273,7 @@ public:
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
 		  uid_t uid, gid_t gid, const std::vector<uint64_t> *caller_gid_list,
 		  unsigned mask, uid_t new_uid, gid_t new_gid,
-		  const entity_addr_t& addr) const;
+		  const entity_addr_t& addr, std::string_view trimmed_inode_path) const;
   bool path_capable(std::string_view inode_path) const;
 
   bool fs_name_capable(std::string_view fs_name, unsigned mask) const {

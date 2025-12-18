@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "common/Clock.h"
 #include "common/Timer.h"
@@ -13,7 +13,7 @@
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
 #include "rgw_zone.h"
-#include "rgw_rados.h"
+#include "driver/rados/rgw_rados.h"
 
 #include "services/svc_zone.h"
 

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <sys/mman.h>
 #include <string.h>
@@ -1281,8 +1281,8 @@ BtreeLBAManager::remap_mappings(
 	    val.pladdr = paddr + remap.offset;
 	  }
 	  val.refcount = EXTENT_DEFAULT_REF_COUNT;
-	  val.checksum = 0; // the checksum should be updated later when
-			    // committing the transaction
+	  // Checksum will be updated when the committing the transaction
+	  val.checksum = CRC_NULL;
 	  return btree.insert(c, iter, new_key, std::move(val)
 	  ).si_then([c, &remap, &mapping, &ret, &iter](auto p) {
 	    auto &[it, inserted] = p;

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -742,8 +743,14 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_ancestor_of(const CInode *other, std::unordered_map<CInode const*,bool>* visited=nullptr) const;
   bool is_projected_ancestor_of(const CInode *other) const;
 
-  void make_path_string(std::string& s, bool projected=false, const CDentry *use_parent=NULL) const;
-  void make_path(filepath& s, bool projected=false) const;
+  void make_path_string(std::string& s, bool projected=false,
+		        const CDentry *use_parent=NULL,
+		        int path_comp_count=-1) const;
+  void make_trimmed_path_string(std::string& s, bool projected=false,
+				const CDentry *use_parent=NULL,
+				int path_comp_count=10) const;
+  void make_path(filepath& s, bool projected=false,
+		 int path_comp_count=-1) const;
   void name_stray_dentry(std::string& dname);
   
   // -- dirtyness --

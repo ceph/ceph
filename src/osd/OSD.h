@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1744,7 +1745,9 @@ protected:
       OpSchedulerItem&& qi);
 
     /// try to do some work
-    void _process(uint32_t thread_index, ceph::heartbeat_handle_d *hb) override;
+    void _process(uint32_t thread_index,
+                  uint32_t shard_index,
+                  ceph::heartbeat_handle_d *hb) override;
 
     void stop_for_fast_shutdown();
 
@@ -1788,8 +1791,7 @@ protected:
       }
     }
 
-    bool is_shard_empty(uint32_t thread_index) override {
-      uint32_t shard_index = thread_index % osd->num_shards;
+    bool is_shard_empty(uint32_t thread_index, uint32_t shard_index) override {
       auto &&sdata = osd->shards[shard_index];
       ceph_assert(sdata);
       std::lock_guard l(sdata->shard_lock);
@@ -2188,7 +2190,7 @@ private:
   }
 
 private:
-  int mon_cmd_maybe_osd_create(std::string &cmd);
+  int mon_cmd_maybe_osd_create(std::string &&cmd);
   int update_crush_device_class();
   int update_crush_location();
 

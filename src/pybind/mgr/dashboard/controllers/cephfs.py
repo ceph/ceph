@@ -30,6 +30,35 @@ GET_STATFS_SCHEMA = {
     'subdirs': (int, '')
 }
 
+LIST_PEERS_SCHEMA = [{
+    'uuid': ({
+        'client_name': (str, 'Ceph client name'),
+        'site_name': (str, 'Remote site name'),
+        'fs_name': (str, 'File system name'),
+    }, 'Peer ID'),
+}]
+
+DAEMON_STATUS_SCHEMA = [{
+    'daemon_id': (int, 'Daemon ID'),
+    'filesystems': ([{
+        'filesystem_id': (int, 'Filesystem ID'),
+        'name': (str, 'Filesystem name'),
+        'directory_count': (int, 'Directory count'),
+        'peers': ([{
+            'uuid': (str, 'Peer UUID'),
+            'remote': ({
+                'client_name': (str, 'Ceph client name'),
+                'cluster_name': (str, 'Remote cluster name'),
+                'fs_name': (str, 'Remote filesystem name'),
+            }, 'Remote peer information'),
+            'stats': ({
+                'failure_count': (int, 'Number of sync failures'),
+                'recovery_count': (int, 'Number of peer recoveries'),
+            }, 'Peer statistics'),
+        }], 'List of peer objects'),
+    }], 'List of filesystems on daemon'),
+}]
+
 
 # pylint: disable=R0904
 @APIRouter('/cephfs', Scope.CEPHFS)
@@ -1206,3 +1235,37 @@ class CephFSSnapshotSchedule(RESTController):
             )
 
         return f'Snapshot schedule for path {path} activated successfully'
+
+
+@APIRouter('/cephfs/mirror', Scope.CEPHFS_MIRROR)
+@APIDoc("Cephfs Mirror Management API", "CephfsMirror")
+class CephFSMirror(RESTController):
+
+    @EndpointDoc("Get peers",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                 },
+                 responses={200: LIST_PEERS_SCHEMA})
+    def list(self, fs_name: str):
+        error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_peer_list', fs_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to get Cephfs mirror peers: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out)
+
+    @EndpointDoc("Get mirror daemon and peers information",
+                 responses={200: DAEMON_STATUS_SCHEMA})
+    @Endpoint('GET', path='/daemon-status')
+    @ReadPermission
+    def daemon_status(self):
+        error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_daemon_status')
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to get Cephfs mirror daemon status: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out)

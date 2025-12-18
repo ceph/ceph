@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <algorithm>
 #include <boost/tokenizer.hpp>
@@ -8,14 +8,12 @@
 #include "include/function2.hpp"
 #include "rgw_iam_policy.h"
 #include "rgw_rest_pubsub.h"
-#include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_arn.h"
 #include "rgw_auth_s3.h"
-#include "rgw_notify.h"
 #include "services/svc_zone.h"
 #include "common/dout.h"
 #include "rgw_url.h"

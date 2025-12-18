@@ -4,7 +4,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, USER } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -66,7 +66,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     [this.clusterAliasNames, this.clusterUrls, this.clusterUsers] = [
       'cluster_alias',
       'url',
-      'user'
+      USER
     ].map((prop) => this.clustersData?.map((cluster) => cluster[prop]));
   }
 

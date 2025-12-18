@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -525,8 +526,71 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
     getline(sstrm, rs);
     mon.reply_command(op, err, rs, rdata, get_last_committed());
     return true;
+  } else if (prefix == "nvme-gw listeners") {
+    std::string  pool, group;
+    if (!f) {
+      f.reset(Formatter::create(format, "json-pretty", "json-pretty"));
+    }
+    cmd_getval(cmdmap, "pool", pool);
+    cmd_getval(cmdmap, "group", group);
+    auto group_key = std::make_pair(pool, group);
+    dout(10) << "nvme-gw listeners pool " << pool << " group " << group << dendl;
+
+    f->open_object_section("common");
+    f->dump_unsigned("epoch", map.epoch);
+    f->dump_string("pool", pool);
+    f->dump_string("group", group);
+
+    f->dump_unsigned("num gws", map.created_gws[group_key].size());
+    if (map.gw_epoch.find(group_key) != map.gw_epoch.end())
+      f->dump_unsigned("GW-epoch", map.gw_epoch[group_key]);
+    if (map.created_gws[group_key].size() == 0) {
+      f->close_section();
+      f->flush(rdata);
+      sstrm.str("");
+    } else {
+      get_gw_listeners(f.get(), group_key); 
+      f->close_section();
+      f->flush(rdata);
+      sstrm.str("");
+    }
+    getline(sstrm, rs);
+    mon.reply_command(op, err, rs, rdata, get_last_committed());
+    return true;
   }
   return false;
+}
+
+void NVMeofGwMon::get_gw_listeners(Formatter *f, std::pair<std::string, std::string>& group_key){
+  std::map<std::string, std::list<std::pair<BeaconListener, std::string>>> subsystem_listeners;
+  for (auto& gw_created_pair: map.created_gws[group_key]) {
+    auto& gw_id = gw_created_pair.first;
+    auto& state = gw_created_pair.second;
+    if (state.availability == gw_availability_t::GW_AVAILABLE) {
+      for (auto &subs: state.subsystems) {
+        auto& lst = subsystem_listeners[subs.nqn];
+        for (auto& listener : subs.listeners) {
+            lst.push_back({listener, gw_id});
+        }
+      }
+    }
+  }
+  f->open_object_section("Created listeners");
+  for (auto& listener_pair: subsystem_listeners) {
+    auto& subsystem_nqn = listener_pair.first;
+    auto& listeners = listener_pair.second;
+    f->open_array_section(subsystem_nqn);
+    for (auto& [listener, gw_id] : listeners) {
+      f->open_object_section("stat");
+      f->dump_string("address_family", listener.address_family);
+      f->dump_string("address", listener.address);
+      f->dump_string("svcid", listener.svcid);
+      f->dump_string("gw_id", gw_id);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  f->close_section(); 
 }
 
 bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
@@ -577,6 +641,7 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
         // Simulate  immediate Failover of this GW
         process_gw_down(id, group_key, propose,
            gw_availability_t::GW_UNAVAILABLE);
+        pending_map.check_all_gws_in_deleting_state(id, group_key);
       } else if (rc == -EINVAL) {
 	dout (4) << "Error: GW not found in the database " << id << " "
 		 << pool << " " << group << "  rc " << rc << dendl;

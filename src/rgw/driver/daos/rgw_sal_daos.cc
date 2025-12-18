@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=2 sw=2 expandtab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -1035,6 +1035,7 @@ int DaosObject::restore_obj_from_cloud(Bucket* bucket,
           uint64_t olh_epoch,
           std::optional<uint64_t> days,
 	  bool& in_progress,
+	  uint64_t& size,
           const DoutPrefixProvider* dpp, 
           optional_yield y)
 {
@@ -1231,7 +1232,7 @@ int DaosObject::copy_object(
     RGWObjCategory category, uint64_t olh_epoch,
     boost::optional<ceph::real_time> delete_at, std::string* version_id,
     std::string* tag, std::string* etag, void (*progress_cb)(off_t, void*),
-    void* progress_data, const DoutPrefixProvider* dpp, optional_yield y) {
+    void* progress_data, rgw::sal::DataProcessorFactory* dp_factory, const DoutPrefixProvider* dpp, optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 

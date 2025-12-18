@@ -39,6 +39,7 @@ objects as well::
       "acls": [ { "type": <id | email | uri>,
                   "source_id": <source_id>,
                   "dest_id": <dest_id> } ... ],
+      "location_constraint": <location-constraint>,
       "target_path": <target_path>,
       "target_storage_class": <target-storage-class>,
       "multipart_sync_threshold": {object_size},
@@ -94,10 +95,12 @@ the following configurables should be set accordingly:
 
   The duration for which the objects are to be restored on the remote cloud service.
 
-* ``glacier_restore_tier_type`` (``Standard`` | ``Expedited``)
+* ``glacier_restore_tier_type`` (``Standard`` | ``Expedited`` | ``NoTier``)
 
   The type of retrieval within the cloud service, which may represent different
-  pricing. Supported options are ``Standard`` and ``Expedited``.
+  pricing. Supported options are ``Standard``, ``Expedited`` and ``NoTier``.
+
+  ``NoTier`` for the s3 servers which does not follow options in ``Tier`` as per s3 protocol.
 
 
 For example:

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -267,9 +267,9 @@ class StoreBucket : public Bucket {
         optional_yield y,
         const DoutPrefixProvider *dpp,
         RGWObjVersionTracker* objv_tracker) override { return 0; }
-    int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed) override { return 0; }
-    int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override { return 0; }
-    int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override {
+    int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed, bool async) override { return 0; }
+    int remove_logging_object(const std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) override { return 0; }
+    int write_logging_object(const std::string& obj_name, const std::string& record, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override {
       return 0;
     }
 
@@ -373,6 +373,7 @@ class StoreObject : public Object {
 			   CephContext* cct,
 		           std::optional<uint64_t> days,
 			   bool& in_progress,
+			   uint64_t& size,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y) override {
       return -1;

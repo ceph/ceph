@@ -9,5 +9,5 @@
 <ng-template #healthTmpl
              let-row="data.row"
              let-value="data.value">
-  <span [ngClass]="row.health_color | mirrorHealthColor">{{ value }}</span>
+  <cds-tag [class]="row.health_color | mirrorHealthColor">{{ value }}</cds-tag>
 </ng-template>

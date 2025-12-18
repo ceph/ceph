@@ -25,7 +25,7 @@ export class RbdDetailsComponent implements OnChanges {
 
   ngOnChanges() {
     if (this.selection) {
-      this.rbdDashboardUrl = `rbd-details?var-pool=${this.selection['pool_name']}&var-image=${this.selection['name']}`;
+      this.rbdDashboardUrl = `ceph-block-details?var-pool=${this.selection['pool_name']}&var-image=${this.selection['name']}`;
     }
   }
 }

@@ -1,3 +1,5 @@
+.. _rados_operations_monitoring_osd_pg:
+
 =========================
  Monitoring OSDs and PGs
 =========================

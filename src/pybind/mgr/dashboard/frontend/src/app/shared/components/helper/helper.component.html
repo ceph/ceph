@@ -8,7 +8,8 @@
 </ng-template>
 @if (type === helperType.tooltip) {
   <cds-tooltip [description]="tooltipTemplate"
-               [autoAlign]="true">
+               [autoAlign]="true"
+               [id]="tooltipId">
     <svg [cdsIcon]="iconType"
          [size]="iconSize"></svg>
   </cds-tooltip>

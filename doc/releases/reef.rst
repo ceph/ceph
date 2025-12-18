@@ -8,6 +8,11 @@ v18.2.7 Reef
 ============
 This is the seventh backport (hotfix) release in the Reef series. We recommend that all users update to this release.
 
+Release Date
+------------
+
+May 8, 2025
+
 Notable Changes
 ---------------
 
@@ -33,6 +38,11 @@ v18.2.6 Reef
 
 This is the sixth backport (hotfix) release in the Reef series. We recommend that all users update to this release.
 
+Release Date
+------------
+
+April 21, 2025
+
 Notable Changes
 ---------------
 
@@ -52,6 +62,11 @@ v18.2.5 Reef
 ============
 
 This is the fifth backport release in the Reef series. We recommend that all users update to this release.
+
+Release Date
+------------
+
+April 8, 2025
 
 Notable Changes
 ---------------

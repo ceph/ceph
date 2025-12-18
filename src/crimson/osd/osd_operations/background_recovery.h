@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -25,7 +25,7 @@ public:
     Ref<PG> pg,
     ShardServices &ss,
     epoch_t epoch_started,
-    crimson::osd::scheduler::scheduler_class_t scheduler_class, float delay = 0);
+    SchedulerClass scheduler_class, float delay = 0);
 
   virtual void print(std::ostream &) const;
   seastar::future<> start();
@@ -38,8 +38,12 @@ protected:
 private:
   virtual void dump_detail(Formatter *f) const;
   crimson::osd::scheduler::params_t get_scheduler_params() const {
+    int cost = static_cast<int>(std::max<int64_t>(1, pg->get_average_object_size()));
+    unsigned priority = pg->get_recovery_op_priority();
+
     return {
-      1, // cost
+      cost, // cost
+      priority, // priority
       0, // owner
       scheduler_class
     };
@@ -47,7 +51,7 @@ private:
   using do_recovery_ret_t = typename PhasedOperationT<T>::template interruptible_future<seastar::stop_iteration>;
   virtual do_recovery_ret_t do_recovery() = 0;
   ShardServices &ss;
-  const crimson::osd::scheduler::scheduler_class_t scheduler_class;
+  const SchedulerClass scheduler_class;
 };
 
 /// represent a recovery initiated for serving a client request

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <cstdint>
@@ -42,7 +42,7 @@
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
 #include "rgw_tag_s3.h"
@@ -72,7 +72,9 @@
 #include "rgw_rest_iam.h"
 #include "rgw_rest_bucket_logging.h"
 #include "rgw_sts.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
+#endif
 #include "rgw_cksum_pipe.h"
 #include "rgw_s3select.h"
 
@@ -553,18 +555,29 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 	try {
 	  rgw::cksum::Cksum cksum;
 	  decode(cksum, i->second);
-	  auto cksum_type =
-	    rgw::cksum::get_checksum_type(cksum,
-	      (multipart_parts_count && multipart_parts_count > 0) /* is_multipart */);
+	  rgw::cksum::ChecksumTypeResult cksum_type;
+	  if (multipart_part_num) {
+	    cksum_type = rgw::cksum::get_part_checksum_type(cksum);
+	  } else {
+	    cksum_type = rgw::cksum::get_checksum_type(cksum,
+		(multipart_parts_count && multipart_parts_count > 0) /* is_multipart */);
+	  }
 	  if (std::get<0>(cksum_type) == rgw::cksum::Cksum::FLAG_COMPOSITE) {
 	    /* cksum was computed with a digest algorithm, or predates the 2025
 	       update that introduced CRC combining */
-	    ldpp_dout_fmt(this, 16,
-			  "INFO: {} ChecksumMode==ENABLED element-name {} value {}-{}",
-			  __func__, cksum.element_name(), cksum.to_armor(),
-			  *multipart_parts_count);
-	    dump_header(s, cksum.header_name(),
-			fmt::format("{}-{}", cksum.to_armor(), *multipart_parts_count));
+	    if (multipart_part_num) {
+	      ldpp_dout_fmt(this, 16,
+		  "INFO: {} ChecksumMode==ENABLED element-name {} value {}",
+		  __func__, cksum.element_name(), cksum.to_armor());
+	      dump_header(s, cksum.header_name(), cksum.to_armor());
+	    } else {
+	      ldpp_dout_fmt(this, 16,
+		  "INFO: {} ChecksumMode==ENABLED element-name {} value {}-{}",
+		  __func__, cksum.element_name(), cksum.to_armor(),
+		  *multipart_parts_count);
+	      dump_header(s, cksum.header_name(),
+		  fmt::format("{}-{}", cksum.to_armor(), *multipart_parts_count));
+	    }
 	  } else {
 	    /* a full object checksum, if multipart, because the checksum is CRC family */
 	    auto elt_name = cksum.element_name();
@@ -781,44 +794,10 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
     return 0;
   }
 
-  std::unique_ptr<BlockCrypt> block_crypt;
-  int res = rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
-                                   crypt_http_responses);
-  if (res < 0) {
-    return res;
-  }
-  if (block_crypt == nullptr) {
-    return 0;
-  }
-
-  // in case of a multipart upload, we need to know the part lengths to
-  // correctly decrypt across part boundaries
-  std::vector<size_t> parts_len;
-
-  // for replicated objects, the original part lengths are preserved in an xattr
-  if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
-    try {
-      auto p = i->second.cbegin();
-      using ceph::decode;
-      decode(parts_len, p);
-    } catch (const buffer::error&) {
-      ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS" << dendl;
-      return -EIO;
-    }
-  } else if (manifest_bl) {
-    // otherwise, we read the part lengths from the manifest
-    res = RGWGetObj_BlockDecrypt::read_manifest_parts(this, *manifest_bl,
-                                                      parts_len);
-    if (res < 0) {
-      return res;
-    }
-  }
-
-  *filter = std::make_unique<RGWGetObj_BlockDecrypt>(
-      s, s->cct, cb, std::move(block_crypt),
-      std::move(parts_len), s->yield);
-  return 0;
+  static constexpr bool copy_source = false;
+  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, &crypt_http_responses, copy_source);
 }
+
 int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y) 
 {
   int ret = -EINVAL;
@@ -2978,6 +2957,9 @@ void RGWPutObj_ObjStore_S3::send_response()
 
     string expires = get_s3_expiration_header(s, mtime);
 
+    for (auto &it : crypt_http_responses)
+      dump_header(s, it.first, it.second);
+
     if (copy_source.empty()) {
       dump_errno(s);
       dump_etag(s, etag);
@@ -2988,8 +2970,6 @@ void RGWPutObj_ObjStore_S3::send_response()
 	dump_header(s, "x-amz-checksum-type", "FULL_OBJECT");
 	dump_header(s, cksum->header_name(), cksum->to_armor());
       }
-      for (auto &it : crypt_http_responses)
-        dump_header(s, it.first, it.second);
     } else {
       dump_errno(s);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
@@ -3047,45 +3027,8 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     map<string, bufferlist>& attrs,
     bufferlist* manifest_bl)
 {
-  std::map<std::string, std::string> crypt_http_responses_unused;
-
-  std::unique_ptr<BlockCrypt> block_crypt;
-  int res = rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
-                                   crypt_http_responses_unused);
-  if (res < 0) {
-    return res;
-  }
-  if (block_crypt == nullptr) {
-    return 0;
-  }
-
-  // in case of a multipart upload, we need to know the part lengths to
-  // correctly decrypt across part boundaries
-  std::vector<size_t> parts_len;
-
-  // for replicated objects, the original part lengths are preserved in an xattr
-  if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
-    try {
-      auto p = i->second.cbegin();
-      using ceph::decode;
-      decode(parts_len, p);
-    } catch (const buffer::error&) {
-      ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS" << dendl;
-      return -EIO;
-    }
-  } else if (manifest_bl) {
-    // otherwise, we read the part lengths from the manifest
-    res = RGWGetObj_BlockDecrypt::read_manifest_parts(this, *manifest_bl,
-                                                      parts_len);
-    if (res < 0) {
-      return res;
-    }
-  }
-
-  *filter = std::make_unique<RGWGetObj_BlockDecrypt>(
-      s, s->cct, cb, std::move(block_crypt),
-      std::move(parts_len), s->yield);
-  return 0;
+  static constexpr bool copy_source = true;
+  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr, copy_source);
 }
 
 int RGWPutObj_ObjStore_S3::get_encrypt_filter(
@@ -3104,8 +3047,9 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
       std::unique_ptr<BlockCrypt> block_crypt;
       /* We are adding to existing object.
        * We use crypto mode that configured as if we were decrypting. */
+      static constexpr bool copy_source = false;
       res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
-                                   &block_crypt, crypt_http_responses);
+                                   &block_crypt, &crypt_http_responses, copy_source);
       if (res == 0 && block_crypt != nullptr)
         filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
     }
@@ -3963,6 +3907,9 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
     set_req_state_err(s, op_ret);
     dump_errno(s);
 
+    for (auto &it : crypt_http_responses)
+      dump_header(s, it.first, it.second);
+
     // Explicitly use chunked transfer encoding so that we can stream the result
     // to the user without having to wait for the full length of it.
     end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
@@ -4101,10 +4048,9 @@ int RGWGetObjAttrs_ObjStore_S3::get_decrypt_filter(
   //
   // in the SSE-KMS and SSE-S3 cases, this unfortunately causes us to fetch
   // decryption keys which we don't need :(
-  std::unique_ptr<BlockCrypt> block_crypt; // ignored
-  std::map<std::string, std::string> crypt_http_responses; // ignored
-  return rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
-                                crypt_http_responses);
+  static constexpr bool copy_source = false;
+  return rgw_s3_prepare_decrypt(s, s->yield, attrs, nullptr,
+                                nullptr, copy_source);
 }
 
 void RGWGetObjAttrs_ObjStore_S3::send_response()
@@ -4751,6 +4697,30 @@ int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y)
 
   map_qs_metadata(s, true);
 
+  // get encrypt headers to reflect from multipart upload
+  // mostly to verify sse-c here
+  std::unique_ptr<rgw::sal::MultipartUpload> upload =
+    s->bucket->get_multipart_upload(s->object->get_name(),
+        upload_id);
+  std::unique_ptr<rgw::sal::Object> obj = upload->get_meta_obj();
+  obj->set_in_extra_data(true);
+  int res = obj->get_obj_attrs(s->yield, this);
+  if (res < 0 && res != -ENOENT) {
+    ldpp_dout(this, 0) << "ERROR: " << __func__ << " failed to get object attrs for "
+                      << s->object->get_name() << ": " << cpp_strerror(res) << dendl;
+    return res;
+  }
+
+  // if we found attrs, populate crypt_http_responses
+  if (res == 0) {
+    static constexpr bool copy_source = false;
+    res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
+                                nullptr, &crypt_http_responses, copy_source);
+    if (res < 0) {
+      return res;
+    }
+  }
+
   return do_aws4_auth_completion();
 }
 
@@ -4760,6 +4730,8 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   dump_errno(s);
   dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+  for (auto &it : crypt_http_responses)
+    dump_header(s, it.first, it.second);
   end_header(s, this, to_mime_type(s->format));
   if (op_ret == 0) {
     dump_start(s);
@@ -6368,7 +6340,11 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
   if (opt_content) {
     content_hash = rgw::auth::s3::calc_v4_payload_hash(opt_content->to_str());
     extra_headers["x-amz-content-sha256"] = content_hash;
-
+  } else {
+    /* Some S3-compatible services require x-amz-content-sha256 header to always
+     * be present and included in the signature, even for unsigned payload.
+     * AWS S3 specification states that this header is required for all requests. */
+    extra_headers["x-amz-content-sha256"] = AWS4_UNSIGNED_PAYLOAD_HASH;
   }
 
   /* craft canonical headers */

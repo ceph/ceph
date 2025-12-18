@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /**
  * Crypto filters for Put/Post/Get operations.
@@ -156,8 +156,8 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
 int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
-                           std::map<std::string,
-                                    std::string>& crypt_http_responses);
+                           std::map<std::string, std::string>* crypt_http_responses,
+                           bool copy_source);
 
 static inline void set_attr(std::map<std::string, bufferlist>& attrs,
                             const char* key,

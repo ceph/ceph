@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 /*
  * Ceph - scalable distributed file system
  *
@@ -406,5 +406,14 @@ namespace rgw { namespace cksum {
      * so it's a "composite" checksum regardless of the algorithm */
     return ChecksumTypeResult(Cksum::FLAG_COMPOSITE, "COMPOSITE");
   } /* get_checksum_type */
+
+  static inline ChecksumTypeResult
+  get_part_checksum_type(const Cksum& cksum) {
+    if (cksum.flags & Cksum::FLAG_COMPOSITE) {
+      return ChecksumTypeResult(Cksum::FLAG_COMPOSITE, "COMPOSITE");
+    } else {
+      return ChecksumTypeResult(Cksum::FLAG_CKSUM_NONE, "FULL_OBJECT");
+    }
+  } /* get_part_checksum_type */
 
 }} /* namespace */

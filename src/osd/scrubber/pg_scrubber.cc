@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=2 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 sts=2 expandtab
 
 #include "./pg_scrubber.h"  // '.' notation used to affect clang-format order
 
@@ -911,8 +911,8 @@ std::optional<uint64_t> PgScrubber::select_range()
   const int max_from_conf = static_cast<int>(size_from_conf(
       m_is_deep, conf, osd_scrub_chunk_max, osd_shallow_scrub_chunk_max));
 
+  const int min_chunk_sz = std::max(3, min_from_conf);
   const int divisor = static_cast<int>(preemption_data.chunk_divisor());
-  const int min_chunk_sz = std::max(3, min_from_conf / divisor);
   const int max_chunk_sz = std::max(min_chunk_sz, max_from_conf / divisor);
 
   dout(10) << fmt::format(
@@ -1020,7 +1020,8 @@ bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
     return false;
   }
 
-  get_labeled_counters()->inc(scrbcnt_write_blocked);
+  const auto& unlabeled_cntrs_idx = get_unlabeled_counters();
+  get_osd_perf_counters()->inc(unlabeled_cntrs_idx.write_intersects);
   dout(20) << __func__ << " " << soid << " can preempt? "
 	   << preemption_data.is_preemptable() << " already preempted? "
 	   << preemption_data.was_preempted() << dendl;
@@ -1042,6 +1043,10 @@ bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
 
     return false;
   }
+
+  get_osd_perf_counters()->inc(unlabeled_cntrs_idx.write_blocked);
+  // to be removed in version 'Umbrella':
+  get_labeled_counters()->inc(scrbcnt_write_blocked);
   return true;
 }
 
@@ -1376,9 +1381,13 @@ int PgScrubber::build_scrub_map_chunk(ScrubMap& map,
     if (pos.ls.empty()) {
       break;
     }
-    m_pg->_scan_rollback_obs(rollback_obs);
     pos.pos = 0;
-    return -EINPROGRESS;
+    if (m_pg->_scan_rollback_obs(rollback_obs)) {
+      // we had to perform some real work (queue a transaction
+      // to discard obsolete rollback versions of objects in the
+      // selected range). Let's reschedule the scrub.
+      return -EINPROGRESS;
+    }
   }
 
   // scan objects

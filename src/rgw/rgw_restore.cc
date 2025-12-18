@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <fmt/chrono.h>
 #include <string.h>
@@ -48,6 +48,7 @@
 
 constexpr int32_t hours_in_a_day = 24;
 constexpr int32_t secs_in_a_day = hours_in_a_day * 60 * 60;
+static constexpr size_t listing_max_entries = 1000;
 
 using namespace std;
 using namespace rgw::sal;
@@ -107,6 +108,43 @@ void RestoreEntry::generate_test_instances(std::list<RestoreEntry*>& l)
   l.push_back(p);
 
   l.push_back(new RestoreEntry);
+}
+
+static std::string restore_id = "rgw restore";
+static std::string restore_req_id = "0";
+
+void Restore::send_notification(const DoutPrefixProvider* dpp,
+                              rgw::sal::Driver* driver,
+                              rgw::sal::Object* obj,
+                              rgw::sal::Bucket* bucket,
+                              const std::string& etag,
+                              uint64_t size,
+                              const std::string& version_id,
+                              const rgw::notify::EventTypeList& event_types,
+                              optional_yield y) {
+  // notification supported only for RADOS driver for now
+  auto notify = driver->get_notification(
+      dpp, obj, nullptr, event_types, bucket, restore_id,
+      const_cast<std::string&>(bucket->get_tenant()), restore_req_id, y);
+
+  if (!notify) {
+    return;
+  }
+
+  int ret = notify->publish_reserve(dpp, nullptr);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: notify publish_reserve failed with error: "
+                      << ret << " for restore object: " << obj->get_name()
+                      << " for event_types: " << event_types << dendl;
+    return;
+  }
+  ret = notify->publish_commit(dpp, size, ceph::real_clock::now(), etag,
+                               version_id);
+  if (ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: notify publish_commit failed with error: "
+                      << ret << " for lc object: " << obj->get_name()
+                      << " for event_types: " << event_types << dendl;
+  }
 }
 
 int Restore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
@@ -458,6 +496,7 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
   } else {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: Attr RGW_ATTR_STORAGE_CLASS not found for object: " << obj->get_key() << dendl;
   }
+
   ret = driver->get_zone()->get_zonegroup().get_placement_tier(target_placement, &tier);
 
   if (ret < 0) {
@@ -476,9 +515,9 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
     goto done;
   }
 
+  uint64_t size;
   // now go ahead with restoring object
-  // XXX: first check if its already restored?
-  ret = obj->restore_obj_from_cloud(bucket.get(), tier.get(), cct, days, in_progress,
+  ret = obj->restore_obj_from_cloud(bucket.get(), tier.get(), cct, days, in_progress, size, 
 		  		      this, y);
   if (ret < 0) {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Restore of object(" << obj->get_key() << ") failed" << ret << dendl;	  
@@ -495,6 +534,17 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
   } else {
     ldpp_dout(this, 15) << __PRETTY_FUNCTION__ << ": Restore of object " << obj->get_key() << " succeeded" << dendl;
     entry.status = rgw::sal::RGWRestoreStatus::CloudRestored;
+    
+    string etag;
+    attr_iter = attrs.find(RGW_ATTR_ETAG);
+    if (attr_iter != attrs.end()) {
+      etag = rgw_bl_str(attr_iter->second);
+    }
+
+    // send notification in case the restore is successfully completed
+    send_notification(this, driver, obj.get(), bucket.get(), etag, size,
+                      obj->get_key().instance,
+                      {rgw::notify::ObjectRestoreCompleted}, y);
   }
 
 done:
@@ -612,17 +662,33 @@ int Restore::update_cloud_restore_exp_date(rgw::sal::Bucket* pbucket,
 }
 
 int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
-	       			       rgw::sal::Object* pobj,
-				       rgw::sal::PlacementTier* tier,
-				       std::optional<uint64_t> days,
-				       const DoutPrefixProvider* dpp,
-				       optional_yield y)
+	       			                      rgw::sal::Object* pobj,
+                       			        rgw::sal::PlacementTier* tier,
+                     				        std::optional<uint64_t> days,
+                    				        const DoutPrefixProvider* dpp,
+                    				        optional_yield y)
 {
   int ret = 0;
 
   if (!pbucket || !pobj) {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: Invalid bucket/object. Restore failed" << dendl;	  
     return -EINVAL;
+  }
+
+  auto notify = driver->get_notification(
+      dpp, pobj, nullptr,
+      {rgw::notify::ObjectRestoreInitiated},
+      pbucket, restore_id,
+      const_cast<std::string&>(pbucket->get_tenant()), restore_req_id, y);
+
+  if (notify) {
+    int ret = notify->publish_reserve(dpp, nullptr);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: notify publish_reserve failed with error: "
+      	                << ret << " for restore object: " << pobj->get_name()
+        	              << " for event_types: rgw::notify::ObjectRestoreInitiated" << dendl;
+      return ret;
+    }
   }
 
   // set restore_status as RESTORE_ALREADY_IN_PROGRESS
@@ -663,6 +729,169 @@ int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
   }
 
   ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Restore of object " << pobj->get_key() << " is in progress." << dendl;  
+
+  if (notify) {
+    auto& attrs = pobj->get_attrs();
+    string etag;
+    auto attr_iter = attrs.find(RGW_ATTR_ETAG);
+    if (attr_iter != attrs.end()) {
+      etag = rgw_bl_str(attr_iter->second);
+    }
+
+    ret = notify->publish_commit(dpp, pobj->get_size(), ceph::real_clock::now(), etag,
+		    		 pobj->get_key().instance);
+    if (ret < 0) {
+      ldpp_dout(dpp, 5) << "WARNING: notify publish_commit failed with error: "
+                        << ret << " for lc object: " << pobj->get_name()
+                        << " for event_types: rgw::notify::ObjectRestoreInitiated" << dendl;
+    }
+  }
+
+  return ret;
+}
+
+int Restore::list(const DoutPrefixProvider* dpp, RestoreEntry& entry,
+                  std::optional<string> restore_status_filter,
+                  std::string& err_msg, RGWFormatterFlusher& flusher, optional_yield y)
+{
+  int ret = 0;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  ret = driver->load_bucket(dpp, entry.bucket, &bucket, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not init bucket: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  params.list_versions = bucket->versioned();
+  params.allow_unordered = true;
+  flusher.start(0);
+  auto f = flusher.get_formatter();
+  f->open_object_section("restore_list");
+  do {
+    ret = bucket->list(dpp, params, listing_max_entries, results, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: driver->list_objects(): " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    for (vector<rgw_bucket_dir_entry>::iterator iter = results.objs.begin(); iter != results.objs.end(); ++iter) {
+      std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(iter->key.name);
+      if (obj) {
+        ret = obj->get_obj_attrs(y, dpp);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
+          return -ret;
+        }
+        for (map<string, bufferlist>::iterator getattriter = obj->get_attrs().begin(); getattriter != obj->get_attrs().end(); ++getattriter) {
+          bufferlist& bl = getattriter->second;
+          if (getattriter->first == RGW_ATTR_RESTORE_STATUS) {
+            rgw::sal::RGWRestoreStatus rs;
+            {
+              using ceph::decode;
+              try {
+                decode(rs, bl);
+              } catch (const JSONDecoder::err& e) {
+                ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
+                return EINVAL;
+              }
+            }
+            if (restore_status_filter) {
+              if (restore_status_filter == rgw::sal::rgw_restore_status_dump(rs)) {
+                f->dump_string(iter->key.name, rgw::sal::rgw_restore_status_dump(rs));
+              }
+            } else {
+              f->dump_string(iter->key.name, rgw::sal::rgw_restore_status_dump(rs));
+            }
+          }
+        }
+      }
+    }
+  } while (results.is_truncated);
+  f->close_section();
+  flusher.flush();
+
+  return ret;
+}
+
+int Restore::status(const DoutPrefixProvider* dpp, RestoreEntry& entry,
+                    std::string& err_msg, RGWFormatterFlusher& flusher,
+                    optional_yield y)
+{
+  int ret = 0;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  ret = driver->load_bucket(dpp, entry.bucket, &bucket, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not init bucket: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  if (!entry.obj_key.name.empty()) {
+    flusher.start(0);
+    auto f = flusher.get_formatter();
+    f->open_object_section("object restore status");
+    f->dump_string("name", entry.obj_key.name);
+    std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(entry.obj_key);
+    ret = obj->get_obj_attrs(y, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
+      return -ret;
+    }
+    map<string, bufferlist>::iterator iter;
+    for (iter = obj->get_attrs().begin(); iter != obj->get_attrs().end(); ++iter) {
+      bufferlist& bl = iter->second;
+      {
+        using ceph::decode;
+        if (iter->first == RGW_ATTR_RESTORE_STATUS) {
+          rgw::sal::RGWRestoreStatus rs;
+          try {
+            decode(rs, bl);
+          } catch (const JSONDecoder::err& e) {
+            ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
+            return EINVAL;
+          }
+          f->dump_string("RestoreStatus", rgw::sal::rgw_restore_status_dump(rs));
+        } else if (iter->first == RGW_ATTR_RESTORE_TYPE) {
+          rgw::sal::RGWRestoreType rt;
+          try {
+            decode(rt, bl);
+          } catch (const JSONDecoder::err& e) {
+            ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
+            return EINVAL;
+          }
+          f->dump_string("RestoreType", rgw::sal::rgw_restore_type_dump(rt));
+        } else if (iter->first == RGW_ATTR_RESTORE_EXPIRY_DATE) {
+          ceph::real_time restore_expiry_date;
+          try {
+            decode(restore_expiry_date, bl);
+          } catch (const JSONDecoder::err& e) {
+            ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
+            return EINVAL;
+          }
+          encode_json("RestoreExpiryDate", restore_expiry_date, f);
+        } else if (iter->first == RGW_ATTR_RESTORE_TIME) {
+          ceph::real_time restore_time;
+          try {
+            decode(restore_time, bl);
+          } catch (const JSONDecoder::err& e) {
+            ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
+            return EINVAL;
+          }
+          encode_json("RestoreTime", restore_time, f);
+        } else if (iter->first == RGW_ATTR_RESTORE_VERSIONED_EPOCH) {
+          uint64_t versioned_epoch;
+          try {
+            decode(versioned_epoch, bl);
+          } catch (const JSONDecoder::err& e) {
+            ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
+            return EINVAL;
+          }
+          f->dump_unsigned("RestoreVersionedEpoch", versioned_epoch);
+        }
+      }
+    }
+    f->close_section();
+    flusher.flush();
+  }
+
   return ret;
 }
 

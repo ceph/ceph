@@ -1,123 +1,112 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} Pipe</ng-container>
-
-  <ng-container class="modal-content">
-    <form name="pipeForm"
-          #frm="ngForm"
-          [formGroup]="pipeForm"
-          novalidate>
-      <div class="modal-body">
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="pipe_id"
-                 i18n>Name</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   placeholder="Pipe Name..."
-                   id="pipe_id"
-                   name="pipe_id"
-                   formControlName="pipe_id"
-                   [readonly]="editing"/>
-          </div>
-        </div>
-          <div class="form-group row">
-            <label class="cd-col-form-label required"
-                   for="source_zone"
-                   i18n>Source Zone </label>
-            <div class="cd-col-form-input">
-              <ng-container *ngTemplateOutlet="zoneMultiSelect;context: { name: 'source_zones', zone: sourceZones }"></ng-container>
-            </div>
-          </div>
-          <div class="form-group row">
-            <label class="cd-col-form-label required"
-                   for="destination_zone"
-                   i18n>Destination Zone</label>
-            <div class="cd-col-form-input">
-              <ng-container *ngTemplateOutlet="zoneMultiSelect;context: { name: 'destination_zones', zone: destZones }"></ng-container>
-            </div>
-          </div>
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="bucket"
-                 i18n>Bucket Name</label>
-          <div class="cd-col-form-input">
-            <input id="bucket"
-                   name="bucket"
-                   class="form-control"
-                   type="text"
-                   i18n-placeholder
-                   placeholder="Bucket Name..."
-                   formControlName="bucket_name"/>
-          </div>
-        </div>
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="source_bucket"
-                 i18n>Source Bucket</label>
-          <div class="cd-col-form-input">
-            <input id="source_bucket"
-                   name="source_bucket"
-                   class="form-control"
-                   type="text"
-                   i18n-placeholder
-                   placeholder="Source Bucket Name..."
-                   formControlName="source_bucket"/>
-            <cd-help-text>
-              <span i18n>{{ allBucketSelectedHelpText }}</span>
-            </cd-help-text>
-          </div>
-          </div>
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="dest_bucket"
-                 i18n>Destination Bucket</label>
-          <div class="cd-col-form-input">
-            <input id="dest_bucket"
-                   name="dest_bucket"
-                   class="form-control"
-                   type="text"
-                   i18n-placeholder
-                   placeholder="Destination Bucket Name..."
-                   formControlName="destination_bucket"/>
-            <cd-help-text>
-              <span i18n>{{ allBucketSelectedHelpText }}</span>
-            </cd-help-text>
-          </div>
-        </div>
+<cds-modal [open]="open"
+           size="md">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ action | titlecase }} pipe</h3>
+    <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+  </cds-modal-header>
+  <form name="pipeForm"
+        #frm="ngForm"
+        [formGroup]="pipeForm"
+        novalidate>
+    <div cdsModalContent>
+      <!-- Pipe Name -->
+      <div class="form-item">
+        <cds-text-label for="pipe_id"
+                        [invalid]="!pipeForm.controls.pipe_id.valid && pipeForm.controls.pipe_id.dirty"
+                        [invalidText]="pipeIdError">
+          <ng-container i18n>Name</ng-container>
+          <input cdsText
+                 type="text"
+                 id="pipe_id"
+                 formControlName="pipe_id"
+                 autofocus
+                 [invalid]="!pipeForm.controls.pipe_id.valid && pipeForm.controls.pipe_id.dirty"
+                 [readonly]="editing">
+        </cds-text-label>
+        <ng-template #pipeIdError>
+          @if (pipeForm.showError('pipe_id', formDir, 'required')) {
+          <span class="invalid-feedback">
+            <ng-container i18n> This field is required. </ng-container>
+          </span>
+          }
+        </ng-template>
       </div>
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
-                              [form]="pipeForm"
-                              [submitText]="(action | titlecase) + ' ' + 'Pipe'">
-        </cd-form-button-panel>
+      <!-- Source and Destination Zones -->
+      <div class="form-item">
+        <ng-container *ngTemplateOutlet="zoneMultiSelect;context: { formControl: 'source_zones', zone: sourceZones, name: 'Source zone' }"></ng-container>
       </div>
-    </form>
-  </ng-container>
-</cd-modal>
+      <div class="form-item">
+        <ng-container *ngTemplateOutlet="zoneMultiSelect;context: { formControl: 'destination_zones', zone: destZones, name: 'Destination zone' }"></ng-container>
+      </div>
+      <!-- Bucket Name -->
+      @if (pipeForm.controls.bucket_name.value) {
+      <div class="form-item">
+        <cds-text-label for="bucket_name"
+                        cdOptionalField="Bucket name">
+          <ng-container i18n>Bucket name</ng-container>
+          <input cdsText
+                 type="text"
+                 id="bucket_name"
+                 formControlName="bucket_name"
+                 autofocus
+                 [readonly]="true">
+        </cds-text-label>
+      </div>
+      }
+      <!-- Source Bucket -->
+      <div class="form-item">
+        <cds-text-label for="source_bucket"
+                        [helperText]="allBucketSelectedHelpText"
+                        i18n-helperText
+                        cdOptionalField="Source bucket">
+          <ng-container i18n>Source bucket</ng-container>
+          <input cdsText
+                 type="text"
+                 id="source_bucket"
+                 formControlName="source_bucket">
+        </cds-text-label>
+      </div>
+      <!-- Destination Bucket -->
+      <div class="form-item">
+        <cds-text-label for="destination_bucket"
+                        [helperText]="allBucketSelectedHelpText"
+                        i18n-helperText
+                        cdOptionalField="Destination bucket">
+          <ng-container i18n>Destination bucket</ng-container>
+          <input cdsText
+                 type="text"
+                 id="destination_bucket"
+                 formControlName="destination_bucket">
+        </cds-text-label>
+      </div>
+    </div>
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="pipeForm"
+                          [modalForm]="true"
+                          [submitText]="(action | titlecase) + ' ' + 'Pipe'">
+    </cd-form-button-panel>
+  </form>
+</cds-modal>
 
 <ng-template #zoneMultiSelect
              let-name="name"
-             let-zone="zone">
-  <cd-select-badges id="{{ name }}"
-                    name="{{ name }}"
-                    [customBadges]="zone.customBadges"
-                    [customBadgeValidators]="zone.data.validators"
-                    [messages]="zone.data.messages"
-                    [data]="zone.data.selected"
-                    [options]="zone.data.available"
-                    (selection)="onZoneSelection(name)">
-  </cd-select-badges>
-
-  <svg *ngIf="zone.data.selected.length <= 0"
-       i18n-title
-       [cdsIcon]="icons.warning"
-       [size]="icons.size16"
-       title="Pipe should be associated with {{ name?.split('_').join(' ') }}"
-       class="cds-warning-color"></svg>
-  <span class="invalid-feedback"
-        *ngIf="pipeForm.showError(name, frm, 'required')"
-        i18n>{{ name?.split('_').join(' ') }} selection is required!
-  </span>
+             let-zone="zone"
+             let-formControl="formControl"
+             [formGroup]="pipeForm">
+  <cds-combo-box [label]="name"
+                 type="multi"
+                 selectionFeedback="top-after-reopen"
+                 [for]="formControl"
+                 [formControlName]="formControl"
+                 [helperText]="'Pipe need to be associated with atleast one zone'"
+                 i18n-helperText
+                 [items]="zone"
+                 itemValueKey="content"
+                 [id]="formControl"
+                 [invalid]="pipeForm.controls[formControl].invalid && pipeForm.controls[formControl].dirty"
+                 [invalidText]="'Zone selection is required!'"
+                 i18n>
+    <cds-dropdown-list></cds-dropdown-list>
+  </cds-combo-box>
 </ng-template>

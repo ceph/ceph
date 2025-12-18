@@ -3,6 +3,7 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details.component
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { USER } from '~/app/shared/constants/app.constants';
 
 describe('RgwRateLimitDetailsComponent', () => {
   let component: RgwRateLimitDetailsComponent;
@@ -15,7 +16,7 @@ describe('RgwRateLimitDetailsComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwRateLimitDetailsComponent);
     component = fixture.componentInstance;
-    component.type = 'user';
+    component.type = USER;
     component.rateLimitConfig = {
       enabled: true,
       max_read_bytes: 987648,

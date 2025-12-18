@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -20,6 +21,7 @@
 #include "common/Finisher.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
+#include "common/ceph_time.h"
 
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
@@ -70,11 +72,18 @@ protected:
   ceph::mutex beacon_lock = ceph::make_mutex("NVMeofGw::beacon_lock");
   SafeTimer timer;
 
+  // Timer state for exact frequency timing
+  ceph::mono_clock::time_point next_tick_time;
+
   int orig_argc;
   const char **orig_argv;
 
   void send_config_beacon(); 
   void send_beacon();
+
+  // Timer management for exact frequency
+  void schedule_next_tick();
+  void log_tick_execution_duration(const ceph::mono_clock::time_point& start_time);
  
 public:
   NVMeofGwMonitorClient(int argc, const char **argv);

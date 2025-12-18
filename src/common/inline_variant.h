@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:4; indent-tabs-mode:t -*-
-// vim: ts=8 sw=4 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef INLINE_VARIANT_H
 #define INLINE_VARIANT_H

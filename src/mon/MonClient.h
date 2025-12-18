@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -453,6 +454,10 @@ public:
     std::lock_guard l(monc_lock);
     _renew_subs();
   }
+  version_t get_start(const std::string& what) const {
+    std::lock_guard l(monc_lock);
+    return sub.get_start(what);
+  }
   bool sub_want(std::string what, version_t start, unsigned flags) {
     std::lock_guard l(monc_lock);
     return sub.want(what, start, flags);
@@ -576,7 +581,7 @@ private:
     CommandCompletion onfinish;
     std::optional<boost::asio::steady_timer> cancel_timer;
 
-    MonCommand(MonClient& monc, uint64_t t, CommandCompletion onfinish)
+    MonCommand(MonClient& monc, uint64_t t, CommandCompletion&& onfinish)
       : tid(t), onfinish(std::move(onfinish)) {
       auto timeout =
           monc.cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
@@ -611,8 +616,8 @@ private:
 
 public:
   template<typename CompletionToken>
-  auto start_mon_command(std::vector<std::string> cmd,
-                         ceph::buffer::list inbl,
+  auto start_mon_command(std::vector<std::string>&& cmd,
+                         ceph::buffer::list&& inbl,
 			 CompletionToken&& token) {
     namespace asio = boost::asio;
     ldout(cct,10) << __func__ << " cmd=" << cmd << dendl;
@@ -642,8 +647,8 @@ public:
   }
 
   template<typename CompletionToken>
-  auto start_mon_command(int mon_rank, std::vector<std::string> cmd,
-			 ceph::buffer::list inbl,
+  auto start_mon_command(int mon_rank, std::vector<std::string>&& cmd,
+			 ceph::buffer::list&& inbl,
 			 CompletionToken&& token) {
     namespace asio = boost::asio;
     namespace sys = boost::system;
@@ -675,9 +680,9 @@ public:
   }
 
   template<typename CompletionToken>
-  auto start_mon_command(std::string mon_name,
-                         std::vector<std::string> cmd,
-			 ceph::buffer::list inbl,
+  auto start_mon_command(std::string&& mon_name,
+                         std::vector<std::string>&& cmd,
+			 ceph::buffer::list&& inbl,
 			 CompletionToken&& token) {
     namespace asio = boost::asio;
     ldout(cct,10) << __func__ << " cmd=" << cmd << dendl;
@@ -731,8 +736,8 @@ public:
     ContextVerter& operator =(ContextVerter&&) = default;
 
     void operator()(boost::system::error_code e,
-		    std::string s,
-		    ceph::bufferlist bl) {
+		    std::string&& s,
+		    ceph::bufferlist&& bl) {
       if (outs)
 	*outs = std::move(s);
       if (outbl)
@@ -742,20 +747,20 @@ public:
     }
   };
 
-  void start_mon_command(std::vector<std::string> cmd, bufferlist inbl,
+  void start_mon_command(std::vector<std::string> cmd, bufferlist&& inbl,
 			 bufferlist *outbl, std::string *outs,
 			 Context *onfinish) {
     start_mon_command(std::move(cmd), std::move(inbl),
 		      ContextVerter(outs, outbl, onfinish));
   }
-  void start_mon_command(int mon_rank, std::vector<std::string> cmd,
-			 bufferlist inbl, bufferlist *outbl, std::string *outs,
+  void start_mon_command(int mon_rank, std::vector<std::string>&& cmd,
+			 bufferlist&& inbl, bufferlist *outbl, std::string *outs,
 			 Context *onfinish) {
     start_mon_command(mon_rank, std::move(cmd), std::move(inbl),
 		      ContextVerter(outs, outbl, onfinish));
   }
-  void start_mon_command(std::string mon_name,  ///< mon name, with mon. prefix
-			 std::vector<std::string> cmd, bufferlist inbl,
+  void start_mon_command(std::string&& mon_name,  ///< mon name, with mon. prefix
+			 std::vector<std::string>&& cmd, bufferlist&& inbl,
 			 bufferlist *outbl, std::string *outs,
 			 Context *onfinish) {
     start_mon_command(std::move(mon_name), std::move(cmd), std::move(inbl),

@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -209,8 +209,8 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
       pg.get_perf_logger().inc(l_osd_replica_read_redirect_missing);
       co_await reply_op_error(pgref, -EAGAIN);
       co_return;
-    } else if (!pg.get_peering_state().can_serve_replica_read(m->get_hobj())) {
-      // Note: can_serve_replica_read checks for writes on the head object
+    } else if (!pg.get_peering_state().can_serve_read(m->get_hobj())) {
+      // Note: can_serve_read checks for writes on the head object
       //       as writes can only occur to head.
       DEBUGDPP("{}.{}: unstable write on replica, bouncing to primary",
 	       pg, *this, this_instance_id);

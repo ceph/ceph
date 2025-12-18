@@ -91,9 +91,7 @@ corresponding directory. With metavariables fully expressed and a cluster named
 
     /var/lib/ceph/mon/ceph-a
 
-For additional details, see the `Monitor Config Reference`_.
-
-.. _Monitor Config Reference: ../mon-config-ref
+For additional details, see the :ref:`monitor-config-reference`.
 
 
 .. _ceph-osd-config:
@@ -112,10 +110,8 @@ the Ceph configuration file, as shown here:
     auth_service_required = cephx
     auth_client_required = cephx
 
-In addition, you should enable message signing. For details, see `Cephx Config
-Reference`_.
-
-.. _Cephx Config Reference: ../auth-config-ref
+In addition, you should enable message signing. For details,
+see :ref:`rados-cephx-config-ref`.
 
 
 .. _ceph-monitor-config:

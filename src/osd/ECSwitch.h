@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -266,6 +267,25 @@ public:
     return legacy.objects_read_sync(hoid, off, len, op_flags, bl);
   }
 
+  int objects_readv_sync(const hobject_t &hoid,
+     std::map<uint64_t, uint64_t>& m,
+     uint32_t op_flags,
+     ceph::buffer::list *bl) override
+  {
+    if (is_optimized()) {
+      return optimized.objects_readv_sync(hoid, m, op_flags, bl);
+    }
+    ceph_abort_msg("Sync reads legacy EC");
+  }
+
+  std::pair<uint64_t, uint64_t> extent_to_shard_extent(
+    uint64_t off, uint64_t len) override {
+    if (is_optimized()) {
+      return optimized.extent_to_shard_extent(off, len);
+    }
+    ceph_abort_msg("Extent conversion not supported in legacy EC");
+  }
+
   void objects_read_async(
     const hobject_t &hoid,
     uint64_t object_size,
@@ -293,10 +313,11 @@ public:
   }
 
   uint64_t be_get_ondisk_size(uint64_t logical_size,
-                              shard_id_t shard_id) const final {
+                              shard_id_t shard_id,
+                              bool object_is_legacy_ec) const final {
     if (is_optimized())
     {
-      return optimized.be_get_ondisk_size(logical_size, shard_id);
+      return optimized.be_get_ondisk_size(logical_size, shard_id, object_is_legacy_ec);
     }
     return legacy.be_get_ondisk_size(logical_size);
   }

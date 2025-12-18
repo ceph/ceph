@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -69,29 +69,6 @@ struct get_obj_data;
 #define PUT_OBJ_CREATE      0x01
 #define PUT_OBJ_EXCL        0x02
 #define PUT_OBJ_CREATE_EXCL (PUT_OBJ_CREATE | PUT_OBJ_EXCL)
-
-static inline void prepend_bucket_marker(const rgw_bucket& bucket, const std::string& orig_oid, std::string& oid)
-{
-  if (bucket.marker.empty() || orig_oid.empty()) {
-    oid = orig_oid;
-  } else {
-    oid = bucket.marker;
-    oid.append("_");
-    oid.append(orig_oid);
-  }
-}
-
-static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, std::string& oid, std::string& locator)
-{
-  const rgw_bucket& bucket = obj.bucket;
-  prepend_bucket_marker(bucket, obj.get_oid(), oid);
-  const std::string& loc = obj.key.get_loc();
-  if (!loc.empty()) {
-    prepend_bucket_marker(bucket, loc, locator);
-  } else {
-    locator.clear();
-  }
-}
 
 struct RGWOLHInfo {
   rgw_obj target;
@@ -364,6 +341,7 @@ class RGWRados
   int open_objexp_pool_ctx(const DoutPrefixProvider *dpp);
   int open_reshard_pool_ctx(const DoutPrefixProvider *dpp);
   int open_notif_pool_ctx(const DoutPrefixProvider *dpp);
+  int open_logging_pool_ctx(const DoutPrefixProvider *dpp);
 
   int open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx&  io_ctx,
 		    bool mostly_omap, bool bulk);
@@ -384,6 +362,7 @@ class RGWRados
   bool run_sync_thread{false};
   bool run_reshard_thread{false};
   bool run_notification_thread{false};
+  bool run_bucket_logging_thread{false};
 
   RGWMetaNotifier* meta_notifier{nullptr};
   RGWDataNotifier* data_notifier{nullptr};
@@ -459,6 +438,7 @@ protected:
   librados::IoCtx objexp_pool_ctx;
   librados::IoCtx reshard_pool_ctx;
   librados::IoCtx notif_pool_ctx;     // .rgw.notif
+  librados::IoCtx logging_pool_ctx;     // .rgw.logging
 
   bool pools_initialized{false};
 
@@ -546,6 +526,11 @@ public:
     return *this;
   }
 
+  RGWRados& set_run_bucket_logging_thread(bool _run_bucket_logging_thread) {
+    run_bucket_logging_thread = _run_bucket_logging_thread;
+    return *this;
+  }
+
   librados::IoCtx* get_lc_pool_ctx() {
     return &lc_pool_ctx;
   }
@@ -560,6 +545,10 @@ public:
   
   librados::IoCtx& get_notif_pool_ctx() {
     return notif_pool_ctx;
+  }
+
+  librados::IoCtx& get_logging_pool_ctx() {
+    return logging_pool_ctx;
   }
   
   void set_context(CephContext *_cct) {
@@ -1258,6 +1247,7 @@ public:
                std::string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
+               rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
                jspan_context& trace);
@@ -1274,6 +1264,7 @@ public:
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
                std::string *petag,
+               rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
                bool log_op = true);
@@ -1294,6 +1285,7 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                              RGWObjTier& tier_config,
                              std::optional<uint64_t> days,
 			     bool& in_progress,
+			     uint64_t& size,
                              const DoutPrefixProvider *dpp,
                              optional_yield y);
 
@@ -1686,7 +1678,8 @@ public:
 
   librados::Rados* get_rados_handle();
 
-  int delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, std::list<librados::AioCompletion *>& handles);
+  int delete_tail_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
+                          const std::string& tag, std::list<librados::AioCompletion *>& handles);
   int delete_obj_aio(const DoutPrefixProvider *dpp, const rgw_obj& obj, RGWBucketInfo& info, RGWObjState *astate,
                      std::list<librados::AioCompletion *>& handles, bool keep_index_consistent,
                      optional_yield y);

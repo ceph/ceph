@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1742,7 +1743,7 @@ void PG::unreserve_recovery_space() {
   local_num_bytes.store(0);
 }
 
-void PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
+bool PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
 {
   ObjectStore::Transaction t;
   eversion_t trimmed_to = recovery_state.get_last_rollback_info_trimmed_to_applied();
@@ -1763,7 +1764,9 @@ void PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
     derr << __func__ << ": queueing trans to clean up obsolete rollback objs"
 	 << dendl;
     osd->store->queue_transaction(ch, std::move(t), NULL);
+    return true; // a transaction was queued
   }
+  return false;
 }
 
 
@@ -1937,8 +1940,7 @@ bool PG::can_discard_op(OpRequestRef& op)
     return true;
   }
 
-  if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+  if ((m->get_flags() & CEPH_OSD_FLAGS_DIRECT_READ) &&
       !is_primary() &&
       m->get_map_epoch() < info.history.same_interval_since) {
     // Note: the Objecter will resend on interval change without the primary

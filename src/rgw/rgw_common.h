@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -575,26 +575,40 @@ class RateLimiter;
 struct RGWRateLimitInfo {
   int64_t max_write_ops;
   int64_t max_read_ops;
+  int64_t max_list_ops;
+  int64_t max_delete_ops;
   int64_t max_write_bytes;
   int64_t max_read_bytes;
   bool enabled = false;
   RGWRateLimitInfo()
-    : max_write_ops(0), max_read_ops(0), max_write_bytes(0), max_read_bytes(0)  {}
+    : max_write_ops(0), max_read_ops(0), max_list_ops(0), max_delete_ops(0), max_write_bytes(0), max_read_bytes(0)  {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(max_write_ops, bl);
     encode(max_read_ops, bl);
+    encode(max_list_ops, bl);
+    encode(max_delete_ops, bl);
     encode(max_write_bytes, bl);
     encode(max_read_bytes, bl);
     encode(enabled, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(max_write_ops,bl);
+    DECODE_START(2, bl);
+    decode(max_write_ops, bl);
     decode(max_read_ops, bl);
-    decode(max_write_bytes,bl);
+    if (struct_v >= 2) {
+      decode(max_list_ops, bl);
+    } else {
+      max_list_ops = 0;
+    }
+    if (struct_v >= 2) {
+      decode(max_delete_ops, bl);
+    } else {
+      max_delete_ops = 0;
+    }
+    decode(max_write_bytes, bl);
     decode(max_read_bytes, bl);
     decode(enabled, bl);
     DECODE_FINISH(bl);
@@ -2059,3 +2073,26 @@ extern boost::optional<rgw::IAM::Policy>
 get_iam_policy_from_attr(CephContext* cct,
                          const std::map<std::string, bufferlist>& attrs,
                          const std::string& tenant);
+
+static inline void prepend_bucket_marker(const rgw_bucket& bucket, const std::string& orig_oid, std::string& oid)
+{
+  if (bucket.marker.empty() || orig_oid.empty()) {
+    oid = orig_oid;
+  } else {
+    oid = bucket.marker;
+    oid.append("_");
+    oid.append(orig_oid);
+  }
+}
+
+static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, std::string& oid, std::string& locator)
+{
+  const rgw_bucket& bucket = obj.bucket;
+  prepend_bucket_marker(bucket, obj.get_oid(), oid);
+  const std::string& loc = obj.key.get_loc();
+  if (!loc.empty()) {
+    prepend_bucket_marker(bucket, loc, locator);
+  } else {
+    locator.clear();
+  }
+}

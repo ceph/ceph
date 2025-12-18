@@ -469,6 +469,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectRead)
 	     &tag,
 	     nullptr,
 	     nullptr,
+       nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -580,6 +581,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectRead)
 	     &tag,
 	     nullptr,
 	     nullptr,
+       nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -667,6 +669,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectRead)
 	     &tag,
 	     nullptr,
 	     nullptr,
+       nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -955,6 +958,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1009,6 +1013,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1094,6 +1099,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1148,6 +1154,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1233,6 +1240,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1287,6 +1295,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1653,6 +1662,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
 	     &tag,
 	     nullptr,
 	     nullptr,
+       nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -1702,8 +1712,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
     EXPECT_EQ(testData, "test data");
 
     // Ensure attr is not modified
-    rgw_obj copyObj = destObj->get_obj();
-    ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+    ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
     rgw::sal::Attrs copyAttrs = destObj->get_attrs();
     buffer::list val = copyAttrs["user.rgw.test_attr"];
     EXPECT_EQ(val.to_str(), "test_value");  
@@ -1775,6 +1784,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
 	     &tag,
 	     nullptr,
 	     nullptr,
+       nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -1824,8 +1834,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
     EXPECT_EQ(testData, "test data");
 
     // Ensure attr is merged 
-    rgw_obj copyObj = destObj->get_obj();
-    ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+    ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
     rgw::sal::Attrs copyAttrs = destObj->get_attrs();
     buffer::list val = copyAttrs["user.rgw.test_attr"];
     EXPECT_EQ(val.to_str(), "copy_value");  
@@ -1897,6 +1906,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
 	     &tag,
 	     nullptr,
 	     nullptr,
+       nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -1946,8 +1956,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
     EXPECT_EQ(testData, "test data");
     
     // Ensure attr is replaced
-    rgw_obj copyObj = destObj->get_obj();
-    ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+    ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
     rgw::sal::Attrs copyAttrs = destObj->get_attrs();
     buffer::list val = copyAttrs["user.rgw.test_attr"];
     EXPECT_EQ(val.to_str(), "copy_value");  
@@ -2412,6 +2421,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2454,8 +2464,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid, err), true);  
 
       // Ensure attr is not modified
-      rgw_obj copyObj = destObjEnabled->get_obj();
-      ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+      ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
       rgw::sal::Attrs copyAttrs = destObjEnabled->get_attrs();
       buffer::list val = copyAttrs["user.rgw.test_attr"];
       EXPECT_EQ(val.to_str(), "test_value");  
@@ -2504,6 +2513,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2549,8 +2559,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid, err), true);  
 
       // Ensure attr is not modified
-      rgw_obj copyObj = destObjSuspended->get_obj();
-      ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+      ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
       rgw::sal::Attrs copyAttrs = destObjSuspended->get_attrs();
       buffer::list val = copyAttrs["user.rgw.test_attr"];
       EXPECT_EQ(val.to_str(), "test_value");  
@@ -2633,6 +2642,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2675,8 +2685,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid, err), true);  
 
       // Ensure attr is merged
-      rgw_obj copyObj = destObjEnabled->get_obj();
-      ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+      ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
       rgw::sal::Attrs copyAttrs = destObjEnabled->get_attrs();
       buffer::list val = copyAttrs["user.rgw.test_attr"];
       EXPECT_EQ(val.to_str(), "copy_value");  
@@ -2725,6 +2734,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2770,8 +2780,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid, err), true);  
 
       // Ensure attr is merged  
-      rgw_obj copyObj = destObjSuspended->get_obj();
-      ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+      ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
       rgw::sal::Attrs copyAttrs = destObjSuspended->get_attrs();
       buffer::list val = copyAttrs["user.rgw.test_attr"];
       EXPECT_EQ(val.to_str(), "copy_value");  
@@ -2854,6 +2863,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2896,8 +2906,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid, err), true);  
 
       // Ensure attr is replaced
-      rgw_obj copyObj = destObjEnabled->get_obj();
-      ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+      ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
       rgw::sal::Attrs copyAttrs = destObjEnabled->get_attrs();
       buffer::list val = copyAttrs["user.rgw.test_attr"];
       EXPECT_EQ(val.to_str(), "copy_value");  
@@ -2946,6 +2955,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2991,8 +3001,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid, err), true);  
 
       // Ensure attr is replaced
-      rgw_obj copyObj = destObjSuspended->get_obj();
-      ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+      ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
       rgw::sal::Attrs copyAttrs = destObjSuspended->get_attrs();
       buffer::list val = copyAttrs["user.rgw.test_attr"];
       EXPECT_EQ(val.to_str(), "copy_value");  

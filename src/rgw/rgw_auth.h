@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -855,7 +855,12 @@ public:
   std::optional<rgw::ARN> get_caller_identity() const override {
     rgw::Partition partition = rgw::Partition::aws;
     rgw::Service service = rgw::Service::sts;
-    std::string acct = role.account->id.empty() ? role.tenant : role.account->id;
+    std::string acct;
+    if (role.account && !role.account->id.empty()) {
+      acct = role.account->id;
+    } else {
+      acct = role.tenant;
+    }
     std::string resource = "assumed-role" + role.path + role.name + "/" + token_attrs.role_session_name;
 
     return rgw::ARN(partition, service, "", acct, resource);

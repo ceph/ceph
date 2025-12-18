@@ -16,7 +16,9 @@ import {
   ListModule,
   ToggletipModule,
   IconModule,
-  IconService
+  IconService,
+  TagModule,
+  SelectModule
 } from 'carbon-components-angular';
 import Analytics from '@carbon/icons/es/analytics/16';
 import CloseFilled from '@carbon/icons/es/close--filled/16';
@@ -83,6 +85,7 @@ import { MultiClusterFormComponent } from './multi-cluster/multi-cluster-form/mu
 import { MultiClusterListComponent } from './multi-cluster/multi-cluster-list/multi-cluster-list.component';
 import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
 import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-details/multi-cluster-details.component';
+import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
 
 @NgModule({
   imports: [
@@ -115,7 +118,10 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     ModalModule,
     ListModule,
     ToggletipModule,
-    IconModule
+    IconModule,
+    TagModule,
+    TextLabelListComponent,
+    SelectModule
   ],
   declarations: [
     MonitorComponent,

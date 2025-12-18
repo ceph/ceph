@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -786,7 +787,8 @@ private:
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
   void finish_old_fragment(std::vector<MDSContext*>& waiters, bool replay);
   void init_fragment_pins();
-  std::string get_path() const;
+  std::string get_trimmed_path() const;
+  std::string get_path(bool trim_path=false) const;
 
   // -- authority --
   /*

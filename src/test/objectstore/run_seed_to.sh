@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# vim: ts=8 sw=2 smarttab
+# vim: ts=8 sw=2 sts=2 expandtab
 #
 # run_seed_to.sh - Run ceph_test_filestore_idempotent_sequence up until an 
 # injection point, generating a sequence of operations based on a

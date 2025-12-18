@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "osd.h"
 
@@ -582,6 +582,14 @@ seastar::future<> OSD::start()
   }).then([this] {
     return _add_device_class();
    }).then([this] {
+    if (is_rotational.has_value()) {
+      return shard_services.invoke_on_all([this](auto &local_service) {
+        local_service.local_state.initialize_scheduler(local_service.get_cct(), *is_rotational);
+      });
+    } else {
+      throw std::runtime_error("No device class is set");
+    }
+   }).then([this] {
     monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
     monc->sub_want("mgrmap", 0, 0);
     monc->sub_want("osdmap", 0, 0);
@@ -701,6 +709,7 @@ seastar::future<> OSD::_add_device_class()
 
   INFO("device_class is {} ", device_class);
 
+  is_rotational = (device_class != "ssd");
   std::string cmd = fmt::format(
     R"({{"prefix": "osd crush set-device-class", "class": "{}", "ids": ["{}"]}})",
     device_class, stringify(whoami)
@@ -1286,19 +1295,20 @@ seastar::future<> OSD::committed_osd_maps(
     }
   }
 
+  if (!pg_shard_manager.is_stopping()) {
+    /*
+     * TODO: Missing start_waiting_for_healthy() counterpart.
+     * Only subscribe to the next map until implemented.
+     * See https://tracker.ceph.com/issues/66832
+    */
+    co_await get_shard_services().osdmap_subscribe(osdmap->get_epoch() + 1, false);
+  }
   if (pg_shard_manager.is_active()) {
     INFO("osd.{}: now active", whoami);
     if (!osdmap->exists(whoami) || osdmap->is_stop(whoami)) {
       co_await shutdown();
     } else if (should_restart()) {
       co_await restart();
-    } else if (!pg_shard_manager.is_stopping()) {
-      /*
-       * TODO: Missing start_waiting_for_healthy() counterpart.
-       * Only subscribe to the next map until implemented.
-       * See https://tracker.ceph.com/issues/66832
-      */
-      co_await get_shard_services().osdmap_subscribe(osdmap->get_epoch() + 1, false);
     }
   } else if (pg_shard_manager.is_preboot()) {
     INFO("osd.{}: now preboot", whoami);

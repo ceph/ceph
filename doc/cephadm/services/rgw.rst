@@ -24,7 +24,7 @@ To deploy a set of ``radosgw`` daemons, with an arbitrary service name
 
 .. prompt:: bash #
 
-  ceph orch apply rgw *<name>* [--realm=*<realm-name>*] [--zone=*<zone-name>*] --placement="*<num-daemons>* [*<host1>* ...]"
+  ceph orch apply rgw <name> [--realm=<realm-name>] [--zone=<zone-name>] --placement="<num-daemons> [<host1> ...]"
 
 Trivial setup
 -------------
@@ -49,7 +49,7 @@ ports 8000 and 8001:
 
    ceph orch host label add gwhost1 rgw  # the 'rgw' label can be anything
    ceph orch host label add gwhost2 rgw
-   ceph orch apply rgw foo '--placement=label:rgw count-per-host:2' --port=8000
+   ceph orch apply rgw foo --placement='label:rgw count-per-host:2' --port=8000
 
 See also: :ref:`cephadm_co_location`.
 
@@ -248,7 +248,7 @@ For RGW services, this can be enabled by applying a spec file such as:
     zonegroup_hostnames:
     - s3.cephlab.com
 
-Then apply this yaml document:
+Then apply this YAML document:
 
 .. prompt:: bash #
 

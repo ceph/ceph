@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -81,10 +82,9 @@ TEST(ClsHello, RecordHello) {
 
 static std::string _get_required_osd_release(Rados& cluster)
 {
-  bufferlist inbl;
   std::string cmd = std::string("{\"prefix\": \"osd dump\",\"format\":\"json\"}");
   bufferlist outbl;
-  int r = cluster.mon_command(cmd, inbl, &outbl, NULL);
+  int r = cluster.mon_command(std::move(cmd), {}, &outbl, NULL);
   ceph_assert(r >= 0);
   std::string outstr(outbl.c_str(), outbl.length());
   json_spirit::Value v;

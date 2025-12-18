@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -204,7 +205,6 @@ PyObject *ActivePyModules::cacheable_get_python(const std::string &what)
   PyObject *obj = get_python(what);
   if(ttl_seconds && ttl_cache.is_cacheable(what)) {
     ttl_cache.insert(what, obj);
-    Py_INCREF(obj);
   }
   update_cache_metrics();
   return obj;
@@ -1578,7 +1578,7 @@ void ActivePyModules::set_device_wear_level(const std::string& devid,
     "}";
 
   Command set_cmd;
-  set_cmd.run(&monc, cmd, json);
+  set_cmd.run(&monc, std::move(cmd), std::move(json));
   set_cmd.wait();
 }
 

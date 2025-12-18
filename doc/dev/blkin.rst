@@ -9,7 +9,7 @@ if you compile code, please use -DWITH_LTTNG option (default: ON)::
 
   ./do_cmake -DWITH_LTTNG=ON
 
-If your Ceph deployment is package-based (YUM, DNF, APT) vs containerized, install the required software packages according to the module which you want to track， otherwise, it may cause a coredump due to missing *tp.solibrary files::
+If your Ceph deployment is package-based (YUM, DNF, APT) vs containerized, install the required software packages according to the module which you want to track， otherwise, it may cause a coredump due to missing ``*tp.solibrary`` files::
 
   librbd-devel    
   librgw-devel    

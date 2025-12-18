@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "rgw_notify.h"
 #include "cls/2pc_queue/cls_2pc_queue_client.h"
@@ -127,6 +127,9 @@ private:
         return ret;
       }
       queues.merge(queues_chunk);
+      if (more) {
+        start_after = *queues.rbegin();
+      }
     }
     return 0;
   }
@@ -509,6 +512,7 @@ private:
               needs_migration_vector[entry_idx - 1] = (result == EntryProcessingResult::Migrating);
               notifs_persistency_tracker.erase(entry.marker);
               is_idle = false;
+              if (result == EntryProcessingResult::Expired && perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
               return;
             }
             if (set_min_marker(end_marker, entry.marker) < 0) {

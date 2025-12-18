@@ -41,7 +41,7 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
         install_container_deps
         dnf_clean
     ;;
-    *~*ubuntu*)
+    *~*ubuntu*|*~*debian*)
         apt-get update
         apt-get install -y wget reprepro curl software-properties-common lksctp-tools libsctp-dev protobuf-compiler ragel libc-ares-dev
         install_container_deps

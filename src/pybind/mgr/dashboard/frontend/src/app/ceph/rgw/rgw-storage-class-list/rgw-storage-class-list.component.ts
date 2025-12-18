@@ -1,4 +1,4 @@
-import { Component, NgZone, OnInit } from '@angular/core';
+import { Component, NgZone, OnInit, ViewChild } from '@angular/core';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -23,8 +23,10 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Permission } from '~/app/shared/models/permissions';
 import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
 import { Router } from '@angular/router';
+import { Observable, Subscriber } from 'rxjs';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 
-const BASE_URL = 'rgw/tiering';
+const BASE_URL = 'rgw/storage-class';
 @Component({
   selector: 'cd-rgw-storage-class-list',
   templateUrl: './rgw-storage-class-list.component.html',
@@ -32,6 +34,8 @@ const BASE_URL = 'rgw/tiering';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class RgwStorageClassListComponent extends ListWithDetails implements OnInit {
+  @ViewChild('table', { static: true })
+  table: TableComponent;
   columns: CdTableColumn[];
   selection = new CdTableSelection();
   permission: Permission;
@@ -108,7 +112,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         name: this.actionLabels.EDIT,
         permission: 'update',
         icon: Icons.edit,
-        routerLink: () => [`/rgw/tiering/edit/${getStorageUri()}`]
+        routerLink: () => [`/${BASE_URL}/edit/${getStorageUri()}`]
       },
       {
         name: this.actionLabels.REMOVE,
@@ -170,17 +174,30 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     const storage_class = this.selection.first().storage_class;
     const placement_target = this.selection.first().placement_target;
     this.cdsModalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: $localize`Tiering Storage Class`,
+      itemDescription: $localize`Storage class`,
       itemNames: [storage_class],
       actionDescription: 'remove',
-      submitActionObservable: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('rgw/zonegroup/storage-class', {
-            placement_target: placement_target,
-            storage_class: storage_class
-          }),
-          call: this.rgwStorageClassService.removeStorageClass(placement_target, storage_class)
-        })
+      submitActionObservable: () => {
+        return new Observable((observer: Subscriber<any>) => {
+          this.taskWrapper
+            .wrapTaskAroundCall({
+              task: new FinishedTask('rgw/zonegroup/storage-class', {
+                placement_target: placement_target,
+                storage_class: storage_class
+              }),
+              call: this.rgwStorageClassService.removeStorageClass(placement_target, storage_class)
+            })
+            .subscribe({
+              error: (error: any) => {
+                observer.error(error);
+              },
+              complete: () => {
+                observer.complete();
+                this.table.refreshBtn();
+              }
+            });
+        });
+      }
     });
   }
 

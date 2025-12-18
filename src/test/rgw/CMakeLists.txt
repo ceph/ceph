@@ -124,10 +124,12 @@ add_executable(unittest_http_manager test_http_manager.cc)
 add_ceph_unittest(unittest_http_manager)
 target_link_libraries(unittest_http_manager ${rgw_libs})
 
+if(WITH_RADOSGW_RADOS)
 # unittest_rgw_reshard_wait
 add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
 add_ceph_unittest(unittest_rgw_reshard_wait)
 target_link_libraries(unittest_rgw_reshard_wait ${rgw_libs})
+endif()
 
 set(test_rgw_a_src test_rgw_common.cc)
 add_library(test_rgw_a STATIC ${test_rgw_a_src})
@@ -215,6 +217,7 @@ target_link_libraries(unittest_rgw_crypto
   ${CRYPTO_LIBS}
   )
 
+if(WITH_RADOSGW_RADOS)
 set(test_rgw_reshard_srcs test_rgw_reshard.cc)
 add_executable(unittest_rgw_reshard
   ${test_rgw_reshard_srcs}
@@ -223,6 +226,7 @@ add_ceph_unittest(unittest_rgw_reshard)
 target_link_libraries(unittest_rgw_reshard
   ${rgw_libs}
   )
+endif()
 
 add_executable(unittest_rgw_putobj test_rgw_putobj.cc)
 add_ceph_unittest(unittest_rgw_putobj)
@@ -232,6 +236,7 @@ add_executable(unittest_rgw_throttle test_rgw_throttle.cc)
 add_ceph_unittest(unittest_rgw_throttle)
 target_link_libraries(unittest_rgw_throttle ${rgw_libs} ${UNITTEST_LIBS})
 
+if(WITH_RADOSGW_RADOS)
 add_executable(unittest_rgw_iam_policy test_rgw_iam_policy.cc)
 add_ceph_unittest(unittest_rgw_iam_policy)
 target_link_libraries(unittest_rgw_iam_policy
@@ -250,6 +255,7 @@ target_link_libraries(unittest_rgw_iam_policy
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
+endif()
 
 add_executable(unittest_rgw_string test_rgw_string.cc)
 add_ceph_unittest(unittest_rgw_string)
@@ -344,11 +350,13 @@ target_link_libraries(unittest_log_backing
   ${rgw_libs})
 endif()
 
+if(WITH_RADOSGW_RADOS)
 add_executable(unittest_rgw_lua test_rgw_lua.cc)
 add_ceph_unittest(unittest_rgw_lua)
 target_include_directories(unittest_rgw_lua
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_lua unit-main ${rgw_libs})
+endif()
 
 if(WITH_RADOSGW_RADOS)
 add_executable(radosgw-cr-test rgw_cr_test.cc)

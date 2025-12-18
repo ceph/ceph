@@ -16,6 +16,8 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper, Mocks } from '~/testing/unit-test-helper';
 import { ServiceFormComponent } from './service-form.component';
 import { PoolService } from '~/app/shared/api/pool.service';
+import { USER } from '~/app/shared/constants/app.constants';
+import { SelectModule } from 'carbon-components-angular';
 
 // for 'nvmeof' service
 const mockPools = [
@@ -45,6 +47,7 @@ describe('ServiceFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
+      SelectModule,
       ToastrModule.forRoot()
     ]
   });
@@ -292,6 +295,21 @@ describe('ServiceFormComponent', () => {
         expect(ssl_key).toBeNull();
       });
 
+      it('should submit rgw with QAT Compression (None)', () => {
+        formHelper.setValue('service_type', 'rgw');
+        formHelper.setValue(component.serviceForm.get('qat').get('compression'), 'none');
+      });
+
+      it('should submit rgw with QAT Compression (Hardware)', () => {
+        formHelper.setValue('service_type', 'rgw');
+        formHelper.setValue(component.serviceForm.get('qat')?.get('compression'), 'hw');
+      });
+
+      it('should submit rgw with QAT Compression (Software)', () => {
+        formHelper.setValue('service_type', 'rgw');
+        formHelper.setValue(component.serviceForm.get('qat')?.get('compression'), 'sw');
+      });
+
       it('should test .pem file', () => {
         const pemCert = `
 -----BEGIN CERTIFICATE-----
@@ -314,7 +332,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
       beforeEach(() => {
         formHelper.setValue('service_type', 'iscsi');
         formHelper.setValue('pool', 'xyz');
-        formHelper.setValue('api_user', 'user');
+        formHelper.setValue('api_user', USER);
         formHelper.setValue('api_password', 'password');
         formHelper.setValue('ssl', false);
       });
@@ -326,7 +344,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           placement: {},
           unmanaged: false,
           pool: 'xyz',
-          api_user: 'user',
+          api_user: USER,
           api_password: 'password',
           api_secure: false
         });
@@ -341,7 +359,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           placement: {},
           unmanaged: false,
           pool: 'xyz',
-          api_user: 'user',
+          api_user: USER,
           api_password: 'password',
           api_secure: true,
           ssl_cert: '',
@@ -358,7 +376,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           placement: {},
           unmanaged: false,
           pool: 'xyz',
-          api_user: 'user',
+          api_user: USER,
           api_password: 'password',
           api_secure: false,
           api_port: 456
@@ -538,7 +556,10 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           unmanaged: false,
           service_id: 'foo',
           cluster_id: 'cluster_foo',
-          config_uri: 'rados://.smb/foo/scc.toml'
+          config_uri: 'rados://.smb/foo/scc.toml',
+          custom_dns: null,
+          join_sources: undefined,
+          user_sources: undefined
         });
       });
     });

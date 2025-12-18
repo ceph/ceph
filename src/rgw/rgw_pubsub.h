@@ -1,11 +1,10 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
 #include "common/versioned_variant.h"
 #include "rgw_sal_fwd.h"
-#include "rgw_tools.h"
 #include "rgw_zone.h"
 #include "rgw_notify_event_type.h"
 #include <boost/container/flat_map.hpp>

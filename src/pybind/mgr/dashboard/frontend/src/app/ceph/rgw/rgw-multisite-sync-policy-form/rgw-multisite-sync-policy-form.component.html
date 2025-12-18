@@ -1,95 +1,85 @@
-<cd-modal [pageURL]="pageURL">
-  <span class="modal-title"
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
-  <ng-container class="modal-content">
-    <form
-      #frm="ngForm"
-      [formGroup]="syncPolicyForm"
-      *cdFormLoading="loading"
-      novalidate>
-      <div class="modal-body">
+<cds-modal size="sm"
+           [open]="open">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ action | titlecase }} {{ resource }}</h3>
+    <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+  </cds-modal-header>
+  <ng-container *cdFormLoading="loading">
+    <form #frm="ngForm"
+          [formGroup]="syncPolicyForm"
+          *cdFormLoading="loading"
+          novalidate>
+      <div cdsModalContent>
         <!-- Group Id -->
-        <div class="form-group row">
-          <label
-            class="cd-col-form-label required"
-            for="group_id"
-            i18n>Group Name</label>
-          <div class="cd-col-form-input">
-            <input
-              id="group_id"
-              name="group_id"
-              class="form-control"
-              type="text"
-              i18n-placeholder
-              placeholder="Group Name..."
-              formControlName="group_id"
-              [readonly]="editing"/>
-            <span
-              class="invalid-feedback"
-              *ngIf="syncPolicyForm.showError('group_id', frm, 'required')"
-              i18n>This field is required.</span>
-          </div>
+        <div class="form-item">
+          <cds-text-label for="group_id"
+                          [invalid]="!syncPolicyForm.controls.group_id.valid && syncPolicyForm.controls.group_id.dirty"
+                          [invalidText]="groupIdError">
+            <ng-container i18n>Group name</ng-container>
+            <input cdsText
+                   type="text"
+                   id="group_id"
+                   formControlName="group_id"
+                   autofocus
+                   [invalid]="!syncPolicyForm.controls.group_id.valid && syncPolicyForm.controls.group_id.dirty"
+                   [readonly]="editing"/>
+          </cds-text-label>
+          <ng-template #groupIdError>
+            @if (syncPolicyForm.showError('group_id', frm, 'required')) {
+            <span class="invalid-feedback">
+              <ng-container i18n> This field is required. </ng-container>
+            </span>
+            }
+          </ng-template>
         </div>
         <!-- Status -->
-        <div class="form-group row">
-          <label
-            class="cd-col-form-label required"
-            for="status"
-            i18n>Status</label>
-          <div class="cd-col-form-input">
-            <select
-                id="status"
-                name="status"
-                class="form-select"
-                formControlName="status">
-              <option
-                i18n
-                value="{{syncPolicyStatus.ENABLED}}">{{syncPolicyStatus.ENABLED | upperFirst }}</option>
-              <option
-                i18n
-                value="{{syncPolicyStatus.ALLOWED}}">{{syncPolicyStatus.ALLOWED | upperFirst }}</option>
-              <option
-                i18n
-                value="{{syncPolicyStatus.FORBIDDEN}}">{{syncPolicyStatus.FORBIDDEN | upperFirst }}</option>
-            </select>
-            <span
-              class="invalid-feedback"
-              *ngIf="syncPolicyForm.showError('status', frm, 'required')"
-              i18n>This field is required.</span>
-          </div>
+        <div class="form-item">
+          <cds-select label="Status"
+                      for="status"
+                      formControlName="status"
+                      id="status"
+                      [invalid]="syncPolicyForm.controls['status'].invalid && (syncPolicyForm.controls['status'].dirty)"
+                      [invalidText]="statusError"
+                      i18n>
+            <ng-container>Status</ng-container>
+            <option value="{{syncPolicyStatus.ENABLED}}">{{syncPolicyStatus.ENABLED | upperFirst }}</option>
+            <option value="{{syncPolicyStatus.ALLOWED}}">{{syncPolicyStatus.ALLOWED | upperFirst }}</option>
+            <option value="{{syncPolicyStatus.FORBIDDEN}}">{{syncPolicyStatus.FORBIDDEN | upperFirst }}</option>
+          </cds-select>
+          <ng-template #statusError>
+            @if (syncPolicyForm.showError('status', frm, 'required')) {
+            <span class="invalid-feedback"
+                  i18n>This field is required.</span>
+            }
+          </ng-template>
         </div>
         <!-- Bucket Name -->
-        <div class="form-group row">
-          <label
-            class="cd-col-form-label"
-            for="bucket_name"
-            i18n>Bucket Name</label>
-          <div class="cd-col-form-input">
-            <input
-              id="bucket_name"
-              name="bucket_name"
-              class="form-control"
-              type="text"
-              i18n-placeholder
-              placeholder="Bucket Name..."
-              formControlName="bucket_name"
-              [ngbTypeahead]="bucketDataSource"/>
-            <span
-              class="invalid-feedback"
-              *ngIf="syncPolicyForm.showError('bucket_name', frm, 'bucketNameNotAllowed')"
-              i18n>The bucket with chosen name does not exist.</span>
-          </div>
+        <div class="form-item">
+          <cds-text-label for="bucket_name"
+                          [invalid]="!syncPolicyForm.controls.bucket_name.valid && syncPolicyForm.controls.bucket_name.dirty"
+                          [invalidText]="bucketNameError"
+                          cdOptionalField="Bucket name">
+            <ng-container i18n>Bucket name</ng-container>
+            <input cdsText
+                   type="text"
+                   id="bucket_name"
+                   formControlName="bucket_name"
+                   [invalid]="!syncPolicyForm.controls.bucket_name.valid && syncPolicyForm.controls.bucket_name.dirty"
+                   [readonly]="editing"/>
+          </cds-text-label>
+          <ng-template #bucketNameError>
+            @if (syncPolicyForm.showError('bucket_name', frm, 'bucketNameNotAllowed')) {
+            <span class="invalid-feedback"
+                  i18n>The bucket with chosen name does not exist.</span>
+            }
+          </ng-template>
         </div>
       </div>
-
-      <div class="modal-footer">
-        <div class="text-right">
-          <cd-form-button-panel (submitActionEvent)="submit()"
-                                [form]="syncPolicyForm"
-                                [disabled]="syncPolicyForm.pending || syncPolicyForm.pristine || syncPolicyForm.invalid"
-                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
-        </div>
-      </div>
+      <cd-form-button-panel (submitActionEvent)="submit()"
+                            [form]="syncPolicyForm"
+                            [modalForm]="true"
+                            [submitText]="(action | titlecase)"></cd-form-button-panel>
     </form>
   </ng-container>
-</cd-modal>
+</cds-modal>

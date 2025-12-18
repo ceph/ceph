@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -521,8 +522,6 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *done)
       ++it; /* trim (in the future) may remove dentry */
 
       if (dn->scrub(next_seq)) {
-        std::string path;
-        dir->get_inode()->make_path_string(path, true);
         clog->warn() << "Scrub error on dentry " << *dn
                      << " see " << g_conf()->name
                      << " log and `damage ls` output for details";

@@ -225,8 +225,38 @@ if(${WITH_RADOSGW})
     ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
 
+  # ceph_test_cls_rgw_admin_account_quota_set
+  set(test_cls_rgw_admin_account_quota_set_srcs 
+    test_rgw_admin_account_quota_set.cc
+    test_rgw_admin_helper.cc
+  )
+  add_executable(ceph_test_cls_rgw_admin_account_quota_set
+    ${test_cls_rgw_admin_account_quota_set_srcs}
+    )
+  target_link_libraries(ceph_test_cls_rgw_admin_account_quota_set
+    librados
+    ${rgw_libs}
+    global
+    cls_version_client
+    cls_log_client
+    cls_refcount_client
+    cls_rgw_client
+    cls_user_client
+    cls_lock_client
+    ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
+    ${CMAKE_DL_LIBS} ${UNITTEST_LIBS} ${CRYPTO_LIBS})
+
+  install(TARGETS
+    ceph_test_cls_rgw_admin_account_quota_set
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
   # ceph_test_cls_rgw_meta
-  set(test_cls_rgw_meta_srcs test_rgw_admin_meta.cc)
+  set(test_cls_rgw_meta_srcs
+    test_rgw_admin_meta.cc
+    test_rgw_admin_helper.cc
+  )
   add_executable(ceph_test_cls_rgw_meta
     ${test_cls_rgw_meta_srcs}
     )
@@ -593,12 +623,14 @@ if(NOT WIN32)
   ceph_snappy
   cls_lock
   ceph_test_objectstore
-  ceph_test_bluefs
   ceph_erasure_code_non_regression
   cython_modules
   crushtool
   monmaptool)
 
+if (WITH_BLUESTORE)
+  add_dependencies(tests ceph_test_bluefs)
+endif()
 if (WITH_CEPHFS)
   add_dependencies(tests ceph-mds)
 endif()
@@ -982,6 +1014,12 @@ add_executable(unittest_not_before_queue
   test_not_before_queue.cc)
 add_ceph_unittest(unittest_not_before_queue)
 target_link_libraries(unittest_not_before_queue ceph-common)
+
+# unittest_mode_collector
+add_executable(unittest_mode_collector
+  test_mode_collector.cc)
+add_ceph_unittest(unittest_mode_collector)
+target_link_libraries(unittest_mode_collector ceph-common)
 
 if(NOT WIN32)
 # unittest_on_exit

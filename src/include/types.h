@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -17,6 +18,7 @@
 // this is needed for ceph_fs to compile in userland
 #include "int_types.h"
 #include "byteorder.h"
+#include "platform_errno.h"
 
 #include "uuid.h"
 
@@ -518,17 +520,6 @@ struct shard_id_t {
 WRITE_CLASS_ENCODER(shard_id_t)
 std::ostream &operator<<(std::ostream &lhs, const shard_id_t &rhs);
 
-#if defined(__sun) || defined(_AIX) || defined(__APPLE__) || \
-    defined(__FreeBSD__) || defined(_WIN32)
-extern "C" {
-__s32  ceph_to_hostos_errno(__s32 e);
-__s32  hostos_to_ceph_errno(__s32 e);
-}
-#else
-#define  ceph_to_hostos_errno(e) (e)
-#define  hostos_to_ceph_errno(e) (e)
-#endif
-
 struct errorcode32_t {
   using code_t = __s32;
   code_t code;
@@ -550,8 +541,8 @@ struct errorcode32_t {
     return hostos_to_ceph_errno(code);
   }
 
-  inline void set_wire_to_host(code_t host_code) {
-    code = ceph_to_hostos_errno(host_code);
+  inline void set_wire_to_host(code_t wire_code) {
+    code = ceph_to_hostos_errno(wire_code);
   }
 
   void encode(ceph::buffer::list &bl) const {

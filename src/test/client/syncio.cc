@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -128,13 +129,19 @@ TEST_F(TestClient, LlreadvLlwritevLargeBuffersSync) {
     {in_buf_1.get(), BUFSIZE}
   };
 
+  int maxio_size = INT_MAX;
+  if (fse.encrypted) {
+    maxio_size = FSCRYPT_MAXIO_SIZE;
+  }
+
+
   rc = client->ll_writev(fh, iov_out, 2, 0);
   // total write length is clamped to INT_MAX in write paths
-  ASSERT_EQ(rc, INT_MAX);
+  ASSERT_EQ(rc, maxio_size);
 
   rc = client->ll_readv(fh, iov_in, 2, 0);
   // total write length is clamped to INT_MAX in write paths
-  ASSERT_EQ(rc, INT_MAX);
+  ASSERT_EQ(rc, maxio_size);
 
   client->ll_release(fh);
   ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));

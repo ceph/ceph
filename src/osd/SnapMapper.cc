@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -56,19 +57,42 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
   e.g., clean up on deletion).
 
   "SNA_"
-  + ("%lld" % poolid)
-  + "_"
-  + ("%016x" % snapid)
-  + "_"
-  + (".%x" % shard_id)
-  + "_"
+  + ("%lld" % poolid) + "_"
+
+  + ("%016x" % snapid) + "_"
+
+  // shard_id formatting is skipped for shard_id_t::NO_SHARD (See: make_shard_prefix)
+  + (".%x" % shard_id) + "_"
+
   + hobject_t::to_str() ("%llx.%8x.%lx.name...." % pool, hash, snap)
+
   -> SnapMapping::Mapping { snap, hoid }
 
+  -----
+
   "OBJ_" +
+
+  // shard_id formatting is skipped for shard_id_t::NO_SHARD (See: make_shard_prefix)
   + (".%x" % shard_id)
+
   + hobject_t::to_str()
+
    -> SnapMapper::object_snaps { oid, set<snapid_t> }
+
+  -----
+
+  Key formats when shard exists (EC):
+
+  <SNA_><pool>_<snapid>_.<shardid>_<hobject_t::to_str()>
+
+  <OBJ_>_.<shardid>_<hobject_t::to_str()>
+
+  Otherwise, for shard_id_t::NO_SHARD (Replicated):
+
+  <SNA_><pool>_<snapid>_<hobject_t::to_str()>
+
+  <OBJ_>_<hobject_t::to_str()>
+
 
   */
 
@@ -83,12 +107,13 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
     ::crimson::interruptible::interruptor<
       ::crimson::osd::IOInterruptCondition>;
 
-#define CRIMSON_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_).debug(FMT_MSG, ##__VA_ARGS__)
+SET_SUBSYS(osd);
 int OSDriver::get_keys(
   const std::set<std::string> &keys,
   std::map<std::string, ceph::buffer::list> *out)
 {
-  CRIMSON_DEBUG("OSDriver::{}", __func__);
+  LOG_PREFIX("OSDriver::get_keys");
+  DEBUG("");
   using crimson::os::FuturizedStore;
   return interruptor::green_get(os->omap_get_values(
     ch, hoid, keys
@@ -106,21 +131,22 @@ int OSDriver::get_next(
   const std::string &key,
   std::pair<std::string, ceph::buffer::list> *next)
 {
-  CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
+  LOG_PREFIX("OSDriver::get_next");
+  DEBUG("key {}", key);
   using crimson::os::FuturizedStore;
   ObjectStore::omap_iter_seek_t start_from{
     key,
     ObjectStore::omap_iter_seek_t::UPPER_BOUND
   };
   std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
-    [key, next] (std::string_view _key, std::string_view _value)
+    [FNAME, key, next] (std::string_view _key, std::string_view _value)
   {
-    CRIMSON_DEBUG("OSDriver::get_next key {} got omap values", key);
+    DEBUG("key {} got omap values", key);
     if (!SnapMapper::is_mapping(std::string(_key))) {
-      CRIMSON_DEBUG("OSDriver::get_next key {} no more values", key);
+      DEBUG("key {} no more values", key);
       return ObjectStore::omap_iter_ret_t::NEXT;
     } else {
-      CRIMSON_DEBUG("OSDriver::get_next returning next: {}, ", _key);
+      DEBUG("returning next: {}, ", _key);
       ceph_assertf(_key > key,
         "Key order violation: input_key='%s' got_key='%s'",
          key.c_str(), std::string(_key).c_str());
@@ -132,14 +158,14 @@ int OSDriver::get_next(
   };
   return interruptor::green_get(
     os->omap_iterate(ch, hoid, start_from, callback
-    ).safe_then([key] (auto ret) {
+    ).safe_then([FNAME, key] (auto ret) {
       if (ret == ObjectStore::omap_iter_ret_t::NEXT) {
-        CRIMSON_DEBUG("OSDriver::get_next key {} no more values", key);
+        DEBUG("key {} no more values", key);
         return -ENOENT;
       }
       return 0; // found and Stopped
-    }, FuturizedStore::Shard::read_errorator::all_same_way([] {
-        CRIMSON_DEBUG("OSDriver::get_next saw error returning EINVAL");
+    }, FuturizedStore::Shard::read_errorator::all_same_way([FNAME] {
+        DEBUG("saw error returning EINVAL");
         return -EINVAL;
       })
     )
@@ -150,19 +176,20 @@ int OSDriver::get_next_or_current(
   const std::string &key,
   std::pair<std::string, ceph::buffer::list> *next_or_current)
 {
-  CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
+  LOG_PREFIX("OSDriver::get_next_or_current");
+  DEBUG("key {}", key);
   using crimson::os::FuturizedStore;
   // let's try to get current first
   return interruptor::green_get(os->omap_get_values(
     ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
-  ).safe_then([&key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
-    CRIMSON_DEBUG("OSDriver::get_next_or_current returning {}", key);
+  ).safe_then([FNAME, &key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
+    DEBUG("returning {}", key);
     ceph_assert(vals.size() == 1);
     *next_or_current = std::make_pair(key, std::move(vals.begin()->second));
     return 0;
   }, FuturizedStore::Shard::read_errorator::all_same_way(
-    [next_or_current, &key, this] {
-    CRIMSON_DEBUG("OSDriver::get_next_or_current no current, try next {}", key);
+    [FNAME, next_or_current, &key, this] {
+    DEBUG("no current, try next {}", key);
     // no current, try next
     return get_next(key, next_or_current);
   }))); // this requires seastar::thread
@@ -297,7 +324,7 @@ std::pair<snapid_t, hobject_t> SnapMapper::from_raw(
 
 bool SnapMapper::is_mapping(const string &to_test)
 {
-  return to_test.substr(0, MAPPING_PREFIX.size()) == MAPPING_PREFIX;
+  return to_test.compare(0, MAPPING_PREFIX.size(), MAPPING_PREFIX) == 0;
 }
 
 string SnapMapper::to_object_key(const hobject_t &hoid) const
@@ -641,6 +668,7 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
   unsigned max)
 {
   vector<hobject_t> out;
+  out.reserve(max);
 
   /// maintain the prefix_itr between calls to avoid searching depleted prefixes
   for ( ; prefix_itr != prefixes.end(); prefix_itr++) {
@@ -658,11 +686,10 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
 
       ceph_assert(is_mapping(next.first));
 
-      if (auto next_prefix = next.first.substr(0, prefix.size());
-          next_prefix != prefix) {
+      if (next.first.compare(0, prefix.size(), prefix) != 0) {
 	// TBD: we access the DB twice for the first object of each iterator...
-	dout(20) << fmt::format("{}: breaking, prefix expected {} got {}",
-	                        __func__, prefix, next_prefix)
+	dout(20) << fmt::format("{}: breaking, prefix expected {} got key {} with a different prefix",
+	                        __func__, prefix, next.first)
 	         << dendl;
 	break; // Done with this prefix
       }
@@ -671,7 +698,7 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
       pair<snapid_t, hobject_t> next_decoded(from_raw(next));
       ceph_assert(next_decoded.first == snap);
       ceph_assert(check(next_decoded.second));
-      out.push_back(next_decoded.second);
+      out.emplace_back(std::move(next_decoded.second));
 
       pos = next.first;
     }
@@ -976,8 +1003,8 @@ bool SnapMapper::Scrubber::_parse_m(
   {
     unsigned long long p, s;
     long sh;
-    int r = sscanf(key.data(), "SNA_%lld_%llx.%lx", &p, &s, &sh);
-    if (r != 1) {
+    int r = sscanf(key.data(), "SNA_%lld_%llx_.%lx", &p, &s, &sh);
+    if (r != 3) {
       shard = shard_id_t::NO_SHARD;
     } else {
       shard = shard_id_t(sh);

@@ -73,21 +73,25 @@ cluster_id
 auth_mode
     One of ``user`` or ``active-directory``
 domain_realm
+    Required for ``active-directory`` clusters and ignored by ``user`` clusters.
     The domain/realm value identifying the AD domain. Required when choosing
     ``active-directory``
 domain_join_user_pass
+    Required for ``active-directory`` clusters and ignored by ``user`` clusters.
     A string in the form ``<username>%<password>`` that will be used to join
     Samba servers to the AD domain.
 define_user_pass
+    Optional. Ignored by ``active-directory`` clusters.
     A string of the form ``<username>%<password>`` that will be used for
-    authentication in ``user`` auth_mode.
+    authentication in ``user`` auth_mode. Can be specified multiple times to
+    define more than one user.
 custom_dns
     Optional. Can be specified multiple times. One or more IP Addresses that
     will be applied to the Samba containers to override the default DNS
     resolver(s). This option is intended to be used when the host Ceph node is
     not configured to resolve DNS entries within AD domain(s).
 placement
-    A Ceph orchestration :ref:`placement specifier <orchestrator-cli-placement-spec>`
+    Optional. A Ceph orchestration :ref:`placement specifier <orchestrator-cli-placement-spec>`
 clustering
     Optional. Control if a cluster abstraction actually uses Samba's clustering
     mechanism.  The value may be one of ``default``, ``always``, or ``never``.
@@ -97,22 +101,70 @@ clustering
     disables clustering regardless of the placement count. If unspecified,
     ``default`` is assumed.
 public_addrs
-    Optional. A string in the form of <ipaddress/prefixlength>[%<destination interface>].
-    Supported only when using Samba's clustering. Assign "virtual" IP
-    addresses that will be managed by the clustering subsystem and may automatically
-    move between nodes running Samba containers.
+    Optional. A string in the form of <ipaddress/prefixlength>[%<destination address>].
+    Supported only when using Samba's clustering. Assign "virtual" IP addresses
+    that will be managed by the clustering subsystem and may automatically move
+    between nodes running Samba containers.  Can be specified multiple times to
+    assign more than one public address to the SMB cluster.
 password_filter
-    One of ``none`` or ``base64``. If the filter is ``none`` the password
-    values on the command line are assumed to be plain text. If the filter is
-    ``base64`` the password values are assumed to be obscured with
+    Optional.  One of ``none`` or ``base64``. If the filter is ``none`` the
+    password values on the command line are assumed to be plain text. If the
+    filter is ``base64`` the password values are assumed to be obscured with
     base64 encoding the string. If ``--password-filter-out`` is not specified
     this filter will also be applied to the output.
 password_filter_out
-    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
-    password fields in the output are emitted as plain text. If the filter is
-    ``base64`` password fields will be obscured by base64 encoding the
-    string.  If the filter is ``hidden`` the password values will be replaced
-    by a invalid generic replacement string containing only asterisks.
+    Optional.  One of ``none``, ``base64``, or ``hidden``. If the filter is
+    ``none`` the password fields in the output are emitted as plain text. If the
+    filter is ``base64`` password fields will be obscured by base64 encoding
+    the string.  If the filter is ``hidden`` the password values will be
+    replaced by an invalid generic replacement string containing only asterisks.
+
+
+Examples
+~~~~~~~~
+
+Create a cluster with two locally defined users:
+
+.. prompt:: bash #
+
+    ceph smb cluster create bob user \
+        --define-user-pass=bob%Passw0rd1 \
+        --define-user-pass=carol%Passw0rd2
+
+Create a cluster with a single user and an explicit placement value for
+cephadm (hosts labeled ``smb``):
+
+.. prompt:: bash #
+
+    ceph smb cluster create test1 user \
+        --define-user-pass=test%Passw0rd1 \
+        --placement="label:smb"
+
+Create a cluster connected to an active directory system. Use a custom DNS
+server:
+
+.. prompt:: bash #
+
+    ceph smb cluster create test2 active-directory \
+        --domain-realm=MYDOM.EXAMPLE.ORG \
+        --domain-join-user-pass=Administrator%Ph0nyPassw0rd \
+        --custom-dns=192.168.76.210
+
+
+Create a cluster connected to an active directory system, similar to the
+previous example. Set three CTDB public address values and a custom placement:
+
+.. prompt:: bash #
+
+    ceph smb cluster create test3 active-directory \
+        --domain-realm=MYDOM.EXAMPLE.ORG \
+        --domain-join-user-pass=Administrator%Ph0nyPassw0rd \
+        --custom-dns=192.168.76.210 \
+        --public-address=192.168.76.110/24 \
+        --public-address=192.168.76.111/24 \
+        --public-address=192.168.76.112/24 \
+        --placement="3 label:smb"
+
 
 Remove Cluster
 ++++++++++++++
@@ -128,11 +180,12 @@ Options:
 cluster_id
     A ``cluster_id`` value identifying a cluster resource.
 password_filter
-    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
-    password fields in the output are emitted as plain text. If the filter is
-    ``base64`` password fields will be obscured by base64 encoding the
-    string.  If the filter is ``hidden`` the password values will be replaced
-    by a invalid generic replacement string containing only asterisks.
+    Optional. One of ``none``, ``base64``, or ``hidden``. If the filter is
+    ``none`` the password fields in the output are emitted as plain text. If
+    the filter is ``base64`` password fields will be obscured by base64
+    encoding the string.  If the filter is ``hidden`` the password values will
+    be replaced by an invalid generic replacement string containing only
+    asterisks.
 
 
 List Clusters
@@ -166,7 +219,7 @@ cluster_id
 share_id
     A short string uniquely identifying the share
 cephfs_volume
-    The name of the cephfs volume to be shared
+    The name of the CephFS volume to be shared
 path
     A path relative to the root of the volume and/or subvolume
 share_name
@@ -178,6 +231,37 @@ subvolume
     specified.
 readonly
     Creates a read-only share
+
+
+Examples
+~~~~~~~~
+
+Create a share using the subvolume ``photos`` in the subvolumegroup ``company``:
+
+.. prompt:: bash #
+
+    ceph smb share create test1 pics cephfs --subvolume=company/photos --path=/
+
+Create a share similar to the example above with a customized name:
+
+.. prompt:: bash #
+
+    ceph smb share create test1 pics cephfs \
+        --subvolume=company/photos --path=/  --share-name="Company Photos"
+
+Create a share at the root of a CephFS volume (not generally recommended):
+
+.. prompt:: bash #
+
+    ceph smb share create test1 rootie cephfs --path=/
+
+Create a read-only share at a custom path in the CephFS volume:
+
+.. prompt:: bash #
+
+    ceph smb share create test1 plans cephfs \
+        --path=/qbranch/top/secret/plans --readonly
+
 
 Remove Share
 ++++++++++++
@@ -227,19 +311,20 @@ format
     One of ``json`` (the default) or ``yaml``. Output format can be
     selected independent of the input format.
 password_filter
-    One of ``none`` or ``base64``. If the filter is ``none`` the password
-    fields in the input are assumed to be plain text. If the filter is
+    Optional. One of ``none`` or ``base64``. If the filter is ``none`` the
+    password fields in the input are assumed to be plain text. If the filter is
     ``base64`` the password fields are assumed to be obscured with
     base64 encoding the string. If ``--password-filter-out`` is not specified
     this filter will also be applied to the output.
 password_filter_out
-    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
-    password fields in the output are emitted as plain text. If the filter is
-    ``base64`` password fields will be obscured by base64 encoding the
-    string.  If the filter is ``hidden`` the password values will be replaced
-    by a invalid generic replacement string containing only asterisks.
+    Optional. One of ``none``, ``base64``, or ``hidden``. If the filter is
+    ``none`` the password fields in the output are emitted as plain text. If
+    the filter is ``base64`` password fields will be obscured by base64
+    encoding the string.  If the filter is ``hidden`` the password values will
+    be replaced by an invalid generic replacement string containing only
+    asterisks.
 input
-    A file name or ``-`` to use stdin.
+    A file name or ``-`` to use the standard input (aka ``stdin``).
 
 
 Resources that have already been applied to the Ceph cluster configuration can
@@ -269,11 +354,12 @@ results
     single item is found the output will always include a wrapper object like
     (in pseudo-JSON): ``{"resources": [...Resource objects...]}``.
 password_filter
-    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
-    password fields in the output are emitted as plain text. If the filter is
-    ``base64`` password fields will be obscured by base64 encoding the
-    string.  If the filter is ``hidden`` the password values will be replaced
-    by a invalid generic replacement string containing only asterisks.
+    Optional. One of ``none``, ``base64``, or ``hidden``. If the filter is
+    ``none`` the password fields in the output are emitted as plain text. If
+    the filter is ``base64`` password fields will be obscured by base64
+    encoding the string.  If the filter is ``hidden`` the password values will
+    be replaced by an invalid generic replacement string containing only
+    asterisks.
 
 ``resource_name`` arguments can take the following forms:
 
@@ -368,7 +454,7 @@ An example YAML based resource list looks like the following:
         # ... other fields skipped for brevity ...
 
 
-An example JSON based resoure list looks like the following:
+An example JSON based resource list looks like the following:
 
 .. code-block:: json
 
@@ -495,15 +581,15 @@ public_addrs
     address
         Required string. An IP address with a required prefix length (example:
         ``192.168.4.51/24``). This address will be assigned to one of the
-        host's network devices and managed automatically.
+        host's network interfaces and managed automatically.
     destination
         Optional. String or list of strings. A ``destination`` defines where
         the system will assign the managed IPs. Each string value must be a
         network address (example ``192.168.4.0/24``). One or more destinations
         may be supplied. The typical case is to use exactly one destination and
         so the value may be supplied as a string, rather than a list with a
-        single item. Each destination network will be mapped to a device on a
-        host. Run ``cephadm list-networks`` for an example of these mappings.
+        single item. Each destination network will be mapped to an interface on
+        a host. Run ``cephadm list-networks`` for an example of these mappings.
         If destination is not supplied the network is automatically determined
         using the address value supplied and taken as the destination.
 remote_control
@@ -557,14 +643,15 @@ custom_smb_global_options
    same ``smb`` service without clustering enabled can cause unexpected behavior.
 
 .. warning::
-   The behavior of the system when combining ``bind_addrs`` and
-   ``public_addrs`` on a cluster could lead to unexpected results. The ``smbd``
-   process can only dynamically add/remove public addresses when assigned to
-   monitor a network device (e.g. ``eth0``) versus a specific address. If the
-   network device is assigned multiple addresses and those addreses overlap
-   with a different smb cluster it is possible the services may fail to start.
-   Currently, one must manually ensure that the devices used by a IP or network
-   is exclusvely used for that network to ensure SMB services start properly.
+    The behavior of the system when combining ``bind_addrs`` and
+    ``public_addrs`` on a cluster could lead to unexpected results. The ``smbd``
+    process can only dynamically add/remove public addresses when assigned to
+    monitor a network interface (e.g. ``eth0``) versus a specific address. If
+    the network interface is assigned multiple addresses and those addresses
+    overlap with a different SMB cluster it is possible the services may fail
+    to start.  Currently, one must manually ensure that the interfaces used by
+    an IP or network is exclusively used for that network to ensure SMB
+    services start properly.
 
 
 .. _join-source-fields:
@@ -585,7 +672,7 @@ source_type
     Optional. One of ``resource`` (the default) or ``empty``
 ref
     String. Required for ``source_type: resource``. Must refer to the ID of a
-    ``ceph.smb.join.auth`` resource
+    ``ceph.smb.usersgroups`` resource
 
 .. _tls-source-fields:
 
@@ -684,7 +771,7 @@ cephfs
         Optional string. Name of a subvolumegroup to share
     subvolume
         Optional string. Name of a subvolume to share. If ``subvolumegroup`` is
-        not set and this value contains a exactly one ``/`` character, the
+        not set and this value contains exactly one ``/`` character, the
         subvolume field will automatically be split into
         ``<subvolumegroup>/<subvolume>`` parts for convenience
     provider

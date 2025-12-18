@@ -7,7 +7,7 @@ Since we've switched to C++ 17, and the default clang shipped with Xcode 9 does 
 
 and install all the necessary bits::
 
-  brew install snappy ccache cmake pkg-config
+  brew install snappy ccache cmake pkg-config bash gnu-getopt
   pip install cython
 
 install FUSE if you want to build the FUSE support::

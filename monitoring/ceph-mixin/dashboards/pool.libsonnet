@@ -3,7 +3,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 (import 'utils.libsonnet') {
   'pool-overview.json':
     $.dashboardSchema(
-      'Ceph Pools Overview',
+      'Ceph Pools - Overview',
       '',
       'z99hzWtmk',
       'now-1h',
@@ -609,7 +609,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ]),
   'pool-detail.json':
     $.dashboardSchema(
-      'Ceph Pool Details',
+      'Ceph Pool - Details',
       '',
       '-xyV8KCiz',
       'now-1h',

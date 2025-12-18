@@ -4,7 +4,7 @@
 
 import logging
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import partial
 from typing import Any, Dict
 
@@ -38,6 +38,16 @@ RBD_TRASH_SCHEMA = [{
     "status": (int, ''),
     "value": ([str], ''),
     "pool_name": (str, 'pool name')
+}]
+
+RBD_GROUP_LIST_SCHEMA = [{
+    "group": (str, 'group name'),
+    "num_images": (int, '')
+}]
+
+RBD_GROUP_GET_SCHEMA = [{
+    "group": (str, 'group name'),
+    "images": ([str], '')
 }]
 
 
@@ -347,9 +357,8 @@ class RbdTrash(RESTController):
                 for trash in images:
                     trash['pool_name'] = pool_name
                     trash['namespace'] = namespace
-                    trash['deletion_time'] = "{}Z".format(trash['deletion_time'].isoformat())
-                    trash['deferment_end_time'] = "{}Z".format(
-                        trash['deferment_end_time'].isoformat())
+                    trash['deletion_time'] = trash['deletion_time'].isoformat()
+                    trash['deferment_end_time'] = trash['deferment_end_time'].isoformat()
                     result.append(trash)
             return result
 
@@ -385,7 +394,7 @@ class RbdTrash(RESTController):
     @allow_empty_body
     def purge(self, pool_name=None):
         """Remove all expired images from trash."""
-        now = "{}Z".format(datetime.utcnow().isoformat())
+        now = datetime.now(timezone.utc).isoformat()
         pools = self._trash_list(pool_name)
 
         for pool in pools:
@@ -458,3 +467,129 @@ class RbdNamespace(RESTController):
                     'num_images': len(images) if images else 0
                 })
             return result
+
+
+@APIRouter('/block/pool/{pool_name}/group', Scope.RBD_IMAGE)
+@APIDoc("RBD Group Management API", "RbdGroup")
+class RbdGroup(RESTController):
+    def __init__(self):
+        super().__init__()
+        self.rbd_inst = rbd.RBD()
+
+    @handle_rbd_error()
+    @EndpointDoc("List groups by pool name",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                 },
+                 responses={200: RBD_GROUP_LIST_SCHEMA})
+    def list(self, pool_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            result = []
+            groups = self.rbd_inst.group_list(ioctx)
+            for group in groups:
+                result.append({
+                    'group': group,
+                    'num_images': len(list(rbd.Group(ioctx, group).list_images()))
+                })
+            return result
+
+    @handle_rbd_error()
+    @EndpointDoc("Get the list of images in a group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                 },
+                 responses={200: RBD_GROUP_GET_SCHEMA})
+    @RESTController.Collection('GET', path='/{group_name}')
+    def get(self, pool_name, group_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            result = []
+            groups = self.rbd_inst.group_list(ioctx)
+            if group_name in groups:
+                result.append({
+                    'group': group_name,
+                    'images': list(rbd.Group(ioctx, group_name).list_images())
+                })
+            else:
+                raise DashboardException(
+                    msg='Group not found',
+                    code='group_not_found',
+                    component='rbd')
+            return result
+
+    @handle_rbd_error()
+    @EndpointDoc("Create a group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'name': (str, 'Name of the group'),
+                 })
+    def create(self, pool_name, name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return self.rbd_inst.group_create(ioctx, name)
+
+    @handle_rbd_error()
+    @EndpointDoc("Delete a group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                 },
+                 responses={200: None})
+    def delete(self, pool_name, group_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return self.rbd_inst.group_remove(ioctx, group_name)
+
+    @handle_rbd_error()
+    @EndpointDoc("Update a group (rename)",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'new_name': (str, 'New name for the group'),
+                 },
+                 responses={200: None})
+    def set(self, pool_name, group_name, new_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            if new_name == group_name:
+                return None
+            return self.rbd_inst.group_rename(ioctx, group_name, new_name)
+
+    @RESTController.Collection('POST', path='/{group_name}/image')
+    @handle_rbd_error()
+    @EndpointDoc("Add image to a group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'image_name': (str, 'Name of the image'),
+                 },
+                 responses={200: None})
+    def add_image(self, pool_name, group_name, image_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            group = rbd.Group(ioctx, group_name)
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return group.add_image(ioctx, image_name)
+
+    @RESTController.Collection('DELETE', path='/{group_name}/image')
+    @handle_rbd_error()
+    @EndpointDoc("Remove image from a group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'image_name': (str, 'Name of the image'),
+                 },
+                 responses={200: None})
+    def remove_image(self, pool_name, group_name, image_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            group = rbd.Group(ioctx, group_name)
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return group.remove_image(ioctx, image_name)

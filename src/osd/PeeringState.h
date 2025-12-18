@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -1509,8 +1509,6 @@ public:
   eversion_t  last_update_applied;  ///< last_update readable
   /// last version to which rollback_info trimming has been applied
   eversion_t  last_rollback_info_trimmed_to_applied;
-  // last version in which the stats for a shard were updated
-  std::map<pg_shard_t,eversion_t> stats_last_update;
 
   /// Counter to determine when pending flushes have completed
   unsigned flushes_in_progress = 0;
@@ -2441,7 +2439,7 @@ public:
   bool needs_recovery() const;
   bool needs_backfill() const;
 
-  bool can_serve_replica_read(const hobject_t &hoid);
+  bool can_serve_read(const hobject_t &hoid);
 
   /**
    * Returns whether the current acting set is able to go active

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { RgwZonegroup, Zone } from '../models/rgw-multisite';
@@ -8,43 +8,56 @@ import { of } from 'rxjs';
 import { RgwDaemon } from '../models/rgw-daemon';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { ZoneData } from '../models/rgw-multisite-zone-selector';
 import { SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { BaseModal } from 'carbon-components-angular';
+import { ComboBoxItem } from '~/app/shared/models/combo-box.model';
 
 const ALL_ZONES = $localize`All zones (*)`;
 const ALL_BUCKET_SELECTED_HELP_TEXT =
   'If no value is provided, all the buckets in the zone group will be selected.';
+
+interface PipeParams {
+  source: { zones: string[]; bucket: string };
+  dest: { zones: string[]; bucket: string };
+  id: string;
+  params: { user: string; mode: string };
+}
+
+interface GroupParams {
+  groupName: string;
+  bucket: string;
+}
 
 @Component({
   selector: 'cd-rgw-multisite-sync-pipe-modal',
   templateUrl: './rgw-multisite-sync-pipe-modal.component.html',
   styleUrls: ['./rgw-multisite-sync-pipe-modal.component.scss']
 })
-export class RgwMultisiteSyncPipeModalComponent implements OnInit {
-  groupExpandedRow: any;
-  pipeSelectedRow: any;
+export class RgwMultisiteSyncPipeModalComponent extends BaseModal implements OnInit {
   pipeForm: CdFormGroup;
-  action: string;
   editing: boolean;
-  sourceZones = new ZoneData(false, 'Filter Zones');
-  destZones = new ZoneData(false, 'Filter Zones');
+  sourceZones: ComboBoxItem[] = [];
+  destZones: ComboBoxItem[] = [];
   icons = Icons;
   allBucketSelectedHelpText = ALL_BUCKET_SELECTED_HELP_TEXT;
 
   constructor(
-    public activeModal: NgbActiveModal,
+    @Inject('groupExpandedRow') public groupExpandedRow: GroupParams,
+    @Inject('pipeSelectedRow') public pipeSelectedRow: PipeParams,
+    @Inject('action') public action: string,
     private rgwDaemonService: RgwDaemonService,
     private rgwZonegroupService: RgwZonegroupService,
     private rgwMultisiteService: RgwMultisiteService,
     private notificationService: NotificationService,
     private succeededLabels: SucceededActionLabelsI18n
-  ) {}
+  ) {
+    super();
+  }
 
   ngOnInit(): void {
     if (this.pipeSelectedRow) {
@@ -73,7 +86,6 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
         validators: [Validators.required]
       })
     });
-    this.pipeForm.get('bucket_name').disable();
     this.rgwDaemonService.selectedDaemon$
       .pipe(
         switchMap((daemon: RgwDaemon) => {
@@ -90,19 +102,33 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
           }
         })
       )
-      .subscribe((zonegroupData: any) => {
+      .subscribe((zonegroupData: { zones: { name: string }[] }) => {
         if (zonegroupData && zonegroupData?.zones?.length > 0) {
-          let zones: any[] = [];
+          let zones: SelectOption[] = [];
           zones.push(new SelectOption(false, ALL_ZONES, ''));
-          zonegroupData.zones.forEach((zone: any) => {
+          zonegroupData.zones.forEach((zone: { name: string }) => {
             zones.push(new SelectOption(false, zone.name, ''));
           });
-          this.sourceZones.data.available = JSON.parse(JSON.stringify(zones));
-          this.destZones.data.available = JSON.parse(JSON.stringify(zones));
+          this.sourceZones = JSON.parse(JSON.stringify(zones)).map((zone: { name: string }) => {
+            return { name: zone.name, content: zone.name };
+          });
+          this.destZones = JSON.parse(JSON.stringify(zones)).map((zone: { name: string }) => {
+            return { name: zone.name, content: zone.name };
+          });
           if (this.editing) {
             this.pipeForm.get('pipe_id').disable();
-            this.sourceZones.data.selected = [...this.pipeSelectedRow.source.zones];
-            this.destZones.data.selected = [...this.pipeSelectedRow.dest.zones];
+            this.sourceZones = [...this.sourceZones].map((zone: { name: string }) => {
+              if (this.pipeSelectedRow.source.zones.includes(zone.name)) {
+                return { name: zone.name, content: zone.name, selected: true };
+              }
+              return { name: zone.name, content: zone.name };
+            });
+            this.destZones = [...this.destZones].map((zone: { name: string }) => {
+              if (this.pipeSelectedRow.dest.zones.includes(zone.name)) {
+                return { name: zone.name, content: zone.name, selected: true };
+              }
+              return { name: zone.name, content: zone.name };
+            });
             const availableDestZone: SelectOption[] = [];
             this.pipeSelectedRow.dest.zones.forEach((zone: string) => {
               availableDestZone.push(new SelectOption(true, zone, ''));
@@ -125,18 +151,6 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
 
   replaceAsteriskWithString(zones: string[]) {
     return zones.map((str) => str.replace('*', ALL_ZONES));
-  }
-
-  onZoneSelection(zoneType: string) {
-    if (zoneType === 'source_zones') {
-      this.pipeForm.patchValue({
-        source_zones: this.sourceZones.data.selected
-      });
-    } else {
-      this.pipeForm.patchValue({
-        destination_zones: this.destZones.data.selected
-      });
-    }
   }
 
   getZoneData(zoneDataToFilter: string[], zoneDataForCondition: string[]) {
@@ -162,26 +176,19 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
       return;
     }
 
+    const selectedSourceZones = this.pipeForm.getValue('source_zones');
+    const selectedDestZones = this.pipeForm.getValue('destination_zones');
     if (this.editing) {
-      destZones.removed = this.getZoneData(
-        this.pipeSelectedRow.dest.zones,
-        this.destZones.data.selected
-      );
-      destZones.added = this.getZoneData(
-        this.destZones.data.selected,
-        this.pipeSelectedRow.dest.zones
-      );
+      destZones.removed = this.getZoneData(this.pipeSelectedRow.dest.zones, selectedDestZones);
+      destZones.added = this.getZoneData(selectedDestZones, this.pipeSelectedRow.dest.zones);
       sourceZones.removed = this.getZoneData(
         this.pipeSelectedRow.source.zones,
-        this.sourceZones.data.selected
+        selectedSourceZones
       );
-      sourceZones.added = this.getZoneData(
-        this.sourceZones.data.selected,
-        this.pipeSelectedRow.source.zones
-      );
+      sourceZones.added = this.getZoneData(selectedSourceZones, this.pipeSelectedRow.source.zones);
     }
-    sourceZones.added = this.assignZoneValue(sourceZones.added, this.sourceZones.data.selected);
-    destZones.added = this.assignZoneValue(destZones.added, this.destZones.data.selected);
+    sourceZones.added = this.assignZoneValue(sourceZones.added, selectedSourceZones);
+    destZones.added = this.assignZoneValue(destZones.added, selectedDestZones);
 
     sourceZones.removed = this.replaceWithAsterisk(sourceZones.removed);
     destZones.removed = this.replaceWithAsterisk(destZones.removed);
@@ -194,20 +201,21 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
         user: this.editing ? this.pipeSelectedRow?.params?.user : '',
         mode: this.editing ? this.pipeSelectedRow?.params?.mode : ''
       })
-      .subscribe(
-        () => {
+      .subscribe({
+        next: () => {
           const action = this.editing ? this.succeededLabels.EDITED : this.succeededLabels.CREATED;
           this.notificationService.show(
             NotificationType.success,
             $localize`${action} Sync Pipe '${this.pipeForm.getValue('pipe_id')}'`
           );
-          this.activeModal.close(NotificationType.success);
         },
-        () => {
+        error: () => {
           // Reset the 'Submit' button.
           this.pipeForm.setErrors({ cdSubmitButton: true });
-          this.activeModal.dismiss();
+        },
+        complete: () => {
+          this.closeModal();
         }
-      );
+      });
   }
 }

@@ -462,8 +462,8 @@ class btree_node {
 
   void set_parent(btree_node *p) { GetField<&base_fields::parent>() = p; }
   field_type &mutable_count() { return GetField<&base_fields::count>(); }
-  slot_type *slot(int i) { return &GetField<&leaf_fields::values>()[i]; }
-  const slot_type *slot(int i) const { return &GetField<&leaf_fields::values>()[i]; }
+  slot_type *slot(int i) { return GetField<&leaf_fields::values>() + i; }
+  const slot_type *slot(int i) const { return GetField<&leaf_fields::values>() + i; }
   void set_position(field_type v) { GetField<&base_fields::position>() = v; }
   void set_count(field_type v) { GetField<&base_fields::count>() = v; }
   // This method is only called by the node init methods.
@@ -511,8 +511,8 @@ public:
   const_reference value(int i) const { return params_type::element(slot(i)); }
 
   // Getters/setter for the child at position i in the node.
-  btree_node* child(int i) const { return GetField<&internal_fields::children>()[i]; }
-  btree_node*& mutable_child(int i) { return GetField<&internal_fields::children>()[i]; }
+  btree_node* child(int i) const { return *(GetField<&internal_fields::children>() + i); }
+  btree_node*& mutable_child(int i) { return *(GetField<&internal_fields::children>() + i); }
   void clear_child(int i) {
 #ifndef NDEBUG
     memset(&mutable_child(i), 0, sizeof(btree_node*));
@@ -1326,8 +1326,10 @@ class btree {
     deallocate(node_type::InternalSize(), node);
   }
   void delete_leaf_node(node_type *node) {
-    node->destroy(mutable_allocator());
-    deallocate(node_type::LeafSize(node->max_count()), node);
+    if (node != EmptyNode()) {
+      node->destroy(mutable_allocator());
+      deallocate(node_type::LeafSize(node->max_count()), node);
+    }
   }
 
   // Rebalances or splits the node iter points to.
@@ -1700,9 +1702,12 @@ void btree_node<P>::swap(btree_node *x, allocator_type *alloc) {
 
   if (!leaf()) {
     // Swap the child pointers.
-    std::swap_ranges(&smaller->mutable_child(0),
-                     &smaller->mutable_child(smaller->count() + 1),
-                     &larger->mutable_child(0));
+    auto* smaller_begin = &smaller->mutable_child(0);
+    auto* larger_begin = &larger->mutable_child(0);
+    auto count = smaller->count() + 1;
+    std::swap_ranges(smaller_begin,
+                     smaller_begin + count,
+                     larger_begin);
     // Update swapped children's parent pointers.
     int i = 0;
     for (; i <= smaller->count(); ++i) {

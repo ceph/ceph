@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <string.h>
 
@@ -12,10 +12,9 @@
 #include "rgw_multi.h"
 #include "rgw_op.h"
 #include "rgw_sal.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
-
-#include "services/svc_sys_obj.h"
-#include "services/svc_tier_rados.h"
+#endif
 
 #define dout_subsys ceph_subsys_rgw
 

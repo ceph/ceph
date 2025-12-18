@@ -155,9 +155,10 @@ export class ServicesPageHelper extends PageHelper {
       }
 
       cy.get('cd-service-daemon-list').within(() => {
+        cy.wait(1000); // wait for the status to be updated
         this.getTableCell(daemonNameIndex, daemon, true)
           .parent()
-          .find(`[cdstabledata]:nth-child(${statusIndex}) .badge`)
+          .find(`[cdstabledata]:nth-child(${statusIndex}) cds-tag`)
           .should(($ele) => {
             const status = $ele.toArray().map((v) => v.innerText);
             expect(status).to.include(expectedStatus);

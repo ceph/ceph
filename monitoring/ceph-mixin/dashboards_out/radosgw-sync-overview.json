@@ -623,7 +623,7 @@
       ]
    },
    "timezone": "",
-   "title": "RGW Sync Overview",
+   "title": "Ceph Object - Sync Overview",
    "uid": "rgw-sync-overview",
    "version": 0
 }

@@ -25,13 +25,12 @@
                   </ng-container>
                 </cds-tree-node>
               </ng-template>
-              <ng-template #badge
+              <ng-template #tag
                            let-data>
-                <span *ngIf="data?.status"
-                      class="badge"
-                      [ngClass]="{'badge-success': ['in', 'up'].includes(data?.status), 'badge-danger': ['down', 'out', 'destroyed'].includes(data?.status)}">
-                  {{ data.status }}
-                </span>
+                <cds-tag *ngIf="data?.status"
+                         [class]="getStatusClasses(data.status)">
+                  {{ data?.status }}
+                </cds-tag>
                 <span>&nbsp;</span>
                 <span class="node-name"
                       [ngClass]="{'type-osd': data?.type === 'osd'}"

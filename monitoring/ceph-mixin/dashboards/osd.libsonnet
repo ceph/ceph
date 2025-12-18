@@ -4,7 +4,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 (import 'utils.libsonnet') {
   'osds-overview.json':
     $.dashboardSchema(
-      'OSD Overview',
+      'Ceph OSDs - Overview',
       '',
       'lo02I1Aiz',
       'now-1h',
@@ -526,7 +526,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       ]);
 
     $.dashboardSchema(
-      'OSD device details',
+      'Ceph OSD - Device Overview',
       '',
       'CrAHE0iZz',
       'now-3h',

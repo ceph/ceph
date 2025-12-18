@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <array>
 #include <string>
@@ -9,7 +9,7 @@
 #include "rgw_common.h"
 #include "rgw_auth.h"
 #include "rgw_quota.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_http_client.h"
 #include "rgw_iam_managed_policy.h"
 #include "rgw_keystone.h"

@@ -94,6 +94,7 @@ set(common_srcs
   perf_counters_key.cc
   perf_histogram.cc
   pick_address.cc
+  prime.cc
   random_string.cc
   reverse.c
   run_cmd.cc
@@ -112,7 +113,13 @@ set(common_srcs
   mclock_common.cc
   tcp_info.cc)
 
+if(WITH_CPUTRACE)
+  list(APPEND common_srcs
+    cputrace.cc)
+endif()
+
 include_directories(${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
+
 if(WITH_SYSTEMD)
   list(APPEND common_srcs
     Journald.cc)

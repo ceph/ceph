@@ -528,7 +528,8 @@ def cephfs_setup(ctx, config):
 @contextlib.contextmanager
 def watchdog_setup(ctx, config):
     ctx.ceph[config['cluster']].thrashers = []
-    ctx.ceph[config['cluster']].watchdog = DaemonWatchdog(ctx, config, ctx.ceph[config['cluster']].thrashers)
+    ctx.ceph[config['cluster']].watched_processes = []
+    ctx.ceph[config['cluster']].watchdog = DaemonWatchdog(ctx, config)
     ctx.ceph[config['cluster']].watchdog.start()
     yield
 
@@ -666,9 +667,7 @@ def create_simple_monmap(ctx, remote, conf, mons,
 
 
 def is_crimson(config):
-    return config.get('flavor', 'default') == 'crimson-debug' or \
-        config.get('flavor', 'default') == 'crimson-release'
-
+    return config.get('crimson_compat', False)
 
 def maybe_redirect_stderr(config, type_, args, log_path):
     if type_ == 'osd' and is_crimson(config):

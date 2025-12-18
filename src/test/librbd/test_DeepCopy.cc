@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
@@ -510,8 +510,6 @@ TEST_F(TestDeepCopy, CloneFlatten)
 
 TEST_F(TestDeepCopy, Stress)
 {
-  // https://tracker.ceph.com/issues/72042
-  SKIP_IF_CRIMSON();
   test_stress();
 }
 
@@ -609,8 +607,6 @@ TEST_F(TestDeepCopy, CloneFlatten_SmallerDstObjSize)
 
 TEST_F(TestDeepCopy, Stress_SmallerDstObjSize)
 {
-  // https://tracker.ceph.com/issues/72042
-  SKIP_IF_CRIMSON();
   uint64_t order = m_src_ictx->order - 1 - rand() % 2;
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_ORDER, order));
   uint64_t stripe_unit = m_src_ictx->stripe_unit >> 2;

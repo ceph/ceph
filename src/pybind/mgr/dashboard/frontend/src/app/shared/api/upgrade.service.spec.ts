@@ -4,11 +4,12 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { TestBed } from '@angular/core/testing';
 import { SummaryService } from '../services/summary.service';
 import { BehaviorSubject } from 'rxjs';
+import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 
 export class SummaryServiceMock {
   summaryDataSource = new BehaviorSubject({
     version:
-      'ceph version 18.1.3-12222-gcd0cd7cb ' +
+      `${VERSION_PREFIX} 18.1.3-12222-gcd0cd7cb ` +
       '(b8193bb4cda16ccc5b028c3e1df62bc72350a15d) reef (dev)'
   });
   summaryData$ = this.summaryDataSource.asObservable();

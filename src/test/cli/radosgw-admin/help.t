@@ -18,10 +18,11 @@
     caps rm                          remove user capabilities
     dedup stats                      Display dedup statistics from the last run
     dedup estimate                   Runs dedup in estimate mode (no changes will be made)
-    dedup restart                    Restart dedup; must include --yes-i-really-mean-it to activate
+    dedup exec                       Execute dedup (duplicated tail objects will be deleted); must include --yes-i-really-mean-it to activate
     dedup abort                      Abort dedup
     dedup pause                      Pause dedup
     dedup resume                     Resume paused dedup
+    dedup throttle                   Throttle dedup execution
     subuser create                   create a new subuser
     subuser modify                   modify subuser
     subuser rm                       remove subuser
@@ -52,6 +53,7 @@
     bucket radoslist                 list rados objects backing bucket's objects
     bucket logging flush             flush pending log records object of source bucket to the log bucket
     bucket logging info              get info on bucket logging configuration on source bucket or list of sources in log bucket
+    bucket logging list              list the log objects pending commit for the source bucket
     bi get                           retrieve bucket index object entries
     bi put                           store bucket index object entries
     bi list                          list raw bucket index entries
@@ -219,6 +221,9 @@
     notification list                list bucket notifications configuration
     notification get                 get a bucket notifications configuration
     notification rm                  remove a bucket notifications configuration
+    restore status                   shows restoration status of object in a bucket
+    restore list                     list restore status of each object in the bucket
+                                     can be filtered with help of --restore-status which shows objects with specified status
   options:
      --tenant=<tenant>                 tenant name
      --user_ns=<namespace>             namespace of user (oidc in case of users authenticated with oidc provider)
@@ -352,16 +357,23 @@
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
+  Dedup throttle options:
+     --max-bucket-index-ops        specify max bucket-index requests per second allowed for an RGW during dedup, 0 means unlimited
+     --max-metadata-ops            specify max metadata requests per second allowed for an RGW during dedup, 0 means unlimited
+     --stat                        display dedup throttle setting
+  
   Quota options:
      --max-objects                 specify max objects (negative value to disable)
      --max-size                    specify max size (in B/K/M/G/T, negative value to disable)
      --quota-scope                 scope of quota (bucket, user, account)
   
   Rate limiting options:
-     --max-read-ops                specify max requests per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited
-     --max-read-bytes              specify max bytes per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited
-     --max-write-ops               specify max requests per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited
-     --max-write-bytes             specify max bytes per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited
+     --max-read-ops                specify max requests per accumulation interval for READ ops per RGW (GET and HEAD request methods), 0 means unlimited
+     --max-read-bytes              specify max bytes per accumulation interval for READ ops per RGW (GET and HEAD request methods), 0 means unlimited
+     --max-write-ops               specify max requests per accumulation interval for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited
+     --max-write-bytes             specify max bytes per accumulation interval for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited
+     --max-list-ops                specify max requests per accumulation interval for bucket listing requests per RGW, 0 means unlimited
+     --max-delete-ops              specify max requests per accumulation interval for DELETE ops per RGW (DELETE request methods), 0 means unlimited
      --ratelimit-scope             scope of rate limiting: bucket, user, anonymous
                                    anonymous can be configured only with global rate limit
   
@@ -412,6 +424,7 @@
   Bucket list objects options:
      --max-entries                 max number of entries listed (default 1000)
      --marker                      the marker used to specify on which entry the listing begins, default none (i.e., very first entry)
+     --show-restore-stats          if the flag is in present it will show restores stats in the bucket stats command
   
     --conf/-c FILE    read configuration from the given configuration file
     --id ID           set ID portion of my name
