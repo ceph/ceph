@@ -11,7 +11,7 @@
       <div class="form-group row">
         <label class="cd-col-form-label"
                for="selectedZonegroup"
-               i18n>Select Zone Group</label>
+               i18n>Select Zonegroup</label>
         <div class="cd-col-form-input">
           <select class="form-select"
                   id="selectedZonegroup"
@@ -23,6 +23,7 @@
                     [value]="zonegroupName.name"
                     [selected]="zonegroupName.name === multisiteZoneForm.getValue('selectedZonegroup')">
             {{ zonegroupName.name }}
+
             </option>
           </select>
         </div>
@@ -55,7 +56,7 @@
                    for="default_zone"
                    i18n>Default</label>
             <span *ngIf="disableDefault && action === 'create'">
-              <cd-helper i18n>Default zone can only exist in a default zone group.
+              <cd-helper i18n>Default zone can only exist in a default zonegroup.
               </cd-helper>
             </span>
             <span *ngIf="isDefaultZone">
@@ -77,7 +78,7 @@
                    for="master_zone"
                    i18n>Master</label>
             <span *ngIf="disableMaster">
-              <cd-helper i18n>Master zone already exists for the selected zone group.
+              <cd-helper i18n>Master zone already exists for the selected zonegroup.
               </cd-helper>
             </span>
             <span *ngIf="isMasterZone">
