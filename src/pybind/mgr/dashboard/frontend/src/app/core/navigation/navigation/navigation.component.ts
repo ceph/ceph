@@ -33,7 +33,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
   clusterTokenStatus: object = {};
   summaryData: any;
 
-  isNotifPanelOpen = true;
   showMenuSidebar = true;
 
   simplebar = {
@@ -103,10 +102,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
     );
   }
 
-  ngOnDestroy(): void {
-    this.subs.unsubscribe();
-  }
-
   checkClusterConnectionStatus() {
     this.clustersMap.forEach((clusterDetails, clusterName) => {
       const clusterTokenStatus = this.clusterTokenStatus[clusterDetails.name];
@@ -161,10 +156,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
     this.displayedSubMenu[menu] = !this.displayedSubMenu[menu];
   }
 
-  toggleSidebar() {
-    this.isNotifPanelOpen = !this.isNotifPanelOpen;
-  }
-
   onClusterSelection(value: object) {
     this.multiClusterService.setCluster(value).subscribe(
       (resp: any) => {
@@ -211,7 +202,17 @@ export class NavigationComponent implements OnInit, OnDestroy {
     );
   }
 
+  onNotificationSelected(event) {
+    event.stopPropagation();
+    const currentState = this.notificationService.getPanelState();
+    this.notificationService.setPanelState(!currentState);
+  }
+
   trackByFn(item: any) {
     return item;
+  }
+
+  ngOnDestroy(): void {
+    this.subs.unsubscribe();
   }
 }

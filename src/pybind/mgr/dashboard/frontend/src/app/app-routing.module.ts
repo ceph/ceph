@@ -110,7 +110,7 @@ const routes: Routes = [
       {
         path: 'notifications',
         data: {
-          breadcrumbs: 'Cluster/Notifications'
+          breadcrumbs: 'Overview/Notifications'
         },
         component: NotificationsPageComponent
       },

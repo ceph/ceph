@@ -5,7 +5,7 @@
   class="notifications-page__container">
   <!-- Left Panel - Notifications List -->
   <div cdsCol
-       [columnNumbers]="{sm: 4, md: 4, lg: 5}">
+       [columnNumbers]="{sm: 4, md: 4, lg: 6}">
     <cds-search
       cdsRow
       [size]="'md'"
@@ -19,8 +19,8 @@
       class="notifications-list"
       *ngIf="filteredNotifications.length > 0">
       <cds-list-row
-        *ngFor="let notification of filteredNotifications"
-        [class.active]="selectedNotification === notification"
+        *ngFor="let notification of filteredNotifications; trackBy trackByNotificationId"
+        [class.active]="selectedNotificationID === notification.id"
         (click)="onNotificationSelect(notification)"
         class="notification-row">
         <cds-list-column>
@@ -56,27 +56,28 @@
         </cds-list-column>
       </cds-list-row>
     </cds-structured-list>
-    <div *ngIf="filteredNotifications.length === 0"
-          class="empty-state"
-          cdsRow>
-        <svg
-          cdsIcon="notification"
-          size="20"
-          class="empty-icon"></svg>
-        <p *ngIf="searchText">No notifications match your search</p>
-        <p *ngIf="!searchText">No notifications available</p>
-      </div>
+    <div
+      *ngIf="filteredNotifications.length === 0"
+      class="empty-state"
+      cdsRow>
+      <svg
+        cdsIcon="notification"
+        size="20"
+        class="empty-icon"></svg>
+      <p *ngIf="searchText">No notifications match your search</p>
+      <p *ngIf="!searchText">No notifications available</p>
+    </div>
   </div>
   <!-- Right Panel - Notifications Details -->
   <div cdsCol
-       [columnNumbers]="{sm: 12, md: 12, lg: 9}">
+       [columnNumbers]="{sm: 12, md: 12, lg: 10}">
     <div
       cdsGrid
       [fullWidth]="true"
       *ngIf="selectedNotification"
       class="notification-details">
       <div cdsCol
-            [columnNumbers]="{sm: 16, md: 16, lg: 16}">
+           [columnNumbers]="{sm: 16, md: 16, lg: 16}">
         <h3 cdsRow>{{ selectedNotification.title }}</h3>
         <cds-structured-list
           cdsRow

@@ -60,6 +60,7 @@ describe('NotificationsPageComponent', () => {
   // Create mock notifications
   const createMockNotification = (overrides: any): CdNotification => {
     return {
+      id: overrides.id,
       title: overrides.title || '',
       message: overrides.message || '',
       application: overrides.application || '',
@@ -71,7 +72,6 @@ describe('NotificationsPageComponent', () => {
       duration: 0,
       borderClass: '',
       timeout: 0,
-      id: '',
       isError: false,
       isFinishedTask: false,
       progress: 0,
@@ -89,6 +89,7 @@ describe('NotificationsPageComponent', () => {
   beforeEach(async () => {
     mockNotifications = [
       createMockNotification({
+        id: '1',
         title: 'Success Notification',
         message: 'Operation completed successfully',
         type: NotificationType.success,
@@ -96,6 +97,7 @@ describe('NotificationsPageComponent', () => {
         timestamp: new Date().toISOString()
       }),
       createMockNotification({
+        id: '2',
         title: 'Error Notification',
         message: 'An error occurred',
         type: NotificationType.error,
@@ -103,6 +105,7 @@ describe('NotificationsPageComponent', () => {
         timestamp: new Date(Date.now() - 86400000).toISOString()
       }),
       createMockNotification({
+        id: '3',
         title: 'Info Notification',
         message: 'System update available',
         type: NotificationType.info,
@@ -202,12 +205,13 @@ describe('NotificationsPageComponent', () => {
 
       expect(mockEvent.stopPropagation).toHaveBeenCalled();
       expect(mockEvent.preventDefault).toHaveBeenCalled();
-      expect(notificationService.remove).toHaveBeenCalledWith(0); // FIXED: use notificationService
+      expect(notificationService.remove).toHaveBeenCalledWith(0);
     });
 
     it('should clear selection if removed notification was selected', () => {
       const notification = mockNotifications[0];
-      component.selectedNotification = notification;
+      component.selectedNotificationID = notification.id;
+
       const mockEvent = {
         stopPropagation: jasmine.createSpy('stopPropagation'),
         preventDefault: jasmine.createSpy('preventDefault')
@@ -215,7 +219,9 @@ describe('NotificationsPageComponent', () => {
 
       component.removeNotification(notification, mockEvent as any);
 
-      expect(component.selectedNotification).toBeNull();
+      const selectedNotification = component.selectedNotification;
+
+      expect(selectedNotification).toBeUndefined();
     });
   });
 
@@ -237,7 +243,7 @@ describe('NotificationsPageComponent', () => {
     });
 
     it('should return default icon for unknown type', () => {
-      expect(component.getCarbonIcon(-1)).toBe('notification--filled');
+      expect(component.getCarbonIcon('')).toBe('notification--filled');
     });
   });
 
@@ -259,7 +265,7 @@ describe('NotificationsPageComponent', () => {
     });
 
     it('should return empty string for unknown type', () => {
-      expect(component.getIconColorClass(-1)).toBe('');
+      expect(component.getIconColorClass('')).toBe('');
     });
   });
 
