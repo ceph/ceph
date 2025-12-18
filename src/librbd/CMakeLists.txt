@@ -155,6 +155,7 @@ set(librbd_internal_srcs
   mirror/GetInfoRequest.cc
   mirror/GetStatusRequest.cc
   mirror/GetUuidRequest.cc
+  mirror/GroupDisableRequest.cc
   mirror/GroupEnableRequest.cc
   mirror/GroupPromoteRequest.cc
   mirror/GroupGetInfoRequest.cc
