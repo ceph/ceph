@@ -30,10 +30,10 @@ public:
       const std::vector<std::string> &global_image_ids,
       uint64_t group_snap_create_flags, uint32_t flags,
       const std::string &group_snap_id, std::vector<uint64_t> *snap_ids,
-      Context *on_finish) {
+      bool acquire_exclusive_locks, Context *on_finish) {
     return new GroupImageCreatePrimaryRequest(
       cct, image_ctxs, global_image_ids, group_snap_create_flags, flags,
-      group_snap_id, snap_ids, on_finish);
+      group_snap_id, snap_ids, acquire_exclusive_locks, on_finish);
   }
 
   GroupImageCreatePrimaryRequest(
@@ -41,7 +41,7 @@ public:
     const std::vector<std::string> &global_image_ids,
     uint64_t group_snap_create_flags, uint32_t flags,
     const std::string &group_snap_id, std::vector<uint64_t> *snap_ids,
-    Context *on_finish);
+    bool acquire_exclusive_locks, Context *on_finish);
 
   void send();
 
@@ -85,6 +85,7 @@ private:
   const uint32_t m_flags;
   const std::string m_group_snap_id;
   std::vector<uint64_t> *m_snap_ids;
+  bool m_acquire_exclusive_locks;
   Context *m_on_finish;
 
   std::vector<std::set<std::string>> m_mirror_peers_uuids;
