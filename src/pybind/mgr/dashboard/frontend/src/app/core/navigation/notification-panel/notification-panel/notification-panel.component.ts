@@ -21,6 +21,12 @@ import { trigger, transition, style, animate } from '@angular/animations';
 })
 export class NotificationPanelComponent {
   @Input() isPanelOpen: boolean = true;
+  showFooter = true;
 
   constructor(public notificationService: NotificationService) {}
+
+  handleDismissAll() {
+    this.showFooter = false;
+    // TODO: Also hoide if there is  afooter
+  }
 }

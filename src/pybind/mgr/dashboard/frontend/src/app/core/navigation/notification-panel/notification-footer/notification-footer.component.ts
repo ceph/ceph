@@ -14,4 +14,5 @@ export class NotificationFooterComponent {
     event.stopPropagation();
     this.notificationService.toggleSidebar(false, true);
   }
+
 }

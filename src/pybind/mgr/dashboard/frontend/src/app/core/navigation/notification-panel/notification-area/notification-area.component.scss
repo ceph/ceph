@@ -10,9 +10,8 @@
   padding: $spacing-05 $spacing-05 $spacing-03;
   background-color: $layer-01;
   position: sticky;
-  top: 0;
   z-index: 2;
-  display: block;
+  inset-block-start: 3.6125rem;
 }
 
 .notification-timestamp {
@@ -110,9 +109,3 @@
   border-bottom: 1px solid $border-subtle-01;
 }
 
-:host {
-  display: block;
-  height: 100%;
-  overflow-y: auto;
-  background-color: $layer-01;
-}

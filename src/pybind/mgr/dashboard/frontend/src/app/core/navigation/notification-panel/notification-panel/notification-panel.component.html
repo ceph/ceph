@@ -4,13 +4,14 @@
   cdsTheme="g10"
   class="notification-panel__container"
   hasScrollingContent="true"
+  (dismissAll)="handleDismissAll"
   @panelAnimation>
   <cds-modal-header
     [showCloseButton]="true">
     <cd-notification-header></cd-notification-header>
   </cds-modal-header>
-  <cd-notification-area></cd-notification-area>
-  <cds-modal-footer>
-      <cd-notification-footer></cd-notification-footer>
+    <cd-notification-area></cd-notification-area>
+  <cds-modal-footer *ngIf="showFooter">
+    <cd-notification-footer></cd-notification-footer>
   </cds-modal-footer>
 </cds-modal>
