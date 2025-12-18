@@ -45,7 +45,7 @@ struct btree_test_base :
 
   mutable segment_info_t tmp_info;
 
-  btree_test_base() = default;
+  btree_test_base() : JournalTrimmer(true) {}
 
   /*
    * JournalTrimmer interfaces

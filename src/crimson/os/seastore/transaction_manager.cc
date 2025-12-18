@@ -143,31 +143,46 @@ TransactionManager::mount()
         }
       }).si_then([this, &t] {
         epm->start_scan_space();
-        return backref_manager->scan_mapped_space(
-          t,
-          [this](
-            paddr_t paddr,
-	    paddr_t backref_key,
-            extent_len_t len,
-            extent_types_t type,
-            laddr_t laddr) {
-          assert(paddr.is_absolute());
-          if (is_backref_node(type)) {
-            assert(laddr == L_ADDR_NULL);
-	    assert(backref_key.is_absolute() || backref_key == P_ADDR_MIN);
-            backref_manager->cache_new_backref_extent(paddr, backref_key, type);
+        if (can_drop_backref()) {
+          return lba_manager->scan_mapped_space(
+            t,
+            [this](
+              paddr_t paddr,
+              extent_len_t len,
+              extent_types_t type,
+              laddr_t laddr) {
+            assert(paddr.is_absolute());
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
-          } else if (laddr == L_ADDR_NULL) {
-	    assert(backref_key == P_ADDR_NULL);
-            cache->update_tree_extents_num(type, -1);
-            epm->mark_space_free(paddr, len);
-          } else {
-	    assert(backref_key == P_ADDR_NULL);
-            cache->update_tree_extents_num(type, 1);
-            epm->mark_space_used(paddr, len);
-          }
-        });
+          });
+        } else {
+          return backref_manager->scan_mapped_space(
+            t,
+            [this](
+              paddr_t paddr,
+              paddr_t backref_key,
+              extent_len_t len,
+              extent_types_t type,
+              laddr_t laddr) {
+            assert(paddr.is_absolute());
+            if (is_backref_node(type)) {
+              assert(laddr == L_ADDR_NULL);
+              assert(backref_key.is_absolute() || backref_key == P_ADDR_MIN);
+              backref_manager->cache_new_backref_extent(
+                paddr, backref_key, type);
+              cache->update_tree_extents_num(type, 1);
+              epm->mark_space_used(paddr, len);
+            } else if (laddr == L_ADDR_NULL) {
+              assert(backref_key == P_ADDR_NULL);
+              cache->update_tree_extents_num(type, -1);
+              epm->mark_space_free(paddr, len);
+            } else {
+              assert(backref_key == P_ADDR_NULL);
+              cache->update_tree_extents_num(type, 1);
+              epm->mark_space_used(paddr, len);
+            }
+          });
+        }
       });
     });
   }).safe_then([this] {
@@ -983,6 +998,7 @@ TransactionManagerRef make_transaction_manager(
     shard_stats_t& shard_stats,
     bool is_test)
 {
+  LOG_PREFIX(make_transaction_manager);
   rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
     "seastore_hot_tier_generations");
   rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
@@ -1061,9 +1077,12 @@ TransactionManagerRef make_transaction_manager(
         roll_size, backend_type);
   }
 
+  bool pure_rbm_backend =
+      (p_backend_type == backend_type_t::RANDOM_BLOCK) && !cold_sms;
   auto journal_trimmer = JournalTrimmerImpl::create(
       *backref_manager, trimmer_config,
-      backend_type, roll_start, roll_size);
+      backend_type, roll_start, roll_size,
+      !pure_rbm_backend);
 
   AsyncCleanerRef cleaner;
   JournalRef journal;
@@ -1108,6 +1127,7 @@ TransactionManagerRef make_transaction_manager(
     cleaner = RBMCleaner::create(
       std::move(rbs),
       *backref_manager,
+      *lba_manager,
       cleaner_is_detailed);
     journal = journal::make_circularbounded(
       *journal_trimmer,
@@ -1122,6 +1142,8 @@ TransactionManagerRef make_transaction_manager(
 	    std::move(cold_segment_cleaner));
   epm->set_primary_device(primary_device);
 
+  INFO("main backend type: {}, cold tier: {}",
+    epm->get_main_backend_type(), (bool)cold_sms);
   return std::make_unique<TransactionManager>(
     std::move(journal),
     std::move(cache),

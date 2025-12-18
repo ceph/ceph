@@ -85,7 +85,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
 
   mutable segment_info_t tmp_info;
 
-  journal_test_t() = default;
+  journal_test_t() : JournalTrimmer(true) {}
 
   /*
    * JournalTrimmer interfaces
