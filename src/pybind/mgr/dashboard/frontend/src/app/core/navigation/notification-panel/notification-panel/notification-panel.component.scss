@@ -1,32 +1,21 @@
-@use '@carbon/styles/scss/theme';
 @use '@carbon/styles/scss/spacing';
-@use '@carbon/styles/scss/themes';
-@use '@carbon/styles/scss/theme' as *;
+@use '@carbon/styles/scss/motion' as *;
 
-.notification-panel {
-  @include theme.theme(themes.$g10);
+$block-class: notification-panel;
+$block-size: 38.5rem;
 
+.#{$block-class}__container {
   position: fixed;
-  top: spacing.$spacing-09;
-  right: 0;
-  width: 400px;
-  height: 700px;
-  background-color: $layer-01;
-  box-shadow: $shadow;
-  border: 1px solid $border-subtle-01;
-  z-index: 6000;
-  color: $text-primary;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-
-  cd-notification-header {
-    flex: 0 0 auto;
-  }
-
-  cd-notification-area {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    min-height: 0; // Failing in firefox without this
-  }
+  z-index: 2;
+  overflow: auto;
+  background-color: var(--cds-layer-01);
+  border-block-end: 1px solid var(--cds-border-subtle-02);
+  border-inline-start: 1px solid var(--cds-border-subtle-02);
+  box-shadow: 0 0.125rem 0.25rem var(--cds-overlay);
+  min-block-size: $block-size;
+  min-inline-size: 20rem;
+  inset-block-start: 3rem;
+  inset-inline-end: 0;
+  max-block-size: $block-size;
+  max-inline-size: 22.75rem;
 }
