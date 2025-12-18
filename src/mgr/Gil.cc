@@ -24,6 +24,30 @@
 
 #include "Gil.h"
 
+static void assert_gil()
+{
+  /* Using PyGILState_Check() isn't appropriate:
+   *
+   * https://docs.python.org/3/c-api/init.html#c.PyGILState_Check
+   *
+   * "Only if it has had its thread state initialized via PyGILState_Ensure()
+   * will it return 1."
+   *
+   * We got away with it for a while due to:
+   *
+   * "Note: If the current Python process has ever created a subinterpreter,
+   * this function will always return 1."
+   *
+   * Instead, use PyThreadState_Get() and use ts->thread_id to confirm that it's
+   * the right thread (ts->thread_id isn't necessarily stable, and may need to
+   * change in the future).  Once we no longer need to support python versions
+   * prior to 3.13, this can be PyThreadState_GetUnchecked().
+   */
+  auto *ts = PyThreadState_Get();
+  ceph_assert(ts != nullptr);
+  ceph_assert(ts->thread_id == PyThread_get_thread_ident());
+}
+
 SafeThreadState::SafeThreadState(PyThreadState *ts_)
     : ts(ts_)
 {
@@ -79,7 +103,7 @@ Gil::~Gil()
 
 without_gil_t::without_gil_t()
 {
-  assert(PyGILState_Check());
+  assert_gil();
   release_gil();
 }
 
