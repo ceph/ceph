@@ -1,10 +1,11 @@
 import logging
 import threading
-from typing import Tuple, Optional, List, Dict, Any
+from typing import Tuple, Optional, List, Dict, Any, Union
 import yaml
 
 from .cli import NFSCLICommand
 
+from ceph.deployment.service_spec import PlacementSpec, SpecValidationError
 from mgr_module import MgrModule, Option, CLICheckNonemptyFileInput
 import object_format
 import orchestrator
@@ -13,10 +14,91 @@ from mgr_util import CephFSEarmarkResolver
 
 from .export import ExportMgr, AppliedExportResults
 from .cluster import NFSCluster
+from .exception import NFSInvalidOperation
 from .utils import available_clusters, cephfs_client_for_mgr
 from .qos_conf import QOSType, QOSBandwidthControl, UserQoSType, QOSOpsControl
 
 log = logging.getLogger(__name__)
+
+
+def _parse_host_ip_pairs(addr_pairs: Optional[str]) -> Optional[Dict[str, str]]:
+    """Parse CLI 'host:ip,host:ip' strings into a host->ip mapping."""
+    if not addr_pairs:
+        return None
+    ip_addrs: Dict[str, str] = {}
+    for pair in addr_pairs.split(','):
+        if ':' in pair:
+            host, ip = pair.split(':', 1)
+            ip_addrs[host.strip()] = ip.strip()
+    return ip_addrs
+
+
+def _normalize_placement(placement: Optional[Union[str, Dict]]) -> Optional[str]:
+    """Normalise a placement that may arrive as a dict (JSON, from the dashboard)
+    or as a placement string (from the CLI).  Dicts are parsed and validated by
+    PlacementSpec.from_json() and returned in the string form accepted by
+    PlacementSpec.from_string()."""
+    if placement is None or isinstance(placement, str):
+        return placement
+    if not isinstance(placement, dict):
+        raise NFSInvalidOperation(f"Invalid placement: {placement!r}")
+    try:
+        return PlacementSpec.from_json(placement).pretty_str()
+    except SpecValidationError as e:
+        raise NFSInvalidOperation(f"Invalid placement: {e}")
+
+
+def _normalize_bind_addrs(
+        bind_addrs: Optional[Union[str, List[Dict[str, str]]]]
+) -> Optional[str]:
+    """Normalise bind addresses to the CLI 'host:ip,host:ip' string that
+    _parse_host_ip_pairs() and create_nfs_cluster() expect.
+
+    Accepts either:
+    * a pre-formatted string (CLI path) — returned as-is
+    * a list of dicts with 'hostname'/'host' and 'ip'/'address' keys (dashboard path)
+    """
+    if not bind_addrs:
+        return None
+    if isinstance(bind_addrs, str):
+        return bind_addrs
+    pairs = []
+    for entry in bind_addrs:
+        hostname = (entry.get('hostname') or entry.get('host') or '').strip()
+        ip = (entry.get('ip') or entry.get('address') or '').strip()
+        if hostname and ip:
+            pairs.append(f'{hostname}:{ip}')
+    return ','.join(pairs) if pairs else None
+
+
+def _normalize_networks(
+        networks: Optional[Union[str, List[str]]]
+) -> Optional[List[str]]:
+    """Strip whitespace from CIDR entries.  Accepts a bare string or a list."""
+    if networks is None:
+        return None
+    if isinstance(networks, str):
+        networks = [networks]
+    cleaned = [n.strip() for n in networks if n and str(n).strip()]
+    return cleaned or None
+
+
+def _normalize_ingress_mode(
+        mode: Optional[Union[str, 'IngressType']]
+) -> Optional['IngressType']:
+    """Accept an IngressType or its string representation."""
+    if mode is None:
+        return None
+    if isinstance(mode, IngressType):
+        return mode
+    try:
+        return IngressType(mode)
+    except ValueError:
+        pass
+    try:
+        return IngressType[mode.replace('-', '_')]
+    except KeyError:
+        raise NFSInvalidOperation(f"Invalid ingress_mode: {mode}")
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
@@ -189,6 +271,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 enable_nfsv3: bool = False,
                                 enable_nfs_metrics: bool = False,
                                 ingress_placement: Optional[str] = None,
+                                networks: Optional[List[str]] = None,
                                 inbuf: Optional[str] = None,
                                 ) -> None:
         """Create an NFS Cluster"""
@@ -212,31 +295,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             tls_debug = config.get('tls_debug')
             tls_ciphers = config.get('tls_ciphers')
 
-        # Parse bind_addrs and monitoring_addrs from CLI format
-        ip_addrs = None
-        if bind_addrs:
-            ip_addrs = {}
-            for pair in bind_addrs.split(','):
-                if ':' in pair:
-                    host, ip = pair.split(':', 1)
-                    ip_addrs[host.strip()] = ip.strip()
-
-        monitoring_ip_addrs = None
-        if monitoring_addrs:
-            monitoring_ip_addrs = {}
-            for pair in monitoring_addrs.split(','):
-                if ':' in pair:
-                    host, ip = pair.split(':', 1)
-                    monitoring_ip_addrs[host.strip()] = ip.strip()
-
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
                                            ingress_mode=ingress_mode, port=port,
                                            cluster_qos_config=cluster_qos_config,
                                            enable_nfsv3=enable_nfsv3,
                                            enable_nfs_metrics=enable_nfs_metrics,
-                                           ip_addrs=ip_addrs,
-                                           monitoring_ip_addrs=monitoring_ip_addrs,
+                                           ip_addrs=_parse_host_ip_pairs(bind_addrs),
+                                           monitoring_ip_addrs=_parse_host_ip_pairs(monitoring_addrs),
                                            monitoring_port=monitoring_port,
                                            kmip_cert=kmip_cert,
                                            kmip_key=kmip_key,
@@ -252,7 +318,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            tls_ciphers=tls_ciphers,
                                            enable_rdma=enable_rdma,
                                            rdma_port=rdma_port,
-                                           ingress_placement=ingress_placement)
+                                           ingress_placement=ingress_placement,
+                                           networks=networks)
 
     @NFSCLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()
@@ -323,6 +390,49 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def cluster_info(self, cluster_id: Optional[str] = None) -> Dict[str, Any]:
         return self.nfs.show_nfs_cluster_info(cluster_id=cluster_id)
+
+    def cluster_create(self,
+                       cluster_id: str,
+                       placement: Optional[Union[str, Dict]] = None,
+                       ingress: Optional[bool] = None,
+                       virtual_ip: Optional[str] = None,
+                       ingress_mode: Optional[Union[str, IngressType]] = None,
+                       port: Optional[int] = None,
+                       bind_addrs: Optional[Union[str, List[Dict[str, str]]]] = None,
+                       monitoring_addrs: Optional[Union[str, List[Dict[str, str]]]] = None,
+                       monitoring_port: Optional[int] = None,
+                       enable_rdma: bool = False,
+                       rdma_port: Optional[int] = None,
+                       enable_nfsv3: bool = False,
+                       ingress_placement: Optional[Union[str, Dict]] = None,
+                       networks: Optional[Union[str, List[str]]] = None) -> None:
+        """Python API for creating an NFS cluster (no CLI EmptyResponder wrapper).
+
+        All placement/address/network parameters accept either their native JSON
+        forms (dicts and lists, as sent by the dashboard) or the pre-formatted
+        strings used by the CLI path.  Normalisation is done here so that every
+        caller shares one code path.
+        """
+        return self.nfs.create_nfs_cluster(
+            cluster_id=cluster_id,
+            placement=_normalize_placement(placement),
+            virtual_ip=virtual_ip,
+            ingress=ingress,
+            ingress_mode=_normalize_ingress_mode(ingress_mode),
+            port=port,
+            enable_nfsv3=enable_nfsv3,
+            ip_addrs=_parse_host_ip_pairs(_normalize_bind_addrs(bind_addrs)),
+            monitoring_ip_addrs=_parse_host_ip_pairs(_normalize_bind_addrs(monitoring_addrs)),
+            monitoring_port=monitoring_port,
+            enable_rdma=enable_rdma,
+            rdma_port=rdma_port,
+            ingress_placement=_normalize_placement(ingress_placement),
+            networks=_normalize_networks(networks),
+        )
+
+    def cluster_rm(self, cluster_id: str) -> None:
+        """Python API for removing an NFS cluster (no CLI EmptyResponder wrapper)."""
+        return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
 
     def fetch_nfs_cluster_obj(self) -> NFSCluster:
         return self.nfs
