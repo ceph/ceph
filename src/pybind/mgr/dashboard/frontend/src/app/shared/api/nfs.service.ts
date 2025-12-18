@@ -1,8 +1,8 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Observable, throwError } from 'rxjs';
-import { NFSCluster } from '~/app/ceph/nfs/models/nfs-cluster-config';
+import { NFSCluster, NFSClusterPayload } from '~/app/ceph/nfs/models/nfs-cluster-config';
 
 import { NfsFSAbstractionLayer, SUPPORTED_FSAL } from '~/app/ceph/nfs/models/nfs.fsal';
 import { ApiClient } from '~/app/shared/api/api-client';
@@ -87,11 +87,20 @@ export class NfsService extends ApiClient {
     });
   }
 
-  listClusters(info = true): Observable<NFSCluster[]> {
-    return this.http.get<NFSCluster[]>(`${this.apiPath}/cluster`, {
+  listClusters(info: false): Observable<string[]>;
+  listClusters(info?: true): Observable<NFSCluster[]>;
+  listClusters(info = true): Observable<NFSCluster[] | string[]> {
+    return this.http.get<NFSCluster[] | string[]>(`${this.apiPath}/cluster`, {
       headers: { Accept: this.getVersionHeaderValue(0, 1) },
       params: { info: String(info) }
     });
+  }
+
+  exists(clusterId: string): Observable<boolean> {
+    return this.listClusters(false).pipe(
+      map((names: any) => (names as string[]).includes(clusterId)),
+      catchError(() => observableOf(false))
+    );
   }
 
   lsDir(fs_name: string, root_dir: string): Observable<Directory> {
@@ -107,5 +116,19 @@ export class NfsService extends ApiClient {
 
   filesystems() {
     return this.http.get(`${this.uiApiPath}/cephfs/filesystems`);
+  }
+
+  createCluster(requestModel: NFSClusterPayload): Observable<HttpResponse<null>> {
+    return this.http.post<null>(`${this.apiPath}/cluster`, requestModel, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
+  }
+
+  deleteCluster(clusterId: string): Observable<HttpResponse<null>> {
+    return this.http.delete<null>(`${this.apiPath}/cluster/${clusterId}`, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
   }
 }
