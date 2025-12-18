@@ -1,5 +1,10 @@
 <div class="cd-navbar-main">
-  <cd-notification-panel *ngIf="isNotifPanelOpen"></cd-notification-panel>
+  <!-- ************************ -->
+  <!-- NOTIFICATION PANEL     -->
+  <!-- ************************ -->
+  <cd-notification-panel
+    *ngIf="isNotifPanelOpen"
+    [isPanelOpen]="isNotifPanelOpen"></cd-notification-panel>
   <!-- ************************ -->
   <!-- HEADER                   -->
   <!-- ************************ -->

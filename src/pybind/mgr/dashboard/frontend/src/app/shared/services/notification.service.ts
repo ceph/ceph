@@ -45,7 +45,6 @@ export class NotificationService {
   private activeToasts: ToastContent[] = [];
   KEY = 'cdNotifications';
   MUTE_KEY = 'cdNotificationsMuted';
-  private readonly MAX_NOTIFICATIONS = 10;
 
   constructor(
     private taskMessageService: TaskMessageService,
@@ -97,9 +96,6 @@ export class NotificationService {
     const notifications = this.dataSource.getValue();
     notifications.push(notification);
     notifications.sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1));
-    while (notifications.length > this.MAX_NOTIFICATIONS) {
-      notifications.pop();
-    }
     this.dataSource.next(notifications);
     this.persistNotifications(notifications);
   }
