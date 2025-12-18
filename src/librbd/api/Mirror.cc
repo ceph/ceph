@@ -30,6 +30,7 @@
 #include "librbd/mirror/GetUuidRequest.h"
 #include "librbd/mirror/GroupEnableRequest.h"
 #include "librbd/mirror/GroupPromoteRequest.h"
+#include "librbd/mirror/GroupDemoteRequest.h"
 #include "librbd/mirror/GroupGetInfoRequest.h"
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
@@ -526,18 +527,6 @@ int open_group_images(IoCtx& group_ioctx, const std::string &group_id,
   }
 
   return 0;
-}
-
-std::string prepare_primary_mirror_snap_name(CephContext *cct,
-                                             const std::string &global_group_id,
-                                             const std::string &snap_id) {
-  ldout(cct, 10) << "global_group_id: " << global_group_id
-                 << ", snap_id: " << snap_id << dendl;
-
-  std::stringstream ind_snap_name_stream;
-  ind_snap_name_stream << ".mirror.primary."
-                       << global_group_id << "." << snap_id;
-  return ind_snap_name_stream.str();
 }
 
 struct C_GroupGetInfo : public Context {
@@ -2495,178 +2484,6 @@ int are_images_mirror_disabled(std::vector<I *> *image_ctxs) {
 }
 
 template <typename I>
-int prepare_group_images(IoCtx& group_ioctx,
-                         std::string group_id,
-                         cls::rbd::MirrorGroupState group_state,
-                         std::vector<I *> *image_ctxs,
-                         cls::rbd::GroupSnapshot *group_snap,
-                         std::vector<uint64_t> &quiesce_requests,
-                         cls::rbd::MirrorSnapshotState snap_state,
-                         std::set<std::string> *mirror_peer_uuids,
-                         uint64_t internal_flags) {
-  CephContext *cct = (CephContext *)group_ioctx.cct();
-  ldout(cct, 20) << dendl;
-
-  librados::IoCtx default_ns_ioctx;
-  default_ns_ioctx.dup(group_ioctx);
-  default_ns_ioctx.set_namespace("");
-  std::vector<cls::rbd::MirrorPeer> peers;
-  int r = cls_client::mirror_peer_list(&default_ns_ioctx, &peers);
-  if (r < 0) {
-    lderr(cct) << "error reading mirror peers: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  for (auto &peer : peers) {
-    if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
-      continue;
-    }
-    mirror_peer_uuids->insert(peer.uuid);
-  }
-
-  if (mirror_peer_uuids->empty()) {
-    lderr(cct) << "no mirror tx peers configured for the pool" << dendl;
-    return -EINVAL;
-  }
-  r = open_group_images(group_ioctx, group_id, image_ctxs);
-  if (r < 0) {
-    return r;
-  }
-
-  if (group_state != cls::rbd::MIRROR_GROUP_STATE_ENABLED) {
-    auto group_pool_id = group_ioctx.get_id();
-    for (auto image_ctx: *image_ctxs) {
-      if (group_pool_id != image_ctx->md_ctx.get_id()) {
-        lderr(cct) << "cannot enable mirroring: image is in a different pool"
-                   << dendl;
-        return -ENOTSUP;
-      }
-    }
-
-    r = are_images_mirror_disabled(image_ctxs);
-    if (r == 0) { // false
-      lderr(cct) << "image(s) not disabled for mirroring" << dendl;
-      return -EINVAL;
-    } else if (r < 0) {
-      lderr(cct) << "failed to validate image(s) disabled for mirroring: "
-                 << cpp_strerror(r) << dendl;
-      return r;
-    }
-  }
-
-  librados::Rados rados(group_ioctx);
-  int8_t require_osd_release;
-  r = rados.get_min_compatible_osd(&require_osd_release);
-  if (r < 0) {
-    lderr(cct) << "failed to retrieve min OSD release: " << cpp_strerror(r)
-               << dendl;
-    return r;
-  }
-
-  auto complete = cls::rbd::get_mirror_group_snapshot_complete_initial(require_osd_release);
-  group_snap->snapshot_namespace = cls::rbd::GroupSnapshotNamespaceMirror{
-                                   snap_state, *mirror_peer_uuids, {}, {},
-                                   complete};
-  for (auto image_ctx: *image_ctxs) {
-    group_snap->snaps.emplace_back(image_ctx->md_ctx.get_id(), image_ctx->id,
-                                   CEPH_NOSNAP);
-  }
-
-  int ret_code = 0;
-  std::vector<C_SaferCond*> on_finishes(image_ctxs->size(), nullptr);
-  std::string group_header_oid = librbd::util::group_header_name(group_id);
-  r = cls_client::group_snap_set(&group_ioctx, group_header_oid, *group_snap);
-  if (r < 0) {
-    lderr(cct) << "failed to set group snapshot metadata: " << cpp_strerror(r)
-               << dendl;
-    ret_code = r;
-    goto remove_record;
-  }
-
-  if ((internal_flags & SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE) == 0) {
-    NoOpProgressContext prog_ctx;
-    r = util::notify_quiesce(*image_ctxs, prog_ctx, &quiesce_requests);
-    if (r < 0 &&
-        (internal_flags & SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR) == 0) {
-      ret_code = r;
-      lderr(cct) << "failed notify quiesce: " << cpp_strerror(r) << dendl;
-      goto remove_record;
-    }
-  }
-  ldout(cct, 20) << "Requesting exclusive locks for images" << dendl;
-
-  C_SaferCond* on_finish;
-  for (auto ictx: *image_ctxs) {
-    std::shared_lock owner_lock{ictx->owner_lock};
-    if (ictx->exclusive_lock != nullptr) {
-      ictx->exclusive_lock->block_requests(-EBUSY);
-    }
-  }
-  for (size_t i = 0; i < image_ctxs->size(); ++i) {
-    ImageCtx *ictx = (*image_ctxs)[i];
-    std::shared_lock owner_lock{ictx->owner_lock};
-
-    if (ictx->exclusive_lock != nullptr) {
-      on_finish = new C_SaferCond;
-      ictx->exclusive_lock->acquire_lock(on_finish);
-      on_finishes[i] = on_finish;
-    }
-  }
-
-  for (size_t i = 0; i < image_ctxs->size(); ++i) {
-    r = 0;
-    ImageCtx *ictx = (*image_ctxs)[i];
-    if (ictx->exclusive_lock != nullptr) {
-      r = on_finishes[i]->wait();
-    }
-    delete on_finishes[i];
-    if (r < 0) {
-      if (ret_code == 0) {
-        ret_code = r;
-      }
-    }
-  }
-
-remove_record:
-  if (ret_code < 0) {
-    r = cls_client::group_snap_remove(&group_ioctx, group_header_oid,
-                                      group_snap->id);
-    if (r < 0) {
-      lderr(cct) << "failed to remove group snapshot metadata: "
-                 << cpp_strerror(r) << dendl;
-    }
-
-    if (!quiesce_requests.empty()) {
-      util::notify_unquiesce(*image_ctxs, quiesce_requests);
-    }
-
-    close_images(image_ctxs);
-  }
-
-  return ret_code;
-}
-
-template <typename I>
-void group_unlink_peer(IoCtx& group_ioctx,
-                       const std::string &group_id,
-                       std::set<std::string> *mirror_peer_uuids,
-                       std::vector<I *> *image_ctxs) {
-  CephContext *cct = (CephContext *)group_ioctx.cct();
-
-  C_SaferCond cond;
-  auto req = mirror::snapshot::GroupUnlinkPeerRequest<I>::create(
-      group_ioctx, group_id, mirror_peer_uuids, image_ctxs, &cond);
-  req->send();
-  int r = cond.wait();
-  if (r < 0) {
-    lderr(cct) << "failed to unlink group snapshot: " << cpp_strerror(r)
-               << dendl;
-  }
-
-  return;
-}
-
-template <typename I>
 void remove_group_snap(IoCtx& group_ioctx,
                        const std::string &group_id,
                        cls::rbd::GroupSnapshot *group_snap,
@@ -2976,112 +2793,18 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
     lderr(cct) << "error getting the group id: " << cpp_strerror(r) << dendl;
     return r;
   }
-
-  mirror::PromotionState promotion_state;
-  cls::rbd::MirrorGroup mirror_group;
-  C_SaferCond ctx;
-  // pass group_id to get ENOENT error returned back when group is not mirror enabled
-  auto request = mirror::GroupGetInfoRequest<I>::create(
-    group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
-  request->send();
-  r = ctx.wait();
-  if (r == -ENOENT) {
-    ldout(cct, 10) << "group is not enabled for mirroring: " << group_name
-                   << dendl;
-    return -EINVAL;
-  } else if (r < 0) {
-    lderr(cct) << "failed to get mirror group info: "
+  C_SaferCond cond;
+  auto req = mirror::GroupDemoteRequest<>::create(
+    group_ioctx, group_id, group_name, &cond);
+  req->send();
+  r = cond.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to mirror demote group: "
                << cpp_strerror(r) << dendl;
     return r;
   }
 
-  if (promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
-    lderr(cct) << "group " << group_name << " is not primary" << dendl;
-    return -EINVAL;
-  }
-
-  std::string group_snap_id = librbd::util::generate_image_id(group_ioctx);
-  cls::rbd::GroupSnapshot group_snap{
-      group_snap_id,
-      cls::rbd::GroupSnapshotNamespaceMirror{},
-      prepare_primary_mirror_snap_name(cct, mirror_group.global_group_id,
-                                       group_snap_id),
-      cls::rbd::GROUP_SNAPSHOT_STATE_CREATING};
-
-  std::vector<uint64_t> quiesce_requests;
-  std::vector<I *> image_ctxs;
-  std::set<std::string> mirror_peer_uuids;
-  r = prepare_group_images(group_ioctx, group_id, mirror_group.state,
-                           &image_ctxs, &group_snap, quiesce_requests,
-                           cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
-                           &mirror_peer_uuids,
-                           SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE);
-  if (r != 0) {
-    return r;
-  }
-
-  int ret_code = 0;
-  std::vector<uint64_t> snap_ids(image_ctxs.size(), CEPH_NOSNAP);
-  std::vector<C_SaferCond*> on_finishes(image_ctxs.size(), nullptr);
-
-  for (size_t i = 0; i < image_ctxs.size(); i++) {
-    C_SaferCond* on_finish = new C_SaferCond;
-    image_demote(image_ctxs[i], group_snap_id, &snap_ids[i], on_finish);
-    on_finishes[i] = on_finish;
-  }
-
-  for (size_t i = 0; i < image_ctxs.size(); i++) {
-    r = on_finishes[i]->wait();
-    delete on_finishes[i];
-    if (r < 0) {
-      lderr(cct) << "failed demoting image: " << image_ctxs[i]->name << ": "
-                 << cpp_strerror(r) << dendl;
-      if (ret_code == 0) {
-        ret_code = r;
-      }
-    } else {
-      group_snap.snaps[i].snap_id = snap_ids[i];
-    }
-  }
-
-  std::string group_header_oid = librbd::util::group_header_name(group_id);
-  if (!ret_code) {
-    group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_CREATED;
-    cls::rbd::set_mirror_group_snapshot_complete(group_snap);
-
-    r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
-    if (r < 0) {
-      lderr(cct) << "failed to update group snapshot metadata: "
-                 << cpp_strerror(r) << dendl;
-    } else {
-      group_unlink_peer(group_ioctx, group_id, &mirror_peer_uuids, &image_ctxs);
-
-      // mask the bit for treating the non-primary feature as read-only
-      for (size_t i = 0; i < image_ctxs.size(); ++i) {
-        ImageCtx *ictx = image_ctxs[i];
-        ictx->image_lock.lock();
-        ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
-        ictx->image_lock.unlock();
-      }
-    }
-    ret_code = r;
-  }
-
-  if (ret_code < 0) {
-    // undo
-    ldout(cct, 20) << "undoing group demote: " << ret_code << dendl;
-    remove_group_snap(group_ioctx, group_id, &group_snap, &image_ctxs);
-    // don't let the non-primary feature bit prevent image updates
-    for (size_t i = 0; i < image_ctxs.size(); ++i) {
-      ImageCtx *ictx = image_ctxs[i];
-      ictx->image_lock.lock();
-      ictx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
-      ictx->image_lock.unlock();
-    }
-  }
-  close_images(&image_ctxs);
-
-  return ret_code;
+  return 0;
 }
 
 template <typename I>
