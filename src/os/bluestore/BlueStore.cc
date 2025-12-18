@@ -5055,6 +5055,55 @@ void BlueStore::Onode::finish_write(TransContext* txc, uint32_t offset, uint32_t
   ldout(c->store->cct, 10) << __func__ << " done " << txc << dendl;
 }
 
+int BlueStore::Onode::get_fragmentation_score()
+{
+  std::unordered_set<uint64_t> endpoints;
+  int regions = 0;
+
+  for (const auto& e : extent_map.extent_map) {
+    const auto& pev = e.blob->get_blob().get_extents();
+
+    uint64_t skip = e.blob_offset;
+    uint64_t remaining = e.length;
+
+    for (const auto& pe : pev) {
+      if (skip >= pe.length) {
+        skip -= pe.length;
+        continue;
+      }
+
+      uint64_t avail = pe.length - skip;
+      uint64_t used = std::min(avail, remaining);
+      uint64_t s = pe.offset + skip;
+      uint64_t eoff = s + used;
+
+      bool merge_left = endpoints.count(s);
+      bool merge_right = endpoints.count(eoff);
+
+      if (merge_left && merge_right) {
+        endpoints.erase(s);
+        endpoints.erase(eoff);
+        regions--;
+      } else if (merge_left) {
+        endpoints.erase(s);
+        endpoints.insert(eoff);
+      } else if (merge_right) {
+        endpoints.erase(eoff);
+        endpoints.insert(s);
+      } else {
+        endpoints.insert(s);
+        endpoints.insert(eoff);
+        regions++;
+      }
+
+      remaining -= used;
+      skip = 0;
+      if (!remaining) break;
+    }
+  }
+  return regions;
+}
+
 // =======================================================
 // WriteContext
  
