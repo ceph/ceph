@@ -20,113 +20,133 @@
 #include "crimson/osd/scheduler/mclock_scheduler.h"
 #include "common/dout.h"
 
-namespace dmc = crimson::dmclock;
-using namespace std::placeholders;
-using namespace std::string_literals;
-
 #define dout_context cct
-#define dout_subsys ceph_subsys_osd
+#define dout_subsys ceph_subsys_mclock
 #undef dout_prefix
-#define dout_prefix *_dout
+#define dout_prefix *_dout << "mClockScheduler: "
 
 
 namespace crimson::osd::scheduler {
 
-mClockScheduler::mClockScheduler(ConfigProxy &conf) :
-  scheduler(
-    std::bind(&mClockScheduler::ClientRegistry::get_info,
-	      &client_registry,
-	      _1),
-    dmc::AtLimit::Allow,
-    conf.get_val<double>("osd_mclock_scheduler_anticipation_timeout"))
+uint32_t mClockScheduler::calc_scaled_cost(int item_cost)
 {
-  conf.add_observer(this);
-  client_registry.update_from_config(conf);
-}
-
-void mClockScheduler::ClientRegistry::update_from_config(const ConfigProxy &conf)
-{
-  default_external_client_info.update(
-    conf.get_val<double>("osd_mclock_scheduler_client_res"),
-    conf.get_val<uint64_t>("osd_mclock_scheduler_client_wgt"),
-    conf.get_val<double>("osd_mclock_scheduler_client_lim"));
-
-  internal_client_infos[
-    static_cast<size_t>(scheduler_class_t::background_recovery)].update(
-    conf.get_val<double>("osd_mclock_scheduler_background_recovery_res"),
-    conf.get_val<uint64_t>("osd_mclock_scheduler_background_recovery_wgt"),
-    conf.get_val<double>("osd_mclock_scheduler_background_recovery_lim"));
-
-  internal_client_infos[
-    static_cast<size_t>(scheduler_class_t::background_best_effort)].update(
-    conf.get_val<double>("osd_mclock_scheduler_background_best_effort_res"),
-    conf.get_val<uint64_t>("osd_mclock_scheduler_background_best_effort_wgt"),
-    conf.get_val<double>("osd_mclock_scheduler_background_best_effort_lim"));
-}
-
-const dmc::ClientInfo *mClockScheduler::ClientRegistry::get_external_client(
-  const client_profile_id_t &client) const
-{
-  auto ret = external_client_infos.find(client);
-  if (ret == external_client_infos.end())
-    return &default_external_client_info;
-  else
-    return &(ret->second);
-}
-
-const dmc::ClientInfo *mClockScheduler::ClientRegistry::get_info(
-  const scheduler_id_t &id) const {
-  switch (id.class_id) {
-  case scheduler_class_t::immediate:
-    ceph_assert(0 == "Cannot schedule immediate");
-    return (dmc::ClientInfo*)nullptr;
-  case scheduler_class_t::repop:
-  case scheduler_class_t::client:
-    return get_external_client(id.client_profile_id);
-  default:
-    ceph_assert(static_cast<size_t>(id.class_id) < internal_client_infos.size());
-    return &internal_client_infos[static_cast<size_t>(id.class_id)];
-  }
+  return mclock_conf.calc_scaled_cost(item_cost);
 }
 
 void mClockScheduler::dump(ceph::Formatter &f) const
 {
+  // Display queue sizes
+  f.open_object_section("queue_sizes");
+  f.dump_int("high_priority_queue", high_priority.size());
+  f.dump_int("scheduler", scheduler.request_count());
+  f.close_section();
+
+  // client map and queue tops (res, wgt, lim)
+  std::ostringstream out;
+  f.open_object_section("mClockClients");
+  f.dump_int("client_count", scheduler.client_count());
+  //out << scheduler;
+  f.dump_string("clients", out.str());
+  f.close_section();
+
+  // Display sorted queues (res, wgt, lim)
+  f.open_object_section("mClockQueues");
+  f.dump_string("queues", display_queues());
+  f.close_section();
+
+  f.open_object_section("HighPriorityQueue");
+  for (auto it = high_priority.begin();
+       it != high_priority.end(); it++) {
+    f.dump_int("priority", it->first);
+    f.dump_int("queue_size", it->second.size());
+  }
+  f.close_section();
 }
 
 void mClockScheduler::enqueue(item_t&& item)
 {
   auto id = get_scheduler_id(item);
-  auto cost = item.params.cost;
+  unsigned priority = item.get_priority();
 
-  if (scheduler_class_t::immediate == item.params.klass) {
-    immediate.push_front(std::move(item));
+  // TODO: move this check into item, handle backwards compat
+  if (SchedulerClass::immediate == item.params.klass) {
+    enqueue_high(immediate_class_priority, std::move(item));
+  } else if (priority >= cutoff_priority) {
+    enqueue_high(priority, std::move(item));
   } else {
+    auto cost = calc_scaled_cost(item.get_cost());
+    dout(20) << __func__ << " " << id
+             << " item_cost: " << item.get_cost()
+             << " scaled_cost: " << cost
+             << dendl;
+
+    // Add item to scheduler queue
     scheduler.add_request(
       std::move(item),
       id,
       cost);
   }
+
+ dout(20) << __func__ << ": sched client_count: " << scheduler.client_count()
+          << " sched queue size: " << scheduler.request_count()
+          << dendl;
+
+ for (auto it = high_priority.begin();it != high_priority.end(); ++it) {
+   dout(20) << __func__ << " high_priority[" << it->first
+            << "]: " << it->second.size()
+            << dendl;
+ }
+
+ dout(30) << __func__ << " mClockClients: "
+          << dendl;
+ dout(30) << __func__ << " mClockQueues: { "
+          << display_queues() << " }"
+          << dendl;
 }
 
 void mClockScheduler::enqueue_front(item_t&& item)
 {
-  immediate.push_back(std::move(item));
-  // TODO: item may not be immediate, update mclock machinery to permit
-  // putting the item back in the queue
+  unsigned priority = item.get_priority();
+
+  if (SchedulerClass::immediate == item.params.klass) {
+    enqueue_high(immediate_class_priority, std::move(item), true);
+  } else if (priority >= cutoff_priority) {
+    enqueue_high(priority, std::move(item), true);
+  } else {
+    // mClock does not support enqueue at front, so we use
+    // the high queue with priority 0
+    enqueue_high(0, std::move(item), true);
+  }
 }
 
-item_t mClockScheduler::dequeue()
+void mClockScheduler::enqueue_high(unsigned priority,
+                                   item_t&& item,
+				   bool front)
 {
-  if (!immediate.empty()) {
-    auto ret = std::move(immediate.back());
-    immediate.pop_back();
+  if (front) {
+    high_priority[priority].push_back(std::move(item));
+  } else {
+    high_priority[priority].push_front(std::move(item));
+  }
+}
+
+WorkItem mClockScheduler::dequeue()
+{
+  if (!high_priority.empty()) {
+    auto iter = high_priority.begin();
+    // invariant: high_priority entries are never empty
+    assert(!iter->second.empty());
+    WorkItem ret{std::move(iter->second.back())};
+    iter->second.pop_back();
+    if (iter->second.empty()) {
+      // maintain invariant, high priority entries are never empty
+      high_priority.erase(iter);
+    }
     return ret;
   } else {
     mclock_queue_t::PullReq result = scheduler.pull_request();
     if (result.is_future()) {
-      ceph_abort_msg(
-	"Not implemented, user would have to be able to be woken up");
-      return std::move(*(item_t*)nullptr);
+      return result.getTime();
     } else if (result.is_none()) {
       ceph_abort_msg(
 	"Impossible, must have checked empty() first");
@@ -140,27 +160,29 @@ item_t mClockScheduler::dequeue()
   }
 }
 
-std::vector<std::string> mClockScheduler::get_tracked_keys() const noexcept
+std::string mClockScheduler::display_queues() const
 {
-  return {
-    "osd_mclock_scheduler_client_res"s,
-    "osd_mclock_scheduler_client_wgt"s,
-    "osd_mclock_scheduler_client_lim"s,
-    "osd_mclock_scheduler_background_recovery_res"s,
-    "osd_mclock_scheduler_background_recovery_wgt"s,
-    "osd_mclock_scheduler_background_recovery_lim"s,
-    "osd_mclock_scheduler_background_best_effort_res"s,
-    "osd_mclock_scheduler_background_best_effort_wgt"s,
-    "osd_mclock_scheduler_background_best_effort_lim"s
-  };
+  std::ostringstream out;
+  scheduler.display_queues(out);
+  return out.str();
 }
 
+
+std::vector<std::string> mClockScheduler::get_tracked_keys() const noexcept
+{
+  return mclock_conf.get_tracked_keys();
+}
 
 void mClockScheduler::handle_conf_change(
   const ConfigProxy& conf,
   const std::set<std::string> &changed)
 {
-  client_registry.update_from_config(conf);
+  mclock_conf.handle_conf_change(conf, changed);
+}
+
+mClockScheduler::~mClockScheduler()
+{
+  cct->_conf.remove_observer(this);
 }
 
 }

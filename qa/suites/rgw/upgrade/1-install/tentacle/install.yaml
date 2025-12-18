@@ -1,3 +1,6 @@
 tasks:
 - install:
     branch: tentacle
+    exclude_packages:
+      - ceph-osd-classic
+      - ceph-osd-crimson

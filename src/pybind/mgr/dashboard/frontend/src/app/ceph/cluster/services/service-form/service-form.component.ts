@@ -35,7 +35,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Host } from '~/app/shared/models/host.interface';
-import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { CephServiceSpec, QatOptions, QatSepcs } from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { TimerService } from '~/app/shared/services/timer.service';
@@ -106,6 +106,11 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     selected: false
   }));
   showMgmtGatewayMessage: boolean = false;
+  qatCompressionOptions = [
+    { value: QatOptions.hw, label: 'Hardware' },
+    { value: QatOptions.sw, label: 'Software' },
+    { value: QatOptions.none, label: 'None' }
+  ];
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -283,6 +288,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       realm_name: [null],
       zonegroup_name: [null],
       zone_name: [null],
+      qat: new CdFormGroup({
+        compression: new UntypedFormControl(QatOptions.none)
+      }),
       // iSCSI
       trusted_ip_list: [null],
       api_port: [null, [CdValidators.number(false)]],
@@ -709,7 +717,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               this.setRgwFields(
                 response[0].spec?.rgw_realm,
                 response[0].spec?.rgw_zonegroup,
-                response[0].spec?.rgw_zone
+                response[0].spec?.rgw_zone,
+                response[0].spec?.qat
               );
               this.serviceForm.get('ssl').setValue(response[0].spec?.ssl);
               if (response[0].spec?.ssl) {
@@ -944,7 +953,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     }
   }
 
-  setRgwFields(realm_name?: string, zonegroup_name?: string, zone_name?: string) {
+  setRgwFields(realm_name?: string, zonegroup_name?: string, zone_name?: string, qat?: QatSepcs) {
     const observables = [
       this.rgwRealmService.getAllRealmsInfo(),
       this.rgwZonegroupService.getAllZonegroupsInfo(),
@@ -1011,6 +1020,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           this.serviceForm.get('realm_name').setValue(realm_name);
           this.serviceForm.get('zonegroup_name').setValue(zonegroup_name);
           this.serviceForm.get('zone_name').setValue(zone_name);
+        }
+        if (qat) {
+          this.serviceForm.get(`qat.compression`)?.setValue(qat['compression']);
         }
         if (this.realmList.length === 0) {
           this.showRealmCreationForm = true;
@@ -1162,6 +1174,11 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       serviceSpec['rgw_zonegroup'] =
         values['zonegroup_name'] !== 'default' ? values['zonegroup_name'] : null;
       serviceSpec['rgw_zone'] = values['zone_name'] !== 'default' ? values['zone_name'] : null;
+      if (values['qat']['compression'] && values['qat']['compression'] != QatOptions.none) {
+        serviceSpec['qat'] = values['qat'];
+      } else if (values['qat']['compression'] == QatOptions.none) {
+        delete serviceSpec['qat'];
+      }
     }
 
     const serviceId: string = values['service_id'];

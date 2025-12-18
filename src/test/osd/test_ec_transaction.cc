@@ -466,3 +466,42 @@ TEST(ectransaction, delete_and_write_misaligned) {
   ref_write[shard_id_t(2)].insert(0, 2*EC_ALIGN_SIZE);
   ASSERT_EQ(ref_write, plan.will_write);
 }
+
+TEST(ectransaction, truncate_to_stripe) {
+  hobject_t h;
+  PGTransaction::ObjectOperation op;
+  uint64_t new_size = 2 * EC_ALIGN_SIZE;
+
+  // We have a 4k write quite a way after the current limit of a 4k object
+  op.truncate.emplace(new_size, new_size);
+
+  pg_pool_t pool;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
+  object_info_t oi;
+  oi.size = new_size;
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(0), 3);
+
+  ECTransaction::WritePlanObj plan(
+    h,
+    op,
+    sinfo,
+    shards,
+    shards,
+    false,
+    16*EC_ALIGN_SIZE,
+    std::nullopt,
+    std::nullopt,
+    0);
+
+  generic_derr << "plan " << plan << dendl;
+
+  /* We are going to delete the object before writing it.  Best not write anything
+   * from the old object... */
+  ASSERT_FALSE(plan.to_read);
+
+  // Truncating to a whole shard - no writes needed.
+  ECUtil::shard_extent_set_t ref_write(sinfo.get_k_plus_m());
+  ASSERT_EQ(ref_write, plan.will_write);
+}

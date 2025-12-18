@@ -129,6 +129,19 @@ base_iertr::future<LBAMapping> LBAMapping::refresh()
   });
 }
 
+base_iertr::future<> LBAMapping::co_refresh()
+{
+  if (is_viewable()) {
+    co_return;
+  }
+  if (direct_cursor) {
+    co_await direct_cursor->refresh();
+  }
+  if (indirect_cursor) {
+    co_await indirect_cursor->refresh();
+  }
+}
+
 bool LBAMapping::is_initial_pending() const {
   assert(is_linked_direct());
   ceph_assert(direct_cursor->is_viewable());

@@ -35,11 +35,11 @@ jobs:
         working-directory: ceph
         run: |
           # Fetch enough history to find a common ancestor commit (aka merge-base):
-          git fetch origin ${{ env.refspec_pr }} --depth=$(( ${{ github.event.pull_request.commits }} + 1 )) \
+          git fetch origin "${{ env.refspec_pr }}" --depth=$(( ${{ github.event.pull_request.commits }} + 1 )) \
             --no-tags --prune --no-recurse-submodules
 
           # This should get the oldest commit in the local fetched history (the commit in ceph upstream from which PR branched from):
-          COMMON_ANCESTOR=$( git rev-list --first-parent --max-parents=0 --max-count=1 ${{ env.branch_pr }} )
+          COMMON_ANCESTOR=$( git rev-list --first-parent --max-parents=0 --max-count=1 "${{ env.branch_pr }}" )
           COMMON_ANCESTOR_SHA=$( git log --format=%H "${COMMON_ANCESTOR}" )
 
           echo "COMMON_ANCESTOR_SHA=${COMMON_ANCESTOR_SHA}" >> $GITHUB_ENV
@@ -66,7 +66,7 @@ jobs:
         run:  |
           {
             echo 'DIFF_JSON<<EOF'
-            python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-branch $REF_BRANCH --ref-commit-sha $REF_COMMIT_SHA --remote-repo $REMOTE_REPO --cmp-branch $REMOTE_BRANCH --cmp-commit-sha $REMOTE_COMMIT_SHA --format=posix-diff --skip-clone
+            python3 ./src/script/config-diff/config_diff.py diff-branch-remote-repo --ref-branch "$REF_BRANCH" --ref-commit-sha "$REF_COMMIT_SHA" --remote-repo "$REMOTE_REPO" --cmp-branch "$REMOTE_BRANCH" --cmp-commit-sha "$REMOTE_COMMIT_SHA" --format=posix-diff --skip-clone
             echo EOF
           } >> "$GITHUB_OUTPUT"
         working-directory: ceph

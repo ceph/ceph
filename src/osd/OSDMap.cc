@@ -2146,20 +2146,19 @@ bool OSDMap::check_pg_upmaps(
       continue;
     }
     // below we check against crush-topology changing..
-    map<int, float> weight_map;
-    auto it = rule_weight_map.find(crush_rule);
-    if (it == rule_weight_map.end()) {
-      auto r = crush->get_rule_weight_osd_map(crush_rule, &weight_map);
+    auto rule_entry = rule_weight_map.find(crush_rule);
+    if (rule_entry == rule_weight_map.end()) {
+      rule_entry = rule_weight_map.emplace(crush_rule, map<int, float>()).first;
+      auto r = crush->get_rule_weight_osd_map(crush_rule, &rule_entry->second);
       if (r < 0) {
         lderr(cct) << __func__ << " unable to get crush weight_map for "
                    << "crush_rule " << crush_rule
                    << dendl;
+        rule_weight_map.erase(rule_entry);
         continue;
       }
-      rule_weight_map[crush_rule] = weight_map;
-    } else {
-      weight_map = it->second;
     }
+    const map<int, float> &weight_map = rule_entry->second;
     ldout(cct, 10) << __func__ << " pg " << pg
                    << " weight_map " << weight_map
                    << dendl;

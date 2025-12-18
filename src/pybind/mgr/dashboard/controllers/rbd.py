@@ -533,6 +533,35 @@ class RbdGroup(RESTController):
             ioctx.set_namespace(namespace)
             return self.rbd_inst.group_create(ioctx, name)
 
+    @handle_rbd_error()
+    @EndpointDoc("Delete a group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                 },
+                 responses={200: None})
+    def delete(self, pool_name, group_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return self.rbd_inst.group_remove(ioctx, group_name)
+
+    @handle_rbd_error()
+    @EndpointDoc("Update a group (rename)",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'new_name': (str, 'New name for the group'),
+                 },
+                 responses={200: None})
+    def set(self, pool_name, group_name, new_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            if new_name == group_name:
+                return None
+            return self.rbd_inst.group_rename(ioctx, group_name, new_name)
+
     @RESTController.Collection('POST', path='/{group_name}/image')
     @handle_rbd_error()
     @EndpointDoc("Add image to a group",
@@ -548,3 +577,19 @@ class RbdGroup(RESTController):
             RbdService.validate_namespace(ioctx, namespace)
             ioctx.set_namespace(namespace)
             return group.add_image(ioctx, image_name)
+
+    @RESTController.Collection('DELETE', path='/{group_name}/image')
+    @handle_rbd_error()
+    @EndpointDoc("Remove image from a group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'image_name': (str, 'Name of the image'),
+                 },
+                 responses={200: None})
+    def remove_image(self, pool_name, group_name, image_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            group = rbd.Group(ioctx, group_name)
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return group.remove_image(ioctx, image_name)

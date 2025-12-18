@@ -17779,7 +17779,7 @@ int BlueStore::_write(TransContext *txc,
     txc->write_onode(o);
   }
   auto finish = mono_clock::now();
-  logger->tinc(l_bluestore_write_lat, finish - start);
+  logger->tinc_with_max(l_bluestore_write_lat, finish - start);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
@@ -18178,7 +18178,7 @@ int BlueStore::_omap_clear(TransContext *txc,
     _do_omap_clear(txc, o);
     txc->write_onode(o);
   }
-  logger->tinc(l_bluestore_omap_clear_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluestore_omap_clear_lat, mono_clock::now() - t0);
 
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
@@ -18826,7 +18826,7 @@ void BlueStore::log_latency(
   const char* info,
   int idx2)
 {
-  logger->tinc(idx, l);
+  logger->tinc_with_max(idx, l);
   if (lat_threshold > 0.0 &&
       l >= make_timespan(lat_threshold)) {
     dout(0) << __func__ << " slow operation observed for " << name
@@ -18848,7 +18848,7 @@ void BlueStore::log_latency_fn(
   std::function<string (const ceph::timespan& lat)> fn,
   int idx2)
 {
-  logger->tinc(idx, l);
+  logger->tinc_with_max(idx, l);
   if (lat_threshold > 0.0 &&
       l >= make_timespan(lat_threshold)) {
     dout(0) << __func__ << " slow operation observed for " << name
@@ -18946,7 +18946,7 @@ mono_clock::duration BlueStore::BlueStoreThrottle::log_state_latency(
 {
   mono_clock::time_point now = mono_clock::now();
   mono_clock::duration lat = now - txc.last_stamp;
-  logger->tinc(state, lat);
+  logger->tinc_with_max(state, lat);
 #if defined(WITH_LTTNG)
   if (txc.tracing &&
       state >= l_bluestore_state_prepare_lat &&

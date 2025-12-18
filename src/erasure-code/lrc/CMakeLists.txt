@@ -11,5 +11,4 @@ set(lrc_srcs
 add_library(ec_lrc SHARED ${lrc_srcs})
 set_target_properties(ec_lrc PROPERTIES
   INSTALL_RPATH "")
-target_link_libraries(ec_lrc json_spirit)
 install(TARGETS ec_lrc DESTINATION ${erasure_plugin_dir})

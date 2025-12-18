@@ -57,6 +57,7 @@
 #include "rgw_etag_verifier.h"
 #include "rgw_worker.h"
 #include "rgw_notify.h"
+#include "rgw_bl_rados.h"
 #include "rgw_http_errors.h"
 #include "rgw_multipart_meta_filter.h"
 
@@ -1142,17 +1143,21 @@ void RGWRados::finalize()
     reshard->stop_processor();
   }
   delete reshard;
-  delete index_completion_manager;
 
   if (run_notification_thread) {
     rgw::notify::shutdown();
     v1_topic_migration.stop();
   }
 
+  if (run_bucket_logging_thread) {
+    rgw::bucketlogging::shutdown();
+  }
+
   if (use_restore_thread) {
     restore->stop_processor();
   }
   restore = NULL;
+  delete index_completion_manager;
 }
 
 /** 
@@ -1276,7 +1281,13 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   if (ret < 0)
     return ret;
 
+  ret = open_logging_pool_ctx(dpp);
+  if (ret < 0)
+    return ret;
+
   pools_initialized = true;
+
+  index_completion_manager = new RGWIndexCompletionManager(this);
 
   if (use_gc) {
     gc = new RGWGC();
@@ -1426,8 +1437,12 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
     reshard->start_processor();
   }
 
-  index_completion_manager = new RGWIndexCompletionManager(this);
-
+  if (run_bucket_logging_thread) {
+    if (!rgw::bucketlogging::init(dpp, this->driver, *svc.site)) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to initialize bucket logging manager" << dendl;
+    }
+      ldpp_dout(dpp, 0) << "INFO: initialized bucket logging manager" << dendl;
+  }
   if (run_notification_thread) {
     if (!rgw::notify::init(dpp, driver, *svc.site)) {
       ldpp_dout(dpp, 0) << "ERROR: failed to initialize notification manager" << dendl;
@@ -1448,7 +1463,6 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
       v1_topic_migration.start(1);
     }
   }
-
   return ret;
 }
 
@@ -1550,6 +1564,11 @@ int RGWRados::open_reshard_pool_ctx(const DoutPrefixProvider *dpp)
 int RGWRados::open_notif_pool_ctx(const DoutPrefixProvider *dpp)
 {
   return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().notif_pool, notif_pool_ctx, true, true);
+}
+
+int RGWRados::open_logging_pool_ctx(const DoutPrefixProvider *dpp)
+{
+  return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().bucket_logging_pool, logging_pool_ctx, true, true);
 }
 
 int RGWRados::open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx& io_ctx,
@@ -7784,6 +7803,9 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       if (boost::algorithm::starts_with(iter.first, RGW_ATTR_CRYPT_PREFIX)) {
         ldpp_dout(dpp, 4) << "get src crypt attr: " << iter.first << dendl;
         src_attrset[iter.first] = iter.second;
+      } else if (iter.first == RGW_ATTR_ETAG) {
+        ldpp_dout(dpp, 4) << "copy src etag attr: " << iter.first << dendl;
+        src_attrset[iter.first] = iter.second;
       }
     }
     int parts_count = 0;
@@ -7814,6 +7836,11 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       if (astate->attrset.find(iter.first) == astate->attrset.end()) {
         astate->attrset[iter.first] = std::move(iter.second);
       }
+    }
+    auto etag_iter = src_attrset.find(RGW_ATTR_ETAG);
+    if (etag_iter != src_attrset.end()) {
+      ldpp_dout(dpp, 4) << "overwrite etag to " << etag_iter->second << dendl;
+      astate->attrset[RGW_ATTR_ETAG] = etag_iter->second;
     }
   }
 

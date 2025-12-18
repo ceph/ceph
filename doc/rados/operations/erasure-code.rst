@@ -180,7 +180,7 @@ By default, erasure-coded pools work only with operations that
 perform full RADOS object writes, for example, RGW.
 
 Since Luminous, partial writes for an erasure-coded pool may be
-enabled with a per-pool setting. This lets RBD, CephFS, and librados  store
+enabled with a per-pool setting. This lets RBD, CephFS, and librados store
 data in an erasure-coded pool:
 
 .. prompt:: bash $

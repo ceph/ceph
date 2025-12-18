@@ -334,7 +334,7 @@ int commit_logging_object(const configuration& conf,
       target_bucket->get_key() << "'. ret = " << ret << dendl;
     return ret;
   }
-  if (const int ret = target_bucket->commit_logging_object(obj_name, y, dpp, conf.target_prefix, last_committed); ret < 0) {
+  if (const int ret = target_bucket->commit_logging_object(obj_name, y, dpp, conf.target_prefix, last_committed, false); ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to commit logging object '" << obj_name << "' of logging bucket '" <<
       target_bucket->get_key() << "'. ret = " << ret << dendl;
     return ret;
@@ -351,6 +351,7 @@ int rollover_logging_object(const configuration& conf,
     optional_yield y,
     bool must_commit,
     RGWObjVersionTracker* objv_tracker,
+    bool async,
     std::string* last_committed,
     std::string* err_message) {
   std::string target_bucket_name;
@@ -393,7 +394,7 @@ int rollover_logging_object(const configuration& conf,
       return ret;
     }
   }
-  if (const int ret = target_bucket->commit_logging_object(*old_obj, y, dpp, conf.target_prefix, last_committed); ret < 0) {
+  if (const int ret = target_bucket->commit_logging_object(*old_obj, y, dpp, conf.target_prefix, last_committed, async); ret < 0) {
     if (must_commit) {
       if (err_message) {
         *err_message = fmt::format("Failed to commit logging object of logging bucket '{}'", target_bucket->get_name());
@@ -516,7 +517,7 @@ int log_record(rgw::sal::Driver* driver,
     if (ceph::coarse_real_time::clock::now() > time_to_commit) {
       ldpp_dout(dpp, 20) << "INFO: logging object '" << obj_name << "' exceeded its time, will be committed to logging bucket '" <<
         target_bucket_id << "'" << dendl;
-      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, false, &objv_tracker, nullptr, &err_message); ret < 0 && ret != -ECANCELED) {
+      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, false, &objv_tracker, true, nullptr, &err_message); ret < 0 && ret != -ECANCELED) {
         set_journal_err(err_message);
         return ret;
       }
@@ -656,6 +657,7 @@ int log_record(rgw::sal::Driver* driver,
 
   if (ret = target_bucket->write_logging_object(obj_name,
         record,
+        conf.target_prefix,
         y,
         dpp,
         async_completion); ret < 0 && ret != -EFBIG) {
@@ -667,12 +669,13 @@ int log_record(rgw::sal::Driver* driver,
   if (ret == -EFBIG) {
     ldpp_dout(dpp, 5) << "WARNING: logging object '" << obj_name << "' is full, will be committed to logging bucket '" <<
       target_bucket->get_key() << "'" << dendl;
-    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, true, &objv_tracker, nullptr, &err_message); ret < 0 && ret != -ECANCELED) {
+    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, true, &objv_tracker, true, nullptr, &err_message); ret < 0 && ret != -ECANCELED) {
       set_journal_err(err_message);
       return ret;
     }
     if (ret = target_bucket->write_logging_object(obj_name,
         record,
+        conf.target_prefix,
         y,
         dpp,
         async_completion); ret < 0) {
@@ -849,7 +852,7 @@ int bucket_deletion_cleanup(const DoutPrefixProvider* dpp,
         }
         ldpp_dout(dpp, 20) << "INFO: successfully deleted object holding bucket logging object name from deleted logging bucket '" <<
           bucket->get_key() << "'" << dendl;
-        if (const int ret = bucket->remove_logging_object(obj_name, y, dpp); ret < 0) {
+        if (const int ret = bucket->remove_logging_object(obj_name, conf.target_prefix, y, dpp); ret < 0) {
           ldpp_dout(dpp, 5) << "WARNING: failed to delete pending logging object '" << obj_name << "' for logging bucket '" <<
             bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
           continue;
@@ -948,7 +951,7 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
   ldpp_dout(dpp, 20) << "INFO: successfully deleted object holding bucket logging object name for bucket '" <<
       bucket->get_key() << "' during source cleanup" << dendl;
   // since the object holding the name was deleted, we cannot fetch the last commited name from it
-  if (const int ret = target_bucket->commit_logging_object(obj_name, y, dpp, conf->target_prefix, nullptr); ret < 0) {
+  if (const int ret = target_bucket->commit_logging_object(obj_name, y, dpp, conf->target_prefix, nullptr, false); ret < 0) {
     ldpp_dout(dpp, 5) << "WARNING: could not commit pending logging object of bucket '" <<
       bucket->get_key() << "' during source cleanup. ret = " << ret << dendl;
     return 0;

@@ -1074,12 +1074,15 @@ class Bucket {
         RGWObjVersionTracker* objv_tracker) = 0;
     /** Move the pending bucket logging object into the bucket
      if "last_committed" is not null, it will be set to the name of the last committed object
+     if async is true, write the entry to the commit lists to be processed by the BucketLoggingManager
      * */
-    virtual int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed) = 0;
+    virtual int commit_logging_object(const std::string& obj_name, optional_yield y,
+	const DoutPrefixProvider *dpp, const std::string& prefix,
+	std::string* last_committed, bool async) = 0;
     //** Remove the pending bucket logging object */
-    virtual int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    virtual int remove_logging_object(const std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) = 0;
     /** Write a record to the pending bucket logging object */
-    virtual int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) = 0;
+    virtual int write_logging_object(const std::string& obj_name, const std::string& record, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) = 0;
 
     /* dang - This is temporary, until the API is completed */
     virtual rgw_bucket& get_key() = 0;
@@ -1971,6 +1974,7 @@ public:
 				      bool run_sync_thread,
 				      bool run_reshard_thread,
 				      bool run_notification_thread,
+				      bool run_bucket_logging_thread,
 				      bool background_tasks,
 				      optional_yield y,
               rgw::sal::ConfigStore* cfgstore,
@@ -1986,6 +1990,7 @@ public:
 						   run_sync_thread,
 						   run_reshard_thread,
                run_notification_thread,
+				                   run_bucket_logging_thread,
 						   use_cache, use_gc,
 						   background_tasks, y, cfgstore, admin);
     return driver;
@@ -2014,7 +2019,8 @@ public:
 						bool quota_threads,
 						bool run_sync_thread,
 						bool run_reshard_thread,
-            bool run_notification_thread,
+                                                bool run_notification_thread,
+                                                bool run_bucket_logging_thread,
 						bool use_metadata_cache,
 						bool use_gc, bool background_tasks,
 						optional_yield y, rgw::sal::ConfigStore* cfgstore, bool admin);

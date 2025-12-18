@@ -45,6 +45,7 @@
 #include "rgw_rest_realm.h"
 #include "rgw_rest_ratelimit.h"
 #include "rgw_rest_zero.h"
+#include "rgw_rest_restore.h"
 #include "rgw_swift_auth.h"
 #include "rgw_log.h"
 #include "rgw_lib.h"
@@ -258,6 +259,7 @@ int rgw::AppMain::init_storage()
           run_sync,
           g_conf().get_val<bool>("rgw_dynamic_resharding"),
 	  true, // run notification thread
+	  true, // run bucket-logging thread
 	  true, null_yield, env.cfgstore,
           g_conf()->rgw_cache_enabled);
   if (!env.driver) {
@@ -363,6 +365,7 @@ void rgw::AppMain::cond_init_apis()
       admin_resource->register_resource("info", new RGWRESTMgr_Info);
       admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
       admin_resource->register_resource("account", new RGWRESTMgr_Account);
+      admin_resource->register_resource("restore", new RGWRESTMgr_Restore);
       /* Register driver-specific admin APIs */
       env.driver->register_admin_apis(admin_resource);
       rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);

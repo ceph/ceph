@@ -92,7 +92,7 @@ Persistent bucket notifications are managed by the following central configurati
 .. note:: When a topic is created during a Ceph upgrade, per-key reordering of notifications may
    happen on any bucket mapped to that topic.
    
-.. note:: Persistent topics that were created on a radosgw that does not support sharding, will be treated as a single shard topics
+.. note:: Persistent topics that were created on a radosgw that does not support sharding will be treated as single-shard topics.
 
 .. tip:: It is also recommended that you avoid modifying or deleting topics created during 
    upgrades, as this might result in orphan RADOS objects that will not be deleted when the topic is deleted.
@@ -140,12 +140,12 @@ by running the following command:
 Notification Performance Statistics
 -----------------------------------
 
-- ``persistent_topic_size``: queue size in bytes
-- ``persistent_topic_len``: shows how many notifications are currently waiting
+- ``persistent_topic_size``: Queue size in bytes
+- ``persistent_topic_len``: Shows how many notifications are currently waiting
   in the queue
-- ``pubsub_push_ok``: a running counter, for all notifications, of events
+- ``pubsub_push_ok``: A running counter, for all notifications, of events
   successfully pushed to their endpoints
-- ``pubsub_push_fail``: a running counter, for all notifications, of events
+- ``pubsub_push_fail``: A running counter, for all notifications, of events
   that failed to be pushed to their endpoints
 - ``pubsub_push_pending``: The gauge value of events pushed to an endpoint but
   not acked or nacked yet: this does not include the notifications waiting in
@@ -189,8 +189,7 @@ Create a Topic
 
 This creates a new topic. Provide the topic with push endpoint parameters,
 which will be used later when a notification is created. A response is
-generated. A successful response includes the topic's `ARN
-<https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_
+generated. A successful response includes the topic's `ARN`_
 (the "Amazon Resource Name", a unique identifier used to reference the topic).
 To update a topic, use the same command that you used to create it (but when
 updating, use the name of an existing topic and different endpoint values).
@@ -258,10 +257,10 @@ Request parameters:
 
   Currently, we support only the following actions:
 
-  - ``sns:GetTopicAttributes``:  to list or get existing topics
-  - ``sns:SetTopicAttributes``:  to set attributes for the existing topic
-  - ``sns:DeleteTopic``:         to delete the existing topic
-  - ``sns:Publish``:             to be able to create/subscribe notification on existing topic
+  - ``sns:GetTopicAttributes``:  To list or get existing topics
+  - ``sns:SetTopicAttributes``:  To set attributes for the existing topic
+  - ``sns:DeleteTopic``:         To delete the existing topic
+  - ``sns:Publish``:             To be able to create/subscribe notification on existing topic
 
 - HTTP endpoint
 
@@ -373,9 +372,7 @@ The response has the following format:
         </ResponseMetadata>
     </CreateTopicResponse>
 
-The topic `ARN
-<https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_
-in the response has the following format:
+The topic `ARN`_ in the response has the following format:
 
 ::
 
@@ -428,13 +425,13 @@ The response has the following format:
         </ResponseMetadata>
     </GetTopicAttributesResponse>
 
-- ``User``: the name of the user that created the topic
-- ``Name``: the name of the topic
-- ``EndPoint``: the JSON-formatted endpoint parameters, including:
+- ``User``: The name of the user that created the topic
+- ``Name``: The name of the topic
+- ``EndPoint``: The JSON-formatted endpoint parameters, including:
 
-   - ``EndpointAddress``: the push-endpoint URL
-   - ``EndpointArgs``: the push-endpoint arguments
-   - ``EndpointTopic``: the topic name to be sent to the endpoint (can be different
+   - ``EndpointAddress``: The push-endpoint URL
+   - ``EndpointArgs``: The push-endpoint arguments
+   - ``EndpointTopic``: The topic name to be sent to the endpoint (can be different
      than the above topic name)
    - ``HasStoredSecret``: This is "true" if the endpoint URL contains ``user``/``password``
      information. In this case, the request must be made over HTTPS. The "topic
@@ -444,10 +441,9 @@ The response has the following format:
    - ``MaxRetries``: This will limit the max retries before expiring notifications.
    - ``RetrySleepDuration``: This will control the frequency of retrying the notifications.
 
-- ``TopicArn``: topic `ARN
-  <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_
-- ``OpaqueData``: the opaque data set on the topic
-- ``Policy``: any access permission set on the topic
+- ``TopicArn``: Topic `ARN`_
+- ``OpaqueData``: The opaque data set on the topic
+- ``Policy``: Any access permission set on the topic
 
 Get Topic Information
 `````````````````````
@@ -488,20 +484,19 @@ The response has the following format:
         </ResponseMetadata>
     </GetTopicResponse>
 
-- ``User``: the name of the user that created the topic
-- ``Name``: the name of the topic
-- ``EndpointAddress``: the push-endpoint URL
-- ``EndpointArgs``: the push-endpoint arguments
-- ``EndpointTopic``: the topic name to be sent to the endpoint (which can be
+- ``User``: The name of the user that created the topic
+- ``Name``: The name of the topic
+- ``EndpointAddress``: The push-endpoint URL
+- ``EndpointArgs``: The push-endpoint arguments
+- ``EndpointTopic``: The topic name to be sent to the endpoint (which can be
   different than the above topic name)
 - ``HasStoredSecret``: This is "true" if the endpoint URL contains user/password
   information. In this case, the request must be made over HTTPS. The "topic
   get" request will otherwise be rejected.
 - ``Persistent``: "true" if topic is persistent
-- ``TopicArn``: topic `ARN
-  <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_
-- ``OpaqueData``: the opaque data set on the topic
-- ``Policy``: any access permission set on the topic
+- ``TopicArn``: Topic `ARN`_
+- ``OpaqueData``: The opaque data set on the topic
+- ``Policy``: Any access permission set on the topic
 
 Delete Topic
 ````````````
@@ -624,7 +619,7 @@ Valid ``AttributeName`` that can be passed:
 - ``ca-location``: If this is provided and a secure connection is used, the
   specified CA will be used instead of the default CA to authenticate the
   broker.
-- ``mechanism``: may be provided together with ``user``/``password`` (default: ``PLAIN``)
+- ``mechanism``: May be provided together with ``user``/``password`` (default: ``PLAIN``)
 - ``kafka-ack-level``: No end2end acknowledgement is required. Messages may persist in the
   broker before being delivered to their final destinations.
 - ``kafka-brokers``: Set endpoint with broker(s) as a comma-separated list of
@@ -692,38 +687,39 @@ For example:
        }
    ]}
 
-- ``awsRegion``: the zonegroup
-- ``eventTime``: the timestamp, indicating when the event was triggered
+- ``awsRegion``: The zonegroup
+- ``eventTime``: The timestamp, indicating when the event was triggered
 - ``eventName``: For a list of supported events, see: :ref:`radosgw-s3-notification-compatibility`.
   Note that ``eventName`` values do not start with the ``s3:`` prefix.
-- ``userIdentity.principalId``: the user that triggered the change
-- ``requestParameters.sourceIPAddress``: not supported
-- ``responseElements.x-amz-request-id``: the request ID of the original change
-- ``responseElements.x_amz_id_2``: the RGW on which the change was made
-- ``s3.configurationId``: the notification ID that created the event
-- ``s3.bucket.name``: the name of the bucket
-- ``s3.bucket.ownerIdentity.principalId``: the owner of the bucket
-- ``s3.bucket.arn``: the ARN of the bucket
-- ``s3.bucket.id``: the ID of the bucket (This is an extension to the S3
+- ``userIdentity.principalId``: The user that triggered the change
+- ``requestParameters.sourceIPAddress``: Not supported
+- ``responseElements.x-amz-request-id``: The request ID of the original change
+- ``responseElements.x_amz_id_2``: The RGW on which the change was made
+- ``s3.configurationId``: The notification ID that created the event
+- ``s3.bucket.name``: The name of the bucket
+- ``s3.bucket.ownerIdentity.principalId``: The owner of the bucket
+- ``s3.bucket.arn``: The ARN of the bucket
+- ``s3.bucket.id``: The ID of the bucket (This is an extension to the S3
   notification API.)
-- ``s3.object.key``: the object key
-- ``s3.object.size``: the object size
-- ``s3.object.eTag``: the object etag
+- ``s3.object.key``: The object key
+- ``s3.object.size``: The object size
+- ``s3.object.eTag``: The object etag
 - ``s3.object.versionId``: This contains the object version, if the bucket is
   versioned. When a copy is made, it includes the version of the target object.
   When a delete marker is created, it includes the version of the delete marker.
-- ``s3.object.sequencer``: the monotonically-increasing identifier of the "change
+- ``s3.object.sequencer``: The monotonically-increasing identifier of the "change
   per object" (hexadecimal format)
 - ``s3.object.metadata``: Any metadata set on the object that is sent as
   ``x-amz-meta-`` (that is, any metadata set on the object that is sent as an
   extension to the S3 notification API).
-- ``s3.object.tags``: any tags set on the object (This is an extension to the S3
+- ``s3.object.tags``: Any tags set on the object (This is an extension to the S3
   notification API.)
-- ``s3.eventId``: the unique ID of the event, which could be used for acking (This
+- ``s3.eventId``: The unique ID of the event, which could be used for acking (This
   is an extension to the S3 notification API.)
 - ``s3.opaqueData``: This means that "opaque data" is set in the topic configuration
   and is added to all notifications triggered by the topic. (This is an
   extension to the S3 notification API.)
 
+.. _ARN: https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html
 .. _AWS Create Topic: https://docs.aws.amazon.com/sns/latest/api/API_CreateTopic.html
 .. _S3 CloudEvents Spec: https://github.com/cloudevents/spec/blob/main/cloudevents/adapters/aws-s3.md

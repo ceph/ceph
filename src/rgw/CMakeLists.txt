@@ -143,7 +143,8 @@ set(librgw_common_srcs
   rgw_realm_watcher.cc
   rgw_bucket_logging.cc
   rgw_rest_bucket_logging.cc
-  rgw_bucket_sync.cc)
+  rgw_bucket_sync.cc
+  rgw_rest_restore.cc)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
@@ -174,6 +175,7 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/group.cc
           driver/rados/groups.cc
           driver/rados/rgw_bucket.cc
+          driver/rados/rgw_bl_rados.cc
           driver/rados/rgw_cr_rados.cc
           driver/rados/rgw_cr_tools.cc
           driver/rados/rgw_d3n_datacache.cc

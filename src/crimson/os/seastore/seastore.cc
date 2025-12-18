@@ -1420,9 +1420,9 @@ SeaStore::Shard::fiemap(
   });
 }
 
-void SeaStore::Shard::on_error(ceph::os::Transaction &t) {
-  LOG_PREFIX(SeaStoreS::on_error);
-  ERROR(" transaction dump:\n");
+void SeaStore::Shard::transaction_dump(ceph::os::Transaction &t) {
+  LOG_PREFIX(SeaStoreS::transaction_dump);
+  ERROR("");
   JSONFormatter f(true);
   f.open_object_section("transaction");
   t.dump(&f);
@@ -1430,7 +1430,6 @@ void SeaStore::Shard::on_error(ceph::os::Transaction &t) {
   std::stringstream str;
   f.flush(str);
   ERROR("{}", str.str());
-  abort();
 }
 
 seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
@@ -1502,8 +1501,9 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
       co_await transaction_manager->submit_transaction(*ctx.transaction);
     })
   ).handle_error(
-    crimson::ct_error::all_same_way([&ctx](auto e) {
-      on_error(ctx.ext_transaction);
+    crimson::ct_error::all_same_way([FNAME, &ctx](auto e) {
+      transaction_dump(ctx.ext_transaction);
+      ceph_abort_msg(fmt::format("{} unexpected error: {}", FNAME, e));
       return seastar::now();
     })
   );

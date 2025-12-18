@@ -1340,6 +1340,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	ldout(cct, 3) << "handle_osd_map hmm, i want a full map, requesting"
 		      << dendl;
 	monc->sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
+    last_osdmap_request_time = ceph::coarse_mono_clock::now();
 	monc->renew_subs();
       }
     }
@@ -2075,7 +2076,6 @@ void Objecter::maybe_request_map()
 
 void Objecter::_maybe_request_map()
 {
-  last_osdmap_request_time = ceph::coarse_mono_clock::now();
   // rwlock is locked
   int flag = 0;
   if (_osdmap_full_flag()
@@ -2088,6 +2088,7 @@ void Objecter::_maybe_request_map()
       << "_maybe_request_map subscribing (onetime) to next osd map" << dendl;
     flag = CEPH_SUBSCRIBE_ONETIME;
   }
+  last_osdmap_request_time = ceph::coarse_mono_clock::now();
   epoch_t epoch = osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0;
   if (monc->sub_want("osdmap", epoch, flag)) {
     monc->renew_subs();
@@ -2266,13 +2267,27 @@ void Objecter::tick()
   if (num_homeless_ops || !toping.empty()) {
     _maybe_request_map();
   } else if (last_osdmap_request_time != ceph::coarse_mono_clock::time_point()) {
+    const epoch_t epoch = osdmap->get_epoch() ? osdmap->get_epoch() + 1 : 0;
     auto now = ceph::coarse_mono_clock::now();
     auto elapsed = now - last_osdmap_request_time;
     auto stale_window = ceph::make_timespan(cct->_conf->objecter_tick_interval) * 2;
-    if (elapsed > stale_window) {
+    auto exist_sub = monc->get_start("osdmap");
+    ldout(cct, 20) << __func__ << ": elapsed since last osdmap request "
+      << std::chrono::duration<double>(elapsed).count() << "s"
+      << ", stale_window "
+      << std::chrono::duration<double>(stale_window).count() << "s"
+      << ", epoch " << epoch
+      << ", monc->get_start(osdmap) " << exist_sub
+      << dendl;
+    // check that:
+    //  1) we passed stale_window since last request AND
+    //  2) we don't have any osdmap subscription in flight OR
+    //     we have subscription - but the epoch we need is newer than the one we subscribed for
+    if (elapsed > stale_window &&
+       ((exist_sub == 0) || (epoch > exist_sub))) {
       double elapsed_s = std::chrono::duration<double>(elapsed).count();
       double thresh_s  = std::chrono::duration<double>(stale_window).count();
-      ldout(cct, 10) << __func__ << ": osdmap stale: " << elapsed_s 
+      ldout(cct, 20) << __func__ << ": osdmap stale: " << elapsed_s
         << "s > " << thresh_s << "s, maybe requesting map" << dendl;
       _maybe_request_map();
     }

@@ -39,6 +39,19 @@ using std::vector;
 using ceph::Formatter;
 using ceph::make_message;
 
+static int get_max_prio_for_base(int base) {
+  static const std::map<int, int> max_prio_map = {
+    {OSD_BACKFILL_PRIORITY_BASE, OSD_BACKFILL_DEGRADED_PRIORITY_BASE - 1},
+    {OSD_BACKFILL_DEGRADED_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_BASE - 1},
+    {OSD_RECOVERY_PRIORITY_BASE, OSD_BACKFILL_INACTIVE_PRIORITY_BASE - 1},
+    {OSD_RECOVERY_INACTIVE_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_MAX},
+    {OSD_BACKFILL_INACTIVE_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_MAX}
+  };
+  auto it = max_prio_map.find(base);
+  ceph_assert(it != max_prio_map.end());
+  return it->second;
+}
+
 BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
   // steal messages from ctx
   : message_map{std::move(ctx.message_map)}
@@ -1165,7 +1178,7 @@ unsigned PeeringState::get_recovery_priority()
     int64_t pool_recovery_priority = 0;
     pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
 
-    ret = clamp_recovery_priority(ret, pool_recovery_priority, max_prio_map[base]);
+    ret = clamp_recovery_priority(ret, pool_recovery_priority, get_max_prio_for_base(base));
   }
   psdout(20) << "recovery priority is " << ret << dendl;
   return static_cast<unsigned>(ret);
@@ -1200,7 +1213,7 @@ unsigned PeeringState::get_backfill_priority()
     int64_t pool_recovery_priority = 0;
     pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
 
-    ret = clamp_recovery_priority(ret, pool_recovery_priority, max_prio_map[base]);
+    ret = clamp_recovery_priority(ret, pool_recovery_priority, get_max_prio_for_base(base));
   }
 
   psdout(20) << "backfill priority is " << ret << dendl;
@@ -6996,6 +7009,15 @@ boost::statechart::result PeeringState::ReplicaActive::react(
     ps->state_set(PG_STATE_ACTIVE);
   } else {
     ps->state_set(PG_STATE_PEERED);
+  }
+  /* Update the state in the stats. This will normally get overwritten when the next write
+   * transaction is applied, but if the PG is idle then these stats may get copied to the
+   * next primary (see PG::merge_log). The state update ensures that prepare_stats_for_publish
+   * will update last_active when the primary changes and this stops health check generating
+   * false positive stuck in peering alerts.
+   */
+  if (ps->info.stats.state != ps->state) {
+    ps->info.stats.state = ps->state;
   }
   pl->on_activate_committed();
 
