@@ -10,6 +10,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 #include "librbd/mirror/snapshot/Types.h"
+#include "librbd/mirror/Types.h"
 
 #include <string>
 #include <set>
@@ -26,25 +27,32 @@ namespace snapshot {
 template <typename ImageCtxT = librbd::ImageCtx>
 class GroupPrepareImagesRequest {
 public:
+  enum Operation {
+    OP_ENABLE          = 0,
+    OP_DISABLE         = 1,
+    OP_PROMOTE         = 2,
+    OP_DEMOTE          = 3,
+    OP_CREATE_PRIMARY  = 4,
+  };
   static GroupPrepareImagesRequest *create(
       librados::IoCtx& group_ioctx, const std::string& group_id,
-      cls::rbd::MirrorSnapshotState state, uint32_t flags,
-      cls::rbd::GroupSnapshot *group_snap,
-      std::vector<librbd::ImageCtx *> *image_ctxs,
-      std::vector<uint64_t> *quiesce_requests,
-      Context *on_finish) {
+      std::vector<librbd::ImageCtx *>& image_ctxs,
+      std::vector<cls::rbd::GroupImageStatus>& images,
+      std::vector<cls::rbd::MirrorImage>* mirror_images,
+      std::set<std::string>* mirror_peer_uuids,
+      Operation operation, bool force, Context *on_finish) {
     return new GroupPrepareImagesRequest(
-      group_ioctx, group_id, state, flags, group_snap, image_ctxs,
-      quiesce_requests, on_finish);
+      group_ioctx, group_id, image_ctxs, images, mirror_images,
+      mirror_peer_uuids, operation, force, on_finish);
   }
 
   GroupPrepareImagesRequest(
     librados::IoCtx& group_ioctx, const std::string& group_id,
-    cls::rbd::MirrorSnapshotState state, uint32_t flags,
-    cls::rbd::GroupSnapshot *group_snap,
-    std::vector<librbd::ImageCtx *> *image_ctxs,
-    std::vector<uint64_t> *quiesce_requests,
-    Context *on_finish);
+    std::vector<librbd::ImageCtx *>& image_ctxs,
+    std::vector<cls::rbd::GroupImageStatus>& images,
+    std::vector<cls::rbd::MirrorImage>* mirror_images,
+    std::set<std::string>* mirror_peer_uuids,
+    Operation operation, bool force, Context *on_finish);
 
   void send();
 
@@ -52,52 +60,60 @@ private:
   /**
    *@verbatim
    *
-   *                <start>
-   *                   |
-   *                   v                        (on error)
-   *                LIST GROUP IMAGES--------------------------------------------------->
-   *                   |                                                   ^             |
-   *                   v                                                   |             |
-   *                OPEN GROUP IMAGES                                      |             |
-   *                   |          \             (on error)                 |             |
-   *                   v           \------------------------------> CLOSE IMAGES         |
-   *   . . . . . .  SET SNAP METADATA                                      ^             |
-   *   . (skip quiesce |          \             (on error)                 |             |
-   *   .  flag)        v           \------------------------------> REMOVE SNAP METADATA |
-   *   .            NOTIFY QUIESCE REQUESTS                                ^             |
-   *   .               |          \             (on error)                 |             |
-   *   .               v           \------------------------------> NOTIFY UNQUIESCE     |
-   *   . . . . . >  ACQUIRE IMAGE EXCLUSIVE LOCKS                          ^             |
-   *                   |          \             (on error)                 |             |
-   *                   |           \----------------------------------------             |
-   *                   |                                                                 |
-   *                   v                                                                 v
-   *                <finish>-----------------------<--------------------------------------
+   *   <start>-------------->-------------\
+   *       |                              |
+   *       v                              |
+   *   GET_MIRROR_PEER_LIST            (disable)
+   *       |                              |
+   *       v                              |
+   *   LIST_GROUP_IMAGES <----------------/
+   *       |            \
+   *       |             \-----(enable)----->CHECK_MIRROR_IMAGES_DISABLED
+   *       |          ___________________________/
+   *       |         |
+   *       v         V
+   *   OPEN_GROUP_IMAGES ------------------(enable, r=0)-------------------->|
+   *       |            \                                                    |
+   *       |             \-------(disable)-------\                           |
+   *       |                                     |                           |
+   *       |                                     v                           |
+   *       |                              CHECK_IMAGES_MIRROR_MODE           |
+   *       |          ___________________________/                           |
+   *       |         |                                                       |
+   *       v         v                                                       |
+   *   GET_IMAGES_MIRROR_INFO ------------(create, r=0)--------------------->|
+   *       |         \                                                       |
+   *       |          \------(disable)--->CHECK_IMAGES_CHILD_MIRRORING       |
+   *       |           __________________________/                           |
+   *       |          |                                                      |
+   *       v          v                                                      |
+   *   UPDATE_IMAGES_READ_ONLY_MASK                                          |
+   *       |                                                                 |
+   *       v                                                                 v
+   *   <finish>-----------------------<--------------------------------------
    *
    * @endverbatim
    */
 
   librados::IoCtx& m_group_ioctx;
   std::string m_group_id;
-  cls::rbd::MirrorSnapshotState m_state;
-  const uint32_t m_flags;
-  cls::rbd::GroupSnapshot *m_group_snap;
-  std::vector<ImageCtx *> *m_image_ctxs;
-  std::vector<uint64_t> *m_quiesce_requests;
+  std::vector<ImageCtx *>& m_image_ctxs;
+  std::vector<cls::rbd::GroupImageStatus>& m_images;
+  std::vector<cls::rbd::MirrorImage>* m_mirror_images;
+  std::set<std::string>* m_mirror_peer_uuids;
+  Operation m_operation;
+  bool m_force;
   Context *m_on_finish;
 
   CephContext *m_cct;
 
   librados::IoCtx m_default_ns_ioctx;
-  uint64_t m_internal_flags;
-  std::set<std::string> m_mirror_peer_uuids;
   bufferlist m_outbl;
-  NoOpProgressContext m_prog_ctx;
-  int m_ret_code = 0;
+  std::vector<bufferlist> m_out_bls;
+  std::vector<mirror::PromotionState> m_images_promotion_states;
+  std::vector<std::string> m_images_primary_mirror_uuids;
   cls::rbd::GroupImageSpec m_start_after;
-  std::vector<cls::rbd::GroupImageStatus> m_images;
-
-  void check_snap_create_flags();
+  std::vector<std::shared_ptr<bufferlist>> m_child_outbls;
 
   void get_mirror_peer_list();
   void handle_get_mirror_peer_list(int r);
@@ -105,28 +121,25 @@ private:
   void list_group_images();
   void handle_list_group_images(int r);
 
+  void check_mirror_images_disabled();
+  void handle_check_mirror_images_disabled(int r);
+
   void open_group_images();
   void handle_open_group_images(int r);
 
-  void set_snap_metadata();
+  void check_images_mirror_mode();
+  void handle_check_images_mirror_mode(int r);
 
-  void notify_quiesce();
-  void handle_notify_quiesce(int r);
+  void get_images_mirror_info();
+  void handle_get_images_mirror_info(int r);
 
-  void acquire_image_exclusive_locks();
-  void handle_acquire_image_exclusive_locks(int r);
+  void check_images_child_mirroring();
+  void handle_check_images_child_mirroring(int r);
+
+  void update_images_read_only_mask();
+  void handle_update_images_read_only_mask(int r);
 
   void finish(int r);
-
-  // cleanup
-  void remove_snap_metadata();
-
-  void notify_unquiesce();
-  void handle_notify_unquiesce(int r);
-
-  void close_images();
-  void handle_close_images(int r);
-
 };
 
 } // namespace snapshot
