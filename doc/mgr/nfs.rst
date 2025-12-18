@@ -34,7 +34,8 @@ Create NFS-Ganesha Cluster
    ceph nfs cluster create <cluster_id> [<placement>] [--ingress] [--virtual_ip <value>] \
           [--ingress-mode {default|keepalive-only|haproxy-standard|haproxy-protocol}] \
           [--ingress-placement <placement>] [--port <int>] \
-          [--enable-rdma] [--rdma_port <int>] [--enable-nfsv3] [-i <spec_file>]
+          [--enable-rdma] [--rdma_port <int>] [--enable-nfsv3] [--networks <value>...] \
+          [-i <spec_file>]
 
 This creates a common recovery pool for all NFS-Ganesha daemons, a new user based on
 ``cluster_id``, and a common NFS-Ganesha config RADOS object.
@@ -68,6 +69,9 @@ NFS can be deployed on a port other than 2049 (the default) with ``--port <port>
 
 By default, only NFSv4 protocol is enabled. To enable both NFSv3 and NFSv4 protocols,
 add the ``--enable-nfsv3`` flag.
+
+To bind NFS daemons to specific networks, use ``--networks <value>...`` with one or
+more CIDR network subnets (e.g., ``--networks 10.0.0.0/24``).
 
 To deploy NFS with a high-availability front-end (virtual IP and load balancer), add the
 ``--ingress`` flag and specify a virtual IP address. This will deploy a combination

@@ -5,7 +5,6 @@ import { take } from 'rxjs/operators';
 
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
-import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 
@@ -71,9 +70,9 @@ describe('NfsClusterComponent', () => {
       ]);
     });
 
-    it('should render Status as a tag with status class mapping', () => {
+    it('should render Status with the status class mapping', () => {
       const statusColumn = component.columns.find((column) => column.prop === 'status');
-      expect(statusColumn.cellTransformation).toBe(CellTemplate.tag);
+      expect(statusColumn.cellTemplate).toBeTruthy();
       expect(statusColumn.customTemplateConfig.map).toEqual({
         Running: { class: 'tag-success' },
         Degraded: { class: 'tag-warning' },
@@ -152,7 +151,7 @@ describe('NfsClusterComponent', () => {
       );
     });
 
-    it('should leave status blank when no backends are running', async () => {
+    it('should show a dash when no backends are running', async () => {
       await expectClusterRows(
         [
           {
@@ -164,11 +163,11 @@ describe('NfsClusterComponent', () => {
           } as NFSCluster
         ],
         [],
-        [{ name: 'cluster1', status: '' }]
+        [{ name: 'cluster1', status: '-' }]
       );
     });
 
-    it('should leave status blank when backends are missing', async () => {
+    it('should show a dash when backends are missing', async () => {
       await expectClusterRows(
         [
           {
@@ -181,8 +180,8 @@ describe('NfsClusterComponent', () => {
         ],
         [],
         [
-          { name: 'cluster1', status: '' },
-          { name: 'cluster2', status: '' }
+          { name: 'cluster1', status: '-', eventsLink: ['/services', 'nfs.cluster1', 'events'] },
+          { name: 'cluster2', status: '-', eventsLink: ['/services', 'nfs.cluster2', 'events'] }
         ]
       );
     });

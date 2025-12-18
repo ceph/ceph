@@ -32,6 +32,7 @@ export class DocService {
       iscsi: `${domain}mgr/dashboard/#enabling-iscsi-management`,
       prometheus: `${domain}mgr/dashboard/#enabling-prometheus-alerting`,
       'nfs-ganesha': `${domain}mgr/dashboard/#configuring-nfs-ganesha-in-the-dashboard`,
+      'nfs-cephadm': `${domain}cephadm/services/nfs/`,
       'rgw-nfs': `${domain}radosgw/nfs`,
       rgw: `${domain}mgr/dashboard/#enabling-the-object-gateway-management-frontend`,
       'rgw-multisite': `${domain}/radosgw/multisite/#failover-and-disaster-recovery`,
