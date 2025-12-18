@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <ostream>
 #include <system_error>
 #include <utility>
@@ -23,14 +24,62 @@
 
 namespace ceph {
 
+class KeyringSecret {
+ public:
+  virtual ~KeyringSecret() noexcept = default;
+  [[nodiscard]] virtual std::error_code read(std::string& out) const = 0;
+  [[nodiscard]] virtual std::error_code remove() const = 0;
+  [[nodiscard]] virtual bool initialized() const = 0;
+  friend std::ostream& operator<<(
+      std::ostream& os, const KeyringSecret& secret) {
+    return os;
+  }
+};
+
+class Keyring {
+ public:
+  virtual ~Keyring() noexcept = default;
+  virtual tl::expected<std::unique_ptr<KeyringSecret>, std::error_code> add(
+      const std::string& key, const std::string& secret) noexcept = 0;
+  virtual bool supported(std::error_code* ec) noexcept = 0;
+  [[nodiscard]] virtual std::string_view name() const noexcept = 0;
+
+  static std::unique_ptr<Keyring> get_best();
+};
+
+class UnsupportedKeyringSecret : public KeyringSecret {
+ public:
+  ~UnsupportedKeyringSecret() noexcept override = default;
+  [[nodiscard]] std::error_code read(std::string& out) const override;
+  [[nodiscard]] std::error_code remove() const override;
+  [[nodiscard]] bool initialized() const override;
+  friend std::ostream& operator<<(
+      std::ostream& os, const UnsupportedKeyringSecret& secret) {
+    os << "UnsupportedKeyringSecret{}";
+    return os;
+  }
+};
+
+class UnsupportedKeyring : public Keyring {
+ public:
+  ~UnsupportedKeyring() noexcept override = default;
+  tl::expected<std::unique_ptr<KeyringSecret>, std::error_code> add(
+      const std::string& key, const std::string& secret) noexcept override;
+  bool supported(std::error_code* ec) noexcept override;
+  [[nodiscard]] std::string_view name() const noexcept override {
+    return "Unsupported";
+  }
+};
+
 /// RAII style wrapper around a secret stored in the Linux Key
 /// Retention Service.
 /// See: add_key(2), keyctl_read(3), keyctl_invalidate(3)
-class LinuxKeyringSecret {
+class LinuxKeyringSecret : public KeyringSecret {
   size_t _len;
   int _serial;
 
   explicit LinuxKeyringSecret(int serial, size_t len) noexcept;
+
  public:
   LinuxKeyringSecret() = delete;
   LinuxKeyringSecret(const LinuxKeyringSecret&) = delete;
@@ -38,10 +87,11 @@ class LinuxKeyringSecret {
   LinuxKeyringSecret(LinuxKeyringSecret&& other) noexcept
       : _len(std::exchange(other._len, 0)),
         _serial(std::exchange(other._serial, -1)) {};
+
   LinuxKeyringSecret& operator=(LinuxKeyringSecret&& other) noexcept {
     if (this != &other) {
       if (this->initialized()) {
-	this->reset();
+        this->reset();
       }
       _len = std::exchange(other._len, 0);
       _serial = std::exchange(other._serial, -1);
@@ -49,21 +99,17 @@ class LinuxKeyringSecret {
     return *this;
   };
 
-  ~LinuxKeyringSecret() noexcept;
+  ~LinuxKeyringSecret() noexcept override;
 
-  // Add a secret to the kernel process keyring. Beware: calling this
-  // with with an existing key _updates_ the value and causes multiple
-  // instances to refer to the same key.
-  static tl::expected<LinuxKeyringSecret, std::error_code> add(
-      const std::string& key, const std::string& secret) noexcept;
-  static bool supported(std::error_code* ec = nullptr) noexcept;
   // Initialize the process keyring. Do this before starting any
   // threads that want to share possession of keys in the process
   // keyring
   static void initialize_process_keyring() noexcept;
-  [[nodiscard]] std::error_code read(std::string& out) const;
-  [[nodiscard]] std::error_code remove() const;
-  [[nodiscard]] bool initialized() const;
+
+  [[nodiscard]] std::error_code read(std::string& out) const override;
+  [[nodiscard]] std::error_code remove() const override;
+  [[nodiscard]] bool initialized() const override;
+
  private:
   std::error_code reset();
 
@@ -75,10 +121,28 @@ class LinuxKeyringSecret {
     return os << "LinuxKeyringSecret{" << secret._serial << "}";
   }
   friend class LinuxKeyringTest_LifecycleMoveAssignResetsDestination_Test;
+  friend class LinuxKeyring;
+};
+
+class LinuxKeyring : public Keyring {
+ public:
+  // Add a secret to the kernel process keyring. Beware: calling this
+  // with with an existing key _updates_ the value and causes multiple
+  // instances to refer to the same key.
+  tl::expected<std::unique_ptr<KeyringSecret>, std::error_code> add(
+      const std::string& key, const std::string& secret) noexcept override;
+  bool supported(std::error_code* ec) noexcept override;
+  [[nodiscard]] std::string_view name() const noexcept override {
+    return "Linux Kernel Key Retention Service";
+  };
+
+  ~LinuxKeyring() override = default;
 };
 }  // namespace ceph
 
 #if FMT_VERSION >= 90000
-template <>
-struct fmt::formatter<ceph::LinuxKeyringSecret> : fmt::ostream_formatter {};
+template <typename T>
+struct fmt::formatter<
+    T, std::enable_if_t<std::is_base_of_v<ceph::KeyringSecret, T>, char>>
+    : fmt::ostream_formatter {};
 #endif
