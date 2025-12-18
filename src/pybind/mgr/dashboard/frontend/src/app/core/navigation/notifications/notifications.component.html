@@ -1,15 +1,15 @@
 @if(isMuted) {
-  <cd-icon type="notificationOff"
-          [size]="iconSize">
+<cd-icon type="notificationOff"
+         [size]="iconSize">
 </cd-icon>
 }
-@else if(!isMuted && hasRunningTasks) {
-  <cd-icon type="notificationNew"
-          [size]="iconSize">
-  </cd-icon>
+@else if(!isMuted && ( hasRunningTasks || hasNotifications)) {
+<cd-icon type="notificationNew"
+         [size]="iconSize">
+</cd-icon>
 }
 @else {
-  <cd-icon type="notification"
-          [size]="iconSize">
-  </cd-icon>
+<cd-icon type="notification"
+         [size]="iconSize">
+</cd-icon>
 }

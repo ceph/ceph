@@ -1,5 +1,4 @@
-import { Component, Input } from '@angular/core';
-import { NotificationService } from '~/app/shared/services/notification.service';
+import { Component } from '@angular/core';
 import { trigger, transition, style, animate } from '@angular/animations';
 
 @Component({
@@ -19,7 +18,5 @@ import { trigger, transition, style, animate } from '@angular/animations';
   ]
 })
 export class NotificationPanelComponent {
-  @Input() isPanelOpen: boolean = true;
-
-  constructor(public notificationService: NotificationService) {}
+  constructor() {}
 }

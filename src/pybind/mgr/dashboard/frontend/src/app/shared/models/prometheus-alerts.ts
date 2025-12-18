@@ -92,7 +92,6 @@ export class PrometheusCustomAlert {
   description: string;
   fingerprint?: string | boolean;
   labels?: PrometheusAlertLabels;
-  annotations?: Annotations;
 }
 
 export const AlertState = {

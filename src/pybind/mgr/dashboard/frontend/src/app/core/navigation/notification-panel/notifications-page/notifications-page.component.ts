@@ -1,11 +1,4 @@
-import {
-  Component,
-  OnInit,
-  OnDestroy,
-  AfterViewInit,
-  ChangeDetectorRef,
-  AfterViewChecked
-} from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { CdNotification } from '~/app/shared/models/cd-notification';
@@ -18,12 +11,12 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
   selector: 'cd-notifications-page',
   templateUrl: './notifications-page.component.html',
   styleUrls: ['./notifications-page.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
-export class NotificationsPageComponent
-  implements OnInit, OnDestroy, AfterViewInit, AfterViewChecked {
+export class NotificationsPageComponent implements OnInit, OnDestroy {
   notifications: CdNotification[] = [];
-  selectedNotification: CdNotification | null = null;
+  selectedNotificationID: string | null = null;
   searchText: string = '';
   filteredNotifications: CdNotification[] = [];
   private sub: Subscription;
@@ -33,8 +26,7 @@ export class NotificationsPageComponent
     private notificationService: NotificationService,
     private prometheusAlertService: PrometheusAlertService,
     private prometheusNotificationService: PrometheusNotificationService,
-    private authStorageService: AuthStorageService,
-    private changeDetectorRef: ChangeDetectorRef
+    private authStorageService: AuthStorageService
   ) {}
 
   ngOnInit(): void {
@@ -51,7 +43,13 @@ export class NotificationsPageComponent
     // Subscribe to notifications from the service
     this.sub = this.notificationService.data$.subscribe((notifications) => {
       this.notifications = notifications;
-      this.filteredNotifications = notifications;
+
+      // preserve filtered array reference if search active
+      if (!this.searchText) {
+        this.filteredNotifications = notifications;
+      } else {
+        this.onSearch(this.searchText);
+      }
     });
   }
 
@@ -65,7 +63,11 @@ export class NotificationsPageComponent
   }
 
   onNotificationSelect(notification: CdNotification): void {
-    this.selectedNotification = notification;
+    this.selectedNotificationID = notification.id;
+  }
+
+  get selectedNotification(): CdNotification {
+    return this.filteredNotifications.find((n) => n.id === this.selectedNotificationID);
   }
 
   onSearch(value: string): void {
@@ -90,22 +92,20 @@ export class NotificationsPageComponent
 
     // Get the notification index from the service's data
     const notifications = this.notificationService['dataSource'].getValue();
-    const index = notifications.findIndex(
-      (n) => n.timestamp === notification.timestamp && n.title === notification.title
-    );
+    const index = notifications.findIndex((n) => n.id === notification.id);
 
     if (index > -1) {
       // Remove the notification through the service
       this.notificationService.remove(index);
 
       // Clear selection if the removed notification was selected
-      if (this.selectedNotification === notification) {
-        this.selectedNotification = null;
+      if (this.selectedNotificationID === notification.id) {
+        this.selectedNotificationID = null;
       }
     }
   }
 
-  getCarbonIcon(type: NotificationType): string {
+  getCarbonIcon(type: NotificationType | string): string {
     switch (type) {
       case NotificationType.success:
         return 'checkmark--filled';
@@ -120,7 +120,7 @@ export class NotificationsPageComponent
     }
   }
 
-  getIconColorClass(type: NotificationType): string {
+  getIconColorClass(type: NotificationType | string): string {
     switch (type) {
       case NotificationType.success:
         return 'icon-success';
@@ -167,11 +167,7 @@ export class NotificationsPageComponent
     this.prometheusNotificationService.refresh();
   }
 
-  ngAfterViewInit(): void {
-    this.sub.add(this.notificationService.data$.subscribe(() => {}));
-  }
-
-  ngAfterViewChecked() {
-    this.changeDetectorRef.detectChanges();
+  trackByNotificationId(_index: number, notification: CdNotification): string {
+    return notification.id;
   }
 }

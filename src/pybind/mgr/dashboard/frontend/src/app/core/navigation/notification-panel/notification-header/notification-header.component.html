@@ -5,24 +5,25 @@
   <div cdsCol
        [columnNumbers]="{sm: 8, md: 8, lg: 16}">
     <div cdsRow>
-      <div cdsGrid
-           [useCssGrid]="true"
-           [fullWidth]="true">
-         <cds-text
-              [columnNumbers]="{sm: 8, md: 8, lg: 11}"
-              i18n
-              cdsCol
-              class="notification-header__title">Tasks and Notifications</cds-text>
-          <button
-            cdsCol
-            [columnNumbers]="{sm: 8, md: 8, lg: 5}"
-            class="notification-header__dismiss-btn"
-            i18n
-            cdsButton="ghost"
-            size="sm"
-            (click)="onDismissAll()">
-            Dismiss all
-          </button>    
+      <div
+        cdsGrid
+        [useCssGrid]="true"
+        [fullWidth]="true">
+        <h1
+          [columnNumbers]="{sm: 8, md: 8, lg: 11}"
+          i18n
+          cdsCol
+          class="cds--type-heading-compact-01">Tasks and Notifications</h1>
+        <button
+          cdsCol
+          [columnNumbers]="{sm: 8, md: 8, lg: 5}"
+          class="notification-header__dismiss-btn"
+          i18n
+          cdsButton="ghost"
+          size="sm"
+          (click)="onDismissAll()">
+          Dismiss all
+        </button>
       </div>
     </div>
     <cds-toggle

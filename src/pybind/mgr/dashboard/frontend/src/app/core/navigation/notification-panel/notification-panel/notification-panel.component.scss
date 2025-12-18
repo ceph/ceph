@@ -1,10 +1,13 @@
-@use '@carbon/styles/scss/spacing';
-@use '@carbon/styles/scss/motion' as *;
-
-$block-class: notification-panel;
 $block-size: 38.5rem;
+$inline-max-size: 22.75rem;
+$inline-min-size: 20rem;
 
-.#{$block-class}__container {
+.notification-panel {
+  --header-height: 4.5625rem;
+  --panel-height: #{$block-size};
+  --panel-max-width: #{$inline-max-size};
+  --panel-min-width: #{$inline-min-size};
+
   position: fixed;
   z-index: 2;
   overflow: auto;
@@ -13,9 +16,9 @@ $block-size: 38.5rem;
   border-inline-start: 1px solid var(--cds-border-subtle-02);
   box-shadow: 0 0.125rem 0.25rem var(--cds-overlay);
   min-block-size: $block-size;
-  min-inline-size: 20rem;
+  min-inline-size: $inline-min-size;
   inset-block-start: 3rem;
   inset-inline-end: 0;
   max-block-size: $block-size;
-  max-inline-size: 22.75rem;
+  max-inline-size: $inline-max-size;
 }
