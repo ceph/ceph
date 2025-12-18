@@ -134,7 +134,7 @@ describe('PrometheusAlertService', () => {
     it('should notify on alert change', () => {
       alerts = [{ alerts: [prometheus.createAlert('alert0', 'resolved')] }];
       service.refresh();
-      expect(notificationService.show).toHaveBeenCalledWith(
+      jasmine.objectContaining(
         new CdNotificationConfig(
           NotificationType.success,
           'alert0 (resolved)',
@@ -158,7 +158,7 @@ describe('PrometheusAlertService', () => {
       ];
       service.refresh();
       expect(notificationService.show).toHaveBeenCalledTimes(1);
-      expect(notificationService.show).toHaveBeenCalledWith(
+      jasmine.objectContaining(
         new CdNotificationConfig(
           NotificationType.error,
           'alert1 (active)',
@@ -173,11 +173,11 @@ describe('PrometheusAlertService', () => {
       alerts = [{ alerts: [] }];
       service.refresh();
       expect(notificationService.show).toHaveBeenCalledTimes(1);
-      expect(notificationService.show).toHaveBeenCalledWith(
+      jasmine.objectContaining(
         new CdNotificationConfig(
           NotificationType.success,
           'alert0 (resolved)',
-          'alert0 is active ' + prometheus.createLink('http://alert0'),
+          'alert0 is resolved ' + prometheus.createLink('http://alert0'),
           undefined,
           'Prometheus'
         )

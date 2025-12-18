@@ -2,9 +2,9 @@
   <!-- ************************ -->
   <!-- NOTIFICATION PANEL     -->
   <!-- ************************ -->
-  <cd-notification-panel
-    *ngIf="isNotifPanelOpen"
-    [isPanelOpen]="isNotifPanelOpen"></cd-notification-panel>
+   @if(notificationService.panelState$ | async; as isNotifPanelOpen) {
+  <cd-notification-panel></cd-notification-panel>
+   }
   <!-- ************************ -->
   <!-- HEADER                   -->
   <!-- ************************ -->
@@ -34,11 +34,10 @@
       <cds-header-navigation>
         <cd-language-selector class="d-flex"></cd-language-selector>
       </cds-header-navigation>
-      <cds-header-action
-        description=""
-        [(active)]="isNotifPanelOpen">
-          <cd-notifications></cd-notifications>
-      </cds-header-action>
+      <div class="cds--btn cds--btn--icon-only cds--header__action"
+           (click)="onNotificationSelected($event)">
+        <cd-notifications></cd-notifications>
+      </div>
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-dashboard-help></cd-dashboard-help>
       </div>
