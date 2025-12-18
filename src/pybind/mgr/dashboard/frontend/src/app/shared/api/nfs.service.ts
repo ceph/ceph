@@ -96,6 +96,13 @@ export class NfsService extends ApiClient {
     });
   }
 
+  exists(clusterId: string): Observable<boolean> {
+    return this.listClusters(false).pipe(
+      map((names: any) => (names as string[]).includes(clusterId)),
+      catchError(() => observableOf(false))
+    );
+  }
+
   lsDir(fs_name: string, root_dir: string): Observable<Directory> {
     if (!fs_name) {
       return throwError($localize`Please specify a filesystem volume.`);

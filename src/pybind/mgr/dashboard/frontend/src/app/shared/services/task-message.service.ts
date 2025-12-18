@@ -689,6 +689,10 @@ export class TaskMessageService {
       )
     };
   }
+  
+  nfsCluster(metadata: { cluster_id: string }) {
+    return $localize`NFS cluster '${metadata.cluster_id}'`;
+  }
 
   nfsCluster(metadata: { cluster_id: string }) {
     return $localize`NFS cluster '${metadata.cluster_id}'`;
