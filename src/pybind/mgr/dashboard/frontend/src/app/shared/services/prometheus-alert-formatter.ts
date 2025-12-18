@@ -35,9 +35,7 @@ export class PrometheusAlertFormatter {
           url: alert.generatorURL,
           description: alert.annotations.description,
           fingerprint: _.isObject(alert.status) && (alert as AlertmanagerAlert).fingerprint,
-          // Store additional metadata for later use
-          labels: alert.labels,
-          annotations: alert.annotations
+          labels: alert.labels
         };
       }),
       _.isEqual
@@ -54,7 +52,7 @@ export class PrometheusAlertFormatter {
 
   convertAlertToNotification(alert: PrometheusCustomAlert): CdNotificationConfig {
     const config = new CdNotificationConfig(
-      this.formatType(alert.status),
+      this.formatType(alert?.status, alert?.labels?.severity),
       `${alert.name} (${alert.status})`,
       this.appendSourceLink(alert, alert.description),
       undefined,
@@ -76,12 +74,27 @@ export class PrometheusAlertFormatter {
     return config;
   }
 
-  private formatType(status: string): any {
+  private formatType(status: string, severity: string): NotificationType {
+    if (severity) {
+      switch (severity.toLowerCase()) {
+        case 'critical':
+          return NotificationType.error;
+        case 'warning':
+          return NotificationType.warning;
+        case 'info':
+          return NotificationType.info;
+        case 'resolved':
+          return NotificationType.success;
+      }
+    }
+
+    // Fallback: map status if severity not present
     const types = {
       error: ['firing', 'active'],
       info: ['suppressed', 'unprocessed'],
       success: ['resolved']
     };
+
     return NotificationType[_.findKey(types, (type: any) => type.includes(status))];
   }
 
