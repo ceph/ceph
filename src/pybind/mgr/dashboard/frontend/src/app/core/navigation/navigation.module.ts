@@ -86,7 +86,7 @@ import { NotificationFooterComponent } from './notification-panel/notification-f
     PlaceholderModule,
     TagModule,
     StructuredListModule,
-    SearchModule
+    SearchModule,
   ],
   declarations: [
     AboutComponent,
