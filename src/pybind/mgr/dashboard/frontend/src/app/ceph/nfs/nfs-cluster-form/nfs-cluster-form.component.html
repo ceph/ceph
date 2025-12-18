@@ -1,0 +1,203 @@
+<div cdsCol
+     [columnNumbers]="{ md: 4 }">
+  <ng-container *cdFormLoading="loading">
+    <form name="nfsForm"
+          #formDir="ngForm"
+          [formGroup]="nfsForm"
+          novalidate>
+      <div i18n="form title"
+           class="form-header">
+        {{ action | titlecase }} {{ resource | upperFirst }}
+      </div>
+
+      <!-- Cluster ID -->
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="cluster_id"
+          i18n
+          helperText="Unique identifier for the NFS cluster. This will be used as the service ID (e.g., 'nfs01')."
+          i18n-helperText
+          cdRequiredField="Cluster Name"
+          [invalid]="nfsForm.controls.cluster_id.invalid && nfsForm.controls.cluster_id.dirty"
+          [invalidText]="clusterIdError">
+          Cluster Name
+          <input
+            cdsText
+            type="text"
+            id="cluster_id"
+            formControlName="cluster_id"
+            [invalid]="nfsForm.controls.cluster_id.invalid && nfsForm.controls.cluster_id.dirty"
+          />
+        </cds-text-label>
+        <ng-template #clusterIdError>
+          <span
+            class="invalid-feedback"
+            *ngIf="nfsForm.showError('cluster_id', formDir, 'required')"
+            i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+      <cd-form-advanced-fieldset title="Service specifications">
+        <!-- Placement -->
+        <div class="form-item">
+          <cds-select
+            label="Placement"
+            formControlName="placement"
+            id="placement"
+            helperText="Choose whether to place NFS daemons on specific hosts or hosts with specific labels."
+            i18n-helperText
+          >
+            <option value="hosts"
+                    i18n>Hosts</option>
+            <option value="label"
+                    i18n>Labels</option>
+          </cds-select>
+        </div>
+
+        <ng-container *ngIf="hostsAndLabels$ | async as data">
+          <!-- Label -->
+          <div *ngIf="nfsForm.controls.placement.value === 'label'"
+               class="form-item">
+            <cds-combo-box
+              type="multi"
+              selectionFeedback="top-after-reopen"
+              label="Label"
+              formControlName="label"
+              id="label"
+              placeholder="Select labels..."
+              [appendInline]="true"
+              [items]="data.labels"
+              i18n-placeholder
+              (selected)="multiSelector($event, 'label')"
+              [invalid]="nfsForm.controls.label.invalid && nfsForm.controls.label.dirty"
+              [invalidText]="labelError"
+              i18n
+            >
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+            <ng-template #labelError>
+              <span
+                class="invalid-feedback"
+                *ngIf="nfsForm.showError('label', formDir, 'required')"
+                i18n>This field is required.</span>
+            </ng-template>
+          </div>
+
+          <!-- Hosts -->
+          <div *ngIf="nfsForm.controls.placement.value === 'hosts'"
+               class="form-item">
+            <cds-combo-box
+              type="multi"
+              selectionFeedback="top-after-reopen"
+              label="Hosts"
+              formControlName="hosts"
+              id="hosts"
+              placeholder="Select hosts..."
+              i18n-placeholder
+              [appendInline]="true"
+              [items]="data.hosts"
+              (selected)="multiSelector($event, 'hosts')"
+              i18n
+            >
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+          </div>
+        </ng-container>
+
+        <!-- Count -->
+        <div class="form-item">
+          <cds-number
+            [id]="'count'"
+            formControlName="count"
+            [label]="'Count'"
+            [min]="1"
+            helperText="Number of NFS daemon instances to deploy. When hosts are selected, this defaults to the number of selected hosts."
+            i18n-helperText
+          ></cds-number>
+        </div>
+      </cd-form-advanced-fieldset>
+
+      <!-- Ingress / Networking -->
+      <cd-form-advanced-fieldset title="Ingress / Networking">
+        <!-- Enable Ingress -->
+        <div class="form-item">
+          <fieldset>
+            <cds-checkbox i18n-label formControlName="ingress">
+              Enable Ingress
+              <cd-help-text i18n>
+                If Ingress is enabled, an Ingress service will be created with a virtual IP for high availability access to the NFS cluster.
+                Additional networking properties will be required.
+              </cd-help-text>
+            </cds-checkbox>
+          </fieldset>
+        </div>
+
+        <ng-container *ngIf="nfsForm.get('ingress').value">
+          <!-- Virtual IP -->
+          <div class="form-item">
+            <cds-text-label
+              labelInputID="virtual_ip"
+              i18n
+              helperText="Virtual IP address with CIDR notation for the ingress service."
+              i18n-helperText
+              cdRequiredField="Virtual IP"
+              [invalid]="nfsForm.controls.virtual_ip.invalid && nfsForm.controls.virtual_ip.dirty"
+              [invalidText]="virtualIpError"
+            >
+              Virtual IP
+              <input
+                cdsText
+                type="text"
+                id="virtual_ip"
+                formControlName="virtual_ip"
+                placeholder="192.0.2.10/24 or 2001:db8::1/64"
+                i18n-placeholder
+                [invalid]="nfsForm.controls.virtual_ip.invalid && nfsForm.controls.virtual_ip.dirty"
+              />
+            </cds-text-label>
+            <ng-template #virtualIpError>
+              <span
+                class="invalid-feedback"
+                *ngIf="nfsForm.showError('virtual_ip', formDir, 'required')"
+                i18n>Virtual IP is required when ingress is enabled.</span>
+            </ng-template>
+          </div>
+
+          <!-- Ingress Mode -->
+          <div class="form-item">
+            <cds-select
+              formControlName="ingress_mode"
+              label="Ingress Mode"
+              id="ingress_mode"
+              helperText="Select the ingress mode for load balancing and high availability."
+              i18n-helperText
+            >
+              <option *ngFor="let m of ingressModes"
+                      [value]="m.value">{{ m.label }}</option>
+            </cds-select>
+          </div>
+        </ng-container>
+
+        <!-- Port -->
+        <div class="form-item">
+          <cds-number
+            [id]="'port'"
+            formControlName="port"
+            [label]="'Port'"
+            [min]="1"
+            placeholder="2049"
+            helperText="NFS service port. Default is 2049."
+            i18n-helperText
+          ></cds-number>
+        </div>
+      </cd-form-advanced-fieldset>
+
+      <cd-form-button-panel
+        (submitActionEvent)="submitAction()"
+        [form]="nfsForm"
+        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+        wrappingClass="text-right"
+      ></cd-form-button-panel>
+    </form>
+  </ng-container>
+</div>
