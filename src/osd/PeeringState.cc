@@ -2924,6 +2924,10 @@ void PeeringState::activate(
   send_notify = false;
 
   if (is_primary()) {
+    // Update the epoch so that pwlc used by the primary during
+    // peering becomes the definitive copy of pwlc
+    info.partial_writes_last_complete_epoch = get_osdmap_epoch();
+
     // only update primary last_epoch_started if we will go active
     if (acting_set_writeable()) {
       ceph_assert(cct->_conf->osd_find_best_info_ignore_history_les ||
@@ -3379,9 +3383,6 @@ void PeeringState::consider_rollback_pwlc(eversion_t last_complete)
 		 << info.partial_writes_last_complete[shard] << dendl;
     }
   }
-  // Update the epoch so that pwlc adjustments made by the whole
-  // proc_master_log process are recognized as the newest updates
-  info.partial_writes_last_complete_epoch = get_osdmap_epoch();
 }
 
 void PeeringState::proc_master_log(
