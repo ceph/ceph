@@ -67,7 +67,7 @@ class CBT(Task):
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', 'pdsh', 'pdsh-rcmd-ssh','perf']
+            cbt_depends = ['librbd-devel', 'pdsh', 'pdsh-rcmd-ssh','perf']
             self.log.info('Installing collectl')
             collectl_location = "https://sourceforge.net/projects/collectl/files/collectl/collectl-4.3.1/collectl-4.3.1.src.tar.gz/download"
             self.first_mon.run(
@@ -82,8 +82,19 @@ class CBT(Task):
             )
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
-            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-dev', 'collectl', 'linux-tools-generic']
+            cbt_depends = ['librbd-dev', 'collectl', 'linux-tools-generic']
         self.first_mon.run(args=install_cmd + cbt_depends)
+
+        # Install the python dependencies from the CBT project requirements.txt file
+        pip_install_cmd = [
+            'python3',
+            '-m',
+            'pip',
+            'install',
+            '-r',
+            f'{misc.get_testdir(self.ctx)}/cbt/requirements.txt',
+        ]
+        self.first_mon.run(args=pip_install_cmd)
 
         benchmark_type = next(iter(self.cbt_config.get('benchmarks').keys()))
         self.log.info('benchmark: %s', benchmark_type)

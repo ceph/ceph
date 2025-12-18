@@ -344,9 +344,7 @@ General Settings
 .. confval:: ms_inject_socket_failures
 
 
-.. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
 .. _Hardware Recommendations - Networks: ../../../start/hardware-recommendations#networks
-.. _hardware recommendations: ../../../start/hardware-recommendations
 .. _Monitor / OSD Interaction: ../mon-osd-interaction
 .. _Message Signatures: ../auth-config-ref#signatures
 .. _CIDR: https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing

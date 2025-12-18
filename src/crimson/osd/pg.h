@@ -936,9 +936,17 @@ public:
     int *return_code,
     std::vector<pg_log_op_return_item_t> *op_returns) const;
   int get_recovery_op_priority() const {
-    int64_t pri = 0;
-    get_pgpool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
-    return  pri > 0 ? pri : crimson::common::local_conf()->osd_recovery_op_priority;
+    return peering_state.get_recovery_op_priority();
+  }
+  int64_t get_average_object_size() {
+    const auto& stats = get_info().stats.stats.sum;
+    auto num_objects = stats.num_objects;
+    auto num_bytes =   stats.num_bytes;
+
+    if (num_objects <= 0)
+      return 0;
+
+    return num_bytes / num_objects;
   }
   seastar::future<> mark_unfound_lost(int) {
     // TODO: see PrimaryLogPG::mark_all_unfound_lost()

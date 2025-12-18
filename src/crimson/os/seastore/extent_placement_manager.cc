@@ -538,7 +538,7 @@ ExtentPlacementManager::write_delayed_ool_extents(
 ExtentPlacementManager::alloc_paddr_iertr::future<>
 ExtentPlacementManager::write_preallocated_ool_extents(
     Transaction &t,
-    std::list<CachedExtentRef> extents)
+    std::list<CachedExtentRef> &extents)
 {
   LOG_PREFIX(ExtentPlacementManager::write_preallocated_ool_extents);
   DEBUGT("start with {} allocated extents",
@@ -546,7 +546,7 @@ ExtentPlacementManager::write_preallocated_ool_extents(
   assert(writer_refs.size());
   return seastar::do_with(
       std::map<ExtentOolWriter*, std::list<CachedExtentRef>>(),
-      [this, &t, extents=std::move(extents)](auto& alloc_map) {
+      [this, &t, &extents](auto& alloc_map) {
     for (auto& extent : extents) {
       auto writer_ptr = get_writer(
           extent->get_user_hint(),

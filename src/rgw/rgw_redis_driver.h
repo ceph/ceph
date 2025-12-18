@@ -32,7 +32,7 @@ class RedisDriver : public CacheDriver {
 
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
-    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override;
+    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp, optional_yield y) override;
 
     virtual int initialize(const DoutPrefixProvider* dpp) override;
     virtual int put(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, optional_yield y) override;
@@ -58,7 +58,7 @@ class RedisDriver : public CacheDriver {
     uint64_t free_space;
     uint64_t outstanding_write_size;
 
-  std::optional<fs::path> resolve_valkey_data_dir(const DoutPrefixProvider* dpp) const;
+  std::optional<fs::path> resolve_valkey_data_dir(const DoutPrefixProvider* dpp, optional_yield y) const;
 
     struct redis_response {
       request req;

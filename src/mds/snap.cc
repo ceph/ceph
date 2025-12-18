@@ -145,7 +145,7 @@ ostream& operator<<(ostream& out, const snaplink_t &l)
 
 void sr_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(7, 4, bl);
+  ENCODE_START(8, 4, bl);
   encode(seq, bl);
   encode(created, bl);
   encode(last_created, bl);
@@ -183,6 +183,17 @@ void sr_t::decode(bufferlist::const_iterator& p)
   if (struct_v >= 7) {
     decode(last_modified, p);
     decode(change_attr, p);
+  }
+  // ensure that after a cluster upgrade, snapshot visibility is enabled
+  // by default.
+  if (struct_v < 6) {
+    // struct_v < 6: `flags` member did not exist - initialize to default
+    // state i.e. with snapshot visibility enabled.
+    flags = SNAPDIR_VISIBILITY;
+  } else if (struct_v < 8) {
+    // struct_v 6-7: `flags` member exists but didn't have the snapshot
+    // visibility bit set. So, set it in-memory.
+    flags |= SNAPDIR_VISIBILITY;
   }
   DECODE_FINISH(p);
 }

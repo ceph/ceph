@@ -12,7 +12,7 @@ from collections import OrderedDict
 from tempfile import NamedTemporaryFile
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
-from mgr_util import get_default_addr, profile_method, build_url
+from mgr_util import get_default_addr, profile_method, build_url, test_port_allocation, PortAlreadyInUse
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from rbd import RBD
 
@@ -31,6 +31,39 @@ DEFAULT_PORT = 9283
 # it's a dict, the writer doesn't need to declare 'global' for access
 
 _global_instance = None  # type: Optional[Module]
+# Configuration for port availability waiting
+PORT_WAIT_MAX_TIME = 10.0  # Maximum time to wait for port to become available
+PORT_WAIT_INTERVAL = 0.5   # Polling interval
+
+
+def _wait_for_port_available(
+    log: Any,
+    server_addr: str,
+    server_port: int,
+    max_wait_time: float = PORT_WAIT_MAX_TIME
+) -> bool:
+    """
+    Wait for a port to become available using test_port_allocation.
+
+    Returns:
+        True if port became available, False if timeout reached.
+    """
+    elapsed = 0.0
+    while elapsed < max_wait_time:
+        try:
+            test_port_allocation(server_addr, server_port)
+            return True  # Port is available
+        except PortAlreadyInUse:
+            log.debug(f'Port {server_port} still in use, waiting...')
+            time.sleep(PORT_WAIT_INTERVAL)
+            elapsed += PORT_WAIT_INTERVAL
+        except Exception as e:
+            # For other errors (e.g., invalid address), just return and let CherryPy handle it
+            log.debug(f'Port check failed with: {e}')
+            return True
+    return False
+
+
 cherrypy.config.update({
     'response.headers.server': 'Ceph-Prometheus'
 })
@@ -641,6 +674,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.cert_file: IO[bytes]
         self.metrics = self._setup_static_metrics()
         self.shutdown_event = threading.Event()
+        self.config_change_event = threading.Event()
         self.collect_lock = threading.Lock()
         self.collect_time = 0.0
         self.scrape_interval: float = 15.0
@@ -937,18 +971,10 @@ class Module(MgrModule, OrchestratorClientMixin):
     def config_notify(self) -> None:
         """
         This method is called whenever one of our config options is changed.
+        Signal the serve loop to restart the engine with the new configuration.
         """
-        # https://stackoverflow.com/questions/7254845/change-cherrypy-port-and-restart-web-server
-        # if we omit the line: cherrypy.server.httpserver = None
-        # then the cherrypy server is not restarted correctly
-        self.log.info('Restarting engine...')
-        cherrypy.engine.stop()
-        cherrypy.server.httpserver = None
-        server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
-        server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
-        self.configure(server_addr, server_port)
-        cherrypy.engine.start()
-        self.log.info('Engine started.')
+        self.log.info('Config changed, signaling serve loop to restart engine')
+        self.config_change_event.set()
 
     @profile_method()
     def get_health(self) -> None:
@@ -2116,6 +2142,10 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.configure(server_addr, server_port)
 
         cherrypy.tree.mount(Root(), "/")
+
+        # Wait for port to be available before starting (handles standby->active transition)
+        if not _wait_for_port_available(self.log, server_addr, server_port):
+            self.log.warning(f'Port {server_port} still in use after waiting, attempting to start anyway')
         self.log.info('Starting engine...')
         try:
             cherrypy.engine.start()
@@ -2124,8 +2154,43 @@ class Module(MgrModule, OrchestratorClientMixin):
             return
         self.log.info('Engine started.')
 
-        # wait for the shutdown event
-        self.shutdown_event.wait()
+        # Main event loop: handle both shutdown and config change events
+        while True:
+            # Wait for either shutdown or config change event (check every 0.5s)
+            while not self.shutdown_event.is_set() and not self.config_change_event.is_set():
+                self.shutdown_event.wait(timeout=0.5)
+
+            if self.shutdown_event.is_set():
+                # Clean shutdown requested
+                break
+
+            if self.config_change_event.is_set():
+                # Config changed, restart engine with new configuration
+                self.config_change_event.clear()
+                self.log.info('Restarting engine due to config change...')
+
+                # https://stackoverflow.com/questions/7254845/change-cherrypy-port-and-restart-web-server
+                # if we omit the line: cherrypy.server.httpserver = None
+                # then the cherrypy server is not restarted correctly
+                cherrypy.engine.stop()
+                cherrypy.server.httpserver = None
+
+                # Re-read configuration
+                server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
+                server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
+                self.configure(server_addr, server_port)
+
+                # Wait for port to be available before starting
+                if not _wait_for_port_available(self.log, server_addr, server_port):
+                    self.log.warning(f'Port {server_port} still in use after waiting, attempting to start anyway')
+
+                try:
+                    cherrypy.engine.start()
+                    self.log.info('Engine restarted.')
+                except Exception as e:
+                    self.log.error(f'Failed to restart engine: {e}')
+
+        # Cleanup on shutdown
         self.shutdown_event.clear()
         # tell metrics collection thread to stop collecting new metrics
         self.metrics_thread.stop()
@@ -2181,10 +2246,10 @@ class StandbyModule(MgrStandbyModule):
         self.shutdown_event = threading.Event()
 
     def serve(self) -> None:
-        server_addr = self.get_localized_module_option(
-            'server_addr', get_default_addr())
-        server_port = self.get_localized_module_option(
-            'server_port', DEFAULT_PORT)
+        server_addr = cast(str, self.get_localized_module_option(
+            'server_addr', get_default_addr()))
+        server_port = cast(int, self.get_localized_module_option(
+            'server_port', DEFAULT_PORT))
         self.log.info("server_addr: %s server_port: %s" %
                       (server_addr, server_port))
         cherrypy.config.update({
@@ -2219,9 +2284,14 @@ class StandbyModule(MgrStandbyModule):
                 return ''
 
         cherrypy.tree.mount(Root(), '/', {})
+
+        # Wait for port to be available before starting
+        if not _wait_for_port_available(self.log, server_addr, server_port):
+            self.log.warning(f'Port {server_port} still in use after waiting, attempting to start anyway')
         self.log.info('Starting engine...')
         cherrypy.engine.start()
         self.log.info('Engine started.')
+
         # Wait for shutdown event
         self.shutdown_event.wait()
         self.shutdown_event.clear()

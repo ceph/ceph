@@ -74,7 +74,7 @@ export class NvmeofService {
 
   // Gateway groups
   listGatewayGroups() {
-    return this.http.get<GatewayGroup[][]>(`${API_PATH}/gateway/group`);
+    return this.http.get<CephServiceSpec[][]>(`${API_PATH}/gateway/group`);
   }
 
   // Gateways

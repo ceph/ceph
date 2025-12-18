@@ -50,7 +50,6 @@ target_link_libraries(denc-mod-osd
   os
   osd
   mon
-  erasure_code
   global)
 
 if(WITH_RADOSGW)

@@ -39,8 +39,8 @@ function munge_ceph_spec_in {
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
-    if $with_crimson; then
-        sed -i -e 's/%bcond_with crimson/%bcond_without crimson/g' $OUTFILE
+    if ! $with_crimson; then
+        sed -i -e 's/%bcond_without crimson/%bcond_with crimson/g' $OUTFILE
     fi
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE

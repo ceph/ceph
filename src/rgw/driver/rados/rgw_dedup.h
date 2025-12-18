@@ -161,6 +161,7 @@ namespace rgw::dedup {
                                      const rgw::sal::Bucket *p_bucket,
                                      const parsed_etag_t    *p_parsed_etag,
                                      const std::string      &obj_name,
+                                     const std::string      &instance,
                                      uint64_t                obj_size,
                                      const std::string      &storage_class);
 

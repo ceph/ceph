@@ -121,7 +121,7 @@ void mon_info_t::dump(ceph::Formatter *f) const
 {
   f->dump_string("name", name);
   f->dump_object("public_addrs", public_addrs);
-  f->dump_stream("addr") << public_addrs; /* sigh: backwards compat */
+  f->dump_stream("addr") << public_addrs.get_legacy_str(); /* sigh: backwards compat */
   f->dump_string("public_addr", public_addrs.get_legacy_str()); /* sighhhhh */
   f->dump_int("priority", priority);
   f->dump_float("weight", weight);

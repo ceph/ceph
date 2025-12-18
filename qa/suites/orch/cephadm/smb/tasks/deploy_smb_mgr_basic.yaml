@@ -52,6 +52,22 @@ tasks:
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user2%t3stP4ss2 //{{'host.a'|role_to_remote|attr('ip_address')}}/share2 -c ls"
 
+- smb.workunit:
+    admin_node: host.a
+    smb_nodes: [host.a]
+    smb_shares:
+      - share1
+      - share2
+    smb_users:
+      - username: user1
+        password: t3stP4ss1
+      - username: user2
+        password: t3stP4ss2
+    timeout: 1h
+    clients:
+      client.0:
+        - [default]
+
 - cephadm.shell:
     host.a:
       - cmd: ceph smb share rm modusr1 share2

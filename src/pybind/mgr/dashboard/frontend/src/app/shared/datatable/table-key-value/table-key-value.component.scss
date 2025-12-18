@@ -1,3 +1,10 @@
 .pre-wrap {
   white-space: pre-wrap;
 }
+
+.key-value-table .cds--data-table td {
+  max-width: 16rem;
+  overflow-wrap: break-word;
+  white-space: normal;
+  text-overflow: unset;
+}
