@@ -31,7 +31,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
   clusterTokenStatus: object = {};
   summaryData: any;
 
-  isNotifPanelOpen = false;
+  isNotifPanelOpen = true;
   showMenuSidebar = true;
 
   simplebar = {
