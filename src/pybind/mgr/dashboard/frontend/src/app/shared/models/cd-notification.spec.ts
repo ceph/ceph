@@ -56,8 +56,20 @@ describe('cd-notification classes', () => {
 
   describe('CdNotification', () => {
     beforeEach(() => {
-      const baseTime = new Date('2022-02-22');
-      spyOn(global, 'Date').and.returnValue(baseTime);
+      const baseTime = new Date('2022-02-22T00:00:00.000Z');
+      const OriginalDate = Date;
+
+      spyOn(global as any, 'Date').and.callFake(function (...args: any[]): any {
+        if (args.length === 0) {
+          return baseTime;
+        }
+        return new (OriginalDate as any)(...args);
+      });
+
+      Object.defineProperty(Date, 'now', {
+        configurable: true,
+        value: () => baseTime.getTime()
+      });
     });
 
     it('should create a new config without any parameters', () => {

@@ -28,7 +28,6 @@ export class NotificationsComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.summaryService.subscribe((summary) => {
         this.hasRunningTasks = summary.executing_tasks.length > 0;
-        // TODO: when notifications are mute - show unread icon too
       })
     );
 
@@ -36,6 +35,12 @@ export class NotificationsComponent implements OnInit, OnDestroy {
       this.notificationService.muteState$.subscribe((isMuted) => {
         this.isMuted = isMuted;
       })
+    );
+
+    this.subs.add(
+      this.notificationService.hasUnread$.subscribe(
+        (hasUnread) => (this.hasNotifications = hasUnread)
+      )
     );
   }
 

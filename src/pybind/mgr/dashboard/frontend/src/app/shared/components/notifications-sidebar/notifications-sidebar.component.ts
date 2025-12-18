@@ -103,7 +103,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
 
     this.subs.add(
       this.notificationService.panelState$.subscribe((state) => {
-        this.isSidebarOpened = state.isOpen && !state.useNewPanel;
+        this.isSidebarOpened = state;
         this.cdRef.detectChanges();
       })
     );
@@ -159,7 +159,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   }
 
   closeSidebar() {
-    this.notificationService.toggleSidebar(false, false);
+    this.notificationService.togglePanel(false);
   }
 
   trackByFn(index: number) {

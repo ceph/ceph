@@ -1,16 +1,7 @@
-<cds-modal
-  [open]="isPanelOpen"
-  size="xs"
-  cdsTheme="g10"
-  class="notification-panel__container"
-  hasScrollingContent="true"
-  @panelAnimation>
-  <cds-modal-header
-    [showCloseButton]="true">
-    <cd-notification-header></cd-notification-header>
-  </cds-modal-header>
+<div
+  class="notification-panel"
+  cdsTheme="g10">
+  <cd-notification-header></cd-notification-header>
   <cd-notification-area></cd-notification-area>
-  <cds-modal-footer>
-      <cd-notification-footer></cd-notification-footer>
-  </cds-modal-footer>
-</cds-modal>
+  <cd-notification-footer></cd-notification-footer>
+</div>

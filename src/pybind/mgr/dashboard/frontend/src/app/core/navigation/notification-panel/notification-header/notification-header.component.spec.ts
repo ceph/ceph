@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NotificationHeaderComponent } from './notification-header.component';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { BehaviorSubject } from 'rxjs';
+import { GridModule, ToggleModule } from 'carbon-components-angular';
 
 describe('NotificationHeaderComponent', () => {
   let component: NotificationHeaderComponent;
@@ -13,6 +14,7 @@ describe('NotificationHeaderComponent', () => {
     muteStateSubject = new BehaviorSubject<boolean>(false);
     await TestBed.configureTestingModule({
       declarations: [NotificationHeaderComponent],
+      imports: [ToggleModule, GridModule],
       providers: [
         {
           provide: NotificationService,

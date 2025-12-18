@@ -13,6 +13,6 @@ export class NotificationFooterComponent {
   closePanel(event: Event) {
     event.preventDefault();
     event.stopPropagation();
-    this.notificationService.toggleSidebar(false, true);
+    this.notificationService.setPanelState(false);
   }
 }
