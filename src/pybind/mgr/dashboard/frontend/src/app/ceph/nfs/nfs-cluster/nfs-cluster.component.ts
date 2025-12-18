@@ -11,9 +11,11 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { NFSCluster } from '../models/nfs-cluster-config';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
 import { BehaviorSubject, Observable } from 'rxjs';
+import { Router } from '@angular/router';
 import { switchMap } from 'rxjs/operators';
-const BASE_URL = 'cephfs/nfs';
+const BASE_URL = 'cephfs/nfs/cluster';
 @Component({
   selector: 'cd-nfs-cluster',
   templateUrl: './nfs-cluster.component.html',
@@ -43,7 +45,9 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
     protected ngZone: NgZone,
     private authStorageService: AuthStorageService,
     private nfsService: NfsService,
-    private orchService: OrchestratorService
+    private orchService: OrchestratorService,
+    private urlBuilder: URLBuilderService
+    , private router: Router
   ) {
     super();
   }
@@ -77,6 +81,15 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
         prop: 'virtual_ip',
         flexGrow: 1,
         cellTemplate: this.virtualIpTpl
+      }
+    ];
+    this.tableActions = [
+      {
+        name: `${this.actionLabels.CREATE} cluster`,
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.router.navigateByUrl(this.urlBuilder.getCreate()),
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
       }
     ];
   }
