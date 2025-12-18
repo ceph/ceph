@@ -15,7 +15,9 @@
 
 #include "keyring.h"
 
-#ifndef _WIN32
+#include <memory>
+
+#if defined(__linux__)
 extern "C" {
 #include <keyutils.h>
 }
@@ -23,38 +25,41 @@ extern "C" {
 
 namespace ceph {
 
-#ifdef _WIN32
+std::unique_ptr<Keyring> Keyring::get_best() {
+#if defined(__linux__)
+  return std::make_unique<LinuxKeyring>();
+#else
+  return std::make_unique<UnsupportedKeyring>();
+#endif
+}
 
-LinuxKeyringSecret::LinuxKeyringSecret(key_serial_t serial, size_t len) noexcept
-    : _len(len), _serial(serial) {}
-
-LinuxKeyringSecret::~LinuxKeyringSecret() noexcept {}
-
-tl::expected<LinuxKeyringSecret, std::error_code> LinuxKeyringSecret::add(
+tl::expected<std::unique_ptr<KeyringSecret>, std::error_code>
+UnsupportedKeyring::add(
     const std::string& key, const std::string& secret) noexcept {
   return tl::unexpected(std::error_code(-ENOSYS, std::system_category()));
 }
 
-bool LinuxKeyringSecret::supported() noexcept {
+bool UnsupportedKeyring::supported(std::error_code* ec) noexcept {
+  if (ec != nullptr) {
+    *ec = {-ENOSYS, std::system_category()};
+  }
   return false;
 }
 
-void LinuxKeyringSecret::initialize_process_keyring() noexcept {
-}
-
-[[nodiscard]] std::error_code LinuxKeyringSecret::read(std::string& out) const {
+[[nodiscard]] std::error_code UnsupportedKeyringSecret::read(
+    std::string& out) const {
   return {-ENOSYS, std::system_category()};
 }
 
-[[nodiscard]] std::error_code LinuxKeyringSecret::remove() const {
+[[nodiscard]] std::error_code UnsupportedKeyringSecret::remove() const {
   return {-ENOSYS, std::system_category()};
 }
 
-[[nodiscard]] std::error_code LinuxKeyringSecret::reset() {
-  return {-ENOSYS, std::system_category()};
+[[nodiscard]] bool UnsupportedKeyringSecret::initialized() const {
+  return false;
 }
 
-#else
+#if defined(__linux__)
 
 LinuxKeyringSecret::LinuxKeyringSecret(key_serial_t serial, size_t len) noexcept
     : _len(len), _serial(serial) {}
@@ -63,7 +68,7 @@ LinuxKeyringSecret::~LinuxKeyringSecret() noexcept {
   reset();
 }
 
-tl::expected<LinuxKeyringSecret, std::error_code> LinuxKeyringSecret::add(
+tl::expected<std::unique_ptr<KeyringSecret>, std::error_code> LinuxKeyring::add(
     const std::string& key, const std::string& secret) noexcept {
   const auto serial = add_key(
       "user", key.c_str(), secret.c_str(), secret.size(),
@@ -71,25 +76,28 @@ tl::expected<LinuxKeyringSecret, std::error_code> LinuxKeyringSecret::add(
   if (serial == -1) {
     return tl::unexpected(std::error_code(errno, std::system_category()));
   }
-  return LinuxKeyringSecret(serial, secret.size());
+  return std::unique_ptr<KeyringSecret>(
+      new LinuxKeyringSecret(serial, secret.size()));
 }
 
-bool LinuxKeyringSecret::supported(std::error_code* ec) noexcept {
-  auto secret = LinuxKeyringSecret::add("ceph_test_keyring_support", "ceph");
-  if (!secret) {
+bool LinuxKeyring::supported(std::error_code* ec) noexcept {
+  LinuxKeyring keyring;
+  auto maybe_secret = keyring.add("ceph_test_keyring_support", "ceph");
+  if (!maybe_secret) {
     if (ec != nullptr) {
-      *ec = secret.error();
+      *ec = maybe_secret.error();
     }
     return false;
   }
   std::string out;
-  if (auto err = secret.value().read(out); err) {
+  auto* secret = static_cast<LinuxKeyringSecret*>(maybe_secret.value().get());
+  if (auto err = secret->read(out); err) {
     if (ec != nullptr) {
       *ec = err;
     }
     return false;
   }
-  if (auto err = secret.value().reset(); err) {
+  if (auto err = secret->reset(); err) {
     if (ec != nullptr) {
       *ec = err;
     }
