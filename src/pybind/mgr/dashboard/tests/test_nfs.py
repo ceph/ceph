@@ -8,7 +8,7 @@ from nfs.export import AppliedExportResults
 
 from .. import mgr
 from ..controllers._version import APIVersion
-from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi
+from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi, format_host_ip_addrs, normalize_networks, parse_ingress_mode
 from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 
@@ -242,3 +242,25 @@ class NFSGaneshaUiControllerTest(ControllerTestCase):
         self._get('/ui-api/nfs-ganesha/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': False, 'message': 'Test'})
+
+
+class NFSIngressModeTest(ControllerTestCase):
+    def test_parse_ingress_mode_values(self):
+        from orchestrator.module import IngressType
+
+        self.assertEqual(parse_ingress_mode('default'), IngressType.default)
+        self.assertEqual(parse_ingress_mode('keepalive-only'), IngressType.keepalive_only)
+        self.assertEqual(parse_ingress_mode('haproxy-standard'), IngressType.haproxy_standard)
+        self.assertEqual(parse_ingress_mode('haproxy-protocol'), IngressType.haproxy_protocol)
+        self.assertIsNone(parse_ingress_mode(None))
+
+    def test_format_host_ip_addrs(self):
+        self.assertEqual(
+            format_host_ip_addrs([{'hostname': 'host1', 'ip': '10.0.0.1'}]),
+            'host1:10.0.0.1'
+        )
+        self.assertIsNone(format_host_ip_addrs([]))
+
+    def test_normalize_networks(self):
+        self.assertEqual(normalize_networks(['10.0.0.0/24', ' 192.168.0.0/24 ']), ['10.0.0.0/24', '192.168.0.0/24'])
+        self.assertIsNone(normalize_networks([]))

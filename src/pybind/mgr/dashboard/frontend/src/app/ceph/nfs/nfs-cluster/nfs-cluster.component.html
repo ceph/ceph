@@ -1,7 +1,7 @@
-@if (orchStatus?.available && clusters$ | async; as clusters) {
+@if (orchStatus?.available) {
   <cd-table
-    [autoReload]="true"
-    [data]="clusters"
+    [autoReload]="5000"
+    [data]="clusters$ | async"
     columnMode="flex"
     [columns]="columns"
     selectionType="single"
