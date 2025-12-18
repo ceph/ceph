@@ -113,7 +113,7 @@ void MirroringWatcher<I>::notify_group_updated(
   ldout(cct, 20) << "pool_name: " << io_ctx.get_pool_name()
                  << ", group_id: " << group_id << " "
                  << ", global_group_id: " << global_group_id
-                 << ", mirror_image_state: " << mirror_group_state << dendl;
+                 << ", mirror_group_state: " << mirror_group_state << dendl;
 
   bufferlist bl;
   encode(NotifyMessage{GroupUpdatedPayload{

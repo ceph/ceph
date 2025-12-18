@@ -29,6 +29,7 @@
 #include "librbd/mirror/GetStatusRequest.h"
 #include "librbd/mirror/GetUuidRequest.h"
 #include "librbd/mirror/GroupEnableRequest.h"
+#include "librbd/mirror/GroupDisableRequest.h"
 #include "librbd/mirror/GroupPromoteRequest.h"
 #include "librbd/mirror/GroupGetInfoRequest.h"
 #include "librbd/mirror/PromoteRequest.h"
@@ -2817,126 +2818,15 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
     return r;
   }
 
-  mirror::PromotionState promotion_state;
-  cls::rbd::MirrorGroup mirror_group;
-  C_SaferCond ctx;
-  // pass group_id to get ENOENT error returned back when group is not mirror enabled
-  auto request = mirror::GroupGetInfoRequest<I>::create(
-    group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
-  request->send();
-  r = ctx.wait();
-  if (r == -ENOENT) {
-    ldout(cct, 10) << "ignoring disable command: mirroring is not enabled for "
-                   << "this group: " << group_name << dendl;
-    return 0;
-  } else if (r < 0) {
-    lderr(cct) << "failed to get mirror group info: "
-               << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  bool is_primary = (promotion_state == mirror::PROMOTION_STATE_PRIMARY ||
-                     promotion_state == mirror::PROMOTION_STATE_UNKNOWN);
-
-  if (!is_primary && !force) {
-    lderr(cct) << "mirrored group " << group_name
-               << " is not primary, add force option to disable mirroring"
-               << dendl;
-    return -EINVAL;
-  }
-
-  // removing pending resync request
-  std::string group_header_oid = librbd::util::group_header_name(group_id);
-  r = librbd::cls_client::metadata_remove(&group_ioctx, group_header_oid,
-                                          RBD_GROUP_RESYNC);
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "failed removing metadata: " << RBD_GROUP_RESYNC << ": "
-               << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  std::vector<I *> image_ctxs;
-  r = open_group_images(group_ioctx, group_id, &image_ctxs);
-  if (r < 0) {
-    return r;
-  }
-
-  mirror_group.state = cls::rbd::MIRROR_GROUP_STATE_DISABLING;
-  r = cls_client::mirror_group_set(&group_ioctx, group_id, mirror_group);
-  if (r < 0) {
-    lderr(cct) << "failed to update mirroring group metadata: "
-               << cpp_strerror(r) << dendl;
-    close_images(&image_ctxs);
-    return r;
-  }
-
-  int ret_code = 0;
-  for (size_t i = 0; i < image_ctxs.size(); i++) {
-    ldout(cct, 10) << "attempting to disable image with id "
-                   << image_ctxs[i]->id << ": " << cpp_strerror(r) << dendl;
-    r = image_disable(image_ctxs[i], force, true);
-    if (r < 0) {
-      lderr(cct) << "failed to disable mirroring on image: "
-                 << image_ctxs[i]->name << cpp_strerror(r) << dendl;
-      if (ret_code == 0) {
-        ret_code = r;
-      }
-    }
-  }
-
-  auto image_count = image_ctxs.size();
-
-  close_images(&image_ctxs);
-
-  // undo an image disable might not be of our interest. If needed, user must
-  // issue the same command again.
-  if (ret_code < 0) {
-    lderr(cct) << "failed to disable one or more images: "
-               << cpp_strerror(ret_code) << dendl;
-    return ret_code;
-  }
-
-  std::vector<cls::rbd::GroupSnapshot> snaps;
   C_SaferCond cond;
-  auto req = group::ListSnapshotsRequest<>::create(group_ioctx, group_id,
-                                                   true, true,
-                                                   &snaps, &cond);
+  auto req = mirror::GroupDisableRequest<>::create(
+    group_ioctx, group_id, group_name, force, &cond);
   req->send();
   r = cond.wait();
   if (r < 0) {
-    lderr(cct) << "failed to list group snapshots, retry later: "
+    lderr(cct) << "failed to mirror disable group: "
                << cpp_strerror(r) << dendl;
     return r;
-  }
-
-  for (auto &snap : snaps) {
-    auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
-        &snap.snapshot_namespace);
-    if (ns == nullptr) {
-      continue;
-    }
-    r = cls_client::group_snap_remove(&group_ioctx, group_header_oid, snap.id);
-    if (r < 0) {
-      lderr(cct) << "failed to remove group snapshot metadata: "
-                 << cpp_strerror(r) << dendl;
-      return r;
-    }
-  }
-
-  r = cls_client::mirror_group_remove(&group_ioctx, group_id);
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "failed to remove mirroring group metadata: "
-               << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  r = MirroringWatcher<I>::notify_group_updated(
-        group_ioctx, cls::rbd::MIRROR_GROUP_STATE_DISABLED, group_id,
-        mirror_group.global_group_id, image_count);
-  if (r < 0) {
-    lderr(cct) << "failed to notify mirroring group=" << group_name
-               << " updated: " << cpp_strerror(r) << dendl;
-    // not fatal
   }
 
   return 0;
