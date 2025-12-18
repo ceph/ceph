@@ -454,6 +454,12 @@ export class TaskMessageService {
     'nfs/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nfs(metadata)
     ),
+    'nfs/cluster/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.nfsCluster(metadata)
+    ),
+    'nfs/cluster/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nfsCluster(metadata)
+    ),
     'nfs/edit': this.newTaskMessage(this.commonOperations.update, (metadata) => this.nfs(metadata)),
     'nfs/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nfs(metadata)
@@ -684,8 +690,12 @@ export class TaskMessageService {
     };
   }
 
+  nfsCluster(metadata: { cluster_id: string }) {
+    return $localize`NFS cluster '${metadata.cluster_id}'`;
+  }
+
   smbCluster(metadata: { cluster_id: string }) {
-    return $localize`SMB cluster  '${metadata.cluster_id}'`;
+    return $localize`SMB cluster '${metadata.cluster_id}'`;
   }
 
   smbShare(metadata: Record<'share_id', string>) {

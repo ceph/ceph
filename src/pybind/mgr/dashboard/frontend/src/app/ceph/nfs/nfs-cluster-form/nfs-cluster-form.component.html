@@ -1,0 +1,809 @@
+<div
+  cdsCol
+  [columnNumbers]="{ md: 4 }"
+>
+  <ng-container *cdFormLoading="loading">
+    <form
+      name="nfsForm"
+      #formDir="ngForm"
+      [formGroup]="nfsForm"
+      novalidate
+    >
+      <div
+        i18n="form title"
+        class="form-header"
+      >
+        {{ action | titlecase }}
+      </div>
+
+      <!-- Details -->
+      <p
+        class="cds--type-heading-03 cds-mb-4"
+        i18n
+      >
+        Details
+      </p>
+
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="cluster_id"
+          i18n
+          helperText="Use lowercase alphanumeric characters and hyphens only (without spaces)."
+          i18n-helperText
+          cdRequiredField="Name"
+          [invalid]="nfsForm.controls.cluster_id.invalid && nfsForm.controls.cluster_id.dirty"
+          [invalidText]="clusterIdError"
+        >
+          Name
+          <input
+            cdsText
+            type="text"
+            id="cluster_id"
+            formControlName="cluster_id"
+            placeholder="Enter a unique name for the service cluster."
+            i18n-placeholder
+            [invalid]="nfsForm.controls.cluster_id.invalid && nfsForm.controls.cluster_id.dirty"
+          />
+        </cds-text-label>
+        <ng-template #clusterIdError>
+          @if (nfsForm.showError('cluster_id', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (nfsForm.showError('cluster_id', formDir, 'pattern')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Use lowercase alphanumeric characters and hyphens only.</span
+            >
+          }
+          @if (nfsForm.showError('cluster_id', formDir, 'uniqueName')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >A cluster with this name already exists.</span
+            >
+          }
+        </ng-template>
+      </div>
+
+      <!-- Service deployment toggle -->
+      <div class="form-item">
+        <button
+          type="button"
+          class="cds--btn cds--btn--ghost advanced-settings-btn"
+          (click)="showDeploymentSettings = !showDeploymentSettings"
+        >
+          @if (showDeploymentSettings) {
+            <ng-container i18n>Hide service deployment settings</ng-container>
+          } @else {
+            <ng-container i18n>Show service deployment settings</ng-container>
+          }
+          @if (!showDeploymentSettings) {
+            <svg
+              cdsIcon="chevron--down"
+              size="16"
+              class="cds--btn__icon"
+            ></svg>
+          } @else {
+            <svg
+              cdsIcon="chevron--up"
+              size="16"
+              class="cds--btn__icon"
+            ></svg>
+          }
+        </button>
+      </div>
+
+      @if (showDeploymentSettings) {
+        <!-- Service deployment header -->
+        <p
+          class="cds--type-heading-compact-01 cds-mb-1"
+          i18n
+        >
+          Service deployment
+        </p>
+        <p
+          class="cds--type-body-compact-01 cds-mb-4"
+          i18n
+        >
+          Choose how many service instances (daemons) to deploy and where to place them.
+          <a
+            href="https://docs.ceph.com/en/latest/cephadm/services/nfs/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Learn more</a
+          >
+        </p>
+
+        <!-- Service instances -->
+        <div class="form-item">
+          <cds-number
+            id="count"
+            formControlName="count"
+            label="Service instances"
+            i18n-label
+            [min]="1"
+            helperText="Additional instances can provide more capacity and improve service availability."
+            i18n-helperText
+          ></cds-number>
+        </div>
+
+        <!-- Placement radio group -->
+        <div class="form-item">
+          <cds-radio-group
+            formControlName="placement"
+            legend="Placement"
+            i18n-legend
+          >
+            <cds-radio
+              [value]="PLACEMENT.auto"
+              i18n
+              >Automatic placement</cds-radio
+            >
+            <cds-radio
+              [value]="PLACEMENT.host"
+              i18n
+              >Specific hosts</cds-radio
+            >
+            <cds-radio
+              [value]="PLACEMENT.custom"
+              i18n
+              >Custom placement rule</cds-radio
+            >
+          </cds-radio-group>
+        </div>
+
+        <!-- Automatic placement: info -->
+        @if (nfsForm.controls.placement.value === PLACEMENT.auto) {
+          <cd-alert-panel
+            type="info"
+            i18n
+          >
+            Ceph automatically selects suitable hosts for the NFS service instances based on the
+            configured count and available cluster resources.
+          </cd-alert-panel>
+        }
+
+        <!-- Specific hosts: host picker -->
+        @if (nfsForm.controls.placement.value === PLACEMENT.host) {
+          @if (hostsAndLabels$ | async; as data) {
+            <div class="form-item">
+              <cds-combo-box
+                cdComboBoxSearchReset
+                type="multi"
+                selectionFeedback="top-after-reopen"
+                label="Host"
+                i18n-label
+                formControlName="hosts"
+                id="hosts"
+                placeholder="Select one or more hosts where the service instances can be deployed."
+                i18n-placeholder
+                [appendInline]="true"
+                [items]="data.hosts"
+                (selected)="multiSelector($event, PLACEMENT.host)"
+                i18n
+              >
+                <cds-dropdown-list></cds-dropdown-list>
+              </cds-combo-box>
+            </div>
+          }
+        }
+
+        <!-- Custom placement rule -->
+        @if (nfsForm.controls.placement.value === PLACEMENT.custom) {
+          <p
+            class="cds--type-body-compact-01 cds-mb-3"
+            i18n
+          >
+            Define a rule to select eligible hosts for deploying the service instances.
+          </p>
+
+          <!-- Placement criteria sub-radio -->
+          <div class="form-item">
+            <cds-radio-group
+              formControlName="custom_placement_type"
+              legend="Placement criteria"
+              i18n-legend
+            >
+              <cds-radio
+                [value]="CUSTOM_PLACEMENT.label"
+                i18n
+                >Host labels</cds-radio
+              >
+              <cds-radio
+                [value]="CUSTOM_PLACEMENT.hostPattern"
+                i18n
+                >Host name pattern</cds-radio
+              >
+            </cds-radio-group>
+          </div>
+
+          <!-- Host label -->
+          @if (nfsForm.controls.custom_placement_type.value === CUSTOM_PLACEMENT.label) {
+            @if (hostsAndLabels$ | async; as data) {
+              <div class="form-item">
+                <cds-combo-box
+                  cdComboBoxSearchReset
+                  type="single"
+                  selectionFeedback="top-after-reopen"
+                  label="Host label"
+                  i18n-label
+                  formControlName="label"
+                  id="label"
+                  placeholder="Select a host label..."
+                  i18n-placeholder
+                  [appendInline]="true"
+                  [items]="data.labels"
+                  [invalid]="nfsForm.controls.label.invalid && nfsForm.controls.label.dirty"
+                  [invalidText]="labelError"
+                  cdRequiredField="Host label"
+                  i18n
+                >
+                  <cds-dropdown-list></cds-dropdown-list>
+                </cds-combo-box>
+                <ng-template #labelError>
+                  @if (nfsForm.showError('label', formDir, 'required')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                      >This field is required.</span
+                    >
+                  }
+                </ng-template>
+              </div>
+            }
+          }
+
+          <!-- Host name pattern -->
+          @if (nfsForm.controls.custom_placement_type.value === CUSTOM_PLACEMENT.hostPattern) {
+            <div class="form-item">
+              <cds-text-label
+                labelInputID="host_pattern"
+                cdRequiredField="Pattern"
+                i18n
+                [invalid]="
+                  nfsForm.controls.host_pattern.invalid && nfsForm.controls.host_pattern.dirty
+                "
+                [invalidText]="hostPatternError"
+              >
+                Pattern
+                <input
+                  cdsText
+                  type="text"
+                  id="host_pattern"
+                  formControlName="host_pattern"
+                  placeholder="e.g. nfs-node-*"
+                  i18n-placeholder
+                  [invalid]="
+                    nfsForm.controls.host_pattern.invalid && nfsForm.controls.host_pattern.dirty
+                  "
+                />
+              </cds-text-label>
+              <ng-template #hostPatternError>
+                @if (nfsForm.showError('host_pattern', formDir, 'required')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >This field is required.</span
+                  >
+                }
+              </ng-template>
+            </div>
+          }
+        }
+      }
+
+      <!-- Protocol -->
+      <p
+        class="cds--type-heading-03 cds-mb-2 cds-mt-5"
+        i18n
+      >
+        Protocol
+      </p>
+      <p
+        class="cds--type-body-01 cds-mb-4"
+        i18n
+      >
+        Select the protocol version for the service cluster.
+      </p>
+
+      <div class="form-item">
+        <cds-select
+          label="Protocol version"
+          i18n-label
+          formControlName="protocol_version"
+          id="protocol_version"
+        >
+          <option
+            value="nfsv4"
+            i18n
+          >
+            NFS v4.1
+          </option>
+          <option
+            value="nfsv3"
+            i18n
+          >
+            NFS v3 and v4
+          </option>
+        </cds-select>
+      </div>
+
+      <!-- Network -->
+      <p
+        class="cds--type-heading-03 cds-mb-2 cds-mt-5"
+        i18n
+      >
+        Network
+      </p>
+      <p
+        class="cds--type-body-01 cds-mb-4"
+        i18n
+      >
+        Configure how clients connect to the NFS service.
+      </p>
+
+      <div class="form-item">
+        <cds-number
+          id="port"
+          formControlName="port"
+          label="Service port"
+          i18n-label
+          [min]="1"
+          [max]="65535"
+          helperText="Port that clients use to connect to the NFS service. The default is 2049."
+          i18n-helperText
+        ></cds-number>
+      </div>
+
+      <div class="form-item">
+        <button
+          type="button"
+          class="cds--btn cds--btn--ghost advanced-settings-btn"
+          (click)="showAdvancedNetwork = !showAdvancedNetwork"
+        >
+          @if (showAdvancedNetwork) {
+            <ng-container i18n>Hide advanced network connectivity settings</ng-container>
+          } @else {
+            <ng-container i18n>Advanced network connectivity settings</ng-container>
+          }
+          @if (!showAdvancedNetwork) {
+            <svg
+              cdsIcon="chevron--down"
+              size="16"
+              class="cds--btn__icon"
+            ></svg>
+          } @else {
+            <svg
+              cdsIcon="chevron--up"
+              size="16"
+              class="cds--btn__icon"
+            ></svg>
+          }
+        </button>
+      </div>
+
+      @if (showAdvancedNetwork) {
+        <p
+          class="cds--type-heading-compact-01 cds-mb-2"
+          i18n
+        >
+          Public network
+        </p>
+        <p
+          class="cds--type-body-compact-01 cds-mb-4"
+          i18n
+        >
+          NFS will use addresses from these networks unless specific bind addresses are provided.
+        </p>
+
+        <ng-container formArrayName="networks">
+          @for (ctrl of networks.controls; track $index; let i = $index) {
+            <div class="form-item form-item-append">
+              <div cdsRow>
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 14 }"
+                >
+                  <cds-text-label
+                    [labelInputID]="'network-' + i"
+                    i18n
+                    [invalid]="networks.controls[i].invalid && networks.controls[i].dirty"
+                    [invalidText]="networkError"
+                  >
+                    Public network
+                    <input
+                      cdsText
+                      type="text"
+                      [id]="'network-' + i"
+                      [formControlName]="i"
+                      placeholder="10.20.0.0/24"
+                      i18n-placeholder
+                      [invalid]="networks.controls[i].invalid && networks.controls[i].dirty"
+                    />
+                  </cds-text-label>
+                  <ng-template #networkError>
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                      >Enter a network address with the host bits cleared (e.g. 10.20.0.0/24).</span
+                    >
+                  </ng-template>
+                </div>
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 1 }"
+                  class="item-action-btn spacing"
+                >
+                  @if (networks.length > 1) {
+                    <cds-icon-button
+                      kind="danger"
+                      size="sm"
+                      i18n-aria-label
+                      aria-label="Remove"
+                      (click)="removeNetwork(i)"
+                    >
+                      <cd-icon type="trash"></cd-icon>
+                    </cds-icon-button>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+        </ng-container>
+        <div class="form-item">
+          <button
+            cdsButton="tertiary"
+            size="sm"
+            type="button"
+            (click)="addNetwork()"
+            i18n
+          >
+            Add network +
+          </button>
+        </div>
+
+        <p
+          class="cds--type-heading-compact-01 cds-mb-2 cds-mt-5"
+          i18n
+        >
+          Bind address
+        </p>
+        <p
+          class="cds--type-body-compact-01 cds-mb-4"
+          i18n
+        >
+          Use this to explicitly control the IP addresses NFS listens on.
+        </p>
+
+        <ng-container formArrayName="bind_addrs">
+          @for (ctrl of bind_addrs.controls; track $index; let i = $index) {
+            <div
+              class="form-item form-item-append"
+              [formGroupName]="i"
+            >
+              <div cdsRow>
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 7 }"
+                >
+                  @if (hostsAndLabels$ | async; as data) {
+                    <cds-combo-box
+                      label="Host"
+                      i18n-label
+                      formControlName="hostname"
+                      [id]="'bind-host-' + i"
+                      placeholder="Select a host"
+                      i18n-placeholder
+                      [appendInline]="true"
+                      [items]="data.hosts"
+                      i18n
+                    >
+                      <cds-dropdown-list></cds-dropdown-list>
+                    </cds-combo-box>
+                  }
+                </div>
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 7 }"
+                >
+                  <cds-text-label
+                    [labelInputID]="'bind-ip-' + i"
+                    i18n
+                    [invalid]="
+                      bind_addrs.controls[i].get('ip').invalid &&
+                      bind_addrs.controls[i].get('ip').dirty
+                    "
+                    [invalidText]="bindIpError"
+                  >
+                    IP address
+                    <input
+                      cdsText
+                      type="text"
+                      formControlName="ip"
+                      [id]="'bind-ip-' + i"
+                      placeholder="Leave empty to use the default binding."
+                      i18n-placeholder
+                      [invalid]="
+                        bind_addrs.controls[i].get('ip').invalid &&
+                        bind_addrs.controls[i].get('ip').dirty
+                      "
+                    />
+                  </cds-text-label>
+                  <ng-template #bindIpError>
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                      >Enter a valid IPv4 or IPv6 address.</span
+                    >
+                  </ng-template>
+                </div>
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 1 }"
+                  class="item-action-btn spacing"
+                >
+                  @if (bind_addrs.length > 1) {
+                    <cds-icon-button
+                      kind="danger"
+                      size="sm"
+                      i18n-aria-label
+                      aria-label="Remove"
+                      (click)="removeBindAddr(i)"
+                    >
+                      <cd-icon type="trash"></cd-icon>
+                    </cds-icon-button>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+        </ng-container>
+        <div class="form-item">
+          <button
+            cdsButton="tertiary"
+            size="sm"
+            type="button"
+            (click)="addBindAddr()"
+            i18n
+          >
+            Add address +
+          </button>
+        </div>
+
+        <p
+          class="cds--type-heading-compact-01 cds-mb-2 cds-mt-5"
+          i18n
+        >
+          Network transport settings
+        </p>
+        <p
+          class="cds--type-body-compact-01 cds-mb-4"
+          i18n
+        >
+          NFS over RDMA
+        </p>
+
+        <div class="form-item">
+          <cds-checkbox
+            id="enable_rdma"
+            formControlName="enable_rdma"
+            i18n
+          >
+            Enable RDMA for low-latency data transfer on supported networks.
+          </cds-checkbox>
+        </div>
+
+        @if (nfsForm.get('enable_rdma').value) {
+          <div class="form-item">
+            <cds-number
+              id="rdma_port"
+              formControlName="rdma_port"
+              label="RDMA Port"
+              i18n-label
+              [min]="1"
+              [max]="65535"
+              helperText="Port used for NFS over RDMA."
+              i18n-helperText
+            ></cds-number>
+          </div>
+        }
+      }
+
+      <!-- High availability -->
+      <p
+        class="cds--type-heading-03 cds-mb-2 cds-mt-5"
+        i18n
+      >
+        High availability
+      </p>
+      <p
+        class="cds--type-body-01 cds-mb-4"
+        i18n
+      >
+        Keep the NFS service accessible when a host or service instance becomes unavailable.
+      </p>
+
+      <div class="form-item">
+        <cds-checkbox
+          id="ingress"
+          formControlName="ingress"
+          i18n
+        >
+          Enable high availability (ingress)
+          <cd-help-text
+            >Clients connect through one virtual IP. If a host fails, another takes
+            over.</cd-help-text
+          >
+        </cds-checkbox>
+      </div>
+
+      @if (nfsForm.get('ingress').value) {
+        <div class="form-item">
+          <cds-text-label
+            labelInputID="virtual_ip"
+            i18n
+            helperText="Enter an IP address with its prefix length, for example 10.20.0.100/24."
+            i18n-helperText
+            cdRequiredField="Virtual IP address"
+            [invalid]="nfsForm.controls.virtual_ip.invalid && nfsForm.controls.virtual_ip.dirty"
+            [invalidText]="virtualIpError"
+          >
+            Virtual IP address
+            <input
+              cdsText
+              type="text"
+              id="virtual_ip"
+              formControlName="virtual_ip"
+              placeholder="Enter an IP address (e.g. 10.20.0.100/24)"
+              i18n-placeholder
+              [invalid]="nfsForm.controls.virtual_ip.invalid && nfsForm.controls.virtual_ip.dirty"
+            />
+          </cds-text-label>
+          <ng-template #virtualIpError>
+            @if (nfsForm.showError('virtual_ip', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Virtual IP address is required when high availability is enabled.</span
+              >
+            }
+            @if (nfsForm.showError('virtual_ip', formDir, 'pattern')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Enter a valid IPv4 address, optionally with a prefix length (e.g.
+                10.20.0.100/24).</span
+              >
+            }
+          </ng-template>
+        </div>
+
+        <div class="form-item">
+          <cds-radio-group
+            formControlName="ingress_mode"
+            name="ingress_mode"
+            orientation="vertical"
+            legend="Ingress mode"
+            i18n-legend
+          >
+            @for (mode of ingressModes; track mode.value) {
+              <cds-radio
+                [value]="mode.value"
+                [id]="'ingress-mode-' + mode.value"
+              >
+                {{ mode.label }}
+              </cds-radio>
+            }
+          </cds-radio-group>
+          <p
+            class="cds--type-helper-text-01 cds-mt-2"
+            i18n
+          >
+            Determines how client connections reach the NFS service.
+          </p>
+        </div>
+
+        <div class="form-item">
+          <cds-radio-group
+            formControlName="ingress_placement_mode"
+            name="ingress_placement_mode"
+            orientation="vertical"
+            legend="Ingress placement"
+            i18n-legend
+          >
+            @for (mode of ingressPlacementModes; track mode.value) {
+              <cds-radio
+                [value]="mode.value"
+                [id]="'ingress-placement-' + mode.value"
+              >
+                {{ mode.label }}
+              </cds-radio>
+            }
+          </cds-radio-group>
+          <p
+            class="cds--type-helper-text-01 cds-mt-2"
+            i18n
+          >
+            Determines which hosts run the load balancer and failover services.
+          </p>
+        </div>
+
+        @if (nfsForm.get('ingress_placement_mode').value === 'custom') {
+          <p
+            class="cds--type-heading-compact-01 cds-mb-2 cds-mt-5"
+            i18n
+          >
+            Ingress hosts
+          </p>
+          <p
+            class="cds--type-body-compact-01 cds-mb-4"
+            i18n
+          >
+            Select one or more hosts where ingress will run. Select at least two to keep failover
+            available.
+          </p>
+
+          @if (hostsAndLabels$ | async; as data) {
+            <div class="form-item">
+              <cds-combo-box
+                type="multi"
+                selectionFeedback="top-after-reopen"
+                label="Host"
+                i18n-label
+                formControlName="ingress_hosts"
+                id="ingress_hosts"
+                placeholder="Select one or more hosts where ingress will run"
+                i18n-placeholder
+                [appendInline]="true"
+                [items]="data.hosts"
+                (selected)="multiSelector($event, 'ingress_hosts')"
+                i18n
+              >
+                <cds-dropdown-list></cds-dropdown-list>
+              </cds-combo-box>
+            </div>
+          }
+        }
+      }
+
+      <!-- Monitoring -->
+      <p
+        class="cds--type-heading-03 cds-mb-2 cds-mt-5"
+        i18n
+      >
+        Monitoring
+      </p>
+      <p
+        class="cds--type-body-01 cds-mb-4"
+        i18n
+      >
+        Expose metrics to your monitoring system.
+      </p>
+
+      <div class="form-item">
+        <cds-number
+          id="monitoring_port"
+          formControlName="monitoring_port"
+          label="Monitoring port"
+          i18n-label
+          [min]="1"
+          [max]="65535"
+          helperText="Port used to expose monitoring metrics."
+          i18n-helperText
+        ></cds-number>
+      </div>
+
+      <cd-form-button-panel
+        (submitActionEvent)="submitAction()"
+        [form]="nfsForm"
+        [submitText]="action | titlecase"
+        wrappingClass="text-right"
+      ></cd-form-button-panel>
+    </form>
+  </ng-container>
+</div>
