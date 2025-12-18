@@ -472,7 +472,21 @@ if(WITH_CRIMSON)
       build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
     endif()
   endif()
+  set(old_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+  if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    # - Debug: shared seastar for faster development iteration
+    #   shared seastar is allowed for faster linking and smaller executables during
+    #   development.
+    #   Note: shared seastar won't be packaged, so this is for developers only
+    # - RelWithDebInfo/Release/MinSizeRel: static seastar for production packages
+    #   This ensures packages don't depend on libseastar.so, and avoids the performance penalty
+    #   of calling functions in shared library.
+    set(BUILD_SHARED_LIBS FALSE)
+  endif()
   add_subdirectory(seastar)
+  set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
+  unset(old_BUILD_SHARED_LIBS)
+
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/include")
