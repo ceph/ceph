@@ -196,6 +196,7 @@ class NFSCluster:
             enable_rdma: bool = False,
             rdma_port: Optional[int] = None,
             ingress_placement: Optional[str] = None,
+            networks: Optional[List[str]] = None,
     ) -> None:
         if not port:
             port = 2049   # default nfs port
@@ -247,7 +248,8 @@ class NFSCluster:
                                   monitoring_ip_addrs=monitoring_ip_addrs,
                                   monitoring_port=monitoring_port,
                                   enable_rdma=enable_rdma,
-                                  rdma_port=rdma_port)
+                                  rdma_port=rdma_port,
+                                  networks=networks)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
             ispec = IngressSpec(service_type='ingress',
@@ -280,7 +282,8 @@ class NFSCluster:
                                   monitoring_ip_addrs=monitoring_ip_addrs,
                                   monitoring_port=monitoring_port,
                                   enable_rdma=enable_rdma,
-                                  rdma_port=rdma_port)
+                                  rdma_port=rdma_port,
+                                  networks=networks)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
         log.debug("Successfully deployed nfs daemons with cluster id %s and placement %s",
@@ -320,6 +323,7 @@ class NFSCluster:
             enable_rdma: bool = False,
             rdma_port: Optional[int] = None,
             ingress_placement: Optional[str] = None,
+            networks: Optional[List[str]] = None,
     ) -> None:
         try:
             if virtual_ip:
@@ -364,7 +368,8 @@ class NFSCluster:
                     monitoring_port=monitoring_port,
                     enable_rdma=enable_rdma,
                     rdma_port=rdma_port,
-                    ingress_placement=ingress_placement
+                    ingress_placement=ingress_placement,
+                    networks=networks
                 )
                 return
             raise NonFatalError(f"{cluster_id} cluster already exists")
@@ -407,31 +412,41 @@ class NFSCluster:
         # Filter daemons for this cluster
         cluster_daemons = [d for d in all_nfs_daemons if d.service_id() == cluster_id]
 
-        # Cache hosts data to avoid O(n) orchestrator calls
-        hosts_map = {}
-        try:
-            hosts_completion = self.mgr.get_hosts()
-            hosts = orchestrator.raise_if_exception(hosts_completion)
-            hosts_map = {h.hostname: h for h in hosts}
-        except orchestrator.OrchestratorError:
-            log.debug("Failed to get hosts for IP resolution")
-
-        # Determine ingress configuration
-        ingress_mode: Optional[IngressType] = None
-        virtual_ip: Optional[str] = None
-        ingress_port: Optional[int] = None
-        monitor_port: Optional[int] = None
-
-        sc = self.mgr.describe_service(
-            service_type='ingress',
-            service_name=f'ingress.nfs.{cluster_id}'
-        )
-        try:
-            ingress_services = orchestrator.raise_if_exception(sc)
-            if ingress_services:
-                svc = ingress_services[0]
-                spec = cast(IngressSpec, svc.spec)
-                virtual_ip = svc.virtual_ip.split('/')[0] if svc.virtual_ip else None
+        r: Dict[str, Any] = {
+            'virtual_ip': None,
+            'backend': backends,
+        }
+        # If no daemons found, but placement spec has hosts, show those as backend and try to resolve IP
+        if not backends:
+            try:
+                spec_result = self.mgr.describe_service(service_type='nfs')
+                services = orchestrator.raise_if_exception(spec_result)
+                for s in services:
+                    if hasattr(s.spec, 'service_id') and s.spec.service_id == cluster_id and hasattr(s.spec, 'placement'):
+                        hosts = getattr(s.spec.placement, 'hosts', None)
+                        if hosts:
+                            resolved_backends = []
+                            for h in hosts:
+                                ip = ''
+                                try:
+                                    ip = resolve_ip(str(h))
+                                except Exception:
+                                    pass
+                                resolved_backends.append({'hostname': str(h), 'ip': ip, 'port': None})
+                            r['backend'] = resolved_backends
+                        break
+            except Exception:
+                pass
+        sc = self.mgr.describe_service(service_type='ingress')
+        services = orchestrator.raise_if_exception(sc)
+        for i in services:
+            spec = cast(IngressSpec, i.spec)
+            if spec.backend_service == f'nfs.{cluster_id}':
+                r['virtual_ip'] = i.virtual_ip.split('/')[0] if i.virtual_ip else None
+                if i.ports:
+                    r['port'] = i.ports[0]
+                    if len(i.ports) > 1:
+                        r['monitor_port'] = i.ports[1]
                 if spec.keepalive_only:
                     ingress_mode = IngressType.keepalive_only
                 elif spec.enable_haproxy_protocol:
