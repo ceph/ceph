@@ -810,10 +810,10 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     ECUtil::shard_extent_set_t want_to_read(s.get_k_plus_m());
     ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
     hobject_t hoid;
-    ECCommon::read_request_t read_request(to_read_list, false, object_size);
+    ECCommon::read_request_t read_request(to_read_list, false, false, false, "", 0, object_size);
     pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
-    ECCommon::read_request_t ref(to_read_list, false, object_size);
+    ECCommon::read_request_t ref(to_read_list, false, false, false, "", 0, object_size);
 
     ASSERT_EQ(read_request,  ref);
   }
@@ -827,10 +827,10 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       to_read_list[i].insert(int(i) * 2 * align_size, align_size);
     }
 
-    ECCommon::read_request_t read_request(to_read_list, false, object_size);
+    ECCommon::read_request_t read_request(to_read_list, false, false, false, "", 0, object_size);
     pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
-    ECCommon::read_request_t ref(to_read_list, false, object_size);
+    ECCommon::read_request_t ref(to_read_list, false, false, false, "", 0, object_size);
     for (shard_id_t shard_id; shard_id < k; ++shard_id) {
       ref.shard_reads[shard_id].extents = to_read_list[shard_id];
       ref.shard_reads[shard_id].subchunk = ecode->default_sub_chunk;
@@ -848,12 +848,12 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       to_read_list[i].insert(int(i) * 2 * align_size, align_size);
     }
 
-    ECCommon::read_request_t read_request(to_read_list, false, object_size);
+    ECCommon::read_request_t read_request(to_read_list, false, false, false, "", 0, object_size);
 
 
     pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
-    ECCommon::read_request_t ref(to_read_list, false, object_size);
+    ECCommon::read_request_t ref(to_read_list, false, false, false, "", 0, object_size);
     for (shard_id_t i; i<k; ++i) {
       shard_id_t shard_id(i);
       ref.shard_reads[shard_id].extents = to_read_list[i];
@@ -873,8 +873,8 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     for (shard_id_t i; i < (int)k; ++i) {
       to_read_list[i].insert(int(i) * 2 * align_size + int(i) + 1, int(i) + 1);
     }
-    ECCommon::read_request_t ref(to_read_list, false, object_size);
-    ECCommon::read_request_t read_request(to_read_list, false, object_size);
+    ECCommon::read_request_t ref(to_read_list, false, false, false, "", 0, object_size);
+    ECCommon::read_request_t read_request(to_read_list, false, false, false, "", 0, object_size);
     for (int i=0; i < (int)k; i++) {
       shard_id_t shard_id(i);
       ECCommon::shard_read_t &ref_shard_read = ref.shard_reads[shard_id];
@@ -896,7 +896,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       to_read_list[i].insert(int(i) * 2 * align_size, align_size);
     }
 
-    ECCommon::read_request_t read_request(to_read_list, false, object_size);
+    ECCommon::read_request_t read_request(to_read_list, false, false, false, "", 0, object_size);
 
     shard_id_t missing_shard(1);
     int parity_shard = k;
@@ -904,7 +904,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
     pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
-    ECCommon::read_request_t ref(to_read_list, false, object_size);
+    ECCommon::read_request_t ref(to_read_list, false, false, false, "", 0, object_size);
     for (shard_id_t i; i<k; ++i) {
       if (i != missing_shard) {
         shard_id_t shard_id(i);
@@ -937,8 +937,8 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     to_read_list[shard_id_t(1)].insert(align_size, align_size);
     to_read_list[shard_id_t(2)].insert(2*align_size, align_size);
     to_read_list[shard_id_t(3)].insert(3*align_size, align_size);
-    ECCommon::read_request_t read_request(to_read_list, false, object_size);
-    ECCommon::read_request_t ref(to_read_list, false, object_size);
+    ECCommon::read_request_t read_request(to_read_list, false, false, false, "", 0, object_size);
+    ECCommon::read_request_t ref(to_read_list, false, false, false, "", 0, object_size);
 
     // Populating reference manually to check that adjacent shards get correctly combined.
     ref.shard_reads[shard_id_t(0)].extents.insert(0, align_size*2);
@@ -976,11 +976,11 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       to_read_list[i].insert(int(i) * 2 * align_size, align_size);
       extents_to_read.insert(int(i) * 2 * align_size, align_size);
     }
-    ECCommon::read_request_t read_request(to_read_list, false, object_size);
+    ECCommon::read_request_t read_request(to_read_list, false, false, false, "", 0, object_size);
 
     pipeline.get_min_avail_to_read_shards(hoid, false, true, read_request);
 
-    ECCommon::read_request_t ref(to_read_list, false, object_size);
+    ECCommon::read_request_t ref(to_read_list, false, false, false, "", 0, object_size);
     for (unsigned int i=0; i<k+2; i++) {
       ECCommon::shard_read_t shard_read;
       shard_read.subchunk = ecode->default_sub_chunk;
@@ -1000,7 +1000,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     for (shard_id_t i; i<k; ++i) {
       to_read_list[i].insert(int(i) * 2 * align_size, align_size);
     }
-    ECCommon::read_request_t read_request(to_read_list, false, object_size);
+    ECCommon::read_request_t read_request(to_read_list, false, false, false, "", 0, object_size);
 
     shard_id_t missing_shard(1);
     int parity_shard = k;
@@ -1010,7 +1010,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     // the shard being missing as a result of a bad read.
     pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request, error_shards);
 
-    ECCommon::read_request_t ref(to_read_list, false, object_size);
+    ECCommon::read_request_t ref(to_read_list, false, false, false, "", 0, object_size);
     std::vector<ECCommon::shard_read_t> want_to_read(empty_shard_vector);
     for (shard_id_t i; i<k; ++i) {
       if (i != missing_shard) {
@@ -1063,11 +1063,11 @@ TEST(ECCommon, shard_read_combo_tests)
 
     ec_align_t to_read(36*1024,10*1024, 1);
     pipeline.get_min_want_to_read_shards(to_read, want_to_read);
-    ECCommon::read_request_t read_request(want_to_read, false, object_size);
+    ECCommon::read_request_t read_request(want_to_read, false, false, false, "", 0, object_size);
 
     pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
-    ECCommon::read_request_t ref(want_to_read, false, object_size);
+    ECCommon::read_request_t ref(want_to_read, false, false, false, "", 0, object_size);
     {
       ECCommon::shard_read_t shard_read;
       shard_read.subchunk = ecode->default_sub_chunk;
@@ -1091,10 +1091,10 @@ TEST(ECCommon, shard_read_combo_tests)
 
     ec_align_t to_read(12*1024,12*1024, 1);
     pipeline.get_min_want_to_read_shards(to_read, want_to_read);
-    ECCommon::read_request_t read_request(want_to_read, false, object_size);
+    ECCommon::read_request_t read_request(want_to_read, false, false, false, "", 0, object_size);
     pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
 
-    ECCommon::read_request_t ref(want_to_read, false, object_size);
+    ECCommon::read_request_t ref(want_to_read, false, false, false, "", 0, object_size);
     {
       ECCommon::shard_read_t shard_read;
       shard_read.subchunk = ecode->default_sub_chunk;
@@ -1191,7 +1191,7 @@ TEST(ECCommon, get_remaining_shards)
     // Mock up a read request
     ECUtil::shard_extent_set_t to_read(s.get_k_plus_m());
     to_read[shard_id_t(0)].insert(0, 4096);
-    ECCommon::read_request_t read_request(to_read, false, object_size);
+    ECCommon::read_request_t read_request(to_read, false, false, false, "", 0, object_size);
     int missing_shard = 0;
 
     // Mock up a read result.
@@ -1200,7 +1200,7 @@ TEST(ECCommon, get_remaining_shards)
 
     pipeline.get_remaining_shards(hoid, read_result, read_request, false, false);
 
-    ECCommon::read_request_t ref(to_read, false, object_size);
+    ECCommon::read_request_t ref(to_read, false, false, false, "", 0, object_size);
     int parity_shard = 4;
     for (unsigned int i=0; i<k; i++) {
       ECCommon::shard_read_t shard_read;
@@ -1220,7 +1220,7 @@ TEST(ECCommon, get_remaining_shards)
 
     ECUtil::shard_extent_set_t to_read(s.get_k_plus_m());
     s.ro_range_to_shard_extent_set(chunk_size/2, chunk_size+align_size, to_read);
-    ECCommon::read_request_t read_request(to_read, false, object_size);
+    ECCommon::read_request_t read_request(to_read, false, false, false, "", 0, object_size);
     unsigned int missing_shard = 1;
 
     // Mock up a read result.
@@ -1235,7 +1235,7 @@ TEST(ECCommon, get_remaining_shards)
 
     // The result should be a read request for the first 4k of shard 0, as that
     // is currently missing.
-    ECCommon::read_request_t ref(to_read, false, object_size);
+    ECCommon::read_request_t ref(to_read, false, false, false, "", 0, object_size);
     int parity_shard = 4;
     for (unsigned int i=0; i<k; i++) {
       ECCommon::shard_read_t shard_read;
@@ -1319,7 +1319,7 @@ void test_decode(unsigned int k, unsigned int m, uint64_t chunk_size, uint64_t o
 
   ECUtil::shard_extent_map_t semap(&s);
   hobject_t hoid;
-  ECCommon::read_request_t read_request(want, false, object_size);
+  ECCommon::read_request_t read_request(want, false, false, false, "", 0, object_size);
   ASSERT_EQ(0, pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request));
   for (auto [shard, read] : read_request.shard_reads) {
     for (auto [off, len] : read.extents) {
