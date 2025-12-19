@@ -273,7 +273,10 @@ std::ostream &operator<<(
     << "ECSubRead(tid=" << rhs.tid
     << ", to_read=" << rhs.to_read
     << ", subchunks=" << rhs.subchunks
-    << ", attrs_to_read=" << rhs.attrs_to_read << ")";
+    << ", attrs_to_read=" << rhs.attrs_to_read
+    << ", omap_headers_to_read=" << rhs.omap_headers_to_read
+    << ", omap_read_from=" << rhs.omap_read_from
+    << ")";
 }
 
 void ECSubRead::dump(Formatter *f) const
@@ -434,10 +437,25 @@ void ECSubReadReply::decode(bufferlist::const_iterator &p_bl,
 std::ostream &operator<<(
   std::ostream &lhs, const ECSubReadReply &rhs)
 {
-  return lhs
-    << "ECSubReadReply(tid=" << rhs.tid
-    << ", attrs_read=" << rhs.attrs_read.size()
-    << ")";
+  lhs << "ECSubReadReply(tid=" << rhs.tid
+      << ", attrs_read=" << rhs.attrs_read.size()
+      << ", omap_headers_read=" << rhs.omap_headers_read.size()
+      << ", omap_entries_read=" << rhs.omap_entries_read.size()
+      << ", omaps_complete=[";
+
+  bool first = true;
+  for (const auto & [hoid, complete] : rhs.omaps_complete) {
+    if (complete) {
+      if (!first) {
+        lhs << ", ";
+      }
+      lhs << hoid;
+      first = false;
+    }
+  }
+
+  lhs << "])";
+  return lhs;
 }
 
 

@@ -610,7 +610,7 @@ void ECBackend::handle_sub_read(
       ghobject_t(hoid, ghobject_t::NO_GEN, shard),
       ObjectStore::omap_iter_seek_t{
       .seek_position = start_key,
-      .seek_type = ObjectStore::omap_iter_seek_t::LOWER_BOUND
+      .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
       },
       [max_entries=cct->_conf->osd_recovery_max_omap_entries_per_chunk, &available, &current_batch]
       (const std::string_view key, const std::string_view value) {

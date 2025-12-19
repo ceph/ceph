@@ -543,7 +543,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
     }
     m.push_back(std::make_pair(pg_shard.osd, msg));
     dout(10) << __func__ << ": will send msg " << *msg
-             << " to osd." << pg_shard << dendl;
+             << " to osd." << pg_shard.osd << dendl;
   }
   if (!m.empty()) {
     get_parent()->send_message_osd_cluster(m, get_osdmap_epoch());
@@ -1525,7 +1525,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         if (!sinfo.is_nonprimary_shard(shard)) {
           shard_read_t shard_read;
           shard_read.pg_shard = pg_shards[shard];
-          read_request.shard_reads.insert(shard, shard_read_t());
+          read_request.shard_reads.insert(shard, shard_read);
           found_omap_shard = true;
           break;
         }

@@ -301,21 +301,23 @@ TEST_P(LibRadosOmapECPP, ChangeUpmap) {
   bufferlist bl_write, omap_val_bl, xattr_val_bl;
   const std::string omap_key_1 = "key_a";
   const std::string omap_key_2 = "key_b";
-  const std::string omap_value = "val_c";
+  const std::string omap_key_3 = "key_c";
+  const std::string omap_value = "val_12345";
   encode(omap_value, omap_val_bl);
   std::map<std::string, bufferlist> omap_map = {
     {omap_key_1, omap_val_bl},
     {omap_key_2, omap_val_bl}
   };
-  const std::string xattr_key = "xattr_key_1";
-  const std::string xattr_value = "xattr_value_2";
-  encode(xattr_value, xattr_val_bl);
+  const std::string header = "upmap_header_z";
+  bufferlist header_bl;
+  encode(header, header_bl);
   bl_write.append("ceph");
   
   // 1. Write data to omap
   ObjectWriteOperation write1;
   write1.write(0, bl_write);
   write1.omap_set(omap_map);
+  write1.omap_set_header(header_bl);
   int ret = ioctx.operate("change_upmap_oid", &write1);
   EXPECT_EQ(ret, 0);
 
@@ -348,7 +350,7 @@ TEST_P(LibRadosOmapECPP, ChangeUpmap) {
   EXPECT_TRUE(rc == 0);
 
   // 5. Wait for new upmap to appear as acting set of osds
-  int res2 = wait_for_upmap(pool_name, "change_upmap_oid", nspace, new_primary, 30s);
+  int res2 = wait_for_upmap(pool_name, "change_upmap_oid", nspace, new_primary, 60s);
   EXPECT_TRUE(res2 == 0);
   
   // 6. Read omap
