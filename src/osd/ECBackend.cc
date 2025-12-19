@@ -121,6 +121,7 @@ void ECBackend::handle_recovery_push(
   recovery_backend.handle_recovery_push(op, m, is_repair);
 
   if (op.after_progress.data_complete &&
+    op.after_progress.omap_complete &&
     !(get_parent()->pgb_is_primary()) &&
     get_parent()->pg_is_remote_backfilling()) {
     struct stat st;
