@@ -366,6 +366,125 @@ TEST_P(LibRadosOmapECPP, ChangeUpmap) {
   turn_balancing_on();
 }
 
+TEST_P(LibRadosOmapECPP, NoOmapRecovery) {
+  SKIP_IF_CRIMSON();
+  turn_balancing_off();
+  bufferlist bl_write;
+  bl_write.append("ceph");
+
+  // 1. Write data to omap
+  ObjectWriteOperation write1;
+  write1.write(0, bl_write);
+  int ret = ioctx.operate("no_omap_oid", &write1);
+  EXPECT_EQ(ret, 0);
+
+  // 2. Find up osds
+  ceph::messaging::osd::OSDMapReply reply;
+  int res = request_osd_map(pool_name, "no_omap_oid", nspace, &reply);
+  EXPECT_TRUE(res == 0);
+  std::vector<int> prev_up_osds = reply.up;
+  std::string pgid = reply.pgid;
+  print_osd_map("Previous up osds: ", prev_up_osds);
+
+  // 3. Find unused osd to be new primary
+  int prev_primary = prev_up_osds[0];
+  int new_primary = 0;
+  while (true) {
+    auto it = std::find(prev_up_osds.begin(), prev_up_osds.end(), new_primary);
+    if (it == prev_up_osds.end()) {
+      break;
+    }
+    new_primary++;
+  }
+  std::vector<int> new_up_osds = prev_up_osds;
+  new_up_osds[0] = new_primary;
+  std::cout << "Previous primary osd: " << prev_primary << std::endl;
+  std::cout << "New primary osd: " << new_primary << std::endl;
+  print_osd_map("Desired up osds: ", new_up_osds);
+
+  // 4. Set new up map
+  int rc = set_osd_upmap(pgid, new_up_osds);
+  EXPECT_TRUE(rc == 0);
+
+  // 5. Wait for new upmap to appear as acting set of osds
+  int res2 = wait_for_upmap(pool_name, "no_omap_oid", nspace, new_primary, 60s);
+  EXPECT_TRUE(res2 == 0);
+
+  // 6. Read data
+  bufferlist bl_read;
+  ObjectReadOperation read;
+  read.read(0, bl_write.length(), &bl_read, nullptr);
+  ret = ioctx.operate("no_omap_oid", &read, nullptr);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(0, memcmp(bl_read.c_str(), "ceph", 4));
+
+  turn_balancing_on();
+}
+
+TEST_P(LibRadosOmapECPP, LargeOmapRecovery) {
+  SKIP_IF_CRIMSON();
+  turn_balancing_off();
+  bufferlist bl_write, header_bl;
+  const std::string huge_val(1024, 'x');
+  std::map<std::string, bufferlist> omap_map;
+  for (int i = 0; i < 10000; ++i) {
+    char key_buf[32];
+    snprintf(key_buf, sizeof(key_buf), "key_%06d", i);
+    bufferlist omap_val_bl;
+    encode(huge_val, omap_val_bl);
+    omap_map[std::string(key_buf)] = omap_val_bl;
+  }
+
+  const std::string header = "large_header";
+  encode(header, header_bl);
+  bl_write.append("ceph");
+
+  // 3. Write data to omap
+  ObjectWriteOperation write1;
+  write1.write(0, bl_write);
+  write1.omap_set(omap_map);
+  write1.omap_set_header(header_bl);
+
+  int ret = ioctx.operate("large_oid", &write1);
+  EXPECT_EQ(ret, 0);
+
+  // 2. Find up osds
+  ceph::messaging::osd::OSDMapReply reply;
+  int res = request_osd_map(pool_name, "large_oid", nspace, &reply);
+  EXPECT_TRUE(res == 0);
+  std::vector<int> prev_up_osds = reply.up;
+  std::string pgid = reply.pgid;
+  print_osd_map("Previous up osds: ", prev_up_osds);
+
+  // 3. Find unused osd to be new primary
+  int prev_primary = prev_up_osds[0];
+  int new_primary = 0;
+  while (true) {
+    auto it = std::find(prev_up_osds.begin(), prev_up_osds.end(), new_primary);
+    if (it == prev_up_osds.end()) {
+      break;
+    }
+    new_primary++;
+  }
+  std::vector<int> new_up_osds = prev_up_osds;
+  new_up_osds[0] = new_primary;
+  std::cout << "Previous primary osd: " << prev_primary << std::endl;
+  std::cout << "New primary osd: " << new_primary << std::endl;
+  print_osd_map("Desired up osds: ", new_up_osds);
+
+  // 4. Set new up map
+  int rc = set_osd_upmap(pgid, new_up_osds);
+  EXPECT_TRUE(rc == 0);
+
+  // 5. Wait for new upmap to appear as acting set of osds
+  int res2 = wait_for_upmap(pool_name, "large_oid", nspace, new_primary, 60s);
+  EXPECT_TRUE(res2 == 0);
+
+  // 6. Read omap
+  check_omap_read("large_oid", "key_000000", huge_val, 1024, 0);
+
+  turn_balancing_on();
+}
 
 TEST_P(LibRadosOmapECPP, RemoveOneRange) {
   // 1. Freeze journal
