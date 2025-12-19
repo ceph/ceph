@@ -147,7 +147,7 @@ lines from the cluster log.
 Monitoring Health Checks
 ========================
 
-Ceph continuously runs various *health checks*. When
+Ceph continuously runs various :ref:`health-checks`. When
 a health check fails, this failure is reflected in the output of ``ceph status`` and
 ``ceph health``. The cluster log receives messages that
 indicate when a check has failed and when the cluster has recovered.
@@ -375,6 +375,8 @@ Most health mutes disappear if the unhealthy condition that triggered the health
 For example, suppose that there is one OSD down and the health check is muted. In that case, if
 one or more additional OSDs go down, then the health mute disappears. This behavior occurs in any health check with a threshold value.
 
+
+.. _rados-monitoring-pool-usage:
 
 Checking a Cluster's Usage Stats
 ================================

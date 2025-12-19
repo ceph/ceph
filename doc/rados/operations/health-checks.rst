@@ -525,7 +525,7 @@ __________________
 The CRUSH map is using very old settings and should be updated. The oldest set
 of tunables that can be used (that is, the oldest client version that can
 connect to the cluster) without raising this health check is determined by the
-``mon_crush_min_required_version`` config option.  For more information, see
+:confval:`mon_crush_min_required_version` config option. For more information, see
 :ref:`crush-map-tunables`.
 
 OLD_CRUSH_STRAW_CALC_VERSION
@@ -546,7 +546,7 @@ objects that are to be flushed and evicted from the cache.
 
 To configure hit sets on the cache pool, run the following commands:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd pool set <poolname> hit_set_type <type>
    ceph osd pool set <poolname> hit_set_period <period-in-seconds>
@@ -562,35 +562,34 @@ been set.
 The ``sortbitwise`` flag must be set in order for OSDs running Luminous v12.y.z
 or newer to start. To safely set the flag, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd set sortbitwise
 
 OSD_FILESTORE
-__________________
+_____________
 
-Warn if OSDs are running the old Filestore back end. The Filestore OSD back end
-is deprecated; the BlueStore back end has been the default object store since
+OSDs are running the old Filestore back end. The Filestore OSD back end
+is deprecated and the BlueStore back end has been the default object store since
 the Ceph Luminous release.
 
-The 'mclock_scheduler' is not supported for Filestore OSDs. For this reason,
-the default 'osd_op_queue' is set to 'wpq' for Filestore OSDs and is enforced
+The mClock scheduler is not supported for Filestore OSDs. For this reason,
+the default ``osd_op_queue`` is set to ``wpq`` for Filestore OSDs and is enforced
 even if the user attempts to change it.
 
-
-
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph report | jq -c '."osd_metadata" | .[] | select(.osd_objectstore | contains("filestore")) | {id, osd_objectstore}'
 
-**In order to upgrade to Reef or a later release, you must first migrate any
-Filestore OSDs to BlueStore.**
+.. important:: In order to upgrade to Reef or a later release, you must first migrate any
+   Filestore OSDs to BlueStore.
 
 If you are upgrading a pre-Reef release to Reef or later, but it is not
-feasible to migrate Filestore OSDs to BlueStore immediately, you can
-temporarily silence this alert by running the following command:
+feasible to :ref:`migrate Filestore OSDs to BlueStore <rados_operations_bluestore_migration>` immediately, you can
+temporarily :ref:`silence <rados-monitoring-muting-health-checks>` this alert
+by running the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph health mute OSD_FILESTORE
 
@@ -602,10 +601,10 @@ OSD_UNREACHABLE
 _______________
 
 The registered v1/v2 public address or addresses of one or more OSD(s) is or
-are out of the defined `public_network` subnet, which prevents these
-unreachable OSDs from communicating with ceph clients properly.
+are out of the defined :confval:`public_network` subnet, which prevents these
+unreachable OSDs from communicating with Ceph clients properly.
 
-Even though these unreachable OSDs are in up state, rados clients
+Even though these unreachable OSDs are in ``up`` state, RADOS clients
 will hang till TCP timeout before erroring out due to this inconsistency.
 
 POOL_FULL
@@ -615,13 +614,16 @@ One or more pools have reached quota and no longer allow writes.
 
 To see pool quotas and utilization, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph df detail
 
+For more details on the ``ceph df`` command,
+see :ref:`rados-monitoring-pool-usage`.
+
 If you opt to raise the pool quota, run the following commands:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd pool set-quota <poolname> max_objects <num-objects>
    ceph osd pool set-quota <poolname> max_bytes <num-bytes>
@@ -631,7 +633,7 @@ If not, delete some existing data to reduce utilization.
 BLUEFS_SPILLOVER
 ________________
 
-One or more OSDs that use the BlueStore back end have been allocated `db`
+One or more OSDs that use the BlueStore back end have been allocated DB device
 partitions (that is, storage space for metadata, normally on a faster device),
 but because that space has been filled, metadata has "spilled over" onto the
 slow device. This is not necessarily an error condition or even unexpected
@@ -641,25 +643,25 @@ that not enough space was provided.
 
 To disable this alert on all OSDs, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set osd bluestore_warn_on_bluefs_spillover false
 
 Alternatively, to disable the alert on a specific OSD, run the following
 command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set osd.123 bluestore_warn_on_bluefs_spillover false
 
 To secure more metadata space, you can destroy and reprovision the OSD in
 question. This process involves data migration and recovery.
 
-It might also be possible to expand the LVM logical volume that backs the `db`
+It might also be possible to expand the LVM logical volume that backs the DB
 storage. If the underlying LV has been expanded, you must stop the OSD daemon
 and inform BlueFS of the device-size change by running the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph-bluestore-tool bluefs-bdev-expand --path /var/lib/ceph/osd/ceph-$ID
 
@@ -668,31 +670,31 @@ ______________________
 
 To see how much space is free for BlueFS, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-   ceph daemon osd.123 bluestore bluefs available
+   ceph daemon osd.123 bluestore bluefs device info
 
 This will output up to three values: ``BDEV_DB free``, ``BDEV_SLOW free``, and
-``available_from_bluestore``. ``BDEV_DB`` and ``BDEV_SLOW`` report the amount
+``bluestore max free``. ``BDEV_DB`` and ``BDEV_SLOW`` report the amount
 of space that has been acquired by BlueFS and is now considered free. The value
-``available_from_bluestore`` indicates the ability of BlueStore to relinquish
-more space to BlueFS.  It is normal for this value to differ from the amount of
+``bluestore max free`` indicates the ability of BlueStore to relinquish
+more space to BlueFS. It is normal for this value to differ from the amount of
 BlueStore free space, because the BlueFS allocation unit is typically larger
-than the BlueStore allocation unit.  This means that only part of the BlueStore
+than the BlueStore allocation unit. This means that only part of the BlueStore
 free space will be available for BlueFS.
 
 BLUEFS_LOW_SPACE
 _________________
 
 If BlueFS is running low on available free space and there is not much free
-space available from BlueStore (in other words, `available_from_bluestore` has
+space available from BlueStore (in other words, ``bluestore max free`` has
 a low value), consider reducing the BlueFS allocation unit size. To simulate
 available space when the allocation unit is different, run the following
 command: 
 
-.. prompt:: bash $
+.. prompt:: bash #
 
-   ceph daemon osd.123 bluestore bluefs available <alloc-unit-size>
+   ceph daemon osd.123 bluestore bluefs device info <alloc-unit-size>
 
 BLUESTORE_FRAGMENTATION
 _______________________
@@ -702,33 +704,34 @@ BlueStore has become fragmented. This is normal and unavoidable, but excessive
 fragmentation causes slowdown. To inspect BlueStore fragmentation, run the
 following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph daemon osd.123 bluestore allocator score block
 
-The fragmentation score is given in a [0-1] range.
-[0.0 .. 0.4] tiny fragmentation
-[0.4 .. 0.7] small, acceptable fragmentation
-[0.7 .. 0.9] considerable, but safe fragmentation
-[0.9 .. 1.0] severe fragmentation, might impact BlueFS's ability to get space from BlueStore
+The fragmentation score is given in a [0-1] range:
+
+- [0.0 .. 0.4] tiny fragmentation
+- [0.4 .. 0.7] small, acceptable fragmentation
+- [0.7 .. 0.9] considerable, but safe fragmentation
+- [0.9 .. 1.0] severe fragmentation, might impact BlueFS' ability to get space from BlueStore
 
 To see a detailed report of free fragments, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph daemon osd.123 bluestore allocator dump block
 
 For OSD processes that are not currently running, fragmentation can be
-inspected with `ceph-bluestore-tool`. To see the fragmentation score, run the
+inspected with :program:`ceph-bluestore-tool`. To see the fragmentation score, run the
 following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph-bluestore-tool --path /var/lib/ceph/osd/ceph-123 --allocator block free-score
 
 To dump detailed free chunks, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph-bluestore-tool --path /var/lib/ceph/osd/ceph-123 --allocator block free-dump
 
@@ -747,7 +750,7 @@ The old OSDs can be updated to use the new usage-tracking scheme by stopping
 each OSD, running a repair operation, and then restarting the OSD. For example,
 to update ``osd.123``, run the following commands:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    systemctl stop ceph-osd@123
    ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
@@ -755,7 +758,7 @@ to update ``osd.123``, run the following commands:
 
 To disable this alert, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set global bluestore_warn_on_legacy_statfs false
 
@@ -774,7 +777,7 @@ The OSDs can be updated to track by pool by stopping each OSD, running a repair
 operation, and then restarting the OSD. For example, to update ``osd.123``, run
 the following commands:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    systemctl stop ceph-osd@123
    ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
@@ -782,15 +785,15 @@ the following commands:
 
 To disable this alert, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set global bluestore_warn_on_no_per_pool_omap false
 
 BLUESTORE_NO_PER_PG_OMAP
 __________________________
 
-One or more OSDs have volumes that were created prior to Pacific.  (In Pacific
-and later releases Bluestore tracks omap space utilitzation by Placement Group
+One or more OSDs have volumes that were created prior to Pacific. (In Pacific
+and later releases BlueStore tracks omap space utilitzation by Placement Group
 (PG).)
 
 Per-PG omap allows faster PG removal when PGs migrate.
@@ -799,7 +802,7 @@ The older OSDs can be updated to track by PG by stopping each OSD, running a
 repair operation, and then restarting the OSD. For example, to update
 ``osd.123``, run the following commands:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    systemctl stop ceph-osd@123
    ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
@@ -807,7 +810,7 @@ repair operation, and then restarting the OSD. For example, to update
 
 To disable this alert, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set global bluestore_warn_on_no_per_pg_omap false
 
@@ -824,7 +827,7 @@ very careful to execute this procedure on only one OSD at a time, so as to
 minimize the risk of losing any data. To execute this procedure, where ``$N``
 is the OSD that has the inconsistency, run the following commands:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd out osd.$N
    while ! ceph osd safe-to-destroy osd.$N ; do sleep 1m ; done
@@ -854,10 +857,10 @@ BLUESTORE_SPURIOUS_READ_ERRORS
 ______________________________
 
 One (or more) BlueStore OSDs detects read errors on the main device.
-BlueStore has recovered from these errors by retrying disk reads.  This alert
+BlueStore has recovered from these errors by retrying disk reads. This alert
 might indicate issues with underlying hardware, issues with the I/O subsystem,
-or something similar.  Such issues can cause permanent data
-corruption.  Some observations on the root cause of spurious read errors can be
+or something similar. Such issues can cause permanent data
+corruption. Some observations on the root cause of spurious read errors can be
 found here: https://tracker.ceph.com/issues/22464
 
 This alert does not require an immediate response, but the affected host might
@@ -866,13 +869,13 @@ OS/kernel versions and implementing hardware-resource-utilization monitoring.
 
 To disable this alert on all OSDs, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set osd bluestore_warn_on_spurious_read_errors false
 
 Or, to disable this alert on a specific OSD, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set osd.123 bluestore_warn_on_spurious_read_errors false
 
@@ -884,17 +887,19 @@ that can cause performance degradation and potentially data unavailability or
 loss. These may indicate a storage drive that is failing and should be
 evaluated and possibly removed and replaced.
 
-``read stalled read 0x29f40370000~100000 (buffered) since 63410177.290546s, timeout is 5.000000s``
+.. code-block:: console
 
-However, this is difficult to spot because there no discernible warning (a
+   read stalled read 0x29f40370000~100000 (buffered) since 63410177.290546s, timeout is 5.000000s
+
+However, this is difficult to spot because there is no discernible warning (a
 health warning or info in ``ceph health detail`` for example). More observations
 can be found here: https://tracker.ceph.com/issues/62500
 
 Also because there can be false positive ``stalled read`` instances, a mechanism
-has been added to increase accuracy. If in the last ``bdev_stalled_read_warn_lifetime``
+has been added to increase accuracy. If in the last :confval:`bdev_stalled_read_warn_lifetime`
 seconds the number of ``stalled read`` events is found to be greater than or equal to
-``bdev_stalled_read_warn_threshold`` for a given BlueStore block device, this
-warning will be reported in ``ceph health detail``.  The warning state will be
+:confval:`bdev_stalled_read_warn_threshold` for a given BlueStore block device, this
+warning will be reported in ``ceph health detail``. The warning state will be
 removed when the condition clears.
 
 The defaults for :confval:`bdev_stalled_read_warn_lifetime`
@@ -903,7 +908,7 @@ specific OSDs.
 
 To change this, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set global bdev_stalled_read_warn_lifetime 10
    ceph config set global bdev_stalled_read_warn_threshold 5
@@ -911,7 +916,7 @@ To change this, run the following command:
 This may be done for specific OSDs or a given mask. For example,
 to apply only to SSD OSDs:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set osd.123 bdev_stalled_read_warn_lifetime 10
    ceph config set osd.123 bdev_stalled_read_warn_threshold 5
@@ -944,14 +949,16 @@ to performance degradation and data unavailability or loss. These indicate
 that the storage drive may be failing and should be investigated and
 potentially replaced.
 
-``log_latency_fn slow operation observed for _txc_committed_kv, latency = 12.028621219s, txc = 0x55a107c30f00``
-``log_latency_fn slow operation observed for upper_bound, latency = 6.25955s``
-``log_latency slow operation observed for submit_transaction..``
+.. code-block:: console
+
+   log_latency_fn slow operation observed for _txc_committed_kv, latency = 12.028621219s, txc = 0x55a107c30f00
+   log_latency_fn slow operation observed for upper_bound, latency = 6.25955s
+   log_latency slow operation observed for submit_transaction..
 
 This may also be reflected by the ``BLUESTORE_SLOW_OP_ALERT`` cluster health flag.
 
 As there can be false positive ``slow ops`` instances, a mechanism has
-been added for more reliability. If in the last ``bluestore_slow_ops_warn_lifetime``
+been added for more reliability. If in the last :confval:`bluestore_slow_ops_warn_lifetime`
 seconds the number of ``slow ops`` indications are found greater than or equal to
 :confval:`bluestore_slow_ops_warn_threshold` for a given BlueStore OSD, this
 warning will be reported in ``ceph health detail``. The warning state is
@@ -963,14 +970,14 @@ specific OSDs.
 
 To change this, run a command of the following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set global bluestore_slow_ops_warn_lifetime 300
    ceph config set global bluestore_slow_ops_warn_threshold 5
 
 this may be done for specific OSDs or a given mask, for example:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set osd.123 bluestore_slow_ops_warn_lifetime 300
    ceph config set osd.123 bluestore_slow_ops_warn_threshold 5
