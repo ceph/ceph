@@ -31,6 +31,10 @@ int RGWResolver::resolve_cname(const string& hostname, string& cname, bool *foun
   return resolver->resolve_cname(g_ceph_context, hostname, &cname, found);
 }
 
+int RGWResolver::resolve_all_addrs(const string& hostname, std::vector<entity_addr_t>* addrs) {
+  return resolver->resolve_all_addrs(g_ceph_context, hostname, addrs);
+}
+
 RGWResolver *rgw_resolver;
 
 
