@@ -196,21 +196,27 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
 TEST_P(LibRadosOmapECPP, OmapRecovery) {
   SKIP_IF_CRIMSON();
   turn_balancing_off();
-  bufferlist bl_write, omap_val_bl;
+  bufferlist bl_write, omap_val_bl, xattr_val_bl;
   const std::string omap_key_1 = "key_a";
   const std::string omap_key_2 = "key_b";
-  const std::string omap_value = "val_c";
+  const std::string omap_key_3 = "key_c";
+  const std::string omap_value = "val_omap_recovery";
   encode(omap_value, omap_val_bl);
   std::map<std::string, bufferlist> omap_map = {
-  {omap_key_1, omap_val_bl},
-  {omap_key_2, omap_val_bl}
+    {omap_key_1, omap_val_bl},
+    {omap_key_2, omap_val_bl},
+    {omap_key_3, omap_val_bl}
   };
+  const std::string header = "recovery_header_z";
+  bufferlist header_bl;
+  encode(header, header_bl);
   bl_write.append("ceph");
 
   // 1. Write to OMAP
   ObjectWriteOperation write1;
   write1.write(0, bl_write);
   write1.omap_set(omap_map);
+  write1.omap_set_header(header_bl);
   int ret = ioctx.operate("omap_recovery_oid", &write1);
   EXPECT_EQ(ret, 0);
 
@@ -253,7 +259,7 @@ TEST_P(LibRadosOmapECPP, OmapRecovery) {
   EXPECT_TRUE(recovered) << "Timed out waiting for recovery on " << pgid;
 
   // 5. Read OMAP
-  check_omap_read("omap_recovery_oid", omap_key_1, omap_value, 2, 0);
+  check_omap_read("omap_recovery_oid", omap_key_1, omap_value, 3, 0);
 
   // 6. Deep Scrub the PG
   std::cout << "Forcing Deep Scrub to verify OMAP integrity..." << std::endl;
@@ -306,7 +312,8 @@ TEST_P(LibRadosOmapECPP, ChangeUpmap) {
   encode(omap_value, omap_val_bl);
   std::map<std::string, bufferlist> omap_map = {
     {omap_key_1, omap_val_bl},
-    {omap_key_2, omap_val_bl}
+    {omap_key_2, omap_val_bl},
+    {omap_key_3, omap_val_bl}
   };
   const std::string header = "upmap_header_z";
   bufferlist header_bl;
@@ -354,7 +361,7 @@ TEST_P(LibRadosOmapECPP, ChangeUpmap) {
   EXPECT_TRUE(res2 == 0);
   
   // 6. Read omap
-  check_omap_read("change_upmap_oid", omap_key_1, omap_value, 2, 0);
+  check_omap_read("change_upmap_oid", omap_key_1, omap_value, 3, 0);
 
   turn_balancing_on();
 }
