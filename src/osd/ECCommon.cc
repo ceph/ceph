@@ -1173,19 +1173,24 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
       coll,
       tobj,
       op.attrset);
-    m->t.omap_clear(
-      coll,
-      tobj);
-    m->t.omap_setheader(
-      coll,
-      tobj,
-      op.omap_header);
+    if (get_parent()->get_pool().supports_omap()) {
+      m->t.omap_clear(
+        coll,
+        tobj);
+      m->t.omap_setheader(
+        coll,
+        tobj,
+        op.omap_header);
+    }
   }
 
-  m->t.omap_setkeys(
+  if (!op.omap_entries.empty()) {
+    ceph_assert(get_parent()->get_pool().supports_omap());
+    m->t.omap_setkeys(
     coll,
     tobj,
     op.omap_entries);
+  }
 
   if (op.after_progress.data_complete && op.after_progress.omap_complete) {
     uint64_t shard_size = sinfo.object_size_to_shard_size(op.recovery_info.size,
@@ -1711,15 +1716,29 @@ ECCommon::RecoveryBackend::recover_object(
       ceph_abort_msg("neither obc nor head set for a snap object");
     }
   }
-  op.recovery_progress.omap_complete = true;
+  bool omap_dirty_in_missing = false;
   for (set<pg_shard_t>::const_iterator i =
          get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
     dout(10) << "checking " << *i << dendl;
-    if (get_parent()->get_shard_missing(*i).is_missing(hoid)) {
+    const auto& missing = get_parent()->get_shard_missing(*i);
+    if (auto it = missing.get_items().find(hoid);
+          it != missing.get_items().end()) {
       op.missing_on.insert(*i);
       op.missing_on_shards.insert(i->shard);
+      if (it->second.clean_regions.omap_is_dirty()) {
+        omap_dirty_in_missing = true;
+      }
+    }
+  }
+  if (!sinfo.supports_ec_optimisations()) {
+    op.recovery_progress.omap_complete = true;
+  } else {
+    op.recovery_progress.omap_complete = !(op.recovery_info.oi.is_omap()
+                                            || omap_dirty_in_missing);
+    if (!op.recovery_progress.omap_complete) {
+      ceph_assert(get_parent()->get_pool().supports_omap());
     }
   }
   dout(10) << __func__ << ": built op " << op << dendl;

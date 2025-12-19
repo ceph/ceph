@@ -352,6 +352,10 @@ struct Trimmer : public ObjectModDesc::Visitor {
       soid,
       old_version,
       t);
+
+    if (pg->get_parent()->get_pool().allows_ecoptimizations()) {
+      pg->omap_trim_delete_from_journal(soid, old_version);
+    }
   }
   // try_rmobject defaults to rmobject
   void rollback_extents(
@@ -381,6 +385,8 @@ struct Trimmer : public ObjectModDesc::Visitor {
 
   void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
     std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) override {
+    ceph_assert(pg->get_parent()->get_pool().allows_ecoptimizations());
+    ceph_assert(pg->get_parent()->get_pool().supports_omap());
 
     auto shard = pg->get_parent()->whoami_shard().shard;
     spg_t spg = pg->get_parent()->whoami_spg_t();
