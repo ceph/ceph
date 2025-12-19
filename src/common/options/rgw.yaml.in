@@ -1972,6 +1972,24 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_resolve_endpoints_into_all_addresses
+  type: bool
+  level: advanced
+  long_desc: When an RGW multisite zone is configured with an endpoint hostname (e.g.,
+    "http://zone-b.example.com"), DNS for that hostname may return multiple A
+    or AAAA records representing multiple RGW nodes. By default, RGW (libcurl) will only
+    use the first resolved address, which means communication between zones may
+    utilize only a single peer node.
+    When this option is enabled, RGW will resolve each configured endpoint into
+    all of its A/AAAA records and may use them all, allowing outgoing requests
+    to be distributed across multiple RGW nodes even when no external load
+    balancer (such as HAProxy or an appliance) is present.
+    This option is intended for deployments where DNS provides multiple backend
+    addresses but the administrator still wants RGW to utilize all of them.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_obj_stripe_size
   type: size
   level: advanced
