@@ -1,7 +1,7 @@
 .. _health-checks:
 
 ===============
- Health checks 
+ Health Checks
 ===============
 
 Overview
@@ -12,13 +12,13 @@ are known as *health checks*. Each health check has a unique identifier.
 
 The identifier is a terse human-readable string -- that is, the identifier is
 readable in much the same way as a typical variable name. It is intended to
-enable tools (for example, monitoring and UIs) to make sense of health checks and present them
-in a way that reflects their meaning.
+enable tools (for example, monitoring and UIs) to make sense of health checks
+and present them in a way that reflects their meaning.
 
 This page lists the health checks that are raised by the monitor and manager
 daemons. In addition to these, you may see health checks that originate
 from CephFS MDS daemons (see :ref:`cephfs-health-messages`), and health checks
-that are defined by ``ceph-mgr`` modules.
+that are defined by Ceph Manager modules.
 
 Definitions
 ===========
@@ -31,32 +31,33 @@ __________________
 
 One or more Ceph daemons are running an old Ceph release.  A health check is
 raised if multiple versions are detected.  This condition must exist for a
-period of time greater than ``mon_warn_older_version_delay`` (set to one week
-by default) in order for the health check to be raised. This allows most
+period of time greater than :confval:`mon_warn_older_version_delay` (set to one
+week by default) in order for the health check to be raised. This allows most
 upgrades to proceed without raising a warning that is both expected and
-ephemeral. If the upgrade is paused for an extended time, ``health mute`` can
-be used by running ``ceph health mute DAEMON_OLD_VERSION --sticky``. Be sure,
-however, to run ``ceph health unmute DAEMON_OLD_VERSION`` after the upgrade has
-finished so that any future, unexpected instances are not masked.
+ephemeral. If the upgrade is paused for an extended time,
+:ref:`rados-monitoring-muting-health-checks` can be used by running ``ceph
+health mute DAEMON_OLD_VERSION --sticky``. Be sure, however, to run ``ceph
+health unmute DAEMON_OLD_VERSION`` after the upgrade has finished so that any
+future, unexpected instances are not masked.
 
 MON_DOWN
 ________
 
-One or more Ceph Monitor daemons are down. The cluster requires a majority
-(more than one-half) of the provsioned monitors to be available. When one or
-more monitors are down, clients may have a harder time forming their initial
+One or more Monitor daemons are down. The cluster requires a majority (more
+than one-half) of the provisioned Monitors to be available. When one or more
+Monitors are down, clients may have a harder time forming their initial
 connection to the cluster, as they may need to try additional IP addresses
-before they reach an operating monitor.
+before they reach an operating Monitor.
 
-Down monitor daemons should be restored or restarted as soon as possible to
-reduce the risk that an additional monitor failure may cause a service outage.
+Down Monitor daemons should be restored or restarted as soon as possible to
+reduce the risk that an additional Monitor failure may cause a service outage.
 
 MON_CLOCK_SKEW
 ______________
 
 The clocks on hosts running Ceph Monitor daemons are not well-synchronized.
 This health check is raised if the cluster detects a clock skew greater than
-``mon_clock_drift_allowed``.
+:confval:`mon_clock_drift_allowed`.
 
 This issue is best resolved by synchronizing the clocks by using a tool like
 the legacy ``ntpd`` or the newer ``chrony``.  It is ideal to configure NTP
@@ -64,34 +65,34 @@ daemons to sync against multiple internal and external sources for resilience;
 the protocol will adaptively determine the best available source.  It is also
 beneficial to have the NTP daemons on Ceph Monitor hosts sync against each
 other, as it is even more important that Monitors be synchronized with each
-other than it is for them to be _correct_ with respect to reference time.
+other than it is for them to be *correct* with respect to reference time.
 
 If it is impractical to keep the clocks closely synchronized, the
-``mon_clock_drift_allowed`` threshold can be increased. However, this value
-must stay significantly below the ``mon_lease`` interval in order for the
-monitor cluster to function properly.  It is not difficult with a quality NTP
+:confval:`mon_clock_drift_allowed` threshold can be increased. However, this
+value must stay significantly below the ``mon_lease`` interval in order for the
+Monitor cluster to function properly.  It is not difficult with a quality NTP
 or PTP configuration to have sub-millisecond synchronization, so there are
 very, very few occasions when it is appropriate to change this value.
 
 MON_MSGR2_NOT_ENABLED
 _____________________
 
-The :confval:`ms_bind_msgr2` option is enabled but one or more monitors are not
-configured in the cluster's monmap to bind to a v2 port. This means that
-features specific to the msgr2 protocol (for example, encryption) are
+The :confval:`ms_bind_msgr2` option is enabled but one or more Ceph Monitors
+are not configured in the cluster's monmap to bind to a v2 port. This means
+that features specific to the msgr2 protocol (for example, encryption) are
 unavailable on some or all connections.
 
 In most cases this can be corrected by running the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph mon enable-msgr2
 
-After this command is run, any monitor configured to listen on the old default
+After this command is run, any Monitor configured to listen on the old default
 port (6789) will continue to listen for v1 connections on 6789 and begin to
 listen for v2 connections on the new default port 3300.
 
-If a monitor is configured to listen for v1 connections on a non-standard port
+If a Monitor is configured to listen for v1 connections on a non-standard port
 (that is, a port other than 6789), the monmap will need to be modified
 manually.
 
@@ -101,8 +102,8 @@ ____________
 
 One or more Monitors are low on storage space. This health check is raised when
 available space on the file system used by the Monitor
-database (normally ``/var/lib/ceph/<fsid>/mon.<monid>``) drops below the threshold
-``mon_data_avail_warn`` (default: 30%).
+database (normally ``/var/lib/ceph/<fsid>/mon.<monid>``) drops below the
+threshold :confval:`mon_data_avail_warn` (default: 30%).
 
 This alert might indicate that some other process or user on the system is
 filling up the file system used by the Monitor. It might also indicate that the
@@ -112,10 +113,10 @@ troubleshooting purposes without subsequent return to default levels.  Ongoing
 verbose logging can easily fill up the files system containing ``/var/log``. If
 you trim logs that are currently open, remember to restart or instruct your
 syslog or other daemon to re-open the log file. Another common dynamic is
-that users or processes have written a large amount of data to ``/tmp`` or ``/var/tmp``,
-which may be on the same filesystem.
+that users or processes have written a large amount of data to ``/tmp``
+or ``/var/tmp``, which may be on the same filesystem.
 
-If space cannot be freed, the monitor's data directory might need to be moved
+If space cannot be freed, the Monitor's data directory might need to be moved
 to another storage device or file system. This relocation process must be
 carried out while the Monitor daemon is not running.
 
@@ -123,37 +124,38 @@ carried out while the Monitor daemon is not running.
 MON_DISK_CRIT
 _____________
 
-One or more monitors are critically low on storage space. This health check is
+One or more Monitors are critically low on storage space. This health check is
 raised if the percentage of available space on the file system used by the
-monitor database (normally ``/var/lib/ceph/mon``) drops below the percentage
-value ``mon_data_avail_crit`` (default: 5%). See ``MON_DISK_LOW``, above.
+Monitor database (normally ``/var/lib/ceph/<fsid>/mon.<monid>``) drops below
+the percentage value :confval:`mon_data_avail_crit` (default: 5%).
+See ``MON_DISK_LOW``, above.
 
 MON_DISK_BIG
 ____________
 
-The database size for one or more monitors is very large. This health check is
-raised if the size of the monitor database is larger than
-``mon_data_size_warn`` (default: 15 GiB).
+The database size for one or more Monitors is very large. This health check is
+raised if the size of the Monitor database is larger than
+:confval:`mon_data_size_warn` (default: 15 GiB).
 
 A large database is unusual, but does not necessarily indicate a problem.
 Monitor databases might grow in size when there are placement groups that have
 not reached an ``active+clean`` state in a long time, or when extensive cluster
-recovery, expansion, or topology changes have recently occurred.  It is recommended
-that when conducting large scale cluster changes that the cluster thus be
-left to "rest" for at least a few hours once each week.
+recovery, expansion, or topology changes have recently occurred.  It is
+recommended that when conducting large scale cluster changes that the cluster
+thus be left to "rest" for at least a few hours once each week.
 
-This alert may also indicate that the monitor's database is not properly
+This alert may also indicate that the Monitor's database is not properly
 compacting, an issue that has been observed with older versions of
 RocksDB. Forcing compaction with ``ceph daemon mon.<id> compact`` may suffice
 to shrink the database's storage usage.
 
-This alert may also indicate that the monitor has a bug that prevents it from
+This alert may also indicate that the Monitor has a bug that prevents it from
 pruning the cluster metadata that it stores. If the problem persists, please
 report a bug.
 
 To adjust the warning threshold, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set global mon_data_size_warn <size>
 
@@ -161,37 +163,39 @@ MON_NETSPLIT
 ____________
 
 A network partition has occurred among Ceph Monitors. This health check is
-raised when one or more monitors detect that at least two Ceph Monitors have
+raised when one or more Monitors detect that at least two Ceph Monitors have
 lost connectivity or reachability, based on their individual connection scores,
 which are frequently updated. This warning only appears when
 the cluster is provisioned with at least three Ceph Monitors and are using the
-``connectivity`` election strategy.
+``connectivity`` :ref:`election strategy <changing_monitor_elections>`.
 
 To reduce false alarms from transient network issues, detected netsplits are
 not immediately reported as health warnings. Instead, they must persist for at
-least ``mon_netsplit_grace_period`` seconds (default: 9 seconds) before being
-reported. If the network partition resolves within this grace period, no health
-warning is emitted.
+least :confval:`mon_netsplit_grace_period` seconds (default: 9 seconds) before
+being reported. If the network partition resolves within this grace period, no
+health warning is emitted.
 
 Network partitions are reported in two ways:
 
-- As location-level netsplits (e.g., "Netsplit detected between dc1 and dc2") when
-  all monitors in one location cannot communicate with all monitors in another location.
-- As individual monitor netsplits (e.g., "Netsplit detected between mon.a and mon.d")
-  when only specific monitors are disconnected across locations.
+- As location-level netsplits (e.g., "Netsplit detected between dc1 and dc2")
+  when all Monitors in one location cannot communicate with all Monitors in
+  another location.
+- As individual Monitor netsplits (e.g., "Netsplit detected between mon.a and
+  mon.d") when only specific Monitors are disconnected across locations.
 
-The system prioritizes reporting at the highest topology level (``datacenter``, ``rack``, etc.)
-when possible, to better help operators identify infrastructure-level network issues.
+The system prioritizes reporting at the highest topology level (``datacenter``,
+``rack``, etc.) when possible, to better help operators identify
+infrastructure-level network issues.
 
 To adjust the grace period threshold, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mon mon_netsplit_grace_period <seconds>
 
 To disable the grace period entirely (immediate reporting), set the value to 0:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mon mon_netsplit_grace_period 0
 
@@ -200,28 +204,29 @@ _______________________________
 
 One or more clients or daemons that are connected to the cluster are not
 securely reclaiming their ``global_id`` (a unique number that identifies each
-entity in the cluster) when reconnecting to a monitor. The client is being
+entity in the cluster) when reconnecting to a Monitor. The client is being
 permitted to connect anyway because the
-``auth_allow_insecure_global_id_reclaim`` option is set to ``true`` (which may
-be necessary until all Ceph clients have been upgraded) and because the
-``auth_expose_insecure_global_id_reclaim`` option is set to ``true`` (which
-allows monitors to detect clients with "insecure reclaim" sooner by forcing
-those clients to reconnect immediately after their initial authentication).
+:confval:`auth_allow_insecure_global_id_reclaim` option is set to ``true``
+(which may be necessary until all Ceph clients have been upgraded) and because
+the :confval:`auth_expose_insecure_global_id_reclaim` option is set to ``true``
+(which allows monitors to detect clients with "insecure reclaim" sooner by
+forcing those clients to reconnect immediately after their initial
+authentication).
 
 To identify which client(s) are using unpatched Ceph client code, run the
 following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph health detail
 
 If you collect a dump of the clients that are connected to an individual
-monitor and examine the ``global_id_status`` field in the output of the dump,
+Monitor and examine the ``global_id_status`` field in the output of the dump,
 you can see the ``global_id`` reclaim behavior of those clients. Here
 ``reclaim_insecure`` means that a client is unpatched and is contributing to
 this health check.  To effect a client dump, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph tell mon.\* sessions
 
@@ -230,46 +235,49 @@ version of Ceph that correctly reclaims ``global_id`` values. After all clients
 have been updated, run the following command to stop allowing insecure
 reconnections:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mon auth_allow_insecure_global_id_reclaim false
 
 If it is impractical to upgrade all clients immediately, you can temporarily
-silence this alert by running the following command:
+:ref:`silence <rados-monitoring-muting-health-checks>` this alert by running
+the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM 1w   # 1 week
 
 Although we do NOT recommend doing so, you can also disable this alert
 indefinitely by running the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mon mon_warn_on_insecure_global_id_reclaim false
 
 AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED
 _______________________________________
 
-Ceph is currently configured to allow clients that reconnect to monitors using
+Ceph is currently configured to allow clients that reconnect to Monitors using
 an insecure process to reclaim their previous ``global_id``. Such reclaiming is
-allowed because, by default, ``auth_allow_insecure_global_id_reclaim`` is set
-to ``true``. It might be necessary to leave this setting enabled while existing
-Ceph clients are upgraded to newer versions of Ceph that correctly and securely
-reclaim their ``global_id``.
+allowed because, by default, :confval:`auth_allow_insecure_global_id_reclaim`
+is set to ``true``. It might be necessary to leave this setting enabled while
+existing Ceph clients are upgraded to newer versions of Ceph that correctly and
+securely reclaim their ``global_id``.
 
 If the ``AUTH_INSECURE_GLOBAL_ID_RECLAIM`` health check has not also been
-raised and if the ``auth_expose_insecure_global_id_reclaim`` setting has not
-been disabled (it is enabled by default), then there are currently no clients
-connected that need to be upgraded. In that case, it is safe to disable
-``insecure global_id reclaim`` by running the following command:
+raised and if the :confval:`auth_expose_insecure_global_id_reclaim` setting has
+not been disabled (it is enabled by default), then there are currently no
+clients connected that need to be upgraded. In that case, it is safe to disable
+insecure ``global_id`` reclaim by running the following command:
 
 .. prompt:: bash $
 
    ceph config set mon auth_allow_insecure_global_id_reclaim false
 
 On the other hand, if there are still clients that need to be upgraded, then
-this alert can be temporarily silenced by running the following command:
+this alert can be
+temporarily :ref:`silenced <rados-monitoring-muting-health-checks>` by running
+the following command:
 
 .. prompt:: bash $
 
