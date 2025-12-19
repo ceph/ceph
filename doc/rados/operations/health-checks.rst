@@ -270,7 +270,7 @@ not been disabled (it is enabled by default), then there are currently no
 clients connected that need to be upgraded. In that case, it is safe to disable
 insecure ``global_id`` reclaim by running the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mon auth_allow_insecure_global_id_reclaim false
 
@@ -279,14 +279,14 @@ this alert can be
 temporarily :ref:`silenced <rados-monitoring-muting-health-checks>` by running
 the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED 1w   # 1 week
 
-Although we do NOT recommend doing so, you can also disable this alert
+Although we do **not** recommend doing so, you can also disable this alert
 indefinitely by running the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false
 
@@ -298,14 +298,14 @@ MGR_DOWN
 ________
 
 All Ceph Manager daemons are currently down. The cluster should normally have
-at least one running manager (``ceph-mgr``) daemon. If no manager daemon is
+at least one running Manager (``ceph-mgr``) daemon. If no Manager daemon is
 running, the cluster's ability to monitor itself will be compromised, parts of
 the management API will become unavailable (for example, the dashboard will not
 work, and most CLI commands that report metrics or runtime state will block).
 However, the cluster will still be able to perform client I/O operations and
 recover from failures.
 
-The down manager daemon(s) should be restarted as soon as possible to ensure
+The down Manager daemon(s) should be restarted as soon as possible to ensure
 that the cluster can be monitored (for example, so that ``ceph -s`` information
 is available and up to date, and so that metrics can be scraped by Prometheus).
 
@@ -313,30 +313,30 @@ is available and up to date, and so that metrics can be scraped by Prometheus).
 MGR_MODULE_DEPENDENCY
 _____________________
 
-An enabled manager module is failing its dependency check. This health check
+An enabled Manager module is failing its dependency check. This health check
 typically comes with an explanatory message from the module about the problem.
 
 For example, a module might report that a required package is not installed: in
-this case, you should install the required package and restart your manager
+this case, you should install the required package and restart your Manager
 daemons.
 
 This health check is applied only to enabled modules. If a module is not
 enabled, you can see whether it is reporting dependency issues in the output of
-`ceph module ls`.
+``ceph module ls``.
 
 
 MGR_MODULE_ERROR
 ________________
 
-A manager module has experienced an unexpected error. Typically, this means
-that an unhandled exception was raised from the module's `serve` function. The
+A Manager module has experienced an unexpected error. Typically, this means
+that an unhandled exception was raised from the module's ``serve()`` function. The
 human-readable description of the error might be obscurely worded if the
 exception did not provide a useful description of itself.
 
 This health check might indicate a bug: please open a Ceph bug report if you
 think you have encountered a bug.
 
-However, if you believe the error is transient, you may restart your manager
+However, if you believe the error is transient, you may restart your Manager
 daemon(s) or use ``ceph mgr fail`` on the active daemon in order to force
 failover to another daemon.
 
@@ -346,7 +346,7 @@ OSDs
 OSD_DOWN
 ________
 
-One or more OSDs are marked ``down``. The ceph-osd daemon(s) or their host(s)
+One or more OSDs are marked ``down``. The ``ceph-osd`` daemon(s) or their host(s)
 may have crashed or been stopped, or peer OSDs might be unable to reach the OSD
 over the public or private network.  Common causes include a stopped or crashed
 daemon, a "down" host, or a network failure.
@@ -358,9 +358,9 @@ functioning. If the daemon has crashed, the daemon log file
 OSD_<crush type>_DOWN
 _____________________
 
-(for example, OSD_HOST_DOWN, OSD_ROOT_DOWN)
+(for example, ``OSD_HOST_DOWN``, ``OSD_ROOT_DOWN``)
 
-All of the OSDs within a particular CRUSH subtree are marked "down" (for
+All of the OSDs within a particular CRUSH subtree are marked ``down`` (for
 example, all OSDs on a host).
 
 OSD_ORPHAN
@@ -370,21 +370,21 @@ An OSD is referenced in the CRUSH map hierarchy, but does not exist.
 
 To remove the OSD from the CRUSH map hierarchy, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd crush rm osd.<id>
 
 OSD_OUT_OF_ORDER_FULL
 _____________________
 
-The utilization thresholds for `nearfull`, `backfillfull`, `full`, and/or
-`failsafe_full` are not ascending. In particular, the following pattern is
-expected: `nearfull < backfillfull`, `backfillfull < full`, and `full <
-failsafe_full`.  This can result in unexpected cluster behavior.
+The utilization thresholds for ``nearfull``, ``backfillfull``, ``full``, and/or
+``failsafe_full`` are not ascending. This can result in unexpected cluster
+behavior. In particular, the following pattern is expected: ``nearfull`` <
+``backfillfull``, ``backfillfull`` < ``full``, and ``full`` < ``failsafe_full``.
 
 To adjust these utilization thresholds, run the following commands:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd set-nearfull-ratio <ratio>
    ceph osd set-backfillfull-ratio <ratio>
@@ -394,30 +394,33 @@ To adjust these utilization thresholds, run the following commands:
 OSD_FULL
 ________
 
-One or more OSDs have exceeded the `full` threshold and are preventing the
+One or more OSDs have exceeded the ``full`` threshold and are preventing the
 cluster from servicing writes.
 
 To check utilization by pool, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph df
 
-To see the currently defined `full` ratio, run the following command:
+To see the currently defined ``full`` ratio, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd dump | grep full_ratio
 
 A short-term workaround to restore write availability is to raise the full
 threshold by a small amount. To do so, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd set-full-ratio <ratio>
 
+For a detailed discussion on troubleshooting OSD free space issues, see
+:ref:`troubleshooting OSD <no-free-drive-space>`.
+
 Additional OSDs should be deployed within appropriate CRUSH failure domains
-in order to increase capacity, and / or existing data should be deleted
+in order to increase capacity, and/or existing data should be deleted
 in order to free up space in the cluster.  One subtle situation is that the
 ``rados bench`` tool may have been used to test one or more pools' performance,
 and the resulting RADOS objects were not subsequently cleaned up.  You may
@@ -428,7 +431,7 @@ then be manually but very, very carefully deleted in order to reclaim capacity.
 OSD_BACKFILLFULL
 ________________
 
-One or more OSDs have exceeded the `backfillfull` threshold or *would* exceed
+One or more OSDs have exceeded the ``backfillfull`` threshold or *would* exceed
 it if the currently-mapped backfills were to finish, which will prevent data
 from rebalancing to this OSD. This alert is an early warning that
 rebalancing might be unable to complete and that the cluster is approaching
@@ -436,45 +439,51 @@ full.
 
 To check utilization by pool, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph df
+
+For a detailed discussion on troubleshooting OSD free space issues, see the
+:ref:`troubleshooting OSD <no-free-drive-space>`.
 
 OSD_NEARFULL
 ____________
 
-One or more OSDs have exceeded the `nearfull` threshold. This alert is an early
+One or more OSDs have exceeded the ``nearfull`` threshold. This alert is an early
 warning that the cluster is approaching full.
 
 To check utilization by pool, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph df
+
+For a detailed discussion on troubleshooting OSD free space issues, see the
+:ref:`troubleshooting OSD <no-free-drive-space>`.
 
 OSDMAP_FLAGS
 ____________
 
 One or more cluster flags of interest have been set. These flags include:
 
-* *full* - the cluster is flagged as full and cannot serve writes
-* *pauserd*, *pausewr* - there are paused reads or writes
-* *noup* - OSDs are not allowed to start
-* *nodown* - OSD failure reports are being ignored, and that means that the
-  monitors will not mark OSDs "down"
-* *noin* - OSDs that were previously marked ``out`` are not being marked
-  back ``in`` when they start
-* *noout* - "down" OSDs are not automatically being marked ``out`` after the
-  configured interval
-* *nobackfill*, *norecover*, *norebalance* - recovery or data
-  rebalancing is suspended
-* *noscrub*, *nodeep_scrub* - scrubbing is disabled
-* *notieragent* - cache-tiering activity is suspended
+* ``full``: The cluster is flagged as full and cannot serve writes.
+* ``pauserd``, ``pausewr``: There are paused reads or writes.
+* ``noup``: OSDs are not allowed to start.
+* ``nodown``: OSD failure reports are being ignored, which means that the
+  monitors will not mark OSDs ``down``.
+* ``noin``: OSDs that were previously marked ``out`` are not being marked
+  back ``in`` when they start.
+* ``noout``: ``down`` OSDs are not automatically being marked ``out`` after the
+  configured interval.
+* ``nobackfill``, ``norecover``, ``norebalance``: Recovery or data
+  rebalancing is suspended.
+* ``noscrub``, ``nodeep_scrub``: Scrubbing is disabled.
+* ``notieragent``: Cache-tiering activity is suspended.
 
-With the exception of *full*, these flags can be set or cleared by running the
+With the exception of ``full``, these flags can be set or cleared by running the
 following commands:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd set <flag>
    ceph osd unset <flag>
@@ -482,26 +491,26 @@ following commands:
 OSD_FLAGS
 _________
 
-One or more OSDs or CRUSH {nodes,device classes} have a flag of interest set.
+One or more OSDs, CRUSH nodes, or CRUSH device classes have a flag of interest set.
 These flags include:
 
-* *noup*: these OSDs are not allowed to start
-* *nodown*: failure reports for these OSDs will be ignored
-* *noin*: if these OSDs were previously marked ``out`` automatically
-  after a failure, they will not be marked ``in`` when they start
-* *noout*: if these OSDs are "down" they will not automatically be marked
-  ``out`` after the configured interval
+* ``noup``: These OSDs are not allowed to start.
+* ``nodown``: Failure reports for these OSDs will be ignored.
+* ``noin``: If these OSDs were previously marked ``out`` automatically
+  after a failure, they will not be marked ``in`` when they start.
+* ``noout``: If these OSDs are ``down`` they will not automatically be marked
+  ``out`` after the configured interval.
 
 To set and clear these flags in batch, run the following commands:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd set-group <flags> <who>
    ceph osd unset-group <flags> <who>
 
 For example:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd set-group noup,noout osd.0 osd.1
    ceph osd unset-group noup,noout osd.0 osd.1
