@@ -223,6 +223,10 @@
                 Ceph cluster. See :ref:`the "Cluster Map" section of the
                 Architecture document<architecture_cluster_map>` for details.
 
+        CRC
+                *C*\yclic *R*\edundancy *C*\heck. An algorithm used to detect
+                errors in data transmission. CRC cannot correct errors.
+
         Crimson
                 A next-generation OSD architecture whose aim is the
                 reduction of latency costs incurred due to cross-core
