@@ -792,7 +792,6 @@ void Objecter::linger_cancel(LingerOp *info)
 {
   unique_lock wl(rwlock);
   _linger_cancel(info);
-  info->put();
 }
 
 void Objecter::_linger_cancel(LingerOp *info)
@@ -833,9 +832,10 @@ auto Objecter::_linger_by_cookie(uint64_t cookie)
   return info;
 }
 
-Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
-					      const object_locator_t& oloc,
-					      int flags)
+auto Objecter::linger_register(const object_t& oid,
+			       const object_locator_t& oloc,
+			       int flags)
+  -> boost::intrusive_ptr<LingerOp>
 {
   unique_lock l(rwlock);
   // Acquire linger ID
@@ -854,7 +854,6 @@ Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
   linger_ops_set.insert(info);
   ceph_assert(linger_ops.size() == linger_ops_set.size());
 
-  info->get(); // for the caller
   return info;
 }
 

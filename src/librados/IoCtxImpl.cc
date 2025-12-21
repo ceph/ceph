@@ -1662,8 +1662,8 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t *handle,
   version_t objver;
   C_SaferCond onfinish;
 
-  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc,
-                                                            extra_op_flags);
+  boost::intrusive_ptr linger_op = objecter->linger_register(oid, oloc,
+                                                             extra_op_flags);
   *handle = linger_op->get_cookie();
   if (internal) {
     linger_op->handle = InternalWatchInfo(this, oid, ctx, ctx2);
@@ -1673,7 +1673,7 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t *handle,
   prepare_assert_ops(&wr);
   wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH, timeout);
   bufferlist bl;
-  objecter->linger_watch(linger_op, wr,
+  objecter->linger_watch(linger_op.get(), wr,
 			 snapc, ceph::real_clock::now(), bl,
 			 &onfinish,
 			 &objver);
@@ -1683,7 +1683,7 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t *handle,
   set_sync_op_version(objver);
 
   if (r < 0) {
-    objecter->linger_cancel(linger_op);
+    objecter->linger_cancel(linger_op.get());
     *handle = 0;
   }
 
@@ -1707,8 +1707,8 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
                                    uint32_t timeout,
                                    bool internal)
 {
-  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc,
-                                                            extra_op_flags);
+  boost::intrusive_ptr linger_op = objecter->linger_register(oid, oloc,
+                                                             extra_op_flags);
   c->io = this;
   Context *oncomplete = new C_aio_linger_Complete(c, linger_op, false);
 
@@ -1723,7 +1723,7 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
   prepare_assert_ops(&wr);
   wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH, timeout);
   bufferlist bl;
-  objecter->linger_watch(linger_op, wr,
+  objecter->linger_watch(linger_op.get(), wr,
                          snapc, ceph::real_clock::now(), bl,
                          oncomplete, &c->objver);
 
@@ -1786,7 +1786,12 @@ int librados::IoCtxImpl::aio_unwatch(uint64_t cookie, AioCompletionImpl *c)
   c->io = this;
   boost::intrusive_ptr linger_op = objecter->linger_by_cookie(cookie);
   if (!linger_op) {
-    return -ENOTCONN;
+    // reject invalid cookies with ENOTCONN, but deliver to the
+    // AioCompletion instead of returning directly
+    boost::asio::defer(client->finish_strand,
+        boost::asio::append(CB_AioCompleteAndSafe(c), -ENOTCONN));
+
+    return 0;
   }
   Context *oncomplete = new C_aio_linger_Complete(c, linger_op, true);
 
@@ -1804,8 +1809,8 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
 				bufferlist *preply_bl,
 				char **preply_buf, size_t *preply_buf_len)
 {
-  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc,
-                                                            extra_op_flags);
+  boost::intrusive_ptr linger_op = objecter->linger_register(oid, oloc,
+                                                             extra_op_flags);
 
   C_SaferCond notify_finish_cond;
   auto e = boost::asio::prefer(
@@ -1815,7 +1820,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
     boost::asio::bind_executor(
       std::move(e),
       CB_notify_Finish(client->cct, &notify_finish_cond,
-                       objecter, linger_op, preply_bl,
+                       objecter, linger_op.get(), preply_bl,
                        preply_buf, preply_buf_len));
   uint32_t timeout = notify_timeout;
   if (timeout_ms)
@@ -1830,7 +1835,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
   // Issue RADOS op
   C_SaferCond onack;
   version_t objver;
-  objecter->linger_notify(linger_op,
+  objecter->linger_notify(linger_op.get(),
 			  rd, snap_seq, inbl, NULL,
 			  &onack, &objver);
 
@@ -1850,7 +1855,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
     notify_finish_cond.wait();
   }
 
-  objecter->linger_cancel(linger_op);
+  objecter->linger_cancel(linger_op.get());
 
   set_sync_op_version(objver);
   return r;
@@ -1861,8 +1866,8 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
                                     bufferlist *preply_bl, char **preply_buf,
                                     size_t *preply_buf_len)
 {
-  Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc,
-                                                            extra_op_flags);
+  boost::intrusive_ptr linger_op = objecter->linger_register(oid, oloc,
+                                                             extra_op_flags);
 
   c->io = this;
 
@@ -1874,7 +1879,7 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
     boost::asio::bind_executor(
       std::move(e),
       CB_notify_Finish(client->cct, oncomplete,
-                       objecter, linger_op,
+                       objecter, linger_op.get(),
                        preply_bl, preply_buf,
                        preply_buf_len));
   Context *onack = new C_aio_notify_Ack(client->cct, oncomplete);
@@ -1890,7 +1895,7 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
   rd.notify(linger_op->get_cookie(), 1, timeout, bl, &inbl);
 
   // Issue RADOS op
-  objecter->linger_notify(linger_op,
+  objecter->linger_notify(linger_op.get(),
 			  rd, snap_seq, inbl, NULL,
 			  onack, &c->objver);
   return 0;
