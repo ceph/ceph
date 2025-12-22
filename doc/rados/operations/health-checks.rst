@@ -165,7 +165,7 @@ ____________
 A network partition has occurred among Ceph Monitors. This health check is
 raised when one or more Monitors detect that at least two Ceph Monitors have
 lost connectivity or reachability, based on their individual connection scores,
-which are frequently updated. This warning only appears when
+which are frequently updated. This warning appears only when
 the cluster is provisioned with at least three Ceph Monitors and are using the
 ``connectivity`` :ref:`election strategy <changing_monitor_elections>`.
 
@@ -1677,8 +1677,8 @@ threshold. This alert indicates either that an extremely large number of
 snapshots was recently deleted, or that OSDs are unable to trim snapshots
 quickly enough to keep up with the rate of new snapshot deletions.
 
-The warning threshold is determined by the ``mon_osd_snap_trim_queue_warn_on``
-option (default: 32768).
+The warning threshold is determined by the :confval:`mon_osd_snap_trim_queue_warn_on`
+option (default: ``32768``).
 
 This alert might be raised if OSDs are under excessive load and unable to keep
 up with their background work, or if the OSDs' internal metadata database is
@@ -1694,38 +1694,39 @@ Stretch Mode
 INCORRECT_NUM_BUCKETS_STRETCH_MODE
 __________________________________
 
-Stretch mode currently only support 2 dividing buckets with OSDs, this warning
-suggests that the number of dividing buckets is not equal to 2 after stretch
-mode is enabled.  You can expect unpredictable failures and MON assertions
+Stretch mode currently supports only two dividing CRUSH buckets with OSDs. This warning
+suggests that the number of dividing buckets is not equal to two after stretch
+mode is enabled. You can expect unpredictable failures and Monitor assertions
 until the condition is fixed.
 
-We encourage you to fix this by removing additional dividing buckets or bump the
-number of dividing buckets to 2.
+We encourage you to fix this by removing additional dividing CRUSH buckets or by increasing the
+number of dividing buckets to two. For more information, see :ref:`stretch_mode`.
 
 UNEVEN_WEIGHTS_STRETCH_MODE
 ___________________________
 
-The 2 dividing buckets must have equal weights when stretch mode is enabled.
-This warning suggests that the 2 dividing buckets have uneven weights after
+The two dividing CRUSH buckets must have equal weights when stretch mode is enabled.
+This warning suggests that the two dividing buckets have uneven weights after
 stretch mode is enabled. This is not immediately fatal, however, you can expect
 Ceph to be confused when trying to process transitions between dividing buckets.
 
-We encourage you to fix this by making the weights even on both dividing buckets.
+We encourage you to fix this by making the weights even on both dividing CRUSH buckets.
 This can be done by making sure the combined weight of the OSDs on each dividing
-bucket are the same.
+bucket are the same. For more information, see :ref:`stretch_mode`.
 
 NONEXISTENT_MON_CRUSH_LOC_STRETCH_MODE
 ______________________________________
 
-The CRUSH location specified for the monitor must belong to one of the dividing
-buckets when stretch mode is enabled. With the ``tiebreaker`` monitor being the
-only exception.
+The CRUSH locations specified for Monitors must be distributed to the dividing CRUSH
+buckets when stretch mode is enabled. The only exception to this rule is a
+tiebreaker Monitor which must be located outside of the dividing buckets.
 
-This warning suggests that one or more monitors have a CRUSH location that does
+This warning suggests that one or more Monitors have a CRUSH location that does
 not belong to any of the dividing buckets in stretch mode.
 
-We encourage you to fix this by making sure the CRUSH location of the monitor
-belongs to one of the dividing buckets.
+We encourage you to fix this by making sure the CRUSH locations of all Monitors,
+with the exception of a tiebreaker Monitor,
+belong to the dividing buckets. For more information, see :ref:`stretch_mode`.
 
 NVMeoF Gateway
 --------------
@@ -1738,22 +1739,22 @@ makes high availability (HA) impossible with a single gatway in a group. This
 can lead to problems with failover and failback operations for the NVMeoF
 gateway.
 
-It's recommended to have multiple NVMeoF gateways in a group.
+It is recommended to have multiple NVMeoF gateways in a group.
 
 NVMEOF_GATEWAY_DOWN
 ___________________
 
-Some of the gateways are in the GW_UNAVAILABLE state. If a NVMeoF daemon has
+Some of the gateways are in the ``GW_UNAVAILABLE`` state. If a NVMeoF daemon has
 crashed, the daemon log file (found at ``/var/log/ceph/``) may contain
 troubleshooting information.
 
 NVMEOF_GATEWAY_DELETING
 _______________________
 
-Some of the gateways are in the GW_DELETING state. They will stay in this
-state until all the namespaces under the gateway's load balancing group are 
-moved to another load balancing group ID. This is done automatically by the 
-load balancing process. If this alert persist for a long time, there might 
+Some of the gateways are in the ``GW_DELETING`` state. They will stay in this
+state until all the namespaces under the gateway's load balancing group are
+moved to another load balancing group ID. This is done automatically by the
+load balancing process. If this alert persist for a long time, there might
 be an issue with that process.
 
 Miscellaneous
@@ -1769,26 +1770,26 @@ problem.
 
 To list recent crashes, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph crash ls-new
 
 To examine information about a specific crash, run a command of the following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph crash info <crash-id>
 
 To silence this alert, you can archive the crash (perhaps after the crash
 has been examined by an administrator) by running a command of the following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph crash archive <crash-id>
 
 Similarly, to archive all recent crashes, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph crash archive-all
 
@@ -1796,41 +1797,41 @@ Archived crashes will still be visible by running the command ``ceph crash
 ls``, but not by running the command ``ceph crash ls-new``.
 
 The time period that is considered recent is determined by the option
-``mgr/crash/warn_recent_interval`` (default: two weeks).
+:confval:`mgr/crash/warn_recent_interval` (default: two weeks).
 
 To entirely disable this alert, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mgr/crash/warn_recent_interval 0
 
 RECENT_MGR_MODULE_CRASH
 _______________________
 
-One or more ``ceph-mgr`` modules have crashed recently, and the crash(es) have
+One or more Manager modules have crashed recently, and the crash(es) have
 not yet been acknowledged and archived by the administrator.  This alert
 usually indicates a software bug in one of the software modules that are
-running inside the ``ceph-mgr`` daemon. The module that experienced the problem
+running inside the Manager (``ceph-mgr``) daemon. The module that experienced the problem
 might be disabled as a result, but other modules are unaffected and continue to
 function as expected.
 
-As with the *RECENT_CRASH* health check, a specific crash can be inspected by
-running the following command:
+As with the `RECENT_CRASH`_ health check, a specific crash can be inspected by
+running a command of the following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph crash info <crash-id>
 
 To silence this alert, you can archive the crash (perhaps after the crash has
 been examined by an administrator) by running a command of the following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph crash archive <crash-id>
 
 Similarly, to archive all recent crashes, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph crash archive-all
 
@@ -1838,11 +1839,11 @@ Archived crashes will still be visible by running the command ``ceph crash ls``
 but not by running the command ``ceph crash ls-new``.
 
 The time period that is considered recent is determined by the option
-``mgr/crash/warn_recent_interval`` (default: two weeks).
+:confval:`mgr/crash/warn_recent_interval` (default: two weeks).
 
 To entirely disable this alert, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mgr/crash/warn_recent_interval 0
 
@@ -1861,7 +1862,7 @@ shared.
 
 To review the contents of the telemetry report, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph telemetry show
 
@@ -1870,22 +1871,22 @@ independently enabled or disabled. For more information, see :ref:`telemetry`.
 
 To re-enable telemetry (and silence the alert), run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph telemetry on
 
 To disable telemetry (and silence the alert), run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph telemetry off
 
 AUTH_BAD_CAPS
 _____________
 
-One or more auth users have capabilities that cannot be parsed by the monitors.
+One or more auth users have capabilities that cannot be parsed by the Monitors.
 As a general rule, this alert indicates that there are one or more daemon types
-that the user is not authorized to use to perform any action.
+authenticating using a user that is not authorized to perform any action.
 
 This alert is most likely to be raised after an upgrade if (1) the capabilities
 were set with an older version of Ceph that did not properly validate the
@@ -1894,7 +1895,7 @@ changed.
 
 To remove the user(s) in question, run a command of the following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph auth rm <entity-name>
 
@@ -1904,7 +1905,7 @@ authenticate as the removed user.)
 Alternatively, to update the capabilities for the user(s), run a command of the following
 form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph auth <entity-name> <daemon-type> <caps> [<daemon-type> <caps> ...]
 
@@ -1913,19 +1914,19 @@ For more information about auth capabilities, see :ref:`user-management`.
 OSD_NO_DOWN_OUT_INTERVAL
 ________________________
 
-The ``mon_osd_down_out_interval`` option is set to zero, which means that the
+The :confval:`mon_osd_down_out_interval` option is set to zero, which means that the
 system does not automatically perform any repair or healing operations when an
-OSD fails. Instead, an administrator an external orchestrator must manually
-mark "down" OSDs as ``out`` (by running ``ceph osd out <osd-id>``) in order to
+OSD fails. Instead, an administrator or an external orchestrator must manually
+mark ``down`` OSDs as ``out`` (by running ``ceph osd out <osd-id>``) in order to
 trigger recovery.
 
 This option is normally set to five or ten minutes, which should be enough time
 for a host to power-cycle or reboot.
 
-To silence this alert, set ``mon_warn_on_osd_down_out_interval_zero`` to
+To silence this alert, set :confval:`mon_warn_on_osd_down_out_interval_zero` to
 ``false`` by running the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config global mon mon_warn_on_osd_down_out_interval_zero false
 
@@ -1939,25 +1940,25 @@ a traceback might contain and expose sensitive information.
 
 To disable the debug mode, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph dashboard debug disable
 
 BLAUM_ROTH_W_IS_NOT_PRIME
 _________________________
 
-An EC pool is using the ``blaum_roth`` technique and ``w + 1`` is not a prime number. 
+An erasure-coded pool is using the ``blaum_roth`` technique and ``w + 1`` is not a prime number.
 This can result in data corruption if the pool needs backfill or recovery.
 
-To check the list of erasure code profiles use the command:
+To check the list of erasure code profiles, run the following command:
 
-.. prompt:: bash $
-   
+.. prompt:: bash #
+
    ceph osd erasure-code-profile ls
 
-Then to check the ``w`` value for a particular profile use a command of the following form:
+Then, to check the ``w`` value for a particular profile, run a command of the following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd erasure-code-profile get <name of profile>
 
