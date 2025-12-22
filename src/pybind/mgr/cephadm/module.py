@@ -523,6 +523,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.event = Event()
         self.ssh = ssh.SSHManager(self)
 
+        # Track hosts being added - these hosts will use root user temporarily
+        # even if cluster is configured to use non-root user
+        self.hosts_being_added: Set[str] = set()
+
         if self.get_store('pause'):
             self.paused = True
         else:
@@ -1983,44 +1987,111 @@ Then run the following:
         :param host: host name
         """
         HostSpec.validate(spec)
-        ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
-        if spec.addr == spec.hostname and ip_addr:
-            spec.addr = ip_addr
 
-        if spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr:
-            self.cache.refresh_all_host_info(spec.hostname)
+        # Check if this is a new host BEFORE any SSH operations
+        is_new_host = spec.hostname not in self.inventory
+        if is_new_host and self.ssh_user and self.ssh_user != 'root':
+            try:
+                self.hosts_being_added.add(spec.hostname)
+                self.log.info(f'Adding new host {spec.hostname}, will use root user temporarily for setup')
+            except Exception as e:
+                self.log.warning(f'Failed to add {spec.hostname} to hosts_being_added tracking: {e}')
 
-        if spec.oob:
-            if not spec.oob.get('addr'):
-                spec.oob['addr'] = self.oob_default_addr
-            if not spec.oob.get('port'):
-                spec.oob['port'] = '443'
-            host_oob_info = dict()
-            host_oob_info['addr'] = spec.oob['addr']
-            host_oob_info['port'] = spec.oob['port']
-            host_oob_info['username'] = spec.oob['username']
-            host_oob_info['password'] = spec.oob['password']
-            self.node_proxy_cache.update_oob(spec.hostname, host_oob_info)
+        try:
+            ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
+            if spec.addr == spec.hostname and ip_addr:
+                spec.addr = ip_addr
+            if spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr:
+                self.cache.refresh_all_host_info(spec.hostname)
 
-        # prime crush map?
-        if spec.location:
-            self.check_mon_command({
-                'prefix': 'osd crush add-bucket',
-                'name': spec.hostname,
-                'type': 'host',
-                'args': [f'{k}={v}' for k, v in spec.location.items()],
-            })
+            if spec.oob:
+                if not spec.oob.get('addr'):
+                    spec.oob['addr'] = self.oob_default_addr
+                if not spec.oob.get('port'):
+                    spec.oob['port'] = '443'
+                host_oob_info = dict()
+                host_oob_info['addr'] = spec.oob['addr']
+                host_oob_info['port'] = spec.oob['port']
+                host_oob_info['username'] = spec.oob['username']
+                host_oob_info['password'] = spec.oob['password']
+                self.node_proxy_cache.update_oob(spec.hostname, host_oob_info)
 
-        if spec.hostname not in self.inventory:
-            self.cache.prime_empty_host(spec.hostname)
-        self.inventory.add_host(spec)
-        self.offline_hosts_remove(spec.hostname)
-        if spec.status == 'maintenance':
-            self.update_maintenance_healthcheck()
-        self.event.set()  # refresh stray health check
-        self.log.info('Added host %s' % spec.hostname)
+            # prime crush map?
+            if spec.location:
+                self.check_mon_command({
+                    'prefix': 'osd crush add-bucket',
+                    'name': spec.hostname,
+                    'type': 'host',
+                    'args': [f'{k}={v}' for k, v in spec.location.items()],
+                })
 
-        return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
+            if spec.hostname not in self.inventory:
+                self.cache.prime_empty_host(spec.hostname)
+            self.inventory.add_host(spec)
+            self.offline_hosts_remove(spec.hostname)
+            if spec.status == 'maintenance':
+                self.update_maintenance_healthcheck()
+            self.event.set()  # refresh stray health check
+            self.log.info('Added host %s' % spec.hostname)
+
+            # If this is a new host and using non-root user, setup the user now
+            if is_new_host and self.ssh_user and self.ssh_user != 'root':
+                self.log.info(f'Setting up user {self.ssh_user} on new host {spec.hostname}')
+                try:
+                    assert self.ssh_pub
+                    self._setup_user_on_host(spec.hostname, self.ssh_user, self.ssh_pub, addr=spec.addr)
+                    self.log.info(f'Successfully set up user {self.ssh_user} on {spec.hostname}')
+                except OrchestratorError as oe:
+                    # OrchestratorError from user setup (user doesn't exist, SSH failures, etc.)
+                    # Log warning but don't fail the add_host operation
+                    self.log.warning(f'Failed to setup user {self.ssh_user} on {spec.hostname}: {oe}')
+                    self.log.warning(
+                        f'Host {spec.hostname} added but user setup incomplete. '
+                        f'Please manually setup user {self.ssh_user} on {spec.hostname}')
+                except Exception as e:
+                    # Unexpected error during user setup
+                    # Log warning but don't fail the add_host operation
+                    self.log.error(f'Unexpected error setting up user {self.ssh_user} on {spec.hostname}: {e}')
+                    self.log.warning(f'You may need to manually setup user {self.ssh_user} on {spec.hostname}')
+                finally:
+                    # Always remove from hosts_being_added after setup attempt
+                    try:
+                        self.hosts_being_added.discard(spec.hostname)
+                    except Exception as discard_err:
+                        self.log.debug(f'Failed to remove {spec.hostname} from hosts_being_added: {discard_err}')
+
+                    # Reset SSH connection so next operations will use configured user
+                    try:
+                        self.ssh.reset_con(spec.hostname)
+                        self.log.debug(f'Reset SSH connection for {spec.hostname} to use configured user')
+                    except Exception as reset_err:
+                        # Connection reset failure is not critical - connection will be recreated on next use
+                        self.log.debug(f'Failed to reset SSH connection for {spec.hostname}: {reset_err}')
+            elif is_new_host:
+                # Root user, no need to track
+                try:
+                    self.hosts_being_added.discard(spec.hostname)
+                except Exception as e:
+                    self.log.debug(f'Failed to remove {spec.hostname} from hosts_being_added: {e}')
+
+            return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
+        except Exception:
+            # If anything fails in core add_host operations, cleanup the new tracking mechanisms
+            if is_new_host and self.ssh_user and self.ssh_user != 'root':
+                # Cleanup tracking set
+                try:
+                    self.hosts_being_added.discard(spec.hostname)
+                    self.log.debug(f'Cleaned up hosts_being_added tracking for {spec.hostname} after error')
+                except Exception as cleanup_err:
+                    self.log.debug(f'Failed to cleanup hosts_being_added for {spec.hostname}: {cleanup_err}')
+
+                # Cleanup any stale SSH connection
+                try:
+                    self.ssh.reset_con(spec.hostname)
+                    self.log.debug(f'Reset SSH connection for {spec.hostname} after error')
+                except Exception as reset_err:
+                    self.log.debug(f'Failed to reset SSH connection for {spec.hostname}: {reset_err}')
+            raise
 
     @handle_orch_error
     def add_host(self, spec: HostSpec) -> str:
