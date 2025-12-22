@@ -36,6 +36,7 @@ function munge_ceph_spec_in {
     shift
     local for_make_check=$1
     shift
+    ci_debug "install-deps believes with_crimson=$with_crimson"
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
