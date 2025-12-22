@@ -1159,7 +1159,7 @@ int KernelDevice::aio_write(
 	   << dendl;
       // generate a real io so that aio_wait behaves properly, but make it
       // a read instead of write, and toss the result.
-      ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+      ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint), write_hint));
       ++ioc->num_pending;
       auto& aio = ioc->pending_aios.back();
       aio.bl.push_back(
@@ -1170,7 +1170,7 @@ int KernelDevice::aio_write(
     } else {
       if (bl.length() <= RW_IO_MAX) {
 	// fast path (non-huge write)
-	ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+	ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint), write_hint));
 	++ioc->num_pending;
 	auto& aio = ioc->pending_aios.back();
 	bl.prepare_iov(&aio.iov);
@@ -1190,7 +1190,7 @@ int KernelDevice::aio_write(
 	    tmp.substr_of(bl, prev_len, bl.length() - prev_len);
 	  }
 	  auto len = tmp.length();
-	  ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+	  ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint), write_hint));
 	  ++ioc->num_pending;
 	  auto& aio = ioc->pending_aios.back();
 	  tmp.prepare_iov(&aio.iov);
@@ -1469,7 +1469,7 @@ int KernelDevice::aio_read(
   if (aio && dio) {
     ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
-    ioc->pending_aios.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
+    ioc->pending_aios.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET], WRITE_LIFE_NOT_SET));
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     aio.bl.push_back(
