@@ -4,7 +4,8 @@ import { Router } from '@angular/router';
 @Component({
   selector: 'cd-user-tabs',
   templateUrl: './user-tabs.component.html',
-  styleUrls: ['./user-tabs.component.scss']
+  styleUrls: ['./user-tabs.component.scss'],
+  standalone: false
 })
 export class UserTabsComponent {
   url: string;

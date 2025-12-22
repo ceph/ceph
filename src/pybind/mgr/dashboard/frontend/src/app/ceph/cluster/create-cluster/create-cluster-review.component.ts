@@ -13,7 +13,8 @@ import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 @Component({
   selector: 'cd-create-cluster-review',
   templateUrl: './create-cluster-review.component.html',
-  styleUrls: ['./create-cluster-review.component.scss']
+  styleUrls: ['./create-cluster-review.component.scss'],
+  standalone: false
 })
 export class CreateClusterReviewComponent implements OnInit {
   hosts: object[] = [];

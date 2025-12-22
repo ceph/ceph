@@ -5,7 +5,8 @@ import _ from 'lodash';
 @Component({
   selector: 'cd-configuration-details',
   templateUrl: './configuration-details.component.html',
-  styleUrls: ['./configuration-details.component.scss']
+  styleUrls: ['./configuration-details.component.scss'],
+  standalone: false
 })
 export class ConfigurationDetailsComponent implements OnChanges {
   @Input()

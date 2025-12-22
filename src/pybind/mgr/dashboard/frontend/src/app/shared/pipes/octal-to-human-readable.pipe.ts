@@ -1,7 +1,8 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({
-  name: 'octalToHumanReadable'
+  name: 'octalToHumanReadable',
+  standalone: false
 })
 export class OctalToHumanReadablePipe implements PipeTransform {
   transform(value: number, toTableArray = false): any {

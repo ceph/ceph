@@ -15,7 +15,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-iscsi-target-discovery-modal',
   templateUrl: './iscsi-target-discovery-modal.component.html',
-  styleUrls: ['./iscsi-target-discovery-modal.component.scss']
+  styleUrls: ['./iscsi-target-discovery-modal.component.scss'],
+  standalone: false
 })
 export class IscsiTargetDiscoveryModalComponent implements OnInit {
   discoveryForm: CdFormGroup;

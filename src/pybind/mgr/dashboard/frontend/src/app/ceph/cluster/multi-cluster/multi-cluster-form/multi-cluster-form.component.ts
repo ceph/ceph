@@ -14,7 +14,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-multi-cluster-form',
   templateUrl: './multi-cluster-form.component.html',
-  styleUrls: ['./multi-cluster-form.component.scss']
+  styleUrls: ['./multi-cluster-form.component.scss'],
+  standalone: false
 })
 export class MultiClusterFormComponent implements OnInit, OnDestroy {
   @Output()

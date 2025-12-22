@@ -17,7 +17,8 @@ import { OctalToHumanReadablePipe } from '~/app/shared/pipes/octal-to-human-read
 @Component({
   selector: 'cd-cephfs-subvolumegroup-form',
   templateUrl: './cephfs-subvolumegroup-form.component.html',
-  styleUrls: ['./cephfs-subvolumegroup-form.component.scss']
+  styleUrls: ['./cephfs-subvolumegroup-form.component.scss'],
+  standalone: false
 })
 export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit {
   subvolumegroupForm: CdFormGroup;

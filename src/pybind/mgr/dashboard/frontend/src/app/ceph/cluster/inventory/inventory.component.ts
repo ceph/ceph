@@ -11,7 +11,8 @@ import { InventoryDevice } from './inventory-devices/inventory-device.model';
 @Component({
   selector: 'cd-inventory',
   templateUrl: './inventory.component.html',
-  styleUrls: ['./inventory.component.scss']
+  styleUrls: ['./inventory.component.scss'],
+  standalone: false
 })
 export class InventoryComponent implements OnChanges, OnInit, OnDestroy {
   // Display inventory page only for this hostname, ignore to display all.

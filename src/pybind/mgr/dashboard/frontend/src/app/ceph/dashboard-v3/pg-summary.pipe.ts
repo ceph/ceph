@@ -3,7 +3,8 @@ import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
 import { PgStateCount } from '~/app/shared/models/health.interface';
 
 @Pipe({
-  name: 'pgSummary'
+  name: 'pgSummary',
+  standalone: false
 })
 export class PgSummaryPipe implements PipeTransform {
   constructor(private pgCategoryService: PgCategoryService) {}

@@ -18,7 +18,8 @@ import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 @Component({
   selector: 'cd-rgw-multisite-migrate',
   templateUrl: './rgw-multisite-migrate.component.html',
-  styleUrls: ['./rgw-multisite-migrate.component.scss']
+  styleUrls: ['./rgw-multisite-migrate.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteMigrateComponent implements OnInit {
   @Output()

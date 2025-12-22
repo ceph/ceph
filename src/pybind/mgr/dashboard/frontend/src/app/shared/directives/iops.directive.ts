@@ -4,7 +4,8 @@ import { NgControl } from '@angular/forms';
 import { FormatterService } from '../services/formatter.service';
 
 @Directive({
-  selector: '[cdIops]'
+  selector: '[cdIops]',
+  standalone: false
 })
 export class IopsDirective implements OnInit {
   @Input()

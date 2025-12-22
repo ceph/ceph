@@ -10,7 +10,8 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 @Component({
   selector: 'cd-notifications',
   templateUrl: './notifications.component.html',
-  styleUrls: ['./notifications.component.scss']
+  styleUrls: ['./notifications.component.scss'],
+  standalone: false
 })
 export class NotificationsComponent implements OnInit, OnDestroy {
   icons = Icons;

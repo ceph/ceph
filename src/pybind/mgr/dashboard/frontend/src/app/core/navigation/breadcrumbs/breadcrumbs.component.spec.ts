@@ -15,7 +15,7 @@ describe('BreadcrumbsComponent', () => {
   let router: Router;
   let titleService: Title;
 
-  @Component({ selector: 'cd-fake', template: '' })
+  @Component({ selector: 'cd-fake', template: '', standalone: false })
   class FakeComponent {}
 
   const routes: Routes = [

@@ -11,7 +11,8 @@ import { ExecutingTask } from '../../models/executing-task';
 @Component({
   selector: 'cd-upgradable',
   templateUrl: './upgradable.component.html',
-  styleUrls: ['./upgradable.component.scss']
+  styleUrls: ['./upgradable.component.scss'],
+  standalone: false
 })
 export class UpgradableComponent implements OnInit, OnDestroy {
   orchAvailable: boolean = false;

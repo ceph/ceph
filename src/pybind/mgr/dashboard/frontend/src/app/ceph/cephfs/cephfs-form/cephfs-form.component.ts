@@ -26,7 +26,8 @@ import { Host } from '~/app/shared/models/host.interface';
 @Component({
   selector: 'cd-cephfs-form',
   templateUrl: './cephfs-form.component.html',
-  styleUrls: ['./cephfs-form.component.scss']
+  styleUrls: ['./cephfs-form.component.scss'],
+  standalone: false
 })
 export class CephfsVolumeFormComponent extends CdForm implements OnInit {
   @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;

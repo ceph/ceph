@@ -11,7 +11,8 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 @Component({
   selector: 'cd-rgw-multisite-export',
   templateUrl: './rgw-multisite-export.component.html',
-  styleUrls: ['./rgw-multisite-export.component.scss']
+  styleUrls: ['./rgw-multisite-export.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteExportComponent extends CdForm implements OnInit, AfterViewChecked {
   exportTokenForm: CdFormGroup;

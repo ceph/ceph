@@ -26,7 +26,8 @@ const BASE_URL = 'user-management/users';
   selector: 'cd-user-list',
   templateUrl: './user-list.component.html',
   styleUrls: ['./user-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class UserListComponent implements OnInit {
   @ViewChild('userRolesTpl', { static: true })

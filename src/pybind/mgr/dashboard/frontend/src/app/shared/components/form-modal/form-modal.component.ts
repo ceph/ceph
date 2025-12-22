@@ -14,7 +14,8 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 @Component({
   selector: 'cd-form-modal',
   templateUrl: './form-modal.component.html',
-  styleUrls: ['./form-modal.component.scss']
+  styleUrls: ['./form-modal.component.scss'],
+  standalone: false
 })
 export class FormModalComponent extends BaseModal implements OnInit {
   // Internal

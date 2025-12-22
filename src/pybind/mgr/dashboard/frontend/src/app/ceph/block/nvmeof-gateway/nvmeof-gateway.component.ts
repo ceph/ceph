@@ -22,7 +22,8 @@ const TAB_LABELS: Record<TABS, string> = {
 @Component({
   selector: 'cd-nvmeof-gateway',
   templateUrl: './nvmeof-gateway.component.html',
-  styleUrls: ['./nvmeof-gateway.component.scss']
+  styleUrls: ['./nvmeof-gateway.component.scss'],
+  standalone: false
 })
 export class NvmeofGatewayComponent implements OnInit, OnDestroy {
   selectedTab: TABS;

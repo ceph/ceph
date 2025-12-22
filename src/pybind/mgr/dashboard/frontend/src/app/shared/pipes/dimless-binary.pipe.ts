@@ -3,7 +3,8 @@ import { Pipe, PipeTransform } from '@angular/core';
 import { FormatterService } from '../services/formatter.service';
 
 @Pipe({
-  name: 'dimlessBinary'
+  name: 'dimlessBinary',
+  standalone: false
 })
 export class DimlessBinaryPipe implements PipeTransform {
   constructor(private formatter: FormatterService) {}

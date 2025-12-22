@@ -1,7 +1,8 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({
-  name: 'path'
+  name: 'path',
+  standalone: false
 })
 export class PathPipe implements PipeTransform {
   transform(value: unknown): string {

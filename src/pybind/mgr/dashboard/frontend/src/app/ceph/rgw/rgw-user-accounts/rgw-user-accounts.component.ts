@@ -27,7 +27,8 @@ const BASE_URL = 'rgw/accounts';
   selector: 'cd-rgw-user-accounts',
   templateUrl: './rgw-user-accounts.component.html',
   styleUrls: ['./rgw-user-accounts.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class RgwUserAccountsComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })

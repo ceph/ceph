@@ -30,7 +30,8 @@ import { SilenceMatcherModalComponent } from '../silence-matcher-modal/silence-m
 @Component({
   selector: 'cd-prometheus-form',
   templateUrl: './silence-form.component.html',
-  styleUrls: ['./silence-form.component.scss']
+  styleUrls: ['./silence-form.component.scss'],
+  standalone: false
 })
 export class SilenceFormComponent {
   icons = Icons;

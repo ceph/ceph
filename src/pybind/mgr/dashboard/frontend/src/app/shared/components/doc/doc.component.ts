@@ -5,7 +5,8 @@ import { DocService } from '~/app/shared/services/doc.service';
 @Component({
   selector: 'cd-doc',
   templateUrl: './doc.component.html',
-  styleUrls: ['./doc.component.scss']
+  styleUrls: ['./doc.component.scss'],
+  standalone: false
 })
 export class DocComponent implements OnInit {
   @Input() section: string;

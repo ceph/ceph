@@ -34,7 +34,8 @@ const BASE_URL = 'cephfs/fs';
   selector: 'cd-cephfs-list',
   templateUrl: './cephfs-list.component.html',
   styleUrls: ['./cephfs-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class CephfsListComponent extends ListWithDetails implements OnInit {
   @ViewChild('deleteTpl', { static: true })

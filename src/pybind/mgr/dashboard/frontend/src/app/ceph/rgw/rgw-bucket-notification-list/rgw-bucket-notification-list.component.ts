@@ -35,7 +35,8 @@ const BASE_URL = 'rgw/bucket';
   selector: 'cd-rgw-bucket-notification-list',
   templateUrl: './rgw-bucket-notification-list.component.html',
   styleUrl: './rgw-bucket-notification-list.component.scss',
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class RgwBucketNotificationListComponent extends ListWithDetails implements OnInit {
   @Input() bucket: Bucket;

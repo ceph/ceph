@@ -27,7 +27,8 @@ import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
 @Component({
   selector: 'cd-rgw-storage-class-details',
   templateUrl: './rgw-storage-class-details.component.html',
-  styleUrls: ['./rgw-storage-class-details.component.scss']
+  styleUrls: ['./rgw-storage-class-details.component.scss'],
+  standalone: false
 })
 export class RgwStorageClassDetailsComponent implements OnChanges, OnInit {
   @Input()

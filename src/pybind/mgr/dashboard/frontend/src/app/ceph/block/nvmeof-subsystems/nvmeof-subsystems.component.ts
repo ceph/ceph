@@ -31,7 +31,8 @@ const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
 @Component({
   selector: 'cd-nvmeof-subsystems',
   templateUrl: './nvmeof-subsystems.component.html',
-  styleUrls: ['./nvmeof-subsystems.component.scss']
+  styleUrls: ['./nvmeof-subsystems.component.scss'],
+  standalone: false
 })
 export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit, OnDestroy {
   @ViewChild('authenticationTpl', { static: true })

@@ -27,7 +27,8 @@ import { catchError, map, switchMap } from 'rxjs/operators';
 @Component({
   selector: 'cd-cephfs-subvolume-form',
   templateUrl: './cephfs-subvolume-form.component.html',
-  styleUrls: ['./cephfs-subvolume-form.component.scss']
+  styleUrls: ['./cephfs-subvolume-form.component.scss'],
+  standalone: false
 })
 export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
   subvolumeForm: CdFormGroup;

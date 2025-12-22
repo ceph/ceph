@@ -6,7 +6,8 @@ import _ from 'lodash';
 @Component({
   selector: 'cd-checked-table-form',
   templateUrl: './checked-table-form.component.html',
-  styleUrls: ['./checked-table-form.component.scss']
+  styleUrls: ['./checked-table-form.component.scss'],
+  standalone: false
 })
 export class CheckedTableFormComponent implements OnInit {
   @Input() data: Array<any>;

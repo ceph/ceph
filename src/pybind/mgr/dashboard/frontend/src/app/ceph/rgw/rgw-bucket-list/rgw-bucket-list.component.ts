@@ -32,7 +32,8 @@ const BASE_URL = 'rgw/bucket';
   selector: 'cd-rgw-bucket-list',
   templateUrl: './rgw-bucket-list.component.html',
   styleUrls: ['./rgw-bucket-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class RgwBucketListComponent extends ListWithDetails implements OnInit, OnDestroy {
   @ViewChild(TableComponent, { static: true })

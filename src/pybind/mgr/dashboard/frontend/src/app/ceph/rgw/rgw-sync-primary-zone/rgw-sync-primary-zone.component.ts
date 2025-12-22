@@ -4,7 +4,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Component({
   selector: 'cd-rgw-sync-primary-zone',
   templateUrl: './rgw-sync-primary-zone.component.html',
-  styleUrls: ['./rgw-sync-primary-zone.component.scss']
+  styleUrls: ['./rgw-sync-primary-zone.component.scss'],
+  standalone: false
 })
 export class RgwSyncPrimaryZoneComponent {
   icons = Icons;

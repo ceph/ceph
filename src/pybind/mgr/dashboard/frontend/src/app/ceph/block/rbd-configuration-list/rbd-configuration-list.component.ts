@@ -14,7 +14,8 @@ import { RbdConfigurationService } from '~/app/shared/services/rbd-configuration
 @Component({
   selector: 'cd-rbd-configuration-table',
   templateUrl: './rbd-configuration-list.component.html',
-  styleUrls: ['./rbd-configuration-list.component.scss']
+  styleUrls: ['./rbd-configuration-list.component.scss'],
+  standalone: false
 })
 export class RbdConfigurationListComponent implements OnInit, OnChanges {
   @Input()

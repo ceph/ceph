@@ -10,7 +10,8 @@ import { FeedbackComponent } from '~/app/ceph/shared/feedback/feedback.component
 @Component({
   selector: 'cd-dashboard-help',
   templateUrl: './dashboard-help.component.html',
-  styleUrls: ['./dashboard-help.component.scss']
+  styleUrls: ['./dashboard-help.component.scss'],
+  standalone: false
 })
 export class DashboardHelpComponent implements OnInit {
   docsUrl: string;
