@@ -975,7 +975,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     int r = lock_ctx.wait();
     if (r < 0) {
-      lderr(cct) << "failed to request exclusive lock: " << cpp_strerror(r)
+      lderr(cct) << "failed to acquire exclusive lock: " << cpp_strerror(r)
 		 << dendl;
       return r;
     }
@@ -984,7 +984,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (ictx->exclusive_lock == nullptr) {
       return -EINVAL;
     } else if (!ictx->exclusive_lock->is_lock_owner()) {
-      lderr(cct) << "failed to acquire exclusive lock" << dendl;
       return ictx->exclusive_lock->get_unlocked_op_error();
     }
 
