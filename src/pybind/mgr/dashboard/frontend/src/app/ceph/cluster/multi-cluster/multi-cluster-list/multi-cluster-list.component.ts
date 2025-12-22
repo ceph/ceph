@@ -26,7 +26,8 @@ import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 @Component({
   selector: 'cd-multi-cluster-list',
   templateUrl: './multi-cluster-list.component.html',
-  styleUrls: ['./multi-cluster-list.component.scss']
+  styleUrls: ['./multi-cluster-list.component.scss'],
+  standalone: false
 })
 export class MultiClusterListComponent extends ListWithDetails implements OnInit, OnDestroy {
   @ViewChild(TableComponent)

@@ -5,7 +5,8 @@ import { SMBUsersGroups } from '../smb.model';
 @Component({
   selector: 'cd-smb-usersgroups-details',
   templateUrl: './smb-usersgroups-details.component.html',
-  styleUrls: ['./smb-usersgroups-details.component.scss']
+  styleUrls: ['./smb-usersgroups-details.component.scss'],
+  standalone: false
 })
 export class SmbUsersgroupsDetailsComponent implements OnInit {
   @Input()

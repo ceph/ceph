@@ -13,7 +13,8 @@ import { FormScopeDirective } from './form-scope.directive';
     <form cdFormScope="osd">
       <input type="checkbox" />
     </form>
-  `
+  `,
+  standalone: false
 })
 export class FormDisableComponent {}
 

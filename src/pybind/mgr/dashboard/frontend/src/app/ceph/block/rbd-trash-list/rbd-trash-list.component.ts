@@ -32,7 +32,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
   selector: 'cd-rbd-trash-list',
   templateUrl: './rbd-trash-list.component.html',
   styleUrls: ['./rbd-trash-list.component.scss'],
-  providers: [TaskListService]
+  providers: [TaskListService],
+  standalone: false
 })
 export class RbdTrashListComponent implements OnInit {
   @ViewChild(TableComponent, { static: true })

@@ -5,7 +5,8 @@ import { Permissions } from '~/app/shared/models/permissions';
 @Component({
   selector: 'cd-host-details',
   templateUrl: './host-details.component.html',
-  styleUrls: ['./host-details.component.scss']
+  styleUrls: ['./host-details.component.scss'],
+  standalone: false
 })
 export class HostDetailsComponent {
   @Input()

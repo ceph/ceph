@@ -20,7 +20,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-cephfs-clients',
   templateUrl: './cephfs-clients.component.html',
-  styleUrls: ['./cephfs-clients.component.scss']
+  styleUrls: ['./cephfs-clients.component.scss'],
+  standalone: false
 })
 export class CephfsClientsComponent extends BaseModal implements OnInit {
   @Input()

@@ -3,7 +3,8 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 @Component({
   selector: 'cd-table-pagination',
   templateUrl: './table-pagination.component.html',
-  styleUrls: ['./table-pagination.component.scss']
+  styleUrls: ['./table-pagination.component.scss'],
+  standalone: false
 })
 export class TablePaginationComponent {
   private _size = 0;

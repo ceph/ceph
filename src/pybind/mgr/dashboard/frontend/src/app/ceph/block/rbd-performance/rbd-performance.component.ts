@@ -3,6 +3,7 @@ import { Component } from '@angular/core';
 @Component({
   selector: 'cd-rbd-performance',
   templateUrl: './rbd-performance.component.html',
-  styleUrls: ['./rbd-performance.component.scss']
+  styleUrls: ['./rbd-performance.component.scss'],
+  standalone: false
 })
 export class RbdPerformanceComponent {}

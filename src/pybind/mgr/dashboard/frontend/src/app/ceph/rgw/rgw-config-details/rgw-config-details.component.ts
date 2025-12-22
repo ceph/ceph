@@ -4,7 +4,8 @@ import { rgwEncryptionConfigKeys } from '~/app/shared/models/rgw-encryption-conf
 @Component({
   selector: 'cd-rgw-config-details',
   templateUrl: './rgw-config-details.component.html',
-  styleUrls: ['./rgw-config-details.component.scss']
+  styleUrls: ['./rgw-config-details.component.scss'],
+  standalone: false
 })
 export class RgwConfigDetailsComponent implements OnChanges {
   transformedData: {};

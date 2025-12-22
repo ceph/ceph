@@ -14,7 +14,8 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 @Component({
   selector: 'cd-rgw-rate-limit',
   templateUrl: './rgw-rate-limit.component.html',
-  styleUrls: ['./rgw-rate-limit.component.scss']
+  styleUrls: ['./rgw-rate-limit.component.scss'],
+  standalone: false
 })
 export class RgwRateLimitComponent implements OnInit, AfterViewInit {
   globalRateLimit: GlobalRateLimitConfig['user_ratelimit' | 'bucket_ratelimit'];

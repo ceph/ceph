@@ -15,7 +15,8 @@ import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.s
 @Component({
   selector: 'cd-rules-list',
   templateUrl: './rules-list.component.html',
-  styleUrls: ['./rules-list.component.scss']
+  styleUrls: ['./rules-list.component.scss'],
+  standalone: false
 })
 export class RulesListComponent extends PrometheusListHelper implements OnInit, OnDestroy {
   columns: CdTableColumn[];

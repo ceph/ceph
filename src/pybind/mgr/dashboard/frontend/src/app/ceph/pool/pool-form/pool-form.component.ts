@@ -60,7 +60,8 @@ interface MonitorResponse {
 @Component({
   selector: 'cd-pool-form',
   templateUrl: './pool-form.component.html',
-  styleUrls: ['./pool-form.component.scss']
+  styleUrls: ['./pool-form.component.scss'],
+  standalone: false
 })
 export class PoolFormComponent extends CdForm implements OnInit {
   private static readonly DEFAULT_RULE_NAME = 'replicated_rule';

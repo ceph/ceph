@@ -8,7 +8,8 @@ import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cac
 @Component({
   selector: 'cd-mirroring-images',
   templateUrl: './image-list.component.html',
-  styleUrls: ['./image-list.component.scss']
+  styleUrls: ['./image-list.component.scss'],
+  standalone: false
 })
 export class ImageListComponent implements OnInit, OnDestroy {
   @ViewChild('stateTmpl', { static: true })

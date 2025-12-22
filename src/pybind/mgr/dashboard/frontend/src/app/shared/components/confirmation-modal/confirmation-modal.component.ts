@@ -11,7 +11,8 @@ import { BaseModal } from 'carbon-components-angular';
     { provide: 'warning', useValue: false },
     { provide: 'showSubmit', useValue: true },
     { provide: 'showCancel', useValue: true }
-  ]
+  ],
+  standalone: false
 })
 export class ConfirmationModalComponent extends BaseModal implements OnInit, OnDestroy {
   // Component only

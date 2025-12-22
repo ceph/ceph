@@ -9,7 +9,8 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 @Component({
   selector: 'cd-osd-details',
   templateUrl: './osd-details.component.html',
-  styleUrls: ['./osd-details.component.scss']
+  styleUrls: ['./osd-details.component.scss'],
+  standalone: false
 })
 export class OsdDetailsComponent implements OnChanges {
   @Input()

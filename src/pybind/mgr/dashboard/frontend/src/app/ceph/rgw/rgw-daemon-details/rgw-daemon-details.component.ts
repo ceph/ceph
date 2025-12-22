@@ -10,7 +10,8 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 @Component({
   selector: 'cd-rgw-daemon-details',
   templateUrl: './rgw-daemon-details.component.html',
-  styleUrls: ['./rgw-daemon-details.component.scss']
+  styleUrls: ['./rgw-daemon-details.component.scss'],
+  standalone: false
 })
 export class RgwDaemonDetailsComponent implements OnChanges {
   metadata: any;

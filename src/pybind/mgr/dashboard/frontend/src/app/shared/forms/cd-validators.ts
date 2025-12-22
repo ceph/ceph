@@ -113,7 +113,7 @@ export class CdValidators {
    *   if the validation check fails, otherwise `null`.
    */
   static pemCert(): ValidatorFn {
-    return Validators.pattern(/^-----BEGIN .+-----$.+^-----END .+-----$/ms);
+    return Validators.pattern(/^-----BEGIN .+-----$\s[\s\S]+^-----END .+-----$/m);
   }
 
   /**

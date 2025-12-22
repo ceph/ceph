@@ -16,7 +16,8 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 @Component({
   selector: 'cd-rbd-trash-move-modal',
   templateUrl: './rbd-trash-move-modal.component.html',
-  styleUrls: ['./rbd-trash-move-modal.component.scss']
+  styleUrls: ['./rbd-trash-move-modal.component.scss'],
+  standalone: false
 })
 export class RbdTrashMoveModalComponent extends BaseModal implements OnInit {
   imageSpec: ImageSpec;

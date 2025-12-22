@@ -3,7 +3,8 @@ import { Pipe, PipeTransform } from '@angular/core';
 import _ from 'lodash';
 
 @Pipe({
-  name: 'empty'
+  name: 'empty',
+  standalone: false
 })
 export class EmptyPipe implements PipeTransform {
   transform(value: any): any {

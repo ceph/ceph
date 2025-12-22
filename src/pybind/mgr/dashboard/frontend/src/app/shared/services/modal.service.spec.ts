@@ -7,7 +7,8 @@ import { configureTestBed } from '~/testing/unit-test-helper';
 import { ModalService } from './modal.service';
 
 @Component({
-  template: ``
+  template: ``,
+  standalone: false
 })
 class MockComponent {
   foo = '';

@@ -17,7 +17,8 @@ const RGW = 'rgw';
 @Component({
   selector: 'cd-configuration',
   templateUrl: './configuration.component.html',
-  styleUrls: ['./configuration.component.scss']
+  styleUrls: ['./configuration.component.scss'],
+  standalone: false
 })
 export class ConfigurationComponent extends ListWithDetails implements OnInit {
   permission: Permission;

@@ -6,7 +6,8 @@ import * as _ from 'lodash';
 @Component({
   selector: 'cd-rgw-topic-details',
   templateUrl: './rgw-topic-details.component.html',
-  styleUrls: ['./rgw-topic-details.component.scss']
+  styleUrls: ['./rgw-topic-details.component.scss'],
+  standalone: false
 })
 export class RgwTopicDetailsComponent implements OnChanges {
   @Input()

@@ -7,7 +7,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Component({
   selector: 'cd-grafana',
   templateUrl: './grafana.component.html',
-  styleUrls: ['./grafana.component.scss']
+  styleUrls: ['./grafana.component.scss'],
+  standalone: false
 })
 export class GrafanaComponent implements OnInit, OnChanges {
   grafanaSrc: SafeUrl;

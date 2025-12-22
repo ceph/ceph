@@ -14,7 +14,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Component({
   selector: 'cd-alert-panel',
   templateUrl: './alert-panel.component.html',
-  styleUrls: ['./alert-panel.component.scss']
+  styleUrls: ['./alert-panel.component.scss'],
+  standalone: false
 })
 export class AlertPanelComponent implements OnInit {
   @ViewChild('content', { static: true })

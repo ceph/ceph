@@ -24,7 +24,8 @@ import { NvmeofEditHostKeyModalComponent } from '../nvmeof-edit-host-key-modal/n
 @Component({
   selector: 'cd-nvmeof-initiators-list',
   templateUrl: './nvmeof-initiators-list.component.html',
-  styleUrls: ['./nvmeof-initiators-list.component.scss']
+  styleUrls: ['./nvmeof-initiators-list.component.scss'],
+  standalone: false
 })
 export class NvmeofInitiatorsListComponent implements OnInit {
   @Input()

@@ -9,7 +9,11 @@ import { CdForm } from '../forms/cd-form';
 import { SharedModule } from '../shared.module';
 import { FormLoadingDirective } from './form-loading.directive';
 
-@Component({ selector: 'cd-test-cmp', template: '<span *cdFormLoading="loading">foo</span>' })
+@Component({
+  selector: 'cd-test-cmp',
+  template: '<span *cdFormLoading="loading">foo</span>',
+  standalone: false
+})
 class TestComponent extends CdForm {
   constructor() {
     super();

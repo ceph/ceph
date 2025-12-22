@@ -9,7 +9,8 @@ import { CephShortVersionPipe } from '~/app/shared/pipes/ceph-short-version.pipe
 @Component({
   selector: 'cd-mirroring-daemons',
   templateUrl: './daemon-list.component.html',
-  styleUrls: ['./daemon-list.component.scss']
+  styleUrls: ['./daemon-list.component.scss'],
+  standalone: false
 })
 export class DaemonListComponent implements OnInit, OnDestroy {
   @ViewChild('healthTmpl', { static: true })

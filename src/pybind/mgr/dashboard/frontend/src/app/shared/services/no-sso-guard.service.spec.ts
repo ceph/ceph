@@ -13,7 +13,7 @@ describe('NoSsoGuardService', () => {
   let authStorageService: AuthStorageService;
   let ngZone: NgZone;
 
-  @Component({ selector: 'cd-404', template: '' })
+  @Component({ selector: 'cd-404', template: '', standalone: false })
   class NotFoundComponent {}
 
   const routes: Routes = [{ path: '404', component: NotFoundComponent }];

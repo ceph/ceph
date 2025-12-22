@@ -12,7 +12,8 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 @Component({
   selector: 'cd-cephfs-tabs',
   templateUrl: './cephfs-tabs.component.html',
-  styleUrls: ['./cephfs-tabs.component.scss']
+  styleUrls: ['./cephfs-tabs.component.scss'],
+  standalone: false
 })
 export class CephfsTabsComponent implements OnChanges, OnDestroy {
   @Input()

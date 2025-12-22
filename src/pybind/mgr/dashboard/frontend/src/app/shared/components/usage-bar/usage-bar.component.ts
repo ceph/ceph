@@ -10,7 +10,8 @@ const PRIMARY_COLOR = 'primary'; // Default theme primary color variable
 @Component({
   selector: 'cd-usage-bar',
   templateUrl: './usage-bar.component.html',
-  styleUrls: ['./usage-bar.component.scss']
+  styleUrls: ['./usage-bar.component.scss'],
+  standalone: false
 })
 export class UsageBarComponent implements OnInit {
   // Total amount of resource (e.g., disk, memory) available, in bytes.

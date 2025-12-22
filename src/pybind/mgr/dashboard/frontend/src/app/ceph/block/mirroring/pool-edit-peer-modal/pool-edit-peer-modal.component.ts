@@ -12,7 +12,8 @@ import { BaseModal } from 'carbon-components-angular';
 @Component({
   selector: 'cd-pool-edit-peer-modal',
   templateUrl: './pool-edit-peer-modal.component.html',
-  styleUrls: ['./pool-edit-peer-modal.component.scss']
+  styleUrls: ['./pool-edit-peer-modal.component.scss'],
+  standalone: false
 })
 export class PoolEditPeerModalComponent extends BaseModal implements OnInit {
   editPeerForm: CdFormGroup;

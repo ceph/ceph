@@ -9,7 +9,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 @Component({
   selector: 'cd-nvmeof-listeners-form',
   templateUrl: './nvmeof-listeners-form.component.html',
-  styleUrls: ['./nvmeof-listeners-form.component.scss']
+  styleUrls: ['./nvmeof-listeners-form.component.scss'],
+  standalone: false
 })
 export class NvmeofListenersFormComponent implements OnInit {
   group!: string;

@@ -20,7 +20,8 @@ export const DEBOUNCE_TIMER = 300;
  * Then it emits the updatedItems back to the <cds-combobox> element
  */
 @Directive({
-  selector: '[cdDynamicInputCombobox]'
+  selector: '[cdDynamicInputCombobox]',
+  standalone: false
 })
 export class DynamicInputComboboxDirective implements OnInit, OnDestroy {
   @Input() items: ComboBoxItem[];

@@ -23,7 +23,8 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 @Component({
   selector: 'cd-bootstrap-create-modal',
   templateUrl: './bootstrap-create-modal.component.html',
-  styleUrls: ['./bootstrap-create-modal.component.scss']
+  styleUrls: ['./bootstrap-create-modal.component.scss'],
+  standalone: false
 })
 export class BootstrapCreateModalComponent
   extends BaseModal

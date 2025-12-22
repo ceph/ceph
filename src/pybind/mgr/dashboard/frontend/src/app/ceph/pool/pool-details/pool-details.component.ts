@@ -12,7 +12,8 @@ import { Permissions } from '~/app/shared/models/permissions';
   selector: 'cd-pool-details',
   templateUrl: './pool-details.component.html',
   styleUrls: ['./pool-details.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class PoolDetailsComponent implements OnChanges {
   @Input()

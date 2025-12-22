@@ -5,7 +5,8 @@ import { FeatureTogglesService } from '~/app/shared/services/feature-toggles.ser
 @Component({
   selector: 'cd-dashboard',
   templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.scss']
+  styleUrls: ['./dashboard.component.scss'],
+  standalone: false
 })
 export class DashboardComponent {
   enabledFeature$: Observable<Object>;

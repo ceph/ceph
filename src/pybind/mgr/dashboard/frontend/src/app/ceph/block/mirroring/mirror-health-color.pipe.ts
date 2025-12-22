@@ -1,7 +1,8 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({
-  name: 'mirrorHealthColor'
+  name: 'mirrorHealthColor',
+  standalone: false
 })
 export class MirrorHealthColorPipe implements PipeTransform {
   transform(value: any): any {

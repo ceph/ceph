@@ -16,7 +16,8 @@ import { ModalService, PlaceholderService } from 'carbon-components-angular';
 export class MockModule {}
 
 @Component({
-  template: `<ng-template #fillTpl>Template based description.</ng-template>`
+  template: `<ng-template #fillTpl>Template based description.</ng-template>`,
+  standalone: false
 })
 class MockComponent {
   @ViewChild('fillTpl', { static: true })

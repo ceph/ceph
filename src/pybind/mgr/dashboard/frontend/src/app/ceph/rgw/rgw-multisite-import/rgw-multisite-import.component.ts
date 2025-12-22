@@ -18,7 +18,8 @@ import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators'
 @Component({
   selector: 'cd-rgw-multisite-import',
   templateUrl: './rgw-multisite-import.component.html',
-  styleUrls: ['./rgw-multisite-import.component.scss']
+  styleUrls: ['./rgw-multisite-import.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteImportComponent implements OnInit {
   readonly endpoints = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{2,4}$/;
