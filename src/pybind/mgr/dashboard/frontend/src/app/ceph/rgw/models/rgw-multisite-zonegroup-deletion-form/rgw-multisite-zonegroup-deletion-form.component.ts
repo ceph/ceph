@@ -12,7 +12,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-rgw-multisite-zonegroup-deletion-form',
   templateUrl: './rgw-multisite-zonegroup-deletion-form.component.html',
-  styleUrls: ['./rgw-multisite-zonegroup-deletion-form.component.scss']
+  styleUrls: ['./rgw-multisite-zonegroup-deletion-form.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteZonegroupDeletionFormComponent implements OnInit, AfterViewInit {
   zonegroupData$: any;

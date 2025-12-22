@@ -21,7 +21,8 @@ import { Host } from '~/app/shared/models/host.interface';
 @Component({
   selector: 'cd-nvmeof-listeners-form',
   templateUrl: './nvmeof-listeners-form.component.html',
-  styleUrls: ['./nvmeof-listeners-form.component.scss']
+  styleUrls: ['./nvmeof-listeners-form.component.scss'],
+  standalone: false
 })
 export class NvmeofListenersFormComponent implements OnInit {
   action: string;

@@ -18,7 +18,8 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 @Component({
   selector: 'cd-rgw-multisite-zone-form',
   templateUrl: './rgw-multisite-zone-form.component.html',
-  styleUrls: ['./rgw-multisite-zone-form.component.scss']
+  styleUrls: ['./rgw-multisite-zone-form.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
   multisiteZoneForm: CdFormGroup;

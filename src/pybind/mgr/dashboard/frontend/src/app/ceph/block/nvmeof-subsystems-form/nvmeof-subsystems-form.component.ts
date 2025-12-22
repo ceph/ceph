@@ -18,7 +18,8 @@ import {
 @Component({
   selector: 'cd-nvmeof-subsystems-form',
   templateUrl: './nvmeof-subsystems-form.component.html',
-  styleUrls: ['./nvmeof-subsystems-form.component.scss']
+  styleUrls: ['./nvmeof-subsystems-form.component.scss'],
+  standalone: false
 })
 export class NvmeofSubsystemsFormComponent implements OnInit {
   permission: Permission;

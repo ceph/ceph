@@ -19,7 +19,8 @@ import { USER } from '~/app/shared/constants/app.constants';
 @Component({
   selector: 'cd-rgw-user-details',
   templateUrl: './rgw-user-details.component.html',
-  styleUrls: ['./rgw-user-details.component.scss']
+  styleUrls: ['./rgw-user-details.component.scss'],
+  standalone: false
 })
 export class RgwUserDetailsComponent implements OnChanges, OnInit {
   @ViewChild('accessKeyTpl')

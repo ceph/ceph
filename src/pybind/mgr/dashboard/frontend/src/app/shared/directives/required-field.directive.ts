@@ -1,7 +1,8 @@
 import { AfterViewInit, Directive, ElementRef, Input, Renderer2 } from '@angular/core';
 
 @Directive({
-  selector: '[cdRequiredField]'
+  selector: '[cdRequiredField]',
+  standalone: false
 })
 export class RequiredFieldDirective implements AfterViewInit {
   @Input('cdRequiredField') label: string;

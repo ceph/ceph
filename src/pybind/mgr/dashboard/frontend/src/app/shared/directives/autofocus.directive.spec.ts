@@ -11,7 +11,8 @@ import { AutofocusDirective } from './autofocus.directive';
       <input id="x" type="text" />
       <input id="y" type="password" autofocus />
     </form>
-  `
+  `,
+  standalone: false
 })
 export class PasswordFormComponent {}
 
@@ -21,7 +22,8 @@ export class PasswordFormComponent {}
       <input id="x" type="checkbox" [autofocus]="edit" />
       <input id="y" type="text" />
     </form>
-  `
+  `,
+  standalone: false
 })
 export class CheckboxFormComponent {
   public edit = true;
@@ -32,7 +34,8 @@ export class CheckboxFormComponent {
     <form>
       <input id="x" type="text" [autofocus]="foo" />
     </form>
-  `
+  `,
+  standalone: false
 })
 export class TextFormComponent {
   foo() {

@@ -14,7 +14,8 @@ const CLIPBOARD_SUCCESS_MESSAGE = $localize`Copied text to the clipboard success
 @Component({
   selector: 'cd-copy-2-clipboard-button',
   templateUrl: './copy2clipboard-button.component.html',
-  styleUrls: ['./copy2clipboard-button.component.scss']
+  styleUrls: ['./copy2clipboard-button.component.scss'],
+  standalone: false
 })
 export class Copy2ClipboardButtonComponent {
   // The text to be copied

@@ -17,7 +17,8 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 @Component({
   selector: 'cd-crush-rule-form-modal',
   templateUrl: './crush-rule-form-modal.component.html',
-  styleUrls: ['./crush-rule-form-modal.component.scss']
+  styleUrls: ['./crush-rule-form-modal.component.scss'],
+  standalone: false
 })
 export class CrushRuleFormModalComponent extends CrushNodeSelectionClass implements OnInit {
   @Output()

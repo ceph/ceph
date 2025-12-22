@@ -6,7 +6,8 @@ import { FormScopeDirective } from './form-scope.directive';
 
 @Directive({
   selector:
-    'input:not([cdNoFormInputDisable]), select:not([cdNoFormInputDisable]), button:not([cdNoFormInputDisable]), [cdFormInputDisable]'
+    'input:not([cdNoFormInputDisable]), select:not([cdNoFormInputDisable]), button:not([cdNoFormInputDisable]), [cdFormInputDisable]',
+  standalone: false
 })
 export class FormInputDisableDirective implements AfterViewInit {
   permissions: Permissions;

@@ -11,7 +11,8 @@ import { DeletionImpact } from '../../enum/delete-confirmation-modal-impact.enum
 @Component({
   selector: 'cd-deletion-modal',
   templateUrl: './delete-confirmation-modal.component.html',
-  styleUrls: ['./delete-confirmation-modal.component.scss']
+  styleUrls: ['./delete-confirmation-modal.component.scss'],
+  standalone: false
 })
 export class DeleteConfirmationModalComponent extends BaseModal implements OnInit {
   @ViewChild(SubmitButtonComponent, { static: true })

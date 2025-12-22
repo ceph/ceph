@@ -8,7 +8,8 @@ import { FieldType } from '@ngx-formly/core';
 @Component({
   selector: 'cd-formly-object-type',
   templateUrl: './formly-object-type.component.html',
-  styleUrls: ['./formly-object-type.component.scss']
+  styleUrls: ['./formly-object-type.component.scss'],
+  standalone: false
 })
 export class FormlyObjectTypeComponent extends FieldType {
   get inputClass(): string {

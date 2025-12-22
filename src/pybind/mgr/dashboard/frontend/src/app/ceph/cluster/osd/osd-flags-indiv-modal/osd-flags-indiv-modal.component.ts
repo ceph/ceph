@@ -15,7 +15,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-osd-flags-indiv-modal',
   templateUrl: './osd-flags-indiv-modal.component.html',
-  styleUrls: ['./osd-flags-indiv-modal.component.scss']
+  styleUrls: ['./osd-flags-indiv-modal.component.scss'],
+  standalone: false
 })
 export class OsdFlagsIndivModalComponent implements OnInit {
   permissions: Permissions;

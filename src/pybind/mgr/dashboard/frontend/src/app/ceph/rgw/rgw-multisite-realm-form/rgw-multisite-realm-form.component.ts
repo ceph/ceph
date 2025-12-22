@@ -14,7 +14,8 @@ import { BaseModal } from 'carbon-components-angular';
 @Component({
   selector: 'cd-rgw-multisite-realm-form',
   templateUrl: './rgw-multisite-realm-form.component.html',
-  styleUrls: ['./rgw-multisite-realm-form.component.scss']
+  styleUrls: ['./rgw-multisite-realm-form.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteRealmFormComponent extends BaseModal implements OnInit {
   multisiteRealmForm: CdFormGroup;

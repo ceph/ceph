@@ -52,7 +52,8 @@ interface FormFieldDescription {
 @Component({
   selector: 'cd-pool-form',
   templateUrl: './pool-form.component.html',
-  styleUrls: ['./pool-form.component.scss']
+  styleUrls: ['./pool-form.component.scss'],
+  standalone: false
 })
 export class PoolFormComponent extends CdForm implements OnInit {
   @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;

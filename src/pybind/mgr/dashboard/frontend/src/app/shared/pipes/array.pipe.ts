@@ -6,7 +6,8 @@ import _ from 'lodash';
  * Convert the given value to an array.
  */
 @Pipe({
-  name: 'array'
+  name: 'array',
+  standalone: false
 })
 export class ArrayPipe implements PipeTransform {
   /**

@@ -19,7 +19,8 @@ const BASE_URL = 'silences'; // as only silence actions can be used
   selector: 'cd-active-alert-list',
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
   templateUrl: './active-alert-list.component.html',
-  styleUrls: ['./active-alert-list.component.scss']
+  styleUrls: ['./active-alert-list.component.scss'],
+  standalone: false
 })
 export class ActiveAlertListComponent extends PrometheusListHelper implements OnInit {
   @ViewChild('externalLinkTpl', { static: true })

@@ -17,7 +17,8 @@ import { TimerService } from '~/app/shared/services/timer.service';
 @Component({
   selector: 'cd-context',
   templateUrl: './context.component.html',
-  styleUrls: ['./context.component.scss']
+  styleUrls: ['./context.component.scss'],
+  standalone: false
 })
 export class ContextComponent implements OnInit, OnDestroy {
   readonly REFRESH_INTERVAL = 5000;

@@ -23,7 +23,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
   selector: 'cd-rbd-namespace-list',
   templateUrl: './rbd-namespace-list.component.html',
   styleUrls: ['./rbd-namespace-list.component.scss'],
-  providers: [TaskListService]
+  providers: [TaskListService],
+  standalone: false
 })
 export class RbdNamespaceListComponent implements OnInit {
   columns: CdTableColumn[];

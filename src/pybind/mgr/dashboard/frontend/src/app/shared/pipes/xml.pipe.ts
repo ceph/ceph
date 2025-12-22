@@ -2,7 +2,8 @@ import { Pipe, PipeTransform } from '@angular/core';
 import { JsonToXmlService } from '../services/json-to-xml.service';
 
 @Pipe({
-  name: 'xml'
+  name: 'xml',
+  standalone: false
 })
 export class XmlPipe implements PipeTransform {
   constructor(private jsonToXmlService: JsonToXmlService) {}

@@ -17,7 +17,8 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 @Component({
   selector: 'cd-create-rgw-service-entities',
   templateUrl: './create-rgw-service-entities.component.html',
-  styleUrls: ['./create-rgw-service-entities.component.scss']
+  styleUrls: ['./create-rgw-service-entities.component.scss'],
+  standalone: false
 })
 export class CreateRgwServiceEntitiesComponent extends CdForm implements OnInit {
   public sub = new Subscription();

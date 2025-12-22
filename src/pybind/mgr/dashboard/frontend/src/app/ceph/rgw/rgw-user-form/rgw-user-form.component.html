@@ -702,7 +702,7 @@
     <cd-form-advanced-fieldset>
       <!-- User Rate Limit -->
       <cd-rgw-rate-limit [type]="'user'"
-                         [isEditing]="this.editing"
+                         [isEditing]="editing"
                          [id]="uid"
                          (rateLimitFormGroup)="rateLimitFormInit($event)">
       </cd-rgw-rate-limit>

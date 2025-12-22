@@ -84,15 +84,9 @@
             "glob": "**/swagger-ui.css",
             "input": "node_modules/swagger-ui-dist",
             "output": "."
-          },
-          {
-            "glob": "**/swagger-ui-bundle.js",
-            "input": "node_modules/swagger-ui-dist",
-            "output": "."
           }
         ],
         "styles": [
-          "node_modules/swagger-ui/dist/swagger-ui.css",
           "node_modules/ngx-toastr/toastr.css",
           "src/styles.scss"
         ],

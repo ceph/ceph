@@ -25,7 +25,8 @@ const DEBOUNCE_TIMER = 300;
 @Component({
   selector: 'cd-cephfs-auth-modal',
   templateUrl: './cephfs-auth-modal.component.html',
-  styleUrls: ['./cephfs-auth-modal.component.scss']
+  styleUrls: ['./cephfs-auth-modal.component.scss'],
+  standalone: false
 })
 export class CephfsAuthModalComponent extends CdForm implements OnInit, AfterViewInit {
   subvolumeGroup: string;

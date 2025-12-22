@@ -18,7 +18,8 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 @Component({
   selector: 'cd-erasure-code-profile-form-modal',
   templateUrl: './erasure-code-profile-form-modal.component.html',
-  styleUrls: ['./erasure-code-profile-form-modal.component.scss']
+  styleUrls: ['./erasure-code-profile-form-modal.component.scss'],
+  standalone: false
 })
 export class ErasureCodeProfileFormModalComponent
   extends CrushNodeSelectionClass

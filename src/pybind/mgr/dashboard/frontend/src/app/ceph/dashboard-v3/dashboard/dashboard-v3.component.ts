@@ -44,7 +44,8 @@ import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 @Component({
   selector: 'cd-dashboard-v3',
   templateUrl: './dashboard-v3.component.html',
-  styleUrls: ['./dashboard-v3.component.scss']
+  styleUrls: ['./dashboard-v3.component.scss'],
+  standalone: false
 })
 export class DashboardV3Component extends PrometheusListHelper implements OnInit, OnDestroy {
   telemetryURL = 'https://telemetry-public.ceph.com/';

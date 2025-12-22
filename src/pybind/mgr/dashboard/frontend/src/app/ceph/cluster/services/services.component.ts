@@ -37,7 +37,8 @@ const BASE_URL = 'services';
   selector: 'cd-services',
   templateUrl: './services.component.html',
   styleUrls: ['./services.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class ServicesComponent extends ListWithDetails implements OnChanges, OnInit {
   @ViewChild(TableComponent, { static: true })

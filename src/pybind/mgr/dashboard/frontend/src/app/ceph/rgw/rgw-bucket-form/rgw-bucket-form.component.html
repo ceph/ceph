@@ -609,8 +609,8 @@
 
       <!-- Bucket Rate Limit -->
       <cd-rgw-rate-limit [type]="'bucket'"
-                         [isEditing]="this.editing"
-                         [allowBid]="this.bucketForm.getValue('bid')"
+                         [isEditing]="editing"
+                         [allowBid]="bucketForm.getValue('bid')"
                          (rateLimitFormGroup)="rateLimitFormInit($event)">
       </cd-rgw-rate-limit>
     </cd-form-advanced-fieldset>

@@ -11,7 +11,8 @@ import { TelemetryNotificationService } from '~/app/shared/services/telemetry-no
 @Component({
   selector: 'cd-telemetry-notification',
   templateUrl: './telemetry-notification.component.html',
-  styleUrls: ['./telemetry-notification.component.scss']
+  styleUrls: ['./telemetry-notification.component.scss'],
+  standalone: false
 })
 export class TelemetryNotificationComponent implements OnInit, OnDestroy {
   displayNotification = false;

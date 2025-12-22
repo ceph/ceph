@@ -21,7 +21,8 @@ import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 @Component({
   selector: 'cd-upgrade',
   templateUrl: './upgrade.component.html',
-  styleUrls: ['./upgrade.component.scss']
+  styleUrls: ['./upgrade.component.scss'],
+  standalone: false
 })
 export class UpgradeComponent implements OnInit, OnDestroy {
   version: string;

@@ -6,7 +6,8 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 @Component({
   selector: 'cd-rbd-tabs',
   templateUrl: './rbd-tabs.component.html',
-  styleUrls: ['./rbd-tabs.component.scss']
+  styleUrls: ['./rbd-tabs.component.scss'],
+  standalone: false
 })
 export class RbdTabsComponent {
   grafanaPermission: Permission;
