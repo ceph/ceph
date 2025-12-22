@@ -43,7 +43,9 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
     ;;
     *~*ubuntu*|*~*debian*)
         apt-get update
-        apt-get install -y wget reprepro curl software-properties-common lksctp-tools libsctp-dev protobuf-compiler ragel libc-ares-dev
+        apt-get install -y locales iproute2 wget reprepro curl software-properties-common lksctp-tools libsctp-dev protobuf-compiler ragel libc-ares-dev
+        # Generate en_US.UTF-8 locale for tests that require it
+        locale-gen en_US.UTF-8
         install_container_deps
     ;;
     *)
