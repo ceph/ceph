@@ -149,6 +149,7 @@ CephFS Concepts
     Directory fragmentation <dirfrags>
     Multiple active MDS daemons <multimds>
     Snapshots <snapshots>
+    fscrypt <fscrypt>
 
 
 .. raw:: html
