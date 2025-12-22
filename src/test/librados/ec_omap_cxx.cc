@@ -222,7 +222,7 @@ TEST_P(LibRadosOmapECPP, OmapRecovery) {
 
   // 2. Find Primary OSD
   ceph::messaging::osd::OSDMapReply reply;
-  int res = request_osd_map(pool_name, "omap_recovery_oid", nspace, &reply);
+  int res = request_osd_map("omap_recovery_oid", &reply);
   EXPECT_EQ(res, 0);
   int victim_osd = reply.acting_primary;
   std::string pgid = reply.pgid;
@@ -330,7 +330,7 @@ TEST_P(LibRadosOmapECPP, ChangeUpmap) {
 
   // 2. Find up osds
   ceph::messaging::osd::OSDMapReply reply;
-  int res = request_osd_map(pool_name, "change_upmap_oid", nspace, &reply);
+  int res = request_osd_map("change_upmap_oid", &reply);
   EXPECT_TRUE(res == 0);
   std::vector<int> prev_up_osds = reply.up;
   std::string pgid = reply.pgid;
@@ -357,7 +357,7 @@ TEST_P(LibRadosOmapECPP, ChangeUpmap) {
   EXPECT_TRUE(rc == 0);
 
   // 5. Wait for new upmap to appear as acting set of osds
-  int res2 = wait_for_upmap(pool_name, "change_upmap_oid", nspace, new_primary, 60s);
+  int res2 = wait_for_upmap("change_upmap_oid", new_primary, 60s);
   EXPECT_TRUE(res2 == 0);
   
   // 6. Read omap
@@ -380,7 +380,7 @@ TEST_P(LibRadosOmapECPP, NoOmapRecovery) {
 
   // 2. Find up osds
   ceph::messaging::osd::OSDMapReply reply;
-  int res = request_osd_map(pool_name, "no_omap_oid", nspace, &reply);
+  int res = request_osd_map("no_omap_oid", &reply);
   EXPECT_TRUE(res == 0);
   std::vector<int> prev_up_osds = reply.up;
   std::string pgid = reply.pgid;
@@ -407,7 +407,7 @@ TEST_P(LibRadosOmapECPP, NoOmapRecovery) {
   EXPECT_TRUE(rc == 0);
 
   // 5. Wait for new upmap to appear as acting set of osds
-  int res2 = wait_for_upmap(pool_name, "no_omap_oid", nspace, new_primary, 60s);
+  int res2 = wait_for_upmap("no_omap_oid", new_primary, 60s);
   EXPECT_TRUE(res2 == 0);
 
   // 6. Read data
@@ -450,7 +450,7 @@ TEST_P(LibRadosOmapECPP, LargeOmapRecovery) {
 
   // 2. Find up osds
   ceph::messaging::osd::OSDMapReply reply;
-  int res = request_osd_map(pool_name, "large_oid", nspace, &reply);
+  int res = request_osd_map("large_oid", &reply);
   EXPECT_TRUE(res == 0);
   std::vector<int> prev_up_osds = reply.up;
   std::string pgid = reply.pgid;
@@ -477,7 +477,7 @@ TEST_P(LibRadosOmapECPP, LargeOmapRecovery) {
   EXPECT_TRUE(rc == 0);
 
   // 5. Wait for new upmap to appear as acting set of osds
-  int res2 = wait_for_upmap(pool_name, "large_oid", nspace, new_primary, 60s);
+  int res2 = wait_for_upmap("large_oid", new_primary, 60s);
   EXPECT_TRUE(res2 == 0);
 
   // 6. Read omap

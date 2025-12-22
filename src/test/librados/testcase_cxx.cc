@@ -617,9 +617,7 @@ void RadosTestECPP::set_allow_ec_overwrites()
 }
 
 int RadosTestECPP::request_osd_map(
-    std::string pool_name, 
-    std::string oid, 
-    std::string nspace, 
+    std::string oid,
     ceph::messaging::osd::OSDMapReply* reply) {
   bufferlist inbl, outbl;
   auto formatter = std::make_unique<JSONFormatter>(false);
@@ -661,16 +659,14 @@ int RadosTestECPP::set_osd_upmap(
 }
 
 int RadosTestECPP::wait_for_upmap(
-    std::string pool_name,
     std::string oid,
-    std::string nspace,
     int desired_primary,
     std::chrono::seconds timeout) {
   bool upmap_in_effect = false;
   auto start_time = std::chrono::steady_clock::now();
   while (!upmap_in_effect && (std::chrono::steady_clock::now() - start_time < timeout)) {
     ceph::messaging::osd::OSDMapReply reply;
-    int res = request_osd_map(pool_name, "error_inject_oid", nspace, &reply);
+    int res = request_osd_map(oid, &reply);
     EXPECT_TRUE(res == 0);
     std::vector<int> acting_osds = reply.acting;
     if (!acting_osds.empty() && acting_osds[0] == desired_primary) {

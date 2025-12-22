@@ -148,9 +148,7 @@ protected:
     int max_keys = -1
   );
   int request_osd_map(
-    std::string pool_name, 
-    std::string oid, 
-    std::string nspace, 
+    std::string oid,
     ceph::messaging::osd::OSDMapReply* reply
   );
   int set_osd_upmap(
@@ -158,9 +156,7 @@ protected:
     std::vector<int> up_osds
   );
   int wait_for_upmap(
-    std::string pool_name,
     std::string oid,
-    std::string nspace,
     int desired_primary,
     std::chrono::seconds timeout
   );
