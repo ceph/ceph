@@ -44,7 +44,6 @@ from ceph.smb import constants as smbconst
 ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
 FuncT = TypeVar('FuncT', bound=Callable)
 
-
 class TLSBlock(TypedDict, total=False):
     ssl: bool
     certificate_source: str
@@ -1407,9 +1406,21 @@ class NFSServiceSpec(ServiceSpec):
             if any(tls_fields) and not all(tls_fields):
                 raise SpecValidationError(
                     f'Either none or all of {tls_field_names} attributes must be set'
-                )
-
-
+                )    
+        # Port Parameter Validation
+        # Port values must be less than 65535 (valid TCP/UDP port range: 0-65535)
+        if self.port is not None and self.port > 65535:
+            raise SpecValidationError(
+                f"Invalid port number: {self.port}. "
+                f"NFS port value must be less than or equal to 65535"
+            )
+        
+        if self.monitoring_port is not None and self.monitoring_port > 65535:
+            raise SpecValidationError(
+                f"Invalid monitoring port number: {self.monitoring_port}. "
+                f"NFS monitoring port value must be less than or equal to 65535"
+            )
+        
 yaml.add_representer(NFSServiceSpec, ServiceSpec.yaml_representer)
 
 
