@@ -3,13 +3,15 @@ import re
 import string
 import ssl
 
-from typing import Optional, MutableMapping, Tuple, Any
+from typing import Optional, MutableMapping, Tuple, Any, Union
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen, Request
 
 import logging
 
 log = logging.getLogger(__name__)
+
+_SIZE_RE = re.compile(r'^\s*(\d+)\s*([KMGTP]?)\s*([iI]?[bB])?\s*$')
 
 
 def datetime_now() -> datetime.datetime:
@@ -189,3 +191,27 @@ def strtobool(value: str) -> bool:
     if value.lower() in _FALSE_VALS:
         return False
     raise ValueError(f'invalid truth value {value!r}')
+
+
+def size_to_bytes(v: Union[str, int]) -> int:
+    if isinstance(v, int):
+        return v
+    if isinstance(v, str):
+        m = _SIZE_RE.match(v)
+        if not m:
+            raise ValueError(
+                f'invalid size "{v}" (examples: 10737418240, 10G, 512M)'
+            )
+        num = int(m.group(1))
+        unit = m.group(2) or ''
+        unit = unit.upper()
+        mult = {
+            '': 1,
+            'K': 1024,
+            'M': 1024**2,
+            'G': 1024**3,
+            'T': 1024**4,
+            'P': 1024**5,
+        }[unit]
+        return num * mult
+    raise ValueError(f'invalid size type {type(v)} (expected int or str)')
