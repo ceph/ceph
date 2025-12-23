@@ -1891,7 +1891,7 @@ public:
     bool paused = false;
 
     int osd = -1;      ///< the final target osd, or -1
-    std::optional<shard_id_t> force_shard; // If set, only this shard may be used.
+    std::optional<int> force_acting_set_index; // If set, only this acting set index may be used.
 
     epoch_t last_force_resend = 0;
 

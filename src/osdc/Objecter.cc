@@ -2545,7 +2545,7 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
 
   ldout(cct, 10) << __func__ << " op " << op << dendl;
 
-  if (op->target.force_shard) {
+  if (op->target.force_acting_set_index) {
     logger->inc(l_osdc_split_op_reads);
   }
 
@@ -3187,8 +3187,8 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->pg_num_mask = pg_num_mask;
     t->pg_num_pending = pg_num_pending;
     spg_t spgid(actual_pgid);
-    if (t->force_shard) {
-      t->osd = t->acting[int(*t->force_shard)];
+    if (t->force_acting_set_index) {
+      t->osd = t->acting[*t->force_acting_set_index];
       // In some redrive scenarios, the acting set can change. Fail the IO
       // and retry.
       if (!osdmap->exists(t->osd)) {
@@ -3196,7 +3196,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
         return RECALC_OP_TARGET_POOL_DNE;
       }
       if (pi->is_erasure()) {
-        spgid.reset_shard(*t->force_shard);
+        spgid.reset_shard(shard_id_t(*t->force_acting_set_index));
       }
     } else if (pi->is_erasure()) {
       // Optimized EC pools need to be careful when calculating the shard
@@ -3227,7 +3227,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 		   << " acting " << t->acting
 		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
-    if (!t->force_shard && (t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
+    if (!t->force_acting_set_index && (t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
                      CEPH_OSD_FLAG_LOCALIZE_READS)) &&
         !is_write && pi->is_replicated() && t->acting.size() > 1) {
       int osd;
@@ -3264,7 +3264,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 	osd = t->acting[best];
       }
       t->osd = osd;
-    } else if (!t->force_shard) {
+    } else if (!t->force_acting_set_index) {
       t->osd = acting_primary;
     }
   }
@@ -3589,8 +3589,8 @@ void Objecter::_send_op(Op *op)
   if (op->trace.valid()) {
     m->trace.init("op msg", nullptr, &op->trace);
   }
-  if (op->target.force_shard) {
-    ceph_assert(op->target.osd == op->target.acting[(int)*op->target.force_shard]);
+  if (op->target.force_acting_set_index) {
+    ceph_assert(op->target.osd == op->target.acting[*op->target.force_acting_set_index]);
   }
   op->session->con->send_message(m);
 }
@@ -3839,10 +3839,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m) {
     op->tid = 0;
     op->target.flags &= ~CEPH_OSD_FLAGS_DIRECT_READ;
 
-    // If IGNORE_EAGAIN is not set and force_shard is set, the implication is
+    // If IGNORE_EAGAIN is not set and force_acting_set_index is set, the implication is
     // that it is safe to redrive the IO to the primary, without any balanced
     // read flag.
-    op->target.force_shard.reset();
+    op->target.force_acting_set_index.reset();
     op->target.pgid = pg_t();
     _op_submit(op, sul, NULL);
     m->put();

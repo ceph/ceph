@@ -189,12 +189,12 @@ class SplitOp {
 
   Objecter::Op *orig_op;
   Objecter &objecter;
-  mini_flat_map<shard_id_t, SubRead> sub_reads;
+  mini_flat_map<int, SubRead> sub_reads;
   CephContext *cct;
   bool abort = false; // Last minute abort... We want to keep this to a minimum.
   int flags = 0;
-  std::optional<shard_id_t> primary_shard;
-  std::map<shard_id_t, std::vector<int>> op_offset_map;
+  std::optional<int> primary_index;
+  std::map<int, std::vector<int>> op_offset_map;
 
  public:
   SplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count) : orig_op(op), objecter(objecter), sub_reads(count), cct(cct) {}
