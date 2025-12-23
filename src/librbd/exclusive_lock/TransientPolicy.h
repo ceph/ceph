@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
-#ifndef CEPH_LIBRBD_EXCLUSIVE_LOCK_STANDARD_POLICY_H
-#define CEPH_LIBRBD_EXCLUSIVE_LOCK_STANDARD_POLICY_H
+#ifndef CEPH_LIBRBD_EXCLUSIVE_LOCK_TRANSIENT_POLICY_H
+#define CEPH_LIBRBD_EXCLUSIVE_LOCK_TRANSIENT_POLICY_H
 
 #include "librbd/exclusive_lock/Policy.h"
 
@@ -13,9 +13,9 @@ struct ImageCtx;
 namespace exclusive_lock {
 
 template <typename ImageCtxT = ImageCtx>
-class StandardPolicy : public Policy {
+class TransientPolicy : public Policy {
 public:
-  StandardPolicy(ImageCtxT* image_ctx) : m_image_ctx(image_ctx) {
+  TransientPolicy(ImageCtxT* image_ctx) : m_image_ctx(image_ctx) {
   }
 
   bool may_auto_request_lock() override {
@@ -31,6 +31,6 @@ private:
 } // namespace exclusive_lock
 } // namespace librbd
 
-extern template class librbd::exclusive_lock::StandardPolicy<librbd::ImageCtx>;
+extern template class librbd::exclusive_lock::TransientPolicy<librbd::ImageCtx>;
 
-#endif // CEPH_LIBRBD_EXCLUSIVE_LOCK_STANDARD_POLICY_H
+#endif // CEPH_LIBRBD_EXCLUSIVE_LOCK_TRANSIENT_POLICY_H

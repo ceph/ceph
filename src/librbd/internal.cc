@@ -40,6 +40,7 @@
 #include "librbd/api/Io.h"
 #include "librbd/cache/Utils.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
+#include "librbd/exclusive_lock/TransientPolicy.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
@@ -959,6 +960,9 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       if (lock_mode == RBD_LOCK_MODE_EXCLUSIVE) {
 	ictx->set_exclusive_lock_policy(
 	  new exclusive_lock::StandardPolicy(ictx));
+      } else if (lock_mode == RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT) {
+        ictx->set_exclusive_lock_policy(
+          new exclusive_lock::TransientPolicy(ictx));
       } else {
         return -EOPNOTSUPP;
       }

@@ -197,6 +197,7 @@ cdef extern from "rbd/librbd.h" nogil:
     ctypedef enum rbd_lock_mode_t:
         _RBD_LOCK_MODE_EXCLUSIVE "RBD_LOCK_MODE_EXCLUSIVE"
         _RBD_LOCK_MODE_SHARED "RBD_LOCK_MODE_SHARED"
+        _RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT "RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT"
 
     ctypedef enum rbd_trash_image_source_t:
         _RBD_TRASH_IMAGE_SOURCE_USER "RBD_TRASH_IMAGE_SOURCE_USER",
