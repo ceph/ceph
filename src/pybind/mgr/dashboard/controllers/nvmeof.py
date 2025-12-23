@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=too-many-lines
 import logging
+from functools import partial
 from typing import Any, Dict, List, Optional
 
 import cherrypy
@@ -10,7 +11,8 @@ from .. import mgr
 from ..exceptions import DashboardException
 from ..model import nvmeof as model
 from ..security import Scope
-from ..services.nvmeof_cli import NvmeofCLICommand, convert_to_bytes
+from ..services.nvmeof_cli import NvmeofCLICommand, convert_to_bytes, \
+    escape_address_if_ipv6, format_host_updates
 from ..services.orchestrator import OrchClient
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
@@ -92,7 +94,8 @@ else:
         @ReadPermission
         @Endpoint('PUT', '/log_level')
         @NvmeofCLICommand(
-            "nvmeof gateway set_log_level", model.RequestStatus, alias="nvmeof gw set_log_level")
+            "nvmeof gateway set_log_level", model.RequestStatus, alias="nvmeof gw set_log_level",
+            success_message_template="Set gateway log level to {log_level}: Successful")
         @EndpointDoc("Set NVMeoF gateway log levels")
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
@@ -156,7 +159,11 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '/log_level')
-        @NvmeofCLICommand("nvmeof spdk_log_level set", model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof spdk_log_level set",
+            model.RequestStatus,
+            success_message_template="Set SPDK log levels and nvmf log flags: Successful"
+        )
         @EndpointDoc("Set NVMeoF gateway spdk log levels")
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
@@ -176,7 +183,8 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '/log_level/disable')
-        @NvmeofCLICommand("nvmeof spdk_log_level disable", model.RequestStatus)
+        @NvmeofCLICommand("nvmeof spdk_log_level disable", model.RequestStatus,
+                          success_message_template="Disable SPDK log flags: Successful")
         @EndpointDoc("Disable NVMeoF gateway spdk log")
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
@@ -221,7 +229,8 @@ else:
             )
 
         @empty_response
-        @NvmeofCLICommand("nvmeof subsystem add", model.RequestStatus)
+        @NvmeofCLICommand("nvmeof subsystem add", model.SubsystemStatus,
+                          success_message_template="Adding subsystem {nqn}: Successful")
         @EndpointDoc(
             "Create a new NVMeoF subsystem",
             parameters={
@@ -251,7 +260,8 @@ else:
             )
 
         @empty_response
-        @NvmeofCLICommand("nvmeof subsystem del", model.RequestStatus)
+        @NvmeofCLICommand("nvmeof subsystem del", model.RequestStatus,
+                          success_message_template="Deleting subsystem {nqn}: Successful")
         @EndpointDoc(
             "Delete an existing NVMeoF subsystem",
             parameters={
@@ -280,7 +290,8 @@ else:
             },
         )
         @empty_response
-        @NvmeofCLICommand("nvmeof subsystem change_key", model.RequestStatus)
+        @NvmeofCLICommand("nvmeof subsystem change_key", model.RequestStatus,
+                          success_message_template="Changing key for subsystem {nqn}: Successful")
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def change_key(self, nqn: str, dhchap_key: str, gw_group: Optional[str] = None,
@@ -300,7 +311,8 @@ else:
             },
         )
         @empty_response
-        @NvmeofCLICommand("nvmeof subsystem del_key", model.RequestStatus)
+        @NvmeofCLICommand("nvmeof subsystem del_key", model.RequestStatus,
+                          success_message_template="Deleting key for subsystem {nqn}: Successful")
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def del_key(self, nqn: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):
@@ -338,7 +350,11 @@ else:
             )
 
         @empty_response
-        @NvmeofCLICommand("nvmeof listener add", model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof listener add",
+            model.RequestStatus,
+            success_message_template="Adding {nqn} listener at {traddr}:{trsvcid}: Successful"
+        )
         @EndpointDoc(
             "Create a new NVMeoF listener",
             parameters={
@@ -372,7 +388,20 @@ else:
             )
 
         @empty_response
-        @NvmeofCLICommand("nvmeof listener del", model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof listener del",
+            model.RequestStatus,
+            success_message_template=(
+                "Deleting listener {traddr}:{trsvcid} from {nqn} {host_msg}: Successful"
+            ),
+            success_message_map={
+                "traddr": lambda v, _f: escape_address_if_ipv6(v) if v is not None else "",
+                "host_msg": lambda _v, f: (
+                    "for all hosts" if f.get("host_name") == "*"
+                    else f"for host {f.get('host_name')}"
+                ),
+            }
+        )
         @EndpointDoc(
             "Delete an existing NVMeoF listener",
             parameters={
@@ -560,7 +589,10 @@ else:
             )
 
         @NvmeofCLICommand(
-            "nvmeof namespace add", model.NamespaceCreation, alias="nvmeof ns add"
+            "nvmeof namespace add",
+            model.NamespaceCreation,
+            alias="nvmeof ns add",
+            success_message_template="Adding namespace {nsid} to {nqn}: Successful"
         )
         @EndpointDoc(
             "Create a new NVMeoF namespace.",
@@ -643,7 +675,8 @@ else:
         @ReadPermission
         @Endpoint('PUT', '{nsid}/set_qos')
         @NvmeofCLICommand(
-            "nvmeof namespace set_qos", model=model.RequestStatus, alias="nvmeof ns set_qos")
+            "nvmeof namespace set_qos", model=model.RequestStatus, alias="nvmeof ns set_qos",
+            success_message_template="Setting QOS limits of namespace {nsid} in {nqn}: Successful")
         @EndpointDoc(
             "set QOS for specified NVMeoF namespace",
             parameters={
@@ -693,8 +726,11 @@ else:
         @ReadPermission
         @Endpoint('PUT', '{nsid}/change_load_balancing_group')
         @NvmeofCLICommand(
-            "nvmeof namespace change_load_balancing_group", model=model.RequestStatus,
-            alias="nvmeof ns change_load_balancing_group"
+            "nvmeof namespace change_load_balancing_group",
+            model=model.RequestStatus,
+            alias="nvmeof ns change_load_balancing_group",
+            success_message_template=("Changing load balancing group of namespace {nsid} "
+                                      "in {nqn} to {load_balancing_group}: Successful")
         )
         @EndpointDoc(
             "set the load balancing group for specified NVMeoF namespace",
@@ -756,8 +792,13 @@ else:
                 )
             )
 
-        @NvmeofCLICommand("nvmeof namespace resize", model=model.RequestStatus,
-                          alias="nvmeof ns resize")
+        @NvmeofCLICommand(
+            "nvmeof namespace resize",
+            model=model.RequestStatus,
+            alias="nvmeof ns resize",
+            success_message_template=("Resizing namespace {nsid} in {nqn} "
+                                      "to {rbd_image_size}: Successful")
+        )
         @EndpointDoc(
             "resize the specified NVMeoF namespace",
             parameters={
@@ -792,7 +833,11 @@ else:
         @ReadPermission
         @Endpoint('PUT', '{nsid}/add_host')
         @NvmeofCLICommand(
-            "nvmeof namespace add_host", model=model.RequestStatus, alias="nvmeof ns add_host"
+            "nvmeof namespace add_host",
+            model=model.RequestStatus,
+            alias="nvmeof ns add_host",
+            success_message_template=("Adding host {host_nqn} to "
+                                      "namespace {nsid} on {nqn}: Successful")
         )
         @EndpointDoc(
             "Adds a host to the specified NVMeoF namespace",
@@ -830,7 +875,11 @@ else:
         @ReadPermission
         @Endpoint('PUT', '{nsid}/del_host')
         @NvmeofCLICommand(
-            "nvmeof namespace del_host", model=model.RequestStatus, alias="nvmeof ns del_host"
+            "nvmeof namespace del_host",
+            model=model.RequestStatus,
+            alias="nvmeof ns del_host",
+            success_message_template=("Deleting host {host_nqn} from "
+                                      "namespace {nsid} on {nqn}: Successful")
         )
         @EndpointDoc(
             "Removes a host from the specified NVMeoF namespace",
@@ -863,8 +912,18 @@ else:
         @ReadPermission
         @Endpoint('PUT', '{nsid}/change_visibility')
         @NvmeofCLICommand(
-            "nvmeof namespace change_visibility", model=model.RequestStatus,
-            alias="nvmeof ns change_visibility"
+            "nvmeof namespace change_visibility",
+            model=model.RequestStatus,
+            alias="nvmeof ns change_visibility",
+            success_message_template=(
+                'Changing visibility of namespace {nsid} in {nqn} to "{auto_visible}": Successful'
+            ),
+            success_message_map={
+                "auto_visible": lambda v, _f: (
+                    "visible to all hosts" if str_to_bool(v)
+                    else "visible to selected hosts"
+                )
+            }
         )
         @EndpointDoc(
             "changes the visibility of the specified NVMeoF namespace to all or selected hosts",
@@ -899,8 +958,19 @@ else:
         @ReadPermission
         @Endpoint('PUT', '{nsid}/set_auto_resize')
         @NvmeofCLICommand(
-            "nvmeof namespace set_auto_resize", model=model.RequestStatus,
-            alias="nvmeof ns set_auto_resize"
+            "nvmeof namespace set_auto_resize",
+            model=model.RequestStatus,
+            alias="nvmeof ns set_auto_resize",
+            success_message_template=(
+                'Setting auto resize flag for namespace {nsid} '
+                'in {nqn} to "{auto_resize_text}": Successful'
+            ),
+            success_message_map={
+                "auto_resize_text": lambda _v, f: (
+                    "auto resize namespace" if str_to_bool(f.get("auto_resize_enabled"))
+                    else "do not auto resize namespace"
+                )
+            }
         )
         @EndpointDoc(
             "Enable or disable namespace auto resize when RBD image is resized",
@@ -937,8 +1007,19 @@ else:
         @ReadPermission
         @Endpoint('PUT', '{nsid}/set_rbd_trash_image')
         @NvmeofCLICommand(
-            "nvmeof namespace set_rbd_trash_image", model=model.RequestStatus,
-            alias="nvmeof ns set_rbd_trash_image"
+            "nvmeof namespace set_rbd_trash_image",
+            model=model.RequestStatus,
+            alias="nvmeof ns set_rbd_trash_image",
+            success_message_template=(
+                'Setting RBD trash image flag for namespace {nsid} '
+                'in {nqn} to "{trash_text}": Successful'
+            ),
+            success_message_map={
+                "trash_text": lambda _v, f: (
+                    "trash on namespace deletion" if str_to_bool(f.get("rbd_trash_image_on_delete"))
+                    else "do not trash on namespace deletion"
+                )
+            }
         )
         @EndpointDoc(
             "changes the trash image on delete of the specified NVMeoF \
@@ -976,7 +1057,8 @@ else:
         @Endpoint('PUT', '{nsid}/refresh_size')
         @NvmeofCLICommand(
             "nvmeof namespace refresh_size", model=model.RequestStatus,
-            alias="nvmeof ns refresh_size"
+            alias="nvmeof ns refresh_size",
+            success_message_template="Refreshing size for namespace {nsid} in {nqn}: Successful"
         )
         @EndpointDoc(
             "refresh the specified NVMeoF namespace to current RBD image size",
@@ -1097,7 +1179,11 @@ else:
             return response
 
         @empty_response
-        @NvmeofCLICommand("nvmeof namespace del", model.RequestStatus, alias="nvmeof ns del")
+        @NvmeofCLICommand(
+            "nvmeof namespace del",
+            model.RequestStatus,
+            alias="nvmeof ns del",
+            success_message_template="Deleting namespace {nsid} from {nqn}: Successful")
         @EndpointDoc(
             "Delete an existing NVMeoF namespace",
             parameters={
@@ -1156,7 +1242,15 @@ else:
             )
 
         @empty_response
-        @NvmeofCLICommand("nvmeof host add", model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof host add",
+            model.RequestStatus,
+            success_message_fn=partial(
+                format_host_updates,
+                template_wildcard="Allowing open host access to {nqn}: Successful",
+                template_item="Adding host {host_nqn} to {nqn}: Successful",
+            ),
+        )
         @EndpointDoc(
             "Allow hosts to access an NVMeoF subsystem",
             parameters={
@@ -1177,7 +1271,15 @@ else:
             )
 
         @empty_response
-        @NvmeofCLICommand("nvmeof host del", model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof host del",
+            model.RequestStatus,
+            success_message_fn=partial(
+                format_host_updates,
+                template_wildcard="Disabling open host access to {nqn}: Successful",
+                template_item="Removing host {host_nqn} access from {nqn}: Successful",
+            ),
+        )
         @EndpointDoc(
             "Disallow hosts from accessing an NVMeoF subsystem",
             parameters={
@@ -1195,7 +1297,12 @@ else:
             )
 
         @empty_response
-        @NvmeofCLICommand("nvmeof host change_key", model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof host change_key",
+            model.RequestStatus,
+            success_message_template=("Changing key for host {host_nqn} "
+                                      "on subsystem {nqn}: Successful")
+        )
         @EndpointDoc(
             "Change host DH-HMAC-CHAP key",
             parameters={
@@ -1218,7 +1325,12 @@ else:
             )
 
         @empty_response
-        @NvmeofCLICommand("nvmeof host del_key", model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof host del_key",
+            model.RequestStatus,
+            success_message_template=("Deleting key for host {host_nqn} "
+                                      "on subsystem {nqn}: Successful")
+        )
         @EndpointDoc(
             "Delete host DH-HMAC-CHAP key",
             parameters={
