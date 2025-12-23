@@ -219,9 +219,13 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   uint64_t length = op.op.extent.length;
   uint64_t slice_count = std::min(length / replica_min_shard_read_size, osds.size());
   uint64_t chunk_size = p2roundup(length / slice_count, (uint64_t)CEPH_PAGE_SIZE);
+  unsigned start = 0;
 
-  for (unsigned i = 0; i < osds.size() && length > 0; i++) {
+  if (slice_count < osds.size()) {
+    start = rand() % osds.size();
+  }
 
+  for (unsigned i = start; length > 0; i = (i + 1 == osds.size()) ? 0 : i + 1) {
     shard_id_t shard(i);
     if (!sub_reads.contains(shard)) {
       sub_reads.emplace(shard, orig_op->ops.size() + 1);

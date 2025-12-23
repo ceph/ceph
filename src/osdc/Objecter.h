@@ -2980,7 +2980,7 @@ public:
   }
 
   uint64_t get_min_split_replica_read_size() {
-  	return min_split_replica_read_size;
+    return min_split_replica_read_size;
   }
 
   /// cancel an in-progress request with the given return code
