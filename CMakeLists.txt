@@ -734,7 +734,7 @@ if (WITH_SYSTEM_ROCKSDB)
   find_package(RocksDB 5.14 REQUIRED)
 endif()
 
-option(WITH_CRIMSON "Build seastar components")
+option(WITH_CRIMSON "Build Crimson components" OFF)
 
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
