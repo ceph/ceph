@@ -424,7 +424,7 @@ struct Trimmer : public ObjectModDesc::Visitor {
       }
     }
 
-    ECOmapJournalEntry to_remove(
+    const ECOmapJournalEntry to_remove(
       entry.version, clear_omap,
       omap_header, omap_updates
       );

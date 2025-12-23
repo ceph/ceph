@@ -1327,6 +1327,7 @@ struct pg_pool_t {
     FLAG_CRIMSON = 1<<18,
     FLAG_EC_OPTIMIZATIONS = 1<<19, // enable optimizations, once enabled, cannot be disabled
     FLAG_CLIENT_SPLIT_READS = 1<<20, // Optimized EC is permitted to do direct reads.
+    FLAG_OMAP = 1<<21, // Optimized EC is permitted to perform OMAP operations
   };
 
   static const char *get_flag_name(uint64_t f) {
@@ -1351,6 +1352,7 @@ struct pg_pool_t {
     case FLAG_BULK: return "bulk";
     case FLAG_CRIMSON: return "crimson";
     case FLAG_EC_OPTIMIZATIONS: return "ec_optimizations";
+    case FLAG_OMAP: return "supports_omap";
     default: return "???";
     }
   }
@@ -1409,6 +1411,8 @@ struct pg_pool_t {
       return FLAG_CRIMSON;
     if (name == "ec_optimizations")
       return FLAG_EC_OPTIMIZATIONS;
+    if (name == "supports_omap")
+      return FLAG_OMAP;
     return 0;
   }
 
@@ -1811,7 +1815,7 @@ public:
   bool is_erasure() const { return get_type() == TYPE_ERASURE; }
 
   bool supports_omap() const {
-    return !(get_type() == TYPE_ERASURE);
+    return has_flag(FLAG_OMAP) || is_replicated();
   }
 
   bool requires_aligned_append() const {

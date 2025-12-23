@@ -1697,16 +1697,27 @@ ECCommon::RecoveryBackend::recover_object(
       ceph_abort_msg("neither obc nor head set for a snap object");
     }
   }
-  op.recovery_progress.omap_complete = true;
+  bool omap_dirty_in_missing = false;
   for (set<pg_shard_t>::const_iterator i =
          get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
     dout(10) << "checking " << *i << dendl;
-    if (get_parent()->get_shard_missing(*i).is_missing(hoid)) {
+    const auto& missing = get_parent()->get_shard_missing(*i);
+    if (auto it = missing.get_items().find(hoid);
+          it != missing.get_items().end()) {
       op.missing_on.insert(*i);
       op.missing_on_shards.insert(i->shard);
+      if (it->second.clean_regions.omap_is_dirty()) {
+        omap_dirty_in_missing = true;
+      }
     }
+  }
+  if (!sinfo.supports_ec_optimisations()) {
+    op.recovery_progress.omap_complete = true;
+  } else {
+    op.recovery_progress.omap_complete = !(op.recovery_info.oi.is_omap()
+                                            || omap_dirty_in_missing);
   }
   dout(10) << __func__ << ": built op " << op << dendl;
   return op;

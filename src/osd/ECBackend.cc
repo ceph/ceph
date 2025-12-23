@@ -582,10 +582,11 @@ void ECBackend::handle_sub_read(
       continue;
     }
     bufferlist bl;
-    int r = switcher->store->omap_get_header(
+    int r = omap_get_header(
       switcher->ch,
       ghobject_t(*i, ghobject_t::NO_GEN, shard),
-      &reply->omap_headers_read[*i], false);
+      &reply->omap_headers_read[*i], false,
+      switcher->store);
     if (r < 0) {
       // If we read error, we should not return the omap header too.
       reply->omap_headers_read.erase(*i);
@@ -606,7 +607,7 @@ void ECBackend::handle_sub_read(
     reply->omaps_complete[hoid] = false;
 
     uint64_t available = max_bytes;
-    const auto result = switcher->store->omap_iterate(
+    const auto result = omap_iterate(
       switcher->ch,
       ghobject_t(hoid, ghobject_t::NO_GEN, shard),
       ObjectStore::omap_iter_seek_t{
@@ -629,7 +630,7 @@ void ECBackend::handle_sub_read(
         current_batch.insert(make_pair(key, val_bl));
         available -= std::min(available, num_new_bytes);
         return ObjectStore::omap_iter_ret_t::NEXT;
-      });
+      }, switcher->store);
 
     if (result < 0) {
       reply->errors[hoid] = result;
@@ -964,6 +965,7 @@ void ECBackend::check_recovery_sources(const OSDMapRef &osdmap) {
 }
 
 void ECBackend::on_change() {
+  ec_omap_journal.clear_all();
   rmw_pipeline.on_change();
   read_pipeline.on_change();
   rmw_pipeline.on_change2();
@@ -1022,7 +1024,8 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
       &temp_added,
       &temp_cleared,
       dpp,
-      osdmap);
+      osdmap,
+      pipeline->ec_backend.ec_omap_journal);
   }
 
   bool skip_transaction(
