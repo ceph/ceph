@@ -287,6 +287,10 @@ def _container_cmd(
             f'--volume={ctx.npm_cache_dir}:/npmcache:z',
             '--env=NPM_CACHEDIR=/npmcache'
         ])
+    cmd.extend([
+        f'--env=NODE_MIRROR=https://npmmirror.com/mirrors/node/',
+        f'--env=NPM_CONFIG_REGISTRY=https://registry.npmmirror.com/'
+    ])
     cmd.append(ctx.image_name)
     cmd.extend(args)
     return cmd
