@@ -193,7 +193,7 @@ class SplitOp {
   CephContext *cct;
   bool abort = false; // Last minute abort... We want to keep this to a minimum.
   int flags = 0;
-  std::optional<int> primary_index;
+  int reference_sub_read = -1;
   std::map<int, std::vector<int>> op_offset_map;
 
  public:
@@ -226,7 +226,8 @@ class ReplicaSplitOp : public SplitOp {
   void assemble_buffer_read(bufferlist &bl_out, int ops_index) override;
   void init_read(OSDOp &op, bool sparse, int ops_index) override;
   bool version_mismatch() override;
-  ReplicaSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int pool_size);
+  ReplicaSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int pool_size) :
+    SplitOp(op, objecter, cct, pool_size) {}
   ~ReplicaSplitOp() {
     complete();
   }

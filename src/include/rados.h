@@ -485,6 +485,7 @@ enum {
 	CEPH_OSD_FLAG_SUPPORTSPOOLEIO = 0x8000000,   /* client understands pool EIO flag */
 	CEPH_OSD_FLAG_EC_DIRECT_READ = 0x10000000,  /* Erasure code doing a partial read direct to OSD. */
 	CEPH_OSD_FLAG_FAIL_ON_EAGAIN = 0x20000000,  /* -EAGAIN will not retry, but fail IO. */
+	CEPH_OSD_FLAG_FORCE_OSD = 0x40000000,  /* osd field contains a forced target. */
 };
 
 // Indicates an IO which is direct-to-OSD and may not be on the primary.

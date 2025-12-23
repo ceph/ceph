@@ -130,7 +130,7 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 
     int direct_osd = t.acting[shard_index];
     if (t.actual_pgid.shard == shard) {
-      primary_index.emplace(shard_index);
+      reference_sub_read = shard_index;
     }
     if (!objecter.osdmap->exists(direct_osd)) {
       ldout(cct, DBG_LVL) << __func__ <<" ABORT: Missing OSD" << dendl;
@@ -149,18 +149,14 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
     }
   }
 
-  if (primary_required && !primary_index) {
+  if (primary_required && reference_sub_read == -1) {
     // _calc_target will have picked the primary by default on EC. The "primary"
     // on replica is an arbitrary shard.
-    primary_index.emplace((int)t.actual_pgid.shard);
-    sub_reads.emplace(*primary_index, orig_op->ops.size() + 1);
-
-    // No primary???  Let the normal code paths deal with this.
-    if (!primary_index) {
-      ldout(cct, DBG_LVL) << __func__ <<" ABORT: Can't find primary" << dendl;
-      abort = true;
-    }
+    reference_sub_read = (int)t.actual_pgid.shard;
+    sub_reads.emplace(reference_sub_read, orig_op->ops.size() + 1);
   }
+  
+  ceph_assert(reference_sub_read != -1);
 }
 
 ECSplitOp::ECSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count) :
@@ -187,15 +183,6 @@ void ReplicaSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) {
   for (auto && [acting_index, sr] : sub_reads) {
     bl_out.append(sr.details[ops_index].bl);
   }
-}
-
-ReplicaSplitOp::ReplicaSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int pool_size) :
-  SplitOp(op, objecter, cct, pool_size) {
-
-  // This may not actually be the primary, but since all shards are kept current
-  // in replica, it does not actually matter which we choose here. Choose 0 since
-  // there will always be a read to this shard (acting set index 0).
-  primary_index = 0;
 }
 
 void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
@@ -232,6 +219,10 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
     int acting_index = i;
     if (!sub_reads.contains(acting_index)) {
       sub_reads.emplace(acting_index, orig_op->ops.size() + 1);
+      // Set reference_sub_read to the first index we use
+      if (reference_sub_read == -1) {
+        reference_sub_read = acting_index;
+      }
     }
     auto &sr = sub_reads.at(acting_index);
     auto bl = &sr.details[ops_index].bl;
@@ -266,9 +257,8 @@ int SplitOp::assemble_rc() {
       return sub_read.rc;
     }
 
-    // The non-primary indices only get reads, which only ever have zero RCs.
-    // Note if primary_index is not engaged, == will return false.
-    if (index == primary_index) {
+    // The non-reference indices only get reads, which only ever have zero RCs.
+    if (index == reference_sub_read) {
       rc = sub_read.rc;
     }
   }
@@ -280,16 +270,16 @@ int SplitOp::assemble_rc() {
 }
 
 bool ECSplitOp::version_mismatch() {
-  // First we need to decode the version list from the primary.
-  ceph_assert(primary_index);
-  ceph_assert(sub_reads.at(*primary_index).internal_version.has_value());
+  // First we need to decode the version list from the reference.
+  ceph_assert(reference_sub_read != -1);
+  ceph_assert(sub_reads.at(reference_sub_read).internal_version.has_value());
 
   std::map<shard_id_t, eversion_t> ref_vers;
-  decode(ref_vers, sub_reads.at(*primary_index).internal_version->bl);
+  decode(ref_vers, sub_reads.at(reference_sub_read).internal_version->bl);
 
   for (auto & [shard_index, sub_read] : sub_reads) {
-      // Primary shard can't be different to itself.
-    if (shard_index == primary_index) {
+      // Reference shard can't be different to itself.
+    if (shard_index == reference_sub_read) {
       continue;
     }
 
@@ -388,8 +378,8 @@ void SplitOp::complete() {
           break;
         }
         default: {
-          out_osd_op.outdata = sub_reads.at(*primary_index).details[ops_index].bl;
-          out_osd_op.rval = sub_reads.at(*primary_index).details[ops_index].rval;
+          out_osd_op.outdata = sub_reads.at(reference_sub_read).details[ops_index].bl;
+          out_osd_op.rval = sub_reads.at(reference_sub_read).details[ops_index].rval;
           break;
         }
       }
@@ -461,9 +451,8 @@ void SplitOp::init(OSDOp &op, int ops_index) {
   }
   default: {
     // Invalid ops should have been rejected in validate.
-    int index = *primary_index;
-    Details &d = sub_reads.at(index).details[ops_index];
-    orig_op->pass_thru_op(sub_reads.at(index).rd, ops_index, &d.bl, &d.rval);
+    Details &d = sub_reads.at(reference_sub_read).details[ops_index];
+    orig_op->pass_thru_op(sub_reads.at(reference_sub_read).rd, ops_index, &d.bl, &d.rval);
     break;
   }
   }
@@ -584,7 +573,7 @@ void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct
     << " pool=" << t.base_oloc.pool
     << " pgid=" << t.actual_pgid
     << " osd=" << t.osd
-    << " acting_index=" << (t.force_acting_set_index ? *t.force_acting_set_index : -1)
+    << " force_osd=" << ((t.flags & CEPH_OSD_FLAG_FORCE_OSD) != 0)
     << " balance_reads=" << ((t.flags & CEPH_OSD_FLAG_BALANCE_READS) != 0)
     << " ops.size()=" << op->ops.size()
     << " needs_version=" << (op->objver?"true":"false");
@@ -622,7 +611,7 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContex
       int acting_index = (int)shard;
       if (objecter.osdmap->exists(op->target.acting[acting_index])) {
         op->target.flags |= CEPH_OSD_FLAG_EC_DIRECT_READ;
-        t.force_acting_set_index.emplace(acting_index);
+        op->target.flags |= CEPH_OSD_FLAG_FORCE_OSD;
         t.osd = t.acting[acting_index];
         t.actual_pgid.reset_shard(shard);
       }
@@ -715,7 +704,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     auto fin = new Finisher(split_read, sub_read); // Self-destructs when called.
 
     version_t *objver = nullptr;
-    if (split_read->primary_index && index == *split_read->primary_index) {
+    if (index == split_read->reference_sub_read) {
       objver = split_read->orig_op->objver;
     }
 
@@ -725,7 +714,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
     auto &st = sub_op->target;
     st = t; // Target can start off in same state as parent.
-    st.force_acting_set_index.emplace(index);
+    st.flags |= CEPH_OSD_FLAG_FORCE_OSD;
     st.flags |= CEPH_OSD_FLAG_FAIL_ON_EAGAIN;
     if (pi->is_erasure()) {
       st.flags |= CEPH_OSD_FLAG_EC_DIRECT_READ;
