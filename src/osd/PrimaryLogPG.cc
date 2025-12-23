@@ -2218,14 +2218,21 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       return;
     }
     if (m->get_hobj() < pool_migration_watermark) {
-      // object has been migrated to the target pool
-      dout(20) << __func__ << ": object has been migrated to pool "
+      // object has been migrated to the target pool - request
+      // Op is redirected and provide client with updated
+      // migration watermark
+      dout(20) << __func__ << ": object " << m->get_hobj()
+	       << " has been migrated to pool "
 	       << *pi->migration_target << dendl;
-      //BILL:FIXME: Need to change client to handle EXDEV (retry request to
-      //the target pool) and find a way of returning
-      //pool_migration_watermark here so the client can update its cached
-      //copy of the watermark so it directs I/O to the correct pool
-      osd->reply_op_error(op, -EXDEV);
+      auto m = op->get_req<MOSDOp>();
+      int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
+      MOSDOpReply *reply = new MOSDOpReply(m, -ENOENT, get_osdmap_epoch(),
+                                       flags, false);
+      request_redirect_t redir(m->get_object_locator(),
+			       *pool.info.migration_target,
+			       pool_migration_watermark);
+      reply->set_redirect(redir);
+      m->get_connection()->send_message(reply);
       return;
     }
   }

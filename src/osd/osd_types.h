@@ -338,6 +338,7 @@ struct request_redirect_t {
 private:
   object_locator_t redirect_locator; ///< this is authoritative
   std::string redirect_object; ///< If non-empty, the request goes to this object name
+  std::optional<hobject_t> redirect_migration_watermark; ///< Migration watermark for pool migration
 
   friend std::ostream& operator<<(std::ostream& out, const request_redirect_t& redir);
 public:
@@ -345,6 +346,11 @@ public:
   request_redirect_t() {}
   explicit request_redirect_t(const object_locator_t& orig, int64_t rpool) :
       redirect_locator(orig) { redirect_locator.pool = rpool; }
+  explicit request_redirect_t(const object_locator_t& orig, int64_t rpool, hobject_t migration_watermark) :
+      redirect_locator(orig) {
+    redirect_locator.pool = rpool;
+    redirect_migration_watermark = migration_watermark;
+  }
   explicit request_redirect_t(const object_locator_t& rloc) :
       redirect_locator(rloc) {}
   explicit request_redirect_t(const object_locator_t& orig,
@@ -359,7 +365,13 @@ public:
     if (!redirect_object.empty())
       obj = redirect_object;
   }
-
+  bool is_pool_migration() const {
+    return redirect_migration_watermark.has_value();
+  }
+  void update_migration_watermark(hobject_t & obj) const {
+    ceph_assert(is_pool_migration());
+    obj = *redirect_migration_watermark;
+  }
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;

@@ -315,23 +315,27 @@ list<object_locator_t> object_locator_t::generate_test_instances()
 // -- request_redirect_t --
 void request_redirect_t::encode(ceph::buffer::list& bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(redirect_locator, bl);
   encode(redirect_object, bl);
   // legacy of the removed osd_instructions member
   encode((uint32_t)0, bl);
+  encode(redirect_migration_watermark, bl);
   ENCODE_FINISH(bl);
 }
 
 void request_redirect_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   uint32_t legacy_osd_instructions_len;
   decode(redirect_locator, bl);
   decode(redirect_object, bl);
   decode(legacy_osd_instructions_len, bl);
   if (legacy_osd_instructions_len) {
     bl += legacy_osd_instructions_len;
+  }
+  if (struct_v >= 2) {
+    decode(redirect_migration_watermark, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -352,6 +356,8 @@ list<request_redirect_t> request_redirect_t::generate_test_instances()
   o.push_back(request_redirect_t(loc, 0));
   o.push_back(request_redirect_t(loc, "redir_obj"));
   o.push_back(request_redirect_t(loc));
+  o.push_back(request_redirect_t(loc, 0,
+      hobject_t(object_t("objname"), "key", 123, 456, -1, "")));
   return o;
 }
 

@@ -1210,7 +1210,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   for (auto it = osdmap->get_pools().begin();
        it != osdmap->get_pools().end(); ++it)
     pool_full_map[it->first] = _osdmap_pool_full(it->second);
-
+  pool_migration_watermarks.clear();
 
   list<LingerOp*> need_resend_linger;
   map<ceph_tid_t, Op*> need_resend;
@@ -2961,7 +2961,34 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       return RECALC_OP_TARGET_POOL_DNE;
     }
   }
-
+  // pool migration
+  if (pi->is_migration_src()) {
+    const pg_pool_t *tpi = osdmap->get_pg_pool(*pi->migration_target);
+    bool migrated = false;
+    if (!tpi->is_migration_target()) {
+      // migration has finished
+      migrated = true;
+    } else {
+      const auto& iter = pool_migration_watermarks.find(t->target_oloc.pool);
+      if (iter != pool_migration_watermarks.end()) {
+	if (t->get_hobj() < iter->second) {
+	  // object has been migrated
+	  migrated = true;
+	}
+      }
+    }
+    if (migrated) {
+      t->target_oloc.pool = *pi->migration_target;
+      pi = tpi;
+      if (!pi) {
+	t->osd = -1;
+	return RECALC_OP_TARGET_POOL_DNE;
+      }
+      if (pi->has_flag(pg_pool_t::FLAG_EIO)) {
+	return RECALC_OP_TARGET_POOL_EIO;
+      }
+    }
+  }
   pg_t pgid;
   if (t->precalc_pgid) {
     ceph_assert(t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY);
@@ -3611,11 +3638,23 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     // FIXME: two redirects could race and reorder
 
     op->tid = 0;
-    m->get_redirect().combine_with_locator(op->target.target_oloc,
-					   op->target.target_oid.name);
-    op->target.flags |= (CEPH_OSD_FLAG_REDIRECTED |
-			 CEPH_OSD_FLAG_IGNORE_CACHE |
-			 CEPH_OSD_FLAG_IGNORE_OVERLAY);
+    const request_redirect_t& r = m->get_redirect();
+    if (r.is_pool_migration()) {
+      //Pool migration is redirecting request to the
+      //target pool because the object has been migrated
+
+      //Upgrade to unique lock to update watermark
+      sul.unlock();
+      sul.lock();
+      r.update_migration_watermark(
+	  pool_migration_watermarks[op->target.target_oloc.pool]);
+    } else {
+      r.combine_with_locator(op->target.target_oloc,
+			     op->target.target_oid.name);
+      op->target.flags |= (CEPH_OSD_FLAG_REDIRECTED |
+			   CEPH_OSD_FLAG_IGNORE_CACHE |
+			   CEPH_OSD_FLAG_IGNORE_OVERLAY);
+    }
     _op_submit(op, sul, NULL);
     m->put();
     return;
