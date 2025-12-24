@@ -601,7 +601,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
         }
       });
     } else if (node?.data?.type === 'zonegroup') {
-      this.modalRef = this.modalService.show(RgwMultisiteZonegroupDeletionFormComponent, {
+      this.cdsModalService.show(RgwMultisiteZonegroupDeletionFormComponent, {
         zonegroup: node.data
       });
     } else if (node?.data?.type === 'zone') {
