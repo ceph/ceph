@@ -514,6 +514,12 @@ else
         case "$ID" in
             fedora)
                 $SUDO dnf install -y dnf-utils
+                MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
+                if [ "$MAJOR_VERSION" -eq 43 ]; then
+                    # packages needed on Fedora 43
+                    $SUDO dnf group install -y c-development
+                    $SUDO dnf install -y libatomic keyutils-libs-devel systemd-devel libblkid-devel openldap-devel
+                fi
                 ;;
             almalinux|rocky|centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
