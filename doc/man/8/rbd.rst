@@ -1037,7 +1037,7 @@ To restore an image from trash and rename it::
 
 To create a mirror snapshot schedule for an image::
 
-       rbd mirror snapshot schedule add --pool mypool --image myimage 12h 14:00:00-05:00
+       rbd mirror snapshot schedule add --pool mypool --image myimage 12h 2020-01-14T11:30+05:30
 
 Availability
 ============
