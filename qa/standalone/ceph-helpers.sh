@@ -1928,6 +1928,21 @@ function pg_scrub() {
     wait_for_scrub $pgid "$last_scrub"
 }
 
+##
+# Run scrub on **pgid** and wait until it completes, without waiting
+# for the PG to be clean first.
+#
+# @param pgid the id of the PG
+# @return 0 on success, 1 on error
+#
+function force_pg_scrub() {
+    local pgid=$1
+    # Skip wait_for_pg_clean check
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+    ceph pg scrub $pgid
+    wait_for_scrub $pgid "$last_scrub"
+}
+
 function pg_deep_scrub() {
     local pgid=$1
     # do not issue the scrub command unless the PG is clean
@@ -1948,7 +1963,7 @@ function test_pg_scrub() {
     wait_for_clean || return 1
     pg_scrub 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=2 pg_scrub 1.0 || return 1
+    ! TIMEOUT=2 force_pg_scrub 1.0 || return 1
     teardown $dir || return 1
 }
 
