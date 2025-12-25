@@ -54,7 +54,7 @@ function TEST_recovery_scrub_1() {
     ceph_osd_args+="--osd_stats_update_period_scrubbing=2"
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-        run_osd $dir $osd --osd_scrub_during_recovery=false || return 1
+        run_osd $dir $osd $ceph_osd_args --osd_scrub_during_recovery=false || return 1
     done
 
     # Create a pool with $PGS pgs
