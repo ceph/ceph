@@ -522,7 +522,7 @@ else
                     libblkid-devel \
                     openldap-devel \
                     ninja \
-                    ccache 
+                    ccache
                 ;;
             almalinux|rocky|centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
