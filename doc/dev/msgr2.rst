@@ -206,10 +206,13 @@ Differences from msgr2.0-crc:
    empty).  Rationale: If the frame has only one segment, it cannot
    be aborted and there are no crcs to store in the epilogue.
 
-3. Unchecksummed late_flags is replaced with late_status which
-   builds in bit error detection by using a 4-bit nibble per flag
+3. Unchecksummed ``late_flags`` is replaced with ``late_status``.
+   A completed frame is indicated by a ``late_flags`` value of
+   ``FRAME_LATE_STATUS_COMPLETE``, while an aborted frame is indicated
+   by a value of ``FRAME_LATE_STATUS_ABORTED``. This adjusted field
+   has better bit error detection by using a 4-bit nibble per flag
    and two code words that are Hamming Distance = 4 apart (and not
-   all zeros or ones).  This comes at the expense of having only
+   all zeros or ones). This comes at the expense of having only
    one reserved flag, of course.
 
 Some example frames:
