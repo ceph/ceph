@@ -155,14 +155,14 @@ back to the user immediately, without making a copy or blocking
 until the whole frame is transmitted.  Currently this is used only
 by the kernel client, see ceph_msg_revoke().
 
-The segment checksum is CRC32-C (see :ref:`crc`).  For "used"
-empty segments, it is initialized with (__le32)-1. For unused
-(trailing) segments, it is zeroed.
+The segment checksum is CRC32-C (see :ref:`crc`).  For used
+segments, the initial value is ``-1``. For unused (trailing)
+segments, it is zeroed.
 
-The crcs are calculated just to protect against bit errors.
+The checksums are calculated just to protect against bit errors.
 No authenticity guarantees are provided, unlike in msgr1 which
 attempted to provide some authenticity guarantee by optionally
-signing segment lengths and crcs with the session key.
+signing segment lengths and checksums with the session key.
 
 Issues
 ^^^^^^
@@ -196,15 +196,16 @@ msgr2.1-crc mode
 Differences from msgr2.0-crc:
 
 1. The crc of the first segment is stored at the end of the
-   first segment, not in the epilogue.  The epilogue stores up to
-   three crcs, not up to four.
+   first segment, not in the epilogue. The epilogue stores up to
+   three checksums, not up to four.
 
-   If the first segment is empty, (__le32)-1 crc is not generated.
+   If the first segment is empty, its CRC value is not written to
+   the frame.
 
 2. The epilogue is generated only if the frame has more than one
    segment (i.e. at least one of second to fourth segments is not
    empty).  Rationale: If the frame has only one segment, it cannot
-   be aborted and there are no crcs to store in the epilogue.
+   be aborted and there are no checksums to store in the epilogue.
 
 3. Unchecksummed ``late_flags`` is replaced with ``late_status``.
    A completed frame is indicated by a ``late_flags`` value of
@@ -980,7 +981,7 @@ The CRC algorithm used in this section has the following parameters:
 
 * Width: 32 bits
 * Poly: ``0x1EDC6F41``
-* Init: ``0`` (for preamble CRC), ``(__le32)-1`` = ``0xFFFFFFFF`` (for segment data CRC)
+* Init: ``0`` (for preamble CRC), ``-1`` = ``0xFFFFFFFF`` (for segment data CRC)
 * Refin: ``true``
 * Refout: ``true``
 * Xorout: ``0``
