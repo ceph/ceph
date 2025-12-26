@@ -13,7 +13,6 @@ setup(
     keywords='bn web testing',
 
     install_requires=[
-        'boto >=2.0b4',
         'boto3 >=1.0.0'
-        ],
-    )
+    ],
+)
