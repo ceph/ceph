@@ -1751,7 +1751,7 @@ class CephadmServe:
                 self.log.debug('stdin: %s' % stdin)
 
             # If SSH hardening is enabled, call invoker directly without which python
-            if self.mgr.ssh_hardening and self.mgr.invoker_path:
+            if self.mgr.sudo_hardening and self.mgr.invoker_path:
                 # For invoker, pass all args as a single string
                 cmd = ssh.RemoteCommand(
                     ssh.Executables.INVOKER,
@@ -1769,10 +1769,10 @@ class CephadmServe:
                     host, cmd, stdin=stdin, addr=addr)
                 if code == 2 or code == 127:
                     # Use invoker to check file existence when SSH hardening is enabled
-                    if self.mgr.ssh_hardening and self.mgr.invoker_path:
+                    if self.mgr.sudo_hardening and self.mgr.invoker_path:
                         check_cmd = ssh.RemoteCommand(
                             ssh.Executables.INVOKER,
-                            ['check_existence', self.mgr.cephadm_binary_path]
+                            ['check_binary', self.mgr.cephadm_binary_path]
                         )
                     else:
                         check_cmd = ssh.RemoteCommand(
@@ -1800,7 +1800,7 @@ class CephadmServe:
         elif self.mgr.mode == 'cephadm-package':
             try:
                 # Wrap with invoker if SSH hardening is enabled
-                if self.mgr.ssh_hardening and self.mgr.invoker_path:
+                if self.mgr.sudo_hardening and self.mgr.invoker_path:
                     cmd = ssh.RemoteCommand(
                         ssh.Executables.INVOKER,
                         ['run', str(CEPHADM_EXE), '--'] + final_args
@@ -1878,7 +1878,7 @@ class CephadmServe:
     async def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
         # Use tee (from coreutils) to create a copy of cephadm on the target machine
         self.log.info(f"Deploying cephadm binary to {host}")
-        if self.mgr.ssh_hardening and self.mgr.invoker_path:
+        if self.mgr.sudo_hardening and self.mgr.invoker_path:
             # Use invoker for secure deployment when SSH hardening is enabled
             await self.mgr.ssh._deploy_cephadm_binary_via_invoker(
                 host, self.mgr.cephadm_binary_path, self.mgr._cephadm, addr=addr)

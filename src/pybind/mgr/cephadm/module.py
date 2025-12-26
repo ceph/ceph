@@ -506,10 +506,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc="Default IP address for RedFish API (OOB management)."
         ),
         Option(
-            'ssh_hardening',
+            'sudo_hardening',
             type='bool',
             default=False,
-            desc='Enable SSH hardening by routing all command execution through invoker.py. '
+            desc='Enable sudo hardening by routing all command execution through invoker.py. '
                  'When enabled, cephadm and bash commands are validated and executed via '
                  'the secure invoker wrapper.'
         ),
@@ -540,7 +540,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         else:
             self.paused = False
 
-        self.ssh_hardening = False
+        self.sudo_hardening = False
         self.invoker_path = '/usr/libexec/cephadm_invoker.py'
 
         # for mypy which does not run the code
@@ -621,7 +621,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.oob_default_addr = ''
             self.ssh_keepalive_interval = 0
             self.ssh_keepalive_count_max = 0
-            self.ssh_hardening = False
+            self.sudo_hardening = False
             self.invoker_path = '/usr/libexec/cephadm_invoker.py'
             self.certificate_duration_days = 0
             self.certificate_renewal_threshold_days = 0
@@ -1568,6 +1568,127 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     self.event.set()
         return 0, '%s (%s) ok' % (host, addr), '\n'.join(err)
 
+    def _prepare_host_for_sudo_hardening(
+        self,
+        host: str,
+        cephadm_args: List[str],
+        addr: Optional[str] = None
+    ) -> Tuple[str, bool, str]:
+        """
+        Prepare a host for sudo hardening by executing 'cephadm prepare-host-sudo-hardening' command.
+        """
+        try:
+            self.log.debug('Preparing host %s for sudo hardening...', host)
+            addr = addr or (self.inventory.get_addr(host) if host in self.inventory else None)
+
+            with self.async_timeout_handler(host, 'cephadm prepare-host-sudo-hardening'):
+                out, err, code = self.wait_async(
+                    CephadmServe(self)._run_cephadm(
+                        host, cephadmNoImage, 'prepare-host-sudo-hardening', cephadm_args,
+                        addr=addr, error_ok=True, no_fsid=True))
+            if code:
+                error_msg = '\n'.join(err) if err else 'Unknown error'
+                self.log.error('Failed to prepare host %s: %s', host, error_msg)
+                return (host, False, error_msg)
+            self.log.debug('Successfully prepared host %s', host)
+            return (host, True, '')
+        except Exception as e:
+            error_msg = str(e)
+            self.log.exception('Exception while preparing host %s: %s', host, error_msg)
+            return (host, False, error_msg)
+
+    @forall_hosts
+    def _prepare_hosts_for_sudo_hardening(
+        self,
+        host: str,
+        cephadm_args: List[str],
+        addr: Optional[str] = None
+    ) -> Tuple[str, bool, str]:
+        return self._prepare_host_for_sudo_hardening(host, cephadm_args, addr)
+
+    @orchestrator._cli_write_command(
+        'cephadm prepare-host-and-enable-sudo-hardening')
+    def _prepare_host_and_enable_sudo_hardening(
+        self,
+        user: str,
+        host_label: Optional[str] = None
+    ) -> Tuple[int, str, str]:
+        """
+        Prepare hosts and enable sudo hardening for the cluster.
+        This command performs a complete sudo hardening setup:
+        1. Prepare each host for sudo hardening (install cephadm, configure sudoers) - executed on all hosts
+        2. Set SSH user to the specified user for cluster operations (without pre-steps)
+        3. Enable sudo hardening globally for the cluster
+        """
+        if not self.ssh_pub:
+            return 1, '', 'Error: No SSH public key configured. Run "ceph cephadm generate-key" first.'
+        if host_label:
+            hosts_to_prepare = [h for h in self.cache.get_hosts()
+                                if self.inventory.has_label(h, host_label)]
+        else:
+            hosts_to_prepare = self.cache.get_hosts()
+        if not hosts_to_prepare:
+            return 1, '', 'Error: No hosts found'
+        self.log.debug('Preparing %s host(s) in the cluster: %s', len(hosts_to_prepare), ", ".join(hosts_to_prepare))
+
+        # Prepare arguments for the cephadm command
+        args = []
+        args.extend(['--ssh-user', user])
+        args.extend(['--ssh-pub-key', self.ssh_pub])
+        ceph_version = self._get_cephadm_version_for_host_prep()
+        if ceph_version:
+            args.extend(['--cephadm-version', ceph_version])
+
+        # Step 1: Prepare each host for sudo hardening (executed on all target hosts in parallel)
+        self.log.debug('Step 1: Preparing %s host(s) for sudo hardening in parallel', len(hosts_to_prepare))
+        host_args = [(host, args) for host in hosts_to_prepare]
+        try:
+            host_results = self._prepare_hosts_for_sudo_hardening(host_args)
+        except Exception as e:
+            self.log.exception('Failed to prepare hosts in parallel: %s', e)
+            return 1, '', f'Failed to prepare hosts: {str(e)}'
+        failed_hosts = []
+        for hostname, success, error_msg in host_results:
+            if not success:
+                failed_hosts.append(hostname)
+        if failed_hosts:
+            return 1, '', f'Failed to prepare {len(failed_hosts)} host(s): {", ".join(failed_hosts)}'
+        self.log.debug('All %s hosts prepared successfully', len(hosts_to_prepare))
+
+        # Step 2: Enable sudo hardening globally
+        self.log.debug('Step 2: Enabling sudo hardening...')
+        try:
+            if not self.sudo_hardening:
+                self.set_module_option('sudo_hardening', True)
+                self.sudo_hardening = True
+        except Exception as e:
+            error_msg = f'Failed to enable sudo hardening: {e}'
+            self.log.exception(error_msg)
+            return 1, '', error_msg
+
+        # Step 3: Set SSH user for cluster operations
+        self.log.debug('Step 3: Setting SSH user to %s for cluster operations', user)
+        try:
+            # Call set_ssh_user with skip_pre_steps=True since we've already prepared the hosts
+            current_user = self.ssh_user
+            if current_user != user:
+                retval, out_msg, err_msg = self.set_ssh_user(user, skip_pre_steps=True)
+                if retval != 0:
+                    error_msg = f'Failed to set SSH user: {err_msg}'
+                    self.log.error(error_msg)
+                    return 1, '', error_msg
+        except Exception as e:
+            error_msg = f'Failed to set SSH user: {e}'
+            self.log.exception(error_msg)
+            return 1, '', error_msg
+
+        success_msg = (
+            f'Sudo hardening is now active for all cluster operations.\n'
+            f'Affected hosts: {", ".join(hosts_to_prepare)}\n'
+        )
+        self.log.debug(success_msg)
+        return 0, success_msg, ''
+
     @orchestrator._cli_write_command(
         prefix='cephadm set-extra-ceph-conf')
     def _set_extra_ceph_conf(self, inbuf: Optional[str] = None) -> HandleCommandResult:
@@ -1992,6 +2113,74 @@ Then run the following:
             raise OrchestratorError(str(e))
         return ip_addr
 
+    def _get_cephadm_version_for_host_prep(self) -> Optional[str]:
+        """Extract cephadm version from cluster version string."""
+        try:
+            if self.version:
+                parts = self.version.split()
+                if len(parts) > 2 and parts[0] == 'ceph' and parts[1] == 'version':
+                    return parts[2]
+        except Exception as e:
+            self.log.debug(f'Could not determine cluster version: {e}')
+        return None
+
+    def _cleanup_add_host_tracking(self, hostname: str) -> None:
+        """Clean up host from tracking sets and reset SSH connection."""
+        try:
+            self.hosts_being_added.discard(hostname)
+        except Exception as e:
+            self.log.debug(f'Failed to remove {hostname} from hosts_being_added: {e}')
+
+        try:
+            self.ssh.reset_con(hostname)
+        except Exception as e:
+            self.log.debug(f'Failed to reset SSH connection for {hostname}: {e}')
+
+    def _prepare_new_host_for_sudo_hardening(self, hostname: str, addr: str) -> None:
+        """
+        Prepare a new host for sudo hardening before adding to inventory.
+        Raises OrchestratorError on failure.
+        """
+        if not self.ssh_pub:
+            raise OrchestratorError('No SSH public key configured')
+        if not self.ssh_user:
+            raise OrchestratorError('No SSH user configured')
+
+        self.log.info('Preparing new host %s for sudo hardening with root', hostname)
+
+        # Build arguments
+        ceph_version = self._get_cephadm_version_for_host_prep()
+        if ceph_version:
+            self.log.debug('Will install cephadm version %s on %s', ceph_version, hostname)
+        cephadm_args = ['--ssh-user', self.ssh_user, '--ssh-pub-key', self.ssh_pub]
+        if ceph_version:
+            cephadm_args.extend(['--cephadm-version', ceph_version])
+
+        # Execute preparation
+        _, success, error_msg = self._prepare_host_for_sudo_hardening(
+            hostname, cephadm_args, addr
+        )
+        if not success:
+            raise OrchestratorError(
+                f'Failed to prepare host {hostname} for sudo hardening: {error_msg}'
+            )
+        self.log.info('Successfully prepared host %s for sudo hardening', hostname)
+
+    def _setup_user_on_new_host(self, hostname: str, addr: Optional[str]) -> None:
+        """
+        user setup for new hosts (when sudo hardening is disabled).
+        """
+        try:
+            assert self.ssh_pub
+            assert self.ssh_user
+            self._setup_user_on_host(hostname, self.ssh_user, self.ssh_pub, addr=addr)
+        except OrchestratorError as oe:
+            self.log.exception('Failed to setup user %s on %s: %s', self.ssh_user, hostname, oe)
+            self.log.warning('Please manually setup user %s on %s', hostname, self.ssh_user, hostname)
+        except Exception as e:
+            self.log.exception('Unexpected error setting up user %s on %s: %s', self.ssh_user, hostname, e)
+            self.log.warning('You may need to manually setup user %s on %s', self.ssh_user, hostname)
+
     def _add_host(self, spec):
         # type: (HostSpec) -> str
         """
@@ -2006,9 +2195,9 @@ Then run the following:
         if is_new_host and self.ssh_user and self.ssh_user != 'root':
             try:
                 self.hosts_being_added.add(spec.hostname)
-                self.log.info(f'Adding new host {spec.hostname}, will use root user temporarily for setup')
+                self.log.info('Adding new host %s, will use root user temporarily for setup', spec.hostname)
             except Exception as e:
-                self.log.warning(f'Failed to add {spec.hostname} to hosts_being_added tracking: {e}')
+                self.log.warning('Failed to add %s to hosts_being_added tracking: %s', spec.hostname, e)
 
         try:
             ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
@@ -2038,6 +2227,20 @@ Then run the following:
                     'args': [f'{k}={v}' for k, v in spec.location.items()],
                 })
 
+            # BEFORE adding host to inventory, prepare it for sudo hardening if needed
+            if is_new_host and self.sudo_hardening and self.ssh_user and self.ssh_user != 'root':
+                try:
+                    self._prepare_new_host_for_sudo_hardening(spec.hostname, spec.addr)
+                except Exception as e:
+                    self.log.exception('Sudo hardening preparation failed for %s: %s', spec.hostname, e)
+                    raise OrchestratorError(
+                        f'Failed to prepare host {spec.hostname} for sudo hardening. '
+                        f'Host was not added to the cluster. Error: {e}'
+                    )
+            elif is_new_host and self.ssh_user and self.ssh_user != 'root':
+                # Sudo hardening not enabled, just perform set user setup presteps
+                self._setup_user_on_new_host(spec.hostname, spec.addr)
+
             if spec.hostname not in self.inventory:
                 self.cache.prime_empty_host(spec.hostname)
             self.inventory.add_host(spec)
@@ -2047,64 +2250,13 @@ Then run the following:
             self.event.set()  # refresh stray health check
             self.log.info('Added host %s' % spec.hostname)
 
-            # If this is a new host and using non-root user, setup the user now
-            if is_new_host and self.ssh_user and self.ssh_user != 'root':
-                self.log.info(f'Setting up user {self.ssh_user} on new host {spec.hostname}')
-                try:
-                    assert self.ssh_pub
-                    self._setup_user_on_host(spec.hostname, self.ssh_user, self.ssh_pub, addr=spec.addr)
-                    self.log.info(f'Successfully set up user {self.ssh_user} on {spec.hostname}')
-                except OrchestratorError as oe:
-                    # OrchestratorError from user setup (user doesn't exist, SSH failures, etc.)
-                    # Log warning but don't fail the add_host operation
-                    self.log.warning(f'Failed to setup user {self.ssh_user} on {spec.hostname}: {oe}')
-                    self.log.warning(
-                        f'Host {spec.hostname} added but user setup incomplete. '
-                        f'Please manually setup user {self.ssh_user} on {spec.hostname}')
-                except Exception as e:
-                    # Unexpected error during user setup
-                    # Log warning but don't fail the add_host operation
-                    self.log.error(f'Unexpected error setting up user {self.ssh_user} on {spec.hostname}: {e}')
-                    self.log.warning(f'You may need to manually setup user {self.ssh_user} on {spec.hostname}')
-                finally:
-                    # Always remove from hosts_being_added after setup attempt
-                    try:
-                        self.hosts_being_added.discard(spec.hostname)
-                    except Exception as discard_err:
-                        self.log.debug(f'Failed to remove {spec.hostname} from hosts_being_added: {discard_err}')
-
-                    # Reset SSH connection so next operations will use configured user
-                    try:
-                        self.ssh.reset_con(spec.hostname)
-                        self.log.debug(f'Reset SSH connection for {spec.hostname} to use configured user')
-                    except Exception as reset_err:
-                        # Connection reset failure is not critical - connection will be recreated on next use
-                        self.log.debug(f'Failed to reset SSH connection for {spec.hostname}: {reset_err}')
-            elif is_new_host:
-                # Root user, no need to track
-                try:
-                    self.hosts_being_added.discard(spec.hostname)
-                except Exception as e:
-                    self.log.debug(f'Failed to remove {spec.hostname} from hosts_being_added: {e}')
-
             return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
         except Exception:
-            # If anything fails in core add_host operations, cleanup the new tracking mechanisms
-            if is_new_host and self.ssh_user and self.ssh_user != 'root':
-                # Cleanup tracking set
-                try:
-                    self.hosts_being_added.discard(spec.hostname)
-                    self.log.debug(f'Cleaned up hosts_being_added tracking for {spec.hostname} after error')
-                except Exception as cleanup_err:
-                    self.log.debug(f'Failed to cleanup hosts_being_added for {spec.hostname}: {cleanup_err}')
-
-                # Cleanup any stale SSH connection
-                try:
-                    self.ssh.reset_con(spec.hostname)
-                    self.log.debug(f'Reset SSH connection for {spec.hostname} after error')
-                except Exception as reset_err:
-                    self.log.debug(f'Failed to reset SSH connection for {spec.hostname}: {reset_err}')
             raise
+        finally:
+            if is_new_host and self.ssh_user and self.ssh_user != 'root':
+                self.log.debug('Cleaning up %s ', spec.hostname)
+                self._cleanup_add_host_tracking(spec.hostname)
 
     @handle_orch_error
     def add_host(self, spec: HostSpec) -> str:

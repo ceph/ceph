@@ -230,14 +230,16 @@ class SSHManager:
         with self.mgr.async_timeout_handler(host, f'ssh {host} (addr {addr})'):
             return self.mgr.wait_async(self._remote_connection(host, addr))
 
-    def _enforce_ssh_hardening(self,
-                               host: str,
-                               cmd_components: RemoteCommand) -> None:
+    def _enforce_sudo_hardening(
+        self,
+        host: str,
+        cmd_components: RemoteCommand
+    ) -> None:
         """
         Enforce that commands are wrapped with invoker when SSH hardening
         is enabled.
         """
-        if not self.mgr.ssh_hardening:
+        if not self.mgr.sudo_hardening:
             return
 
         is_wrapped = (
@@ -268,7 +270,7 @@ class SSHManager:
             logger.debug(f'Host {host} is being added, using root user without sudo')
 
         # Enforce invoker usage if SSH hardening is enabled
-        self._enforce_ssh_hardening(host, cmd_components)
+        self._enforce_sudo_hardening(host, cmd_components)
 
         rcmd = RemoteSudoCommand.wrap(cmd_components, use_sudo=use_sudo)
         try:
@@ -497,7 +499,7 @@ class SSHManager:
 
             invoker_cmd = RemoteCommand(
                 Executables.INVOKER,
-                ['deploy_cephadm_binary', remote_tmp_path, cephadm_path]
+                ['deploy_binary', remote_tmp_path, cephadm_path]
             )
             await self._execute_command(host, invoker_cmd, addr=addr)
 
