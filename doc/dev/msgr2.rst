@@ -115,7 +115,8 @@ empty.
 If there are less than four segments, unused (trailing) segment
 length and segment alignment fields are zeroed.
 
-### Currently supported flags
+Currently supported flags
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
   1. FRAME_EARLY_DATA_COMPRESSED (see :ref:`msgr-post-compression`)
 
@@ -126,7 +127,8 @@ everything up to itself (28 bytes) and is calculated and verified
 irrespective of the connection mode (i.e. even if the frame is
 encrypted).
 
-### msgr2.0-crc mode
+msgr2.0-crc mode
+~~~~~~~~~~~~~~~~
 
 A msgr2.0-crc frame has the form::
 
@@ -162,7 +164,8 @@ No authenticity guarantees are provided, unlike in msgr1 which
 attempted to provide some authenticity guarantee by optionally
 signing segment lengths and crcs with the session key.
 
-Issues:
+Issues
+^^^^^^
 
 1. As part of introducing a structure for a generic frame with
    variable number of segments suitable for both control and
@@ -187,7 +190,8 @@ Issues:
 
    This was the case with msgr1 and got carried over to msgr2.0.
 
-### msgr2.1-crc mode
+msgr2.1-crc mode
+~~~~~~~~~~~~~~~~
 
 Differences from msgr2.0-crc:
 
@@ -347,7 +351,8 @@ Depending on the negotiated connection mode from TAG_AUTH_DONE, the
 connection either stays in crc mode or switches to the corresponding
 secure mode (msgr2.0-secure or msgr2.1-secure).
 
-### msgr2.0-secure mode
+msgr2.0-secure mode
+~~~~~~~~~~~~~~~~~~~
 
 A msgr2.0-secure frame has the form::
 
@@ -375,7 +380,8 @@ But, if the overall input length is not a multiple of 16 bytes, some
 implicit zero padding would occur internally because GHASH function
 used by GCM for generating auth tags only works on 16-byte blocks.
 
-Issues:
+Issues
+^^^^^^
 
 1. The sender encrypts the whole frame using a single nonce
    and generating a single auth tag.  Because segment lengths are
@@ -400,7 +406,8 @@ Issues:
    This was addressed by disconnecting before the counter repeats
    (CVE-2020-1759).
 
-### msgr2.1-secure mode
+msgr2.1-secure mode
+~~~~~~~~~~~~~~~~~~~
 
 Differences from msgr2.0-secure:
 
@@ -571,7 +578,8 @@ Once the handshake is completed, both peers have setup their compression handler
                 |<-----------------------|
                 |   compression done     |
 
-# msgr2.x-secure mode
+msgr2.x-secure mode
+~~~~~~~~~~~~~~~~~~~
 
 Combining compression with encryption introduces security implications.
 Compression will not be possible when using secure mode, unless configured specifically by an admin. 
@@ -582,13 +590,15 @@ Post-compression frame format
 -----------------------------
 Depending on the negotiated connection mode from TAG_COMPRESSION_DONE, the connection is able to accept/send compressed frames or process all frames as decompressed.
 
-# msgr2.x-force mode
+msgr2.x-force mode
+~~~~~~~~~~~~~~~~~
 
 All subsequent frames that will be sent via the connection will be compressed if compression requirements are met (e.g, the frames size).
 
 For compressed frames, the sending peer will enable the FRAME_EARLY_DATA_COMPRESSED flag, thus allowing the accepting peer to detect it and decompress the frame.
 
-# msgr2.x-none mode
+msgr2.x-none mode
+~~~~~~~~~~~~~~~~~
 
 FRAME_EARLY_DATA_COMPRESSED flag will be disabled in preamble.
 
