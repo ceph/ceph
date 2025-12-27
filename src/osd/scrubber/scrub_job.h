@@ -270,8 +270,6 @@ class ScrubJob {
       scrub_level_t s_or_d,
       const Scrub::sched_conf_t& app_conf);
 
-  void dump(ceph::Formatter* f) const;
-
   bool is_registered() const { return registered; }
 
   /// are any of our two SchedTargets queued in the scrub queue?

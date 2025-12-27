@@ -2313,12 +2313,41 @@ void PgScrubber::dump_scrubber(
 	<< earliest.sched_info.schedule.not_before;
     auto sched_state = m_scrub_job->scheduling_state(now_is);
     f->dump_string("schedule", sched_state);
+    f->dump_named_fmt("urgency", "{}", earliest.urgency());
   }
 
   if (m_publish_sessions) {
     // this is a test-only feature. It is not expected to be used in production.
     // The 'test_sequence' is an ever-increasing number used by tests.
     f->dump_int("test_sequence", m_sessions_counter);
+  }
+
+  // always (also) dump the two targets (as some tests expect their specific
+  // format)
+  const auto query_time = ceph_clock_now();
+  {
+    Formatter::ObjectSection shallow_section{*f, "shallow-target"sv};
+    m_scrub_job->shallow_target.queued_element().dump(*f);
+    f->dump_bool(
+        "eligible",
+        m_scrub_job->shallow_target.queued_element().schedule.not_before <=
+            query_time);
+    f->dump_bool("queued", m_scrub_job->shallow_target.queued);
+    f->dump_bool(
+        "active",
+        (m_active_target && m_active_target->is_shallow()) ? true : false);
+  }
+  {
+    Formatter::ObjectSection deep_section{*f, "deep-target"sv};
+    m_scrub_job->deep_target.queued_element().dump(*f);
+    f->dump_bool(
+        "eligible",
+        m_scrub_job->deep_target.queued_element().schedule.not_before <=
+            query_time);
+    f->dump_bool("queued", m_scrub_job->deep_target.queued);
+    f->dump_bool(
+        "active",
+        (m_active_target && m_active_target->is_deep()) ? true : false);
   }
 }
 
@@ -2361,6 +2390,7 @@ void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
   } else {
     f->dump_bool("is_reserving_replicas", false);
   }
+  f->dump_named_fmt("urgency", "{}",m_active_target->urgency());
 }
 
 pg_scrubbing_status_t PgScrubber::get_schedule() const
