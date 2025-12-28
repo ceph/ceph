@@ -2290,8 +2290,7 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
 
 
 ///\todo modify the fields dumped here to match the new scrub-job structure
-void PgScrubber::dump_scrubber(
-    ceph::Formatter* f) const
+void PgScrubber::dump_scrubber(ceph::Formatter* f) const
 {
   Formatter::ObjectSection scrubber_section{*f, "scrubber"sv};
 
@@ -2304,13 +2303,12 @@ void PgScrubber::dump_scrubber(
     const auto& earliest = m_scrub_job->earliest_target(now_is);
     f->dump_bool("must_scrub", earliest.is_high_priority());
     f->dump_bool(
-	"must_deep_scrub", m_scrub_job->deep_target.is_high_priority());
+        "must_deep_scrub", m_scrub_job->deep_target.is_high_priority());
     // the following data item is deprecated. Will be replaced by a set
     // of reported attributes that match the updated scrub-job state.
     f->dump_bool("must_repair", earliest.urgency() == urgency_t::must_repair);
-
-    f->dump_stream("scrub_reg_stamp")
-	<< earliest.sched_info.schedule.not_before;
+    f->dump_named_fmt(
+        "sched_time", "{}", earliest.sched_info.schedule.not_before);
     auto sched_state = m_scrub_job->scheduling_state(now_is);
     f->dump_string("schedule", sched_state);
     f->dump_named_fmt("urgency", "{}", earliest.urgency());
