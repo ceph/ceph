@@ -328,10 +328,42 @@ below.
 .. confval:: rgw_d4n_l1_datacache_disk_reserve
 .. confval:: rgw_d4n_l1_evict_cache_on_start
 .. confval:: rgw_d4n_l1_fadvise
-.. confval:: rgw_d4n_libaio_aio_threads
-.. confval:: rgw_d4n_libaio_aio_num
 .. confval:: rgw_lfuda_sync_frequency
 .. confval:: rgw_d4n_l1_datacache_address
+
+D4N Asynchronous I/O Backend Settings
+--------------------------------------
+
+The D4N cache supports two asynchronous I/O backends for cache read/write
+operations: ``libaio`` (POSIX AIO, the default) and ``liburing`` (io_uring).
+The active backend is selected at startup via :confval:`rgw_d4n_io_backend_type`.
+
+.. confval:: rgw_d4n_io_backend_type
+
+If the ``liburing`` backend is selected but liburing is unavailable or
+initialization fails, the gateway automatically falls back to ``libaio``.
+The ``liburing`` backend requires Linux kernel 5.1 or later.
+
+.. note:: The ``liburing`` backend and all ``rgw_d4n_io_uring_*`` options are *experimental*.
+
+liburing Settings
+~~~~~~~~~~~~~~~~~
+
+The following options apply only when :confval:`rgw_d4n_io_backend_type` is set to ``liburing``.
+
+.. confval:: rgw_d4n_io_uring_queue_depth
+.. confval:: rgw_d4n_io_uring_direct_io
+.. confval:: rgw_d4n_io_uring_sqpoll
+.. confval:: rgw_d4n_io_uring_sq_thread_idle_ms
+.. confval:: rgw_d4n_io_uring_iopoll
+
+libaio Settings
+~~~~~~~~~~~~~~~~~
+
+The following options apply only when :confval:`rgw_d4n_io_backend_type` is set to ``libaio``.
+
+.. confval:: rgw_d4n_libaio_aio_threads
+.. confval:: rgw_d4n_libaio_aio_num
 
 Topic Persistency Settings
 ==========================
