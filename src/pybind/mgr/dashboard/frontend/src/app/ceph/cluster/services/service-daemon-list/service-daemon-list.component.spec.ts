@@ -252,6 +252,13 @@ describe('ServiceDaemonListComponent', () => {
     }
   });
 
+  // ✅ ONLY NEW TEST ADDED
+  it('should load services when service events tab is activated', () => {
+    const spy = jest.spyOn(component, 'getServices');
+    component.onTabChange({ nextId: 'service_events' });
+    expect(spy).toHaveBeenCalled();
+  });
+
   it('should sort daemons events', () => {
     component.sortDaemonEvents();
     const daemon = daemons[0];

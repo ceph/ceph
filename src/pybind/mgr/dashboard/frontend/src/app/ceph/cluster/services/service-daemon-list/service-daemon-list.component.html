@@ -9,7 +9,8 @@
     <nav ngbNav
          #nav="ngbNav"
          class="nav-tabs"
-         cdStatefulTab="service-details">
+         cdStatefulTab="service-details"
+         (navChange)="onTabChange($event)">
       <ng-container ngbNavItem="details">
         <a ngbNavLink
            i18n>Daemons</a>
@@ -21,13 +22,21 @@
         <a ngbNavLink
            i18n>Service Events</a>
         <ng-template ngbNavContent>
-          <cd-table *ngIf="hasOrchestrator"
-                    #serviceTable
-                    [data]="services"
-                    [columns]="serviceColumns"
-                    columnMode="flex"
-                    (fetchData)="getServices($event)">
-          </cd-table>
+          <div *ngIf="hasOrchestrator">
+  <ng-container *ngIf="services?.length; else noServiceEvents">
+    <div *ngFor="let service of services">
+      <ng-container
+        *ngTemplateOutlet="listTpl; context: { data: { value: service.events } }">
+      </ng-container>
+    </div>
+  </ng-container>
+
+  <ng-template #noServiceEvents>
+    <div class="list-group-item">
+      <span>No data available</span>
+    </div>
+  </ng-template>
+</div>
         </ng-template>
       </ng-container>
     </nav>
