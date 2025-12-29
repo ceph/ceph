@@ -1,0 +1,65 @@
+// No css variable to apply css to modal div hence using css ngdeep
+// This is needed to set the width of tearsheet as per carbon standards.
+:host ::ng-deep .cds--modal-container {
+  block-size: 100%;
+  inline-size: calc(100% - 8rem);
+  inset-block-start: auto;
+  max-block-size: calc(100% - 5.5rem);
+}
+
+.tearsheet-header {
+  background-color: var(--cds-layer-01);
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+  fill: var(--cds-icon-primary);
+  padding: var(--cds-spacing-06) var(--cds-spacing-07);
+
+  .tearsheet-title {
+    color: var(--cds-text-primary);
+  }
+
+  .tearsheet-description {
+    color: var(--cds-text-secondary);
+    margin-top: var(--cds-spacing-04);
+  }
+}
+
+.tearsheet-body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  padding-block: 0;
+  padding-inline: 0;
+
+  .tearsheet-influencer {
+    background-color: var(--cds-layer-01);
+    border-inline-end: 1px solid var(--cds-border-subtle-01);
+    margin: 0;
+    overflow-block: auto;
+    overflow-y: auto;
+    padding: var(--cds-spacing-06) var(--cds-spacing-07);
+  }
+
+  .tearsheet-main {
+    display: flex;
+    height: 100%;
+    margin: 0;
+
+    .tearsheet-content {
+      background-color: var(--cds-background);
+      flex: 1;
+      flex-direction: column;
+      margin: 0;
+      overflow-y: auto;
+      padding: var(--cds-spacing-06) var(--cds-spacing-07);
+    }
+  }
+}
+
+.tearsheet-footer {
+  background: var(--cds-background);
+  border-top: 1px solid var(--cds-border-subtle);
+
+  .tearsheet-footer-cancel {
+    margin-left: var(--cds-spacing-05);
+  }
+}
