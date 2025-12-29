@@ -79,7 +79,7 @@ function TEST_mute() {
     # sticky
     ceph health mute OSDMAP_FLAGS --sticky
     ceph osd unset noup
-    sleep 5
+    wait_for_osd up 0
     ceph -s
     ceph health | grep OSDMAP_FLAGS || return 1
     ceph osd set noup
@@ -94,7 +94,7 @@ function TEST_mute() {
     ceph health mute OSD_DOWN
     kill_daemons $dir TERM osd.0
     ceph osd unset noup
-    sleep 10
+    wait_for_osd up 1
     ceph -s
     ceph health detail | grep OSD_DOWN || return 1
     ceph health detail | grep '1 osds down' || return 1
