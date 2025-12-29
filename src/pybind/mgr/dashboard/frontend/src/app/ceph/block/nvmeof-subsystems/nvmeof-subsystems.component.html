@@ -14,16 +14,10 @@
   </cds-combo-box>
 </div>
 
-<legend i18n>
-  Subsystems
-  <cd-help-text>
-    A subsystem provides access control to which hosts can access the namespaces within the subsystem.
-  </cd-help-text>
-</legend>
-<cd-table [data]="subsystems"
-          columnMode="flex"
-          (fetchData)="getSubsystems()"
+<cd-table #table
+          [data]="subsystems"
           [columns]="subsystemsColumns"
+          columnMode="flex"
           selectionType="single"
           [hasDetails]="true"
           (setExpandedRow)="setExpandedRow($event)"
@@ -44,8 +38,44 @@
   <cd-nvmeof-subsystems-details *cdTableDetail
                                 [selection]="expandedRow"
                                 [permissions]="permissions"
-                                [group]="group">
+                                [group]="expandedRow?.gw_group">
   </cd-nvmeof-subsystems-details>
 </cd-table>
+
+<ng-template #authenticationTpl
+             let-row="data.row">
+  <div [cdsStack]="'horizontal'"
+       gap="4">
+  @if (row.enable_ha === false) {
+    <cd-icon type="warning"></cd-icon>
+    <span class="cds-ml-3"
+          i18n>No authentication</span>
+  } @else if (row.allow_any_host) {
+    <cd-icon type="success"></cd-icon>
+    <span class="cds-ml-3"
+          i18n>Unidirectional</span>
+  } @else {
+    <cd-icon type="success"></cd-icon>
+    <span class="cds-ml-3"
+          i18n>Bidirectional</span>
+  }
+  </div>
+</ng-template>
+
+<ng-template #encryptionTpl
+             let-row="data.row">
+  <div [cdsStack]="'horizontal'"
+       gap="4">
+  @if (row.enable_ha) {
+    <cd-icon type="success"></cd-icon>
+    <span class="cds-ml-3"
+          i18n>Enabled</span>
+  } @else {
+    <cd-icon type="error"></cd-icon>
+    <span class="cds-ml-3"
+          i18n>Disabled</span>
+  }
+  </div>
+</ng-template>
 
 <router-outlet name="modal"></router-outlet>
