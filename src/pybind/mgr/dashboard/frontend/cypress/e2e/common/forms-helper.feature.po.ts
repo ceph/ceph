@@ -41,10 +41,17 @@ And('enter {string} {string} in the carbon modal', (field: string, value: string
 
 And('select options {string}', (labels: string) => {
   if (labels) {
-    cy.get('a[data-testid=select-menu-edit]').click();
+    // Open Carbon combo-box dropdown (finds first multi-select combo-box)
+    cy.get('cds-combo-box[type="multi"] input.cds--text-input').first().click({ force: true });
+    cy.get('.cds--list-box__menu.cds--multi-select').should('be.visible');
     for (const label of labels.split(', ')) {
-      cy.get('.popover-body div.select-menu-item-content').contains(label).click();
+      cy.get('.cds--list-box__menu.cds--multi-select .cds--checkbox-label')
+        .contains('.cds--checkbox-label-text', label, { matchCase: false })
+        .parent()
+        .click({ force: true });
     }
+    // Close the dropdown
+    cy.get('body').type('{esc}');
   }
 });
 
@@ -103,6 +110,22 @@ Then('I should see an error in {string} field', (field: string) => {
 });
 
 And('select {string} {string}', (selectionName: string, option: string) => {
-  cy.get(`select[id=${selectionName}]`).select(option);
-  cy.get(`select[id=${selectionName}] option:checked`).contains(option);
+  cy.get('body').then(($body) => {
+    if ($body.find(`cds-select[id=${selectionName}]`).length > 0) {
+      // Carbon Design System select
+      cy.get(`cds-select[id=${selectionName}] select`).select(option, { force: true });
+      cy.get(`cds-select[id=${selectionName}] select option:checked`).should(($opt) => {
+        expect($opt.text().trim().toLowerCase()).to.include(option.toLowerCase());
+      });
+    } else if ($body.find(`cds-radio-group[formControlName=${selectionName}]`).length > 0) {
+      // Carbon Design System radio group
+      cy.get(
+        `cds-radio-group[formControlName=${selectionName}] cds-radio input[type="radio"][value="${option}"]`
+      ).check({ force: true });
+    } else {
+      // Native select
+      cy.get(`select[id=${selectionName}]`).select(option);
+      cy.get(`select[id=${selectionName}] option:checked`).contains(option);
+    }
+  });
 });
