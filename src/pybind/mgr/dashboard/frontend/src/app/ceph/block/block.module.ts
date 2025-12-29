@@ -74,8 +74,8 @@ import AddFilled from '@carbon/icons/es/add--filled/32';
 import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
 import Reset from '@carbon/icons/es/reset/32';
 import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group/nvmeof-gateway-group.component';
-import { NvmeofGroupFormComponent } from './nvmeof-group-form /nvmeof-group-form.component';
 import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway-node.component';
+import { NvmeofGroupFormComponent } from './nvmeof-group-form/nvmeof-group-form.component';
 
 @NgModule({
   imports: [

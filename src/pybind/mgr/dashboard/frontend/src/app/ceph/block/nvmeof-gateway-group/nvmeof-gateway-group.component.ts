@@ -155,12 +155,15 @@ export class NvmeofGatewayGroupComponent implements OnInit {
               })
             );
           }),
-          catchError(() => {
+          catchError((error) => {
             this.notificationService.show(
               NotificationType.error,
               $localize`Unable to fetch Gateway group`,
               $localize`Gateway group does not exist`
             );
+            if (error?.preventDefault) {
+              error.preventDefault();
+            }
             return of([]);
           })
         )
