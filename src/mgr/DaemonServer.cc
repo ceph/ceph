@@ -565,7 +565,23 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
     if (m->service_daemon) {
       // update the metadata through the daemon state index to
       // ensure it's kept up-to-date
-      daemon_state.update_metadata(daemon, m->daemon_metadata);
+      auto metadata = m->daemon_metadata;
+      if (key.type == "osd") {
+	try {
+	  int osd_id = std::stoi(key.name);
+	  cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	    if (osdmap.crush) {
+	      auto loc = osdmap.crush->get_full_location(osd_id);
+	      auto it = loc.find("host");
+	      if (it != loc.end()) {
+		metadata["hostname"] = it->second;
+	      }
+	    }
+	  });
+	} catch (const std::exception&) {
+	}
+      }
+      daemon_state.update_metadata(daemon, metadata);
     }
 
     std::lock_guard l(daemon->lock);
@@ -649,7 +665,23 @@ bool DaemonServer::handle_update(const ref_t<MMgrUpdate>& m)
       daemon = daemon_state.get(key);
       if (m->need_metadata_update &&
           !m->daemon_metadata.empty()) {
-        daemon_state.update_metadata(daemon, m->daemon_metadata);
+	auto metadata = m->daemon_metadata;
+	if (key.type == "osd") {
+	  try {
+	    int osd_id = std::stoi(key.name);
+	    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	      if (osdmap.crush) {
+		auto loc = osdmap.crush->get_full_location(osd_id);
+		auto it = loc.find("host");
+		if (it != loc.end()) {
+		  metadata["hostname"] = it->second;
+		}
+	      }
+	    });
+	  } catch (const std::exception&) {
+	  }
+	}
+        daemon_state.update_metadata(daemon, metadata);
       }
     }
   }
