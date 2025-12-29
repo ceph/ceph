@@ -541,6 +541,10 @@ if(WITH_RADOSGW_STANDALONE)
   endif()
 endif()
 
+if(WITH_RADOSGW_D4N AND WITH_LIBURING)
+  target_link_libraries(rgw_common PUBLIC uring::uring)
+endif()
+
 set(rgw_a_srcs
   rgw_appmain.cc
   rgw_asio_client.cc
