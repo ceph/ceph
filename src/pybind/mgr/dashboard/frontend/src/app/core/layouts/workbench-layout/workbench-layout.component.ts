@@ -17,7 +17,8 @@ import _ from 'lodash';
   selector: 'cd-workbench-layout',
   templateUrl: './workbench-layout.component.html',
   styleUrls: ['./workbench-layout.component.scss'],
-  providers: [FaviconService]
+  providers: [FaviconService],
+  standalone: false
 })
 export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
   notifications: string[] = [];

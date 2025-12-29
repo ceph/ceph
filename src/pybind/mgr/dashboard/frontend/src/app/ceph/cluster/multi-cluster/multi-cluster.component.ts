@@ -24,7 +24,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-multi-cluster',
   templateUrl: './multi-cluster.component.html',
-  styleUrls: ['./multi-cluster.component.scss']
+  styleUrls: ['./multi-cluster.component.scss'],
+  standalone: false
 })
 export class MultiClusterComponent implements OnInit, OnDestroy {
   COUNT_OF_UTILIZATION_CHARTS = 5;
@@ -91,7 +92,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   PROMETHEUS_DELAY = 20000;
   LOAD_DELAY = 5000;
   CLUSTERS_REFRESH_INTERVAL = 30000;
-  interval: NodeJS.Timer;
+  interval: number;
   selectedTime: any;
   multiClusterQueries: any = {};
   managedByConfig$: Observable<any>;
@@ -286,7 +287,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
         this.alerts = this.queriesResults.ALERTS;
         this.getAlertsInfo();
         this.getClustersInfo();
-        this.interval = setInterval(() => {
+        this.interval = window.setInterval(() => {
           this.getClustersInfo();
         }, this.CLUSTERS_REFRESH_INTERVAL);
       });

@@ -19,7 +19,8 @@ const BASE_URL = 'block/nvmeof/subsystems';
 @Component({
   selector: 'cd-nvmeof-listeners-list',
   templateUrl: './nvmeof-listeners-list.component.html',
-  styleUrls: ['./nvmeof-listeners-list.component.scss']
+  styleUrls: ['./nvmeof-listeners-list.component.scss'],
+  standalone: false
 })
 export class NvmeofListenersListComponent implements OnInit {
   @Input()

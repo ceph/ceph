@@ -7,7 +7,8 @@ import { NotificationType } from '../../../../shared/enum/notification-type.enum
 @Component({
   selector: 'cd-notification-area',
   templateUrl: './notification-area.component.html',
-  styleUrls: ['./notification-area.component.scss']
+  styleUrls: ['./notification-area.component.scss'],
+  standalone: false
 })
 export class NotificationAreaComponent implements OnInit, OnDestroy {
   todayNotifications: CdNotification[] = [];

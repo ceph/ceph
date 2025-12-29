@@ -24,7 +24,8 @@ export const JOIN_AUTH_PATH = 'cephfs/smb/active-directory';
   selector: 'cd-smb-join-auth-list',
   templateUrl: './smb-join-auth-list.component.html',
   styleUrls: ['./smb-join-auth-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(JOIN_AUTH_PATH) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(JOIN_AUTH_PATH) }],
+  standalone: false
 })
 export class SmbJoinAuthListComponent implements OnInit {
   columns: CdTableColumn[];

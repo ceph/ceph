@@ -44,7 +44,8 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
   templateUrl: './rbd-snapshot-list.component.html',
   styleUrls: ['./rbd-snapshot-list.component.scss'],
   providers: [TaskListService],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class RbdSnapshotListComponent implements OnInit, OnChanges {
   @Input()

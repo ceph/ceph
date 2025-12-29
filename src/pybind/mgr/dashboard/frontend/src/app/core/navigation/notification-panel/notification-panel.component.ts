@@ -4,7 +4,8 @@ import { NotificationService } from '../../../shared/services/notification.servi
 @Component({
   selector: 'cd-notification-panel',
   templateUrl: './notification-panel.component.html',
-  styleUrls: ['./notification-panel.component.scss']
+  styleUrls: ['./notification-panel.component.scss'],
+  standalone: false
 })
 export class NotificationPanelComponent {
   constructor(public notificationService: NotificationService, private elementRef: ElementRef) {}

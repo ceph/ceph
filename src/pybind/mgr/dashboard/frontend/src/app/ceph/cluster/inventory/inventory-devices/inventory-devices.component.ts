@@ -34,7 +34,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 @Component({
   selector: 'cd-inventory-devices',
   templateUrl: './inventory-devices.component.html',
-  styleUrls: ['./inventory-devices.component.scss']
+  styleUrls: ['./inventory-devices.component.scss'],
+  standalone: false
 })
 export class InventoryDevicesComponent implements OnInit, OnDestroy {
   @ViewChild(TableComponent, { static: true })

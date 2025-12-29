@@ -5,7 +5,8 @@ import { HelperType } from '../../enum/cd-helper.enum';
 @Component({
   selector: 'cd-helper',
   templateUrl: './helper.component.html',
-  styleUrls: ['./helper.component.scss']
+  styleUrls: ['./helper.component.scss'],
+  standalone: false
 })
 export class HelperComponent {
   private static nextId = 0;

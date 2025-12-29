@@ -26,7 +26,8 @@ import { HttpResponse } from '@angular/common/http';
 @Component({
   selector: 'cd-nvmeof-namespaces-form',
   templateUrl: './nvmeof-namespaces-form.component.html',
-  styleUrls: ['./nvmeof-namespaces-form.component.scss']
+  styleUrls: ['./nvmeof-namespaces-form.component.scss'],
+  standalone: false
 })
 export class NvmeofNamespacesFormComponent implements OnInit {
   action: string;

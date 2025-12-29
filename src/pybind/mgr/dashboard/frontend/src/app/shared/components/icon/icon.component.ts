@@ -4,7 +4,8 @@ import { ICON_TYPE, Icons, IconSize } from '../../enum/icons.enum';
 @Component({
   selector: 'cd-icon',
   templateUrl: './icon.component.html',
-  styleUrl: './icon.component.scss'
+  styleUrl: './icon.component.scss',
+  standalone: false
 })
 export class IconComponent implements OnInit {
   @Input() type!: keyof typeof ICON_TYPE;

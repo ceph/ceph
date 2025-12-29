@@ -14,7 +14,8 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 @Component({
   selector: 'cd-rbd-trash-restore-modal',
   templateUrl: './rbd-trash-restore-modal.component.html',
-  styleUrls: ['./rbd-trash-restore-modal.component.scss']
+  styleUrls: ['./rbd-trash-restore-modal.component.scss'],
+  standalone: false
 })
 export class RbdTrashRestoreModalComponent extends BaseModal implements OnInit {
   executingTasks: ExecutingTask[];

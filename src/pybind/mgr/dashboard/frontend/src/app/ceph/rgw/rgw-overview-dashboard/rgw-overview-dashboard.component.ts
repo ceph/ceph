@@ -23,7 +23,8 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 @Component({
   selector: 'cd-rgw-overview-dashboard',
   templateUrl: './rgw-overview-dashboard.component.html',
-  styleUrls: ['./rgw-overview-dashboard.component.scss']
+  styleUrls: ['./rgw-overview-dashboard.component.scss'],
+  standalone: false
 })
 export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   icons = Icons;

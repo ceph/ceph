@@ -47,7 +47,8 @@ type TPaginationOutput = { start: number; end: number };
   selector: 'cd-table',
   templateUrl: './table.component.html',
   styleUrls: ['./table.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestroy {
   @ViewChild('tableCellBoldTpl', { static: true })

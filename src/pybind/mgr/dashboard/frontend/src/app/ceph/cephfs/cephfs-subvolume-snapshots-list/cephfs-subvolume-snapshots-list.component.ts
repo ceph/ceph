@@ -32,7 +32,8 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
 @Component({
   selector: 'cd-cephfs-subvolume-snapshots-list',
   templateUrl: './cephfs-subvolume-snapshots-list.component.html',
-  styleUrls: ['./cephfs-subvolume-snapshots-list.component.scss']
+  styleUrls: ['./cephfs-subvolume-snapshots-list.component.scss'],
+  standalone: false
 })
 export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges {
   @Input() fsName: string;

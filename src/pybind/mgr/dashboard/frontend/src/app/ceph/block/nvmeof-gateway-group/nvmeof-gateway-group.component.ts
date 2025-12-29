@@ -17,7 +17,8 @@ import { CephServiceSpec } from '~/app/shared/models/service.interface';
 @Component({
   selector: 'cd-nvmeof-gateway-group',
   templateUrl: './nvmeof-gateway-group.component.html',
-  styleUrls: ['./nvmeof-gateway-group.component.scss']
+  styleUrls: ['./nvmeof-gateway-group.component.scss'],
+  standalone: false
 })
 export class NvmeofGatewayGroupComponent implements OnInit {
   @ViewChild(TableComponent, { static: true })

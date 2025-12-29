@@ -43,7 +43,8 @@ import { TimerService } from '~/app/shared/services/timer.service';
 @Component({
   selector: 'cd-service-form',
   templateUrl: './service-form.component.html',
-  styleUrls: ['./service-form.component.scss']
+  styleUrls: ['./service-form.component.scss'],
+  standalone: false
 })
 export class ServiceFormComponent extends CdForm implements OnInit {
   public sub = new Subscription();
@@ -1306,7 +1307,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['ssl_key'] = values['ssl_key']?.trim();
           serviceSpec['enable_auth'] = values['enable_auth'];
           serviceSpec['port'] = values['port'];
-          if (serviceSpec['port'] === (443 || 80)) {
+          if ([443, 80].includes(values['port'])) {
             // omit port default values due to issues with redirect_url on the backend
             delete serviceSpec['port'];
           }

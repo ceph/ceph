@@ -13,7 +13,8 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 @Component({
   selector: 'cd-rgw-daemon-list',
   templateUrl: './rgw-daemon-list.component.html',
-  styleUrls: ['./rgw-daemon-list.component.scss']
+  styleUrls: ['./rgw-daemon-list.component.scss'],
+  standalone: false
 })
 export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[] = [];

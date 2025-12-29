@@ -11,7 +11,8 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 @Component({
   selector: 'cd-osd-reweight-modal',
   templateUrl: './osd-reweight-modal.component.html',
-  styleUrls: ['./osd-reweight-modal.component.scss']
+  styleUrls: ['./osd-reweight-modal.component.scss'],
+  standalone: false
 })
 export class OsdReweightModalComponent implements OnInit {
   currentWeight = 1;

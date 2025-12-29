@@ -6,7 +6,8 @@ import { MountData } from '~/app/shared/models/cephfs.model';
 @Component({
   selector: 'cd-cephfs-mount-details',
   templateUrl: './cephfs-mount-details.component.html',
-  styleUrls: ['./cephfs-mount-details.component.scss']
+  styleUrls: ['./cephfs-mount-details.component.scss'],
+  standalone: false
 })
 export class CephfsMountDetailsComponent extends BaseModal implements OnInit {
   @ViewChild('mountDetailsTpl', { static: true })

@@ -5,7 +5,8 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'cd-notification-header',
   templateUrl: './notification-header.component.html',
-  styleUrls: ['./notification-header.component.scss']
+  styleUrls: ['./notification-header.component.scss'],
+  standalone: false
 })
 export class NotificationHeaderComponent implements OnInit, OnDestroy {
   @Output() dismissAll = new EventEmitter<void>();

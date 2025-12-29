@@ -18,7 +18,8 @@ const BASE_URL = 'cephfs/nfs';
   selector: 'cd-nfs-cluster',
   templateUrl: './nfs-cluster.component.html',
   styleUrls: ['./nfs-cluster.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class NfsClusterComponent extends ListWithDetails implements OnInit {
   @ViewChild('hostnameTpl', { static: true })

@@ -16,7 +16,8 @@ import { BaseModal } from 'carbon-components-angular';
 @Component({
   selector: 'cd-pool-edit-mode-modal',
   templateUrl: './pool-edit-mode-modal.component.html',
-  styleUrls: ['./pool-edit-mode-modal.component.scss']
+  styleUrls: ['./pool-edit-mode-modal.component.scss'],
+  standalone: false
 })
 export class PoolEditModeModalComponent extends BaseModal implements OnInit, OnDestroy {
   poolName: string;

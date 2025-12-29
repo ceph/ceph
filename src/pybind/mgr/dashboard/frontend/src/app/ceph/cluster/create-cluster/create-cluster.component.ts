@@ -39,7 +39,8 @@ import { Step } from 'carbon-components-angular';
 @Component({
   selector: 'cd-create-cluster',
   templateUrl: './create-cluster.component.html',
-  styleUrls: ['./create-cluster.component.scss']
+  styleUrls: ['./create-cluster.component.scss'],
+  standalone: false
 })
 export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('skipConfirmTpl', { static: true })

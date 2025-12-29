@@ -27,7 +27,8 @@ const BASE_URL = 'rgw/destination';
   selector: 'cd-rgw-topic-list',
   templateUrl: './rgw-topic-list.component.html',
   styleUrls: ['./rgw-topic-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class RgwTopicListComponent extends ListWithDetails implements OnInit {
   @ViewChild('table', { static: true })

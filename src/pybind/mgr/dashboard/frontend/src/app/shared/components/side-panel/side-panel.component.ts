@@ -3,7 +3,8 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 @Component({
   selector: 'cd-side-panel',
   templateUrl: './side-panel.component.html',
-  styleUrl: './side-panel.component.scss'
+  styleUrl: './side-panel.component.scss',
+  standalone: false
 })
 export class SidePanelComponent {
   @Input() expanded = false;

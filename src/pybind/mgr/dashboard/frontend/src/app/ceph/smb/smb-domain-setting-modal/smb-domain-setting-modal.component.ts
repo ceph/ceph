@@ -17,7 +17,8 @@ import { JOIN_AUTH_PATH } from '../smb-join-auth-list/smb-join-auth-list.compone
 @Component({
   selector: 'cd-smb-domain-setting-modal',
   templateUrl: './smb-domain-setting-modal.component.html',
-  styleUrls: ['./smb-domain-setting-modal.component.scss']
+  styleUrls: ['./smb-domain-setting-modal.component.scss'],
+  standalone: false
 })
 export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
   domainSettingsForm: CdFormGroup;

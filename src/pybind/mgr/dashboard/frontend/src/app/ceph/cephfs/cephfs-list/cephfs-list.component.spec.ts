@@ -16,7 +16,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephfsListComponent } from './cephfs-list.component';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 
-@Component({ selector: 'cd-cephfs-tabs', template: '' })
+@Component({ selector: 'cd-cephfs-tabs', template: '', standalone: false })
 class CephfsTabsStubComponent {
   @Input()
   selection: CdTableSelection;

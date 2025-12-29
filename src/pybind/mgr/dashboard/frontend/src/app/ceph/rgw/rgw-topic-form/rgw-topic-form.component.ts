@@ -30,7 +30,8 @@ const BASE_URL = 'rgw/destination';
 @Component({
   selector: 'cd-rgw-topic-form',
   templateUrl: './rgw-topic-form.component.html',
-  styleUrls: ['./rgw-topic-form.component.scss']
+  styleUrls: ['./rgw-topic-form.component.scss'],
+  standalone: false
 })
 export class RgwTopicFormComponent extends CdForm implements OnInit, AfterViewChecked {
   @ViewChild('topicPolicyTextArea')

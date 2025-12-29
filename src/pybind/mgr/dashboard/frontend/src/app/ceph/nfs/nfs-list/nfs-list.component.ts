@@ -36,7 +36,8 @@ export enum RgwExportType {
   selector: 'cd-nfs-list',
   templateUrl: './nfs-list.component.html',
   styleUrls: ['./nfs-list.component.scss'],
-  providers: [TaskListService]
+  providers: [TaskListService],
+  standalone: false
 })
 export class NfsListComponent extends ListWithDetails implements OnInit, OnDestroy {
   @ViewChild('nfsState')
