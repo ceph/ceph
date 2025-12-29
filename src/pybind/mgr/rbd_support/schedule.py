@@ -1,3 +1,4 @@
+import hashlib
 import json
 import rados
 import rbd
@@ -329,12 +330,26 @@ class Schedule:
                start_time: Optional[StartTime] = None) -> None:
         self.items.discard((interval, start_time))
 
-    def next_run(self, now: datetime) -> datetime:
+    @staticmethod
+    def _compute_phase_offset_minutes(entity_id: str, period_minutes: int) -> int:
+        key = entity_id + "|" + str(period_minutes)
+        h = hashlib.md5(key.encode("utf-8")).hexdigest()
+        val = int(h, 16)
+        return (val % period_minutes)
+
+    def next_run(self, now: datetime, entity_id: str) -> datetime:
         schedule_time = None
 
         for interval, start_time in self.items:
             period = timedelta(minutes=interval.minutes)
-            anchor_time = start_time.dt if start_time else datetime(1970, 1, 1, tzinfo=timezone.utc)
+            if start_time:
+                anchor_time = start_time.dt
+            else:
+                phase_offset_minutes = self._compute_phase_offset_minutes(entity_id, interval.minutes)
+                anchor_time = (
+                    datetime(1970, 1, 1, tzinfo=timezone.utc)
+                    + timedelta(minutes=phase_offset_minutes)
+                )
 
             if anchor_time > now:
                 candidate_time = anchor_time

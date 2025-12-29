@@ -1,6 +1,7 @@
 import errno
 import json
 import rados
+import random
 import rbd
 import traceback
 
@@ -520,7 +521,7 @@ class MirrorSnapshotScheduleHandler:
                     pool_id, namespace, image_id))
             return
 
-        schedule_time = schedule.next_run(now)
+        schedule_time = schedule.next_run(now, image_id)
         if schedule_time not in self.queue:
             self.queue[schedule_time] = []
         self.log.debug(
@@ -541,7 +542,8 @@ class MirrorSnapshotScheduleHandler:
             return None, (schedule_time - now).total_seconds()
 
         images = self.queue[schedule_time]
-        image = images.pop(0)
+        rng = random.Random(schedule_time.timestamp())
+        image = images.pop(rng.randrange(len(images)))
         if not images:
             del self.queue[schedule_time]
         return image, 0.0

@@ -421,6 +421,10 @@ globally, per-pool, or per-image levels. Multiple mirror-snapshot schedules can
 be defined at any level, but only the most-specific snapshot schedules that
 match an individual mirrored image will run.
 
+When multiple images share the same schedule interval and no explicit
+``start-time`` is defined, snapshot execution is automatically staggered across
+the interval to reduce scheduling spikes.
+
 To create a mirror-snapshot schedule with ``rbd``, specify the
 ``mirror snapshot schedule add`` command along with an optional pool or
 image name; interval; and optional start time::

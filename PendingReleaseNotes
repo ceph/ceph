@@ -20,6 +20,9 @@
   anchor instead of defining it. The argument now requires an ISO 8601
   date-time. The `schedule ls` output displays the start time in UTC, including
   the date and time in the format "%Y-%m-%d %H:%M:00".
+* RBD: Mirror snapshot creation and trash purge schedules are now automatically
+  staggered when no explicit "start-time" is specified. This reduces
+  synchronized scheduling spikes and distributes work more evenly over time.
 
 >=20.0.0
 
