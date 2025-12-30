@@ -115,7 +115,8 @@ empty.
 If there are less than four segments, unused (trailing) segment
 length and segment alignment fields are zeroed.
 
-### Currently supported flags
+Currently supported flags
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
   1. FRAME_EARLY_DATA_COMPRESSED (see :ref:`msgr-post-compression`)
 
@@ -126,7 +127,8 @@ everything up to itself (28 bytes) and is calculated and verified
 irrespective of the connection mode (i.e. even if the frame is
 encrypted).
 
-### msgr2.0-crc mode
+msgr2.0-crc mode
+~~~~~~~~~~~~~~~~
 
 A msgr2.0-crc frame has the form::
 
@@ -153,16 +155,17 @@ back to the user immediately, without making a copy or blocking
 until the whole frame is transmitted.  Currently this is used only
 by the kernel client, see ceph_msg_revoke().
 
-The segment checksum is CRC32-C (see :ref:`crc`).  For "used"
-empty segments, it is initialized with (__le32)-1. For unused
-(trailing) segments, it is zeroed.
+The segment checksum is CRC32-C (see :ref:`crc`).  For used
+segments, the initial value is ``-1``. For unused (trailing)
+segments, it is zeroed.
 
-The crcs are calculated just to protect against bit errors.
+The checksums are calculated just to protect against bit errors.
 No authenticity guarantees are provided, unlike in msgr1 which
 attempted to provide some authenticity guarantee by optionally
-signing segment lengths and crcs with the session key.
+signing segment lengths and checksums with the session key.
 
-Issues:
+Issues
+^^^^^^
 
 1. As part of introducing a structure for a generic frame with
    variable number of segments suitable for both control and
@@ -187,25 +190,30 @@ Issues:
 
    This was the case with msgr1 and got carried over to msgr2.0.
 
-### msgr2.1-crc mode
+msgr2.1-crc mode
+~~~~~~~~~~~~~~~~
 
 Differences from msgr2.0-crc:
 
 1. The crc of the first segment is stored at the end of the
-   first segment, not in the epilogue.  The epilogue stores up to
-   three crcs, not up to four.
+   first segment, not in the epilogue. The epilogue stores up to
+   three checksums, not up to four.
 
-   If the first segment is empty, (__le32)-1 crc is not generated.
+   If the first segment is empty, its CRC value is not written to
+   the frame.
 
 2. The epilogue is generated only if the frame has more than one
    segment (i.e. at least one of second to fourth segments is not
    empty).  Rationale: If the frame has only one segment, it cannot
-   be aborted and there are no crcs to store in the epilogue.
+   be aborted and there are no checksums to store in the epilogue.
 
-3. Unchecksummed late_flags is replaced with late_status which
-   builds in bit error detection by using a 4-bit nibble per flag
+3. Unchecksummed ``late_flags`` is replaced with ``late_status``.
+   A completed frame is indicated by a ``late_flags`` value of
+   ``FRAME_LATE_STATUS_COMPLETE``, while an aborted frame is indicated
+   by a value of ``FRAME_LATE_STATUS_ABORTED``. This adjusted field
+   has better bit error detection by using a 4-bit nibble per flag
    and two code words that are Hamming Distance = 4 apart (and not
-   all zeros or ones).  This comes at the expense of having only
+   all zeros or ones). This comes at the expense of having only
    one reserved flag, of course.
 
 Some example frames:
@@ -347,7 +355,8 @@ Depending on the negotiated connection mode from TAG_AUTH_DONE, the
 connection either stays in crc mode or switches to the corresponding
 secure mode (msgr2.0-secure or msgr2.1-secure).
 
-### msgr2.0-secure mode
+msgr2.0-secure mode
+~~~~~~~~~~~~~~~~~~~
 
 A msgr2.0-secure frame has the form::
 
@@ -375,7 +384,8 @@ But, if the overall input length is not a multiple of 16 bytes, some
 implicit zero padding would occur internally because GHASH function
 used by GCM for generating auth tags only works on 16-byte blocks.
 
-Issues:
+Issues
+^^^^^^
 
 1. The sender encrypts the whole frame using a single nonce
    and generating a single auth tag.  Because segment lengths are
@@ -400,7 +410,8 @@ Issues:
    This was addressed by disconnecting before the counter repeats
    (CVE-2020-1759).
 
-### msgr2.1-secure mode
+msgr2.1-secure mode
+~~~~~~~~~~~~~~~~~~~
 
 Differences from msgr2.0-secure:
 
@@ -571,7 +582,8 @@ Once the handshake is completed, both peers have setup their compression handler
                 |<-----------------------|
                 |   compression done     |
 
-# msgr2.x-secure mode
+msgr2.x-secure mode
+~~~~~~~~~~~~~~~~~~~
 
 Combining compression with encryption introduces security implications.
 Compression will not be possible when using secure mode, unless configured specifically by an admin. 
@@ -582,13 +594,15 @@ Post-compression frame format
 -----------------------------
 Depending on the negotiated connection mode from TAG_COMPRESSION_DONE, the connection is able to accept/send compressed frames or process all frames as decompressed.
 
-# msgr2.x-force mode
+msgr2.x-force mode
+~~~~~~~~~~~~~~~~~
 
 All subsequent frames that will be sent via the connection will be compressed if compression requirements are met (e.g, the frames size).
 
 For compressed frames, the sending peer will enable the FRAME_EARLY_DATA_COMPRESSED flag, thus allowing the accepting peer to detect it and decompress the frame.
 
-# msgr2.x-none mode
+msgr2.x-none mode
+~~~~~~~~~~~~~~~~~
 
 FRAME_EARLY_DATA_COMPRESSED flag will be disabled in preamble.
 
@@ -967,7 +981,7 @@ The CRC algorithm used in this section has the following parameters:
 
 * Width: 32 bits
 * Poly: ``0x1EDC6F41``
-* Init: ``0`` (for preamble CRC), ``(__le32)-1`` = ``0xFFFFFFFF`` (for segment data CRC)
+* Init: ``0`` (for preamble CRC), ``-1`` = ``0xFFFFFFFF`` (for segment data CRC)
 * Refin: ``true``
 * Refout: ``true``
 * Xorout: ``0``
