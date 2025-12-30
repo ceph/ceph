@@ -211,8 +211,8 @@ struct rgw_bucket_dir_entry_meta {
   std::string user_data;
   std::string storage_class;
   bool appendable = false;
-  uint16_t cksum_algo;
-  uint8_t cksum_flags;
+  uint16_t cksum_algo = 0;
+  uint16_t cksum_flags = 0;
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(8, 3, bl);

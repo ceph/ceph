@@ -4518,7 +4518,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.if_nomatch = if_nomatch;
   if (cksum_type != rgw::cksum::Type::none) {
     obj_op.meta.cksum_algo = static_cast<uint16_t>(cksum_type);
-    obj_op.meta.cksum_flags = static_cast<uint8_t>(cksum_flags & rgw::cksum::Cksum::CKSUM_TYPE_MASK);
+    obj_op.meta.cksum_flags = cksum_flags & rgw::cksum::Cksum::CKSUM_TYPE_MASK;
   }
 
   const req_context rctx{dpp, y, nullptr};

@@ -834,7 +834,7 @@ public:
         bool completeMultipart;
         bool appendable;
         uint16_t cksum_algo;
-        uint8_t cksum_flags;
+        uint16_t cksum_flags;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
@@ -1014,7 +1014,7 @@ public:
                    uint64_t accounted_size, const ceph::real_time& ut,
                    const std::string& etag, const std::string& content_type,
                    const std::string& storage_class,
-                   uint16_t cksum_algo, uint8_t cksum_flags,
+                   uint16_t cksum_algo, uint16_t cksum_flags,
                    const ACLOwner& owner, RGWObjCategory category,
 		   std::list<rgw_obj_index_key> *remove_objs,
 		   optional_yield y,

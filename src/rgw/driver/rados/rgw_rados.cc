@@ -4112,14 +4112,14 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
   }
 
   uint16_t cksum_algo = 0;
-  uint8_t cksum_flags = 0;
+  uint16_t cksum_flags = 0;
   if (found_cksum) {
     try {
       rgw::cksum::Cksum cksum;
       auto iter = cksum_bl.cbegin();
       cksum.decode(iter);
       cksum_algo = static_cast<uint16_t>(cksum.type);
-      cksum_flags = static_cast<uint8_t>(cksum.flags & rgw::cksum::Cksum::CKSUM_TYPE_MASK);
+      cksum_flags = cksum.flags & rgw::cksum::Cksum::CKSUM_TYPE_MASK;
     } catch (buffer::error& err) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	": unable to decode Checksum for " << p(head_obj) << dendl;
@@ -7609,13 +7609,13 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
         storage_class = rgw_bl_str(iter->second);
       }
       uint16_t cksum_algo = 0;
-      uint8_t cksum_flags = 0;
+      uint16_t cksum_flags = 0;
       if (iter = attrs.find(RGW_ATTR_CKSUM); iter != attrs.end()) {
         try {
           rgw::cksum::Cksum cksum;
           decode(cksum, iter->second);
           cksum_algo = static_cast<uint16_t>(cksum.type);
-          cksum_flags = static_cast<uint8_t>(cksum.flags & rgw::cksum::Cksum::CKSUM_TYPE_MASK);
+          cksum_flags = cksum.flags & rgw::cksum::Cksum::CKSUM_TYPE_MASK;
         } catch (buffer::error& err) {
           ldpp_dout(dpp, 0) << "ERROR: failed to decode rgw::cksum::Cksum" << dendl;
         }
@@ -8082,7 +8082,7 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
                                             uint64_t size, uint64_t accounted_size,
                                             const ceph::real_time& ut, const string& etag,
                                             const string& content_type, const string& storage_class,
-                                            const uint16_t cksum_algo, const uint8_t cksum_flags,
+                                            const uint16_t cksum_algo, const uint16_t cksum_flags,
                                             const ACLOwner& owner,
                                             RGWObjCategory category,
                                             list<rgw_obj_index_key> *remove_objs,

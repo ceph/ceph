@@ -419,7 +419,7 @@ int AtomicObjectProcessor::complete(
   obj_op.meta.modify_tail = true;
   if (cksum) {
     obj_op.meta.cksum_algo = static_cast<uint16_t>(cksum->type);
-    obj_op.meta.cksum_flags = static_cast<uint8_t>(cksum->flags & rgw::cksum::Cksum::CKSUM_TYPE_MASK);
+    obj_op.meta.cksum_flags = cksum->flags & rgw::cksum::Cksum::CKSUM_TYPE_MASK;
   }
 
   r = read_cloudtier_info_from_attrs(attrs, obj_op.meta.category, obj_op.meta.olh_epoch, manifest);
