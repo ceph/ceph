@@ -62,6 +62,102 @@ If there are no slow requests reported on the MDS, and there is no indication
 that clients are misbehaving, then either there is a problem with the client
 or the client's requests are not reaching the MDS.
 
+.. _mds_request_tracing:
+
+MDS Request Tracing
+-------------------
+
+When OpenTelemetry tracing is enabled (via ``jaeger_tracing_enable``), the MDS
+captures detailed hierarchical traces of client request processing. These
+traces help identify performance bottlenecks by showing time spent in each
+phase of request handling.
+
+Dumping Traces
+^^^^^^^^^^^^^^
+
+Use the ``trace dump`` admin socket command to retrieve recent traces:
+
+.. prompt:: bash #
+
+   ceph daemon mds.<name> trace dump
+
+The MDS maintains a sliding window of completed traces in memory. When traces
+are dumped, the window is cleared. The window duration is controlled by
+:confval:`mds_trace_sliding_window_sec`.
+
+Example output::
+
+    {
+        "trace_id": "89a470995cd418dad345a74a78357005",
+        "name": "mds:client_request",
+        "start_time": "2025-12-10T18:07:08.496362+0000",
+        "end_time": "2025-12-10T18:07:09.932454+0000",
+        "duration_ms": 1436.09,
+        "result": 0,
+        "attributes": {
+            "mds.client_id": "4158",
+            "mds.op_name": "unlink",
+            "mds.reqid": "client.4158:37"
+        },
+        "spans": [
+            {
+                "span_id": "abc123",
+                "parent_span_id": "",
+                "name": "handle_unlink",
+                "duration_ms": 4.27
+            },
+            {
+                "span_id": "def456",
+                "parent_span_id": "abc123",
+                "name": "path_traverse",
+                "duration_ms": 0.58
+            }
+        ]
+    }
+
+Interpreting Traces
+^^^^^^^^^^^^^^^^^^^
+
+Each trace represents a single client request and contains:
+
+* **trace_id**: Unique identifier for the trace (correlates with Jaeger if enabled)
+* **name**: Always ``mds:client_request`` for MDS request traces
+* **duration_ms**: Total request processing time in milliseconds
+* **result**: Return code (0 = success)
+* **attributes**: Request metadata (client ID, operation name, request ID, path)
+* **spans**: Hierarchical breakdown of processing phases
+
+Spans show the call hierarchy via ``parent_span_id``. Root spans have an empty
+``parent_span_id``. Spans marked with ``async: true`` represent asynchronous
+operations (like journal commits) that may outlive their parent span.
+
+Common spans include:
+
+* ``handle_*``: Top-level request handlers (handle_unlink, handle_open, etc.)
+* ``path_traverse``: Directory path resolution
+* ``acquire_locks``: Metadata lock acquisition
+* ``journal_wait``: Waiting for journal commit (async)
+
+If span durations don't sum to the total request duration, the gap represents
+uninstrumented code or time spent waiting for async operations.
+
+Enabling OpenTelemetry Integration
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To enable full distributed tracing with Jaeger:
+
+.. prompt:: bash #
+
+   ceph config set global jaeger_tracing_enable true
+
+When enabled, trace IDs and span IDs will match those exported to Jaeger,
+allowing correlation between MDS traces and the distributed tracing backend.
+
+.. note::
+
+   The ``trace dump`` command only returns traces when ``jaeger_tracing_enable``
+   is set to true. Tracing is a no-op when disabled.
+
 
 .. _cephfs_dr_stuck_during_recovery:
 

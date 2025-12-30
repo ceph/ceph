@@ -1167,7 +1167,7 @@ class TestMDSTrace(CephFSTestCase):
                 # If has parent, verify parent_span_id format
                 if 'parent_span_id' in span and span['parent_span_id']:
                     self.assertEqual(len(span['parent_span_id']), 16,
-                                     f"parent_span_id should be 16 hex chars")
+                                     "parent_span_id should be 16 hex chars")
 
             # All span_ids should be unique within a trace
             self.assertEqual(len(span_ids), len(spans),
