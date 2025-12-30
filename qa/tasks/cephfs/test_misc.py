@@ -919,3 +919,314 @@ class TestNewFSCreation(CephFSTestCase):
                 test_fs.destroy()
             if test_fs1 is not None:
                 test_fs1.destroy()
+
+
+class TestMDSTrace(CephFSTestCase):
+    """
+    Tests for MDS tracing functionality via admin socket 'trace dump' command.
+    
+    Note: Most tests require OTEL/Jaeger tracing to be enabled at build time.
+    When tracing is disabled, all trace operations are no-ops.
+    """
+    MDSS_REQUIRED = 1
+    CLIENTS_REQUIRED = 1
+
+    def _is_tracing_enabled(self):
+        """Check if OTEL tracing is enabled by generating I/O and checking for traces."""
+        # Generate some I/O
+        self.mount_a.run_shell(["mkdir", "-p", "trace_check_dir"])
+        self.mount_a.run_shell(["rm", "-rf", "trace_check_dir"])
+        # Check if traces were generated
+        result = self.fs.mds_asok(['trace', 'dump'])
+        return result and 'traces' in result and len(result['traces']) > 0
+
+    def _skip_if_tracing_disabled(self):
+        """Skip test if OTEL tracing is not enabled."""
+        if not self._is_tracing_enabled():
+            self.skipTest("MDS tracing is not enabled (requires OTEL/Jaeger)")
+
+    def _get_traces(self):
+        """Dump traces from MDS via admin socket and return parsed JSON."""
+        result = self.fs.mds_asok(['trace', 'dump'])
+        self.assertIsNotNone(result)
+        self.assertIn('traces', result)
+        return result['traces']
+
+    def _set_trace_window(self, seconds):
+        """Set the trace sliding window duration."""
+        self.fs.mds_asok(['config', 'set', 'mds_trace_sliding_window_sec', str(seconds)])
+
+    def _generate_io(self):
+        """Generate some I/O to produce traces."""
+        self.mount_a.run_shell(["mkdir", "-p", "trace_test_dir"])
+        self.mount_a.run_shell(["touch", "trace_test_dir/file1"])
+        self.mount_a.run_shell(["ls", "trace_test_dir"])
+        self.mount_a.run_shell(["cat", "trace_test_dir/file1"])
+        self.mount_a.run_shell(["rm", "-rf", "trace_test_dir"])
+
+    def test_trace_dump_command(self):
+        """
+        Test that trace dump command returns valid JSON structure.
+        This test runs regardless of whether OTEL is enabled.
+        """
+        result = self.fs.mds_asok(['trace', 'dump'])
+        self.assertIsNotNone(result)
+        self.assertIn('traces', result)
+        self.assertIn('count', result)
+        self.assertIn('window_sec', result)
+        self.assertIsInstance(result['traces'], list)
+
+    def test_trace_toggle_on_off(self):
+        """
+        Test tracing behavior when toggling jaeger_tracing_enable on and off.
+        
+        This test verifies:
+        1. When tracing is OFF: no traces are generated
+        2. When tracing is ON: traces are generated for the window duration
+        3. When tracing is OFF again: no new traces, old ones expire
+        
+        Requires Jaeger support to be compiled in (HAVE_JAEGER).
+        """
+        window_sec = 3
+        self._set_trace_window(window_sec)
+        
+        # Step 1: Disable tracing, verify no traces
+        self.fs.mds_asok(['config', 'set', 'jaeger_tracing_enable', 'false'])
+        # Clear any existing traces
+        self._get_traces()
+        
+        self.mount_a.run_shell(["mkdir", "-p", "toggle_test_1"])
+        self.mount_a.run_shell(["rm", "-rf", "toggle_test_1"])
+        
+        traces_off = self._get_traces()
+        traces_off_count = len(traces_off)
+        log.info(f"Tracing OFF: {traces_off_count} traces")
+        
+        # Step 2: Enable tracing, verify traces appear
+        self.fs.mds_asok(['config', 'set', 'jaeger_tracing_enable', 'true'])
+        
+        self.mount_a.run_shell(["mkdir", "-p", "toggle_test_2"])
+        self.mount_a.run_shell(["touch", "toggle_test_2/file"])
+        self.mount_a.run_shell(["rm", "-rf", "toggle_test_2"])
+        
+        traces_on = self._get_traces()
+        traces_on_count = len(traces_on)
+        log.info(f"Tracing ON: {traces_on_count} traces")
+        
+        # Step 3: Disable tracing again, verify no new traces
+        self.fs.mds_asok(['config', 'set', 'jaeger_tracing_enable', 'false'])
+        
+        # Wait for any in-flight requests to complete and clear leftover traces
+        time.sleep(1)
+        self._get_traces()  # Clear any traces from in-flight requests
+        
+        self.mount_a.run_shell(["mkdir", "-p", "toggle_test_3"])
+        self.mount_a.run_shell(["rm", "-rf", "toggle_test_3"])
+        
+        traces_off_again = self._get_traces()
+        traces_off_again_count = len(traces_off_again)
+        log.info(f"Tracing OFF again: {traces_off_again_count} traces")
+        
+        # Verify behavior based on whether Jaeger is compiled in
+        if traces_on_count == 0:
+            # Jaeger not compiled in - all trace counts should be 0
+            self.assertEqual(traces_off_count, 0,
+                             "Without Jaeger, no traces when OFF")
+            self.assertEqual(traces_off_again_count, 0,
+                             "Without Jaeger, no traces when OFF again")
+            log.info("Jaeger not compiled in - tracing is always no-op")
+        else:
+            # Jaeger compiled in - verify toggle behavior
+            self.assertEqual(traces_off_count, 0,
+                             "With tracing OFF, no traces should be generated")
+            self.assertGreater(traces_on_count, 0,
+                               "With tracing ON, traces should be generated")
+            self.assertEqual(traces_off_again_count, 0,
+                             "With tracing OFF again, no new traces should be generated")
+            log.info("Jaeger compiled in - toggle behavior verified")
+        
+        # Reset to default
+        self._set_trace_window(10)
+
+    def test_trace_dump_basic(self):
+        """
+        Test that trace dump returns valid JSON with expected structure.
+        Requires OTEL to be enabled.
+        """
+        self._skip_if_tracing_disabled()
+        self._generate_io()
+
+        traces = self._get_traces()
+        self.assertIsInstance(traces, list)
+        self.assertGreater(len(traces), 0, "Expected at least one trace after I/O")
+
+        # Verify trace structure
+        trace = traces[0]
+        self.assertIn('trace_id', trace)
+        self.assertIn('name', trace)
+        self.assertIn('start_time', trace)
+        self.assertIn('end_time', trace)
+        self.assertIn('duration_ms', trace)
+        self.assertIn('attributes', trace)
+
+        # Verify trace_id format (32 hex chars)
+        self.assertEqual(len(trace['trace_id']), 32)
+        self.assertTrue(all(c in '0123456789abcdef' for c in trace['trace_id']))
+
+    def test_trace_dump_clears_window(self):
+        """
+        Test that traces are cleared after dump (clear-on-dump semantics).
+        Requires OTEL to be enabled.
+        """
+        self._skip_if_tracing_disabled()
+        self._generate_io()
+
+        # First dump should have traces
+        traces_first = self._get_traces()
+        self.assertGreater(len(traces_first), 0, "Expected traces after I/O")
+
+        # Second dump immediately after should be empty (cleared on first dump)
+        traces_second = self._get_traces()
+        self.assertEqual(len(traces_second), 0,
+                         "Expected empty traces after dump (clear-on-dump)")
+
+        # Generate more I/O
+        self._generate_io()
+
+        # Should have new traces
+        traces_third = self._get_traces()
+        self.assertGreater(len(traces_third), 0,
+                           "Expected new traces after more I/O")
+
+    def test_trace_sliding_window_expiry(self):
+        """
+        Test that traces expire after the sliding window duration.
+        Requires OTEL to be enabled.
+        """
+        self._skip_if_tracing_disabled()
+        # Set a short window for testing
+        window_sec = 2
+        self._set_trace_window(window_sec)
+
+        self._generate_io()
+
+        # Traces should exist immediately
+        traces = self._get_traces()
+        # Note: clear-on-dump means we need to generate more I/O
+        self._generate_io()
+        traces = self._get_traces()
+        self.assertGreater(len(traces), 0, "Expected traces immediately after I/O")
+
+        # Clear by dumping, then generate I/O and wait for expiry
+        self._generate_io()
+        time.sleep(window_sec + 1)
+
+        # After window expires and we dump, old traces should be pruned
+        # Generate a tiny bit of I/O to trigger pruning
+        traces_after = self._get_traces()
+        # All traces from before should have expired
+        self.assertEqual(len(traces_after), 0,
+                         "Expected traces to expire after sliding window")
+
+        # Reset to default
+        self._set_trace_window(10)
+
+    def test_trace_span_hierarchy(self):
+        """
+        Test that child spans have valid parent_span_id references.
+        Requires OTEL to be enabled.
+        """
+        self._skip_if_tracing_disabled()
+        # Generate I/O that produces nested spans
+        self.mount_a.run_shell(["mkdir", "-p", "hierarchy_test/subdir"])
+        self.mount_a.run_shell(["touch", "hierarchy_test/subdir/file"])
+        self.mount_a.run_shell(["rm", "-rf", "hierarchy_test"])
+
+        traces = self._get_traces()
+        self.assertGreater(len(traces), 0)
+
+        # Find traces with spans
+        for trace in traces:
+            if 'spans' not in trace or len(trace['spans']) == 0:
+                continue
+
+            spans = trace['spans']
+            span_ids = set()
+            for span in spans:
+                self.assertIn('span_id', span)
+                self.assertIn('name', span)
+                self.assertIn('start_time', span)
+                self.assertIn('end_time', span)
+                self.assertIn('duration_ms', span)
+
+                # Verify span_id format (16 hex chars for OTEL span ID)
+                self.assertEqual(len(span['span_id']), 16,
+                                 f"span_id should be 16 hex chars: {span['span_id']}")
+                span_ids.add(span['span_id'])
+
+                # If has parent, verify parent_span_id format
+                if 'parent_span_id' in span and span['parent_span_id']:
+                    self.assertEqual(len(span['parent_span_id']), 16,
+                                     f"parent_span_id should be 16 hex chars")
+
+            # All span_ids should be unique within a trace
+            self.assertEqual(len(span_ids), len(spans),
+                             "All span_ids should be unique within a trace")
+
+    def test_trace_attributes(self):
+        """
+        Test that trace attributes contain expected MDS operation metadata.
+        Requires OTEL to be enabled.
+        """
+        self._skip_if_tracing_disabled()
+        # Create a file to generate a traced operation
+        test_path = "attr_test_file"
+        self.mount_a.run_shell(["touch", test_path])
+        self.mount_a.run_shell(["rm", test_path])
+
+        traces = self._get_traces()
+        self.assertGreater(len(traces), 0)
+
+        # Check that at least one trace has the expected attributes
+        found_client_request = False
+        for trace in traces:
+            if trace.get('name') == 'mds:client_request':
+                found_client_request = True
+                attrs = trace.get('attributes', {})
+
+                # Verify expected attribute keys
+                self.assertIn('mds.op_name', attrs)
+                self.assertIn('mds.rank', attrs)
+                self.assertIn('mds.reqid', attrs)
+
+                # Verify attribute values are non-empty
+                self.assertTrue(attrs['mds.op_name'])
+                self.assertTrue(attrs['mds.reqid'])
+                break
+
+        self.assertTrue(found_client_request,
+                        "Expected at least one mds:client_request trace")
+
+    def test_trace_async_spans(self):
+        """
+        Test that async spans (like journal_wait) are marked with async flag.
+        Requires OTEL to be enabled.
+        """
+        self._skip_if_tracing_disabled()
+        # Operations that trigger journaling will have async spans
+        self.mount_a.run_shell(["mkdir", "async_test_dir"])
+        self.mount_a.run_shell(["touch", "async_test_dir/file"])
+        self.mount_a.run_shell(["rm", "-rf", "async_test_dir"])
+
+        traces = self._get_traces()
+        self.assertGreater(len(traces), 0)
+
+        # Look for async spans
+        for trace in traces:
+            if 'spans' not in trace:
+                continue
+            for span in trace['spans']:
+                if span.get('name') == 'journal_wait':
+                    # journal_wait should have async flag
+                    self.assertTrue(span.get('async', False),
+                                    "journal_wait span should have async=true")
