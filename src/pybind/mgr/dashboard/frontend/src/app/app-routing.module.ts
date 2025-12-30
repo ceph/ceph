@@ -49,7 +49,6 @@ import { CephfsVolumeFormComponent } from './ceph/cephfs/cephfs-form/cephfs-form
 import { UpgradeProgressComponent } from './ceph/cluster/upgrade/upgrade-progress/upgrade-progress.component';
 import { MultiClusterComponent } from './ceph/cluster/multi-cluster/multi-cluster.component';
 import { MultiClusterListComponent } from './ceph/cluster/multi-cluster/multi-cluster-list/multi-cluster-list.component';
-import { MultiClusterDetailsComponent } from './ceph/cluster/multi-cluster/multi-cluster-details/multi-cluster-details.component';
 import { SmbClusterFormComponent } from './ceph/smb/smb-cluster-form/smb-cluster-form.component';
 import { SmbShareFormComponent } from './ceph/smb/smb-share-form/smb-share-form.component';
 import { SmbJoinAuthFormComponent } from './ceph/smb/smb-join-auth-form/smb-join-auth-form.component';
@@ -59,6 +58,7 @@ import { SmbClusterListComponent } from './ceph/smb/smb-cluster-list/smb-cluster
 import { SmbJoinAuthListComponent } from './ceph/smb/smb-join-auth-list/smb-join-auth-list.component';
 import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb-usersgroups-list.component';
 import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
+import { MultiClusterFormComponent } from './ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -209,14 +209,24 @@ const routes: Routes = [
           },
           {
             path: 'manage-clusters',
-            component: MultiClusterListComponent,
-            data: {
-              breadcrumbs: 'Multi-Cluster/Manage Clusters'
-            },
+            data: { breadcrumbs: 'Multi-Cluster/Manage Clusters' },
+
             children: [
+              { path: '', component: MultiClusterListComponent },
               {
-                path: 'performance-details',
-                component: MultiClusterDetailsComponent
+                path: URLVerbs.CONNECT,
+                component: MultiClusterFormComponent,
+                data: { breadcrumbs: ActionLabels.CONNECT }
+              },
+              {
+                path: `${URLVerbs.EDIT}/:name`,
+                component: MultiClusterFormComponent,
+                data: { breadcrumbs: ActionLabels.EDIT }
+              },
+              {
+                path: `${URLVerbs.RECONNECT}/:name`,
+                component: MultiClusterFormComponent,
+                data: { breadcrumbs: ActionLabels.RECONNECT }
               }
             ]
           }

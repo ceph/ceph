@@ -18,11 +18,13 @@ import {
   IconModule,
   IconService,
   TagModule,
-  SelectModule
+  SelectModule,
+  LayoutModule
 } from 'carbon-components-angular';
 import Analytics from '@carbon/icons/es/analytics/16';
 import CloseFilled from '@carbon/icons/es/close--filled/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
+import Connect from '@carbon/icons/es/connect/32';
 import {
   NgbActiveModal,
   NgbDatepickerModule,
@@ -121,7 +123,8 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     IconModule,
     TagModule,
     TextLabelListComponent,
-    SelectModule
+    SelectModule,
+    LayoutModule
   ],
   declarations: [
     MonitorComponent,
@@ -174,6 +177,6 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
 })
 export class ClusterModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([Analytics, CloseFilled, ProgressBarRoundIcon]);
+    this.iconService.registerAll([Analytics, CloseFilled, ProgressBarRoundIcon, Connect]);
   }
 }

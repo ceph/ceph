@@ -86,6 +86,7 @@ export enum Icons {
   idea = 'idea',
   userAccessLocked = 'user--access-locked', // User access locked
   chevronDown = 'chevron--down',
+  connect = 'connect',
   /* Icons for special effect */
   size16 = '16',
   size20 = '20',

@@ -3,36 +3,36 @@
                 *ngIf="managedByConfig$ | async as managedByConfig">
     <div class="row h-100 justify-content-center align-items-center">
       <div class="blank-page">
-        <i class="mx-auto d-block"
-           [ngClass]="[icons.large, icons.wrench]">
-        </i>
-      <div class="mt-4 text-center"
-           *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length === 0">
-        <h3 class="fw-bold">Connect Cluster</h3>
-        <h4 class="mt-3">Upgrade your current cluster to a multi-cluster setup effortlessly.
-            Click on the "Connect Cluster" button to begin the process.</h4>
-      </div>
-      <div class="mt-4 text-center"
-           *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length > 0">
-        <h4 class="mt-3">This cluster is already managed by cluster -
-          <a target="_blank"
-             [href]="managedByConfig['MANAGED_BY_CLUSTERS'][0]['url']">
-             {{ managedByConfig['MANAGED_BY_CLUSTERS'][0]['fsid'] }}
-            <i class="fa fa-external-link"></i>
-          </a>
-        </h4>
-      </div>
-      <div class="mt-4"
-           *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length === 0">
-        <div class="text-center">
-          <button class="btn btn-primary"
-                  (click)="openRemoteClusterInfoModal()">
-            <i class="mx-auto"
-               [ngClass]="icons.add">
-            </i> Connect Cluster
-          </button>
+        <svg cdsIcon="connect"
+             size="32"
+             class="mx-auto d-block"></svg>
+        <div class="mt-4 text-center"
+             *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length === 0">
+          <h3 class="fw-bold">Connect Cluster</h3>
+          <h4 class="mt-3">Upgrade your current cluster to a multi-cluster setup effortlessly.
+              Click on the "Connect Cluster" button to begin the process.</h4>
         </div>
-      </div>
+        <div class="mt-4 text-center"
+             *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length > 0">
+          <h4 class="mt-3">This cluster is already managed by cluster -
+            <a target="_blank"
+               [href]="managedByConfig['MANAGED_BY_CLUSTERS'][0]['url']">
+               {{ managedByConfig['MANAGED_BY_CLUSTERS'][0]['fsid'] }}
+              <i class="fa fa-external-link"></i>
+            </a>
+          </h4>
+        </div>
+        <div class="mt-4"
+             *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length === 0">
+          <div class="text-center">
+            <button class="btn btn-primary"
+                    (click)="openConnectClusterForm()">
+              <i class="mx-auto"
+                 [ngClass]="icons.add">
+              </i> Connect Cluster
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </ng-container>

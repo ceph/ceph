@@ -1,226 +1,203 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} Cluster
-  </ng-container>
-  <ng-container class="modal-content">
-    <form name="remoteClusterForm"
-          #frm="ngForm"
-          [formGroup]="remoteClusterForm">
-      <div class="modal-body">
-        <cd-alert-panel *ngIf="connectionVerified !== undefined && !connectionVerified && connectionMessage !== 'Connection refused'"
-                        type="error"
-                        spacingClass="mb-3"
-                        i18n>{{ connectionMessage }}
-        </cd-alert-panel>
-        <cd-alert-panel *ngIf="connectionVerified !== undefined && connectionVerified"
-                        type="success"
-                        spacingClass="mb-3"
-                        i18n>{{ connectionMessage }}
-        </cd-alert-panel>
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="remoteClusterUrl"
-                 i18n>Cluster API URL
-            <cd-helper>
-              <span>
-                <p>Enter the Dashboard API URL. You can retrieve it from the CLI with: <b>{{ clusterApiUrlCmd }} </b>
-                  <cd-copy-2-clipboard-button [source]="clusterApiUrlCmd"
-                                              [byId]="false"></cd-copy-2-clipboard-button>
-                </p>
-              </span>
-            </cd-helper>
-          </label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   placeholder="https://localhost:4202"
-                   id="remoteClusterUrl"
-                   name="remoteClusterUrl"
-                   formControlName="remoteClusterUrl">
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('remoteClusterUrl', frm, 'required')"
-                  i18n>This field is required.
-            </span>
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('remoteClusterUrl', frm, 'endpoint')"
-                  i18n>Please enter a valid URL.
-            </span>
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('remoteClusterUrl', frm, 'hubUrlCheck')"
-                  i18n>The hub cluster cannot be connected.
-            </span>
-          </div>
-        </div>
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="clusterAlias"
-                 i18n>Alias Name
-          </label>
-          <div class="cd-col-form-input">
-            <input id="clusterAlias"
-                   name="clusterAlias"
-                   class="form-control"
-                   type="text"
-                   placeholder="Name/Text to uniquely identify cluster"
-                   formControlName="clusterAlias">
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('clusterAlias', frm, 'required')"
-                  i18n>This field is required.
-            </span>
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('clusterAlias', frm, 'uniqueName')"
-                  i18n>The chosen alias name is already in use.
-            </span>
-          </div>
-        </div>
-        <div class="form-group row"
-             *ngIf="action !== 'edit'">
-          <label class="cd-col-form-label required"
-                 for="username"
-                 i18n>Username
-          </label>
-          <div class="cd-col-form-input">
-            <input id="username"
-                   name="username"
-                   class="form-control"
-                   type="text"
-                   formControlName="username">
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('username', frm, 'required')"
-                  i18n>This field is required.
-            </span>
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('username', frm, 'uniqueUrlandUser')"
-                  i18n>A cluster with the chosen user is already connected.
-            </span>
-          </div>
-        </div>
-        <div class="form-group row"
-             *ngIf="action !== 'edit'">
-          <label class="cd-col-form-label required"
-                 for="password"
-                 i18n>Password
-          </label>
-          <div class="cd-col-form-input">
-            <div class="input-group">
-              <input id="password"
-                     name="password"
-                     class="form-control"
-                     type="password"
-                     formControlName="password">
-              <span class="input-group-button">
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="password">
-                </button>
-                <cd-copy-2-clipboard-button source="password">
-                </cd-copy-2-clipboard-button>
-              </span>
-              <span class="invalid-feedback"
-                    *ngIf="remoteClusterForm.showError('password', frm, 'requiredNotEdit')"
-                    i18n>This field is required.
-              </span>
-            </div>
-          </div>
-        </div>
-        <div class="form-group row"
-             *ngIf="action !== 'edit'">
-          <label class="cd-col-form-label"
-                 for="ttl"
-                 i18n>Login Expiration</label>
-          <div class="cd-col-form-input">
-            <select class="form-select"
-                    id="ttl"
-                    formControlName="ttl"
-                    name="ttl">
-              <option value="1">1 day</option>
-              <option value="7">1 week</option>
-              <option value="15"
-                      [selected]="true">15 days</option>
-              <option value="30">30 days</option>
-            </select>
-          </div>
-        </div>
-        <!--
-        <div class="form-group row"
-             *ngIf="action !== 'edit'">
-          <label class="cd-col-form-label required"
-                 for="apiToken"
-                 i18n>Token
-          </label>
-          <div class="cd-col-form-input">
-            <input id="apiToken"
-                   name="apiToken"
-                   class="form-control"
-                   type="text"
-                   formControlName="apiToken">
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('apiToken', frm, 'required')"
-                  i18n>This field is required.</span>
-          </div>
-        </div>
-        <div class="form-group row"
-             *ngIf="action !== 'edit'">
-          <div class="cd-col-form-offset">
-            <div class="custom-control custom-checkbox">
-              <input class="custom-control-input"
-                     id="showToken"
-                     type="checkbox"
-                     [checked]="showToken"
-                     (change)="toggleToken()"
-                     formControlName="showToken">
-              <label class="custom-control-label"
-                     for="showToken"
-                     i18n>Auth with token</label>
-            </div>
-          </div>
-        </div> -->
-        <!-- ssl -->
-        <div class="form-group row">
-          <div class="cd-col-form-offset">
-            <div class="custom-control custom-checkbox">
-              <input class="custom-control-input"
-                     id="ssl"
-                     type="checkbox"
-                     formControlName="ssl">
-              <label class="custom-control-label"
-                     for="ssl"
-                     i18n>SSL</label>
-            </div>
-          </div>
-        </div>
+<form name="remoteClusterForm"
+      #frm="ngForm"
+      [formGroup]="remoteClusterForm"
+      novalidate>
+  <div cdsGrid
+       [useCssGrid]="true"
+       [narrow]="true"
+       [fullWidth]="true">
+    <div cdsCol
+         [columnNumbers]="{sm: 4, md: 8}">
+      <div cdsRow
+           class="form-heading">
+        <h3>{{ action | titlecase }} Cluster</h3>
+      </div>
 
-        <!-- ssl_cert -->
-        <div *ngIf="remoteClusterForm.controls.ssl.value"
-             class="form-group row">
-          <label class="cd-col-form-label"
-                 for="ssl_cert">
-            <span i18n>Certificate</span>
-            <cd-helper i18n>The SSL certificate in PEM format.</cd-helper>
-          </label>
-          <div class="cd-col-form-input">
-            <textarea id="ssl_cert"
-                      class="form-control resize-vertical text-monospace text-pre"
-                      formControlName="ssl_cert"
-                      rows="5">
-            </textarea>
+      <cds-inline-notification
+        *ngIf="connectionVerified !== undefined && !connectionVerified && connectionMessage !== 'Connection refused'"
+        kind="error"
+        title=""
+        [subtitle]="connectionMessage">
+      </cds-inline-notification>
+
+      <cds-inline-notification
+        *ngIf="connectionVerified !== undefined && connectionVerified"
+        kind="success"
+        title=""
+        [subtitle]="connectionMessage">
+      </cds-inline-notification>
+
+      <div cdsRow
+           class="form-item">
+        <cds-text-label
+          cdRequiredField="Cluster API URL"
+          [invalid]="remoteClusterForm.controls.remoteClusterUrl.invalid && remoteClusterForm.controls.remoteClusterUrl.dirty"
+          [invalidText]="urlErrorTpl"
+          for="remoteClusterUrl"
+          i18n>
+          Cluster API URL
+        <input cdsText
+               type="text"
+               id="remoteClusterUrl"
+               name="remoteClusterUrl"
+               placeholder="https://localhost:4202"
+               formControlName="remoteClusterUrl"
+               [invalid]="remoteClusterForm.controls.remoteClusterUrl.invalid && remoteClusterForm.controls.remoteClusterUrl.dirty">
+        </cds-text-label>
+        <ng-template #urlErrorTpl>
+          <span class="invalid-feedback"
+                *ngIf="remoteClusterForm.showError('remoteClusterUrl', frm, 'required')"
+                i18n>This field is required.
+          </span>
+          <span class="invalid-feedback"
+                *ngIf="remoteClusterForm.showError('remoteClusterUrl', frm, 'invalidURL')"
+                i18n>Please enter a valid URL.
+          </span>
+          <span class="invalid-feedback"
+                *ngIf="remoteClusterForm.showError('remoteClusterUrl', frm, 'hubUrlCheck')"
+                i18n>The hub cluster cannot be connected.
+          </span>
+        </ng-template>
+        <cd-help-text>
+          Enter the Dashboard API URL. CLI: <b>{{ clusterApiUrlCmd }}</b>
+        </cd-help-text>
+      </div>
+
+      <div cdsRow
+           class="form-item">
+        <cds-text-label
+          cdRequiredField="Alias Name"
+          [invalid]="remoteClusterForm.showError('clusterAlias', frm)"
+          [invalidText]="aliasErrorTpl"
+          for="clusterAlias"
+          i18n>
+          Alias Name
+          <input cdsText
+                 id="clusterAlias"
+                 name="clusterAlias"
+                 placeholder="Name/Text to uniquely identify cluster"
+                 formControlName="clusterAlias">
+        </cds-text-label>
+        <ng-template #aliasErrorTpl>
+          <span *ngIf="remoteClusterForm.showError('clusterAlias', frm, 'required')"
+                i18n>
+            This field is required.
+          </span>
+          <span *ngIf="remoteClusterForm.showError('clusterAlias', frm, 'uniqueName')"
+                i18n>
+            The chosen alias name is already in use.
+          </span>
+        </ng-template>
+      </div>
+
+      <div cdsRow
+           class="form-item"
+           *ngIf="action !== 'edit'">
+        <cds-text-label
+          cdRequiredField="Username"
+          [invalid]="remoteClusterForm.showError('username', frm)"
+          [invalidText]="usernameErrorTpl"
+          for="username"
+          i18n>
+          Username
+          <input cdsText
+                 id="username"
+                 name="username"
+                 formControlName="username">
+        </cds-text-label>
+        <ng-template #usernameErrorTpl>
+          <span *ngIf="remoteClusterForm.showError('username', frm, 'required')"
+                i18n>
+            This field is required.
+          </span>
+          <span *ngIf="remoteClusterForm.showError('username', frm, 'uniqueUrlandUser')"
+                i18n>
+            A cluster with the chosen user is already connected.
+          </span>
+        </ng-template>
+      </div>
+
+      <div cdsRow
+           class="form-item"
+           *ngIf="action !== 'edit'">
+        <cds-password-label labelInputID="password"
+                            label="Password..."
+                            i18n>Password
+          <input cdsPassword
+                 type="password"
+                 placeholder="Password..."
+                 id="password"
+                 name="password"
+                 autocomplete="new-password"
+                 formControlName="password">
+        </cds-password-label>
+      </div>
+
+      <div cdsRow
+           class="form-item"
+           *ngIf="action !== 'edit'">
+        <cds-select formControlName="ttl"
+                    name="ttl"
+                    for="ttl"
+                    label="Login Expiration"
+                    id="ttl"
+                    i18n>
+          <option value="1">1 day</option>
+          <option value="7">1 week</option>
+          <option value="15">15 days</option>
+          <option value="30">30 days</option>
+        </cds-select>
+      </div>
+
+      <div cdsRow
+           class="form-item">
+        <cds-checkbox
+          formControlName="ssl"
+          id="ssl"
+          i18n>
+          SSL
+        </cds-checkbox>
+      </div>
+
+      <div cdsRow
+           class="form-item"
+           *ngIf="remoteClusterForm.get('ssl').value">
+        <cds-text-label
+          label="Certificate"
+          [helperText]="sslHelpTpl"
+          [invalid]="remoteClusterForm.showError('ssl_cert', frm)"
+          [invalidText]="sslCertErrorTpl"
+          i18n>
+          <div cdsStack="vertical"
+               gap="3">
+            <textarea cdsTextArea
+                      id="ssl_cert"
+                      rows="5"
+                      formControlName="ssl_cert"></textarea>
             <input type="file"
                    (change)="fileUpload($event.target.files, 'ssl_cert')">
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'required')"
-                  i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'pattern')"
-                  i18n>Invalid SSL certificate.</span>
           </div>
-        </div>
+        </cds-text-label>
+        <ng-template #sslHelpTpl>
+          <span i18n>The SSL certificate in PEM format.</span>
+        </ng-template>
+        <ng-template #sslCertErrorTpl>
+          <span *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'required')"
+                i18n>
+            This field is required.
+          </span>
+          <span *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'pattern')"
+                i18n>
+            Invalid SSL certificate.
+          </span>
+        </ng-template>
       </div>
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                              [submitText]="(action | titlecase) + ' ' + 'Cluster'"
-                              [form]="remoteClusterForm">
-        </cd-form-button-panel>
-      </div>
-    </form>
-  </ng-container>
-</cd-modal>
+
+      <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                            [form]="frm"
+                            [submitText]="(action | titlecase) + ' ' + 'Cluster'"
+                            wrappingClass="text-right"></cd-form-button-panel>
+
+    </div>
+  </div>
+</form>
