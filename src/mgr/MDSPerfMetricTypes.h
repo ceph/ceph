@@ -527,6 +527,24 @@ public:
     auto duration = std::chrono::steady_clock::now() - data_points.back().timestamp;
     return std::chrono::duration_cast<std::chrono::seconds>(duration).count();
    }
+
+    // Update the window duration (for dynamic config changes)
+    void set_window_duration(uint64_t window_duration_seconds) {
+      std::unique_lock lock(data_lock);
+      window_duration = std::chrono::seconds(window_duration_seconds);
+      prune_old_data(std::chrono::steady_clock::now());
+    }
+
+    uint64_t get_window_duration_sec() const {
+      std::shared_lock lock(data_lock);
+      return std::chrono::duration_cast<std::chrono::seconds>(window_duration).count();
+    }
+
+    size_t size() const {
+      std::shared_lock lock(data_lock);
+      return data_points.size();
+    }
+
  private:
     void prune_old_data(TimePoint now) {
       TimePoint window_start = now - window_duration;
