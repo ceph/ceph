@@ -1,0 +1,19 @@
+<ng-container *ngIf="daemonStatus$ | async as daemonStatus">
+  <cd-table
+    [data]="daemonStatus"
+    [columns]="columns"
+    selectionType="single"
+    [hasDetails]="false"
+    (setExpandedRow)="setExpandedRow($event)"
+    (fetchData)="loadDaemonStatus($event)"
+    (updateSelection)="updateSelection($event)"
+  >
+  </cd-table>
+</ng-container>
+
+<ng-template #remoteClusterName
+             let-row="data.row">
+  <span>{{ row?.remote_cluster_name }}</span
+  ><br />
+  <span>{{ row?.peerId }}</span>
+</ng-template>

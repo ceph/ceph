@@ -778,6 +778,37 @@ class CephFsUi(CephFS):
             pools.extend(fs['mdsmap']['data_pools'] + [fs['mdsmap']['metadata_pool']])
         return pools
 
+    @Endpoint('GET', path='/mirror/peers-status')
+    @ReadPermission
+    def list_peers_status(self):
+        """
+        This API is created to list all the peers information to be listed in the UI
+        """
+        data = []
+        error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_daemon_status')
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to get mirror peers information: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        daemon_status_list = json.loads(out)
+        for daemon in daemon_status_list:
+            for fs in daemon.get('filesystems', []):
+                peers = fs.get('peers', [])
+
+                if not peers:
+                    peers = [None]
+
+                for peer in peers:
+                    data.append({
+                        "fs_name": fs.get("name"),
+                        "directory_count": fs.get("directory_count"),
+                        "peer_id": peer["uuid"] if peer else None,
+                        "remote_cluster_name": peer["remote"]["cluster_name"] if peer else None,
+                        "client_name": peer["remote"]["client_name"] if peer else None
+                    })
+        return data
 
 @APIRouter('/cephfs/subvolume', Scope.CEPHFS)
 @APIDoc('CephFS Subvolume Management API', 'CephFSSubvolume')

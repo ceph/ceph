@@ -31,6 +31,7 @@ import { CephfsSubvolumeSnapshotsFormComponent } from './cephfs-subvolume-snapsh
 import { CephfsSnapshotscheduleFormComponent } from './cephfs-snapshotschedule-form/cephfs-snapshotschedule-form.component';
 import { CephfsMountDetailsComponent } from './cephfs-mount-details/cephfs-mount-details.component';
 import { CephfsAuthModalComponent } from './cephfs-auth-modal/cephfs-auth-modal.component';
+import { CephfsMirroringListComponent } from '../cephfs-mirroring/cephfs-mirroring-list/cephfs-mirroring-list.component';
 import {
   ButtonModule,
   CheckboxModule,
@@ -106,7 +107,8 @@ import Trash from '@carbon/icons/es/trash-can/32';
     CephfsSnapshotscheduleFormComponent,
     CephfsSubvolumeSnapshotsFormComponent,
     CephfsMountDetailsComponent,
-    CephfsAuthModalComponent
+    CephfsAuthModalComponent,
+    CephfsMirroringListComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
