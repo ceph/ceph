@@ -77,3 +77,9 @@ export interface RgwRealmToken {
   realm: string;
   token: string;
 }
+
+export interface RgwZoneTreeNode {
+  name: string;
+  parent: string;
+  second_parent: string;
+}
