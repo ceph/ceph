@@ -52,7 +52,10 @@ class Ceph(ContainerDaemonForm):
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
         # TODO: figure out a way to un-special-case osd
-        return daemon_type in cls._daemons and daemon_type not in ('osd', 'crash')
+        return daemon_type in cls._daemons and daemon_type not in (
+            'osd',
+            'crash',
+        )
 
     def __init__(self, ctx: CephadmContext, ident: DaemonIdentity) -> None:
         self.ctx = ctx
@@ -335,6 +338,7 @@ class OSD(Ceph):
     def osd_fsid(self) -> Optional[str]:
         return self._osd_fsid
 
+
 @register_daemon_form
 class Crash(Ceph):
     @classmethod
@@ -352,10 +356,17 @@ class Crash(Ceph):
     def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Ceph':
         (uid, gid) = extract_uid_gid(ctx)
         data_dir_base = f'{ctx.data_dir}/{ident.fsid}'
-        makedirs(os.path.join(data_dir_base, 'crash'), uid, gid, DATA_DIR_MODE)
-        makedirs(os.path.join(data_dir_base, 'crash', 'posted'), uid, gid,
-                 DATA_DIR_MODE)
+        makedirs(
+            os.path.join(data_dir_base, 'crash'), uid, gid, DATA_DIR_MODE
+        )
+        makedirs(
+            os.path.join(data_dir_base, 'crash', 'posted'),
+            uid,
+            gid,
+            DATA_DIR_MODE,
+        )
         return cls(ctx, ident)
+
 
 @register_daemon_form
 class CephExporter(ContainerDaemonForm):
