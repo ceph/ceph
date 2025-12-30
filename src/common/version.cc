@@ -48,7 +48,7 @@ static std::string get_ceph_vendor_release()
 {
   const char* env = std::getenv("CEPH_VENDOR_RELEASE");
 
-  if (!env || env[0] = '\0') {
+  if (!env || env[0] == '\0') {
     return "";
   }
 
