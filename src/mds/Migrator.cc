@@ -15,6 +15,7 @@
 
 #include "Migrator.h"
 #include "MDSRank.h"
+#include "MDSTracer.h"
 #include "MDCache.h"
 #include "CInode.h"
 #include "CDir.h"
@@ -1155,6 +1156,7 @@ public:
 
 void Migrator::dispatch_export_dir(const MDRequestRef& mdr, int count)
 {
+  ScopedSpan trace_span(mds->tracer, "export_dir", mdr->trace_span, &mdr->trace_data);
   CDir *dir = mdr->more()->export_dir;
   auto* diri = dir->get_inode();
   dout(7) << *mdr << " " << *dir << dendl;

@@ -16,6 +16,7 @@
 #include "StrayManager.h"
 #include "BatchOp.h"
 #include "MDSRank.h"
+#include "MDSTracer.h"
 #include "Mutation.h"
 
 #include "common/debug.h"
