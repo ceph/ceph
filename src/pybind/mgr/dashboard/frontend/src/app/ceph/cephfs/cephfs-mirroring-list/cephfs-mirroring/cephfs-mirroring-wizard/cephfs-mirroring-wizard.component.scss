@@ -1,0 +1,15 @@
+@use '@carbon/layout';
+
+.mirroring-bg {
+  background-color: var(--cds-ui-02);
+  min-height: 100vh;
+}
+
+.mirroring-list-item {
+  margin-bottom: layout.$spacing-03;
+  margin-top: layout.$spacing-03;
+}
+
+.mirroring-list {
+  margin-top: layout.$spacing-03;
+}

@@ -1,0 +1,142 @@
+<div>
+  <p i18n>Configure a new mirroring relationship between clusters</p>
+</div>
+
+<div cdsRow>
+  <div cdsCol [columnNumbers]="{ sm: 12, md: 3, lg: 2 }">
+    <cd-wizard 
+      [stepsTitle]="stepTitles"
+      i18n-stepsTitle>
+    </cd-wizard>
+  </div>
+
+  <div cdsCol [columnNumbers]="{ sm: 12, md: 9, lg: 14 }">
+    <div cdsGrid class="mirroring-bg">
+      <ng-container [ngSwitch]="currentStep?.stepIndex">
+
+        <div *ngSwitchCase="0">
+          <div cdsCol>
+            <h5 i18n>Choose Mirror Peer Role</h5>
+            <p i18n>
+              Select how the cluster will participate in the CephFS mirroring relationship.
+            </p>
+          </div>
+
+          <cds-radio-group name="clusterRole"
+                           [(ngModel)]="selectedRole"
+                           >
+            <div cdsCol [columnNumbers]="{ sm: 12, md: 8, lg: 8 }">
+              <cds-tile>
+                <cds-radio value="source">
+                  <div>
+                    <h6 i18n>Configure Local Peer</h6>
+                    <div i18n>
+                      This cluster will act as the initiating peer and send snapshots to a remote peer.
+                    </div>
+                    <ul class="mirroring-list">
+                      <li *ngFor="let item of sourceList" class="mirroring-list-item">
+                        → {{ item }}
+                      </li>
+                    </ul>
+                  </div>
+                </cds-radio>
+              </cds-tile>
+            </div>
+
+            <div cdsCol [columnNumbers]="{ sm: 12, md: 8, lg: 8 }">
+              <cds-tile cds-mb="lg">
+                <cds-radio value="target">
+                  <div>
+                    <h6 i18n>Configure Remote Peer</h6>
+                    <div i18n>
+                      A remote cluster will act as the receiving peer and store replicated snapshots.
+                    </div>
+                    <ul cdsGap="sm" class="mirroring-list">
+                      <li *ngFor="let item of targetList" class="mirroring-list-item">
+                        → {{ item }}
+                      </li>
+                    </ul>
+                  </div>
+                </cds-radio>
+              </cds-tile>
+            </div>
+          </cds-radio-group>
+
+
+<cd-alert-panel
+  type="info"
+  spacingClass="mb-3"
+  i18n
+  class="align-items-center"
+>
+  <div>
+    <strong style="display:block; margin-bottom: 8px;">About Remote Peer Setup</strong>
+    <p style="margin:0 0 10px 0;">
+      As a remote peer, this cluster prepares to receive mirrored data from an initiating cluster. The setup includes environment validation, enabling filesystem mirroring, creating required Ceph users, and generating a bootstrap token.
+    </p>
+    <strong style="display:block; margin-bottom:5px;">What happens next:</strong>
+    <ul style="list-style-type: disc; padding-left: 20px; margin: 0;">
+      <li>Environment validation</li>
+      <li>Ceph user creation</li>
+      <li>Filesystem mirroring activation</li>
+      <li>Bootstrap token generation</li>
+    </ul>
+  </div>
+
+</cd-alert-panel>
+
+        <div cdsRow>
+          <div cdsCol [columnNumbers]="{ sm: 12, md: 5, lg: 5 }">
+            <cds-tile>
+              <div>
+                <h6>Remote Cluster Health</h6>
+                <div>
+                  All monitors and OSDs are healthy.
+                </div>
+              </div>
+            </cds-tile>
+          </div>
+
+          <div cdsCol [columnNumbers]="{ sm: 12, md: 5, lg: 5}">
+            <cds-tile>
+              <div>
+                <h6>Remote Manager Service</h6>
+                <div>
+                  Manager service is running and responsive.
+                </div>
+              </div>
+            </cds-tile>
+          </div>
+
+          <div cdsCol [columnNumbers]="{ sm: 12, md: 5, lg: 5 }">
+            <cds-tile>
+              <div>
+                <h6>Remote Filesystem Availability</h6>
+                <div>
+                  Verifies that at least one filesystem is configured and accessible on the remote cluster.
+                </div>
+                <div>
+                  Filesystem
+                </div>
+              </div>
+            </cds-tile>
+          </div>
+        </div>
+      </div>
+
+        <div *ngSwitchCase="1">
+        <p>test 1</p>
+        </div>
+
+        <div *ngSwitchCase="2">
+         <p>test 2</p>
+        </div>
+
+        <div *ngSwitchCase="3">
+         <p>Test3</p>
+        </div>
+
+      </ng-container>
+    </div>
+  </div>
+</div>
