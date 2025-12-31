@@ -4,10 +4,12 @@ import { STEP_TITLES_MIRRORING_CONFIGURED } from './cephfs-mirroring-wizard-step
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 import { WizardStepModel } from '~/app/shared/models/wizard-steps';
+import { BehaviorSubject } from 'rxjs';
 
 @Component({
   selector: 'cd-cephfs-mirroring-wizard',
   templateUrl: './cephfs-mirroring-wizard.component.html',
+  standalone: false,
   styleUrls: ['./cephfs-mirroring-wizard.component.scss']
 })
 export class CephfsMirroringWizardComponent implements OnInit {
@@ -16,6 +18,7 @@ export class CephfsMirroringWizardComponent implements OnInit {
   currentStep: WizardStepModel;
   selectedRole: string = 'source';
   icons = Icons;
+  selectedFilesystem$: BehaviorSubject<any> = new BehaviorSubject<any>(null);
 
   sourceList: string[] = [
     'Sends data to remote clusters',
@@ -65,20 +68,28 @@ export class CephfsMirroringWizardComponent implements OnInit {
       this.onSubmit();
     }
   }
+  // onNextStep() {
+  //   if (!this.wizardStepsService.isLastStep()) {
+  //     this.wizardStepsService.moveToNextStep();
+  //   } else {
+  //     this.onSubmit();
+  //   }
+  // }
 
-  onPreviousStep() {
-    if (!this.wizardStepsService.isFirstStep()) {
-      this.wizardStepsService.moveToPreviousStep();
-    }
-  }
+  // onNextStep() {
+  //   // you can validate before moving next
+  //   if (this.currentStepIndex === 1 && !this.selectedFilesystem$.value) {
+  //     return; // block next
+  //   }
+  //   this.wizardStepsService.moveToNextStep();
+  // }
 
-  onSubmit() {}
+// 4
 
-  selectRole(role: string) {
-    this.selectedRole = role;
-  }
 
-  getCurrentRoleList(): string[] {
-    return this.selectedRole === 'source' ? this.sourceList : this.targetList;
+
+
+  onSubmit() {
+    throw new Error('Method not implemented.');
   }
 }
