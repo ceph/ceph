@@ -480,18 +480,6 @@ private:
     op_context_t c,
     LBABtree& btree,
     const LBACursor& indirect_cursor);
-
-  resolve_indirect_cursor_ret resolve_indirect_cursor(
-    op_context_t c,
-    const LBACursor& indirect_cursor) {
-    assert(indirect_cursor.is_indirect());
-    return with_btree<LBABtree>(
-      cache,
-      c,
-      [c, &indirect_cursor, this](auto &btree) {
-      return resolve_indirect_cursor(c, btree, indirect_cursor);
-    });
-  }
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 
