@@ -43,7 +43,17 @@
                           i18n>Yes, I am sure.</cds-checkbox>
           </ng-container>
           <ng-template #highImpactDeletion>
-            <cds-text-label label="Resource Name"
+            <p class="cds--type-body-01">
+            @if (bodyContext?.deletionMessage) {
+            <span [innerHTML]="bodyContext.deletionMessage"></span>
+            } @else {
+            <ng-container i18n>Deleting <strong>{{ itemNames[0] }}</strong> will remove all associated {{itemDescription}}.This action cannot be undone.</ng-container>
+            }
+            </p>
+            <ng-template #labelTemplate>
+              <span i18n>Type <strong>{{ itemNames[0] }}</strong> to confirm (required)</span>
+            </ng-template>
+            <cds-text-label [labelTemplate]="labelTemplate"
                             labelInputID="resource_name"
                             cdRequiredField="Resource Name"
                             [invalid]="!deletionForm.controls.confirmInput.valid && deletionForm.controls.confirmInput.dirty"

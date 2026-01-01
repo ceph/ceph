@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -15,6 +15,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofService, GroupsComboboxItem } from '~/app/shared/api/nvmeof.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 const BASE_URL = 'block/nvmeof/subsystems';
 const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
@@ -25,6 +26,9 @@ const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
   styleUrls: ['./nvmeof-subsystems.component.scss']
 })
 export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit {
+  @ViewChild('deleteTpl', { static: true })
+  deleteTpl: TemplateRef<any>;
+
   subsystems: NvmeofSubsystem[] = [];
   subsystemsColumns: any;
   permissions: Permissions;
@@ -41,9 +45,9 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
     private router: Router,
+    private route: ActivatedRoute,
     private modalService: ModalCdsService,
-    private taskWrapper: TaskWrapperService,
-    private route: ActivatedRoute
+    private taskWrapper: TaskWrapperService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -68,6 +72,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
         prop: 'max_namespaces'
       }
     ];
+
     this.tableActions = [
       {
         name: this.actionLabels.CREATE,
@@ -110,9 +115,14 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
   deleteSubsystemModal() {
     const subsystem = this.selection.first();
     this.modalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: 'Subsystem',
+      itemDescription: $localize`Subsystem`,
+      impact: DeletionImpact.high,
+      bodyTemplate: this.deleteTpl,
       itemNames: [subsystem.nqn],
       actionDescription: 'delete',
+      bodyContext: {
+        deletionMessage: $localize`Deleting <strong>${subsystem.nqn}</strong> will remove all associated configurations and resources. Dependent services may stop working. This action cannot be undone.`
+      },
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
           task: new FinishedTask('nvmeof/subsystem/delete', { nqn: subsystem.nqn }),
@@ -121,7 +131,6 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     });
   }
 
-  // Gateway groups
   onGroupSelection(selected: GroupsComboboxItem) {
     selected.selected = true;
     this.group = selected.content;
