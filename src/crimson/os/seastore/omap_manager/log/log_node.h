@@ -27,6 +27,7 @@ struct delta_t {
     ADD_PREV,
     ADD_DUP_ADDR,
     INIT,
+    OVERWRITE
   } op;
   std::string key;
   ceph::bufferlist val;
@@ -108,6 +109,17 @@ public:
     }
   }
 
+  void insert_overwrite(
+    const std::string &key,
+    const ceph::bufferlist &val) {
+    buffer.push_back(
+      delta_t{
+        delta_t::op_t::OVERWRITE,
+        key,
+        val
+      });
+  }
+
   void clear() {
     buffer.clear();
   }
@@ -140,6 +152,18 @@ public:
     for (auto it = buffer.rbegin(); it != buffer.rend(); ++it) {
       if (it->op == delta_t::op_t::REMOVE) {
 	ret = it->val;
+	return ret;
+      }
+    }
+    return ret;
+  }
+
+  std::optional<delta_t> get_latest_write_delta() {
+    std::optional<delta_t> ret = std::nullopt;
+    for (auto it = buffer.rbegin(); it != buffer.rend(); ++it) {
+      if (it->op == delta_t::op_t::APPEND ||
+	it->op == delta_t::op_t::OVERWRITE) {
+	ret = *it;
 	return ret;
       }
     }
@@ -632,6 +656,11 @@ public:
     set_size(get_size() + 1);
   }
 
+  void _overwrite(const std::string &key, const ceph::bufferlist &val) {
+    iterator iter(this, get_last_pos());
+    iter.set_node_key(log_key_t(key.size(), val.length()));
+    iter.set_node_val(key, val);
+  }
 
   void journal_append(
     const std::string &key,
@@ -661,10 +690,23 @@ public:
 
   void journal_append_remove(delta_buffer_t *recorder, ceph::bufferlist bl);
 
+  void journal_overwrite(
+    const std::string &key,
+    const ceph::bufferlist &val,
+    delta_buffer_t *recorder) {
+    recorder->insert_overwrite(key, val);
+  }
+
   void append(
     const std::string &key,
     const ceph::bufferlist &val) {
     _append(key, val);
+  }
+
+  void overwrite(
+    const std::string &key,
+    const ceph::bufferlist &val) {
+    _overwrite(key, val);
   }
 
   void init_vars() {
@@ -678,14 +720,13 @@ public:
     
   }
 
-  bool expect_overflow(size_t ksize, size_t vsize) const {
-    return free_space() < get_entry_size(ksize, vsize) + reserved_len;
-  }
-
   std::string get_last_key() const {
     const_iterator iter(this, get_last_pos());
     return iter->get_key();
   }
+
+  int _ow_gap_from_last_entry(const size_t key, const size_t val);
+  friend class LogNode;
 };
 
 struct LogNode 
@@ -741,6 +782,9 @@ struct LogNode
   }
 
   void append_kv(Transaction &t, const std::string &key,
+    const ceph::bufferlist &val);
+
+  void overwrite_kv(Transaction &t, const std::string &key,
     const ceph::bufferlist &val);
 
   /*
@@ -868,6 +912,12 @@ struct LogNode
   uint32_t get_capacity() const {
     return this->capacity();
   }
+
+  bool can_ow();
+
+  int ow_gap_from_last_entry(const size_t key, const size_t val);
+
+  bool expect_overflow(const std::string &key, size_t vsize, bool can_ow);
 
   void update_delta() {
     if (!delta_buffer.empty()) {
