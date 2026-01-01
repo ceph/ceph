@@ -182,7 +182,8 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       itemNames: [selectedGroup.spec.group],
       bodyContext: {
         disableForm,
-        subsystemCount: selectedGroup.subSystemCount
+        subsystemCount: selectedGroup.subSystemCount,
+        deletionMessage: $localize`Deleting <strong>${selectedGroup.spec.group}</strong> will remove all associated subsystems and may disrupt traffic routing for services relying on it. This action cannot be undone.`
       },
       submitActionObservable: () => {
         return this.taskWrapper
