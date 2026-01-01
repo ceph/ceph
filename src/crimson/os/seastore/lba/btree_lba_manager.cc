@@ -152,7 +152,7 @@ BtreeLBAManager::get_mappings(
     TRACET("{}~0x{:x} got {}", t, laddr, length, ret.back());
   }
 
-  co_return ret;
+  co_return std::move(ret);
 }
 
 BtreeLBAManager::_get_cursors_ret
@@ -176,7 +176,7 @@ BtreeLBAManager::get_cursors(
 
   TRACET("{}~0x{:x} done with {} results, stop at {}",
 	 c.trans, laddr, length, ret.size(), pos);
-  co_return ret;
+  co_return std::move(ret);
 }
 
 BtreeLBAManager::resolve_indirect_cursor_ret
@@ -199,7 +199,7 @@ BtreeLBAManager::resolve_indirect_cursor(
   assert(direct_cursor->get_laddr() <= intermediate_key);
   assert(direct_cursor->get_laddr() + direct_cursor->get_length()
 	 >= intermediate_key + indirect_cursor.get_length());
-  co_return direct_cursor;
+  co_return std::move(direct_cursor);
 }
 
 BtreeLBAManager::get_mapping_ret
@@ -232,7 +232,7 @@ BtreeLBAManager::get_mapping(
   auto mapping = LBAMapping::create_indirect(
     std::move(direct), std::move(cursor));
   TRACET("{} got cursor mapping {}", t, laddr, mapping);
-  co_return mapping;
+  co_return std::move(mapping);
 }
 
 BtreeLBAManager::get_mapping_ret
@@ -351,7 +351,7 @@ BtreeLBAManager::alloc_extents(
     }
 #endif
   }
-  co_return ret;
+  co_return std::move(ret);
 }
 
 BtreeLBAManager::alloc_extent_ret
@@ -421,7 +421,7 @@ BtreeLBAManager::alloc_extents(
   for (auto &cursor : cursors) {
     ret.emplace_back(LBAMapping::create_direct(std::move(cursor)));
   }
-  co_return ret;
+  co_return std::move(ret);
 }
 
 BtreeLBAManager::ref_ret
@@ -699,7 +699,7 @@ BtreeLBAManager::insert_mappings(
     iter = co_await iter.next(c);
   }
 
-  co_return ret;
+  co_return std::move(ret);
 }
 
 static bool is_lba_node(const CachedExtent &e)
@@ -921,13 +921,13 @@ BtreeLBAManager::complete_indirect_lba_mapping(
   assert(mapping.is_viewable());
   assert(mapping.is_indirect());
   if (mapping.is_complete_indirect()) {
-    co_return mapping;
+    co_return std::move(mapping);
   }
   auto c = get_context(t);
   auto btree = co_await get_btree(t);
   auto cursor = co_await resolve_indirect_cursor(c, btree, *mapping.indirect_cursor);
   mapping.direct_cursor = std::move(cursor);
-  co_return mapping;
+  co_return std::move(mapping);
 }
 
 void BtreeLBAManager::register_metrics()
@@ -1175,7 +1175,7 @@ BtreeLBAManager::remap_mappings(
 	remapped_mapping = std::move(mapping);
       });
     });
-  co_return ret;
+  co_return std::move(ret);
 }
 
 }
