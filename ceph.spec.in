@@ -35,7 +35,7 @@
 %bcond_with rbd_rwl_cache
 %endif
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-%if 0%{?rhel} < 9 || 0%{?openEuler}
+%if (0%{?rhel} && 0%{?rhel} < 9) || 0%{?openEuler}
 %bcond_with system_pmdk
 %else
 %ifarch s390x aarch64
@@ -150,7 +150,7 @@
 %{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
-%if 0%{?rhel} < 10
+%if 0%{?rhel} && 0%{?rhel} < 10
 %{!?gts_version: %global gts_version 13}
 %endif
 
@@ -674,7 +674,7 @@ Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-routes
 %if 0%{?weak_deps}
 Recommends:     python%{python3_pkgversion}-saml
-%if 0%{?fedora} || 0%{?rhel} <= 8
+%if 0%{?fedora} || (0%{?rhel} && 0%{?rhel} <= 8)
 Recommends:     python%{python3_pkgversion}-grpcio
 Recommends:     python%{python3_pkgversion}-grpcio-tools
 %endif
@@ -729,7 +729,7 @@ Requires:       python%{python3_pkgversion}-PyYAML
 %endif
 # RHEL8 has python 3.6 and that lacks dataclasses in the stdlib, so pull in the
 # backport dataclasses module instead.
-%if 0%{?rhel} <= 8
+%if 0%{?rhel} && 0%{?rhel} <= 8
 Requires:       python%{python3_pkgversion}-dataclasses
 %endif
 %if 0%{?weak_deps}
