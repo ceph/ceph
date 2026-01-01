@@ -194,7 +194,7 @@ public:
    */
   omap_set_key_ret _log_set_key(omap_root_t &log_root,
     Transaction &t, LogNodeRef e, const std::string &key,
-    const ceph::bufferlist &value);
+    const ceph::bufferlist &value, bool can_ow = false);
 
   /**
    * remove_kv
@@ -266,11 +266,19 @@ public:
   TransactionManager &tm;
 };
 
-inline bool is_log_key(std::string s) {
+inline bool is_log_key(const std::string &s) {
   pg_log_entry_t e;
   return (s.size() == e.get_key_name().size() &&
       (s[0] >= (0 + '0') && s[0] <= (9 + '0'))) ||
       s.starts_with("dup_");
+}
+
+inline bool is_ow_key(const std::string &s) {
+  return s == fastinfo_key;
+}
+
+inline std::string get_ow_key() {
+  return std::string(fastinfo_key);
 }
 
 }

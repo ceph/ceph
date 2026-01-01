@@ -29,8 +29,9 @@ void delta_t::replay(LogKVNodeLayout &l) {
     auto biter = val.cbegin();
     ceph::decode(bitmap, biter);
     l._set_d_bitmap(bitmap);
+  } else if (op == op_t::OVERWRITE) {
+    l._overwrite(key, val);
   }
-
 }
 
 void LogNode::append_kv(Transaction &t, const std::string &key,
@@ -41,6 +42,21 @@ void LogNode::append_kv(Transaction &t, const std::string &key,
     return;
   }
   append(key, val);
+
+}
+
+void LogNode::overwrite_kv(Transaction &t, const std::string &key,
+    const ceph::bufferlist &val) {
+  auto p = maybe_get_delta_buffer();
+  if (p) {
+    int gap = ow_gap_from_last_entry(key.size(), val.length());
+    journal_overwrite(key, val, p);
+    if (gap > 0) {
+      reserved_len += gap;
+    }
+    return;
+  }
+  overwrite(key, val);
 }
 
 void LogNode::set_prev_addr(laddr_t l) {
@@ -193,10 +209,69 @@ bool LogNode::remove_entry(const std::string key)
   return false;
 }
 
+bool LogNode::can_ow()
+{
+  auto p = maybe_get_delta_buffer();
+  if (p) {
+    auto ret = p->get_last_added_delta();
+    if (ret && (*ret).key == get_ow_key()) {
+      return true;
+    } else if (ret && (*ret).key != get_ow_key()) {
+      return false;
+    }
+  }
+  if (is_ow_key(get_last_key())) {
+    return true;
+  }
+  return false;
+}
+
 void LogKVNodeLayout::journal_append_remove(
   delta_buffer_t *recorder, 
   ceph::bufferlist bl) {
   recorder->insert_remove(bl);
+}
+
+bool LogNode::expect_overflow(const std::string &key,
+  size_t vsize, bool can_ow) {
+  size_t ksize = key.size();
+  if (can_ow) { 
+    int gap = ow_gap_from_last_entry(key.size(), vsize);
+    uint64_t remain = capacity() - get_last_pos() - reserved_len;
+    if (gap >= 0) {
+      gap += static_cast<uint64_t>(gap);
+    } else {
+      uint64_t d = static_cast<uint64_t>(-gap);
+      gap -= d;
+    }
+    return remain < get_entry_size(ksize, vsize);
+  } else if (is_ow_key(key) && !can_ow) {
+    // guess there is enough space to store further entry in this node.
+    // this makes sure that the last entry of this node is non-ow entry,
+    // leading to reducing garbage collection for _fastinfo
+    size_t next_expected_size = get_entry_size(ksize, vsize) + reserved_len;
+    return free_space() < 
+      get_entry_size(ksize, vsize) + reserved_len + next_expected_size;
+  }
+  return free_space() < get_entry_size(ksize, vsize) + reserved_len;
+}
+
+int LogNode::ow_gap_from_last_entry(const size_t key, const size_t val) {
+  int gap = 0;
+  auto p = maybe_get_delta_buffer();
+  if (p) {
+    auto ret = p->get_last_added_delta();
+    if (ret && (*ret).key == get_ow_key()) {
+      if ((*ret).val.length() < val) {
+	gap = val - (*ret).val.length();
+      }
+    } else {
+      gap = _ow_gap_from_last_entry(key, val);
+    }
+  } else {
+    gap = _ow_gap_from_last_entry(key, val);
+  }
+  return gap;
 }
 
 }

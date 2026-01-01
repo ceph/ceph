@@ -50,7 +50,9 @@ LogManager::omap_set_keys(
   auto ext = co_await log_load_extent<LogNode>(
     t, log_root.addr, BEGIN_KEY, END_KEY);
   ceph_assert(ext);
-  for (auto &p : kvs) {
+  std::pair<std::string, ceph::bufferlist> ow_kv;
+  auto f = [&](const std::string &k, const bufferlist &v, bool has_ow_key) 
+    -> omap_set_key_ret {
     CachedExtentRef node;
     Transaction::get_extent_ret ret;
     // To find mutable extent in the same transaction
@@ -58,12 +60,54 @@ LogManager::omap_set_keys(
     assert(ret == Transaction::get_extent_ret::PRESENT);
     assert(node);
     LogNodeRef log_node = node->template cast<LogNode>();
-    if (!is_log_key(p.first)) {
+    bool can_ow = has_ow_key && log_node->can_ow();
+    co_await _log_set_key(log_root, t, log_node, k, v, can_ow);
+    co_return;
+  };
+  /*
+   * During a normal write transaction, pgmeta_oid receives two key–value pairs:
+   * _fastinfo and pg_log_entry. Unlike pg_log_entry, _fastinfo is likely to be
+   * overwritten in the near future. Storing _fastinfo in an append-only manner
+   * within a LogNode causes unnecessary space overhead and requires garbage
+   * collection.
+   * To mitigate this, LogManager adjusts the write sequence of _fastinfo and
+   * pg_log_entry by placing _fastinfo at the last position of the LogNode.
+   * As a result, _fastinfo can be overwritten by the next pg_log_entry, and a new
+   * _fastinfo is appended afterward.
+   *
+   * | pg_log_entry #1 | _fastinfo #1 | ->
+   * | pg_log_entry #1 | pg_log_entry #2 | _fastinfo #2 |
+   *
+   * Furthermore, if we ensure that the last entry of each LogNode is always
+   * _fastinfo, garbage collection is unnecessary, because the new _fastinfo
+   * will be appended to a new LogNode.
+   */
+  bool has_ow_key = false;
+  if (kvs.size() <= 2) {
+    for (auto &p : kvs) {
+      if (is_ow_key(p.first)) {
+	ow_kv.first = p.first;
+	ow_kv.second = p.second;
+	has_ow_key = true;
+	break;
+      }
+    }
+  }
+  for (auto &p : kvs) {
+    if (is_ow_key(p.first)) {
+      continue;
+    }
+    if (!is_log_key(p.first) && !is_ow_key(p.first)) {
       // remove duplicate keys first
       co_await remove_kv(t, log_root.addr, p.first, nullptr);
     }
-    co_await _log_set_key(log_root, t, log_node, p.first, p.second);
+    co_await f(p.first, p.second, has_ow_key);
   }
+
+  if (!ow_kv.first.empty()) {
+    co_await f(ow_kv.first, ow_kv.second, has_ow_key);
+  }
+
   co_return;
 }
 
@@ -85,16 +129,31 @@ LogManager::omap_set_key(
 LogManager::omap_set_key_ret
 LogManager::_log_set_key(omap_root_t &log_root,
   Transaction &t, LogNodeRef tail,
-  const std::string &key, const ceph::bufferlist &value)
+  const std::string &key, const ceph::bufferlist &value, bool can_ow)
 {
   LOG_PREFIX(LogManager::_log_set_key);
   DEBUGT("enter key={}", t, key);
   assert(tail);
-  if (!tail->expect_overflow(key.size(), value.length())) {
+  if (!tail->expect_overflow(key, value.length(), can_ow)) {
     auto mut = tm.get_mutable_extent(t, tail)->cast<LogNode>();
-    mut->append_kv(t, key, value);
+    if (can_ow) {
+      mut->overwrite_kv(t, key, value);
+    } else {
+      mut->append_kv(t, key, value);
+    }
     co_return;
   }
+
+  // This means the first entry of the new LogNode is not _fastinfo
+  if (!is_ow_key(key) && can_ow) {
+    // remove _fastinfo in old LogNode
+    auto e = co_await tail->get_value(key);
+    if (e != std::nullopt) {
+      auto mut = tm.get_mutable_extent(t, tail)->template cast<LogNode>();
+      mut->remove_entry(get_ow_key());
+    }
+  }
+
   auto extent = co_await tm.alloc_non_data_extent<LogNode>(
     t, log_root.hint, LOG_NODE_BLOCK_SIZE
   ).handle_error_interruptible(
