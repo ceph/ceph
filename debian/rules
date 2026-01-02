@@ -18,6 +18,9 @@ endif
 ifneq ($(filter pkg.ceph.crimson,$(DEB_BUILD_PROFILES)),)
   extraopts += -DWITH_CRIMSON=ON
 endif
+ifneq ($(filter pkg.ceph.uca,$(DEB_BUILD_PROFILES)),)
+  extraopts += -DWITH_UCA=ON
+endif
 
 extraopts += -DWITH_JAEGER=ON
 extraopts += -DWITH_SYSTEM_UTF8PROC=ON
