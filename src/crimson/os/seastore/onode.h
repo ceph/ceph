@@ -33,7 +33,6 @@ struct onode_layout_t {
   ceph_le32 oi_size{0};
   ceph_le32 ss_size{0};
   omap_root_le_t omap_root;
-  omap_root_le_t log_root;
   omap_root_le_t xattr_root;
 
   object_data_le_t object_data;
@@ -49,17 +48,15 @@ struct onode_layout_t {
     */
   bool need_cow = false;
 
-  onode_layout_t() : omap_root(omap_type_t::OMAP), log_root(omap_type_t::LOG),
+  onode_layout_t() : omap_root(omap_type_t::OMAP),
     xattr_root(omap_type_t::XATTR) {}
 
   const omap_root_le_t& get_root(omap_type_t type) const {
     if (type == omap_type_t::XATTR) {
       return xattr_root;
-    } else if (type == omap_type_t::OMAP) {
-      return omap_root;
     } else {
-      assert(type == omap_type_t::LOG);
-      return log_root;
+      assert(type == omap_type_t::LOG || type == omap_type_t::OMAP);
+      return omap_root;
     }
   }
 } __attribute__((packed));
@@ -107,7 +104,6 @@ public:
   }
   virtual void update_onode_size(Transaction&, uint32_t) = 0;
   virtual void update_omap_root(Transaction&, omap_root_t&) = 0;
-  virtual void update_log_root(Transaction&, omap_root_t&) = 0;
   virtual void update_xattr_root(Transaction&, omap_root_t&) = 0;
   virtual void update_object_data(Transaction&, object_data_t&) = 0;
   virtual void update_object_info(Transaction&, ceph::bufferlist&) = 0;
