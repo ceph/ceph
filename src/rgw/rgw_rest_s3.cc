@@ -322,6 +322,12 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
   // optional part number
   auto optstr = s->info.args.get_optional("partNumber");
   if (optstr) {
+    auto range_str = s->info.env->get("HTTP_RANGE");
+    if (range_str) {
+      s->err.message = "Cannot specify both Range header and partNumber query parameter";
+      return -ERR_INVALID_REQUEST;
+    }
+
     string err;
     multipart_part_num = strict_strtol(optstr->c_str(), 10, &err);
     if (!err.empty()) {
