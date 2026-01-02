@@ -895,6 +895,70 @@ def _ensure_fstab_entry(ctx: CephadmContext, device: str, mountpoint: str, fs_ty
         f.write(entry)
 
 
+def d3n_state(
+        ctx: CephadmContext,
+        data_dir: str,
+        action: str,
+        d3n_cache: Optional[Dict[str, Any]] = None,
+        uid: int = 0,
+        gid: int = 0,
+) -> None:
+    """
+    Persist/read minimal D3N info in the daemon's data directory
+    so that rm-daemon can cleanup properly.
+    """
+    path = os.path.join(data_dir, 'd3n_state.json')
+
+    if action == 'write':
+        if d3n_cache is None:
+            return
+        cache_path = d3n_cache.get('cache_path')
+        mount_path = d3n_cache.get('mountpoint')
+
+        if not isinstance(cache_path, str) or not cache_path:
+            raise Error('d3n_cache.cache_path must be a string')
+
+        state = {
+            'cache_path': cache_path,
+            'mount_path': mount_path if isinstance(mount_path, str) else None,
+        }
+
+        tmp = f'{path}.tmp'
+        with open(tmp, 'w') as f:
+            f.write(json.dumps(state, sort_keys=True) + '\n')
+        os.chown(tmp, uid, gid)
+        os.replace(tmp, path)
+        return
+
+    if action == 'cleanup':
+        if not os.path.exists(path):
+            return
+
+        try:
+            with open(path, 'r') as f:
+                state = json.load(f)
+        except Exception:
+            state = {}
+
+        cache_path = state.get('cache_path') if isinstance(state, dict) else None
+        if isinstance(cache_path, str) and cache_path:
+            try:
+                shutil.rmtree(cache_path, ignore_errors=True)
+                logger.info(f'D3N] removed cache directory: {cache_path}')
+            except Exception as e:
+                logger.warning(f'[D3N] failed to remove cache directory {cache_path}: {e}')
+
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logger.warning(f'[D3N] failed to remove {path}: {e}')
+        return
+
+    raise Error(f'[D3N] invalid d3n_state action: {action}')
+
+
 def prepare_d3n_cache(
     ctx: CephadmContext,
     d3n_cache: Dict[str, Any],
@@ -1059,6 +1123,10 @@ def deploy_daemon(
 
             if d3n_cache:
                 prepare_d3n_cache(ctx, d3n_cache, uid, gid)
+                try:
+                    d3n_state(ctx, data_dir, 'write', d3n_cache, uid, gid)
+                except Exception as e:
+                    logger.warning(f'[D3N] failed to persist D3N state in {data_dir}: {e}')
 
     # only write out unit files and start daemon
     # with systemd if this is not a reconfig
@@ -4038,6 +4106,10 @@ def command_rm_daemon(ctx):
              verbosity=CallVerbosity.DEBUG)
 
     data_dir = ident.data_dir(ctx.data_dir)
+
+    if ident.daemon_type == 'rgw':
+        d3n_state(ctx, data_dir, action='cleanup')
+
     if ident.daemon_type in ['mon', 'osd', 'prometheus'] and \
        not ctx.force_delete_data:
         # rename it out of the way -- do not delete
