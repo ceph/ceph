@@ -1852,7 +1852,7 @@ SeaStore::Shard::_do_transaction_step(
 	  return omaptree_initialize(
 	    *ctx.transaction, mgr, omap_type_t::LOG, *onode, *device
 	  ).si_then([&onode, &ctx](auto new_root) {
-	    onode->update_log_root(*ctx.transaction, new_root);
+	    onode->update_omap_root(*ctx.transaction, new_root);
 	  });
 	}
         return tm_iertr::now();
@@ -1917,7 +1917,6 @@ SeaStore::Shard::_rename(
   uint32_t size = olayout.size;
   auto omap_root = rename_omap_root(omap_type_t::OMAP, *onode, *d_onode);
   auto xattr_root = rename_omap_root(omap_type_t::XATTR, *onode, *d_onode);
-  auto log_root = rename_omap_root(omap_type_t::LOG, *onode, *d_onode);
   auto object_data = olayout.object_data.get();
   auto oi_bl = ceph::bufferlist::static_from_mem(
     &olayout.oi[0],
@@ -1929,7 +1928,6 @@ SeaStore::Shard::_rename(
   d_onode->update_onode_size(*ctx.transaction, size);
   d_onode->update_omap_root(*ctx.transaction, omap_root);
   d_onode->update_xattr_root(*ctx.transaction, xattr_root);
-  d_onode->update_log_root(*ctx.transaction, log_root);
   d_onode->update_object_data(*ctx.transaction, object_data);
   d_onode->update_object_info(*ctx.transaction, oi_bl);
   d_onode->update_snapset(*ctx.transaction, ss_bl);
@@ -2733,7 +2731,7 @@ void omaptree_update_root(
     onode.update_xattr_root(t, root);
   } else {
     assert(root.get_type() == omap_type_t::LOG);
-    onode.update_log_root(t, root);
+    onode.update_omap_root(t, root);
   }
 }
 

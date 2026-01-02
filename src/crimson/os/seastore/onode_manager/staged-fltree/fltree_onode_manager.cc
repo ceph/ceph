@@ -28,10 +28,6 @@ void FLTreeOnode::Recorder::apply_value_delta(
       DEBUG("update omap root");
       bliter.copy(sizeof(mlayout.omap_root), (char *)&mlayout.omap_root);
       break;
-    case delta_op_t::UPDATE_LOG_ROOT:
-      DEBUG("update log root");
-      bliter.copy(sizeof(mlayout.log_root), (char *)&mlayout.log_root);
-      break;
     case delta_op_t::UPDATE_XATTR_ROOT:
       DEBUG("update xattr root");
       bliter.copy(sizeof(mlayout.xattr_root), (char *)&mlayout.xattr_root);
@@ -92,12 +88,6 @@ void FLTreeOnode::Recorder::encode_update(
       (const char *)&layout.omap_root,
       sizeof(layout.omap_root));
     break;
-  case delta_op_t::UPDATE_LOG_ROOT:
-    DEBUG("update log root");
-    encoded.append(
-      (const char *)&layout.log_root,
-      sizeof(layout.log_root));
-   break;
   case delta_op_t::UPDATE_XATTR_ROOT:
     DEBUG("update xattr root");
     encoded.append(
