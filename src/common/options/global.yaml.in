@@ -522,6 +522,9 @@ options:
   type: bool
   level: basic
   desc: send log lines to stderr
+  long_desc: When Ceph runs as a library (e.g., librados), the default value set to false because
+    stderr may not be writable by the application. For daemons, the daemon_default of false is used
+    instead.
   fmt_desc: Determines if logging messages should appear in ``stderr``.
   default: true
   daemon_default: false
