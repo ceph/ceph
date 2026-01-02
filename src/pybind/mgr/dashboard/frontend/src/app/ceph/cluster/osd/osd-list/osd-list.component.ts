@@ -502,7 +502,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     const initialState = {
       selected: this.getSelectedOsds()
     };
-    this.bsModalRef = this.modalService.show(OsdFlagsIndivModalComponent, initialState);
+    this.bsModalRef = this.cdsModalService.show(OsdFlagsIndivModalComponent, initialState);
   }
 
   showConfirmationModal(markAction: string, onSubmit: (id: number) => Observable<any>) {
