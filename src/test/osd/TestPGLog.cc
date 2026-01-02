@@ -3255,6 +3255,166 @@ TEST_F(PGLogTrimTest, TestCopyAfter2) {
   EXPECT_EQ(7u, copy.dups.size()) << copy;
 }
 
-// Local Variables:
-// compile-command: "cd ../.. ; make unittest_pglog ; ./unittest_pglog --log-to-stderr=true  --debug-osd=20 # --gtest_filter=*.* "
-// End:
+// Test for merge_log with existing missing list and divergent log
+// This reproduces the issue where missing and rmissing lists become inconsistent
+// Test that merge_log correctly handles epoch changes with out-of-order recovery.
+// When objects are recovered out of order after an epoch change, the missing and
+// rmissing maps must remain consistent.
+TEST_F(PGLogTest, merge_log_epoch_change_out_of_order_recovery) {
+  clear();
+
+  // Create objects matching the log scenario
+  hobject_t obj_3, obj_4, obj_0, obj_5, obj_1, obj_2;
+
+  obj_0.set_hash(0);
+  obj_1.set_hash(1);
+  obj_2.set_hash(2);
+  obj_3.set_hash(3);
+  obj_4.set_hash(4);
+  obj_5.set_hash(5);
+
+  // Set up the initial missing list with ALL 14 objects at epoch 1 versions
+  missing.add(obj_3, eversion_t(1, 1), eversion_t(), false);
+  missing.add(obj_1, eversion_t(1, 2), eversion_t(), false);
+  missing.add(obj_4, eversion_t(1, 3), eversion_t(), false);
+  missing.add(obj_0, eversion_t(1, 4), eversion_t(), false);
+  missing.add(obj_5, eversion_t(1, 5), eversion_t(), false);
+  missing.add(obj_2, eversion_t(1, 6), eversion_t(), false);
+
+  missing.flush();
+
+  // Build the divergent log (what we have locally) - epoch 1
+  // This represents one branch of history
+  log.tail = eversion_t(1, 0);
+  // Divergent entries matching the actual log scenario
+  log.log.push_back(mk_ple_mod(obj_3, eversion_t(1, 1), eversion_t()));
+  log.log.push_back(mk_ple_mod(obj_1, eversion_t(1, 2), eversion_t()));
+  log.log.push_back(mk_ple_mod(obj_4, eversion_t(1, 3), eversion_t()));
+  log.log.push_back(mk_ple_mod(obj_0, eversion_t(1, 4), eversion_t()));
+  log.log.push_back(mk_ple_mod(obj_5, eversion_t(1, 5), eversion_t()));
+  log.log.push_back(mk_ple_mod(obj_2, eversion_t(1, 6), eversion_t()));
+
+  log.head = eversion_t(1, 14);
+  log.index();
+
+  pg_info_t info;
+  info.last_update = eversion_t(1, 6);
+  info.last_complete = eversion_t();
+  info.log_tail = eversion_t(1, 0);
+  info.last_backfill = hobject_t::get_max();
+
+  // Build the authoritative log (olog) - epoch 2 (NEWER epoch!)
+  // This represents the authoritative branch that extends the head
+  IndexedLog olog;
+  olog.tail = eversion_t(1, 0);
+  // Authoritative entries with NEWER epoch - this is the key difference!
+  olog.log.push_back(mk_ple_mod(obj_3, eversion_t(2, 1), eversion_t()));
+  olog.log.push_back(mk_ple_mod(obj_4, eversion_t(2, 2), eversion_t()));
+  olog.log.push_back(mk_ple_mod(obj_0, eversion_t(2, 3), eversion_t()));
+  olog.log.push_back(mk_ple_mod(obj_5, eversion_t(2, 4), eversion_t()));
+  olog.log.push_back(mk_ple_mod(obj_1, eversion_t(2, 5), eversion_t()));
+  olog.log.push_back(mk_ple_mod(obj_2, eversion_t(2, 6), eversion_t()));
+
+  olog.head = eversion_t(2, 6);
+  olog.index();
+
+  pg_info_t oinfo;
+  oinfo.last_update = eversion_t(2, 6);
+  oinfo.last_complete = eversion_t();
+  oinfo.log_tail = eversion_t(2, 0);
+  oinfo.last_backfill = hobject_t::get_max();
+
+  // Perform merge_log - this should handle the existing missing list correctly
+  LogHandler h;
+  bool dirty_info = false;
+  bool dirty_big_info = false;
+
+  merge_log(
+    oinfo, std::move(olog), pg_shard_t(1, shard_id_t(0)), info,
+    pg_pool_t(), pg_shard_t(), &h, dirty_info, dirty_big_info, false);
+
+  // Recover objects in the order shown in the logs
+  pg_info_t recovery_info;
+  recovery_info.last_update = eversion_t(2, 2);
+  recovery_info.last_complete = eversion_t();
+
+  // Recover out of order.
+  recover_got(obj_3, eversion_t(2, 1), recovery_info);
+  // Skip v2
+  recover_got(obj_0, eversion_t(2, 3), recovery_info);
+  recover_got(obj_5, eversion_t(2, 4), recovery_info);
+  recover_got(obj_1, eversion_t(2, 5), recovery_info);
+  recover_got(obj_2, eversion_t(2, 6), recovery_info);
+  // Now to v2.
+
+  recover_got(obj_4, eversion_t(2, 2), recovery_info);
+
+  ASSERT_FALSE(missing.have_missing());
+  ASSERT_EQ(0, missing.get_rmissing().size());
+}
+
+// Test basic invariant: after merge_log with epoch change, missing and rmissing
+// sizes must match. This is the fundamental consistency check.
+TEST_F(PGLogTest, merge_log_epoch_change_basic) {
+  clear();
+
+  // Create objects matching the log scenario
+  hobject_t obj_0, obj_1;
+
+  obj_0.set_hash(0);
+  obj_1.set_hash(1);
+
+  // Set up the initial missing list with ALL 14 objects at epoch 1 versions
+  missing.add(obj_0, eversion_t(1, 1), eversion_t(), false);
+  missing.add(obj_1, eversion_t(1, 2), eversion_t(), false);
+
+  missing.flush();
+
+  // Build the divergent log (what we have locally) - epoch 1
+  // This represents one branch of history
+  log.tail = eversion_t(1, 0);
+  // Divergent entries matching the actual log scenario
+  log.log.push_back(mk_ple_mod(obj_0, eversion_t(1, 1), eversion_t()));
+  log.log.push_back(mk_ple_mod(obj_1, eversion_t(1, 2), eversion_t()));
+
+  log.head = eversion_t(1, 2);
+  log.index();
+
+  pg_info_t info;
+  info.last_update = eversion_t(1, 2);
+  info.last_complete = eversion_t();
+  info.log_tail = eversion_t(1, 0);
+  info.last_backfill = hobject_t::get_max();
+
+  // Build the authoritative log (olog) - epoch 2 (NEWER epoch!)
+  // This represents the authoritative branch that extends the head
+  IndexedLog olog;
+  olog.tail = eversion_t(1, 0);
+  // Authoritative entries with NEWER epoch - this is the key difference!
+  olog.log.push_back(mk_ple_mod(obj_1, eversion_t(2, 1), eversion_t()));
+  olog.log.push_back(mk_ple_mod(obj_0, eversion_t(2, 2), eversion_t()));
+
+  olog.head = eversion_t(2, 2);
+  olog.index();
+
+  pg_info_t oinfo;
+  oinfo.last_update = eversion_t(2, 2);
+  oinfo.last_complete = eversion_t(2, 2);
+  oinfo.log_tail = eversion_t(1, 0);
+  oinfo.last_backfill = hobject_t::get_max();
+
+  // Perform merge_log - this should handle the existing missing list correctly
+  LogHandler h;
+  bool dirty_info = false;
+  bool dirty_big_info = false;
+
+  merge_log(
+    oinfo, std::move(olog), pg_shard_t(1, shard_id_t(0)), info,
+    pg_pool_t(), pg_shard_t(), &h, dirty_info, dirty_big_info, false);
+
+  // Revers missing should be same length as missing!
+  ASSERT_EQ(2, missing.num_missing());
+  ASSERT_EQ(2, missing.get_rmissing().size());
+}
+
+
