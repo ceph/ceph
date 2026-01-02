@@ -49,7 +49,6 @@ struct FLTreeOnode final : Onode, Value {
     enum class delta_op_t : uint8_t {
       UPDATE_ONODE_SIZE,
       UPDATE_OMAP_ROOT,
-      UPDATE_LOG_ROOT,
       UPDATE_XATTR_ROOT,
       UPDATE_OBJECT_DATA,
       UPDATE_OBJECT_INFO,
@@ -110,15 +109,12 @@ struct FLTreeOnode final : Onode, Value {
       o_payload_mut.get_write());
     std::swap(mlayout.object_data, o_mlayout.object_data);
     std::swap(mlayout.omap_root, o_mlayout.omap_root);
-    std::swap(mlayout.log_root, o_mlayout.log_root);
     std::swap(mlayout.xattr_root, o_mlayout.xattr_root);
     if (recorder) {
       recorder->encode_update(
 	payload_mut, Recorder::delta_op_t::UPDATE_OBJECT_DATA);
       recorder->encode_update(
 	payload_mut, Recorder::delta_op_t::UPDATE_OMAP_ROOT);
-      recorder->encode_update(
-	payload_mut, Recorder::delta_op_t::UPDATE_LOG_ROOT);
       recorder->encode_update(
 	payload_mut, Recorder::delta_op_t::UPDATE_XATTR_ROOT);
     }
@@ -127,8 +123,6 @@ struct FLTreeOnode final : Onode, Value {
 	o_payload_mut, Recorder::delta_op_t::UPDATE_OBJECT_DATA);
       o_recorder->encode_update(
 	o_payload_mut, Recorder::delta_op_t::UPDATE_OMAP_ROOT);
-      o_recorder->encode_update(
-	o_payload_mut, Recorder::delta_op_t::UPDATE_LOG_ROOT);
       o_recorder->encode_update(
 	o_payload_mut, Recorder::delta_op_t::UPDATE_XATTR_ROOT);
     }
@@ -191,7 +185,8 @@ struct FLTreeOnode final : Onode, Value {
   }
 
   void update_omap_root(Transaction &t, omap_root_t &oroot) final {
-    assert(oroot.get_type() == omap_type_t::OMAP);
+    assert(oroot.get_type() == omap_type_t::OMAP ||
+	  oroot.get_type() == omap_type_t::LOG);
     with_mutable_layout(
       t,
       [&oroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -201,21 +196,6 @@ struct FLTreeOnode final : Onode, Value {
 	if (recorder) {
 	  recorder->encode_update(
 	    payload_mut, Recorder::delta_op_t::UPDATE_OMAP_ROOT);
-	}
-    });
-  }
-
-  void update_log_root(Transaction &t, omap_root_t &lroot) final {
-    assert(lroot.get_type() == omap_type_t::LOG);
-    with_mutable_layout(
-      t,
-      [&lroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
-	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
-          payload_mut.get_write());
-	mlayout.log_root.update(lroot);
-	if (recorder) {
-	  recorder->encode_update(
-	    payload_mut, Recorder::delta_op_t::UPDATE_LOG_ROOT);
 	}
     });
   }
