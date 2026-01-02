@@ -2504,6 +2504,11 @@ void RGWGetObj::execute(optional_yield y)
   if (op_ret < 0)
     goto done_err;
 
+  if (multipart_part_num) {
+    multipart_part_ofs = read_op->params.part_ofs;
+    full_obj_size = read_op->params.full_obj_size;
+  }
+
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {
     return;

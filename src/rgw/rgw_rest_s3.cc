@@ -533,6 +533,10 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     dump_header(s, "x-amz-mp-parts-count", *multipart_parts_count);
   }
 
+  if (multipart_part_num && multipart_part_ofs && full_obj_size) {
+    dump_range(s, *multipart_part_ofs, *multipart_part_ofs + total_len - 1, *full_obj_size);
+  }
+
   if (! op_ret) {
     if (! lo_etag.empty()) {
       /* Handle etag of Swift API's large objects (DLO/SLO). It's entirely
