@@ -226,6 +226,16 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   @Input()
   scrollable: boolean = true;
 
+  @Input()
+  emptyStateTemplate: TemplateRef<any>;
+
+  @Input()
+  emptyStateTitle: string;
+  @Input()
+  emptyStateMessage: string;
+  @Input()
+  emptyStateIcon: string = Icons.deploy;
+
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
    *

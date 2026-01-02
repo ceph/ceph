@@ -223,8 +223,29 @@
           class="no-data"
           cdstabledata
           [attr.colspan]="visibleColumns.length + 2">
-        <span class="d-flex justify-content-center align-items-center"
-              i18n>No data to display</span>
+        <div *ngIf="emptyStateTemplate; else defaultNoData">
+          <ng-container *ngTemplateOutlet="emptyStateTemplate"></ng-container>
+        </div>
+        <ng-template #defaultNoData>
+          <div
+               *ngIf="emptyStateTitle"
+               class="empty-state">
+            <div>
+              <svg
+                   [cdsIcon]="emptyStateIcon"
+                   size="32"></svg>
+            </div>
+            <legend>
+              {{ emptyStateTitle }}
+              <cd-help-text>
+                {{ emptyStateMessage }}
+              </cd-help-text>
+            </legend>
+          </div>
+          <span *ngIf="!emptyStateTitle"
+                class="d-flex justify-content-center align-items-center"
+                i18n>No data to display</span>
+        </ng-template>
       </td>
     </tr>
   </tbody>

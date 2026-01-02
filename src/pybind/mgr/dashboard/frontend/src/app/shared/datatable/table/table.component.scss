@@ -111,3 +111,14 @@ tr:hover .edit-btn {
 .table-tag {
   white-space: nowrap;
 }
+
+.empty-state {
+  height: 100%;
+  padding-top: layout.$spacing-11; // 5rem (approx 80px), layout.$spacing-11 is 5rem
+  padding-bottom: layout.$spacing-09; // 3rem
+  padding-left: layout.$spacing-05; // 1rem
+  display: flex;
+  flex-direction: column;
+
+
+}
