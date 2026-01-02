@@ -35,6 +35,9 @@ ifneq ($(filter pkg.ceph.fdb,$(DEB_BUILD_PROFILES)),)
 else
   extraopts += -DWITH_RADOSGW_FDB=OFF
 endif
+ifneq ($(filter pkg.ceph.uca,$(DEB_BUILD_PROFILES)),)
+  extraopts += -DWITH_UCA=ON
+endif
 
 extraopts += -DWITH_JAEGER=ON
 extraopts += -DWITH_SYSTEM_JERASURE=ON
