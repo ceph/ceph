@@ -1378,13 +1378,8 @@ SeaStore::Shard::omap_get_header(
 
 omap_root_t SeaStore::Shard::select_log_omap_root(Onode& onode) const
 {
-  auto log_root = get_omap_root(omap_type_t::LOG, onode);
-  if (log_root.is_null()) {
-    return get_omap_root(omap_type_t::OMAP, onode);
-  } else {
-    ceph_assert(get_omap_root(omap_type_t::OMAP, onode).is_null());
-    return log_root;
-  }
+  // OMAP and LOG exclusively share the same omap_root
+  return get_omap_root(omap_type_t::OMAP, onode);
 }
 
 SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_t>
