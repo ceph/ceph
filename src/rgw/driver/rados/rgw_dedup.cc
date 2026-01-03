@@ -967,6 +967,7 @@ namespace rgw::dedup {
 
     const string &ref_tag = p_tgt_rec->ref_tag;
     ldpp_dout(dpp, 20) << __func__ << "::ref_tag=" << ref_tag << dendl;
+    // src_manifest was updated in split-head case to include the new_tail
     ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
     if (unlikely(ret != 0)) {
       if (p_src_rec->s.flags.is_split_head()) {
@@ -1392,7 +1393,8 @@ namespace rgw::dedup {
                                                               ondisk_byte_size);
       p_stats->shared_manifest_dedup_bytes += dedupable_objects_bytes;
       ldpp_dout(dpp, 20) << __func__ << "::(1)skipped shared_manifest, SRC::block_id="
-                         << src_val.block_idx << "::rec_id=" << (int)src_val.rec_id << dendl;
+                         << src_val.get_src_block_id()
+                         << "::rec_id=" << (int)src_val.get_src_rec_id() << dendl;
       return 0;
     }
 
@@ -1546,12 +1548,12 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   static int read_hash_and_manifest(const DoutPrefixProvider *const dpp,
                                     rgw::sal::Driver *driver,
-                                    RGWRados *rados,
+                                    rgw::sal::RadosStore *store,
                                     disk_record_t *p_rec)
   {
     librados::IoCtx ioctx;
     std::string oid;
-    int ret = get_ioctx(dpp, driver, rados, p_rec, &ioctx, &oid);
+    int ret = get_ioctx(dpp, driver, store, p_rec, &ioctx, &oid);
     if (unlikely(ret != 0)) {
       ldpp_dout(dpp, 5) << __func__ << "::ERR: failed get_ioctx()" << dendl;
       return ret;
@@ -1645,7 +1647,7 @@ namespace rgw::dedup {
     bufferlist bl;
     std::string head_oid;
     librados::IoCtx ioctx;
-    int ret = get_ioctx(dpp, driver, rados, p_src_rec, &ioctx, &head_oid);
+    int ret = get_ioctx(dpp, driver, store, p_src_rec, &ioctx, &head_oid);
     if (unlikely(ret != 0)) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: failed get_ioctx()" << dendl;
       return ret;
@@ -1682,7 +1684,6 @@ namespace rgw::dedup {
       }
     }
 
-    bool exclusive = true; // block overwrite
     std::string tail_name = generate_split_head_tail_name(src_manifest);
     const rgw_bucket_placement &tail_placement = src_manifest.get_tail_placement();
     // Tail placement_rule was fixed before committed to SLAB, if looks bad -> abort
@@ -1702,6 +1703,7 @@ namespace rgw::dedup {
       return ret;
     }
 
+    bool exclusive = true; // block overwrite
     ret = tail_ioctx.create(tail_oid, exclusive);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << __func__ << "::successfully created: " << tail_oid << dendl;
@@ -1724,7 +1726,11 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1) << __func__ << "::ERROR: failed to write " << tail_oid
                         << " with: " << cpp_strerror(-ret) << dendl;
       // don't leave orphan object behind
-      tail_ioctx.remove(tail_oid);
+      int ret_rmv = tail_ioctx.remove(tail_oid);
+      if (ret_rmv != 0) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERROR: failed to remove " << tail_oid
+                          << " with: " << cpp_strerror(-ret_rmv) << dendl;
+      }
       return ret;
     }
     else {
@@ -1769,7 +1775,7 @@ namespace rgw::dedup {
       // read the manifest and strong hash from the head-object attributes
       ldpp_dout(dpp, 20) << __func__ << "::Fetch SRC strong hash from head-object::"
                          << p_src_rec->obj_name << dendl;
-      if (unlikely(read_hash_and_manifest(dpp, driver, rados, p_src_rec) != 0)) {
+      if (unlikely(read_hash_and_manifest(dpp, driver, store, p_src_rec) != 0)) {
         return false;
       }
       try {
@@ -1809,11 +1815,11 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static bool parse_manifests(const DoutPrefixProvider *dpp,
-                              const disk_record_t *p_src_rec,
-                              const disk_record_t *p_tgt_rec,
-                              RGWObjManifest      *p_src_manifest,
-                              RGWObjManifest      *p_tgt_manifest)
+  static int parse_manifests(const DoutPrefixProvider *dpp,
+                             const disk_record_t *p_src_rec,
+                             const disk_record_t *p_tgt_rec,
+                             RGWObjManifest      *p_src_manifest,
+                             RGWObjManifest      *p_tgt_manifest)
   {
     bool valid_src_manifest = false;
     try {
@@ -1993,6 +1999,7 @@ namespace rgw::dedup {
       return 0;
     }
 
+    RGWObjManifest src_manifest, tgt_manifest;
     ret = parse_manifests(dpp, p_src_rec, p_tgt_rec, &src_manifest, &tgt_manifest);
     if (unlikely(ret != 0)) {
       return 0;

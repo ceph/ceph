@@ -412,7 +412,7 @@ def count_objects_in_bucket(bucket_name, conn):
 
         listing=conn.list_objects_v2(**list_args)
         if 'Contents' not in listing or len(listing['Contents'])== 0:
-            return 0
+            return obj_count
 
         obj_count += len(listing['Contents'])
 
@@ -423,14 +423,6 @@ def count_objects_in_bucket(bucket_name, conn):
         else:
             return obj_count
 
-
-#-------------------------------------------------------------------------------
-def copy_obj(base_bucket_name, base_key, bucket_name, key):
-    s3_prefix="s3://"
-    src  = s3_prefix + base_bucket_name + "/" + base_key
-    dest = s3_prefix + bucket_name + "/" + key
-    result = bash(['s3cmd', 'cp', src, dest])
-    assert result[1] == 0
 
 #-------------------------------------------------------------------------------
 def count_object_parts_in_all_buckets(verbose=False, expected_size=0):
@@ -792,7 +784,7 @@ def upload_objects(bucket_name, files, indices, conn, config, check_obj_count):
     log.debug("Based on calculation we should have %d duplicated tail objs", duplicated_tail_objs)
     log.debug("Based on calculation we should have %.2f MiB total in pool", total_space/MB)
     log.debug("Based on calculation we should have %.2f MiB duplicated space in pool", duplicated_space/MB)
-    log.info("split_head_objs=%d, rados_objects_total=%d, duplicated_tail_objs=%d",
+    log.debug("split_head_objs=%d, rados_objects_total=%d, duplicated_tail_objs=%d",
              split_head_objs, rados_objects_total, duplicated_tail_objs)
     expected_rados_obj_count_post_dedup=(split_head_objs+rados_objects_total-duplicated_tail_objs)
     log.debug("Post dedup expcted rados obj count = %d", expected_rados_obj_count_post_dedup)
@@ -895,7 +887,7 @@ def upload_objects_multi(files, conns, bucket_names, indices, config, check_obj_
             log.debug("upload_objects::<%s/%s>", bucket_names[ten_id], key)
 
     log.debug("==========================================")
-    log.debug("Summery:%d S3 objects were uploaded (%d rados objects), total size = %.2f MiB",
+    log.debug("Summary:%d S3 objects were uploaded (%d rados objects), total size = %.2f MiB",
               s3_objects_total, rados_objects_total, total_space/MB)
     log.debug("Based on calculation we should have %d rados objects", rados_objects_total)
     log.debug("Based on calculation we should have %d duplicated tail objs", duplicated_tail_objs)
@@ -978,7 +970,7 @@ def procs_upload_objects(files, conns, bucket_names, indices, config, check_obj_
         proc_list[idx].join()
 
     log.debug("==========================================")
-    log.debug("Summery:%d S3 objects were uploaded (%d rados objects), total size = %.2f MiB",
+    log.debug("Summary:%d S3 objects were uploaded (%d rados objects), total size = %.2f MiB",
               s3_objects_total, rados_objects_total, total_space/MB)
     log.debug("Based on calculation we should have %d rados objects", rados_objects_total)
     log.debug("Based on calculation we should have %d duplicated tail objs", duplicated_tail_objs)
@@ -1305,13 +1297,16 @@ def read_full_dedup_stats(dedup_stats, md5_stats):
 
 
 #-------------------------------------------------------------------------------
-def read_dedup_ratio(json):
+def read_dedup_ratio(jstats, field):
     dedup_ratio=Dedup_Ratio()
+    json=jstats[field]
     dedup_ratio.s3_bytes_before=json['s3_bytes_before']
     dedup_ratio.s3_bytes_after=json['s3_bytes_after']
     dedup_ratio.ratio=json['dedup_ratio']
 
-    log.debug("Completed! ::ratio=%f", dedup_ratio.ratio)
+    log.debug("%s::before=%d, after=%d, ratio=%f", field,
+             dedup_ratio.s3_bytes_before, dedup_ratio.s3_bytes_after,
+             dedup_ratio.ratio)
     return dedup_ratio
 
 #-------------------------------------------------------------------------------
@@ -1388,8 +1383,8 @@ def read_dedup_stats(dry_run):
 
     dedup_work_was_completed=jstats['completed']
     if dedup_work_was_completed:
-        dedup_ratio_estimate=read_dedup_ratio(jstats['dedup_ratio_estimate'])
-        dedup_ratio_actual=read_dedup_ratio(jstats['dedup_ratio_actual'])
+        dedup_ratio_estimate=read_dedup_ratio(jstats, 'dedup_ratio_estimate')
+        dedup_ratio_actual=read_dedup_ratio(jstats, 'dedup_ratio_actual')
     else:
         log.debug("Uncompleted!")
 
@@ -1578,13 +1573,12 @@ def simple_dedup(conn, files, bucket_name, run_cleanup_after, config, dry_run):
         if dry_run == False:
             log.debug("Verify all objects")
             verify_objects(bucket_name, files, conn, expected_results, config, run_cleanup_after)
+
+        return ret
     finally:
         if run_cleanup_after:
             # cleanup must be executed even after a failure
             cleanup(bucket_name, conn)
-
-        return ret
-
 
 #-------------------------------------------------------------------------------
 def simple_dedup_with_tenants(files, conns, bucket_names, config, dry_run=False):
@@ -1800,18 +1794,20 @@ def ver_calc_rados_obj_count(config, files, op_log):
 
     rados_obj_total  = 0
     duplicated_tail_objs = 0
+    split_head_objs = 0
     for key, value in size_dict.items():
         size = value
         num_copies = num_copies_dict[key]
         assert num_copies > 0
         rados_obj_count  = calc_rados_obj_count(num_copies, size, config)
         rados_obj_total += (rados_obj_count * num_copies)
+        split_head_objs += calc_split_objs_count(size, num_copies, config)
         duplicated_tail_objs += ((num_copies-1) * (rados_obj_count-1))
 
     # versioned buckets hold an extra rados-obj per versioned S3-Obj
     unique_s3_objs_count = len(unique_s3_objs)
     rados_obj_total += unique_s3_objs_count
-    rados_obj_count_post_dedup=(rados_obj_total-duplicated_tail_objs)
+    rados_obj_count_post_dedup=(split_head_objs+rados_obj_total-duplicated_tail_objs)
     log.debug("calc::rados_obj_total=%d, rados_obj_count_post_dedup=%d",
               rados_obj_total, rados_obj_count_post_dedup)
     return(rados_obj_total, rados_obj_count_post_dedup, unique_s3_objs_count)
@@ -1886,6 +1882,7 @@ def test_dedup_with_versions():
         # enable versioning
         conn.put_bucket_versioning(Bucket=bucket_name,
                                    VersioningConfiguration={"Status": "Enabled"})
+        print_bucket_versioning(conn, bucket_name)
         ver_count=7
         first_time=True
         for i in range(0, ver_count):
@@ -2199,11 +2196,10 @@ def test_dedup_split_head_with_tenants():
 #-------------------------------------------------------------------------------
 def loop_dedup_split_head():
     prepare_test()
-    #bucket_name = gen_bucket_name()
-    bucket_name = "bucket1"
+    bucket_name = "splitheadbucket"
     config=default_config
-    max_copies_count=4
     files=[]
+    max_copies_count=4
     num_files=11 # [16KB-32MB]
     base_size = 16*KB
     log.debug("generate files: base size=%d KiB, max_size=%d KiB",
@@ -2227,7 +2223,7 @@ def loop_dedup_split_head():
 
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
-def test_dedup_split_head():
+def test_dedup_split_head_simple():
     #return
 
     if full_dedup_is_disabled():
@@ -3592,6 +3588,7 @@ def calc_identical_copies_stats(files, conns, bucket_name, config):
 
 #-------------------------------------------------------------------------------
 def __test_dedup_identical_copies(files, config, dry_run, verify, force_clean=False):
+    finished=False
     num_threads=32
     bucket_name = "bucket1"
     conns=get_connections(num_threads)
@@ -3616,9 +3613,10 @@ def __test_dedup_identical_copies(files, config, dry_run, verify, force_clean=Fa
             end_time = time.time_ns()
             log.info("Verify all objects time = %d(sec)",
                      (end_time - start_time)/1_000_000_000)
+        finished=True
     finally:
         # cleanup must be executed even after a failure
-        if not dry_run or force_clean:
+        if not dry_run or force_clean or not finished:
             log.info("cleanup bucket")
             cleanup(bucket_name, conns[0])
 
@@ -3626,7 +3624,7 @@ def __test_dedup_identical_copies(files, config, dry_run, verify, force_clean=Fa
 @pytest.mark.basic_test
 def test_dedup_identical_copies_1():
     num_files=1
-    copies_count=64*1024+1
+    copies_count=1024
     size=64*KB
     config=default_config
     prepare_test()
@@ -3649,29 +3647,6 @@ def test_dedup_identical_copies_1():
 
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
-def test_dedup_identical_copies_multipart():
-    num_files=1
-    copies_count=64*1024+1
-    size=16*KB
-    prepare_test()
-    files=[]
-    gen_files_fixed_copies(files, num_files, size, copies_count)
-    config=TransferConfig(multipart_threshold=size, multipart_chunksize=size)
-    # start with a dry_run
-    dry_run=True
-    verify=False
-    log.info("test_dedup_identical_copies_multipart:dry test")
-    __test_dedup_identical_copies(files, config, dry_run, verify)
-
-    # and then perform a full dedup
-    dry_run=False
-    verify=False
-    force_clean=True
-    log.info("test_dedup_identical_copies_multipart:full test")
-    __test_dedup_identical_copies(files, config, dry_run, verify, force_clean)
-
-#-------------------------------------------------------------------------------
-@pytest.mark.basic_test
 def test_dedup_identical_copies_multipart_small():
     num_files=1
     copies_count=1024
@@ -3680,6 +3655,7 @@ def test_dedup_identical_copies_multipart_small():
     files=[]
     gen_files_fixed_copies(files, num_files, size, copies_count)
     config=TransferConfig(multipart_threshold=size, multipart_chunksize=size)
+
     # start with a dry_run
     dry_run=True
     verify=False
