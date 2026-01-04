@@ -281,7 +281,7 @@ class NvmeofCLICommand(CLICommand):
             if out_format == 'plain' or not out_format:
                 out = self._output_formatter.format_output(ret, self._model)
             elif out_format == 'json':
-                out = json.dumps(ret)
+                out = json.dumps(ret, indent=4)
             elif out_format == 'yaml':
                 out = yaml.dump(ret)
             else:
