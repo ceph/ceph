@@ -4,7 +4,7 @@
            (overlaySelected)="closeModal()">
   <cds-modal-header (closeSelect)="closeModal()">
     <h3 cdsModalHeaderHeading
-        i18n>Create Realm/Zone Group/Zone</h3>
+        i18n>Create Realm/Zonegroup/Zone</h3>
     <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
   </cds-modal-header>
   <form
@@ -16,7 +16,7 @@
     <div cdsModalContent>
       <cd-alert-panel type="info"
                       spacingClass="mt-3"
-                      i18n>The realm/zone group/zone created will be set as default and master.
+                      i18n>The realm/zonegroup/zone created will be set as default and master.
       </cd-alert-panel>
       <div class="form-item">
         <cds-text-label
@@ -55,11 +55,11 @@
                      createMultisiteEntitiesForm.controls.zonegroupName.dirty"
           [invalidText]="zoneGroupNameError"
           i18n
-          >Zone Group Name
+          >Zonegroup Name
           <input
             cdsText
             type="text"
-            placeholder="Zone group name..."
+            placeholder="Zonegroup name..."
             id="zonegroupName"
             name="zonegroupName"
             formControlName="zonegroupName"

@@ -278,7 +278,7 @@ export const READTHROUGH_RESTORE_DAYS_TEXT = $localize`The days for which object
 
 export const RESTORE_STORAGE_CLASS_TEXT = $localize`The storage class to which object data is to be restored.`;
 
-export const ZONEGROUP_TEXT = $localize`A Zone Group is a logical grouping of one or more zones that share the same data
+export const ZONEGROUP_TEXT = $localize`A Zonegroup is a logical grouping of one or more zones that share the same data
                   and metadata, allowing for multi-site replication and geographic distribution of
                   data.`;
 
