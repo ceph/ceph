@@ -389,4 +389,5 @@ Code Walkthroughs
    The ClientRequest Pipeline <pipeline>
    Error Handling <error-handling>
    BackfillMachine <backfillmachine>
+   SeaStore <seastore>
    PoseidonStore <poseidonstore>
