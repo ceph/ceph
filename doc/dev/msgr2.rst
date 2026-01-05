@@ -595,7 +595,7 @@ Post-compression frame format
 Depending on the negotiated connection mode from TAG_COMPRESSION_DONE, the connection is able to accept/send compressed frames or process all frames as decompressed.
 
 msgr2.x-force mode
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 All subsequent frames that will be sent via the connection will be compressed if compression requirements are met (e.g, the frames size).
 
@@ -883,7 +883,7 @@ Once a session is established, we can exchange messages.
 
 
 Example of protocol interaction (WIP)
-_____________________________________
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 .. ditaa::
