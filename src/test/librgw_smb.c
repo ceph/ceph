@@ -836,9 +836,9 @@ int main(int argc, char *argv[])
 	const char *user_secret_access_key = argv[3];
 	const char *bkt_name = argv[4];
 	const char *debug_flag = argv[5];
-	const char *cluster_config_file = "/etc/ceph/ceph.conf";
+	const char *cluster_config_file = "/home/mbenjamin/dev/ceph-cp/build/ceph.conf";
 	const char *rgw_name = "client.admin";
-	const char *keyring = "/etc/ceph/ceph.client.admin.keyring";
+        const char* keyring = "/home/mbenjamin/dev/ceph-cp/build/keyring";
 	const char *cluster = "ceph";
 	char fname[80];
 	char dst_fname[80];
@@ -941,6 +941,7 @@ int main(int argc, char *argv[])
 
 	printf("Mounted bucket=%s successfully.\n", bkt_name);
 
+#if 0
 	while(choice != 99) {
 		choice = get_choice();
 		switch(choice) {
@@ -1042,6 +1043,15 @@ int main(int argc, char *argv[])
 		}
 
 	} /* End of while */
+#else
+	{
+	  char* fname;
+	  char* dst_fname;
+	  fname = strdup("passwd");
+	  dst_fname = strdup("dweezil");
+	  rc = rename_file(rgw_fs, fname, dst_fname);
+	}
+#endif
 
 out_unmount:
 	rc = rgw_umount(rgw_fs, RGW_UMOUNT_FLAG_NONE);
@@ -1049,7 +1059,7 @@ out_unmount:
 		printf("Unable to un-mount bucket=%s. Err=%d\n", bkt_name, rc);
 		goto out_free;
 	}
-	
+
 	printf("Un-Mounted bucket=%s successfully.\n", bkt_name);
 
 out_free:
