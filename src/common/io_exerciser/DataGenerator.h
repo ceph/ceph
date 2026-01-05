@@ -48,7 +48,7 @@ class DataGenerator {
   virtual bufferlist generate_data(uint64_t length, uint64_t offset) = 0;
   virtual bool validate(bufferlist& bufferlist, uint64_t offset,
                         uint64_t length, std::string_view pool,
-                        ceph::io_exerciser::Sequence curseq, int step);
+                        ceph::io_exerciser::Sequence seq, int step);
 
   // Used for testing debug outputs from data generation
   virtual bufferlist generate_wrong_data(uint64_t offset, uint64_t length);
@@ -82,7 +82,7 @@ class HeaderedSeededRandomGenerator : public SeededRandomGenerator {
   bufferptr generate_wrong_block(uint64_t offset) override;
   bool validate(bufferlist& bufferlist, uint64_t offset,
                 uint64_t length, std::string_view pool, 
-                ceph::io_exerciser::Sequence curseq, int step) override;
+                ceph::io_exerciser::Sequence seq, int step) override;
 
  private:
   using UniqueIdBytes = uint64_t;

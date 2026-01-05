@@ -34,8 +34,6 @@ class Model {
   std::string primary_oid;
   std::string secondary_oid;
   uint64_t block_size;
-  ceph::io_exerciser::Sequence curseq;
-  int step;
   bool delete_objects;
   int num_objects{0};
 
@@ -49,10 +47,6 @@ class Model {
 
   virtual bool readyForIoOp(IoOp& op) = 0;
   virtual void applyIoOp(IoOp& op) = 0;
-  void set_test_step(ceph::io_exerciser::Sequence new_seq, int new_step);
-
-  virtual void set_primary_oid(const std::string& new_oid);
-  virtual void set_secondary_oid(const std::string& new_oid);
   const std::string get_primary_oid() const;
   const std::string get_secondary_oid() const;
   void swap_primary_secondary_oid();

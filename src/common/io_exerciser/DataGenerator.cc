@@ -8,7 +8,6 @@
 #include <stdexcept>
 
 #include "ObjectModel.h"
-#include "IoSequence.h"
 #include "common/debug.h"
 #include "common/dout.h"
 #include "fmt/format.h"
@@ -52,7 +51,7 @@ bufferlist DataGenerator::generate_wrong_data(uint64_t offset,
 
 bool DataGenerator::validate(bufferlist& bufferlist, uint64_t offset,
                              uint64_t length, std::string_view pool,
-                             ceph::io_exerciser::Sequence curseq, int step) {
+                             ceph::io_exerciser::Sequence seq, int step) {
   return bufferlist.contents_equal(generate_data(offset, length));
 }
 
@@ -216,8 +215,7 @@ HeaderedSeededRandomGenerator::readDateTime(uint64_t block_offset,
 
 bool HeaderedSeededRandomGenerator::validate(bufferlist& bufferlist, uint64_t offset, 
                                              uint64_t length, std::string_view pool,
-                                             ceph::io_exerciser::Sequence curseq,
-                                             int step) {
+                                             Sequence seq, int step) {
   std::vector<uint64_t> invalid_block_offsets;
 
   for (uint64_t block_offset = offset; block_offset < offset + length;
@@ -232,8 +230,11 @@ bool HeaderedSeededRandomGenerator::validate(bufferlist& bufferlist, uint64_t of
 
   if (!invalid_block_offsets.empty()) {
     dout(0) << "Miscompare for read of oid=" << m_model.get_primary_oid() <<
-      " offset=" << offset << " length=" << length << " pool=" << pool << 
-      ". This occured in test=" << curseq << " step=" << step << dendl;
+      " offset=" << offset << " length=" << length << " pool=" << pool <<
+      (seq != Sequence::SEQUENCE_END ? " sequence=" : "") <<
+      (seq != Sequence::SEQUENCE_END ? std::to_string((int)seq) : "") <<
+      (step != -1 ? " step=" : "") <<
+      (step != -1 ? std::to_string(step) : "") << dendl;
     printDebugInformationForOffsets(offset, invalid_block_offsets, bufferlist);
   }
 
