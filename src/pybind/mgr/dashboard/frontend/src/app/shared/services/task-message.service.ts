@@ -545,7 +545,11 @@ export class TaskMessageService {
     'cephfs/smb/standalone/delete': this.newTaskMessage(
       this.commonOperations.delete,
       (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-    )
+    ),
+    'mirroring/cephUser/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata: { userEntity: string }) => this.cephUser(metadata)
+    ),
   };
 
   newTaskMessage(
@@ -636,6 +640,10 @@ export class TaskMessageService {
 
   rgwStorageClass(metadata: any) {
     return $localize`Storage Class  '${metadata.storage_class}'`;
+  }
+
+   cephUser(metadata: { userEntity: string }) {
+    return $localize`Ceph User  '${metadata.userEntity}'`;
   }
 
   crudMessage(metadata: any) {

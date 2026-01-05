@@ -131,4 +131,12 @@ export class CephfsService {
   listDaemonStatus(): Observable<Daemon[]> {
     return this.http.get<Daemon[]>(`${this.baseURL}/mirror/daemon-status`);
   }
+
+  listUser() {
+    return this.http.get<any[]>(`api/cluster/user`);
+  }
+
+  createUser(payload: { user_entity: string; capabilities: any } ) {
+    return this.http.post(`api/cluster/user`, payload);
+  }
 }

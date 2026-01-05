@@ -1,5 +1,5 @@
-import { Component, OnInit, ViewChild, Input } from '@angular/core';
-import { BehaviorSubject, Observable, of } from 'rxjs';
+import { Component, OnInit, ViewChild, Input, OnDestroy } from '@angular/core';
+import { BehaviorSubject, Observable, of, Subscription } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -12,12 +12,13 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { Validators } from '@angular/forms';
 import { CdForm } from '~/app/shared/forms/cd-form';
+import { CephUserService } from '~/app/shared/api/ceph-user.service';
 
 @Component({
   selector: 'cd-cephfs-mirroring-entity',
   templateUrl: './cephfs-mirroring-entity.component.html'
 })
-export class CephfsMirroringEntityComponent extends CdForm implements OnInit {
+export class CephfsMirroringEntityComponent extends CdForm implements OnInit, OnDestroy {
   @ViewChild('table', { static: true }) table: TableComponent;
   columns: CdTableColumn[];
   selection = new CdTableSelection();
@@ -35,22 +36,29 @@ export class CephfsMirroringEntityComponent extends CdForm implements OnInit {
 
   entityForm: CdFormGroup;
 
-  @Input() selectedFilesystem: string;
+  @Input() selectedFilesystem$: BehaviorSubject<any>;
+  selectedFilesystem: any = null;
+  private _fsSub: Subscription;
+  isSubmitting: boolean = false
 
   constructor(private cephfsService: CephfsService, private formBuilder: CdFormBuilder) {
     super();
   }
-  @Input() selectedFilesystem$: BehaviorSubject<any>;
 
   ngOnInit(): void {
-    this.selectedFilesystem$?.subscribe((fs) => {
-      console.log('Received filesystem:', fs);
-      // use fs as needed
-    });
-    this.entityForm = this.formBuilder.group({
-      entityName: ['', Validators.required]
+    // Subscribe to selectedFilesystem$ to get the selected filesystem
+    this._fsSub = this.selectedFilesystem$?.subscribe((fs) => {
+      this.selectedFilesystem = fs;
+      console.log('Selected filesystem in entity component:', fs);  
+      // optionally prefill form field
     });
 
+    // Initialize the form
+    this.entityForm = this.formBuilder.group({
+      user_entity: ['', Validators.required]
+    });
+
+    // Define table columns
     this.columns = [
       {
         name: $localize`Entity ID`,
@@ -83,27 +91,41 @@ export class CephfsMirroringEntityComponent extends CdForm implements OnInit {
       switchMap(() =>
         this.cephfsService.listUser().pipe(
           switchMap((users) => {
-            const rows = users
-              .filter((u) => u.entity?.startsWith('client.'))
-              .map((user) => {
+            const filteredUsers = users.filter((user) => {
+              if (user.entity?.startsWith('client.')) {
                 const caps = user.caps || {};
-
                 const mdsCaps = caps.mds || '-';
-                const monCaps = caps.mon || '-';
+               // const monCaps = caps.mon || '-';
                 const osdCaps = caps.osd || '-';
 
+                // Filter users based on the selected filesystem name
+                const fsName = this.selectedFilesystem;
                 const isValid =
-                  mdsCaps.includes('rw') || mdsCaps.includes('rwps') || osdCaps.includes('rw');
+                  (mdsCaps.includes('rw') || mdsCaps.includes('rwps') || osdCaps.includes('rw')) &&
+                  user.entity.includes(fsName);
 
-                return {
-                  entity: user.entity,
-                  mdsCaps,
-                  monCaps,
-                  osdCaps,
-                  status: isValid ? 'Valid' : 'Invalid'
-                };
-              });
+                return isValid;
+              }
+              return false;
+            });
 
+            const rows = filteredUsers.map((user) => {
+              const caps = user.caps || {};
+              const mdsCaps = caps.mds || '-';
+              const monCaps = caps.mon || '-';
+              const osdCaps = caps.osd || '-';
+              const isValid = mdsCaps.includes('rw') || mdsCaps.includes('rwps') || osdCaps.includes('rw');
+
+              return {
+                entity: user.entity,
+                mdsCaps,
+                monCaps,
+                osdCaps,
+                status: isValid ? 'Valid' : 'Invalid'
+              };
+            });
+
+            console.log('Loaded entities:', rows);
             return of(rows);
           }),
           catchError(() => {
@@ -117,11 +139,41 @@ export class CephfsMirroringEntityComponent extends CdForm implements OnInit {
     this.loadEntities();
   }
 
-  submitAction(): void {
-    if (this.entityForm.valid) {
-      // const entityName = this.entityForm.get('entityName').value;
-    }
-  }
+  // Handle submit action (e.g., when the user creates a new entity)
+
+  // {"capabilities":[{"entity":"mds","cap":"allow *"},{"entity":"mgr","cap":"allow *"},
+  // {"entity":"mon","cap":"allow *"},{"entity":"osd","cap":"allow *"}]
+  // ,"user_entity":"client.mirror45"}
+submitAction(): void {
+  console.log('Submit action triggered');
+    // Set the loading state to true to show the submit button is busy
+    this.isSubmitting = true;
+
+    const userEntity = this.entityForm.get('entityName').value;
+
+    // Define the default capabilities
+    const defaultCapabilities = [
+      { entity: 'mds', cap: 'allow rw' },
+      { entity: 'mon', cap: 'allow rw' },
+      { entity: 'osd', cap: 'allow rw' }
+    ];
+  console.log('Creating entity with values:', userEntity, defaultCapabilities);
+    // Call the service to create the user with default capabilities
+    this.cephfsService.createUser(userEntity, defaultCapabilities).subscribe(
+      (response) => {
+        console.log('Entity created successfully:', response);
+        this.isCreatingNewEntity = false;
+        this.loadEntities(this.context); // Reload entities after creation
+        this.isSubmitting = false; // Reset the loading state
+      },
+      (error) => {
+        console.error('Error creating entity:', error);
+        this.isSubmitting = false; // Reset the loading state
+      }
+    );
+}
+
+
 
   loadEntities(context?: CdTableFetchDataContext) {
     this.context = context;
@@ -130,5 +182,9 @@ export class CephfsMirroringEntityComponent extends CdForm implements OnInit {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  ngOnDestroy(): void {
+    this._fsSub?.unsubscribe();
   }
 }

@@ -112,8 +112,15 @@ export class CephfsMirroringFilesystemComponent implements OnInit {
     return size + ' B';
   }
 
-  updateSelection(selection: CdTableSelection) {
+  updateSelection1(selection: CdTableSelection) {
     this.selection = selection;
     this.selectedFilesystem$?.next(selection?.selected?.[0] ?? null);
+  }
+
+    updateSelection(selection: CdTableSelection) {
+    // adapt to your CdTableSelection shape; pick the first selected row
+    const selectedRow = selection?.selected?.[0]?.data ?? null;
+    // push selected filesystem into the shared subject
+    this.selectedFilesystem$?.next(selectedRow);
   }
 }

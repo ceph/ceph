@@ -22,9 +22,7 @@
             </p>
           </div>
 
-          <cds-radio-group name="clusterRole"
-                           [(ngModel)]="selectedRole"
-                           >
+          <cds-radio-group name="clusterRole" [(ngModel)]="selectedRole">
             <div cdsCol [columnNumbers]="{ sm: 12, md: 8, lg: 8 }">
               <cds-tile>
                 <cds-radio value="source">
@@ -62,81 +60,93 @@
             </div>
           </cds-radio-group>
 
+          <cd-alert-panel type="info" spacingClass="mb-3" i18n class="align-items-center">
+            <div>
+              <strong style="display:block; margin-bottom: 8px;">About Remote Peer Setup</strong>
+              <p style="margin:0 0 10px 0;">
+                As a remote peer, this cluster prepares to receive mirrored data from an initiating cluster. The setup includes environment validation, enabling filesystem mirroring, creating required Ceph users, and generating a bootstrap token.
+              </p>
+              <strong style="display:block; margin-bottom:5px;">What happens next:</strong>
+              <ul style="list-style-type: disc; padding-left: 20px; margin: 0;">
+                <li>Environment validation</li>
+                <li>Ceph user creation</li>
+                <li>Filesystem mirroring activation</li>
+                <li>Bootstrap token generation</li>
+              </ul>
+            </div>
+          </cd-alert-panel>
 
-<cd-alert-panel
-  type="info"
-  spacingClass="mb-3"
-  i18n
-  class="align-items-center"
->
-  <div>
-    <strong style="display:block; margin-bottom: 8px;">About Remote Peer Setup</strong>
-    <p style="margin:0 0 10px 0;">
-      As a remote peer, this cluster prepares to receive mirrored data from an initiating cluster. The setup includes environment validation, enabling filesystem mirroring, creating required Ceph users, and generating a bootstrap token.
-    </p>
-    <strong style="display:block; margin-bottom:5px;">What happens next:</strong>
-    <ul style="list-style-type: disc; padding-left: 20px; margin: 0;">
-      <li>Environment validation</li>
-      <li>Ceph user creation</li>
-      <li>Filesystem mirroring activation</li>
-      <li>Bootstrap token generation</li>
-    </ul>
-  </div>
-
-</cd-alert-panel>
-
-        <div cdsRow>
-          <div cdsCol [columnNumbers]="{ sm: 12, md: 5, lg: 5 }">
-            <cds-tile>
-              <div>
-                <h6>Remote Cluster Health</h6>
+          <div cdsRow>
+            <div cdsCol [columnNumbers]="{ sm: 12, md: 5, lg: 5 }">
+              <cds-tile>
                 <div>
-                  All monitors and OSDs are healthy.
+                  <h6>Remote Cluster Health</h6>
+                  <div>
+                    All monitors and OSDs are healthy.
+                  </div>
                 </div>
-              </div>
-            </cds-tile>
-          </div>
+              </cds-tile>
+            </div>
 
-          <div cdsCol [columnNumbers]="{ sm: 12, md: 5, lg: 5}">
-            <cds-tile>
-              <div>
-                <h6>Remote Manager Service</h6>
+            <div cdsCol [columnNumbers]="{ sm: 12, md: 5, lg: 5 }">
+              <cds-tile>
                 <div>
-                  Manager service is running and responsive.
+                  <h6>Remote Manager Service</h6>
+                  <div>
+                    Manager service is running and responsive.
+                  </div>
                 </div>
-              </div>
-            </cds-tile>
-          </div>
+              </cds-tile>
+            </div>
 
-          <div cdsCol [columnNumbers]="{ sm: 12, md: 5, lg: 5 }">
-            <cds-tile>
-              <div>
-                <h6>Remote Filesystem Availability</h6>
+            <div cdsCol [columnNumbers]="{ sm: 12, md: 5, lg: 5 }">
+              <cds-tile>
                 <div>
-                  Verifies that at least one filesystem is configured and accessible on the remote cluster.
+                  <h6>Remote Filesystem Availability</h6>
+                  <div>
+                    Verifies that at least one filesystem is configured and accessible on the remote cluster.
+                  </div>
+                  <div>
+                    Filesystem
+                  </div>
                 </div>
-                <div>
-                  Filesystem
-                </div>
-              </div>
-            </cds-tile>
+              </cds-tile>
+            </div>
           </div>
         </div>
-      </div>
 
-        <div *ngSwitchCase="1">
-        <p>test 1</p>
-        </div>
+       <div *ngSwitchCase="1">
+  <cd-cephfs-mirroring-filesystem
+    [selectedFilesystem$]="selectedFilesystem$">
+  </cd-cephfs-mirroring-filesystem>
+</div>
 
-        <div *ngSwitchCase="2">
-         <p>test 2</p>
-        </div>
-
+<div *ngSwitchCase="2">
+  <cd-cephfs-mirroring-entity
+    [selectedFilesystem$]="selectedFilesystem$">
+  </cd-cephfs-mirroring-entity>
+</div>
         <div *ngSwitchCase="3">
-         <p>Test3</p>
+          <p>Test3</p>
         </div>
 
       </ng-container>
     </div>
   </div>
 </div>
+
+<cds-modal-footer class="tearsheet-footer">
+  <button cdsButton="ghost"
+          class="tearsheet-footer-cancel"
+          (click)="closeWizard()"
+          size="xl"
+          i18n>Cancel</button>
+  <button cdsButton="secondary"
+          size="xl"
+          (click)="onPrevious()"
+          i18n>Previous</button>
+  <button cdsButton="primary"
+          size="xl"
+          (click)="onNext()"
+          i18n>Next</button>
+</cds-modal-footer>

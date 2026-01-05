@@ -37,40 +37,58 @@
   </ul>
   </cd-alert-panel>
 
- <form name="entityForm"
-          #formDir="ngForm"
-          [formGroup]="entityForm"
-          novalidate>
-      <div i18n="form title"
-           class="form-header">
-        {{ action | titlecase }} {{ resource | upperFirst }}
-      </div>
+<form name="entityForm"
+      #formDir="ngForm"
+      [formGroup]="entityForm"
+      novalidate>
 
-      <div class="form-item form-item-append"
-           cdsRow>
-
-        <!-- Entity -->
-        <div cdsCol>
-          <cds-text-label labelInputID="entityName"
-                          i18n
-                          helperText="Ceph Authentication entiity used by mirroring."
-                          i18n-helperText>Ceph Entity
-            <input cdsText
-                   type="text"
-                   id="entityName"
-                   formControlName="entityName"/>
-          </cds-text-label>
+  <div cdsRow class="form-item form-item-append">
+    <!-- Entity input constrained to half width on md/lg -->
+    <div cdsCol [columnNumbers]="{ sm: 12, md: 6, lg: 6 }">
+      <cds-text-label labelInputID="user_entity"
+                      i18n
+                      helperText="Ceph Authentication entity used by mirroring."
+                      i18n-helperText
+                      cdRequiredField="Ceph Entity"
+                      [helperText]="user_entityHelperText"
+                      [invalid]="!entityForm.controls['user_entity'].valid && (entityForm.controls['user_entity'].dirty)"
+                      [invalidText]="user_entityError"
+                      i18n-invalidText>
+        Ceph Entity
+        <div cdsGrid>
+          <div cdsRow>
+            <div cdsCol [columnNumbers]="{ sm: 12, md: 4, lg: 4 }">
+              <input cdsText value="client." readonly />
+            </div>
+            <div cdsCol [columnNumbers]="{ sm: 12, md: 8, lg: 8 }">
+              <input cdsText
+                     id="user_entity"
+                     name="user_entity"
+                     formControlName="user_entity"
+                     [invalid]="!entityForm.controls['user_entity'].valid && (entityForm.controls['user_entity'].dirty)" />
+            </div>
+          </div>
         </div>
-      </div>
+      </cds-text-label>
 
- 
+      <ng-template #user_entityError>
+        <span class="invalid-feedback"
+              *ngIf="entityForm.showError('user_entity', formDir, 'required')"
+              i18n>This field is required.</span>
+      </ng-template>
+    </div>
+  </div>
+
+  <div cdsRow>
+    <div cdsCol [columnNumbers]="{ sm: 12, md: 6, lg: 6 }" class="text-right">
       <cd-form-button-panel
         (submitActionEvent)="submitAction()"
         [form]="entityForm"
-        [submitText]="'Create Entity'"
-        wrappingClass="text-right"
-      ></cd-form-button-panel>
-    </form>
+        [submitText]="'Create Entity'">
+      </cd-form-button-panel>
+    </div>
+  </div>
+</form>
   </div>
 
   <div *ngIf="!isCreatingNewEntity">
@@ -86,13 +104,10 @@
   <div>
       <strong class="entity-note-title">Entity Selection Note</strong>
       </div>
-   
         Only entities with valid rwps capabilities can be used for mirroring.
-    
   </cd-alert-panel>
  </div>
 
-<!-- Table for existing entities -->
 <ng-container *ngIf="!isCreatingNewEntity && entities$ | async as entities">
   <cd-table
     #table
