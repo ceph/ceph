@@ -128,8 +128,7 @@ extensions = [
     'ceph_confval',
     'sphinxcontrib.mermaid',
     'sphinxcontrib.openapi',
-    'sphinxcontrib.seqdiag',
-    ]
+]
 
 ditaa = shutil.which("ditaa")
 if ditaa is not None:
@@ -237,10 +236,6 @@ for c in pybinds:
 # openapi
 openapi_logger = sphinx.util.logging.getLogger('sphinxcontrib.openapi.openapi30')
 openapi_logger.setLevel(logging.WARNING)
-
-# seqdiag
-seqdiag_antialias = True
-seqdiag_html_image_format = 'SVG'
 
 # ceph_confval
 ceph_confval_imports = glob.glob(os.path.join(top_level,
