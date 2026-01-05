@@ -533,6 +533,32 @@ else:
         @NvmeofCLICommand(
             "nvmeof namespace add", model.NamespaceCreation, alias="nvmeof ns add"
         )
+        @EndpointDoc(
+            "Create a new NVMeoF namespace.",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "rbd_pool": Param(str, "RBD pool name"),
+                "rbd_image_name": Param(str, "RBD image name"),
+                "create_image": Param(bool, "Create RBD image"),
+                "size": Param(str, "Deprecated. Use `rbd_image_size` instead", True, None),
+                "rbd_image_size": Param(str, "RBD image size", True, None),
+                "trash_image": Param(bool, "Trash the RBD image when namespace is removed"),
+                "block_size": Param(int, "NVMeoF namespace block size"),
+                "load_balancing_group": Param(int, "Load balancing group"),
+                "disable_auto_resize": Param(str, "Disable auto resize", True, None),
+                "read_only": Param(str, "Read only namespace", True, None),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "traddr": Param(str, "Target gateway address", True, None),
+                "force": Param(
+                    bool,
+                    "Force create namespace even it image is used by other namespace"
+                ),
+                "no_auto_visible": Param(
+                    bool,
+                    "Namespace will be visible only for the allowed hosts"
+                )
+            },
+        )
         @convert_to_model(model.NamespaceCreation)
         @handle_nvmeof_error
         def create_cli(
@@ -703,6 +729,16 @@ else:
 
         @NvmeofCLICommand("nvmeof namespace resize", model=model.RequestStatus,
                           alias="nvmeof ns resize")
+        @EndpointDoc(
+            "resize the specified NVMeoF namespace",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "nsid": Param(str, "NVMeoF Namespace ID"),
+                "rbd_image_size": Param(str, "RBD image size"),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "traddr": Param(str, "NVMeoF gateway address", True, None),
+            },
+        )
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def resize_cli(
