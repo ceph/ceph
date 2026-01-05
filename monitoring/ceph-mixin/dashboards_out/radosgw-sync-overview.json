@@ -499,7 +499,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "rate(ceph_rgw_sync_delta_sync_delta[$__rate_interval])",
+               "expr": "rate(ceph_rgw_sync_delta_sync_delta{instance_id=~\"$rgw_servers\", cluster=~\"$cluster\", }[$__rate_interval])",
                "format": "time_series",
                "instant": false,
                "intervalFactor": 1,
