@@ -630,6 +630,7 @@ void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
 void Session::dump(Formatter *f, bool cap_dump) const
 {
   f->dump_int("id", info.inst.name.num());
+  f->dump_object("auth_name", info.auth_name);
   f->dump_object("entity", info.inst);
   f->dump_string("state", get_state_name());
   f->dump_int("num_leases", leases.size());
