@@ -30,8 +30,3 @@ void Model::swap_primary_secondary_oid() {
 const uint64_t Model::get_block_size() const { return block_size; }
 
 int Model::get_num_io() const { return num_io; }
-
-void Model::set_test_step(ceph::io_exerciser::Sequence new_seq, int new_step) {
-  curseq = new_seq;
-  step = new_step;
-}

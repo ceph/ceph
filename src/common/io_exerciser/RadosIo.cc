@@ -47,7 +47,7 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
                  const std::string& pool, const std::string& primary_oid, const std::string& secondary_oid,
                  uint64_t block_size, int seed, int threads, ceph::mutex& lock,
                  ceph::condition_variable& cond, bool is_replicated_pool,
-                 bool ec_optimizations)
+                 bool ec_optimizations, std::shared_ptr<ceph::io_exerciser::IoSequence> seq)
     : Model(primary_oid, secondary_oid, block_size),
       rados(rados),
       asio(asio),
@@ -58,7 +58,8 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
       threads(threads),
       lock(lock),
       cond(cond),
-      outstanding_io(0) {
+      outstanding_io(0),
+      seq(seq) {
   int rc;
   rc = rados.ioctx_create(pool.c_str(), io);
   ceph_assert(rc == 0);
@@ -256,7 +257,9 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       ceph_assert(ec == boost::system::errc::success);
       for (int i = 0; i < N; i++) {
         ceph_assert(db->validate(op_info->bufferlist[i], op_info->offset[i],
-                                 op_info->length[i], pool, curseq, step));
+                                 op_info->length[i], pool,
+                                 seq ? seq->get_id() : Sequence::SEQUENCE_END,
+                                 seq ? seq->get_step() : -1));
       }
       finish_io();
     };
