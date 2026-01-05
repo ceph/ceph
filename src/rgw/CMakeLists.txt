@@ -174,6 +174,7 @@ set(librgw_common_srcs
   driver/rados/groups.cc
   driver/rados/rgw_bucket.cc
   driver/rados/rgw_bucket_sync.cc
+  driver/rados/rgw_bl_rados.cc
   driver/rados/rgw_cr_rados.cc
   driver/rados/rgw_cr_tools.cc
   driver/rados/rgw_d3n_datacache.cc
