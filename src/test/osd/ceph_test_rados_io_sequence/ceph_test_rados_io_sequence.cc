@@ -1026,12 +1026,12 @@ ceph::io_sequence::tester::TestObject::TestObject(
     SelectObjectSize& sos, SelectNumThreads& snt, SelectSeqRange& ssr,
     ceph::util::random_number_generator<int>& rng, ceph::mutex& lock,
     ceph::condition_variable& cond, bool dryrun, bool verbose,
-    std::optional<int> seqseed, bool testrecovery, bool checkconsistency, bool dontdeleteobjects)
-    : rng(rng), verbose(verbose), seqseed(seqseed), primary_oid(primary_oid), secondary_oid(secondary_oid),
-      testrecovery(testrecovery), checkconsistency(checkconsistency), dontdeleteobjects(dontdeleteobjects) {
+    std::optional<int> seqseed, bool testrecovery, bool checkconsistency, bool delete_objects)
+    : rng(rng), verbose(verbose), seqseed(seqseed), testrecovery(testrecovery), checkconsistency(checkconsistency),
+      delete_objects(delete_objects) {
   if (dryrun) {
     exerciser_model = std::make_unique<ceph::io_exerciser::ObjectModel>(
-        primary_oid, secondary_oid, sbs.select(), rng());
+        primary_oid, secondary_oid, sbs.select(), rng(), delete_objects);
   } else {
     const std::string pool = spo.select();
     if (!dryrun) {
@@ -1053,7 +1053,7 @@ ceph::io_sequence::tester::TestObject::TestObject(
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(
         rados, asio, pool, primary_oid, secondary_oid, sbs.select(), rng(),
         threads, lock, cond, spo.is_replicated_pool(),
-        spo.get_allow_pool_ec_optimizations());
+        spo.get_allow_pool_ec_optimizations(), delete_objects);
     dout(0) << "= " << primary_oid << " pool=" << pool << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size() << " ="
             << dendl;
@@ -1061,9 +1061,6 @@ ceph::io_sequence::tester::TestObject::TestObject(
   obj_size_range = sos.select();
   seq_range = ssr.select();
   curseq = seq_range.first;
-
-  object_counter = 0;
-  primary_oid_base = primary_oid;
 
   if (testrecovery) {
     seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
@@ -1095,13 +1092,7 @@ bool ceph::io_sequence::tester::TestObject::next() {
               << ": " << op->to_string(exerciser_model->get_block_size())
               << dendl;
     }
-    if (dontdeleteobjects && op->getOpType() == ceph::io_exerciser::OpType::Remove) {
-      // Change the primary_oid so that the next object will be created with a different name
-      primary_oid = primary_oid_base + "_" + std::to_string(object_counter++);
-      exerciser_model->set_primary_oid(primary_oid);
-    } else {
-      exerciser_model->applyIoOp(*op);
-    }
+    exerciser_model->applyIoOp(*op);
     if (op->getOpType() == ceph::io_exerciser::OpType::Done) {
       curseq = seq->getNextSupportedSequenceId();
       if (curseq >= seq_range.second) {
@@ -1163,7 +1154,7 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
 
   verbose = vm.contains("verbose");
   dryrun = vm.contains("dryrun");
-  dont_delete_objects = vm.contains("dont_delete_objects");
+  delete_objects = !vm.contains("dont_delete_objects");
 
   seqseed = std::nullopt;
   if (vm.contains("seqseed")) {
@@ -1486,7 +1477,7 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test() {
       test_objects.push_back(
           std::make_shared<ceph::io_sequence::tester::TestObject>(
               primary_name, secondary_name, rados, asio, sbs, spo, sos, snt, ssr, rng, lock, cond,
-              dryrun, verbose, seqseed, testrecovery, checkconsistency, dont_delete_objects));
+              dryrun, verbose, seqseed, testrecovery, checkconsistency, delete_objects));
     }
     catch (const std::runtime_error &e) {
       std::cerr << "Error: " << e.what() << std::endl;

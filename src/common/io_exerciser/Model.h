@@ -29,12 +29,16 @@ class IoOp;
 class Model {
  protected:
   int num_io{0};
+  std::string primary_oid_base;
   std::string primary_oid;
   std::string secondary_oid;
   uint64_t block_size;
+  bool delete_objects;
+  int num_objects{0};
 
  public:
-  Model(const std::string& primary_oid, const std::string& secondary_oid, uint64_t block_size);
+  Model(const std::string& primary_oid, const std::string& secondary_oid,
+        uint64_t block_size, bool delete_objects);
   virtual ~Model() = default;
 
   virtual bool readyForIoOp(IoOp& op) = 0;

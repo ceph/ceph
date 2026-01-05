@@ -45,10 +45,8 @@ class ObjectModel : public Model {
   interval_set<uint64_t> writes;
 
  public:
-  ObjectModel(const std::string& primary_oid, const std::string& secondary_oid, uint64_t block_size, int seed);
-
-  void set_primary_oid(const std::string& new_oid) override;
-  void set_secondary_oid(const std::string& new_oid) override;
+  ObjectModel(const std::string& primary_oid, const std::string& secondary_oid,
+              uint64_t block_size, int seed, bool delete_objects = true);
 
   int get_seed(uint64_t offset) const;
   std::vector<int> get_seed_offsets(int seed) const;
