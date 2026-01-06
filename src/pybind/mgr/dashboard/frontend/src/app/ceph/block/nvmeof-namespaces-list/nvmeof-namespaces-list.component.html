@@ -8,7 +8,11 @@
           (fetchData)="listNamespaces()"
           [columns]="namespacesColumns"
           selectionType="single"
-          (updateSelection)="updateSelection($event)">
+          (updateSelection)="updateSelection($event)"
+          emptyStateTitle="No namespaces created."
+          i18n-emptyStateTitle
+          emptyStateMessage="Namespaces are storage volumes mapped to subsystems for host access. Create a namespace to start provisioning storage within a subsystem."
+          i18n-emptyStateMessage>
 
   <div class="table-actions">
     <cd-table-actions [permission]="permission"

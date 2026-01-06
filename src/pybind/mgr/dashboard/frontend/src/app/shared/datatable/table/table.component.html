@@ -220,8 +220,26 @@
           class="no-data"
           cdstabledata
           [attr.colspan]="visibleColumns.length + 2">
-        <span class="d-flex justify-content-center align-items-center"
-              i18n>No data to display</span>
+        <div class="empty-state cds-ml-3"
+             cdsStack="vertical"
+             gap="11">
+          <div></div>
+          <div cdsStack="vertical"
+               gap="1">
+            <div>
+              <cd-icon
+                [type]="emptyStateIcon"
+                [size]="iconSize.size32">
+              </cd-icon>
+            </div>
+            <legend class="cds--type-body-compact-02">
+              <ng-container>{{ emptyStateTitle }}</ng-container>
+              <cd-help-text class="cds--type-label-01">
+                {{ emptyStateMessage }}
+              </cd-help-text>
+            </legend>
+          </div>
+        </div>
       </td>
     </tr>
   </tbody>
@@ -333,6 +351,7 @@
     </cds-tag>
   </span>
 </ng-template>
+
 <ng-template #tagTpl
              let-column="data.column"
              let-value="data.value">
