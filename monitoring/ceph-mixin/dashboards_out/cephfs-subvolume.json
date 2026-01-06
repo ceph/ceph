@@ -1,0 +1,685 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 23,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ceph_mds_subvolume_metrics_avg_read_iops{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"}",
+          "instant": true,
+          "legendFormat": "Read",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ceph_mds_subvolume_metrics_avg_write_iops{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"}",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "Write",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "IOPS",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "binBps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ceph_mds_subvolume_metrics_avg_read_tp_Bps{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"}",
+          "instant": true,
+          "legendFormat": "Read",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ceph_mds_subvolume_metrics_avg_write_tp_Bps{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"}",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "Write",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Throughput",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ceph_mds_subvolume_metrics_avg_read_lat_msec{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"}",
+          "instant": true,
+          "legendFormat": "Read",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ceph_mds_subvolume_metrics_avg_write_lat_msec{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"}",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "Write",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Latency",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 5
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ceph_mds_subvolume_metrics_avg_read_iops{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"}",
+          "instant": false,
+          "legendFormat": "Read",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ceph_mds_subvolume_metrics_avg_write_iops{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "Write",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "IOPS graph",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "binBps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 8,
+        "y": 5
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ceph_mds_subvolume_metrics_avg_read_tp_Bps{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"}",
+          "instant": true,
+          "legendFormat": "Read",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ceph_mds_subvolume_metrics_avg_write_tp_Bps{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"}",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "Write",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Throughput graph",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P43CA22E17D0F9596"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 5
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ceph_mds_subvolume_metrics_avg_read_lat_msec{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"}",
+          "instant": true,
+          "legendFormat": "Read",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P43CA22E17D0F9596"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ceph_mds_subvolume_metrics_avg_write_lat_msec{cluster=\"$cluster\",fs_name=\"$filesystem\", subvolume_path=\"$subvolume\"}",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "Write",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Latency Graph",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "10s",
+  "schemaVersion": 41,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "Dashboard1",
+          "value": "P43CA22E17D0F9596"
+        },
+        "label": "Data Source",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "text": "8bcee976-a4db-11f0-a341-525400d32de5",
+          "value": "8bcee976-a4db-11f0-a341-525400d32de5"
+        },
+        "definition": "label_values(ceph_health_status,cluster)",
+        "label": "Cluster",
+        "name": "cluster",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(ceph_health_status,cluster)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "cephfs",
+          "value": "cephfs"
+        },
+        "definition": "label_values(ceph_fs_metadata{cluster=~\"$cluster\"},name)",
+        "includeAll": true,
+        "label": "Filesystem",
+        "name": "filesystem",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(ceph_fs_metadata{cluster=~\"$cluster\"},name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "definition": "label_values(ceph_mds_subvolume_metrics_avg_read_iops{cluster=~\"$cluster\", fs_name=~\"$filesystem\"},subvolume_path)",
+        "includeAll": true,
+        "label": "Subvolume path",
+        "name": "subvolume",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(ceph_mds_subvolume_metrics_avg_read_iops{cluster=~\"$cluster\", fs_name=~\"$filesystem\"},subvolume_path)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Ceph - Filesystem Subvolume Overview",
+  "uid": "af0wifl5kbda8d",
+  "version": 1
+}
