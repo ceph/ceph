@@ -4600,6 +4600,22 @@ public:
   void dump(std::ostream& sout) override;
   BlueFSVolumeSelector* clone_empty() const override;
   bool compare(BlueFSVolumeSelector* other) override;
+
+  void expand_device(uint8_t dev_id, uint64_t new_size) override {
+    switch (dev_id) {
+    case BlueFS::BDEV_WAL:
+      l_totals[LEVEL_WAL - LEVEL_FIRST] = new_size;
+      break;
+    case BlueFS::BDEV_DB:
+      l_totals[LEVEL_DB - LEVEL_FIRST] = new_size;
+      break;
+    case BlueFS::BDEV_SLOW:
+      l_totals[LEVEL_SLOW - LEVEL_FIRST] = new_size;
+      break;
+    default:
+      break;
+    }
+  }
 };
 
 #endif

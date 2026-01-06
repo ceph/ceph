@@ -929,6 +929,11 @@ void BlueFS::expand_device(unsigned devid, uint64_t new_size, uint64_t old_size)
   auto aligned_size = p2align(new_size, alloc_size[devid]);
   alloc[devid]->init_add_free(old_size, aligned_size - old_size);
 
+  if (vselector) {
+    vselector->expand_device(devid, aligned_size);
+    vselector->update_from_config(cct);
+  }
+
   uint64_t total = get_block_device_size(devid);
   uint64_t free = get_free(devid);
   ceph_assert(total > total - free);

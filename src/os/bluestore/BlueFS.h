@@ -205,6 +205,15 @@ public:
   /* used for sanity checking of vselector */
   virtual BlueFSVolumeSelector* clone_empty() const { return nullptr; }
   virtual bool compare(BlueFSVolumeSelector* other) { return true; };
+
+  /**
+  *  Update device total size after online expansion
+  *  Parameters:
+  *    dev_id: BlueFS device id (BDEV_WAL, BDEV_DB, BDEV_SLOW)
+  *    new_size: new total size of the device
+  *
+  */
+  virtual void expand_device(uint8_t dev_id, uint64_t new_size) = 0;
 };
 
 struct bluefs_shared_alloc_context_t {
@@ -990,6 +999,22 @@ public:
   uint8_t select_prefer_bdev(void* hint) override;
   void get_paths(const std::string& base, paths& res) const override;
   void dump(std::ostream& sout) override;
+
+  void expand_device(uint8_t dev_id, uint64_t new_size) override {
+    switch (dev_id) {
+    case BlueFS::BDEV_WAL:
+      wal_total = new_size;
+      break;
+    case BlueFS::BDEV_DB:
+      db_total = new_size;
+      break;
+    case BlueFS::BDEV_SLOW:
+      slow_total = new_size;
+      break;
+    default:
+      break;
+    }
+  }
 };
 
 class FitToFastVolumeSelector : public OriginalVolumeSelector {
