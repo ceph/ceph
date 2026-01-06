@@ -7,7 +7,11 @@
     selectionType="single"
     identifier="name"
     (updateSelection)="updateSelection($event)"
-    (fetchData)="fetchData()">
+    (fetchData)="fetchData()"
+    emptyStateTitle="No gateway group created"
+    i18n-emptyStateTitle
+    emptyStateMessage="Set up your first gateway group to start using NVMe over Fabrics. This will allow you to create high-performance block storage with NVMe/TCP protocol."
+    i18n-emptyStateMessage>
   </cd-table>
 </ng-container>
 

@@ -116,6 +116,7 @@ export const ICON_TYPE = {
   check: 'check',
   copy: 'copy',
   danger: 'danger',
+  deploy: 'deploy',
   edit: 'edit',
   error: 'error--filled',
   infoCircle: 'info-circle',
