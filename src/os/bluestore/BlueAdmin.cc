@@ -203,7 +203,7 @@ int BlueStore::SocketHook::call(
     return r;
   } else if (command == "bluestore bluefs-bdev-expand"){
     std::stringstream result;
-    int ret = store.expand_devices_online(result);
+    int ret = store.expand_devices(result);
     if (ret < 0) {
       ss << "expand device failed: " << cpp_strerror(ret) << std::endl;
     } else {
