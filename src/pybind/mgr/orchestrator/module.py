@@ -224,7 +224,9 @@ class IngressType(enum.Enum):
 
     def canonicalize(self) -> "IngressType":
         if self == self.default:
-            return IngressType(self.haproxy_standard)
+            # Default to haproxy-protocol to preserve client IP addresses
+            # for proper IP-level export restrictions in NFS Ganesha
+            return IngressType(self.haproxy_protocol)
         return IngressType(self)
 
 
@@ -2603,3 +2605,4 @@ Usage:
         completion = self.update_service(service_type.value, service_type.name, image)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
+
