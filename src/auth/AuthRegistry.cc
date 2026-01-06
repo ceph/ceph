@@ -9,6 +9,7 @@
 #endif
 #include "none/AuthNoneAuthorizeHandler.h"
 #include "common/ceph_context.h"
+#include "common/StackStringStream.h"
 #include "common/debug.h"
 #include "auth/KeyRing.h"
 
@@ -164,9 +165,12 @@ void AuthRegistry::_refresh_config()
     }
   }
   if (any_cephx) {
+    ldout(cct, 20) << "attempting to load cephx key" << dendl;
     KeyRing k;
-    int r = k.from_ceph_context(cct);
-    if (r == -ENOENT) {
+    CachedStackStringStream css;
+    int r = k.from_ceph_context(cct, css.get());
+    if (r < 0) {
+      ldout(cct, 5) << "removing any cephx auth method as loading cephx key failed: " << css->strv() << dendl;
       for (auto *p : {&cluster_methods, &service_methods, &client_methods}) {
 	auto q = std::find(p->begin(), p->end(), CEPH_AUTH_CEPHX);
 	if (q != p->end()) {

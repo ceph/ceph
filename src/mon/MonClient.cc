@@ -270,7 +270,12 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
   auth_registry.refresh_config();
 
   KeyRing keyring;
-  keyring.from_ceph_context(cct);
+  CachedStackStringStream css;
+  int keyload = keyring.from_ceph_context(cct, css.get());
+  if (keyload < 0) {
+    ldout(cct, 10) << "could not load key: " << css->strv() << dendl;
+    return keyload;
+  }
   RotatingKeyRing rkeyring(cct, cct->get_module_type(), &keyring);
 
   MonClientPinger *pinger = new MonClientPinger(cct,
@@ -519,18 +524,24 @@ int MonClient::init()
   auth_registry.refresh_config();
 
   keyring.reset(new KeyRing);
+  CachedStackStringStream css;
+  int keyload = keyring->from_ceph_context(cct, css.get());
   if (auth_registry.is_supported_method(messenger->get_mytype(),
 					CEPH_AUTH_CEPHX)) {
     // this should succeed, because auth_registry just checked!
-    int r = keyring->from_ceph_context(cct);
-    if (r != 0) {
+    if (keyload < 0) {
       // but be somewhat graceful in case there was a race condition
-      lderr(cct) << "keyring not found" << dendl;
-      return r;
+      lderr(cct) << css->strv() << dendl;
+      return keyload;
     }
+  } else if (keyload < 0) {
+    ldout(cct, 5) << "Key loading failed with: " << css->strv() << dendl;
   }
   if (!auth_registry.any_supported_methods(messenger->get_mytype())) {
-    lderr(cct) << "no supported authentication method found! Is the keyring missing?" << dendl;
+    lderr(cct) << "No supported authentication method found! Is the keyring missing?" << dendl;
+    if (keyload < 0) {
+      lderr(cct) << "Key loading failed with: " << css->strv() << dendl;
+    }
     lderr(cct) << "Try debugging using arguments: --debug_monc=20 --debug_auth=5" << dendl;
     return -ENOENT;
   }
