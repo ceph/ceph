@@ -9033,135 +9033,22 @@ string BlueStore::get_device_path(unsigned id)
 
 int BlueStore::expand_devices(ostream& out)
 {
-  // let's open in read-only mode first to be able to recover
-  // from the out-of-space state at DB/shared volume(s)
-  // Opening in R/W mode might cause extra space allocation
-  // which is effectively a show stopper for volume expansion.
-  int r = _open_db_and_around(true);
-  ceph_assert(r == 0);
-  bluefs->dump_block_extents(out);
-  out << "Expanding DB/WAL..." << std::endl;
-  // updating dedicated devices first
-  for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
-    if (devid == bluefs_layout.shared_bdev) {
-      continue;
+  bool need_to_close = false;
+  int r = 0;
+
+  if (!mounted) {
+    // let's open in read-only mode first to be able to recover
+    // from the out-of-space state at DB/shared volume(s)
+    // Opening in R/W mode might cause extra space allocation
+    // which is effectively a show stopper for volume expansion.
+    r = _open_db_and_around(false);
+    if (r < 0) {
+      derr << __func__ << " failed to open db: " << cpp_strerror(r) << dendl;
+      return r;
     }
-    auto my_bdev = bluefs->get_block_device(devid);
-    uint64_t size = my_bdev ? my_bdev->get_size() : 0;
-    if (size == 0) {
-      // no bdev
-      continue;
-    }
-    if (my_bdev->supported_bdev_label()) {
-      string my_path = get_device_path(devid);
-      bluestore_bdev_label_t my_label;
-      int r = _read_bdev_label(cct, my_bdev, my_path, &my_label);
-      if (r < 0) {
-        derr << "unable to read label for " << my_path << ": "
-              << cpp_strerror(r) << dendl;
-        continue;
-      } else {
-        if (size == my_label.size) {
-          // no need to expand
-          out << devid
-	      << " : nothing to do, skipped"
-	      << std::endl;
-          continue;
-        } else if (size < my_label.size) {
-          // something weird in bdev label
-          out << devid
-	      <<" : ERROR: bdev label is above device size, skipped"
-	      << std::endl;
-          continue;
-        } else {
-          my_label.size = size;
-          out << devid
-	      << " : Expanding to 0x" << std::hex << size
-	      << std::dec << "(" << byte_u_t(size) << ")"
-	      << std::endl;
-          r = _write_bdev_label(cct, my_bdev, my_path, my_label);
-          if (r < 0) {
-            derr << "unable to write label for " << my_path << ": "
-                  << cpp_strerror(r) << dendl;
-          } else {
-            out << devid
-                << " : size updated to 0x" << std::hex << size
-                << std::dec << "(" << byte_u_t(size) << ")"
-                << std::endl;
-          }
-        }
-      }
-    }
+    need_to_close = true;
   }
-  // now proceed with a shared device
-  uint64_t size0 = fm->get_size();
-  uint64_t size = bdev->get_size();
-  auto devid = bluefs_layout.shared_bdev;
-  auto aligned_size = p2align(size, min_alloc_size);
-  if (aligned_size == size0) {
-    // no need to expand
-    out << devid
-        << " : nothing to do, skipped"
-        << std::endl;
-  } else if (aligned_size < size0) {
-    // something weird in bdev label
-    out << devid
-        << " : ERROR: previous device size is above the current one, skipped"
-	<< std::endl;
-  } else {
-    auto my_path = get_device_path(devid);
-    out << devid
-	<<" : Expanding to 0x" << std::hex << size
-	<< std::dec << "(" << byte_u_t(size) << ")"
-	<< std::endl;  
-    r = _write_out_fm_meta(size);
-    if (r != 0) {
-      derr << "unable to write out fm meta for " << my_path << ": "
-           << cpp_strerror(r) << dendl;
-    } else if (bdev->supported_bdev_label()) {
-      bdev_label.size = size;
-      uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
-      for (uint64_t loc : bdev_label_positions) {
-        if ((loc >= size0) && (loc + lsize <= size)) {
-          bdev_label_valid_locations.push_back(loc);
-          if (!bdev_label_multi) {
-            break;
-          }
-        }
-      }
-      r = _write_bdev_label(cct, bdev, my_path,
-        bdev_label, bdev_label_valid_locations);
-      if (r != 0) {
-        derr << "unable to write label(s) for " << my_path << ": "
-             << cpp_strerror(r) << dendl;
-      }
-    }
-    if (r == 0) {
-      out << devid
-          << " : size updated to 0x" << std::hex << size
-          << std::dec << "(" << byte_u_t(size) << ")"
-          << std::endl;
-      _close_db_and_around();
 
-       //
-      // Mount in read/write to sync expansion changes
-      // and make sure everything is all right.
-      //
-      before_expansion_bdev_size = size0; // preserve orignal size to permit
-                                          // following _db_open_and_around()
-                                          // do some post-init stuff on opened
-                                          // allocator.
-
-      r = _open_db_and_around(false);
-      ceph_assert(r == 0);
-    }
-  }
-  _close_db_and_around();
-  return r;
-}
-
-int BlueStore::expand_devices_online(ostream& out)
-{
   bluefs->dump_block_extents(out);
   out << "Expanding DB/WAL..." << std::endl;
 
@@ -9182,7 +9069,7 @@ int BlueStore::expand_devices_online(ostream& out)
     if (my_bdev->supported_bdev_label()) {
       string my_path = get_device_path(devid);
       bluestore_bdev_label_t my_label;
-      int r = _read_bdev_label(cct, my_bdev, my_path, &my_label);
+      r = _read_bdev_label(cct, my_bdev, my_path, &my_label);
       if (r < 0) {
         derr << "unable to read label for " << my_path << ": "
               << cpp_strerror(r) << dendl;
@@ -9217,7 +9104,9 @@ int BlueStore::expand_devices_online(ostream& out)
                 << std::dec << "(" << byte_u_t(size) << ")"
                 << std::endl;
           }
-          bluefs->expand_device(devid, size, old_size);
+          if (mounted) {
+            bluefs->expand_device(devid, size, old_size);
+          }
         }
       }
     }
@@ -9231,7 +9120,7 @@ int BlueStore::expand_devices_online(ostream& out)
   uint64_t size0 = fm->get_size();
   uint64_t size = bdev->get_size();
   auto aligned_size = p2align(size, min_alloc_size);
-  int r = 0;
+  r = 0;
   if (aligned_size == size0) {
     // no need to expand
     out << devid
@@ -9247,7 +9136,7 @@ int BlueStore::expand_devices_online(ostream& out)
     out << devid
 	<<" : Expanding to 0x" << std::hex << size
 	<< std::dec << "(" << byte_u_t(size) << ")"
-	<< std::endl;  
+	<< std::endl;
     r = _write_out_fm_meta(size);
     if (r != 0) {
       derr << "unable to write out fm meta for " << my_path << ": "
@@ -9265,6 +9154,10 @@ int BlueStore::expand_devices_online(ostream& out)
       }
       r = _write_bdev_label(cct, bdev, my_path,
         bdev_label, bdev_label_valid_locations);
+      if (r != 0) {
+        derr << "unable to write label(s) for " << my_path << ": "
+             << cpp_strerror(r) << dendl;
+      }
     }
     if (r == 0) {
       out << devid
@@ -9272,26 +9165,25 @@ int BlueStore::expand_devices_online(ostream& out)
           << std::dec << "(" << byte_u_t(size) << ")"
           << std::endl;
 
-      // since we are not relying on db open/close to update FM
-      // need to keep FM and the shared allocator in sync now
       fm->expand(aligned_size, db);
       alloc->expand(aligned_size);
       alloc->init_add_free(size0, aligned_size - size0);
-
-      need_to_destage_allocation_file = true;
-      before_expansion_bdev_size = 0;
 
       dout(1) << __func__
               << " : size updated to 0x" << std::hex << size
               << std::dec << "(" << byte_u_t(size) << ")"
               << ", allocator type " << alloc->get_type()
-              << ", capacity 0x" << alloc->get_capacity()
+              << ", capacity 0x" << std::hex << alloc->get_capacity()
               << ", block size 0x" << alloc->get_block_size()
               << ", free 0x" << alloc->get_free()
+              << std::dec
               << ", fragmentation " << alloc->get_fragmentation()
-              << std::dec << dendl;
-
+              << dendl;
     }
+  }
+
+  if (need_to_close) {
+    _close_db_and_around();
   }
   return r;
 }
