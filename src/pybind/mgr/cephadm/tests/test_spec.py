@@ -133,6 +133,7 @@ def test_spec_octopus(spec_json):
     converted = convert_to_old_style_json(spec.to_json())
     if spec_json.get('service_type') == 'osd':
         spec_json['termination_grace_period_seconds'] = 30
+        spec_json['osd_type'] = "classic"
     assert spec_json == converted
 
 

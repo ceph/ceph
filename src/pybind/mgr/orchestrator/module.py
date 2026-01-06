@@ -16,7 +16,7 @@ except ImportError:
     natsorted = sorted  # type: ignore
 
 from ceph.deployment.inventory import Device  # noqa: F401; pylint: disable=unused-variable
-from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, OSDMethod
+from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, OSDMethod, OSDType
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spec_allow_invalid_from_json, TracingSpec
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.deployment.utils import unwrap_ipv6
@@ -1474,7 +1474,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                    dry_run: bool = False,
                    no_overwrite: bool = False,
                    method: Optional[OSDMethod] = None,
-                   inbuf: Optional[str] = None  # deprecated. Was deprecated before Quincy
+                   inbuf: Optional[str] = None,  # deprecated. Was deprecated before Quincy
+                   osd_type: Optional[OSDType] = None
                    ) -> HandleCommandResult:
         """
         Create OSD daemon(s) on all available devices
@@ -1517,7 +1518,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     data_devices=DeviceSelection(all=True),
                     unmanaged=unmanaged,
                     preview_only=dry_run,
-                    method=method
+                    method=method,
+                    osd_type=osd_type
                 )
             ]
             return self._apply_misc(dg_specs, dry_run, format, no_overwrite)
@@ -1528,7 +1530,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     def _daemon_add_osd(self,
                         svc_arg: Optional[str] = None,
                         method: Optional[OSDMethod] = None,
-                        skip_validation: bool = False) -> HandleCommandResult:
+                        skip_validation: bool = False,
+                        osd_type: Optional[OSDType] = None) -> HandleCommandResult:
         """Create OSD daemon(s) on specified host and device(s) (e.g., ceph orch daemon add osd myhost:/dev/sdb)"""
         # Create one or more OSDs"""
 
@@ -1577,6 +1580,7 @@ Usage:
             drive_group = DriveGroupSpec(
                 placement=PlacementSpec(host_pattern=host_name),
                 method=method,
+                osd_type=osd_type,
                 **drive_group_spec,
             )
         except (TypeError, KeyError, ValueError) as e:

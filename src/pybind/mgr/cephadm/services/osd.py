@@ -404,6 +404,8 @@ class OSDService(CephService):
 
             if hasattr(svc_spec, 'objectstore') and svc_spec.objectstore:
                 config['objectstore'] = svc_spec.objectstore
+            if hasattr(svc_spec, 'osd_type') and svc_spec.osd_type:
+                config['osd_type'] = svc_spec.osd_type
         return config, parent_deps
 
 
