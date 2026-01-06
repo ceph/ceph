@@ -229,7 +229,7 @@ The following QAT-related settings can be added to the Ceph configuration file
 
 .. _QAT Support for Compression: https://github.com/ceph/ceph/pull/19714
 .. _QAT based Encryption for RGW: https://github.com/ceph/ceph/pull/19386
-.. _Intel Quickassist Technology: https://01.org/intel-quickassist-technology
+.. _Intel QuickAssist Technology: https://www.intel.com/content/www/us/en/developer/topic-technology/open/quick-assist-technology/overview.html
 .. _QATzip: https://github.com/intel/QATzip
 .. _OpenSSL support for RGW encryption: https://github.com/ceph/ceph/pull/15168
 .. _QAT Engine: https://github.com/intel/QAT_Engine
