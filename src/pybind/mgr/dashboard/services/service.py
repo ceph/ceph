@@ -161,7 +161,7 @@ class RgwServiceManager:
                     'user', 'create',
                     '--uid', user,
                     '--display-name', 'Ceph Dashboard',
-                    '--system',
+                    '--admin',
                 ] + cmd_realm_option
                 _, out, err = mgr.send_rgwadmin_command(rgw_create_user_cmd)
                 if out:
