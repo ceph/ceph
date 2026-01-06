@@ -40,20 +40,9 @@ using std::string;
 using ceph::bufferlist;
 using ceph::Formatter;
 
-int KeyRing::from_ceph_context(CephContext *cct)
+int KeyRing::from_ceph_context(CephContext *cct, std::ostream* os)
 {
   const auto& conf = cct->_conf;
-  string filename;
-
-  int ret = ceph_resolve_file_search(conf->keyring, filename);
-  if (!ret) {
-    ret = load(cct, filename);
-    if (ret < 0) {
-      lderr(cct) << "failed to load " << filename
-		 << ": " << cpp_strerror(ret) << dendl;
-    }
-    return ret;
-  }
 
   if (!conf->key.empty()) {
     EntityAuth ea;
@@ -63,7 +52,7 @@ int KeyRing::from_ceph_context(CephContext *cct)
       return 0;
     }
     catch (ceph::buffer::error& e) {
-      lderr(cct) << "failed to decode key '" << conf->key << "'" << dendl;
+      *os << "failed to decode key from 'key' config";
       return -EINVAL;
     }
   }
@@ -73,24 +62,40 @@ int KeyRing::from_ceph_context(CephContext *cct)
     string err;
     int r = bl.read_file(conf->keyfile.c_str(), &err);
     if (r < 0) {
-      lderr(cct) << err << dendl;
+      *os << "unable to read keyfile '" << conf->keyfile << "': " << err;
       return r;
-    }
-    string k(bl.c_str(), bl.length());
-    EntityAuth ea;
-    try {
-      ea.key.decode_base64(k);
-      add(conf->name, ea);
-      return 0;
-    }
-    catch (ceph::buffer::error& e) {
-      lderr(cct) << "failed to decode key '" << k << "'" << dendl;
-      return -EINVAL;
+    } else {
+      string k(bl.c_str(), bl.length());
+      EntityAuth ea;
+      try {
+        ea.key.decode_base64(k);
+        add(conf->name, ea);
+        return 0;
+      }
+      catch (ceph::buffer::error& e) {
+        *os << "failed to decode key from 'keyfile' config: '" << conf->keyfile << "'";
+        return -EINVAL;
+      }
     }
   }
 
-  /* this can happen during startup when configs are still being set */
-  ldout(cct, 2) << "unable to find a keyring on " << conf->keyring << ": " << cpp_strerror(ret) << dendl;
+  if (!conf->keyring.empty()) {
+    string filename;
+    int ret = ceph_resolve_file_search(conf->keyring, filename);
+    if (!ret) {
+      ret = load(cct, filename);
+      if (ret < 0) {
+        *os << "failed to load 'keyring' config file '" << filename << "': " << cpp_strerror(ret);
+      }
+      return ret;
+    } else {
+      *os << "unable to find a keyring via 'keyring' config " << conf->keyring << ": " << cpp_strerror(ret);
+      return -ENOENT;
+    }
+  }
+
+  /* Note: this can happen during startup when configs are still being set */
+  *os << "unable to find suitable key from configs 'keyring', 'keyfile', or 'key'";
   return -ENOENT;
 }
 
