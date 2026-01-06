@@ -227,37 +227,23 @@ class NFSCluster:
             log.exception("Failed to list NFS Cluster")
             raise ErrorResponse.wrap(e)
 
-    def _get_daemon_role(
+    def _get_daemon_status(
             self,
-            hostname: str,
-            daemon_running: bool,
-            sorted_running_hosts: List[str]
+            daemon_status: Any
     ) -> str:
         """
-        Determine the role of an NFS daemon for active/standby display.
-
-        Role definitions:
-        - "active": Primary daemon (first running host sorted alphabetically)
-        - "standby": Secondary daemon ready to take over if active fails
-        - "stopped": Daemon is not running
+        Get simplified daemon status using built-in DaemonDescriptionStatus.to_str() method.
+        
+        Returns:
+        - "running": Daemon is running
         - "error": Daemon is in error state
+        - "stopped": Daemon is stopped
         - "starting": Daemon is starting up
         - "unknown": Status cannot be determined
-
-        The first running daemon (sorted alphabetically by hostname) is designated
-        as "active". While HAProxy load-balances across all running daemons, this
-        provides a consistent primary/secondary view for operational clarity.
-
-        For standalone NFS (no ingress):
-            First running daemon is "active", others are "standby".
         """
-        if not daemon_running:
-            return "stopped"
-
-        # First running host (sorted alphabetically) is active, others are standby
-        if sorted_running_hosts and hostname == sorted_running_hosts[0]:
-            return "active"
-        return "standby"
+        from orchestrator import DaemonDescriptionStatus
+        
+        return DaemonDescriptionStatus.to_str(daemon_status)
 
     def _show_nfs_cluster_info(self, cluster_id: str) -> Dict[str, Any]:
         """
@@ -295,12 +281,7 @@ class NFSCluster:
                         monitor_port = svc.ports[1]
                 break
 
-        # Build sorted list of running daemon hostnames for active/passive role assignment
-        # First host (sorted alphabetically) is designated as "active"
-        sorted_running_hosts: List[str] = sorted([
-            d.hostname for d in cluster_daemons
-            if d.hostname and d.status == DaemonDescriptionStatus.running
-        ])
+        # No longer needed as we're not showing active/passive per daemon
 
         # Build backend list with role information
         backends: List[Dict[str, Any]] = []
@@ -324,28 +305,14 @@ class NFSCluster:
                     else:
                         ip = resolve_ip(daemon.hostname)
 
-                # Determine daemon role based on status
-                daemon_running = daemon.status == DaemonDescriptionStatus.running
-                if daemon.status == DaemonDescriptionStatus.error:
-                    role = "error"
-                elif daemon.status == DaemonDescriptionStatus.starting:
-                    role = "starting"
-                elif daemon.status == DaemonDescriptionStatus.stopped:
-                    role = "stopped"
-                elif daemon.status is None:
-                    role = "unknown"
-                else:
-                    role = self._get_daemon_role(
-                        daemon.hostname,
-                        daemon_running,
-                        sorted_running_hosts
-                    )
+                # Get daemon status
+                status = self._get_daemon_status(daemon.status)
 
                 backends.append({
                     "hostname": daemon.hostname,
                     "ip": ip,
                     "port": daemon.ports[0] if daemon.ports else None,
-                    "status": role
+                    "status": status
                 })
             except orchestrator.OrchestratorError:
                 log.warning(f"Failed to get info for NFS daemon on {daemon.hostname}")
@@ -354,14 +321,11 @@ class NFSCluster:
         # Sort backends by hostname for consistent output
         backends.sort(key=lambda x: x["hostname"])
 
-        # Build result dictionary
-        r: Dict[str, Any] = {
-            'virtual_ip': virtual_ip,
-            'backend': backends,
-            'placement': None,
-        }
-
-        # Get NFS service spec for placement information
+        # Determine deployment type based on ingress configuration and actual daemon count
+        deployment_type = "standalone"
+        placement = None
+        
+        # Get NFS service spec for placement information first
         nfs_sc = self.mgr.describe_service(
             service_type='nfs',
             service_name=f'nfs.{cluster_id}'
@@ -370,26 +334,30 @@ class NFSCluster:
         for svc in nfs_services:
             if svc.spec.service_id == cluster_id:
                 placement = svc.spec.placement
-                if placement:
-                    placement_info: Dict[str, Any] = {}
-                    if placement.hosts:
-                        placement_info['hosts'] = [str(h) for h in placement.hosts]
-                    if placement.count is not None:
-                        placement_info['count'] = placement.count
-                    if placement.label:
-                        placement_info['label'] = placement.label
-                    if placement.host_pattern:
-                        placement_info['host_pattern'] = str(placement.host_pattern)
-                    r['placement'] = placement_info if placement_info else str(placement)
                 break
+        
+        if ingress_mode:
+            # Check if multiple NFS daemons are configured
+            if len(backends) > 1 or (placement and placement.count and placement.count > 1):
+                deployment_type = "active-active"
+            else:
+                deployment_type = "active-passive"
+        
+        # Build result dictionary
+        r: Dict[str, Any] = {
+            'deployment_type': deployment_type,
+            'virtual_ip': virtual_ip,
+            'backend': backends,
+            'placement': placement.to_json() if placement else None,
+        }
 
         # Add ingress configuration to result
         if ingress_mode:
             r['ingress_mode'] = ingress_mode.value
         if ingress_port:
-            r['port'] = ingress_port
+            r['ingress_port'] = ingress_port
         if monitor_port:
-            r['monitor_port'] = monitor_port
+            r['ingress_monitor_port'] = monitor_port
 
         log.debug("Successfully fetched %s info: %s", cluster_id, r)
         return r
