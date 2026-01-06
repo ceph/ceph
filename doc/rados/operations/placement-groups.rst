@@ -631,7 +631,7 @@ For this reason, limiting the number of PGs saves significant resources.
 Choosing the Number of PGs
 ==========================
 
-.. note: It is rarely necessary to do the math in this section by hand.
+.. note:: It is rarely necessary to do the math in this section by hand.
    Instead, use the ``ceph osd pool autoscale-status`` command in combination
    with the ``target_size_bytes`` or ``target_size_ratio`` pool properties. For
    more information, see :ref:`pg-autoscaler`.

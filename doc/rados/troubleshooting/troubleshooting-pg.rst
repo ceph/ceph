@@ -551,7 +551,7 @@ For example:
 
    ceph pg repair 1.4
     
-.. warning: This command overwrites the "bad" copies with "authoritative"
+.. warning:: This command overwrites the "bad" copies with "authoritative"
    copies. In most cases, Ceph is able to choose authoritative copies from all
    the available replicas by using some predefined criteria. This, however,
    does not work in every case. For example, it might be the case that the

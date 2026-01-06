@@ -528,7 +528,7 @@ Pools set at least the following parameters:
 See :ref:`setpoolvalues` for details.
 
 
-.. index: architecture; placement group mapping
+.. index:: architecture; placement group mapping
 
 Mapping PGs to OSDs
 ~~~~~~~~~~~~~~~~~~~

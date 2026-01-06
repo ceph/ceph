@@ -747,7 +747,7 @@ The relevant erasure-code profile properties are as follows:
 
    ceph osd crush rule create-erasure {name} {profile-name}
 
-.. note: When creating a new pool, it is not necessary to create the rule
+.. note:: When creating a new pool, it is not necessary to create the rule
    explicitly. If only the erasure-code profile is specified and the rule
    argument is omitted, then Ceph will create the CRUSH rule automatically.
 
