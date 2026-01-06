@@ -1,3 +1,4 @@
+// WIDE TEARSHEET
 // No css variable to apply css to modal div hence using css ngdeep
 // This is needed to set the width of tearsheet as per carbon standards.
 :host ::ng-deep .cds--modal-container {
@@ -7,22 +8,43 @@
   max-block-size: calc(100% - 5.5rem);
 }
 
+// FULL TEARSHEET
+.tearsheet--full {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.tearsheet-cols--full {
+  margin: 0;
+  padding: 0;
+}
+
+// HEADER
 .tearsheet-header {
   background-color: var(--cds-layer-01);
   border-block-end: 1px solid var(--cds-border-subtle-01);
   fill: var(--cds-icon-primary);
   padding: var(--cds-spacing-06) var(--cds-spacing-07);
 
-  .tearsheet-title {
+  &-title {
     color: var(--cds-text-primary);
   }
 
-  .tearsheet-description {
+  &-description {
     color: var(--cds-text-secondary);
     margin-top: var(--cds-spacing-04);
+    margin-top: var(--cds-spacing-04);
+  }
+
+  &--full {
+    padding: 0 0 var(--cds-spacing-05) var(--cds-spacing-07);
+    position: sticky;
   }
 }
 
+// BODY
 .tearsheet-body {
   height: 100%;
   margin: 0;
@@ -50,16 +72,25 @@
       flex-direction: column;
       margin: 0;
       overflow-y: auto;
-      padding: var(--cds-spacing-06) var(--cds-spacing-07);
+
+      &--full {
+        padding-left: 0;
+      }
     }
   }
 }
 
+//FOOTER
 .tearsheet-footer {
   background: var(--cds-background);
   border-top: 1px solid var(--cds-border-subtle);
 
-  .tearsheet-footer-cancel {
+  &-cancel {
     margin-left: var(--cds-spacing-05);
+  }
+
+  &--full {
+    bottom: 0;
+    position: sticky;
   }
 }
