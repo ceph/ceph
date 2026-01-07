@@ -49,10 +49,64 @@ p {
   }
 }
 
+.logs-container{
+
+  .btn-group {
+    margin-top: -57px;
+    position: absolute;
+    right: 0;
+  }
+
+  height: 70vh;
+  max-height: 80vh;
+  overflow-y: auto;
+  // border: 1px solid vv.$gray-300;
+  // border-radius: 5px;
+  // padding: 1rem;
+
+  
+  .timestamp {
+    // flex-shrink: 0;
+    font-weight: bold;
+  }
+
+  .priority {
+    margin-left: 0.3rem;
+  }
+
+  .message {
+    // margin-left: 1rem;
+  }
+
+  .err {
+    color: vv.$danger;
+  }
+
+  .warn {
+    color: vv.$warning;
+  }
+
+  .info {
+    color: vv.$info;
+  }
+
+  .debug {
+    color: vv.$gray-700;
+  }
+}
+
 ::ng-deep cd-logs ngb-timepicker input.ngb-tp-input {
   width: 3.5rem !important;
 }
 
 .card-body.overflow-auto {
   height: 50vh;
+}
+
+.cds--snippet--multi {
+    inline-size: 100%;
+    max-inline-size: 100%;
+    // overflow-y: auto;/
+    // height: 0vh;
+    // max-height: 70vh;
 }
