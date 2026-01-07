@@ -64,9 +64,6 @@ export class CephfsMirroringWizardComponent implements OnInit {
     }
   }
 
-  get sourceChecked(): boolean {
-    return this.form.get('localRole')?.value === LOCAL_ROLE;
-  }
 
   onLocalRoleChange() {
     this.form.patchValue({ localRole: LOCAL_ROLE, remoteRole: null });

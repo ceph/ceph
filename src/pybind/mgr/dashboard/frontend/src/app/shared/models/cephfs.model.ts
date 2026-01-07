@@ -52,4 +52,32 @@ export interface MirroringRow {
   id?: string;
 }
 
+export type CephfsPool = {
+  pool: string;
+  used: number;
+};
+
+export type CephfsDetail = {
+  cephfs: {
+    id: number;
+    name: string;
+    pools: CephfsPool[];
+    flags?: {
+      enabled?: boolean;
+    };
+    mirror_info?: {
+      peers?: Record<string, unknown>;
+    };
+  };
+};
+
+export type FilesystemRow = {
+  id: number;
+  name: string;
+  pools: string[];
+  used: string;
+  mdsStatus: string;
+  mirroringStatus: string;
+};
+
 export type DaemonResponse = Daemon[];

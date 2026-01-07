@@ -1,0 +1,76 @@
+<div cds-mb="lg">
+  <div class="cds--type-heading-03"
+       i18n>Select file system</div>
+</div>
+<div class="cds-mt-5">
+  <cd-alert-panel type="info">
+    <div [cdsStack]="'vertical'"
+         [gap]="2">
+      <div class="cds--type-heading-compact-01"
+           i18n>Selection requirements</div>
+      <ul class="cds--type-body-compact-01 requirements-list">
+        <li i18n>Only one filesystem can be selected as the mirroring target</li>
+        <li i18n>The selected filesystem must have an active MDS (Metadata Server)</li>
+        <li i18n>If mirroring is already enabled, the existing configuration will be reused</li>
+        <li i18n>Ensure sufficient storage capacity for incoming mirrored snapshots</li>
+      </ul>
+    </div>
+  </cd-alert-panel>
+</div>
+
+<div class="cds-mt-5">
+  <cd-table [data]="filesystems"
+            [columns]="columns"
+            columnMode="flex"
+            selectionType="singleRadio"
+            headerTitle="Select target filesystem"
+            headerDescription="Choose the filesystem that will receive mirrored data from the local cluster."
+            (updateSelection)="updateSelection($event)">
+    <ng-template #mdsStatus
+                 let-value="data.value"
+                 let-row="data.row">
+      <div [cdsStack]="'horizontal'"
+           gap="2">
+        @if (value === 'Active') {
+        <cd-icon type="success"></cd-icon>
+        }
+        @if (value === 'Inactive') {
+        <cd-icon type="warning"></cd-icon>
+        }
+        <span class="cds--type-body-compact-01">{{ value | titlecase }}</span>
+      </div>
+    </ng-template>
+
+    <ng-template #mirroringStatus
+                 let-value="data.value"
+                 let-row="data.row">
+      <div [cdsStack]="'horizontal'"
+           gap="2">
+        @if (value === 'Enabled') {
+        <cd-icon type="success"></cd-icon>
+        }
+        @if (value === 'Disabled') {
+        <cd-icon type="warning"></cd-icon>
+        }
+        <span class="cds--type-body-compact-01">{{ value | titlecase }}</span>
+      </div>
+    </ng-template>
+
+    <ng-template let-row="row"
+                 let-col="col">
+      <ng-container [ngSwitch]="col.prop">
+        <ng-container *ngSwitchCase="'pools'">
+          @for (pool of row.pools; track $index; let last = $last) {
+          <cd-badge>{{ pool }}</cd-badge>
+          @if (!last) {
+          <span>, </span>
+          }
+          }
+        </ng-container>
+        <ng-container *ngSwitchDefault>
+          {{ row[col.prop] }}
+        </ng-container>
+      </ng-container>
+    </ng-template>
+  </cd-table>
+</div>
