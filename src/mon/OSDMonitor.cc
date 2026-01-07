@@ -13802,8 +13802,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     std::optional<int64_t> source_pool_id;
     const pg_pool_t *source_pool = nullptr;
     if (cmd_getval(cmdmap, "migrate_from_pool", source_pool_name)) {
-      //BILL:FIXME: release should be umbrella
-      if (osdmap.require_min_compat_client < ceph_release_t::tentacle) {
+      if (osdmap.require_min_compat_client < ceph_release_t::umbrella) {
 	ss << "require_min_compat_client "
 	   << osdmap.require_min_compat_client
 	   << " < umbrella, which is required for pool migration. "
@@ -13812,12 +13811,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -EPERM;
 	goto reply_no_propose;
       }
+
       if (osdmap.require_osd_release < ceph_release_t::umbrella) {
-        if (ss) {
-          ss << "All OSDs must be upgraded to umbrella or "
-              << "later before using pool migration";
-        }
-        return -EINVAL;
+        ss << "All OSDs must be upgraded to umbrella or "
+            << "later before using pool migration";
+        err = -EPERM;
+        goto reply_no_propose;
       }
 
       source_pool_id = osdmap.lookup_pg_pool_name(source_pool_name);
