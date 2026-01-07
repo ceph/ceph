@@ -15,7 +15,6 @@ import { FormBuilder, FormGroup } from '@angular/forms';
   standalone: false,
   styleUrls: ['./cephfs-mirroring-wizard.component.scss']
 })
-
 export class CephfsMirroringWizardComponent implements OnInit {
   steps: Step[] = [];
   title: string = $localize`Create new CephFS Mirroring`;
