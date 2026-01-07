@@ -177,9 +177,10 @@ class FSPolicy:
                 self.op_tracker.finish_async_op()
 
     def process_updates(self):
-        def acquire_message(dir_path):
+        def acquire_message(dir_path, prio_mode):
             return json.dumps({'dir_path': dir_path,
-                               'mode': 'acquire'
+                               'mode': 'acquire',
+                               'prio_mode': prio_mode
                                })
         def release_message(dir_path):
             return json.dumps({'dir_path': dir_path,
@@ -200,16 +201,19 @@ class FSPolicy:
                     continue
                 elif action_type == ActionType.MAP_UPDATE:
                     # take care to not overwrite purge status
-                    update_map[dir_path] = {'version': 1,
+                    update_map[dir_path] = {'version': 2,
                                             'instance_id': lookup_info['instance_id'],
-                                            'last_shuffled': lookup_info['mapped_time']
+                                            'last_shuffled': lookup_info['mapped_time'],
                     }
+                    if 'prio_mode' in lookup_info:
+                        update_map[dir_path]['prio_mode'] = lookup_info['prio_mode']
                     if lookup_info['purging']:
                         update_map[dir_path]['purging'] = 1
                 elif action_type == ActionType.MAP_REMOVE:
                     removals.append(dir_path)
                 elif action_type == ActionType.ACQUIRE:
-                    notifies[dir_path] = (lookup_info['instance_id'], acquire_message(dir_path))
+                    notifies[dir_path] = (lookup_info['instance_id'],
+                                          acquire_message(dir_path, lookup_info['prio_mode']))
                 elif action_type == ActionType.RELEASE:
                     notifies[dir_path] = (lookup_info['instance_id'], release_message(dir_path))
             if update_map or removals:
@@ -227,10 +231,11 @@ class FSPolicy:
                     raise MirrorException(-errno.EAGAIN, f'remove in-progress for {dir_path}')
                 else:
                     raise MirrorException(-errno.EEXIST, f'directory {dir_path} is already tracked')
-            schedule = self.policy.add_dir(dir_path)
+            schedule = self.policy.add_dir(dir_path, Policy.DEFAULT_MODE)
             if not schedule:
                 return
-            update_map = {dir_path: {'version': 1, 'instance_id': '', 'last_shuffled': 0.0}}
+            update_map = {dir_path: {'version': 2, 'instance_id': '', 'last_shuffled': 0.0,
+                                     'prio_mode': Policy.DEFAULT_MODE}}
             updated = False
             def update_safe(updates, removals, r):
                 nonlocal updated
@@ -247,9 +252,10 @@ class FSPolicy:
                 raise MirrorException(-errno.ENOENT, f'directory {dir_path} id not tracked')
             if lookup_info['purging']:
                 raise MirrorException(-errno.EINVAL, f'directory {dir_path} is under removal')
-            update_map = {dir_path: {'version': 1,
+            update_map = {dir_path: {'version': 2,
                                      'instance_id': lookup_info['instance_id'],
                                      'last_shuffled': lookup_info['mapped_time'],
+                                     'prio_mode': lookup_info['prio_mode'],
                                      'purging': 1}}
             updated = False
             sync_lock = threading.Lock()
@@ -264,6 +270,35 @@ class FSPolicy:
             with sync_lock:
                 sync_cond.wait_for(lambda: updated)
             schedule = self.policy.remove_dir(dir_path)
+            if schedule:
+                self.schedule_action([dir_path])
+
+    def set_prio_mode(self, dir_path, prio_mode):
+        if prio_mode not in Policy.ALLOWED_MODES:
+            raise MirrorException(-errno.ENOENT, f'invalid mode: "{prio_mode}".')
+        with self.lock:
+            lookup_info = self.policy.lookup(dir_path)
+            if not lookup_info:
+                raise MirrorException(-errno.ENOENT, f'directory {dir_path} id not tracked')
+            if lookup_info['purging']:
+                raise MirrorException(-errno.EINVAL, f'directory {dir_path} is under removal')
+            update_map = {dir_path: {'version': 2,
+                                     'instance_id': lookup_info['instance_id'],
+                                     'last_shuffled': lookup_info['mapped_time'],
+                                     'prio_mode': prio_mode}}
+            updated = False
+            sync_lock = threading.Lock()
+            sync_cond = threading.Condition(sync_lock)
+            def update_safe(r):
+                with sync_lock:
+                    nonlocal updated
+                    updated = True
+                    sync_cond.notifyAll()
+            request = UpdateDirMapRequest(self.ioctx, update_map.copy(), [], update_safe)
+            request.send()
+            with sync_lock:
+                sync_cond.wait_for(lambda: updated)
+            schedule = self.policy.set_prio_mode(dir_path, prio_mode)
             if schedule:
                 self.schedule_action([dir_path])
 
@@ -721,6 +756,22 @@ class FSSnapshotMirror:
             return me.args[0], '', me.args[1]
         except Exception as e:
             return e.args[0], '', 'failed to remove directory'
+
+    def set_prio_mode(self, filesystem, dir_path, prio_mode):
+        try:
+            with self.lock:
+                if not self.filesystem_exist(filesystem):
+                    raise MirrorException(-errno.ENOENT, f'filesystem {filesystem} does not exist')
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if not fspolicy:
+                    raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
+                dir_path = FSSnapshotMirror.norm_path(dir_path)
+                fspolicy.set_prio_mode(dir_path, prio_mode)
+                return 0, json.dumps({}), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except Exception as e:
+            return e.args[0], '', 'failed to set prio-mode'
 
     def list_dirs(self, filesystem):
         try:
