@@ -16,10 +16,13 @@
 #include "common/version.h"
 
 #include <stdlib.h>
+#include <cstring>
 #include <sstream>
 
 #include "ceph_ver.h"
 #include "common/ceph_strings.h"
+
+#include <iostream>
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
@@ -46,7 +49,8 @@ const char *git_version_to_str(void)
 
 static std::string get_ceph_vendor_release()
 {
-  if (!CEPH_VENDOR_RELEASE.empty()) {
+  std::cout << "#define value is: " << CEPH_VENDOR_RELEASE ;
+  if (CEPH_VENDOR_RELEASE && strlen(CEPH_VENDOR_RELEASE)) {
     return std::string(" release ") + STRINGIFY(CEPH_VENDOR_RELEASE);
   } else {
     return "";
@@ -57,7 +61,6 @@ static std::string get_ceph_vendor_release()
 std::string const pretty_version_to_str(void)
 {
   std::ostringstream oss;
-  std::cout << CEPH_VENDOR_RELEASE << std::endl;
   oss << "ceph version " << CEPH_GIT_NICE_VER
       << " (" << STRINGIFY(CEPH_GIT_VER) << ") "
       << ceph_release_name(CEPH_RELEASE)

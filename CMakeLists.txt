@@ -862,3 +862,5 @@ add_tags(ctags
   EXCLUDES "*.js" "*.css" ".tox" "python-common/build")
 add_custom_target(tags DEPENDS ctags)
 
+add_compile_definitions(CEPH_VENDOR_RELEASE="${CEPH_VENDOR_RELEASE}")
+
