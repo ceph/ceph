@@ -117,8 +117,8 @@ private:
       : fs_mirror(fs_mirror) {
     }
 
-    void acquire_directory(std::string_view dir_path) override {
-      fs_mirror->handle_acquire_directory(dir_path);
+    void acquire_directory(std::string_view dir_path, std::string_view prio_mode) override {
+      fs_mirror->handle_acquire_directory(dir_path, prio_mode);
     }
 
     void release_directory(std::string_view dir_path) override {
@@ -152,7 +152,7 @@ private:
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::fs_mirror");
   SnapListener m_snap_listener;
   TimestampListener m_ts_listener;
-  std::set<std::string, std::less<>> m_directories;
+  std::unordered_map<std::string, std::string> m_directories;
   Peers m_all_peers;
   std::map<Peer, std::unique_ptr<PeerReplayer>> m_peer_replayers;
 
@@ -192,7 +192,7 @@ private:
   void shutdown_instance_watcher();
   void handle_shutdown_instance_watcher(int r);
 
-  void handle_acquire_directory(std::string_view dir_path);
+  void handle_acquire_directory(std::string_view dir_path, std::string_view prio_mode);
   void handle_release_directory(std::string_view dir_path);
 };
 
