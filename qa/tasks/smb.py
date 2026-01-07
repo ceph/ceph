@@ -10,6 +10,7 @@ import shlex
 import time
 
 from teuthology.exceptions import ConfigError, CommandFailedError
+from teuthology.task import ssh_keys
 
 
 log = logging.getLogger(__name__)
@@ -372,8 +373,13 @@ def workunit(ctx, config):
     _config['no_coverage_and_limits'] = config.get(
         'no_coverage_and_limits', True
     )
+    _ssh_keys_config = config.get('ssh_keys', {})
+    _config['enable_ssh_keys'] = _ssh_keys_config not in (False, None)
     log.info('Passing workunit config: %r', _config)
-    with write_metadata_file(ctx, _config):
+    with contextlib.ExitStack() as estack:
+        if _config['enable_ssh_keys']:
+            estack.enter_context(ssh_keys.task(ctx, _ssh_keys_config))
+        estack.enter_context(write_metadata_file(ctx, _config))
         return workunit.task(ctx, _config)
 
 
