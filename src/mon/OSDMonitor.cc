@@ -13812,6 +13812,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -EPERM;
 	goto reply_no_propose;
       }
+      if (osdmap.require_osd_release < ceph_release_t::umbrella) {
+        if (ss) {
+          ss << "All OSDs must be upgraded to umbrella or "
+              << "later before using pool migration";
+        }
+        return -EINVAL;
+      }
 
       source_pool_id = osdmap.lookup_pg_pool_name(source_pool_name);
       if (source_pool_id < 0) {
