@@ -351,6 +351,25 @@ private:
   seastar::future<> store_maps(ceph::os::Transaction& t,
                                epoch_t start, Ref<MOSDMap> m);
   void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
+
+  // -- PG merging --
+  std::map<pg_t, eversion_t> ready_to_merge_source;
+  std::map<pg_t,std::tuple<eversion_t,epoch_t,epoch_t>> ready_to_merge_target;
+  std::set<pg_t> not_ready_to_merge_source;
+  std::map<pg_t,pg_t> not_ready_to_merge_target;
+  std::set<pg_t> sent_ready_to_merge_source;
+  seastar::future<> set_ready_to_merge_source(pg_t pgid,
+                                 eversion_t version);
+  seastar::future<> set_ready_to_merge_target(pg_t pgid,
+                                 eversion_t version,
+                                 epoch_t last_epoch_started,
+                                 epoch_t last_epoch_clean);
+  seastar::future<> set_not_ready_to_merge_source(pg_t source);
+  seastar::future<> set_not_ready_to_merge_target(pg_t target, pg_t source);
+  void clear_ready_to_merge(pg_t pgid);
+  seastar::future<> send_ready_to_merge();
+  void clear_sent_ready_to_merge();
+  void prune_sent_ready_to_merge(const cached_map_t osdmap);
 };
 
 /**
@@ -611,6 +630,15 @@ public:
 	return make_local_shared_foreign(std::move(fmap));
       });
   }
+
+  FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_source)
+  FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_target)
+  FORWARD_TO_OSD_SINGLETON(set_not_ready_to_merge_source)
+  FORWARD_TO_OSD_SINGLETON(set_not_ready_to_merge_target)
+  FORWARD_TO_OSD_SINGLETON(clear_ready_to_merge)
+  FORWARD_TO_OSD_SINGLETON(send_ready_to_merge)
+  FORWARD_TO_OSD_SINGLETON(clear_sent_ready_to_merge)
+  FORWARD_TO_OSD_SINGLETON(prune_sent_ready_to_merge)
 
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
   FORWARD(get_throttle, get_throttle, local_state.throttler)
