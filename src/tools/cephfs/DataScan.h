@@ -14,8 +14,10 @@
  */
 
 
-#include "MDSUtility.h"
 #include "include/rados/librados.hpp"
+
+#include "MDSUtility.h"
+#include "ProgressTracker.h"
 
 struct inode_backtrace_t;
 class InodeStore;
@@ -244,100 +246,116 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
 
 class DataScan : public MDSUtility, public MetadataTool
 {
-  protected:
-    RecoveryDriver *driver;
-    fs_cluster_id_t fscid;
+private:
+  librados::Rados rados;
 
-    std::string metadata_pool_name;
-    std::vector<int64_t> data_pools;
+  uint64_t get_pool_objects(const std::vector<librados::IoCtx*>& data_ios);
+  uint64_t get_metadata_pool_objects(
+      librados::IoCtx& metadata_io,
+      bool worker_sliced = false);
 
-    // IoCtx for data pool (where we scrape file backtraces from)
-    librados::IoCtx data_io;
-    // Remember the data pool ID for use in layouts
-    int64_t data_pool_id;
-    // IoCtxs for extra data pools
-    std::vector<librados::IoCtx> extra_data_ios;
+protected:
+  RecoveryDriver* driver;
+  fs_cluster_id_t fscid;
 
-    uint32_t n;
-    uint32_t m;
+  std::string get_progress_operation_name(std::string_view op_name) const;
 
-    /**
+  // IoCtx for data pool (where we scrape file backtraces from)
+  librados::IoCtx data_io;
+  // Remember the data pool ID for use in layouts
+  int64_t data_pool_id;
+  // IoCtxs for extra data pools
+  std::vector<librados::IoCtx> extra_data_ios;
+
+  uint32_t worker_n;
+  uint32_t worker_m;
+
+  std::string metadata_pool_name;
+  std::vector<int64_t> data_pools;
+
+  /**
      * Scan data pool for backtraces, and inject inodes to metadata pool
      */
-    int scan_inodes();
+  int scan_inodes();
 
-    /**
+  /**
      * Scan data pool for file sizes and mtimes
      */
-    int scan_extents();
+  int scan_extents();
 
-    /**
+  /**
      * Scan metadata pool for 0th dirfrags to link orphaned
      * directory inodes.
      */
-    int scan_frags();
+  int scan_frags();
 
-    /**
+  /**
      * Cleanup xattrs from data pool
      */
-    int cleanup();
+  int cleanup();
 
-    /**
+  /**
      * Check if an inode number is in the permitted ranges
      */
-    bool valid_ino(inodeno_t ino) const;
+  bool valid_ino(inodeno_t ino) const;
 
 
-    int scan_links();
+  int scan_links();
 
-    // Accept pools which are not in the FSMap
-    bool force_pool;
-    // Respond to decode errors by overwriting
-    bool force_corrupt;
-    // Overwrite root objects even if they exist
-    bool force_init;
-    // Only scan inodes without this scrub tag
-    std::string filter_tag;
+  // Accept pools which are not in the FSMap
+  bool force_pool;
+  // Respond to decode errors by overwriting
+  bool force_corrupt;
+  // Overwrite root objects even if they exist
+  bool force_init;
+  // Only scan inodes without this scrub tag
+  std::string filter_tag;
+  // Interval to update progress
+  ProgressTracker::duration progress_update_interval;
 
-    /**
+  /**
      * @param r set to error on valid key with invalid value
      * @return true if argument consumed, else false
      */
-    bool parse_kwarg(
-        const std::vector<const char*> &args,
-        std::vector<const char *>::const_iterator &i,
-        int *r);
+  bool parse_kwarg(
+      const std::vector<const char*>& args,
+      std::vector<const char*>::const_iterator& i,
+      int* r);
 
-    /**
+  /**
      * @return true if argument consumed, else false
      */
-    bool parse_arg(
-      const std::vector<const char*> &arg,
-      std::vector<const char *>::const_iterator &i);
+  bool parse_arg(
+      const std::vector<const char*>& arg,
+      std::vector<const char*>::const_iterator& i);
 
-    int probe_filter(librados::IoCtx &ioctx);
+  int probe_filter(librados::IoCtx& ioctx);
 
-    /**
+  /**
      * Apply a function to all objects in an ioctx's pool, optionally
      * restricted to only those objects with a 00000000 offset and
      * no tag matching DataScan::scrub_tag.
      */
-    int forall_objects(
-        librados::IoCtx &ioctx,
-        bool untagged_only,
-        std::function<int(std::string, uint64_t, uint64_t)> handler);
+  int forall_objects(
+      librados::IoCtx& ioctx,
+      bool untagged_only,
+      std::function<int(std::string, uint64_t, uint64_t)> handler);
 
-  public:
-    static void usage();
-    int main(const std::vector<const char *> &args);
+public:
+  static void usage();
+  int main(const std::vector<const char*>& args);
 
-    DataScan()
-      : driver(NULL), fscid(FS_CLUSTER_ID_NONE),
-	data_pool_id(-1), n(0), m(1),
-        force_pool(false), force_corrupt(false),
-        force_init(false)
-    {
-    }
+  DataScan() :
+    driver(NULL),
+    fscid(FS_CLUSTER_ID_NONE),
+    data_pool_id(-1),
+    worker_n(0),
+    worker_m(1),
+    force_pool(false),
+    force_corrupt(false),
+    force_init(false)
+  {
+  }
 
     ~DataScan() override
     {

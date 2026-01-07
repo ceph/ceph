@@ -762,6 +762,10 @@ if(WITH_LIBCEPHFS OR WITH_FUSE)
   list(APPEND BOOST_COMPONENTS locale)
 endif()
 
+if(WITH_CEPHFS)
+  list(APPEND BOOST_COMPONENTS filesystem)
+endif()
+
 set(Boost_USE_MULTITHREADED ON)
 
 CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
