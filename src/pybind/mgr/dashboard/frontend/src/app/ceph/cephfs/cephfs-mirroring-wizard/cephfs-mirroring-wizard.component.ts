@@ -7,6 +7,7 @@ import {
   REMOTE_ROLE
 } from './cephfs-mirroring-wizard-step.enum';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
+import { BehaviorSubject } from 'rxjs';
 import { WizardStepModel } from '~/app/shared/models/wizard-steps';
 import { FormBuilder, FormGroup } from '@angular/forms';
 @Component({
