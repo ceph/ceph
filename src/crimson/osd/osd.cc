@@ -1330,6 +1330,10 @@ seastar::future<> OSD::committed_osd_maps(
     old_map = osdmap;
   }
 
+  // Drop merge-ready bookkeeping for PGs removed by the map we just
+  // consumed, mirroring classic OSD::consume_map().
+  co_await get_shard_services().prune_sent_ready_to_merge();
+
   if (osdmap->is_up(whoami)) {
     const auto up_from = osdmap->get_up_from(whoami);
     INFO("osd.{}: map e {} marked me up: up_from {}, bind_epoch {}, state {}",

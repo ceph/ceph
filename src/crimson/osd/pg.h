@@ -26,6 +26,7 @@
 #include "osd/DynamicPerfStats.h"
 
 #include "crimson/common/interruptible_future.h"
+#include "crimson/common/gated.h"
 #include "crimson/common/log.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/os/futurized_collection.h"
@@ -563,12 +564,51 @@ public:
   std::pair<ghobject_t, bool>
   do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final;
 
-  // merge/split not ready
-  void clear_ready_to_merge() final {}
-  void set_not_ready_to_merge_target(pg_t pgid, pg_t src) final {}
-  void set_not_ready_to_merge_source(pg_t pgid) final {}
-  void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {}
-  void set_ready_to_merge_source(eversion_t lu) final {}
+  void clear_ready_to_merge() final {
+    LOG_PREFIX(PG::clear_ready_to_merge);
+    SUBDEBUGDPP(osd, "", *this);
+    merge_notify_gate.dispatch_in_background(
+      "clear_ready_to_merge", *this,
+      [this] {
+        return shard_services.clear_ready_to_merge(pgid.pgid);
+      });
+  }
+  void set_not_ready_to_merge_target(pg_t pgid, pg_t src) final {
+    LOG_PREFIX(PG::set_not_ready_to_merge_target);
+    SUBDEBUGDPP(osd, "", *this);
+    merge_notify_gate.dispatch_in_background(
+      "set_not_ready_to_merge_target", *this,
+      [this, pgid, src] {
+        return shard_services.set_not_ready_to_merge_target(pgid, src);
+      });
+  }
+  void set_not_ready_to_merge_source(pg_t pgid) final {
+    LOG_PREFIX(PG::set_not_ready_to_merge_source);
+    SUBDEBUGDPP(osd, "", *this);
+    merge_notify_gate.dispatch_in_background(
+      "set_not_ready_to_merge_source", *this,
+      [this, pgid] {
+        return shard_services.set_not_ready_to_merge_source(pgid);
+      });
+  }
+  void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {
+    LOG_PREFIX(PG::set_ready_to_merge_target);
+    SUBDEBUGDPP(osd, "", *this);
+    merge_notify_gate.dispatch_in_background(
+      "set_ready_to_merge_target", *this,
+      [this, lu, les, lec] {
+        return shard_services.set_ready_to_merge_target(pgid.pgid, lu, les, lec);
+      });
+  }
+  void set_ready_to_merge_source(eversion_t lu) final {
+    LOG_PREFIX(PG::set_ready_to_merge_source);
+    SUBDEBUGDPP(osd, "", *this);
+    merge_notify_gate.dispatch_in_background(
+      "set_ready_to_merge_source", *this,
+      [this, lu] {
+        return shard_services.set_ready_to_merge_source(pgid.pgid, lu);
+      });
+  }
 
   void on_active_actmap() final;
   void on_active_advmap(const OSDMapRef &osdmap) final;
@@ -1147,6 +1187,11 @@ private:
   // whether the system is shutting down, as we don't need to track
   // continuations here.
   bool stopping = false;
+
+  // PeeringListener merge callbacks must remain void, but they trigger async
+  // mon notifies in ShardServices. Gate them here so failures are logged and
+  // PG::stop() waits for them to drain.
+  crimson::common::Gated merge_notify_gate;
 
   PGActivationBlocker wait_for_active_blocker;
   PglogBasedRecovery* pglog_based_recovery_op = nullptr;

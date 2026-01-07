@@ -9,6 +9,7 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
+#include "messages/MOSDPGReadyToMerge.h"
 
 #include "osd/osd_perf_counters.h"
 #include "osd/PeeringState.h"
@@ -304,6 +305,150 @@ void OSDSingletonState::prune_pg_created()
     } else {
       DEBUG("keeping {}", *i);
       ++i;
+    }
+  }
+}
+
+seastar::future<> OSDSingletonState::set_ready_to_merge_source(pg_t pgid,
+                                                  eversion_t version)
+{
+  LOG_PREFIX(OSDSingletonState::set_ready_to_merge_source);
+  DEBUG("{}", pgid);
+  ready_to_merge_source[pgid] = version;
+  ceph_assert(!not_ready_to_merge_source.contains(pgid));
+  return send_ready_to_merge();
+}
+
+seastar::future<> OSDSingletonState::set_ready_to_merge_target(pg_t pgid,
+                                           eversion_t version,
+                                           epoch_t last_epoch_started,
+                                           epoch_t last_epoch_clean)
+{
+  LOG_PREFIX(OSDSingletonState::set_ready_to_merge_target);
+  DEBUG("{}", pgid);
+  ready_to_merge_target.insert(std::make_pair(pgid,
+                                         std::make_tuple(version,
+                                                    last_epoch_started,
+                                                    last_epoch_clean)));
+  ceph_assert(!not_ready_to_merge_target.contains(pgid));
+  return send_ready_to_merge();
+}
+
+seastar::future<> OSDSingletonState::set_not_ready_to_merge_source(pg_t source)
+{
+  LOG_PREFIX(OSDSingletonState::set_not_ready_to_merge_source);
+  DEBUG("{}", source);
+  not_ready_to_merge_source.insert(source);
+  ceph_assert(!ready_to_merge_source.contains(source));
+  return send_ready_to_merge();
+}
+
+seastar::future<> OSDSingletonState::set_not_ready_to_merge_target(pg_t target, pg_t source)
+{
+  LOG_PREFIX(OSDSingletonState::set_not_ready_to_merge_target);
+  DEBUG("{} source {}", target, source);
+  not_ready_to_merge_target[target] = source;
+  ceph_assert(!ready_to_merge_target.contains(target));
+  return send_ready_to_merge();
+}
+
+seastar::future<> OSDSingletonState::send_ready_to_merge()
+{
+  LOG_PREFIX(OSDSingletonState::send_ready_to_merge);
+  DEBUG(" ready_to_merge_source: {} not_ready_to_merge_source: {} \
+          ready_to_merge_target: {} not_ready_to_merge_target: {} \
+          sent_ready_to_merge_source {}", ready_to_merge_source,
+          not_ready_to_merge_source, ready_to_merge_target, not_ready_to_merge_target,
+          sent_ready_to_merge_source);
+
+  struct ready_to_merge_send_t {
+    pg_t pgid;
+    eversion_t source_version;
+    eversion_t target_version;
+    epoch_t last_epoch_started = 0;
+    epoch_t last_epoch_clean = 0;
+    bool ready = false;
+  };
+
+  const epoch_t map_epoch = osdmap->get_epoch();
+  std::vector<ready_to_merge_send_t> pending;
+  pending.reserve(not_ready_to_merge_source.size() +
+                  not_ready_to_merge_target.size() +
+                  ready_to_merge_source.size());
+
+  for (auto src : not_ready_to_merge_source) {
+    if (!sent_ready_to_merge_source.contains(src)) {
+      sent_ready_to_merge_source.insert(src);
+      pending.push_back({src, {}, {}, 0, 0, false});
+    }
+  }
+  for (auto p : not_ready_to_merge_target) {
+    if (!sent_ready_to_merge_source.contains(p.second)) {
+      sent_ready_to_merge_source.insert(p.second);
+      pending.push_back({p.second, {}, {}, 0, 0, false});
+    }
+  }
+  for (auto& [src_pg, src_version] : ready_to_merge_source) {
+    if (not_ready_to_merge_source.contains(src_pg) ||
+        not_ready_to_merge_target.contains(src_pg.get_parent())) {
+      continue;
+    }
+    auto p = ready_to_merge_target.find(src_pg.get_parent());
+    if (p != ready_to_merge_target.end() &&
+        !sent_ready_to_merge_source.contains(src_pg)) {
+      sent_ready_to_merge_source.insert(src_pg);
+      pending.push_back({
+        src_pg,
+        src_version,
+        std::get<0>(p->second),
+        std::get<1>(p->second),
+        std::get<2>(p->second),
+        true});
+    }
+  }
+
+  if (pending.empty()) {
+    return seastar::now();
+  }
+  return seastar::parallel_for_each(
+    std::move(pending),
+    [this, map_epoch](const ready_to_merge_send_t& m) {
+      return monc.send_message(crimson::make_message<MOSDPGReadyToMerge>(
+        m.pgid,
+        m.source_version,
+        m.target_version,
+        m.last_epoch_started,
+        m.last_epoch_clean,
+        m.ready,
+        map_epoch));
+    });
+}
+
+void OSDSingletonState::clear_ready_to_merge(pg_t pgid)
+{
+  ready_to_merge_source.erase(pgid);
+  ready_to_merge_target.erase(pgid);
+  not_ready_to_merge_source.erase(pgid);
+  not_ready_to_merge_target.erase(pgid);
+  sent_ready_to_merge_source.erase(pgid);
+}
+
+void OSDSingletonState::clear_sent_ready_to_merge()
+{
+  sent_ready_to_merge_source.clear();
+}
+
+void OSDSingletonState::prune_sent_ready_to_merge()
+{
+  LOG_PREFIX(OSDSingletonState::prune_sent_ready_to_merge);
+  auto source = sent_ready_to_merge_source.begin();
+  while (source != sent_ready_to_merge_source.end()) {
+    if (!osdmap->pg_exists(*source)) {
+      DEBUG("{}", *source);
+      source = sent_ready_to_merge_source.erase(source);
+    } else {
+      DEBUG(" exist {}", *source);
+      ++source;
     }
   }
 }
