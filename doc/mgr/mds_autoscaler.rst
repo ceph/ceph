@@ -19,6 +19,6 @@ The Ceph monitor daemons remain responsible for promoting or stopping MDS
 according to these settings. The ``mds_autoscaler`` simply adjusts the
 number of MDS daemons spawned by the orchestrator.
 
-.. note: There is no CLI as of the Tentacle release. There are no module
+.. note:: There is no CLI as of the Tentacle release. There are no module
    configurations as of the Tentacle release. Enable or disable the module to
    turn the functionality on or off.
