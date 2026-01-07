@@ -115,12 +115,27 @@ export class CephfsService {
     });
   }
 
-  setAuth(fsName: string, clientId: number, caps: string[], rootSquash: boolean) {
+  setAuth(fsName: string, clientId: string | number, caps: string[], rootSquash: boolean) {
     return this.http.put(`${this.baseURL}/auth`, {
       fs_name: fsName,
       client_id: `client.${clientId}`,
       caps: caps,
       root_squash: rootSquash
+    });
+  }
+
+  createBootstrapToken(fsName: string, clientName: string, siteName: string) {
+    return this.http.post(`${this.baseURL}/mirror/token`, {
+      fs_name: fsName,
+      client_name: clientName,
+      site_name: siteName
+    });
+  }
+
+  createBootstrapPeer(fsName: string, token: string) {
+    return this.http.post(`${this.baseURL}/mirror`, {
+      fs_name: fsName,
+      token: token
     });
   }
 

@@ -9,7 +9,7 @@
       <div>
         <div class="cds--type-heading-03"
              i18n>Choose mirror peer role</div>
-        <p i18n>Select how the cluster will participate in the CephFS Mirroring relationship.</p>
+        <p i18n>Select how the cluster will participate in the CephFS mirroring relationship.</p>
       </div>
 
       <div cdsStack="horizontal">
@@ -70,7 +70,7 @@
         (dismissed)="showMessage = false">
         <div>
           <div class="cds--type-heading-compact-01 cds-mb-2"
-               i18n>About Remote Peer Setup</div>
+            i18n>About remote peer setup</div>
           <div class="cds--type-body-compact-01 cds-mb-3"
                i18n>
             As a remote peer, this cluster prepares to receive mirrored data from an initiating
@@ -93,19 +93,29 @@
 
   <!-- Step 1 -->
   <cd-tearsheet-step>
-    <cd-cephfs-filesystem-selector>
+    <cd-cephfs-filesystem-selector (filesystemSelected)="onFilesystemSelected($event)">
     </cd-cephfs-filesystem-selector>
   </cd-tearsheet-step>
 
   <!-- Step 2 -->
   <cd-tearsheet-step>
-    <div>Test 2</div>
+    <cd-cephfs-mirroring-entity [selectedFilesystem]="selectedFilesystem"
+                                (entitySelected)="onEntitySelected($event)">
+    </cd-cephfs-mirroring-entity>
   </cd-tearsheet-step>
 
   <!-- Step 3 -->
   <cd-tearsheet-step>
-    <div>
-      <p>Test3</p>
-    </div>
+    @if (form.get('remoteRole')?.value === REMOTE_ROLE) {
+    <cd-cephfs-generate-token [selectedFilesystem]="selectedFilesystem"
+                              [selectedEntity]="selectedEntity">
+    </cd-cephfs-generate-token>
+    }
+  </cd-tearsheet-step>
+
+  <!-- Step 4 -->
+  <cd-tearsheet-step>
+    <cd-cephfs-import-token [selectedFilesystem]="selectedFilesystem">
+    </cd-cephfs-import-token>
   </cd-tearsheet-step>
 </cd-tearsheet>
