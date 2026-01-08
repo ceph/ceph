@@ -106,6 +106,154 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
     });
 }
 
+seastar::future<Ref<PG>> ShardServices::extract_pg(spg_t pgid) {
+  auto pg = local_state.pg_map.get_pg(pgid);
+  ceph_assert(pg);
+  co_await remove_pg(pgid);
+  co_return pg;
+}
+
+seastar::future<> ShardServices::perform_source_cleanup(spg_t target_id)
+{
+  LOG_PREFIX(ShardServices::perform_source_cleanup);
+  auto& merge_info = this->local_merge_info;
+
+  // Pull the metadata we left behind in wait_for_merge_sources
+  auto it = merge_info.ready_pgs.find(target_id);
+  if (it == merge_info.ready_pgs.end()) {
+      DEBUG(" Nothing to clean up");
+      co_return;
+  }
+
+  auto sources_with_meta = std::move(it->second);
+  merge_info.ready_pgs.erase(it);
+
+  for (auto& [src_id, meta] : sources_with_meta) {
+    DEBUG(" Releasing source PG {} on shard {}; will be destroyed on shard {}",
+          src_id, seastar::this_shard_id(), meta.first);
+    meta.second.reset();
+  }
+  co_return;
+}
+
+void ShardServices::apply_register_source(
+    merge_info_t& merge_info,
+    spg_t target,
+    spg_t source,
+    int sources_needed)
+{
+  LOG_PREFIX(ShardServices::apply_register_source);
+  // Record the source that is now on this shard
+  merge_info.sources_ready[target].insert(source);
+
+  DEBUG("Source {} registered for target {}. Progress: {}/{}",
+        source, target, merge_info.sources_ready[target].size(), sources_needed);
+
+  // Once all required sources arrive, we fulfill the promise to unblock the target.
+  if (std::cmp_greater_equal(merge_info.sources_ready[target].size(), sources_needed)) {
+    DEBUG("All sources ready for target {}!", target);
+
+    auto it = merge_info.target_ready.find(target);
+
+    if (it == merge_info.target_ready.end()) {
+      /* * CASE A: The sources arrived before the Target PG reached the merge point.
+       * We create a 'pre-fulfilled' promise. When the Target PG eventually
+       * calls wait_for_merge_sources(), it will find this available and
+       * continue without suspending.
+       */
+      auto [new_it, inserted] = merge_info.target_ready.emplace(target, seastar::shared_promise<>());
+      ceph_assert(inserted);
+      new_it->second.set_value();
+    } else {  
+      /* * CASE B: The Target PG is already suspended in wait_for_merge_sources().
+       * Fulfilling this promise wakes up the Target PG.
+       */
+      ceph_assert(!it->second.available());
+      it->second.set_value();
+    }    
+  }
+}
+
+seastar::future<> ShardServices::register_merge_source(
+    spg_t target,
+    spg_t source,
+    int sources_needed)
+{
+  LOG_PREFIX(ShardServices::register_merge_source);
+
+  core_id_t birth_shard = seastar::this_shard_id();
+  core_id_t target_core = co_await get_pg_mapping(target);
+
+  // Remove the source pg from pg_to_shard_mapping so that
+  // it no longer receives any messages
+  auto pg_to_move = co_await extract_pg(source);
+
+  // If the target is on the current shard, just update the local map
+  if (target_core == seastar::this_shard_id()) {
+    // Wrap the PG to ensure its eventual destruction happens on the birth_shard.
+    auto source_pg = crimson::make_local_shared_foreign(std::move(pg_to_move));
+    DEBUG("Target {} is local to shard {}", target, target_core);
+    this->local_merge_info.ready_pgs[target].emplace(source,
+        std::make_pair(birth_shard, std::move(source_pg)));
+    apply_register_source(this->local_merge_info, target, source, sources_needed);
+    co_return;
+  }
+
+  // If the target is on another shard, tell that shard to update its map
+  // We wrap the PG in a foreign_ptr, to safely move across cores in a lambda.
+  auto foreign_pg = seastar::make_foreign(std::move(pg_to_move));
+
+  DEBUG("Target {} is on shard {}. Hopping...", target, target_core);
+
+  co_await container().invoke_on(
+      target_core,
+      [target, source, sources_needed, foreign_pg = std::move(foreign_pg), birth_shard]
+      (ShardServices& target_svc) mutable {
+      // This lambda runs on the target_core.
+      // Store the source PG in a temporary list for the target PG to pick up
+      // Convert to a shared wrapper to ensure destruction returns to the birth shard.
+      auto source_pg = crimson::make_local_shared_foreign<Ref<PG>>(std::move(foreign_pg));
+      target_svc.local_merge_info.ready_pgs[target].emplace(
+          source, std::make_pair(birth_shard, std::move(source_pg)));
+
+      target_svc.apply_register_source(target_svc.local_merge_info, target, source, sources_needed);
+  });
+}
+
+seastar::future<std::map<spg_t, crimson::local_shared_foreign_ptr<Ref<PG>>>>
+ShardServices::wait_for_merge_sources(
+    spg_t target,
+    std::set<spg_t> sources_needed)
+{
+  LOG_PREFIX(ShardServices::wait_for_merge_sources);
+
+  auto& merge_info = this->local_merge_info;
+  auto it = merge_info.target_ready.find(target);
+
+  if (it != merge_info.target_ready.end()) {
+    if (it->second.available()) {
+        DEBUG("Target {}: Sources already ready.", target);
+    } else {
+        DEBUG("Target {}: Waiting on existing promise.", target);
+        co_await it->second.get_shared_future();
+    }
+  } else {
+    auto [new_it, inserted] = merge_info.target_ready.emplace(target, seastar::shared_promise<>());
+    ceph_assert(inserted);
+    DEBUG("Target {}: Created promise, suspending.", target);
+    co_await new_it->second.get_shared_future();
+  }
+
+  auto& pgs = merge_info.ready_pgs[target];
+  std::map<spg_t, crimson::local_shared_foreign_ptr<Ref<PG>>> sources_for_merge;
+  for (auto& [src_id, meta] : pgs) {
+      sources_for_merge[src_id] = meta.second;
+  }
+  merge_info.sources_ready.erase(target);
+  merge_info.target_ready.erase(target);
+  co_return sources_for_merge;
+}
+
 Ref<PG> PerShardState::get_pg(spg_t pgid)
 {
   assert_core();

@@ -502,6 +502,21 @@ public:
 
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
+  struct merge_info_t {
+    // target_pg -> set of source pgids that are ready for merge
+    std::map<spg_t, std::set<spg_t>> sources_ready;
+    // target_pg -> promise that fulfills when all sources are in ready_pgs
+    std::map<spg_t, seastar::shared_promise<>> target_ready;
+    // target_pg -> map<source_pg_id, pair<birth_shard, Ref<PG>>>
+    // We wrap the source PG in a local_shared_foreign_ptr so that it can be
+    // safely stored and accessed on the target PG's shard. The wrapper
+    // ensures that when the PG is eventually released, its destruction
+    // is safely routed back to its birth_shard.
+    std::map<spg_t, std::map<spg_t,
+    std::pair<core_id_t, crimson::local_shared_foreign_ptr<Ref<PG>>>>> ready_pgs;
+  };
+  merge_info_t local_merge_info;
+
   crimson::os::FuturizedStore::Shard &get_store() {
     return local_state.store;
   }
@@ -515,6 +530,10 @@ public:
 
   auto create_split_pg_mapping(spg_t pgid, core_id_t core) {
     return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core);
+  }
+
+  seastar::future<core_id_t> get_pg_mapping(spg_t pgid) {
+    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid);
   }
 
   auto remove_pg(spg_t pgid) {
@@ -631,6 +650,20 @@ public:
 	return make_local_shared_foreign(std::move(fmap));
       });
   }
+
+  seastar::future<> perform_source_cleanup(spg_t target_id);
+  seastar::future<Ref<PG>> extract_pg(spg_t pgid);
+  void apply_register_source(
+    merge_info_t& merge_info,
+    spg_t target,
+    spg_t source,
+    int sources_needed);
+  seastar::future<> register_merge_source(spg_t target,
+                                          spg_t source,
+					  int sources_needed);
+  seastar::future<std::map<spg_t, crimson::local_shared_foreign_ptr<Ref<PG>>>>
+  wait_for_merge_sources(spg_t target,
+                         std::set<spg_t> sources_needed);
 
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_source)
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_target)
