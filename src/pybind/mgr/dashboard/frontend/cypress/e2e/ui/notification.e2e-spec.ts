@@ -11,7 +11,9 @@ describe('Notification page', () => {
     pools.navigateTo('create');
     pools.create(poolName, 8, ['rbd']);
     cy.wait(5000);
-    pools.edit_pool_pg(poolName, 4, false);
+    pools.navigateTo();
+    pools.getTableRow(poolName).should('exist');
+    pools.edit_pool_pg(poolName, 4, true);
   });
 
   after(() => {
