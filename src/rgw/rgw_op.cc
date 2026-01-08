@@ -1875,6 +1875,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   RGWGetObj_CB cb(this);
   RGWGetObj_Filter* filter = &cb;
   boost::optional<RGWGetObj_Decompress> decompress;
+  std::unique_ptr<RGWGetObj_Filter> decrypt;
 
   int64_t cur_ofs = start_ofs;
   int64_t cur_end = end_ofs;
@@ -1902,8 +1903,46 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   op_ret = part->range_to_ofs(ent.meta.accounted_size, cur_ofs, cur_end);
   if (op_ret < 0)
     return op_ret;
+
+  auto part_attrs = part->get_attrs();
+  std::unique_ptr<BlockCrypt> block_crypt;
+  static constexpr bool copy_source = false;
+  op_ret = rgw_s3_prepare_decrypt(s, s->yield, part_attrs, &block_crypt,
+                                  nullptr, copy_source);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to prepare decryption for manifest part" << dendl;
+    return op_ret;
+  }
+  if (block_crypt != nullptr) {
+    std::vector<size_t> parts_len;
+    if (auto i = part_attrs.find(RGW_ATTR_CRYPT_PARTS); i != part_attrs.end()) {
+      try {
+        auto p = i->second.cbegin();
+        using ceph::decode;
+        decode(parts_len, p);
+      } catch (const buffer::error&) {
+        ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS for manifest part" << dendl;
+        return -EIO;
+      }
+    } else if (auto manifest_iter = part_attrs.find(RGW_ATTR_MANIFEST);
+               manifest_iter != part_attrs.end()) {
+      op_ret = RGWGetObj_BlockDecrypt::read_manifest_parts(this, manifest_iter->second,
+                                                           parts_len);
+      if (op_ret < 0) {
+        return op_ret;
+      }
+    }
+
+    decrypt = std::make_unique<RGWGetObj_BlockDecrypt>(
+        s, s->cct, filter, std::move(block_crypt),
+        std::move(parts_len), s->yield);
+    filter = decrypt.get();
+    // Adjust offsets for decryption block alignment
+    filter->fixup_range(cur_ofs, cur_end);
+  }
+
   bool need_decompress;
-  op_ret = rgw_compression_info_from_attrset(part->get_attrs(), need_decompress, cs_info);
+  op_ret = rgw_compression_info_from_attrset(part_attrs, need_decompress, cs_info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to decode compression info" << dendl;
     return -EIO;
