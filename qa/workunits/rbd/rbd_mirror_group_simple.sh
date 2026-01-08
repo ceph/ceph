@@ -2985,8 +2985,6 @@ test_resync_after_relocate_and_force_promote()
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
 
-  mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}"
-
   # relocation: demote primary and promote secondary
   mirror_group_demote "${primary_cluster}" "${pool}/${group0}"
   wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+unknown'
@@ -3489,7 +3487,14 @@ test_resync_marker()
 
   # demote primary and request resync on secondary - check that group does not get deleted (due to resync request flag)
   mirror_group_demote "${primary_cluster}" "${pool}/${group0}" 
-  mirror_group_resync "${secondary_cluster}" "${pool}/${group0}" 
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+unknown'
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+unknown'
+  mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
+
+  # wait to give some time for resync to commence
+  sleep 20
+  # making sure nothing changed eversince
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+unknown'
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+unknown'
 
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after

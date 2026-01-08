@@ -1684,6 +1684,19 @@ void Replayer<I>::get_replayers_by_image_id(
 }
 
 template <typename I>
+void Replayer<I>::prune_image_snapshot(ImageReplayer<I>* image_replayer,
+    uint64_t snap_id, std::unique_lock<ceph::mutex>& locker) {
+
+  if (!image_replayer) {
+    return;
+  }
+
+  locker.unlock();
+  image_replayer->prune_snapshot(snap_id);
+  locker.lock();
+}
+
+template <typename I>
 bool Replayer<I>::prune_all_image_snapshots(
     cls::rbd::GroupSnapshot *local_snap,
     std::unique_lock<ceph::mutex>* locker) {
@@ -1719,9 +1732,7 @@ bool Replayer<I>::prune_all_image_snapshots(
       // The ImageReplayer can have m_replayer empty, so no guaranty that
       // this will succeed in one shot, but we keep retry for this and
       // acheive anyway.
-      locker->unlock();
-      image_replayer->prune_snapshot(spec.snap_id);
-      locker->lock();
+      prune_image_snapshot(image_replayer, spec.snap_id, *locker);
     }
   }
 
@@ -1791,9 +1802,7 @@ bool Replayer<I>::prune_all_image_snapshots_by_gsid(
         ImageReplayer<I>* image_replayer = ir->second;
         dout(10) << "pruning snapshot " << snap_id
                  << " for image " << image.spec.image_id << dendl;
-        locker->unlock();
-        image_replayer->prune_snapshot(snap_id);
-        locker->lock();
+        prune_image_snapshot(image_replayer, snap_id, *locker);
       }
     }
   }
@@ -2026,6 +2035,42 @@ void Replayer<I>::prune_group_snapshots(std::unique_lock<ceph::mutex>* locker) {
   prune_mirror_group_snapshots(locker);
 }
 
+template <typename I>
+std::string Replayer<I>::get_global_image_id( ImageReplayer<I>* image_replayer,
+    std::unique_lock<ceph::mutex>& locker) {
+
+  if (!image_replayer) {
+    return {};
+  }
+
+  locker.unlock();
+  auto global_image_id = image_replayer->get_global_image_id();
+  locker.lock();
+
+  return global_image_id;
+}
+
+template <typename I>
+void Replayer<I>::set_image_replayer_end_limits(
+    ImageReplayer<I>* image_replayer,
+    uint64_t snap_id,
+    std::unique_lock<ceph::mutex>& locker) {
+
+  if (!image_replayer) {
+    return;
+  }
+
+  locker.unlock();
+  auto remote_snap_id_end =
+    image_replayer->get_remote_snap_id_end_limit();
+
+  if (remote_snap_id_end == CEPH_NOSNAP ||
+      remote_snap_id_end < snap_id) {
+    image_replayer->set_remote_snap_id_end_limit(snap_id);
+  }
+  locker.lock();
+}
+
 // set_image_replayer_limits, sets limits of remote_snap_id_end in the image
 // replayer for all the respective images part of a remote group snapshot.
 // If image_id is specified it will only set for image replayer belonging to
@@ -2039,21 +2084,20 @@ void Replayer<I>::set_image_replayer_limits(const std::string &image_id,
     return;
   }
 
-  locker->unlock();
-  for (auto it = m_image_replayers->begin();
-      it != m_image_replayers->end(); ++it) {
-    auto image_replayer = it->second;
-    if (!image_replayer) {
-      continue;
-    }
-    auto local_image_id = image_replayer->get_local_image_id();
-    if (!local_image_id.empty() && local_image_id != image_id) {
-      continue;
-    }
-    auto global_image_id = image_replayer->get_global_image_id();
+  get_replayers_by_image_id(locker);
+  auto ir = std::find_if(
+      m_replayers_by_image_id.begin(),
+      m_replayers_by_image_id.end(),
+      [&image_id](const std::pair<std::string, ImageReplayer<I>*>& entry) {
+      return entry.first == image_id;
+      });
+
+  if (ir != m_replayers_by_image_id.end()) {
+    ImageReplayer<I>* image_replayer = ir->second;
+    auto global_image_id = get_global_image_id(image_replayer, *locker);
     if (global_image_id.empty()) {
       derr << "global_image_id is empty for: " << image_id << dendl;
-      break;
+      return;
     }
     for (auto &spec : remote_snap->snaps) {
       cls::rbd::MirrorImage mirror_image;
@@ -2061,7 +2105,7 @@ void Replayer<I>::set_image_replayer_limits(const std::string &image_id,
           spec.image_id, &mirror_image);
       if (r < 0) {
         derr << "mirror image get failed for: " << spec.image_id << " : "
-          << cpp_strerror(r) << dendl;
+             << cpp_strerror(r) << dendl;
         continue;
       }
       if (global_image_id != mirror_image.global_image_id) {
@@ -2076,14 +2120,10 @@ void Replayer<I>::set_image_replayer_limits(const std::string &image_id,
              << ", : " << cpp_strerror(r) << dendl;
         continue;
       }
-      auto remote_snap_id_end = image_replayer->get_remote_snap_id_end_limit();
-      if (remote_snap_id_end == CEPH_NOSNAP || remote_snap_id_end < snap_info.id) {
-        image_replayer->set_remote_snap_id_end_limit(snap_info.id);
-      }
+      set_image_replayer_end_limits(image_replayer, snap_info.id, *locker);
       break;
     }
   }
-  locker->lock();
 }
 
 template <typename I>
