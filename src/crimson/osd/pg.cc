@@ -1545,20 +1545,26 @@ seastar::future<> PG::stop()
 {
   logger().info("PG {} {}", pgid, __func__);
   stopping = true;
+
+  context_registry_on_change();
+  clear_primary_state();
+  if (is_primary()) {
+    clear_ready_to_merge();
+  }
+
   cancel_local_background_io_reservation();
   cancel_remote_recovery_reservation();
   check_readable_timer.cancel();
   renew_lease_timer.cancel();
   backend->on_actingset_changed(false);
-  return osdmap_gate.stop().then([this] {
-    return wait_for_active_blocker.stop();
-  }).then([this] {
-    return recovery_handler->stop();
-  }).then([this] {
-    return recovery_backend->stop();
-  }).then([this] {
-    return backend->stop();
-  });
+
+  co_await osdmap_gate.stop();
+  co_await wait_for_active_blocker.stop();
+  co_await recovery_handler->stop();
+  co_await recovery_backend->stop();
+  co_await backend->stop();
+
+  co_return;
 }
 
 void PG::on_change(ceph::os::Transaction &t) {
