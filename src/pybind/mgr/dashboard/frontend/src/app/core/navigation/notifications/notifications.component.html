@@ -3,8 +3,16 @@
    [ngClass]="{ 'running': hasRunningTasks }"
    (click)="togglePanel($event)">
   <div class="notification-icon-wrapper">
-    <cd-icon type="notification"
-             size="20">
+    <cd-icon
+      *ngIf="(notificationService.muteState$ | async) === false"
+      type="notification"
+      size="20">
+    </cd-icon>
+
+    <cd-icon
+      *ngIf="notificationService.muteState$ | async"
+      type="muteNotification"
+      size="20">
     </cd-icon>
     <span class="notification-count"
           *ngIf="notificationCount > 0">

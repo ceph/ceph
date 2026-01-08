@@ -55,7 +55,7 @@ export enum Icons {
   signOut = 'fa fa-sign-out', // Sign Out
   circle = 'dot-mark', // Circle
   bell = 'notification', // Notification
-  mute = 'notification--off', // Mute or silence
+  muteNotification = 'notification--off', // Mute or silence
   leftArrow = 'caret--left', // Left facing angle
   rightArrow = 'caret--right', // Right facing angle
   downArrow = 'caret--down',
@@ -120,6 +120,7 @@ export const ICON_TYPE = {
   error: 'error--filled',
   infoCircle: 'info-circle',
   notification: 'notification',
+  muteNotification: 'notification--off',
   success: 'success',
   warning: 'warning'
 } as const;

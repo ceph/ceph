@@ -39,6 +39,7 @@ import UserFilledIcon from '@carbon/icons/es/user--filled/20';
 import SettingsIcon from '@carbon/icons/es/settings/20';
 import HelpIcon from '@carbon/icons/es/help/20';
 import NotificationIcon from '@carbon/icons/es/notification/20';
+import NotificationOffIcon from '@carbon/icons/es/notification--off/20';
 import LaunchIcon from '@carbon/icons/es/launch/16';
 import DashboardIcon from '@carbon/icons/es/template/20';
 import ClusterIcon from '@carbon/icons/es/web-services--cluster/20';
@@ -98,6 +99,7 @@ export class NavigationModule {
       SettingsIcon,
       HelpIcon,
       NotificationIcon,
+      NotificationOffIcon,
       LaunchIcon,
       DashboardIcon,
       ClusterIcon,
