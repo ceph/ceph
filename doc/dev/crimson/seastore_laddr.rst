@@ -14,9 +14,9 @@ Defects of Legacy Laddr Hint
 One logical extent is normally derived from an onode, so to allocate a
 laddr, we need to use the information of the corresponding onode to
 construct a laddr hint and use it to search the LBA btree to find a
-suitable laddr. (Not all logical extents are related to the onode, but
+suitable laddr. Not all logical extents are related to the onode, but
 these are only a small part of the total logical extents, so we could
-ignore them for now).
+ignore them for now.
 
 The legacy laddr hint is constructed as (note the each laddr represents
 one 4KiB physical blocks on the disk):
@@ -121,14 +121,21 @@ There are two special rules for global metadata logical extents:
    either. NOTE: It's possible that shard, pool, and hash are zero; we
    allow them to mix with RootBlock and CollectionNode.
 
-This layout allows:
+For a pool which happens to contain 65k pgs, this layout would allow:
 
 -  2\ :sup:`12`\ =4096 pools per cluster
 -  2\ :sup:`6`-1=63 shards per pool for EC
--  2\ :sup:`16`\ =65536 pgs per pool and OSD (the most significant 16
-   bits in reversed hash are represented as pg id internally)
--  2\ :sup:`42`\ =4T objects per pg (the remaining 16 bits of hash + 26
-   bits object id)
+-  2\ :sup:`16`\ =65536 pgs per pool and OSD (Objects in a pg share a
+   ``reverse_hash`` prefix. With 65k pgs, that prefix would be the
+   first 16 bits of ``reverse_hash``.)
+-  2\ :sup:`42`\ =4T objects per pg (the remaining 16 bits of hash +
+   26 bits object id)
+
+Note that Seastore internally doesn't distinguish the pg prefix bits
+of ``reverse_hash`` -- we simply rely on the fact that objects in a pg
+share a ``reverse_hash`` prefix to sort blocks for any given pg
+together. More pgs would mean a smaller object space per pg, fewer pgs
+would be a larger object space per pg.
 
 Object Content
 --------------
