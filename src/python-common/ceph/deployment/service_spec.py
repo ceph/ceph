@@ -98,11 +98,6 @@ class HostPlacementSpec(NamedTuple):
     network: str
     name: str
 
-    @classmethod
-    def normalized(cls, hostname: str, network: str = '', name: str = '') -> 'HostPlacementSpec':
-        """Create a HostPlacementSpec with normalized hostname."""
-        return cls(normalize_hostname(hostname), network, name)
-
     def __str__(self) -> str:
         res = ''
         res += self.hostname
@@ -117,10 +112,9 @@ class HostPlacementSpec(NamedTuple):
     def from_json(cls, data: Union[dict, str]) -> 'HostPlacementSpec':
         if isinstance(data, str):
             return cls.parse(data)
-        # Use normalized() for consistent lowercasing
         if isinstance(data, dict):
-            return cls.normalized(
-                data.get('hostname', ''),
+            return cls(
+                normalize_hostname(data.get('hostname', '')),
                 data.get('network', ''),
                 data.get('name', '')
             )
@@ -356,16 +350,18 @@ class PlacementSpec(object):
     def set_hosts(self, hosts: Union[List[str], List[HostPlacementSpec]]) -> None:
         # To backpopulate the .hosts attribute when using labels or count
         # in the orchestrator backend.
-        if all(isinstance(host, HostPlacementSpec) for host in hosts):
-            # Type narrowing: all items are HostPlacementSpec
-            placement_hosts = cast(List[HostPlacementSpec], hosts)
+        if all(isinstance(h, HostPlacementSpec) for h in hosts):
+            # All items are HostPlacementSpec → normalize directly
             self.hosts = [
-                HostPlacementSpec.normalized(h.hostname, h.network, h.name)
-                for h in placement_hosts
+                HostPlacementSpec(normalize_hostname(h.hostname), h.network, h.name)  # type: ignore[union-attr]
+                for h in hosts
             ]
         else:
-            self.hosts = [HostPlacementSpec.parse(x, require_network=False)  # type: ignore
-                          for x in hosts if x]
+            # Otherwise, parse from strings
+            self.hosts = [
+                HostPlacementSpec.parse(h, require_network=False)  # type: ignore
+                for h in hosts if h
+            ]
 
     # deprecated
     def filter_matching_hosts(self, _get_hosts_func: Callable) -> List[str]:
