@@ -1684,11 +1684,7 @@ def task(ctx, config):
     ref = ctx.config.get("branch", "main")
     if not ctx.ceph[cluster_name].image:
         if not container_image_name:
-            raise Exception("Configuration error occurred. "
-                            "The 'image' value is undefined for 'cephadm' task. "
-                            "Please provide corresponding options in the task's "
-                            "config, task 'overrides', or teuthology 'defaults' "
-                            "section.")
+            container_image_name = 'quay.ceph.io/ceph-ci/ceph'
         sha1 = config.get('sha1')
         flavor = config.get('flavor', 'default')
 
