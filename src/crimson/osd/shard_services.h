@@ -375,7 +375,8 @@ private:
 /**
  * Represents services available to each PG
  */
-class ShardServices : public OSDMapService {
+class ShardServices : public OSDMapService,
+                      public seastar::peering_sharded_service<ShardServices> {
   friend class PGShardManager;
   friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
