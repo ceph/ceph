@@ -159,6 +159,12 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
                            std::map<std::string, std::string>* crypt_http_responses,
                            bool copy_source);
 
+/**
+ * Apply bucket-level encryption defaults to the request state.
+ * Reads RGW_ATTR_BUCKET_ENCRYPTION_POLICY and populates s->info.crypt_attribute_map.
+ */
+int get_encryption_defaults(req_state *s);
+
 static inline void set_attr(std::map<std::string, bufferlist>& attrs,
                             const char* key,
                             std::string_view value)
