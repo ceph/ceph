@@ -813,6 +813,8 @@ close_local_fd:
     return -EINVAL;
   }
 
+  dout(20) << ": dir_root=" << dir_root << ", epath=" << epath << " error=" << r << " synced" << dendl;
+
   return r == 0 ? 0 : r;
 }
 
