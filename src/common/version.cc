@@ -49,9 +49,9 @@ const char *git_version_to_str(void)
 
 static std::string get_ceph_vendor_release()
 {
-  std::cout << "#define value is: " << CEPH_VENDOR_RELEASE ;
-  if (CEPH_VENDOR_RELEASE && strlen(CEPH_VENDOR_RELEASE)) {
-    return std::string(" release ") + STRINGIFY(CEPH_VENDOR_RELEASE);
+  const char* ceph_vendor_release = STRINGIFY(CEPH_VENDOR_RELEASE);
+  if (ceph_vendor_release && strlen(ceph_vendor_release)) {
+    return std::string(" release ") + ceph_vendor_release;
   } else {
     return "";
   }
