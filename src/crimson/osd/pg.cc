@@ -1690,6 +1690,11 @@ seastar::future<> PG::stop()
     clear_ready_to_merge();
   }
 
+  // Wake any coroutine parked in collect_merge_sources() so shutdown
+  // doesn't hang waiting for sources that will never arrive.
+  merge_rendezvous.arrivals.broken();
+  merge_rendezvous.sources.clear();
+
   cancel_local_background_io_reservation();
   cancel_remote_recovery_reservation();
   check_readable_timer.cancel();
@@ -2035,6 +2040,45 @@ void PG::PGLogEntryHandler::partial_write(pg_info_t *info,
   }
   logger().debug("{}: after pwlc={}",
                  __func__, info->partial_writes_last_complete);
+}
+
+void PG::add_merge_source(
+    spg_t source,
+    core_id_t birth_shard,
+    seastar::foreign_ptr<Ref<PG>> source_pg)
+{
+  LOG_PREFIX(PG::add_merge_source);
+  auto wrapped =
+    crimson::make_local_shared_foreign<Ref<PG>>(std::move(source_pg));
+  auto [_, inserted] = merge_rendezvous.sources.emplace(
+    source, std::make_pair(birth_shard, std::move(wrapped)));
+  if (inserted) {
+    DEBUG("target {} source {} arrived from shard {} ({} total)",
+          get_pgid(), source, birth_shard,
+          merge_rendezvous.sources.size());
+    merge_rendezvous.arrivals.signal(1);
+  } else {
+    DEBUG("target {} source {} already registered, ignoring",
+          get_pgid(), source);
+  }
+}
+
+seastar::future<PG::merge_source_map_t>
+PG::collect_merge_sources(std::size_t n)
+{
+  LOG_PREFIX(PG::collect_merge_sources);
+  DEBUG("target {} waiting for {} sources ({} already arrived)",
+        get_pgid(), n, merge_rendezvous.sources.size());
+  try {
+    co_await merge_rendezvous.arrivals.wait(n);
+  } catch (const seastar::broken_semaphore&) {
+    DEBUG("target {} merge rendezvous broken, aborting wait", get_pgid());
+    co_return merge_source_map_t{};
+  }
+  ceph_assert(merge_rendezvous.sources.size() == n);
+  auto sources = std::move(merge_rendezvous.sources);
+  merge_rendezvous.sources.clear();
+  co_return sources;
 }
 
 }

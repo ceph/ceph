@@ -8,6 +8,8 @@
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_future.hh>
+#include <seastar/core/semaphore.hh>
+#include <seastar/core/sharded.hh>
 
 #include "common/dout.h"
 #include "common/ostream_temp.h"
@@ -563,6 +565,38 @@ public:
 
   std::pair<ghobject_t, bool>
   do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final;
+
+  // Per-PG rendezvous used to collect source PGs converging on this PG
+  // during a merge. Producers (source-side coroutines on other shards)
+  // push entries via add_merge_source(); the target-side coroutine waits
+  // via collect_merge_sources(n).
+  using merge_source_entry_t =
+    std::pair<core_id_t, crimson::local_shared_foreign_ptr<Ref<PG>>>;
+  using merge_source_map_t = std::map<spg_t, merge_source_entry_t>;
+
+  // Producer side: called on the target's shard with the foreign PG
+  // already wrapped. The first registration for a given source signals
+  // the semaphore; duplicate registrations (e.g. from replay) are no-ops.
+  void add_merge_source(
+    spg_t source,
+    core_id_t birth_shard,
+    seastar::foreign_ptr<Ref<PG>> source_pg);
+
+  // Consumer side: wait until `n` distinct sources have arrived, then
+  // return them and clear the rendezvous state.  Returns an empty map if
+  // reset_merge_rendezvous() breaks the wait (e.g. PG stop or merge cancel).
+  seastar::future<merge_source_map_t> collect_merge_sources(std::size_t n);
+
+  // Drop in-flight handoffs and reset the semaphore.  Call on PG stop or
+  // after Seastore cross-shard cancel so a failed try cannot leave stale
+  // sources for the next epoch.
+  void reset_merge_rendezvous();
+
+  void merge_from(
+      merge_source_map_t& sources,
+      PeeringCtx &rctx,
+      unsigned split_bits,
+      const pg_merge_meta_t& last_pg_merge_meta);
 
   void clear_ready_to_merge() final {
     LOG_PREFIX(PG::clear_ready_to_merge);
@@ -1187,6 +1221,15 @@ private:
   // whether the system is shutting down, as we don't need to track
   // continuations here.
   bool stopping = false;
+
+  // Rendezvous state owned by the target PG of a pending merge.
+  // sources is keyed by source pgid so re-registration is naturally
+  // idempotent; arrivals is signaled exactly once per first insert.
+  struct merge_rendezvous_t {
+    merge_source_map_t sources;
+    seastar::semaphore arrivals{0};
+  };
+  merge_rendezvous_t merge_rendezvous;
 
   // PeeringListener merge callbacks must remain void, but they trigger async
   // mon notifies in ShardServices. Gate them here so failures are logged and

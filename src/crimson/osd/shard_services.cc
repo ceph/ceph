@@ -107,6 +107,47 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
     });
 }
 
+seastar::future<Ref<PG>> ShardServices::extract_pg(spg_t pgid) {
+  auto pg = local_state.pg_map.get_pg(pgid);
+  ceph_assert(pg);
+  co_await remove_pg(pgid);
+  co_return pg;
+}
+
+seastar::future<> ShardServices::register_merge_source(
+    spg_t target,
+    spg_t source)
+{
+  LOG_PREFIX(ShardServices::register_merge_source);
+
+  core_id_t birth_shard = seastar::this_shard_id();
+  core_id_t target_core = co_await get_pg_mapping(target);
+
+  // Remove the source pg from pg_to_shard_mapping so that
+  // it no longer receives any messages
+  auto pg_to_move = co_await extract_pg(source);
+
+  // Wrap the PG in a foreign_ptr to cross cores safely. If the target
+  // happens to be on the same shard, invoke_on simply runs the lambda
+  // inline.
+  auto foreign_pg = seastar::make_foreign(std::move(pg_to_move));
+
+  DEBUG("Target {} on shard {} (from shard {}); handing off source {}",
+        target, target_core, birth_shard, source);
+
+  co_await container().invoke_on(
+    target_core,
+    [target, source, birth_shard, foreign_pg = std::move(foreign_pg)]
+    (ShardServices& target_svc) mutable {
+      auto target_pg = target_svc.local_state.pg_map.get_pg(target);
+      // PGAdvanceMap on the target shard is expected to have instantiated
+      // the target PG by this point in the merge protocol.
+      ceph_assert(target_pg);
+      target_pg->add_merge_source(
+        source, birth_shard, std::move(foreign_pg));
+    });
+}
+
 Ref<PG> PerShardState::get_pg(spg_t pgid)
 {
   assert_core();

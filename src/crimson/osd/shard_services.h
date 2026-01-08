@@ -546,6 +546,13 @@ public:
     return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core, store_index);
   }
 
+  seastar::future<core_id_t> get_pg_mapping(spg_t pgid) {
+    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid).then(
+      [](std::pair<core_id_t, store_index_t> mapping) {
+        return mapping.first;
+      });
+  }
+
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
     return pg_to_shard_mapping.remove_pg_mapping(pgid);
@@ -669,6 +676,13 @@ public:
   ECExtentCache::LRU &lookup_ec_extent_cache_lru() {
     return local_state.ec_extent_cache_lru;
   }
+
+  seastar::future<Ref<PG>> extract_pg(spg_t pgid);
+  // Hand the source PG off to the target PG's rendezvous, hopping shards
+  // if needed. The consumer side (target PG) waits via
+  // PG::collect_merge_sources(); cleanup happens when the target drops the
+  // local_shared_foreign_ptr it received.
+  seastar::future<> register_merge_source(spg_t target, spg_t source);
 
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_source)
   FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_target)
