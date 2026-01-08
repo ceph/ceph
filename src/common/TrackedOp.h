@@ -33,6 +33,9 @@
 
 struct pow2_hist_t;
 class TrackedOp;
+// Declare intrusive_ptr functions in global namespace for boost ADL
+inline void intrusive_ptr_add_ref(TrackedOp *o);
+inline void intrusive_ptr_release(TrackedOp *o);
 class OpHistory;
 
 typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
