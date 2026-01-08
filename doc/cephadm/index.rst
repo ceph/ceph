@@ -23,7 +23,7 @@ configuration tools, visit their pages:
 
 ``cephadm`` manages the full lifecycle of a Ceph cluster. This lifecycle starts
 with the bootstrapping process, when ``cephadm`` creates a tiny Ceph cluster on
-a single node. This cluster consists of one monitor and one manager.
+a single node. This cluster consists of one Monitor and one Manager.
 ``cephadm`` then uses the orchestration interface to expand the cluster, adding
 hosts and provisioning Ceph daemons and services. Management of this lifecycle
 can be performed either via the Ceph command-line interface (CLI) or via the
