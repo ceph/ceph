@@ -25,7 +25,9 @@
 #include "include/ceph_assert.h"
 #include "include/encoding.h"
 #include "common/interval_map.h"
+#include "common/hybrid_interval_map.h"
 #include "common/mini_flat_map.h"
+#include "include/hybrid_interval_set.h"
 
 #include "osd_types.h"
 
@@ -57,9 +59,16 @@ struct bl_split_merge {
   uint64_t length(const ceph::buffer::list &b) const { return b.length(); }
 };
 
-using extent_set = interval_set<uint64_t, boost::container::flat_map, false>;
-using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge,
-                                boost::container::flat_map, true>;
+// Hybrid extent types for optimized single-extent case (zero allocations)
+// These use inline storage for 0-1 extents, upgrading to interval_set/interval_map for 2+
+using extent_set = hybrid_interval_set<uint64_t, boost::container::flat_map, false>;
+using extent_map = hybrid_interval_map<uint64_t, ceph::buffer::list, bl_split_merge,
+                                       boost::container::flat_map, true>;
+
+// Keep old types available for reference/fallback if needed
+using legacy_extent_set = interval_set<uint64_t, boost::container::flat_map, false>;
+using legacy_extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge,
+                                       boost::container::flat_map, true>;
 
 /* Slice iterator.  This looks for contiguous buffers which are common
  * across all shards in the out_set.
