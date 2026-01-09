@@ -16,7 +16,7 @@
  * 1) begin == end == hobject_t() indicates the the interval is unpopulated
  * 2) Else, objects contains all objects in [begin, end)
  *
- * ReplicaBackfillInterval
+ * ReplicaBackfillInterval, PoolMigrationInterval
  *
  * Stores a map of hobject_t and eversion to track the version number of
  * the objects being backfilled in an interval for one specific shard
