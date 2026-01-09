@@ -16,7 +16,7 @@
  * 1) begin == end == hobject_t() indicates the the interval is unpopulated
  * 2) Else, objects contains all objects in [begin, end)
  *
- * ReplicaBackfillInterval
+ * ReplicaBackfillInterval, PoolMigrationInterval
  *
  * Stores a map of hobject_t and eversion to track the version number of
  * the objects being backfilled in an interval for one specific shard
@@ -83,6 +83,11 @@ public:
   /// true if interval extends to the end of the range
   bool extends_to_end() const {
     return end.is_max();
+  }
+
+  /// true if e is the interval end object
+  bool is_end(hobject_t e) const {
+    return (e == end);
   }
 
   /// removes items <= soid and adjusts begin to the first object
@@ -194,7 +199,7 @@ public:
   }
 
   /// drop first entry, and adjust @begin accordingly
-  void pop_front() {
+  void pop_front() override {
     ceph_assert(!objects.empty());
     objects.erase(objects.begin());
     trim();
