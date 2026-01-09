@@ -596,6 +596,7 @@ void rgw::AppMain::init_lua()
     lua_background->start();
     env.lua.background = lua_background.get();
     static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->watch_reload(dpp);
+    env.lua.manager.get()->set_lua_background(lua_background.get());
   }
 #endif
 } /* init_lua */

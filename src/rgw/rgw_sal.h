@@ -24,6 +24,7 @@
 #include "rgw_cksum.h"
 #include "rgw_sal_fwd.h"
 #include "rgw_lua.h"
+//#include "rgw_lua_background.h"
 #include "rgw_notify_event_type.h"
 #include "rgw_req_context.h"
 #include "include/random.h"
@@ -64,6 +65,10 @@ namespace rgw {
 namespace rgw::restore {
   class Restore;
   struct RestoreEntry;
+}
+
+namespace rgw::lua {
+  class Background;
 }
 
 class RGWGetDataCB {
@@ -1922,6 +1927,8 @@ public:
 
   /** Get a script named with the given key from the backing store */
   virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) = 0;
+  /** Get a copy of the lua bytecode if it exists, else the script named with the given key from the backing store */
+  virtual std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) = 0;
   /** Put a script named with the given key to the backing store */
   virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) = 0;
   /** Delete a script named with the given key from the backing store */
@@ -1938,6 +1945,8 @@ public:
   virtual const std::string& luarocks_path() const = 0;
   /** Set the path to the loarocks install location **/
   virtual void set_luarocks_path(const std::string& path) = 0;
+
+  virtual void set_lua_background(rgw::lua::Background* background) = 0;
 };
 
 /** @} namespace rgw::sal in group RGWSAL */

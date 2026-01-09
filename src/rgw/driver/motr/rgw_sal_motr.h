@@ -548,6 +548,9 @@ class MotrLuaManager : public StoreLuaManager {
 
   /** Get a script named with the given key from the backing store */
   virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  /** Get the Lua bytecode if it exists, else script named with the given key from the backing store */
+  virtual std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
+                                                                        const std::string& key) override;
   /** Put a script named with the given key to the backing store */
   virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
   /** Delete a script named with the given key from the backing store */

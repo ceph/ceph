@@ -1541,6 +1541,12 @@ int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y
   return next->get_script(dpp, y, key, script);
 }
 
+std::tuple<rgw::lua::LuaCodeType, int> FilterLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
+				             const std::string& key)
+{
+  return next->get_script_or_bytecode(dpp, y, key);
+}
+
 int FilterLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
 				const std::string& key, const std::string& script)
 {
@@ -1582,6 +1588,9 @@ const std::string& FilterLuaManager::luarocks_path() const {
 
 void FilterLuaManager::set_luarocks_path(const std::string& path) {
   next->set_luarocks_path(path);
+}
+void FilterLuaManager::set_lua_background(rgw::lua::Background* background) {
+  next->set_lua_background(background);
 }
 
 } } // namespace rgw::sal

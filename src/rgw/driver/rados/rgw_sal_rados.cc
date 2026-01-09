@@ -5336,8 +5336,81 @@ RadosLuaManager::RadosLuaManager(RadosStore* _s, const std::string& _luarocks_pa
   store(_s),
   pool((store->svc() && store->svc()->zone) ? store->svc()->zone->get_zone_params().log_pool : rgw_pool()),
   ioctx(*store->getRados()->get_lc_pool_ctx()),
-  packages_watcher(this)
-{ }
+  packages_watcher(this),
+  scripts_watcher(this)
+{
+  if (!pool.empty()) {
+    //TODO: error check
+    // The packages and script rados objects are in different namespaces
+    rgw_init_ioctx(&scripts_watcher, store->getRados()->get_rados_handle(), pool, ioctx_scripts);
+  }
+}
+
+uint64_t RadosLuaManager::get_watch_handle_for_script(const std::string& script_oid) {
+  auto search = script_watches.find(script_oid);
+  if (search != script_watches.end()) {
+    return search->second;
+  }
+  return 0;
+}
+
+std::string RadosLuaManager::get_script_for_watch_handle(uint64_t handle) {
+  auto search = reverse_script_watches.find(handle);
+  if (search != reverse_script_watches.end()) {
+    return search->second;
+  }
+  return {};
+}
+
+int RadosLuaManager::watch_script(const DoutPrefixProvider* dpp, const std::string& script_oid) {
+
+  if (get_watch_handle_for_script(script_oid) == 0) {
+    uint64_t w_handle;
+    auto r = ioctx_scripts.watch2(script_oid, &w_handle, &scripts_watcher);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to watch " << script_oid
+                        << ". error: " << cpp_strerror(r) << dendl;
+      if (r == -ENOENT) {
+        // Let the background thread know to update the script cache
+        lua_background->process_script_add(script_oid);
+      }
+    // Return error?
+      return r;
+    }
+    ldpp_dout(dpp, 20) << "INFO: inited watch on " << script_oid  << " with handle " << w_handle << dendl;
+    script_watches.emplace(script_oid, w_handle);
+    reverse_script_watches.emplace(w_handle, script_oid);
+  }
+  return 0;
+}
+
+int RadosLuaManager::unwatch_script(const DoutPrefixProvider* dpp, const std::string& script_oid) {
+
+  if (!ioctx_scripts.is_valid()) {
+    ldpp_dout(dpp, 1) << "ERROR: invalid pool when unwatch Lua script " << script_oid << dendl;
+    return 0;
+  }
+
+  auto w_handle = get_watch_handle_for_script(script_oid);
+  if (w_handle == 0) {
+    return 0;
+  }
+
+  const auto r = ioctx_scripts.unwatch2(w_handle);
+  if (r < 0 && r != -ENOENT) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to unwatch Lua script " << script_oid
+        << ". error: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  script_watches.erase(script_oid);
+  reverse_script_watches.erase(w_handle);
+
+  ldpp_dout(dpp, 20) << "Stopped watching for updates of Lua script " << script_oid
+    << " with handle: " << w_handle << dendl;
+
+  return 0;
+}
 
 int RadosLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
 {
@@ -5362,7 +5435,51 @@ int RadosLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
   return 0;
 }
 
-int RadosLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
+std::tuple<rgw::lua::LuaCodeType, int> RadosLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
+                                                                               const std::string& key)
+{
+  if (pool.empty()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when reading Lua script " << dendl;
+    return std::make_tuple("", 0);
+  }
+  std::vector<char> lua_bytecode;
+  lua_bytecode.clear();
+  // First try to get the bytecode
+  int r = lua_background->get_script_bytecode(key, lua_bytecode);
+  if (r == 0) {
+    return std::make_tuple(lua_bytecode, 0);
+  }
+
+  std::string script;
+  bufferlist bl;
+  r = rgw_get_system_obj(store->svc()->sysobj, pool, key, bl, nullptr, nullptr, y, dpp);
+  if (r < 0) {
+    return std::make_tuple("", r);
+  }
+
+  // The bytecode has not been cached yet. Let the lua background know.
+  lua_background->process_script_add(key);
+
+  auto iter = bl.cbegin();
+  try {
+    ceph::decode(script, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 1) << "ERROR : failed to decode lua script " << key
+                      <<  ", error = " << err.what() << dendl;
+    return std::make_tuple("", -EIO);
+  }
+
+  r = watch_script(dpp, key);
+  if (r < 0) {
+    ldpp_dout(dpp, 10) << "WARNING: failed to watch script: " << key << ", err:"
+                       << r << dendl;
+  }
+
+  return std::make_tuple(script, 0);
+}
+
+int RadosLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
+                                const std::string& key, const std::string& script)
 {
   if (pool.empty()) {
     ldpp_dout(dpp, 10) << "WARNING: missing pool when writing Lua script " << dendl;
@@ -5376,6 +5493,11 @@ int RadosLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
     return r;
   }
 
+  r = notify_script_update(dpp, key, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 10) << "WARNING: failed to notify Lua script updated: " << key << ", err:" << r << dendl;
+    return r;
+  }
   return 0;
 }
 
@@ -5391,6 +5513,40 @@ int RadosLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   return 0;
+}
+
+void RadosLuaManager::ack_script_update(const DoutPrefixProvider* dpp,
+                                        uint64_t notify_id, uint64_t cookie,
+                                        int update_status)
+{
+  if (!ioctx_scripts.is_valid()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when acking Lua script update" << dendl;
+    return;
+  }
+
+  std::string script_oid = get_script_for_watch_handle(cookie);
+  if (script_oid.empty()) {
+    ldpp_dout(dpp, 10) << "WARNING: failed to find script when acking Lua script update" << dendl;
+    return;
+  }
+
+  bufferlist reply;
+  ceph::encode(update_status, reply);
+  ioctx_scripts.notify_ack(script_oid, notify_id, cookie, reply);
+}
+
+void RadosLuaManager::handle_script_update_notify(const DoutPrefixProvider* dpp,
+                                                  optional_yield y, uint64_t notify_id,
+                                                  uint64_t cookie)
+{
+  std::string key = get_script_for_watch_handle(cookie);
+  if (key.empty()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing Lua script for watch handle: " << cookie << dendl;
+    return;
+  }
+  // Let the background thread know to remove the bytecode from the cache
+  lua_background->process_script_add(key);
+  ack_script_update(dpp, notify_id, cookie, 0);
 }
 
 const std::string PACKAGE_LIST_OBJECT_NAME = "lua_package_allowlist";
@@ -5606,6 +5762,49 @@ int RadosLuaManager::reload_packages(const DoutPrefixProvider *dpp, optional_yie
   return 0;
 }
 
+int RadosLuaManager::notify_script_update(const DoutPrefixProvider *dpp, const std::string& script_oid, optional_yield y)
+{
+  if (!ioctx_scripts.is_valid()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool trying to notify update of Lua script" << dendl;
+    return -ENOENT;
+  }
+  bufferlist empty_bl;
+  bufferlist reply_bl;
+  const uint64_t timeout_ms = 0;
+  auto r = rgw_rados_notify(dpp,
+      ioctx_scripts,
+      script_oid,
+      empty_bl, timeout_ms, &reply_bl, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to notify update on " << script_oid
+        << ". error: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  std::vector<librados::notify_ack_t> acks;
+  std::vector<librados::notify_timeout_t> timeouts;
+  ioctx_scripts.decode_notify_response(reply_bl, &acks, &timeouts);
+  if (timeouts.size() > 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to notify update on " << script_oid
+      << ". error: timeout" << dendl;
+    return -EAGAIN;
+  }
+  for (auto& ack : acks) {
+    try {
+      auto iter = ack.payload_bl.cbegin();
+      ceph::decode(r, iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 1) << "ERROR: couldn't decode Lua script update status for "
+                        << script_oid << ", error: " << err.what() << dendl;
+      return -EINVAL;
+    }
+    if (r < 0) {
+      return r;
+    }
+  }
+  return 0;
+}
+
 void RadosLuaManager::PackagesWatcher::handle_notify(uint64_t notify_id, uint64_t cookie, uint64_t notifier_id, bufferlist &bl)
 {
   parent->handle_reload_notify(this, null_yield, notify_id, cookie);
@@ -5632,6 +5831,38 @@ unsigned RadosLuaManager::PackagesWatcher::get_subsys() const {
 
 std::ostream& RadosLuaManager::PackagesWatcher::gen_prefix(std::ostream& out) const {
   return out << "rgw lua package reloader: ";
+}
+
+CephContext* RadosLuaManager::ScriptsWatcher::get_cct() const {
+  return parent->store->ctx();
+}
+
+unsigned RadosLuaManager::ScriptsWatcher::get_subsys() const {
+  return dout_subsys;
+}
+
+std::ostream& RadosLuaManager::ScriptsWatcher::gen_prefix(std::ostream& out) const {
+  return out << "rgw lua scripts watcher: ";
+}
+
+void RadosLuaManager::ScriptsWatcher::handle_notify(uint64_t notify_id, uint64_t cookie, uint64_t notifier_id, bufferlist &bl)
+{
+  parent->handle_script_update_notify(this, null_yield, notify_id, cookie);
+}
+
+void RadosLuaManager::ScriptsWatcher::handle_error(uint64_t cookie, int err)
+{
+  std::string script_oid = parent->get_script_for_watch_handle(cookie);
+  if (script_oid.empty()) {
+    ldpp_dout(this, 5) << "ERROR: failed to find the script for watch handle: "
+                       << cookie << dendl;
+    return;
+  }
+  ldpp_dout(this, 5) << "WARNING: restarting watch handler for script: "
+                     << script_oid << ", err:" << err << dendl;
+
+  parent->unwatch_script(this, script_oid);
+  parent->watch_script(this, script_oid);
 }
 
 int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)

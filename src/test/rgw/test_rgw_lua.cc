@@ -169,6 +169,10 @@ class TestLuaManager : public rgw::sal::StoreLuaManager {
       script = lua_script;
       return 0;
     }
+    std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override {
+      std::this_thread::sleep_for(std::chrono::seconds(read_time));
+      return std::make_tuple(lua_script, 0);
+    }
     int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override {
       return 0;
     }

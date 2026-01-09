@@ -8,11 +8,11 @@ namespace rgw::lua {
 
 class RGWObjFilter {
   req_state* const s;
-  const std::string script;
+  const rgw::lua::LuaCodeType script;
 
 public:
   RGWObjFilter(req_state* s,
-      const std::string& script) : 
+      const rgw::lua::LuaCodeType& script) :
     s(s), script(script) {}
 
   int execute(bufferlist& bl, off_t offset, const char* op_name) const;
@@ -23,7 +23,7 @@ class RGWGetObjFilter : public RGWGetObj_Filter {
 
 public:
   RGWGetObjFilter(req_state* s,
-      const std::string& script,
+      const rgw::lua::LuaCodeType& script,
       RGWGetObj_Filter* next) : RGWGetObj_Filter(next), filter(s, script) 
   {}
 
@@ -40,7 +40,7 @@ class RGWPutObjFilter : public rgw::putobj::Pipe {
 
 public:
   RGWPutObjFilter(req_state* s,
-      const std::string& script,
+      const rgw::lua::LuaCodeType& script,
       rgw::sal::DataProcessor* next) : rgw::putobj::Pipe(next), filter(s, script) 
   {}
 

@@ -84,6 +84,12 @@ int read_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const s
   return manager ? manager->get_script(dpp, y, script_oid(ctx, tenant), script) : -ENOENT;
 }
 
+std::tuple<LuaCodeType, int> read_script_or_bytecode(const DoutPrefixProvider *dpp, sal::LuaManager* manager,
+                                                     const std::string& tenant, optional_yield y, context ctx)
+{
+  return manager ? manager->get_script_or_bytecode(dpp, y, script_oid(ctx, tenant)) : std::make_tuple("", -ENOENT);
+}
+
 int write_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& script)
 {
   return manager ? manager->put_script(dpp, y, script_oid(ctx, tenant), script) : -ENOENT;
