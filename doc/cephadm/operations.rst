@@ -694,9 +694,10 @@ without client keyrings, run the following command:
 
     ceph config set mgr mgr/cephadm/manage_etc_ceph_ceph_conf true
 
+.. _ceph_conf_distribution_label:
 
-Using Placement Specs to Specify which Hosts Get Keyrings
----------------------------------------------------------
+Using Placement Specs to Specify which Hosts Get ``ceph.conf``
+--------------------------------------------------------------
 
 By default, the configs are written to all hosts (i.e., those listed by ``ceph
 orch host ls``).  To specify which hosts get a ``ceph.conf``, run a command of
