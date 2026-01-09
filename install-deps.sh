@@ -513,7 +513,16 @@ else
         echo "Using dnf to install dependencies"
         case "$ID" in
             fedora)
-                $SUDO dnf install -y dnf-utils
+                $SUDO dnf install -y \
+                    dnf-utils \
+                    gcc-c++ \
+                    libatomic \
+                    keyutils-libs-devel \
+                    systemd-devel \
+                    libblkid-devel \
+                    openldap-devel \
+                    ninja \
+                    ccache
                 ;;
             almalinux|rocky|centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
