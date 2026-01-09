@@ -5,7 +5,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDPGMigratedPool : public PaxosServiceMessage {
+class MOSDPGMigratedPool final : public PaxosServiceMessage {
 public:
   int64_t migration_target;
   pg_t pgid;
