@@ -43,7 +43,6 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.last_task = localStorage.getItem('last_task') || '';
     this.subs.add(
       this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
         const today: Date = new Date();
