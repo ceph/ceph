@@ -31,6 +31,81 @@ namespace rgw {
 namespace auth {
 namespace keystone {
 
+// Service type for access rules matching
+static constexpr const char* const SWIFT_SERVICE_TYPE = "object-store";
+
+// Match path against pattern with OpenStack glob support (* and **).
+static bool
+path_matches_pattern(const std::string& pattern, const std::string_view path)
+{
+  size_t pi = 0, si = 0;
+  size_t star_pi = std::string::npos, star_si = 0;
+  size_t dstar_pi = std::string::npos, dstar_si = 0;
+
+  while (si < path.size()) {
+    if (pi + 1 < pattern.size() && pattern[pi] == '*' &&
+        pattern[pi + 1] == '*') {
+      dstar_pi = pi;
+      dstar_si = si;
+      pi += 2;
+      if (pi < pattern.size() && pattern[pi] == '/')
+        pi++;
+      continue;
+    }
+    if (pi < pattern.size() && pattern[pi] == '*') {
+      star_pi = pi;
+      star_si = si;
+      pi++;
+      continue;
+    }
+    if (pi < pattern.size() && (pattern[pi] == path[si] || pattern[pi] == '?')) {
+      pi++;
+      si++;
+      continue;
+    }
+    if (dstar_pi != std::string::npos) {
+      pi = dstar_pi + 2;
+      if (pi < pattern.size() && pattern[pi] == '/')
+        pi++;
+      si = ++dstar_si;
+      continue;
+    }
+    if (star_pi != std::string::npos && path[star_si] != '/') {
+      pi = star_pi + 1;
+      si = ++star_si;
+      continue;
+    }
+    return false;
+  }
+  while (pi < pattern.size() && pattern[pi] == '*')
+    pi++;
+  return pi == pattern.size();
+}
+
+// Check if request matches any access rule
+static bool
+check_access_rules(
+    const DoutPrefixProvider* dpp,
+    const std::vector<rgw::keystone::TokenEnvelope::AccessRule>& rules,
+    const std::string_view method,
+    const std::string_view path)
+{
+  if (rules.empty())
+    return true;
+  for (const auto& rule : rules) {
+    if (rule.service != SWIFT_SERVICE_TYPE)
+      continue;
+    if (rule.method != method)
+      continue;
+    if (path_matches_pattern(rule.path, path)) {
+      ldpp_dout(dpp, 10) << "access rule matched: " << rule.path << dendl;
+      return true;
+    }
+  }
+  ldpp_dout(dpp, 5) << "no access rule matched" << dendl;
+  return false;
+}
+
 bool
 TokenEngine::is_applicable(const std::string& token) const noexcept
 {
@@ -69,6 +144,7 @@ admin_token_retry:
   }
 
   validate.append_header("X-Subject-Token", token);
+  validate.append_header("OpenStack-Identity-Access-Rules", "1.0");
 
   std::string admin_token;
   bool admin_token_cached = false;
@@ -387,6 +463,16 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
                     << ":" << t->get_user_name()
                     << " expires: " << t->get_expires() << dendl;
+      // Check Application Credential Access Rules if present.
+      // If rules exist but none match, deny the request (403 Forbidden).
+      if (!check_access_rules(dpp, t->get_access_rules(),
+                              s->info.method, s->decoded_uri)) {
+        ldpp_dout(dpp, 0) << "access rules check failed for method="
+                          << s->info.method << " path=" << s->decoded_uri
+                          << dendl;
+        return result_t::deny(-EACCES);
+      }
+
       token_cache.add(token_id, *t);
       auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                                 get_creds_info(*t));
