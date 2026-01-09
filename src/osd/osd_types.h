@@ -2558,9 +2558,14 @@ struct store_statfs_t
   uint64_t kb_used_omap() const {
     return omap_allocated >> 10;
   }
-
   uint64_t kb_used_internal_metadata() const {
     return internal_metadata >> 10;
+  }
+  uint64_t kb_est_avail() const {
+    return est_available >> 10;
+  }
+  uint64_t kb_est_capac() const {
+    return est_capacity >> 10;
   }
 
   void add(const store_statfs_t& o) {
