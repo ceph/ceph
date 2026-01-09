@@ -93,12 +93,15 @@
 
   <!-- Step 1 -->
   <cd-tearsheet-step>
-    <cd-cephfs-filesystem-selector>
+    <cd-cephfs-filesystem-selector [selectedFilesystem$]="selectedFilesystem$">
     </cd-cephfs-filesystem-selector>
   </cd-tearsheet-step>
 
   <!-- Step 2 -->
-  <cd-tearsheet-step> Test2
+  <cd-tearsheet-step>
+    <cd-cephfs-mirroring-entity [selectedFilesystem$]="selectedFilesystem$"
+                                [selectedEntity$]="selectedEntity$">
+    </cd-cephfs-mirroring-entity>
   </cd-tearsheet-step>
 
   <!-- Step 3 -->

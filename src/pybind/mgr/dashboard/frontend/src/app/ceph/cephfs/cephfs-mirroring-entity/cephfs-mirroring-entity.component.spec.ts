@@ -4,11 +4,11 @@ import { of, throwError } from 'rxjs';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Daemon, MirroringRow } from '~/app/shared/models/cephfs.model';
-import { CephfsMirroringFilesystemComponent } from './cephfs-mirroring-filesystem.component';
+import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity.component';
 
-describe('CephfsMirroringFilesystemComponent', () => {
-  let component: CephfsMirroringFilesystemComponent;
-  let fixture: ComponentFixture<CephfsMirroringFilesystemComponent>;
+describe('CephfsMirroringEntityComponent', () => {
+  let component: CephfsMirroringEntityComponent;
+  let fixture: ComponentFixture<CephfsMirroringEntityComponent>;
 
   const cephfsServiceMock = {
     listDaemonStatus: jest.fn()
@@ -16,11 +16,11 @@ describe('CephfsMirroringFilesystemComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [CephfsMirroringFilesystemComponent],
+      declarations: [CephfsMirroringEntityComponent],
       providers: [ActionLabelsI18n, { provide: CephfsService, useValue: cephfsServiceMock }]
     }).compileComponents();
 
-    fixture = TestBed.createComponent(CephfsMirroringFilesystemComponent);
+    fixture = TestBed.createComponent(CephfsMirroringEntityComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });
@@ -68,7 +68,7 @@ describe('CephfsMirroringFilesystemComponent', () => {
 
     let emitted: MirroringRow[] = [];
 
-    component.daemonStatus$.subscribe((v) => (emitted = v || []));
+    component.daemonStatus$.subscribe((v: MirroringRow[]) => (emitted = v || []));
     component.ngOnInit();
 
     expect(emitted.length).toBe(1);
@@ -101,7 +101,7 @@ describe('CephfsMirroringFilesystemComponent', () => {
 
     let emitted: MirroringRow[] = [];
 
-    component.daemonStatus$.subscribe((v) => (emitted = v || []));
+    component.daemonStatus$.subscribe((v: MirroringRow[]) => (emitted = v || []));
     component.ngOnInit();
 
     expect(emitted.length).toBe(1);

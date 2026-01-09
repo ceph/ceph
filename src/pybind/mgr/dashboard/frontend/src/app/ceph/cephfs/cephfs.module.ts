@@ -45,11 +45,12 @@ import {
   ModalModule,
   NumberModule,
   PlaceholderModule,
+  RadioModule,
   SelectModule,
   TimePickerModule,
   TreeviewModule,
   TabsModule,
-  RadioModule
+  TilesModule
 } from 'carbon-components-angular';
 
 import AddIcon from '@carbon/icons/es/add/32';
@@ -59,6 +60,7 @@ import Trash from '@carbon/icons/es/trash-can/32';
 import { CephfsMirroringListComponent } from './cephfs-mirroring-list/cephfs-mirroring-list.component';
 import { CephfsMirroringWizardComponent } from './cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
 import { CephfsFilesystemSelectorComponent } from './cephfs-filesystem-selector/cephfs-filesystem-selector.component';
+import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs-mirroring-entity.component';
 
 @NgModule({
   imports: [
@@ -89,9 +91,10 @@ import { CephfsFilesystemSelectorComponent } from './cephfs-filesystem-selector/
     LayoutModule,
     ComboBoxModule,
     IconModule,
+    RadioModule,
     BaseChartDirective,
     TabsModule,
-    RadioModule
+    TilesModule
   ],
   declarations: [
     CephfsDetailComponent,
@@ -114,7 +117,8 @@ import { CephfsFilesystemSelectorComponent } from './cephfs-filesystem-selector/
     CephfsAuthModalComponent,
     CephfsMirroringListComponent,
     CephfsMirroringWizardComponent,
-    CephfsFilesystemSelectorComponent
+    CephfsFilesystemSelectorComponent,
+    CephfsMirroringEntityComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
