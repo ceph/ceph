@@ -163,6 +163,15 @@ public:
     bool is_admin;
     bool is_reader;
     void decode_json(JSONObj *obj);
+
+  // OpenStack Application Credential Access Rule (for access rule filtering).
+  class AccessRule {
+  public:
+    std::string service;  // e.g., "object-store"
+    std::string method;   // HTTP method: GET, PUT, POST, DELETE, HEAD
+    std::string path;     // URL path pattern with glob support
+    void decode_json(JSONObj *obj);
+  };
   };
 
   class User {
@@ -187,6 +196,7 @@ public:
   User user;
   std::list<Role> roles;
   std::optional<ApplicationCredential> app_cred;
+  std::vector<AccessRule> access_rules;
 
   void decode(JSONObj* obj);
 
@@ -203,6 +213,8 @@ public:
   const std::string& get_user_id() const {return user.id;};
   const std::string& get_user_name() const {return user.name;};
   bool has_role(const std::string& r) const;
+  const std::vector<AccessRule>& get_access_rules() const { return access_rules; }
+  bool has_access_rules() const { return !access_rules.empty(); }
   bool expired() const {
     const uint64_t now = ceph_clock_now().sec();
     return std::cmp_greater_equal(now, get_expires());
