@@ -12,6 +12,7 @@ describe('Images page', () => {
     // Need pool for image testing
     pools.navigateTo('create');
     pools.create(poolName, 8, ['rbd']);
+    pools.navigateTo();
     pools.existTableCell(poolName);
   });
 

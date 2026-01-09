@@ -45,7 +45,8 @@
   let-notification="notification"
   let-last="last">
   <div class="notification-wrapper">
-    <div class="notification-item">
+    <div class="notification-item"
+         data-testid="notification-item">
       <cd-icon
         id="notification-icon"
         [type]="notificationIconMap[notification.type] || notificationIconMap['default']">
