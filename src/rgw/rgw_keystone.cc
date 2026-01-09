@@ -524,7 +524,6 @@ void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
   JSONDecoder::decode_json("roles", roles, root_obj, true);
   JSONDecoder::decode_json("project", project, root_obj, true);
 
-  // Parse application_credential.access_rules if present
   JSONObjIter app_cred_iter = root_obj->find_first("application_credential");
   if (!app_cred_iter.end()) {
     JSONDecoder::decode_json("access_rules", access_rules, *app_cred_iter);

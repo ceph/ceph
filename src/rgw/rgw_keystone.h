@@ -167,12 +167,11 @@ public:
     bool is_reader;
     void decode_json(JSONObj *obj);
 
-  // OpenStack Application Credential Access Rule (for access rule filtering).
   class AccessRule {
   public:
-    std::string service;  // e.g., "object-store"
-    std::string method;   // HTTP method: GET, PUT, POST, DELETE, HEAD
-    std::string path;     // URL path pattern with glob support
+    std::string service;
+    std::string method;
+    std::string path;
     void decode_json(JSONObj *obj);
   };
   };

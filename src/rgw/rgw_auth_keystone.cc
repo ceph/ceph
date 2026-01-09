@@ -31,10 +31,8 @@ namespace rgw {
 namespace auth {
 namespace keystone {
 
-// Service type for access rules matching
 static constexpr const char* const SWIFT_SERVICE_TYPE = "object-store";
 
-// Match path against pattern with OpenStack glob support (* and **).
 static bool
 path_matches_pattern(const std::string& pattern, const std::string_view path)
 {
@@ -82,7 +80,6 @@ path_matches_pattern(const std::string& pattern, const std::string_view path)
   return pi == pattern.size();
 }
 
-// Check if request matches any access rule
 static bool
 check_access_rules(
     const DoutPrefixProvider* dpp,
@@ -463,8 +460,6 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
                     << ":" << t->get_user_name()
                     << " expires: " << t->get_expires() << dendl;
-      // Check Application Credential Access Rules if present.
-      // If rules exist but none match, deny the request (403 Forbidden).
       if (!check_access_rules(dpp, t->get_access_rules(),
                               s->info.method, s->decoded_uri)) {
         ldpp_dout(dpp, 0) << "access rules check failed for method="
