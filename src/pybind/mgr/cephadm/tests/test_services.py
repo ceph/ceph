@@ -3541,6 +3541,48 @@ class TestIngressService:
                 assert haproxy_daemon_spec.port_ips == {str(frontend_port): ip}
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_ingress_config_ssl_cert_embedded(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """Test that embedded ssl_cert (containing both cert and key) is properly written to haproxy.pem"""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        test_ssl_cert = """-----BEGIN CERTIFICATE-----
+MIIDQTCCAimgAwIBAgIUH8cBJRP6ZIcp3bvLjV1OIe8s9VwwDQYJKoZIhvcNAQEL
+BQAwGjEYMBYGA1UEAwwPaGFwcm94eS50ZXN0LmNvbTAeFw0yNDAxMDExMjAwMDBa
+TEST_CERTIFICATE_DATA
+-----END CERTIFICATE-----
+-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEAz8cceT2z7Yt0PO
+TEST_PRIVATE_KEY_DATA
+-----END RSA PRIVATE KEY-----"""
+
+        with with_host(cephadm_module, 'test', addr='1.2.3.7'):
+            cephadm_module.cache.update_host_networks('test', {
+                '1.2.3.0/24': {
+                    'if0': ['1.2.3.1']
+                }
+            })
+
+            s = RGWSpec(service_id="foo", placement=PlacementSpec(count=1),
+                        rgw_frontend_type='beast')
+            
+            ispec = IngressSpec(service_type='ingress',
+                                service_id='test',
+                                backend_service='rgw.foo',
+                                frontend_port=443,
+                                monitor_port=8999,
+                                ssl_cert=test_ssl_cert,
+                                virtual_ip="1.2.3.4/32")
+            
+            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+                haproxy_config, _ = service_registry.get_service('ingress').haproxy_generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
+                
+                assert 'haproxy.pem' in haproxy_config['files']
+                pem_content = haproxy_config['files']['haproxy.pem']
+                assert 'BEGIN CERTIFICATE' in pem_content
+                assert 'BEGIN PRIVATE KEY' in pem_content
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
     @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
     @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
