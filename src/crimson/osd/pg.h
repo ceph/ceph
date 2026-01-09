@@ -418,6 +418,12 @@ public:
   std::pair<ghobject_t, bool>
   do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final;
 
+  void merge_from(
+      std::map<spg_t, crimson::local_shared_foreign_ptr<Ref<PG>>>& sources,
+      PeeringCtx &rctx,
+      unsigned split_bits,
+      const pg_merge_meta_t& last_pg_merge_meta);
+
   void clear_ready_to_merge() final {
     LOG_PREFIX(PG::clear_ready_to_merge);
     SUBDEBUGDPP(osd, "", *this);
@@ -1025,6 +1031,7 @@ private:
   bool can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const;
   bool can_discard_op(const MOSDOp& m) const;
   void context_registry_on_change();
+
   bool is_missing_object(const hobject_t& soid) const {
     return get_local_missing().is_missing(soid);
   }
