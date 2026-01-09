@@ -115,7 +115,7 @@ export class CephfsService {
     });
   }
 
-  setAuth(fsName: string, clientId: number, caps: string[], rootSquash: boolean) {
+  setAuth(fsName: string, clientId: string | number, caps: string[], rootSquash: boolean) {
     return this.http.put(`${this.baseURL}/auth`, {
       fs_name: fsName,
       client_id: `client.${clientId}`,
