@@ -14,6 +14,7 @@ add_custom_command(
   DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/cephadm.py
     ${CMAKE_CURRENT_SOURCE_DIR}/build.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/cephadm_invoker.py
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   COMMAND ${Python3_EXECUTABLE} build.py
     --set-version-var=CEPH_GIT_VER=${CEPH_GIT_VER}
@@ -31,3 +32,7 @@ add_custom_target(cephadm ALL
 install(PROGRAMS
   ${bin_target_file}
   DESTINATION ${CMAKE_INSTALL_SBINDIR})
+
+install(PROGRAMS
+  ${CMAKE_CURRENT_SOURCE_DIR}/cephadm_invoker.py
+  DESTINATION ${CMAKE_INSTALL_LIBEXECDIR})
