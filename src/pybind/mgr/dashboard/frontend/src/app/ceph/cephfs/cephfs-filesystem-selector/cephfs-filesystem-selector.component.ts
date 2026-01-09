@@ -1,11 +1,11 @@
-import { Component, OnInit, TemplateRef, ViewChild, inject } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild, inject, Input } from '@angular/core';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { catchError } from 'rxjs/operators';
-import { forkJoin, of, Observable } from 'rxjs';
+import { forkJoin, of, Observable, BehaviorSubject } from 'rxjs';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { CephfsDetail, FilesystemRow } from '~/app/shared/models/cephfs.model';
@@ -27,6 +27,7 @@ export class CephfsFilesystemSelectorComponent implements OnInit {
   filesystems: FilesystemRow[] = [];
   selection = new CdTableSelection();
   icons = Icons;
+ @Input() selectedFilesystem$: BehaviorSubject<any>;
 
   ngOnInit(): void {
     this.columns = [
@@ -90,7 +91,8 @@ export class CephfsFilesystemSelectorComponent implements OnInit {
     });
   }
 
-  updateSelection(selection: CdTableSelection) {
+ updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+    this.selectedFilesystem$?.next(selection?.selected?.[0] ?? null);
   }
 }

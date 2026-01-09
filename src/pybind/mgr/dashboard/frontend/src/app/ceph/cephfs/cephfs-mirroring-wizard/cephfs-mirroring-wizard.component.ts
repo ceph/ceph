@@ -21,6 +21,8 @@ export class CephfsMirroringWizardComponent implements OnInit {
   description: string = $localize`Configure a new mirroring relationship between clusters`;
   form: FormGroup;
   showMessage: boolean = true;
+  selectedFilesystem$: BehaviorSubject<any> = new BehaviorSubject<any>(null);
+  selectedEntity$: BehaviorSubject<any> = new BehaviorSubject<any>(null);
 
   LOCAL_ROLE = LOCAL_ROLE;
   REMOTE_ROLE = REMOTE_ROLE;
