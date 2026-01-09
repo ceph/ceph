@@ -1,3 +1,4 @@
+@use './src/styles/defaults' as *;
 @use '@carbon/styles/scss/theme' as *;
 @use '@carbon/styles/scss/spacing' as *;
 @use '@carbon/type';
@@ -13,6 +14,20 @@
   top: 0;
   z-index: 2;
   display: block;
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--cds-spacing-02);
+}
+
+.task-progress {
+  @include type.type-style('label-01');
+
+  color: var(--cds-text-secondary);
+  text-align: right;
 }
 
 .notification-timestamp {
@@ -110,4 +125,8 @@
   height: 100%;
   overflow-y: auto;
   background-color: $layer-01;
+}
+
+:host ::ng-deep .infoCircle-icon {
+  fill: $primary !important;
 }

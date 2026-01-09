@@ -16,7 +16,8 @@ import {
   TagModule,
   ToggleModule,
   ButtonModule,
-  PlaceholderModule
+  PlaceholderModule,
+  ProgressBarModule
 } from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -85,7 +86,8 @@ import CloseIcon from '@carbon/icons/es/close/16';
     TagModule,
     ToggleModule,
     ButtonModule,
-    PlaceholderModule
+    PlaceholderModule,
+    ProgressBarModule
   ],
   declarations: [
     AboutComponent,

@@ -9,6 +9,7 @@ import { CdNotification, CdNotificationConfig } from '../../../../shared/models/
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { SharedModule } from '../../../../shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 
 describe('NotificationAreaComponent', () => {
   let component: NotificationAreaComponent;
@@ -19,6 +20,10 @@ describe('NotificationAreaComponent', () => {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
+
+  configureTestBed({
+    imports: [HttpClientTestingModule]
+  });
 
   const createNotification = (
     type: NotificationType,
@@ -90,7 +95,7 @@ describe('NotificationAreaComponent', () => {
   });
 
   it('should unsubscribe from notification service on destroy', () => {
-    const subSpy = spyOn(component['sub'], 'unsubscribe');
+    const subSpy = spyOn(component['subs'], 'unsubscribe');
     component.ngOnDestroy();
     expect(subSpy).toHaveBeenCalled();
   });
