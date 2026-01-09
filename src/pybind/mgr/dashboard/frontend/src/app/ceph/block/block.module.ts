@@ -64,7 +64,8 @@ import {
   UIShellModule,
   TreeviewModule,
   TabsModule,
-  TagModule
+  TagModule,
+  ThemeModule
 } from 'carbon-components-angular';
 
 // Icons
@@ -76,6 +77,8 @@ import Reset from '@carbon/icons/es/reset/32';
 import SubtractAlt from '@carbon/icons/es/subtract--alt/20';
 import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
 import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group/nvmeof-gateway-group.component';
+import { NvmeofGatewayProdComponent } from './nvmeof-gateway-prod/nvmeof-gateway-prod.component';
+
 
 @NgModule({
   imports: [
@@ -103,7 +106,8 @@ import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group/nvmeof-gatew
     DatePickerModule,
     ComboBoxModule,
     TabsModule,
-    TagModule
+    TagModule,
+    ThemeModule
   ],
   declarations: [
     RbdListComponent,
@@ -133,6 +137,9 @@ import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group/nvmeof-gatew
     NvmeofGatewayComponent,
     NvmeofSubsystemsComponent,
     NvmeofSubsystemsDetailsComponent,
+    NvmeofSubsystemsDetailsComponent,
+    NvmeofGatewayProdComponent,
+
     NvmeofGatewayGroupComponent,
     NvmeofSubsystemsFormComponent,
     NvmeofListenersFormComponent,
@@ -294,7 +301,18 @@ const routes: Routes = [
     },
     children: [
       { path: '', redirectTo: 'gateways', pathMatch: 'full' },
-      { path: '', component: NvmeofGatewayComponent, data: { breadcrumbs: 'Gateways' } },
+      {
+        path: 'gateways',
+        data: { breadcrumbs: 'Gateways' },
+        children: [
+          { path: '', component: NvmeofGatewayComponent },
+          {
+            path: 'gateway-prod/:group/:service',
+            component: NvmeofGatewayProdComponent,
+            data: { breadcrumbs: 'gateway-prod' }
+          }
+        ]
+      },
       {
         path: 'subsystems',
         component: NvmeofSubsystemsComponent,

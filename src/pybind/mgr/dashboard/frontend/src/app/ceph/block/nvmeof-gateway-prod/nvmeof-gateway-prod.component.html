@@ -1,0 +1,38 @@
+<div class="p-3">
+  <h3 i18n>Gateway Production</h3>
+  @if (group) {
+    <p
+      i18n="@@gatewayGroup"
+      class="cds-mb-4">
+      Selected gateway group: <strong>{{ group }}</strong>
+    </p>
+  }
+
+  <cd-table
+    [data]="data"
+    [columns]="columns"
+    columnMode="flex"
+    [selectionType]="'multi'"
+    (updateSelection)="updateSelection($event)"
+    [size]="'sm'">
+    <cd-table-actions
+      class="table-actions"
+      [permission]="permission"
+      [selection]="selection"
+      [tableActions]="tableActions">
+    </cd-table-actions>
+  </cd-table>
+
+  <ng-template
+    #statusTpl
+    let-status="data.value"
+    let-row="data.row">
+    @if (status === 'Available') {
+    <cd-icon type="success"></cd-icon>
+    }
+    @if (status !== 'Available') {
+    <cd-icon type="error"></cd-icon>
+    }
+    <span class="cds-ml-3">{{ status }}</span>
+  </ng-template>
+</div>

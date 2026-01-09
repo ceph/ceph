@@ -6,8 +6,15 @@
     columnMode="flex"
     selectionType="single"
     identifier="name"
+    [selection]="selection"
     (updateSelection)="updateSelection($event)"
     (fetchData)="fetchData()">
+    <cd-table-actions
+            class="table-actions"
+            [permission]="permission"
+            [selection]="selection"
+            [tableActions]="tableActions">
+    </cd-table-actions>
   </cd-table>
 </ng-container>
 
@@ -37,4 +44,27 @@
 
 
   </div>
+</ng-template>
+
+<ng-template #deleteTpl
+             let-groupName="groupName"
+             let-subsystemCount="subsystemCount">
+  <ng-container *ngIf="subsystemCount > 0">
+    <p class="cds-mb-4"
+       i18n>
+      The gateway group <strong>{{ groupName }}</strong> contains <strong>{{ subsystemCount }}</strong> subsystem(s).
+    </p>
+
+    <div class="cds-theme-zone-g10 cds-p-3 cds-mb-4">
+      <cd-icon type="warning"></cd-icon>
+      <span i18n>Please delete all subsystems before deleting the gateway group.</span>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="subsystemCount === 0">
+    <p i18n
+       class="cds-mb-4">
+      Are you sure you want to delete the gateway group <strong>{{ groupName }}</strong>?
+    </p>
+  </ng-container>
 </ng-template>
