@@ -586,6 +586,11 @@ public:
   // return them and clear the rendezvous state.  Returns an empty map if
   // reset_merge_rendezvous() breaks the wait (e.g. PG stop or merge cancel).
   seastar::future<merge_source_map_t> collect_merge_sources(std::size_t n);
+  void merge_from(
+      merge_source_map_t& sources,
+      PeeringCtx &rctx,
+      unsigned split_bits,
+      const pg_merge_meta_t& last_pg_merge_meta);
 
   // Drop in-flight handoffs and reset the semaphore.  Call on PG stop or
   // after Seastore cross-shard cancel so a failed try cannot leave stale
