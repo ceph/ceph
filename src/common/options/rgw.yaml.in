@@ -4559,7 +4559,7 @@ options:
 - name: rgw_usage_log_key_transition
   type: bool
   level: advanced
-  desc: Hhandle the co-existence of both old and new name-by-user keys
+  desc: Handle the co-existence of both old and new name-by-user keys
   long_desc: The new usage log keyed by owner/payer ID has the prefix of "~"
     for IDs starting with '0'.  This prefix is absent from the old scheme.
     This option instructs RGW to handle the old keys if they still exist.
