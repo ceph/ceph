@@ -679,6 +679,7 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
       check_image_cache_state_clean();
       m_wake_up_enabled = false;
       m_log_entries.clear();
+      m_current_sync_point.reset();
       m_cache_state->clean = true;
       m_cache_state->empty = true;
       remove_pool_file();
