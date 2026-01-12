@@ -693,3 +693,41 @@ class RbdGroupSnapshot(RESTController):
             ioctx.set_namespace(namespace)
             group = rbd.Group(ioctx, group_name)
             return group.remove_snap(snapshot_name)
+
+    @RbdTask('group_snap/update',
+             ['{pool_name}', '{group_name}', '{snapshot_name}'], 4.0)
+    @EndpointDoc("Update a group snapshot",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'snapshot_name': (str, 'Current name of the snapshot'),
+                     'new_snap_name': (str, 'New name for the snapshot'),
+                 },
+                 responses={200: None})
+    def set(self, pool_name, group_name, snapshot_name, new_snap_name=None, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            group = rbd.Group(ioctx, group_name)
+            if new_snap_name and new_snap_name != snapshot_name:
+                return group.rename_snap(snapshot_name, new_snap_name)
+            return None
+
+    @RbdTask('group_snap/rollback',
+             ['{pool_name}', '{group_name}', '{snapshot_name}'], 5.0)
+    @RESTController.Resource('POST')
+    @UpdatePermission
+    @allow_empty_body
+    @EndpointDoc("Rollback group to snapshot",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'snapshot_name': (str, 'Name of the snapshot'),
+                 },
+                 responses={200: None})
+    def rollback(self, pool_name, group_name, snapshot_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            group = rbd.Group(ioctx, group_name)
+            return group.rollback_to_snap(snapshot_name)
