@@ -259,7 +259,7 @@ class NFSCluster:
         # Filter daemons for this cluster
         cluster_daemons = [d for d in all_nfs_daemons if d.service_id() == cluster_id]
 
-        # Determine ingress configuration (HAProxy modes only)
+        # Determine ingress configuration
         ingress_mode: Optional[IngressType] = None
         virtual_ip: Optional[str] = None
         ingress_port: Optional[int] = None
@@ -271,7 +271,9 @@ class NFSCluster:
             spec = cast(IngressSpec, svc.spec)
             if spec.backend_service == f'nfs.{cluster_id}':
                 virtual_ip = svc.virtual_ip.split('/')[0] if svc.virtual_ip else None
-                if spec.enable_haproxy_protocol:
+                if spec.keepalive_only:
+                    ingress_mode = IngressType.keepalive_only
+                elif spec.enable_haproxy_protocol:
                     ingress_mode = IngressType.haproxy_protocol
                 else:
                     ingress_mode = IngressType.haproxy_standard
@@ -281,9 +283,7 @@ class NFSCluster:
                         monitor_port = svc.ports[1]
                 break
 
-        # No longer needed as we're not showing active/passive per daemon
-
-        # Build backend list with role information
+        # Build backend list with daemon information
         backends: List[Dict[str, Any]] = []
         for daemon in cluster_daemons:
             if not daemon.hostname:
@@ -315,7 +315,7 @@ class NFSCluster:
                     "status": status
                 })
             except orchestrator.OrchestratorError:
-                log.warning(f"Failed to get info for NFS daemon on {daemon.hostname}")
+                log.warning(f"Failed to get info for NFS daemon on {daemon.hostname} in cluster {cluster_id}")
                 continue
 
         # Sort backends by hostname for consistent output

@@ -1231,7 +1231,12 @@ NFS_CORE_PARAM {
         cluster = NFSCluster(nfs_mod)
 
         out = cluster.show_nfs_cluster_info(self.cluster_id)
-        assert out == {"foo": {"virtual_ip": None, "backend": []}}
+        assert out == {"foo": {
+            "deployment_type": "standalone",
+            "virtual_ip": None,
+            "backend": [],
+            "placement": None
+        }}
 
     def test_cluster_info(self):
         self._do_mock_test(self._do_test_cluster_info)

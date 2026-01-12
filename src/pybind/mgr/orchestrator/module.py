@@ -2605,4 +2605,3 @@ Usage:
         completion = self.update_service(service_type.value, service_type.name, image)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
-
