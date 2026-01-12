@@ -10,6 +10,16 @@
 .container-fluid {
   overflow: auto;
   padding-top: 48px;
+
+  &:has(.tearsheet--full) {
+    padding-left: 0;
+    padding-right: 0;
+    overflow: hidden;
+
+    .breadcrumbs--padding {
+      padding-left: var(--cds-spacing-07);
+    }
+  }
 }
 
 .rgw-dashboard {
