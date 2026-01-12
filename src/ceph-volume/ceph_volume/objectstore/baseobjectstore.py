@@ -155,8 +155,6 @@ class BaseObjectStore:
             '-i', self.osd_id,
             '--monmap', self.monmap,
         ]
-        if self.disable_bluestore_discard and self.objectstore == 'bluestore':
-            self.osd_mkfs_cmd.extend(['--bluestore-discard-on-mkfs', 'false'])
         if self.cephx_secret is not None:
             self.osd_mkfs_cmd.extend(['--keyfile', '-'])
 
@@ -165,10 +163,64 @@ class BaseObjectStore:
         self.osd_mkfs_cmd.extend(self.supplementary_command)
         return self.osd_mkfs_cmd
 
+    def _mkfs_env_disable_bluestore_discard(self) -> Optional[Dict[str, str]]:
+        """
+        Disable the mkfs-time BlueStore discard step for this mkfs invocation.
+
+        In some cephadm environments, passing a CLI flag to disable mkfs discard
+        is not consistently supported by `ceph-osd --mkfs` across builds.
+        As a workaround we:
+
+        - write a tiny temporary ceph.conf snippet:
+
+            [osd]
+            bluestore_discard_on_mkfs = false
+
+        - set `CEPH_CONF` only for the mkfs subprocess
+        - delete the temp file afterwards
+        """
+        if not (self.disable_bluestore_discard and self.objectstore == 'bluestore'):
+            return None
+
+        base_conf = conf.path or f'/etc/ceph/{conf.cluster}.conf'
+        snippet = "\n[osd]\nbluestore_discard_on_mkfs = false\n"
+
+        tmp_dir = '/rootfs/tmp' if os.environ.get('I_AM_IN_A_CONTAINER', False) else '/tmp'
+        fd, tmp_path = tempfile.mkstemp(prefix='ceph-volume-mkfs-', suffix='.conf', dir=tmp_dir)
+        os.close(fd)
+
+        try:
+            try:
+                with open(base_conf, 'r', encoding='utf-8') as src:
+                    base_contents = src.read()
+            except Exception:
+                base_contents = ''
+
+            with open(tmp_path, 'w', encoding='utf-8') as dst:
+                if base_contents:
+                    dst.write(base_contents)
+                dst.write(snippet)
+
+            env = os.environ.copy()
+            env['CEPH_CONF'] = tmp_path
+            logger.info(
+                'mkfs: using temporary ceph.conf to set bluestore_discard_on_mkfs=false: %s',
+                tmp_path,
+            )
+            return env
+        except Exception as exc:
+            logger.warning('mkfs: unable to create temporary ceph.conf override: %s', exc)
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+            return None
+
     def osd_mkfs(self) -> None:
         self.osd_path = self.get_osd_path()
         self.monmap = os.path.join(self.osd_path, 'activate.monmap')
         cmd = self.build_osd_mkfs_cmd()
+        mkfs_env = self._mkfs_env_disable_bluestore_discard()
 
         system.chown(self.osd_path)
         """
@@ -181,7 +233,9 @@ class BaseObjectStore:
             _, _, returncode = process.call(cmd,
                                             stdin=self.cephx_secret,
                                             terminal_verbose=True,
-                                            show_command=True)
+                                            show_command=True,
+                                            env=mkfs_env,
+            )
             if returncode == 0:
                 break
             else:
@@ -194,6 +248,13 @@ class BaseObjectStore:
                 else:
                     raise RuntimeError('Command failed with exit code %s: %s' %
                                        (returncode, ' '.join(cmd)))
+        # Clean up the temporary ceph.conf created for mkfs so we don’t leave
+        # stale temp files behind on each OSD creation.
+        if mkfs_env and mkfs_env.get('CEPH_CONF'):
+            try:
+                os.unlink(mkfs_env['CEPH_CONF'])
+            except Exception:
+                pass
 
         mapping: Dict[str, Any] = {'raw': ['data', 'block_db', 'block_wal'],
                                    'lvm': ['ceph.block_device', 'ceph.db_device', 'ceph.wal_device']}

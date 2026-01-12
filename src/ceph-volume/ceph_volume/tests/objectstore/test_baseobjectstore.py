@@ -1,4 +1,5 @@
 import pytest
+import os
 from unittest.mock import patch, Mock, call
 from ceph_volume.objectstore.baseobjectstore import BaseObjectStore
 from ceph_volume.util import system
@@ -132,7 +133,6 @@ class TestBaseObjectStore:
                           '--mkfs', '-i', '123',
                           '--monmap',
                           '/etc/ceph/ceph.monmap',
-                          '--bluestore-discard-on-mkfs', 'false',
                           '--keyfile', '-',
                           '--osd-data',
                           '/var/lib/ceph/osd/ceph-123/',
@@ -157,9 +157,44 @@ class TestBaseObjectStore:
                 'kwargs': {
                     'stdin': ['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ=='],
                     'terminal_verbose': True,
-                    'show_command': True}
+                    'show_command': True,
+                    'env': None}
                 }
             ]
+
+    def test_osd_mkfs_sets_temp_ceph_conf_when_discard_disabled(self, monkeypatch, tmpfile, objectstore):
+        args = objectstore(dmcrypt=False)
+        bo = BaseObjectStore(args)
+        bo.objectstore = 'bluestore'
+        bo.disable_bluestore_discard = True
+        bo.get_osd_path = lambda: '/var/lib/ceph/osd/ceph-123/'
+        bo.build_osd_mkfs_cmd = lambda: ['ceph-osd', '--mkfs', 'some', 'fake', 'args']
+        monkeypatch.setattr(system, 'chown', lambda path: 0)
+
+        # Provide a base config file so the helper can copy and append.
+        base_conf = tmpfile(contents='[global]\nfsid = deadbeef\n')
+        monkeypatch.setattr('ceph_volume.objectstore.baseobjectstore.conf.path', base_conf)
+
+        captured = {}
+
+        def fake_call(cmd, **kwargs):
+            env = kwargs.get('env')
+            assert env and 'CEPH_CONF' in env
+            conf_path = env['CEPH_CONF']
+            captured['conf_path'] = conf_path
+            assert os.path.exists(conf_path)
+            with open(conf_path, 'r', encoding='utf-8') as fp:
+                data = fp.read()
+            assert 'bluestore_discard_on_mkfs = false' in data
+            return ([], [], 0)
+
+        monkeypatch.setattr('ceph_volume.objectstore.baseobjectstore.process.call', fake_call)
+
+        bo.osd_mkfs()
+
+        # Temp conf should be removed after mkfs returns.
+        assert 'conf_path' in captured
+        assert not os.path.exists(captured['conf_path'])
 
     @patch('ceph_volume.process.call', Mock(return_value=([], [], 999)))
     def test_osd_mkfs_fails(self, monkeypatch):
