@@ -371,9 +371,10 @@ struct shard_extent_set_t {
   extent_set &at(shard_id_t shard) { return map.at(shard); }
   const extent_set &at(shard_id_t shard) const { return map.at(shard); }
 
-  extent_set get(shard_id_t shard) const {
+  const extent_set &get(shard_id_t shard) const {
+    static const extent_set empty_extent_set;
     if (!map.contains(shard)) {
-      return extent_set();
+      return empty_extent_set;
     }
     return at(shard);
   }
