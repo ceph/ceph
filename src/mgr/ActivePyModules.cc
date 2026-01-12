@@ -699,19 +699,28 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
     const std::string &prefix) const
 {
   without_gil_t no_gil;
-  std::lock_guard l(lock);
-  std::lock_guard lock(module_config.lock);
-  no_gil.acquire_gil();
-
   const std::string base_prefix = PyModule::mgr_store_prefix
                                     + module_name + "/";
-  const std::string global_prefix = base_prefix + prefix;
-  dout(4) << __func__ << " prefix: " << global_prefix << dendl;
+
+  std::map<std::string, std::string> snap_cache_store;
+  {
+    std::lock_guard l(lock);
+    std::lock_guard lock(module_config.lock);
+
+    const std::string global_prefix = base_prefix + prefix;
+    dout(4) << __func__ << " prefix: " << global_prefix << dendl;
+
+    for (auto p = store_cache.lower_bound(global_prefix); 
+         p != store_cache.end() && p->first.find(global_prefix) == 0;
+         ++p) {
+      snap_cache_store[p->first] = p->second;
+    }
+  }
+  no_gil.acquire_gil();
 
   PyFormatter f;
-  for (auto p = store_cache.lower_bound(global_prefix);
-       p != store_cache.end() && p->first.find(global_prefix) == 0; ++p) {
-    f.dump_string(p->first.c_str() + base_prefix.size(), p->second);
+  for (const auto& [full_key, val] : snap_cache_store) {
+    f.dump_string(full_key.c_str() + base_prefix.size(), val);
   }
   return f.get();
 }
