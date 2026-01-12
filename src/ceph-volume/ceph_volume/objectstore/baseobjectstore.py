@@ -185,7 +185,10 @@ class BaseObjectStore:
         base_conf = conf.path or f'/etc/ceph/{conf.cluster}.conf'
         snippet = "\n[osd]\nbluestore_discard_on_mkfs = false\n"
 
-        tmp_dir = '/rootfs/tmp' if os.environ.get('I_AM_IN_A_CONTAINER', False) else '/tmp'
+        # If we're running in a container with the host root mounted at /rootfs,
+        # write the file into /rootfs/tmp so the host can read it.
+        use_rootfs_tmp = os.path.isdir('/rootfs/tmp')
+        tmp_dir = '/rootfs/tmp' if use_rootfs_tmp else '/tmp'
         fd, tmp_path = tempfile.mkstemp(prefix='ceph-volume-mkfs-', suffix='.conf', dir=tmp_dir)
         os.close(fd)
 
@@ -201,19 +204,23 @@ class BaseObjectStore:
                     dst.write(base_contents)
                 dst.write(snippet)
 
+            # `ceph-osd` runs on the host, so point it at the host visible path.
+            ceph_conf_path = tmp_path.replace('/rootfs', '', 1) if use_rootfs_tmp else tmp_path
             env = os.environ.copy()
-            env['CEPH_CONF'] = tmp_path
+            env['CEPH_CONF'] = ceph_conf_path
             logger.info(
                 'mkfs: using temporary ceph.conf to set bluestore_discard_on_mkfs=false: %s',
-                tmp_path,
+                ceph_conf_path,
             )
             return env
         except Exception as exc:
             logger.warning('mkfs: unable to create temporary ceph.conf override: %s', exc)
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
+            for p in (tmp_path, tmp_path.replace('/rootfs', '', 1)):
+                try:
+                    os.unlink(p)
+                    break
+                except Exception:
+                    pass
             return None
 
     def osd_mkfs(self) -> None:
@@ -251,10 +258,16 @@ class BaseObjectStore:
         # Clean up the temporary ceph.conf created for mkfs so we don’t leave
         # stale temp files behind on each OSD creation.
         if mkfs_env and mkfs_env.get('CEPH_CONF'):
-            try:
-                os.unlink(mkfs_env['CEPH_CONF'])
-            except Exception:
-                pass
+            p = mkfs_env['CEPH_CONF']
+            # If the file was created via /rootfs/tmp, remove the host-visible
+            # file through /rootfs as well.
+            candidates = (p, '/rootfs' + p) if p.startswith('/tmp/') else (p,)
+            for c in candidates:
+                try:
+                    os.unlink(c)
+                    break
+                except Exception:
+                    pass
 
         mapping: Dict[str, Any] = {'raw': ['data', 'block_db', 'block_wal'],
                                    'lvm': ['ceph.block_device', 'ceph.db_device', 'ceph.wal_device']}
