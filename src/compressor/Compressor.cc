@@ -28,6 +28,7 @@ namespace TOPNSPC {
 
 const char* Compressor::get_comp_alg_name(int a) {
 
+  // 【修改点】删除了之前的劫持逻辑，恢复原状
   auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
 		   [a](const auto& kv) { return kv.second == a; });
 
@@ -40,6 +41,8 @@ const char* Compressor::get_comp_alg_name(int a) {
 boost::optional<Compressor::CompressionAlgorithm>
 Compressor::get_comp_alg_type(std::string_view s) {
 
+  // 【修改点】删除了之前的劫持逻辑，恢复原状
+  // 现在因为 Compressor.h 里已经注册了 "hrac"，这里会自动查表找到
   auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
 		   [&s](const auto& kv) { return kv.first == s; });
   if (std::cend(compression_algorithms) == p)
@@ -84,6 +87,7 @@ CompressorRef Compressor::create(CephContext *cct, const std::string &type)
   CompressorRef cs_impl = NULL;
   std::stringstream ss;
   auto reg = cct->get_plugin_registry();
+  
   auto factory = dynamic_cast<ceph::CompressionPlugin*>(reg->get_with_load("compressor", type));
   if (factory == NULL) {
     lderr(cct) << __func__ << " cannot load compressor of type " << type << dendl;

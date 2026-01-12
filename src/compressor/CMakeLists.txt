@@ -21,6 +21,8 @@ set(compressor_plugin_dir ${CEPH_INSTALL_PKGLIBDIR}/compressor)
 add_subdirectory(snappy)
 add_subdirectory(zlib)
 add_subdirectory(zstd)
+add_subdirectory(mylz4)
+add_subdirectory(hrac)
 
 if(HAVE_LZ4)
   add_subdirectory(lz4)

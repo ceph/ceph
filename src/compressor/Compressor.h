@@ -45,6 +45,9 @@ public:
 #ifdef HAVE_BROTLI
     COMP_ALG_BROTLI = 5,
 #endif
+    // 【修改点】新增 HRAC 的 ID
+    COMP_ALG_HRAC = 6,
+
     COMP_ALG_LAST   //the last value for range checks
   };
 
@@ -60,6 +63,8 @@ public:
 #ifdef HAVE_BROTLI
 	{ "brotli",	COMP_ALG_BROTLI },
 #endif
+    // 【修改点】注册名字映射
+    { "hrac",	COMP_ALG_HRAC },
   };
 
   // compression options
