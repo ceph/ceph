@@ -5160,7 +5160,8 @@ public:
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
       if (is_missing_divergent_item) {  // use iterator
-        rmissing.erase(missing_it->second.need);
+        auto erased = rmissing.erase(missing_it->second.need);
+        ceph_assert(erased == 1);  // Should always erase exactly one entry
         // .have = nil
         missing_it->second = item(e.version, eversion_t(), e.is_delete());
         missing_it->second.clean_regions.mark_fully_dirty();
@@ -5175,7 +5176,8 @@ public:
       }
     } else if (is_missing_divergent_item) {
       // already missing (prior).
-      rmissing.erase((missing_it->second).need);
+      auto erased = rmissing.erase((missing_it->second).need);
+      ceph_assert(erased == 1);  // Should always erase exactly one entry
       missing_it->second.need = e.version;  // leave .have unchanged.
       missing_it->second.set_delete(e.is_delete());
       if (e.is_lost_revert())
@@ -5195,7 +5197,11 @@ public:
         missing[e.soid].clean_regions = e.clean_regions;
     }
     if (!skipped) {
-      rmissing[e.version] = e.soid;
+      auto [it, inserted] = rmissing.insert({e.version, e.soid});
+      if (!inserted) {
+        // Duplicate eversion_t detected - this should never happen
+        ceph_assert(it->second == e.soid);  // Same object is OK (idempotent)
+      }
       tracker.changed(e.soid);
     }
   }
@@ -5203,7 +5209,8 @@ public:
   void revise_need(hobject_t oid, eversion_t need, bool is_delete) {
     auto p = missing.find(oid);
     if (p != missing.end()) {
-      rmissing.erase((p->second).need);
+      auto erased = rmissing.erase((p->second).need);
+      ceph_assert(erased == 1);  // Should always erase exactly one entry
       p->second.need = need;          // do not adjust .have
       p->second.set_delete(is_delete);
       p->second.clean_regions.mark_fully_dirty();
@@ -5211,7 +5218,10 @@ public:
       missing[oid] = item(need, eversion_t(), is_delete);
       missing[oid].clean_regions.mark_fully_dirty();
     }
-    rmissing[need] = oid;
+    auto [it, inserted] = rmissing.insert({need, oid});
+    if (!inserted) {
+      ceph_assert(it->second == oid);  // Same object is OK
+    }
 
     tracker.changed(oid);
   }
@@ -5235,12 +5245,18 @@ public:
   void add(const hobject_t& oid, eversion_t need, eversion_t have,
 	   bool is_delete) {
     missing[oid] = item(need, have, is_delete, true);
-    rmissing[need] = oid;
+    auto [it, inserted] = rmissing.insert({need, oid});
+    if (!inserted) {
+      ceph_assert(it->second == oid);  // Duplicate eversion_t for same object is OK
+    }
     tracker.changed(oid);
   }
 
   void add(const hobject_t& oid, pg_missing_item&& item) {
-    rmissing[item.need] = oid;
+    auto [it, inserted] = rmissing.insert({item.need, oid});
+    if (!inserted) {
+      ceph_assert(it->second == oid);  // Duplicate eversion_t for same object is OK
+    }
     missing.insert({oid, std::move(item)});
     tracker.changed(oid);
   }
@@ -5253,7 +5269,8 @@ public:
 
   void rm(std::map<hobject_t, item>::const_iterator m) {
     tracker.changed(m->first);
-    rmissing.erase(m->second.need);
+    auto erased = rmissing.erase(m->second.need);
+    ceph_assert(erased == 1);  // Should always erase exactly one entry
     missing.erase(m);
   }
 
@@ -5266,7 +5283,8 @@ public:
 
   void got(std::map<hobject_t, item>::const_iterator m) {
     tracker.changed(m->first);
-    rmissing.erase(m->second.need);
+    auto erased = rmissing.erase(m->second.need);
+    ceph_assert(erased == 1);  // Should always erase exactly one entry
     missing.erase(m);
   }
 
@@ -5334,8 +5352,13 @@ public:
     for (std::map<hobject_t,item>::iterator it =
 	   missing.begin();
 	 it != missing.end();
-	 ++it)
-      rmissing[it->second.need] = it->first;
+	 ++it) {
+      auto [rit, inserted] = rmissing.insert({it->second.need, it->first});
+      if (!inserted) {
+        // Duplicate eversion_t in decoded data - this indicates corruption
+        ceph_assert(rit->second == it->first);
+      }
+    }
     for (auto const &i: missing)
       tracker.changed(i.first);
   }
