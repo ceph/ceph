@@ -34,3 +34,7 @@ leak:^PyModule_ExecDef
 # following suppression mirrors qa/valgrind.supp
 # ignore ec plugin factory (FIXME SOMEDAY)
 leak:^ceph::ErasureCodePluginRegistry::load
+
+# SQLite internal allocations
+# These are indirect leaks from SQLite's internal memory management
+leak:libsqlite3.so
