@@ -316,13 +316,13 @@ add_ceph_unittest(unittest_perf_counters_key)
 target_link_libraries(unittest_perf_counters_key ceph-common)
 
 # unittest_global_doublefree
-if(WITH_CEPHFS)
+if(WITH_LIBCEPHFS)
   add_executable(unittest_global_doublefree
     test_global_doublefree.cc
     )
   add_ceph_unittest(unittest_global_doublefree)
   target_link_libraries(unittest_global_doublefree cephfs librados ceph-common)
-endif(WITH_CEPHFS)
+endif()
 
 if(NOT WIN32)
 add_executable(unittest_dns_resolve
