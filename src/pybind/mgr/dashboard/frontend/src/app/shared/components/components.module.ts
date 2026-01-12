@@ -41,7 +41,8 @@ import {
   TilesModule,
   PopoverModule,
   InlineLoadingModule,
-  TagModule
+  TagModule,
+  LinkModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/20';
 import CodeIcon from '@carbon/icons/es/code/16';
@@ -92,6 +93,7 @@ import { InlineMessageComponent } from './inline-message/inline-message.componen
 import { IconComponent } from './icon/icon.component';
 import { DetailsCardComponent } from './details-card/details-card.component';
 import { ToastComponent } from './notification-toast/notification-toast.component';
+import { TearsheetComponent } from './tearsheet/tearsheet.component';
 
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
@@ -99,6 +101,7 @@ import CopyIcon from '@carbon/icons/es/copy/32';
 import downloadIcon from '@carbon/icons/es/download/16';
 import IdeaIcon from '@carbon/icons/es/idea/20';
 import CloseIcon from '@carbon/icons/es/close/16';
+import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 
 @NgModule({
   imports: [
@@ -144,7 +147,8 @@ import CloseIcon from '@carbon/icons/es/close/16';
     TilesModule,
     PopoverModule,
     InlineLoadingModule,
-    TagModule
+    TagModule,
+    LinkModule
   ],
   declarations: [
     SparklineComponent,
@@ -190,7 +194,9 @@ import CloseIcon from '@carbon/icons/es/close/16';
     IconComponent,
     InlineMessageComponent,
     DetailsCardComponent,
-    ToastComponent
+    ToastComponent,
+    TearsheetComponent,
+    TearsheetStepComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -233,7 +239,9 @@ import CloseIcon from '@carbon/icons/es/close/16';
     IconComponent,
     InlineMessageComponent,
     DetailsCardComponent,
-    ToastComponent
+    ToastComponent,
+    TearsheetComponent,
+    TearsheetStepComponent
   ]
 })
 export class ComponentsModule {
