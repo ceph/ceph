@@ -29,6 +29,7 @@
 #include "librbd/mirror/GetStatusRequest.h"
 #include "librbd/mirror/GetUuidRequest.h"
 #include "librbd/mirror/GroupEnableRequest.h"
+#include "librbd/mirror/GroupAddImageRequest.h"
 #include "librbd/mirror/GroupGetInfoRequest.h"
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
@@ -3024,6 +3025,50 @@ int create_orphan_group_snapshot(IoCtx& group_ioctx,
     return r;
   }
 
+  return 0;
+}
+
+template <typename I>
+int Mirror<I>::group_image_add(IoCtx &group_ioctx,
+    const std::string &group_id,
+    IoCtx &image_ioctx,
+    const std::string &image_id) {
+  CephContext *cct = (CephContext *)group_ioctx.cct();
+  ldout(cct, 20) << "group io_ctx=" << &group_ioctx << ", group_id=" << group_id
+                 << ", image io_ctx=" << &image_ioctx << ", image_id="
+                 << image_id << dendl;
+
+  cls::rbd::MirrorGroup mirror_group;
+  int r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_group);
+  if (r == -ENOENT) {
+    ldout(cct, 10) << "group is not enabled for mirroring" << dendl;
+    return 0;
+  } else if (r < 0) {
+    lderr(cct) << "failed to retrieve mirror group metadata: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  uint64_t internal_flags;
+  r = librbd::util::snap_create_flags_api_to_internal(
+      cct, librbd::util::get_default_snap_create_flags(group_ioctx),
+      &internal_flags);
+  if (r < 0) {
+    lderr(cct) << "error getting flags: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  C_SaferCond cond;
+  auto req = mirror::GroupAddImageRequest<>::create(
+    group_ioctx, group_id, image_id, internal_flags,
+    static_cast<cls::rbd::MirrorImageMode>(RBD_MIRROR_IMAGE_MODE_SNAPSHOT), &cond);
+  req->send();
+  r = cond.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to add image to group: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
   return 0;
 }
 

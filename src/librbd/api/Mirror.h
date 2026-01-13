@@ -146,6 +146,8 @@ struct Mirror {
                           mirror_image_mode_t group_image_mode);
   static int group_disable(IoCtx &group_ioctx, const char *group_name,
                            bool force);
+  static int group_image_add(IoCtx &group_ioctx, const std::string &group_id,
+                             IoCtx &image_ioctx, const std::string &image_id);
   static int group_promote(IoCtx &group_ioctx, const char *group_name,
                            bool force);
   static int group_demote(IoCtx &group_ioctx, const char *group_name);
