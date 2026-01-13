@@ -1343,6 +1343,57 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
   return verify_user_permission_no_policy(dpp, &ps, s->user_acl, perm);
 }
 
+Effect evaluate_resource_permission(
+    const DoutPrefixProvider* dpp,
+    const rgw::IAM::Environment& env,
+    const rgw::auth::Identity& identity,
+    uint64_t op,
+    const rgw::ARN& arn,
+    const rgw_owner& resource_owner,
+    const boost::optional<rgw::IAM::Policy>& resource_policy,
+    const std::vector<rgw::IAM::Policy>& identity_policies,
+    const std::vector<rgw::IAM::Policy>& session_policies)
+{
+  if (identity.get_account()) {
+    const bool account_root = (identity.get_identity_type() == TYPE_ROOT);
+    if (!identity.is_owner_of(resource_owner)) {
+      ldpp_dout(dpp, 4) << "cross-account request for resource owner "
+          << resource_owner << " != " << identity.get_aclowner().id << dendl;
+      constexpr bool cross_account = true;
+      // cross-account requests evaluate the identity-based policies separately
+      // from the resource-based policies and require Allow from both
+      const auto identity_res = evaluate_iam_policies(
+          dpp, env, identity, account_root, op, arn, {},
+          identity_policies, session_policies, cross_account);
+      if (identity_res == rgw::IAM::Effect::Deny) {
+        return Effect::Deny;
+      }
+      const auto resource_res = evaluate_iam_policies(
+          dpp, env, identity, false, op, arn,
+          resource_policy, {}, {}, cross_account);
+      if (resource_res == Effect::Deny) {
+        return Effect::Deny;
+      }
+      if (resource_res == Effect::Pass) {
+        return Effect::Pass;
+      }
+      return identity_res;
+    } else {
+      // require an Allow from either identity- or resource-based policy
+      constexpr bool cross_account = false;
+      return evaluate_iam_policies(
+          dpp, env, identity, account_root, op, arn, resource_policy,
+          identity_policies, session_policies, cross_account);
+    }
+  }
+
+  constexpr bool account_root = false;
+  constexpr bool cross_account = false;
+  return evaluate_iam_policies(
+      dpp, env, identity, account_root, op, arn, resource_policy,
+      identity_policies, session_policies, cross_account);
+}
+
 bool verify_requester_payer_permission(const perm_state_base *s)
 {
   if (!s->bucket_info.requester_pays)
