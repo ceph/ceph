@@ -654,6 +654,7 @@ static int32_t proxy_config_prepare(proxy_settings_t *settings,
 	char hash[65];
 	proxy_config_t cfg;
 	struct stat before;
+	const char *name;
 	int32_t err;
 
 	cfg.size = 4096;
@@ -685,8 +686,28 @@ static int32_t proxy_config_prepare(proxy_settings_t *settings,
 		goto done_dst;
 	}
 
-	err = proxy_snprintf(path, size, "%s/ceph-%s.conf", settings->work_dir,
-			     hash);
+	err = proxy_snprintf(path, size, "%s/%s_%d", settings->work_dir,
+			     hash, cfg.total);
+	if (err < 0) {
+		goto done_dst;
+	}
+
+	if (mkdir(path, 0700) < 0) {
+		if (errno != EEXIST) {
+			err = proxy_log(LOG_ERR, errno,
+					"Failed to create a directory");
+			goto done_dst;
+		}
+	}
+
+	name = strrchr(config, '/');
+	if (name == NULL) {
+		name = config;
+	} else {
+		name++;
+	}
+
+	err = proxy_snprintf(path + err, size - err, "/%s", name);
 	if (err < 0) {
 		goto done_dst;
 	}
@@ -829,7 +850,8 @@ static int32_t proxy_instance_release(proxy_instance_t *instance)
 static int32_t proxy_instance_config(proxy_instance_t *instance,
 				     const char *config)
 {
-	char path[strlen(instance->settings->work_dir) + 128], *ppath;
+	char path[strlen(instance->settings->work_dir) + strlen(config) + 80];
+	char *ppath;
 	int32_t err;
 
 	if (instance->mounted) {
