@@ -975,7 +975,17 @@ int RGWSTSAssumeRoleWithWebIdentity::verify_permission(optional_yield y)
     ldpp_dout(this, 0) << "failed to get role info using role arn: " << rArn << dendl;
     return ret;
   }
+  auto arn = rgw::ARN::parse(rArn);
+  if (!arn) {
+    ldpp_dout(this, 0) << "failed to parse role arn: " << rArn << dendl;
+    return -EINVAL;
+  }
   string policy = role->get_assume_role_policy();
+
+  // tenanted roles will have an empty account id, resulting in an empty
+  // rgw_owner. this means that account users will always use cross-account
+  // rules for policy evaluation
+  const rgw_owner owner = role->get_account_id();
 
   //Parse the policy
   //TODO - This step should be part of Role Creation
@@ -985,18 +995,21 @@ int RGWSTSAssumeRoleWithWebIdentity::verify_permission(optional_yield y)
 
     const rgw::IAM::Policy p(s->cct, policy_tenant, policy, false);
     if (!s->principal_tags.empty()) {
-      boost::optional<rgw::auth::Principal> principal; // ignored
-      auto res = p.eval(this, s->env, *s->auth.identity, rgw::IAM::stsTagSession,
-                        boost::none, principal);
-      if (res != rgw::IAM::Effect::Allow) {
+      // require sts:TagSession permission
+      constexpr uint64_t op = rgw::IAM::stsTagSession;
+      if (!verify_resource_permission(this, s->env, *s->auth.identity,
+                                      op, *arn, owner, p,
+                                      s->iam_identity_policies,
+                                      s->session_policies)) {
         ldout(s->cct, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
         return -EPERM;
       }
     }
     constexpr uint64_t op = rgw::IAM::stsAssumeRoleWithWebIdentity;
-    boost::optional<rgw::auth::Principal> principal; // ignored
-    auto res = p.eval(this, s->env, *s->auth.identity, op, boost::none, principal);
-    if (res != rgw::IAM::Effect::Allow) {
+    if (!verify_resource_permission(this, s->env, *s->auth.identity,
+                                    op, *arn, owner, p,
+                                    s->iam_identity_policies,
+                                    s->session_policies)) {
       ldout(s->cct, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
       return -EPERM;
     }
@@ -1089,7 +1102,17 @@ int RGWSTSAssumeRole::verify_permission(optional_yield y)
     ldpp_dout(this, 0) << "failed to get role info using role arn: " << rArn << dendl;
     return ret;
   }
+  auto arn = rgw::ARN::parse(rArn);
+  if (!arn) {
+    ldpp_dout(this, 0) << "failed to parse role arn: " << rArn << dendl;
+    return -EINVAL;
+  }
   string policy = role->get_assume_role_policy();
+
+  // tenanted roles will have an empty account id, resulting in an empty
+  // rgw_owner. this means that account users will always use cross-account
+  // rules for policy evaluation
+  const rgw_owner owner = role->get_account_id();
 
   //Parse the policy
   //TODO - This step should be part of Role Creation
@@ -1099,18 +1122,21 @@ int RGWSTSAssumeRole::verify_permission(optional_yield y)
 
     const rgw::IAM::Policy p(s->cct, policy_tenant, policy, false);
     if (!s->principal_tags.empty()) {
-      boost::optional<rgw::auth::Principal> principal; // ignored
-      auto res = p.eval(this, s->env, *s->auth.identity, rgw::IAM::stsTagSession,
-                        boost::none, principal);
-      if (res != rgw::IAM::Effect::Allow) {
+      // require sts:TagSession permission
+      constexpr uint64_t op = rgw::IAM::stsTagSession;
+      if (!verify_resource_permission(this, s->env, *s->auth.identity,
+                                      op, *arn, owner, p,
+                                      s->iam_identity_policies,
+                                      s->session_policies)) {
         ldout(s->cct, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
         return -EPERM;
       }
     }
     constexpr uint64_t op = rgw::IAM::stsAssumeRole;
-    boost::optional<rgw::auth::Principal> principal; // ignored
-    auto res = p.eval(this, s->env, *s->auth.identity, op, boost::none, principal);
-    if (res != rgw::IAM::Effect::Allow) {
+    if (!verify_resource_permission(this, s->env, *s->auth.identity,
+                                    op, *arn, owner, p,
+                                    s->iam_identity_policies,
+                                    s->session_policies)) {
       ldout(s->cct, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
       return -EPERM;
     }
