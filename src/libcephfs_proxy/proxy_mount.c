@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <ctype.h>
 
 /* Maximum number of symlinks to visit while resolving a path before returning
  * ELOOP. */
@@ -904,6 +905,118 @@ static int32_t proxy_instance_option_set(proxy_instance_t *instance,
 	return err;
 }
 
+static int32_t proxy_instance_keyring_check(proxy_instance_t *instance,
+					    char *path, char **plist)
+{
+	char private[strlen(instance->settings->work_dir) + strlen(path) + 80];
+	struct stat st;
+	char *tmp;
+	int32_t len1, len2, err;
+
+	/* Remove any leading white-space characters. */
+	while (isspace(*path)) {
+		path++;
+	}
+
+	/* Remove any trailing white-space characters. */
+	len1 = strlen(path);
+	while ((len1 > 0) && isspace(path[len1 - 1])) {
+		len1--;
+	}
+	if (len1 == 0) {
+		return 0;
+	}
+	path[len1] = 0;
+
+	if (stat(path, &st) < 0) {
+		if ((errno == ENOENT) || (errno == ENOTDIR)) {
+			return 0;
+		}
+
+		return proxy_log(LOG_ERR, errno,
+				 "Failed to check keyring file (%s)", path);
+	}
+
+	err = proxy_config_prepare(instance->settings, path, private,
+				   sizeof(private));
+	if (err < 0) {
+		return err;
+	}
+
+	len2 = strlen(private) + 1;
+
+	/* Create/update the list of valid keyring entries separated by comma
+	 * (','). */
+	tmp = *plist;
+	if (tmp == NULL) {
+		len1 = 0;
+		tmp = proxy_malloc(len2);
+		if (tmp == NULL) {
+			return -ENOMEM;
+		}
+	} else {
+		len1 = strlen(tmp) + 1;
+		err = proxy_realloc((void **)&tmp, len1 + len2);
+		if (err < 0) {
+			return err;
+		}
+		tmp[len1 - 1] = ',';
+	}
+
+	memcpy(tmp + len1, private, len2);
+
+	*plist = tmp;
+
+	return 0;
+}
+
+static int32_t proxy_instance_keyring(proxy_instance_t *instance)
+{
+	char value[1024];
+	char *path, *next, *list;
+	int32_t err;
+
+	if (instance->settings->disable_copy) {
+		return 0;
+	}
+
+	err = proxy_instance_option_get(instance, "keyring", value,
+					sizeof(value));
+	if (err < 0) {
+		return err;
+	}
+
+	list = NULL;
+	path = value;
+	while ((next = strchr(path, ',')) != NULL) {
+		*next++ = 0;
+		err = proxy_instance_keyring_check(instance, path, &list);
+		if (err < 0) {
+			goto done;
+		}
+		path = next;
+	}
+
+	err = proxy_instance_keyring_check(instance, path, &list);
+	if (err < 0) {
+		goto done;
+	}
+
+	err = proxy_instance_option_set(instance, "keyring", list ?: "");
+
+done:
+	if (list != NULL) {
+		proxy_free(list);
+	}
+
+	if (err < 0) {
+		/* Remove the "keyring" option get in case of error */
+		proxy_instance_change_del(instance);
+	}
+
+	return err;
+}
+
 /* Assign a configuration file to the instance. */
 static int32_t proxy_instance_config(proxy_instance_t *instance,
 				     const char *config)
@@ -933,6 +1046,10 @@ static int32_t proxy_instance_config(proxy_instance_t *instance,
 	}
 
 	err = ceph_conf_read_file(instance->cmount, ppath);
+	if (err >= 0) {
+		err = proxy_instance_keyring(instance);
+	}
+
 	if (err < 0) {
 		proxy_instance_change_del(instance);
 	}
