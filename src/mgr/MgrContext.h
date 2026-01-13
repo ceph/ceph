@@ -15,10 +15,14 @@
 #ifndef MGR_CONTEXT_H_
 #define MGR_CONTEXT_H_
 
+#include <fmt/format.h> // JFW
+
 #include <memory>
 
 #include "common/Cond.h"
 #include "mon/MonClient.h"
+
+#include <boost/json.hpp>
 
 class Command
 {
