@@ -138,8 +138,10 @@ class RgwServiceManager:
         return all_daemons_up
 
     def _parse_secrets(self, user: str, data: dict) -> Tuple[str, str]:
+        assert data.get('admin') in ['true', True] or data.get('system') in ['true', True], \
+            'dashboard user must be created with --admin or --system flag'
         for key in data.get('keys', []):
-            if key.get('user') == user and data.get('system') in ['true', True]:
+            if key.get('user') == user:
                 access_key = key.get('access_key')
                 secret_key = key.get('secret_key')
                 return access_key, secret_key
