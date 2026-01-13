@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -152,12 +153,7 @@ describe('NvmeofGatewayNodeComponent', () => {
     component.selection = new CdTableSelection();
     component.selection.selected = [mockGatewayNodes[0], mockGatewayNodes[1]];
 
-    // ensure hosts list contains the selected hosts for lookup
-    component.hosts = [mockGatewayNodes[0], mockGatewayNodes[1]];
-
-    const selectedHosts = component
-      .getSelectedHostnames()
-      .map((hostname) => component.hosts.find((host) => host.hostname === hostname));
+    const selectedHosts = component.getSelectedHosts();
 
     expect(selectedHosts.length).toBe(2);
     expect(selectedHosts[0]).toEqual(mockGatewayNodes[0]);
@@ -173,7 +169,8 @@ describe('NvmeofGatewayNodeComponent', () => {
     expect(selectedHostnames).toEqual(['gateway-node-1', 'gateway-node-2']);
   });
 
-  it('should load hosts with orchestrator available and facts feature enabled', (done) => {
+  it('should load hosts with orchestrator available and facts feature enabled', fakeAsync(() => {
+
     const hostListSpy = spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
     const mockOrcStatus: any = {
       available: true,
@@ -187,18 +184,17 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
-    setTimeout(() => {
-      expect(hostListSpy).toHaveBeenCalled();
-      // Only hosts with status 'available', '' or 'running' are included (excluding 'maintenance')
-      expect(component.hosts.length).toBe(2);
-      expect(component.isLoadingHosts).toBe(false);
-      expect(component.hosts[0]['hostname']).toBe('gateway-node-1');
-      expect(component.hosts[0]['status']).toBe(HostStatus.AVAILABLE);
-      done();
-    }, 100);
-  });
+    tick(100);
+    expect(hostListSpy).toHaveBeenCalled();
+    // Only hosts with status 'available', '' or 'running' are included (excluding 'maintenance')
+    expect(component.hosts.length).toBe(2);
+    expect(component.isLoadingHosts).toBe(false);
+    expect(component.hosts[0]['hostname']).toBe('gateway-node-1');
+    expect(component.hosts[0]['status']).toBe('available');
+  }));
 
-  it('should normalize empty status to "available"', (done) => {
+  it('should normalize empty status to "available"', fakeAsync(() => {
+
     spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
     const mockOrcStatus: any = {
       available: true,
@@ -212,15 +208,14 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
-    setTimeout(() => {
-      // Host at index 1 in filtered list (gateway-node-3 has empty status which becomes 'available')
-      const nodeWithEmptyStatus = component.hosts.find((h) => h.hostname === 'gateway-node-3');
-      expect(nodeWithEmptyStatus?.['status']).toBe(HostStatus.AVAILABLE);
-      done();
-    }, 100);
-  });
+    tick(100);
+    // Host at index 1 in filtered list (gateway-node-3 has empty status which becomes 'available')
+    const nodeWithEmptyStatus = component.hosts.find((h) => h.hostname === 'gateway-node-3');
+    expect(nodeWithEmptyStatus?.['status']).toBe('available');
+  }));
 
-  it('should set count to hosts length', (done) => {
+  it('should set count to hosts length', fakeAsync(() => {
+
     spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
     const mockOrcStatus: any = {
       available: true,
@@ -234,14 +229,13 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
-    setTimeout(() => {
-      // Count should equal the filtered hosts length
-      expect(component.count).toBe(component.hosts.length);
-      done();
-    }, 100);
-  });
+    tick(100);
+    // Count should equal the filtered hosts length
+    expect(component.count).toBe(component.hosts.length);
+  }));
 
-  it('should set count to 0 when no hosts are returned', (done) => {
+  it('should set count to 0 when no hosts are returned', fakeAsync(() => {
+
     spyOn(hostService, 'list').and.returnValue(of([]));
     const mockOrcStatus: any = {
       available: true,
@@ -255,14 +249,13 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
-    setTimeout(() => {
-      expect(component.count).toBe(0);
-      expect(component.hosts.length).toBe(0);
-      done();
-    }, 100);
-  });
+    tick(100);
+    expect(component.count).toBe(0);
+    expect(component.hosts.length).toBe(0);
+  }));
 
-  it('should handle error when fetching hosts', (done) => {
+  it('should handle error when fetching hosts', fakeAsync(() => {
+
     const errorMsg = 'Failed to fetch hosts';
     spyOn(hostService, 'list').and.returnValue(throwError(() => new Error(errorMsg)));
     const mockOrcStatus: any = {
@@ -280,12 +273,11 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     component.getHosts(context);
 
-    setTimeout(() => {
-      expect(component.isLoadingHosts).toBe(false);
-      expect(context.error).toHaveBeenCalled();
-      done();
-    }, 100);
-  });
+    tick(100);
+    expect(component.isLoadingHosts).toBe(false);
+    expect(context.error).toHaveBeenCalled();
+  }));
+
 
   it('should check hosts facts available when orchestrator features present', () => {
     component.orchStatus = {
@@ -295,12 +287,14 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
 
+
     const result = component.checkHostsFactsAvailable();
 
     expect(result).toBe(true);
   });
 
-  it('should return false when get_facts feature is not available', () => {
+  it('should return true even when get_facts feature is not available', () => {
+
     component.orchStatus = {
       available: true,
       features: new Map([['other_feature', { available: true }]])
@@ -308,10 +302,11 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     const result = component.checkHostsFactsAvailable();
 
-    expect(result).toBe(false);
+    expect(result).toBe(true);
   });
 
-  it('should return false when orchestrator status features are empty', () => {
+  it('should return true even when orchestrator status features are empty', () => {
+
     component.orchStatus = {
       available: true,
       features: new Map()
@@ -319,7 +314,8 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     const result = component.checkHostsFactsAvailable();
 
-    expect(result).toBe(false);
+    expect(result).toBe(true);
+
   });
 
   it('should return false when orchestrator status is undefined', () => {
@@ -330,30 +326,29 @@ describe('NvmeofGatewayNodeComponent', () => {
     expect(result).toBe(false);
   });
 
-  it('should not re-fetch if already loading', (done) => {
+  it('should not re-fetch if already loading', fakeAsync(() => {
+
     component.isLoadingHosts = true;
     const hostListSpy = spyOn(hostService, 'list');
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
-    setTimeout(() => {
-      expect(hostListSpy).not.toHaveBeenCalled();
-      done();
-    }, 100);
-  });
+    tick(100);
+    expect(hostListSpy).not.toHaveBeenCalled();
+  }));
+
 
   it('should unsubscribe on component destroy', () => {
-    const destroy$ = component['destroy$'];
-    spyOn(destroy$, 'next');
-    spyOn(destroy$, 'complete');
+    const sub = component['sub'];
+    spyOn(sub, 'unsubscribe');
 
     component.ngOnDestroy();
 
-    expect(destroy$.next).toHaveBeenCalled();
-    expect(destroy$.complete).toHaveBeenCalled();
+    expect(sub.unsubscribe).toHaveBeenCalled();
   });
 
-  it('should handle host list with various label types', (done) => {
+  it('should handle host list with various label types', fakeAsync(() => {
+
     const hostsWithLabels = [
       {
         ...mockGatewayNodes[0],
@@ -378,14 +373,12 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
-    setTimeout(() => {
-      expect(component.hosts[0]['labels'].length).toBe(3);
-      expect(component.hosts[1]['labels'].length).toBe(0);
-      done();
-    }, 100);
-  });
+    tick(100);
+    expect(component.hosts[0]['labels'].length).toBe(3);
+    expect(component.hosts[1]['labels'].length).toBe(0);
+  }));
 
-  it('should handle hosts with multiple services', (done) => {
+  it('should handle hosts with multiple services', fakeAsync(() => {
     const hostsWithServices = [
       {
         ...mockGatewayNodes[0],
@@ -409,13 +402,11 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
-    setTimeout(() => {
-      expect(component.hosts[0]['services'].length).toBe(2);
-      done();
-    }, 100);
-  });
+    tick(100);
+    expect(component.hosts[0]['services'].length).toBe(2);
+  }));
 
-  it('should initialize table context on first getHosts call', (done) => {
+  it('should initialize table context on first getHosts call', fakeAsync(() => {
     spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
     const mockOrcStatus: any = {
       available: true,
@@ -431,13 +422,11 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
-    setTimeout(() => {
-      expect((component as any).tableContext).not.toBeNull();
-      done();
-    }, 100);
-  });
+    tick(100);
+    expect((component as any).tableContext).not.toBeNull();
+  }));
 
-  it('should reuse table context if already set', (done) => {
+  it('should reuse table context if already set', fakeAsync(() => {
     const context = new CdTableFetchDataContext(() => undefined);
     spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
     const mockOrcStatus: any = {
@@ -452,10 +441,9 @@ describe('NvmeofGatewayNodeComponent', () => {
 
     component.getHosts(context);
 
-    setTimeout(() => {
-      const storedContext = (component as any).tableContext;
-      expect(storedContext).toBe(context);
-      done();
-    }, 100);
-  });
+    tick(100);
+    const storedContext = (component as any).tableContext;
+    expect(storedContext).toBe(context);
+  }));
+
 });

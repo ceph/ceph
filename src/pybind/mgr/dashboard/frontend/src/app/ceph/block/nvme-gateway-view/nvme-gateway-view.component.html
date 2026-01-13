@@ -1,0 +1,30 @@
+<header class="cds-mb-5">
+  <h2 class="cds--type-heading-05">{{ groupName }}</h2>
+</header>
+<div class="nvme-shell">
+  <div>
+    <cds-sidenav [expanded]="true">
+      <cds-sidenav-item
+        [active]="selectedTab === 'gateways'"
+        (click)="selectTab('gateways')">
+        <span class="cds--type-heading-compact-01">Gateway nodes</span>
+      </cds-sidenav-item>
+      <cds-sidenav-item
+        [active]="selectedTab === 'subsystems'"
+        (click)="selectTab('subsystems')">
+        <span class="cds--type-heading-compact-01">Subsystems</span>
+      </cds-sidenav-item>
+    </cds-sidenav>
+  </div>
+
+  <main class="nvme-main">
+  @if (selectedTab === 'gateways') {
+    <cd-nvmeof-gateway-node></cd-nvmeof-gateway-node>
+  }
+  @if (selectedTab === 'subsystems') {
+    <cd-nvmeof-gateway-subsystem
+      [groupName]="groupName">
+    </cd-nvmeof-gateway-subsystem>
+  }
+  </main>
+</div>

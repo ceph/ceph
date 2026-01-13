@@ -25,6 +25,15 @@
   <span *ngIf="created">{{ created | date:'EEE d MMM, yyyy' }}</span>
 </ng-template>
 
+<ng-template #customTableItemTemplate
+             let-value="data.value">
+  <a class="cds--link"
+     [routerLink]="['/block/nvmeof/gateways/view', value | encodeUri]"
+     (click)="$event.stopPropagation()">
+    {{ value }}
+  </a>
+</ng-template>
+
 <ng-template #gatewayStatusTpl
              let-gateway="data.value">
   <div [cdsStack]="'horizontal'"

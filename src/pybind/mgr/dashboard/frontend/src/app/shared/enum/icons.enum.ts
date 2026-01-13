@@ -102,7 +102,8 @@ export enum Icons {
   spin = 'fa fa-spin', //  To get any icon to rotate
   inverse = 'fa fa-inverse', // To get an alternative icon color
   notification = 'notification',
-  error = 'error--filled'
+  error = 'error--filled',
+  emptySearch = 'search'
 }
 
 export enum IconSize {
@@ -122,5 +123,6 @@ export const ICON_TYPE = {
   infoCircle: 'info-circle',
   notification: 'notification',
   success: 'success',
-  warning: 'warning'
+  warning: 'warning',
+  emptySearch: 'emptySearch'
 } as const;

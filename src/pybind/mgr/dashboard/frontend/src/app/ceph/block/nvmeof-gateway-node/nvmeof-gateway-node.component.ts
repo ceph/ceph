@@ -27,7 +27,6 @@ import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 
-import _ from 'lodash';
 
 @Component({
   selector: 'cd-nvmeof-gateway-node',
@@ -37,22 +36,19 @@ import _ from 'lodash';
 })
 export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   @ViewChild(TableComponent, { static: true })
-  table: TableComponent;
+  table!: TableComponent;
 
   @ViewChild('hostNameTpl', { static: true })
-  hostNameTpl: TemplateRef<any>;
+  hostNameTpl!: TemplateRef<any>;
 
   @ViewChild('statusTpl', { static: true })
-  statusTpl: TemplateRef<any>;
+  statusTpl!: TemplateRef<any>;
 
   @ViewChild('addrTpl', { static: true })
-  addrTpl: TemplateRef<any>;
+  addrTpl!: TemplateRef<any>;
 
   @ViewChild('labelsTpl', { static: true })
-  labelsTpl: TemplateRef<any>;
-
-  @ViewChild('orchTmpl', { static: true })
-  orchTmpl: TemplateRef<any>;
+  labelsTpl!: TemplateRef<any>;
 
   @Output() selectionChange = new EventEmitter<CdTableSelection>();
   @Output() hostsLoaded = new EventEmitter<number>();
@@ -63,7 +59,8 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   columns: CdTableColumn[] = [];
   hosts: Host[] = [];
   isLoadingHosts = false;
-  tableActions: CdTableAction[];
+  tableActions!: CdTableAction[];
+
   selection = new CdTableSelection();
   icons = Icons;
   HostStatus = HostStatus;
@@ -82,6 +79,23 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.tableActions = [
+      {
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.addGateway(),
+        name: $localize`Add`,
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+      },
+      {
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.removeGateway(),
+        name: $localize`Remove`,
+        disable: (selection: CdTableSelection) => !selection.hasSelection
+      }
+    ];
+
     this.columns = [
       {
         name: $localize`Hostname`,
@@ -102,12 +116,21 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
         cellTemplate: this.statusTpl
       },
       {
-        name: $localize`Labels`,
+        name: $localize`Labels (tags)`,
+
         prop: 'labels',
         flexGrow: 1,
         cellTemplate: this.labelsTpl
       }
     ];
+  }
+
+  addGateway(): void {
+    // TODO: Logic to open add gateway modal
+  }
+
+  removeGateway(): void {
+    // TODO: Logic to remove gateway
   }
 
   ngOnDestroy(): void {
