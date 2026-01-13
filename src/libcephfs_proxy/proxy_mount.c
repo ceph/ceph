@@ -657,6 +657,10 @@ static int32_t proxy_config_prepare(proxy_settings_t *settings,
 	const char *name;
 	int32_t err;
 
+	if (settings->disable_copy) {
+		return proxy_snprintf(path, size, "%s", config);
+	}
+
 	cfg.size = 4096;
 	cfg.buffer = proxy_malloc(cfg.size);
 	if (cfg.buffer == NULL) {

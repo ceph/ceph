@@ -2132,12 +2132,13 @@ static void log_print(proxy_log_handler_t *handler, int32_t level, int32_t err,
 }
 
 static struct option main_opts[] = {
-	{"socket",   required_argument, NULL, 's'},
-	{"work-dir", required_argument, NULL, 'w'},
+	{"socket",              required_argument, NULL, 's'},
+	{"work-dir",            required_argument, NULL, 'w'},
+	{"disable-safe-config", no_argument,       NULL, 'u'},
 	{}
 };
 
-static const char short_opts[] = ":s:w:";
+static const char short_opts[] = ":s:w:u";
 
 int32_t main(int32_t argc, char *argv[])
 {
@@ -2155,6 +2156,7 @@ int32_t main(int32_t argc, char *argv[])
 
 	proxy.settings.socket_path = PROXY_SOCKET;
 	proxy.settings.work_dir = ".";
+	proxy.settings.disable_copy = false;
 
 	env = getenv(PROXY_SOCKET_ENV);
 	if (env != NULL) {
@@ -2166,6 +2168,8 @@ int32_t main(int32_t argc, char *argv[])
 			proxy.settings.socket_path = optarg;
 		} else if (val == 'w') {
 			proxy.settings.work_dir = optarg;
+		} else if (val == 'u') {
+			proxy.settings.disable_copy = true;
 		} else if (val == ':') {
 			proxy_log(LOG_ERR, ENODATA,
 				  "Argument missing for '%s'\n", optopt);
