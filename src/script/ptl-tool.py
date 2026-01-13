@@ -520,6 +520,9 @@ def build_branch(args):
           "watcher_user_ids": user['id'],
         }
 
+        if args.qa_private:
+            issue_kwargs['is_private'] = True
+
         if args.update_qa:
             issue = R.issue.get(args.update_qa)
             if issue.project.id != project.id:
@@ -607,6 +610,7 @@ def main():
 
     group = parser.add_argument_group('QA Control Options')
     group.add_argument('--create-qa', dest='create_qa', action='store_true', help='create QA run ticket')
+    group.add_argument('--qa-private', dest='qa_private', action='store_true', help='make the QA run ticket private')
     group.add_argument('--qa-release', dest='qa_release', action='store', help='QA release for tracker')
     group.add_argument('--qa-tags', dest='qa_tags', action='store', help='QA tags for tracker')
     group.add_argument('--update-qa', dest='update_qa', action='store', help='update QA run ticket')
