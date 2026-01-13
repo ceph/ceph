@@ -1346,6 +1346,9 @@ bool verify_resource_permission(
     const std::vector<rgw::IAM::Policy>& identity_policies,
     const std::vector<rgw::IAM::Policy>& session_policies)
 {
+  ldpp_dout(dpp, 16) << __func__ << ": policy: " << resource_policy
+      << " resource: " << arn << dendl;
+
   if (identity.get_account()) {
     const bool account_root = (identity.get_identity_type() == TYPE_ROOT);
     if (!identity.is_owner_of(resource_owner)) {
