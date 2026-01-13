@@ -46,3 +46,7 @@ Using `color` in css and seyting svg will fill="currentColor does not work.
 .notificationNew-icon circle {
   fill: theme.$support-error !important;
 }
+
+.emptySearch-icon {
+  fill: theme.$layer-selected-disabled !important;
+}
