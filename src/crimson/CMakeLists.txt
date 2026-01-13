@@ -60,7 +60,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/hex.cc
   ${PROJECT_SOURCE_DIR}/src/common/frag.cc
   ${PROJECT_SOURCE_DIR}/src/common/fs_types.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ceph_json.cc
   ${PROJECT_SOURCE_DIR}/src/common/histogram.cc
   ${PROJECT_SOURCE_DIR}/src/common/hobject.cc
   ${PROJECT_SOURCE_DIR}/src/common/hostname.cc
@@ -153,6 +152,7 @@ target_link_libraries(crimson-common
     crimson::cflags
   PRIVATE
     crc32 arch
+    ceph-json
     Boost::iostreams
     Boost::random
     json_spirit

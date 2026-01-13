@@ -8,6 +8,9 @@ add_library(common_prioritycache_obj OBJECT
   PriorityCache.cc)
 target_link_libraries(common_prioritycache_obj legacy-option-headers)
 
+add_library(ceph-json OBJECT ceph_json.cc)
+target_link_libraries(ceph-json PUBLIC glaze::glaze)
+
 if(WIN32)
   add_library(dlfcn_win32 STATIC win32/dlfcn.cc win32/errno.cc)
 endif()
@@ -59,7 +62,6 @@ set(common_srcs
   ceph_frag.cc
   ceph_fs.cc
   ceph_hash.cc
-  ceph_json.cc
   ceph_strings.cc
   ceph_releases.cc
   ceph_time.cc
@@ -209,7 +211,7 @@ target_compile_definitions(common-common-objs PRIVATE
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\""
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
-target_link_libraries(common-common-objs PUBLIC legacy-option-headers)
+target_link_libraries(common-common-objs PUBLIC legacy-option-headers ceph-json)
 if(WITH_BREAKPAD)
   target_link_libraries(common-common-objs PUBLIC
     Breakpad::client)
