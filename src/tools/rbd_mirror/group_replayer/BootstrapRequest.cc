@@ -284,20 +284,34 @@ template <typename I>
 int BootstrapRequest<I>::create_replayers() {
   dout(10) << dendl;
 
-  //TODO: check that the images have not changed
-  if (!m_image_replayers->empty()) {
-    dout(10) << "image replayers already exist."<< dendl;
-    return 0;
-  }
-
   auto state_builder = *m_state_builder;
   int r = 0;
 
   if ((*m_state_builder)->is_local_primary()) {
+    //TODO: check that the images have not changed
+    if (m_image_replayers->size() == (*m_state_builder)->local_images.size()) {
+      dout(10) << "image replayers already exist."<< dendl;
+      return 0;
+    }
   // The ImageReplayers are required to run even when the group is primary in
   // order to update the image status for the mirror pool status to be healthy.
     for (auto &[global_image_id, p] : (*m_state_builder)->local_images) {
       auto &local_pool_id = p.first;
+      bool is_image_replayer_exist = false;
+      for (auto &[_, image_replayer] : *m_image_replayers) {
+        auto exising_replayer_global_image_id =
+          image_replayer->get_global_image_id();
+        if (exising_replayer_global_image_id == global_image_id) {
+          is_image_replayer_exist = true;
+          break;
+        }
+      }
+
+      if (is_image_replayer_exist) {
+        dout(10) << "image replayer for global image id: " << global_image_id
+                 << "already exists" << dendl;
+        continue;
+      }
 
       m_image_replayers->emplace_back(librados::IoCtx(), nullptr);
       auto &local_io_ctx = m_image_replayers->back().first;
@@ -360,7 +374,27 @@ int BootstrapRequest<I>::create_replayers() {
                                 remote_pool_meta, m_remote_status_updater});
     }
   } else if (!state_builder->remote_group_id.empty()) {
+    //TODO: check that the images have not changed
+    if (m_image_replayers->size() == (*m_state_builder)->remote_images.size()) {
+      dout(10) << "image replayers already exist."<< dendl;
+      return 0;
+    }
     for (auto &[remote_pool_id, global_image_id] : (*m_state_builder)->remote_images) {
+      bool is_image_replayer_exist = false;
+      for (auto &[_, image_replayer] : *m_image_replayers) {
+        auto exising_replayer_global_image_id =
+          image_replayer->get_global_image_id();
+        if (exising_replayer_global_image_id == global_image_id) {
+          is_image_replayer_exist = true;
+          break;
+        }
+      }
+
+      if (is_image_replayer_exist) {
+        dout(10) << "image replayer for global image id: " << global_image_id
+                 << "already exists" << dendl;
+        continue;
+      }
 
       m_image_replayers->emplace_back(librados::IoCtx(), nullptr);
       auto &local_io_ctx = m_image_replayers->back().first;

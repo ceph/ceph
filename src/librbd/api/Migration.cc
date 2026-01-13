@@ -1647,7 +1647,8 @@ int Migration<I>::remove_group(I *image_ctx, group_info_t *group_info) {
   r = librbd::api::Group<I>::image_remove_by_id(group_ioctx,
                                                 group_info->name.c_str(),
                                                 image_ctx->md_ctx,
-                                                image_ctx->id.c_str());
+                                                image_ctx->id.c_str(),
+                                                false);
   if (r < 0) {
     lderr(m_cct) << "failed to remove image from group: " << cpp_strerror(r)
                  << dendl;

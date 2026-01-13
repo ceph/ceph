@@ -1858,6 +1858,67 @@ compare_images()
     return ${ret}
 }
 
+wait_for_image_snapshot_with_group_snap_info() {
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local group_snap_id=$4
+    local -n _id=$5
+
+    local last_snap_name='';
+    for s in 0.1  0.1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+      run_cmd "rbd --cluster ${cluster} snap list ${pool}/${image} --all --format xml --pretty-format"
+      last_snap_name=$(xmlstarlet sel -t -v "(//snapshots/snapshot/name)[last()]" < "$CMD_STDOUT") || { last_snap_name=''; }
+      if [[ $(grep -c ${group_snap_id} <<< ${last_snap_name}) -ne 0 ]]; then
+        _id=$(xmlstarlet sel -t -v "(//snapshots/snapshot[name='${last_snap_name}']/id)" < "$CMD_STDOUT");
+        return 0;
+      fi
+      sleep ${s};
+    done
+    fail "image snaps didn't hold any group snap ${group_snap_id} specific snap yet"; return 1;
+}
+
+get_image_snapshot_with_group_snap_info() {
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local group_snap_id=$4
+    local -n _id=$5
+
+    run_cmd "rbd --cluster ${cluster} snap list ${pool}/${image} --all --format xml --pretty-format"
+    local last_snap_name=$(xmlstarlet sel -t -v "(//snapshots/snapshot/name)[last()]" < "$CMD_STDOUT");
+    if [[ $(grep -c ${group_snap_id} <<< ${last_snap_name}) -ne 0 ]]; then
+      _id=$(xmlstarlet sel -t -v "(//snapshots/snapshot[name='${last_snap_name}']/id)" < "$CMD_STDOUT");
+      return 0;
+    fi
+    fail "image snaps didn't hold any group snap ${group_snap_id} specific snap yet"; return 1;
+}
+
+stop_mirror_while_group_snapshot_incomplete() {
+    local cluster=$1
+    local pool=$2
+    local group=$3
+    local group_snap_id=$4
+    # expected_state can be "creating" or "created"
+    local expected_state=$5
+
+    local count=0
+    while [ "${count}" -lt 60 ]; do
+      run_cmd "rbd --cluster ${cluster} group snap ls ${pool}/${group} --format xml --pretty-format"
+      state=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT") || { state=''; }
+      snaps_synced=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/namespace/complete" < "$CMD_STDOUT") || { snaps_synced='false'; }
+
+      if [[ "${expected_state}" == "${state}" ]] && [[ "${snaps_synced}" == "false" ]]; then
+        # stop the daemon to prevent further syncing of snapshots
+        stop_mirrors "${cluster}" '-9'
+        return 0;
+      fi
+      count=$((count+1))
+      sleep 1;
+    done
+    fail "group snap ${group_snap_id} is not at creating phase its at ${state} now"; return 1;
+}
+
 compare_image_snapshots()
 {
     local pool=$1
@@ -2711,6 +2772,25 @@ test_group_snap_sync_state()
     elif [ "$expected_state" = "incomplete" ]; then
         # Test if snaps_synced is 'false'
         test "$snaps_synced" = "false" || { fail; return 1; }
+    fi
+}
+
+test_group_snap_completeness_state()
+{
+    local cluster=$1
+    local pool=$2
+    local group=$3
+    local group_snap_id=$4
+    # expected_state can be "creating" or "created"
+    local expected_state=$5
+
+    run_cmd "rbd --cluster ${cluster} group snap ls ${pool}/${group} --format xml --pretty-format"
+    state=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT") || { state=''; }
+    snaps_synced=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/namespace/complete" < "$CMD_STDOUT") || { snaps_synced='false'; }
+
+    if [ "${expected_state}" != "${state}" ]; then
+      fail  "group snap ${group_snap_id} is not at "${expected_state}" phase its at ${state} now";
+      return 1;
     fi
 }
 

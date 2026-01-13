@@ -304,7 +304,8 @@ template <typename I>
 int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
                                  const char *group_name,
                                  librados::IoCtx& image_ioctx,
-                                 const char *image_id)
+                                 const char *image_id,
+                                 bool force)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
@@ -332,11 +333,11 @@ int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
                << cpp_strerror(r) << dendl;
     return r;
   } else if (r == 0) {
-    if (mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
+    if (!force && mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
       lderr(cct) << "cannot remove image from mirror enabled group" << dendl;
       return -EINVAL;
     }
-    if (promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
+    if (!force && promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
       lderr(cct) << "group is not primary, cannot remove image" << dendl;
       return -EINVAL;
     }
@@ -601,10 +602,6 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
                << cpp_strerror(r) << dendl;
     return r;
   } else if (r == 0) {
-    if (mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
-      lderr(cct) << "cannot add image to mirror enabled group" << dendl;
-      return -EINVAL;
-    }
     if (promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
       lderr(cct) << "group is not primary, cannot add image" << dendl;
       return -EINVAL;
@@ -668,6 +665,13 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
     return r;
   }
   ImageWatcher<>::notify_header_update(image_ioctx, image_header_oid);
+
+  r = Mirror<I>::group_image_add(group_ioctx, group_id, image_ioctx, image_id);
+  if (r < 0) {
+    lderr(cct) << "error add image to mirror group: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
 
   r = cls_client::group_image_set(&group_ioctx, group_header_oid,
 				  attached_st);
