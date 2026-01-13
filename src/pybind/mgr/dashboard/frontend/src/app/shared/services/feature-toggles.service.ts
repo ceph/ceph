@@ -12,6 +12,7 @@ export class FeatureTogglesMap {
   cephfs = true;
   rgw = true;
   nfs = true;
+  dashboard = true;
 }
 export type Features = keyof FeatureTogglesMap;
 export type FeatureTogglesMap$ = Observable<FeatureTogglesMap>;
@@ -33,5 +34,9 @@ export class FeatureTogglesService {
 
   get(): FeatureTogglesMap$ {
     return this.featureToggleMap$;
+  }
+
+  isFeatureEnabled(feature: string): boolean {
+    return this.http.get<FeatureTogglesMap>(this.API_URL)?.[feature];
   }
 }

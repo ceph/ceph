@@ -13,6 +13,7 @@ import { FeedbackComponent } from '../shared/feedback/feedback.component';
 import { DashboardComponent } from './dashboard/dashboard.component';
 import { HealthPieComponent } from './health-pie/health-pie.component';
 import { InputModule, ModalModule, SelectModule, ToggletipModule } from 'carbon-components-angular';
+import { OverviewComponent } from '../overview/overview.component';
 
 @NgModule({
   imports: [
@@ -28,8 +29,10 @@ import { InputModule, ModalModule, SelectModule, ToggletipModule } from 'carbon-
     ToggletipModule,
     ModalModule,
     InputModule,
-    SelectModule
+    SelectModule,
+    OverviewComponent
   ],
+  exports: [OverviewComponent],
   declarations: [DashboardComponent, HealthPieComponent, FeedbackComponent],
   providers: [provideCharts(withDefaultRegisterables())]
 })
