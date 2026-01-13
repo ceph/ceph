@@ -701,7 +701,9 @@ void GroupReplayer<I>::handle_start_image_replayers(int r) {
 
   if (finish_start_if_interrupted()) {
     return;
-  } else if (r < 0) {
+  } else if (r < 0 && r != -ENOENT) {
+    /* scenario for ENOENT could be, as part of the group snapshot rollback
+     * image might be disabled and hence ENOENT */
     finish_start_fail(r, "failed to start image replayers");
     return;
   }
@@ -817,6 +819,15 @@ void GroupReplayer<I>::handle_replayer_notification() {
     if (error_code == -EEXIST) {
       m_destroy_replayers = true;
     } */
+
+    if (error_code == -ENOENT) {
+      // remap -ENOENT from group_replayer to -EINVAL to avoid GR triggering
+      // set_finished() during shutdown(), which would further mislead
+      // InstanceReplayer to remove the group replayer object before the group
+      // is cleaned locally.
+      error_code = -EINVAL;
+    }
+
     on_stop_replay(error_code, error_description);
     return;
   }

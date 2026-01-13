@@ -79,10 +79,16 @@ private:
    *    v                                               |
    * DRAIN_IMAGES_WATCHERS                              |
    *    |                                               |
-   *    v                                               |
-   * ACQUIRE_EXCLUSIVE_LOCKS                            |
+   *    v                       (no rollback needed)    |
+   * ACQUIRE_EXCLUSIVE_LOCKS ---------------------------|
    *    |                                               |
    *    v  (skip if not needed)                         |
+   * FIX_GROUP_MEMBERSHIP                               |
+   *    |                                               |
+   *    v  (skip if not needed)                         |
+   * LIST_GROUP_IMAGES                                  |
+   *    |                                               |
+   *    v                                               |
    * ROLLBACK                                           |
    *    |                                               |
    *    v  (incomplete)                                 |
@@ -100,6 +106,9 @@ private:
    *    v                                                v        |
    * GROUP_UNLINK_PEER               ENABLE_NON_PRIMARY_FEATURES  |
    *    |                                                |        |
+   *    v  (skip if not required)                        |        |
+   * REMOVE_NON_MEMBER_IMAGES                            |        |
+   *    |                                                |        |
    *    v  (skip if not needed)                          v        v
    * RELEASE_EXCLUSIVE_LOCKS <-------------REMOVE_PRIMARY_GROUP_SNAPSHOT
    *    |
@@ -116,16 +125,21 @@ private:
   const std::string m_group_id;
   const std::string m_group_name;
   bool m_force;
+  bool m_orphan_required = false;
   Context *m_on_finish;
   CephContext *m_cct;
 
   std::vector<cls::rbd::GroupSnapshot> m_snaps;
+  std::vector<cls::rbd::GroupImageSpec> m_to_add;
+  std::vector<cls::rbd::GroupImageSpec> m_to_remove;
 
   cls::rbd::MirrorGroup m_mirror_group;
   std::set<std::string> m_mirror_peer_uuids;
   std::vector<cls::rbd::GroupImageStatus> m_images;
   std::vector<ImageCtxT *> m_image_ctxs;
+  std::vector<librados::IoCtx> m_remove_ioctxs;
   ceph::bufferlist m_out_bl;
+  cls::rbd::GroupImageSpec m_start_after;
   bool m_excl_locks_acquire = false;
 
   int m_ret_val = 0;
@@ -176,6 +190,14 @@ private:
   void acquire_exclusive_locks();
   void handle_acquire_exclusive_locks(int r);
 
+  void fix_group_membership(
+      std::vector<cls::rbd::GroupImageSpec>& current_membership,
+      std::vector<cls::rbd::GroupImageSpec>& rollback_membership);
+  void handle_fix_group_membership(int r);
+
+  void list_group_images();
+  void handle_list_group_images(int r);
+
   void rollback();
   void handle_rollback(int r);
 
@@ -193,6 +215,9 @@ private:
 
   void group_unlink_peer();
   void handle_group_unlink_peer(int r);
+
+  void remove_non_member_images();
+  void handle_remove_non_member_images(int r);
 
   void release_exclusive_locks();
   void handle_release_exclusive_locks(int r);
