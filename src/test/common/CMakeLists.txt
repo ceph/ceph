@@ -379,44 +379,44 @@ add_ceph_unittest(unittest_hobject)
 
 add_executable(unittest_async_completion test_async_completion.cc)
 add_ceph_unittest(unittest_async_completion)
-target_link_libraries(unittest_async_completion ceph-common Boost::system)
+target_link_libraries(unittest_async_completion ceph-common Boost::headers)
 
 
 add_executable(unittest_async_max_concurrent_for_each test_async_max_concurrent_for_each.cc)
 add_ceph_unittest(unittest_async_max_concurrent_for_each)
-target_link_libraries(unittest_async_max_concurrent_for_each ceph-common Boost::system Boost::context)
+target_link_libraries(unittest_async_max_concurrent_for_each ceph-common Boost::boost Boost::context)
 
 if(NOT WIN32)
 add_executable(unittest_async_co_spawn_group test_async_co_spawn_group.cc)
 add_ceph_unittest(unittest_async_co_spawn_group)
-target_link_libraries(unittest_async_co_spawn_group ceph-common Boost::system)
+target_link_libraries(unittest_async_co_spawn_group ceph-common Boost::boost)
 
 add_executable(unittest_async_co_throttle test_async_co_throttle.cc)
 add_ceph_unittest(unittest_async_co_throttle)
-target_link_libraries(unittest_async_co_throttle ceph-common Boost::system)
+target_link_libraries(unittest_async_co_throttle ceph-common Boost::boost)
 endif(NOT WIN32)
 
 add_executable(unittest_async_shared_mutex test_async_shared_mutex.cc)
 add_ceph_unittest(unittest_async_shared_mutex)
-target_link_libraries(unittest_async_shared_mutex ceph-common Boost::system)
+target_link_libraries(unittest_async_shared_mutex ceph-common Boost::boost)
 
 
 add_executable(unittest_async_spawn_throttle test_async_spawn_throttle.cc)
 add_ceph_unittest(unittest_async_spawn_throttle)
-target_link_libraries(unittest_async_spawn_throttle ceph-common Boost::system Boost::context)
+target_link_libraries(unittest_async_spawn_throttle ceph-common Boost::boost Boost::context)
 
 add_executable(unittest_async_yield_waiter test_async_yield_waiter.cc)
 add_ceph_unittest(unittest_async_yield_waiter)
-target_link_libraries(unittest_async_yield_waiter ceph-common Boost::system Boost::context)
+target_link_libraries(unittest_async_yield_waiter ceph-common Boost::boost Boost::context)
 
 
 add_executable(unittest_async_parallel_for_each test_async_parallel_for_each.cc)
 add_ceph_unittest(unittest_async_parallel_for_each)
-target_link_libraries(unittest_async_parallel_for_each ceph-common Boost::system)
+target_link_libraries(unittest_async_parallel_for_each ceph-common Boost::boost)
 
 add_executable(unittest_async_spawn_group test_async_spawn_group.cc)
 add_ceph_unittest(unittest_async_spawn_group)
-target_link_libraries(unittest_async_spawn_group ceph-common Boost::system)
+target_link_libraries(unittest_async_spawn_group ceph-common Boost::boost)
 
 add_executable(unittest_cdc test_cdc.cc
   $<TARGET_OBJECTS:unit-main>)
@@ -437,7 +437,7 @@ add_ceph_unittest(unittest_fault_injector)
 
 add_executable(unittest_blocked_completion test_blocked_completion.cc)
 add_ceph_unittest(unittest_blocked_completion)
-target_link_libraries(unittest_blocked_completion Boost::system GTest::GTest)
+target_link_libraries(unittest_blocked_completion Boost::boost GTest::GTest)
 
 add_executable(unittest_allocate_unique test_allocate_unique.cc)
 add_ceph_unittest(unittest_allocate_unique)
@@ -492,14 +492,14 @@ set_tests_properties(unittest_decode_start_v_checker_expect_failure
 endif(0)
 
 add_executable(unittest_async_call test_async_call.cc)
-target_link_libraries(unittest_async_call ceph-common Boost::system
+target_link_libraries(unittest_async_call ceph-common Boost::boost
   GTest::GTest)
 add_ceph_unittest(unittest_async_call)
 
 
 add_executable(unittest_librados_completion test_librados_completion.cc)
 target_link_libraries(unittest_librados_completion librados ceph-common
-  Boost::system GTest::GTest)
+  Boost::boost GTest::GTest)
 add_ceph_unittest(unittest_librados_completion)
 
 add_executable(unittest_async_cond test_async_cond.cc)
