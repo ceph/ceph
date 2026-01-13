@@ -61,8 +61,7 @@ std::tuple<int, bufferlist > rgw_rest_get_json_input_keep_data(CephContext *cct,
   }
 
   JSONParser parser;
-
-  if (!parser.parse(data.c_str(), data.length())) {
+  if (!parser.parse(data)) {
     return std::make_tuple(-EINVAL, std::move(data));
   }
 
