@@ -61,8 +61,8 @@ receive bug fixes or backports).
 Release timeline
 ----------------
 
-.. ceph_timeline_gantt:: releases.yml tentacle squid reef
-.. ceph_timeline:: releases.yml tentacle squid reef
+.. ceph_timeline_gantt:: releases.yml tentacle squid
+.. ceph_timeline:: releases.yml tentacle squid
 
 .. _Tentacle: tentacle
 .. _20.2.0: tentacle#v20-2-0-tentacle
