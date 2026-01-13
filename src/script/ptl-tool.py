@@ -480,6 +480,11 @@ def build_branch(args):
             tag = git.refs.tag.Tag.create(G, tag_name)
             log.info("Created tag %s" % tag)
 
+    do_qa = args.create_qa or args.update_qa
+    if args.push_ci or (not args.no_push_ci and do_qa):
+        G.git.push(CI_REMOTE_URL, branch) # for shaman
+        G.git.push(CI_REMOTE_URL, tag.name) # for archival
+
     if args.create_qa or args.update_qa:
         if not created_branch:
             log.error("branch already exists!")
@@ -505,9 +510,6 @@ def build_branch(args):
         if args.qa_tags:
             custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_TAGS, 'value': args.qa_tags})
 
-        if not args.no_push_ci:
-            G.git.push(CI_REMOTE_URL, branch) # for shaman
-            G.git.push(CI_REMOTE_URL, tag.name) # for archival
         origin_url = f'{BASE_PROJECT}/{CI_REPO}/commits/{tag.name}'
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_GIT_BRANCH, 'value': origin_url})
 
@@ -606,7 +608,6 @@ def main():
     group.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
     group.add_argument('--distros', dest='distros', action=SplitCommaAppendAction, default=[], help='add distro(s) to build. Specify one or more times. Comma separated values are split.')
     group.add_argument('--flavors', dest='flavors', action=SplitCommaAppendAction, default=[], help='add flavors(s) to build. Specify one or more times. Comma separated values are split.')
-    group.add_argument('--no-push-ci', dest='no_push_ci', action='store_true', help='don\'t push branch to ceph-ci repo')
 
     group = parser.add_argument_group('QA Control Options')
     group.add_argument('--create-qa', dest='create_qa', action='store_true', help='create QA run ticket')
@@ -614,6 +615,10 @@ def main():
     group.add_argument('--qa-release', dest='qa_release', action='store', help='QA release for tracker')
     group.add_argument('--qa-tags', dest='qa_tags', action='store', help='QA tags for tracker')
     group.add_argument('--update-qa', dest='update_qa', action='store', help='update QA run ticket')
+
+    group = parser.add_argument_group('CI Repository Options')
+    group.add_argument('--no-push-ci', dest='no_push_ci', action='store_true', help='don\'t push branch to ceph-ci repo (when making QA tickets)')
+    group.add_argument('--push-ci', dest='push_ci', action='store_true', help='push branch and tag to CI repository (even when not making QA tickets)')
 
     group = parser.add_argument_group('PRs to Merge')
     group.add_argument('prs', metavar="PRs...", type=int, nargs='*', help='Pull Requests to Merge')
