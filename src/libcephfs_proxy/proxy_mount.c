@@ -850,42 +850,6 @@ static int32_t proxy_instance_release(proxy_instance_t *instance)
 	return 0;
 }
 
-/* Assign a configuration file to the instance. */
-static int32_t proxy_instance_config(proxy_instance_t *instance,
-				     const char *config)
-{
-	char path[strlen(instance->settings->work_dir) + strlen(config) + 80];
-	char *ppath;
-	int32_t err;
-
-	if (instance->mounted) {
-		return proxy_log(LOG_ERR, EISCONN,
-				 "Cannot configure a mounted instance");
-	}
-
-	ppath = NULL;
-	if (config != NULL) {
-		err = proxy_config_prepare(instance->settings, config, path,
-					   sizeof(path));
-		if (err < 0) {
-			return err;
-		}
-		ppath = path;
-	}
-
-	err = proxy_instance_change_add(instance, "conf", ppath, NULL);
-	if (err < 0) {
-		return err;
-	}
-
-	err = ceph_conf_read_file(instance->cmount, ppath);
-	if (err < 0) {
-		proxy_instance_change_del(instance);
-	}
-
-	return err;
-}
-
 static int32_t proxy_instance_option_get(proxy_instance_t *instance,
 					 const char *name, char *value,
 					 size_t size)
@@ -934,6 +898,42 @@ static int32_t proxy_instance_option_set(proxy_instance_t *instance,
 	if (err < 0) {
 		proxy_log(LOG_ERR, -err,
 			  "Failed to configure a client instance");
+		proxy_instance_change_del(instance);
+	}
+
+	return err;
+}
+
+/* Assign a configuration file to the instance. */
+static int32_t proxy_instance_config(proxy_instance_t *instance,
+				     const char *config)
+{
+	char path[strlen(instance->settings->work_dir) + strlen(config) + 80];
+	char *ppath;
+	int32_t err;
+
+	if (instance->mounted) {
+		return proxy_log(LOG_ERR, EISCONN,
+				 "Cannot configure a mounted instance");
+	}
+
+	ppath = NULL;
+	if (config != NULL) {
+		err = proxy_config_prepare(instance->settings, config, path,
+					   sizeof(path));
+		if (err < 0) {
+			return err;
+		}
+		ppath = path;
+	}
+
+	err = proxy_instance_change_add(instance, "conf", ppath, NULL);
+	if (err < 0) {
+		return err;
+	}
+
+	err = ceph_conf_read_file(instance->cmount, ppath);
+	if (err < 0) {
 		proxy_instance_change_del(instance);
 	}
 
