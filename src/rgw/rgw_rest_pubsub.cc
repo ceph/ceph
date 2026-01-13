@@ -164,10 +164,10 @@ auto get_policy_from_text(req_state* const s, const std::string& policy_text)
 using rgw::IAM::Effect;
 using rgw::IAM::Policy;
 
-bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
-                             const rgw_owner& owner, const rgw::ARN& arn,
-                             const boost::optional<Policy>& policy,
-                             uint64_t op)
+Effect evaluate_resource_permission(const DoutPrefixProvider* dpp, req_state* s,
+                                    const rgw_owner& owner, const rgw::ARN& arn,
+                                    const boost::optional<Policy>& policy,
+                                    uint64_t op)
 {
   if (s->auth.identity->get_account()) {
     const bool account_root = (s->auth.identity->get_identity_type() == TYPE_ROOT);
@@ -181,16 +181,22 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
           dpp, s->env, *s->auth.identity, account_root, op, arn, {},
           s->iam_identity_policies, s->session_policies, cross_account);
       if (identity_res == Effect::Deny) {
-        return false;
+        return Effect::Deny;
       }
       const auto resource_res = evaluate_iam_policies(
           dpp, s->env, *s->auth.identity, false, op, arn,
           policy, {}, {}, cross_account);
-      return identity_res == Effect::Allow && resource_res == Effect::Allow;
+      if (resource_res == Effect::Deny) {
+        return Effect::Deny;
+      }
+      if (resource_res == Effect::Pass) {
+        return Effect::Pass;
+      }
+      return identity_res;
     } else {
       // require an Allow from either identity- or resource-based policy
       constexpr bool cross_account = false;
-      return Effect::Allow == evaluate_iam_policies(
+      return evaluate_iam_policies(
           dpp, s->env, *s->auth.identity, account_root, op, arn, policy,
           s->iam_identity_policies, s->session_policies, cross_account);
     }
@@ -198,16 +204,29 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
 
   constexpr bool account_root = false;
   constexpr bool cross_account = false;
-  const auto effect = evaluate_iam_policies(
+  return evaluate_iam_policies(
       dpp, s->env, *s->auth.identity, account_root, op, arn, policy,
       s->iam_identity_policies, s->session_policies, cross_account);
+}
+
+bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
+                             const rgw_owner& owner, const rgw::ARN& arn,
+                             const boost::optional<Policy>& policy,
+                             uint64_t op)
+{
+  const auto effect = evaluate_resource_permission(dpp, s, owner, arn, policy, op);
   if (effect == Effect::Deny) {
     return false;
   }
   if (effect == Effect::Allow) {
     return true;
   }
+  if (s->auth.identity->get_account()) {
+    // enforce implicit deny for account users
+    return false;
+  }
 
+  // non-account users fall back to ownership
   if (s->auth.identity->is_owner_of(owner)) {
     ldpp_dout(dpp, 10) << __func__ << ": granted to resource owner" << dendl;
     return true;
