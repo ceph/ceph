@@ -1,0 +1,48 @@
+@use '@carbon/colors';
+
+.productive-card {
+  margin: 0;
+  padding: 0;
+
+  &-header {
+    margin: 0;
+    padding: var(--cds-spacing-05);
+
+    &-title {
+      margin: 0;
+    }
+
+    &-actions {
+      margin: 0;
+    }
+  }
+
+  &-section {
+    margin: 0;
+    padding: var(--cds-spacing-05);
+    padding-top: 0;
+
+    &--footer {
+      padding-bottom: 0;
+    }
+  }
+
+  &-footer {
+    height: var(--cds-spacing-08);
+    padding: var(--cds-spacing-05);
+  }
+
+  &--shadow {
+    background-color: var(--cds-layer);
+    position: relative;
+    overflow: hidden; // ensures proper edge fade
+    background-image:
+      // cyan left edge
+      radial-gradient(120% 60% at -15% 100%, rgba(colors.$cyan-60, 0.13) 0%, transparent 65%),
+      // cyan right edge
+      radial-gradient(120% 60% at 115% 100%, rgba(colors.$cyan-60, 0.1) 0%, transparent 65%),
+      // pink center
+      radial-gradient(120% 60% at 50% 100%, rgba(colors.$magenta-60, 0.11) 0%, transparent 70%);
+    box-shadow: var(--cds-ai-drop-shadow), inset 0 0 0 1px var(--cds-ai-inner-shadow);
+  }
+}

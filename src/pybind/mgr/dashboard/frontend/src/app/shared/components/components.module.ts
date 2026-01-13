@@ -39,7 +39,9 @@ import {
   InlineLoadingModule,
   PanelModule,
   TagModule,
-  LinkModule
+  LinkModule,
+  LayerModule,
+  TilesModule
 } from 'carbon-components-angular';
 
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
@@ -92,6 +94,7 @@ import CopyIcon from '@carbon/icons/es/copy/32';
 import { IconComponent } from './icon/icon.component';
 import downloadIcon from '@carbon/icons/es/download/16';
 import { ChartsModule } from '@carbon/charts-angular';
+import { ProductiveCardComponent } from './productive-card/productive-card.component';
 
 @NgModule({
   imports: [
@@ -135,7 +138,9 @@ import { ChartsModule } from '@carbon/charts-angular';
     PanelModule,
     ChartsModule,
     TagModule,
-    LinkModule
+    LinkModule,
+    LayerModule,
+    TilesModule
   ],
   declarations: [
     SparklineComponent,
@@ -180,7 +185,8 @@ import { ChartsModule } from '@carbon/charts-angular';
     ProgressComponent,
     IconComponent,
     TearsheetComponent,
-    TearsheetStepComponent
+    TearsheetStepComponent,
+    ProductiveCardComponent,
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -222,7 +228,8 @@ import { ChartsModule } from '@carbon/charts-angular';
     ProgressComponent,
     IconComponent,
     TearsheetComponent,
-    TearsheetStepComponent
+    TearsheetStepComponent,
+    ProductiveCardComponent
   ]
 })
 export class ComponentsModule {
