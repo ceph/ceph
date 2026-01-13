@@ -12,6 +12,11 @@
     i18n-emptyStateTitle
     emptyStateMessage="Set up your first gateway group to start using NVMe over Fabrics. This will allow you to create high-performance block storage with NVMe/TCP protocol."
     i18n-emptyStateMessage>
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
   </cd-table>
 </ng-container>
 
@@ -26,19 +31,30 @@
        gap="4">
 
     @if (gateway.running > 0) {
-    <span>
-      <cd-icon   type="success"></cd-icon>
+    <span [ngClass]="gateway.error > 0 ? 'cds-mr-3' : ''">
+      <cd-icon type="success"></cd-icon>
       <span class="cds-ml-3">{{ gateway.running }}</span>
     </span>
-  }
+    }
 
-  @if (gateway.error > 0) {
-    <span class="cds-ml-3">
-      <cd-icon   type="error"></cd-icon>
+    @if (gateway.error > 0) {
+    <span>
+      <cd-icon type="error"></cd-icon>
       <span class="cds-ml-3">{{ gateway.error }}</span>
     </span>
-  }
-
-
+    }
   </div>
+</ng-template>
+<ng-template #deleteTpl
+             let-groupName="groupName"
+             let-subsystemCount="subsystemCount">
+  @if (subsystemCount > 0) {
+  <cd-alert-panel type="warning"
+                  spacingClass="cds-mb-3">
+    <h1 class="cds--type-heading-compact-01"
+        i18n>Cannot delete gateway group</h1>
+    <p class="cds--type-body-compact-01"
+       i18n>This gateway group includes dependent NVMe-oF resources. Remove the associated initiators and gateway targets before proceeding with deletion.</p>
+  </cd-alert-panel>
+  }
 </ng-template>
