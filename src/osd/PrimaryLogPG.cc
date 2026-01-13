@@ -5991,6 +5991,8 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       dout(10) << " sparse read ended up empty for " << soid << dendl;
       map<uint64_t, uint64_t> extents;
       encode(extents, osd_op.outdata);
+      bufferlist data_bl;
+      encode(data_bl, osd_op.outdata);
     }
   } else {
     // read into a buffer
