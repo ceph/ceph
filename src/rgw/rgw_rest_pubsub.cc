@@ -152,10 +152,10 @@ auto get_policy_from_text(req_state* const s, const std::string& policy_text)
 using rgw::IAM::Effect;
 using rgw::IAM::Policy;
 
-bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
-                             const rgw_owner& owner, const rgw::ARN& arn,
-                             const boost::optional<Policy>& policy,
-                             uint64_t op)
+bool verify_resource_permission(const DoutPrefixProvider* dpp, req_state* s,
+                                const rgw_owner& owner, const rgw::ARN& arn,
+                                const boost::optional<Policy>& policy,
+                                uint64_t op)
 {
   if (s->auth.identity->get_account()) {
     const bool account_root = (s->auth.identity->get_identity_type() == TYPE_ROOT);
@@ -190,6 +190,17 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
     return false;
   }
   if (effect == Effect::Allow) {
+    return true;
+  }
+  return false;
+}
+
+bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
+                             const rgw_owner& owner, const rgw::ARN& arn,
+                             const boost::optional<Policy>& policy,
+                             uint64_t op)
+{
+  if (verify_resource_permission(dpp, s, owner, arn, policy, op)) {
     return true;
   }
 
