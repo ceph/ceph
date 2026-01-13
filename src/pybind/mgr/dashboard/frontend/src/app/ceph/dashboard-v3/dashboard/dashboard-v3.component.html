@@ -1,15 +1,10 @@
 <div class="container-fluid p-4">
   <div class="row d-flex flex-row ps-3">
-
     <!-- First Grid to hold Details and Inventory Card-->
-    <div class="col-sm-3 d-flex flex-column ps-2">
-
-      <!-- Details Card-->
-      <cd-card cardTitle="Details"
-               i18n-title
-               class="details"
-               aria-label="Details card">
-        <dl class="ms-4 me-4">
+    <div class="col-sm-3 d-flex flex-column ps-2 details-card">
+      <cd-productive-card title="Details"
+                          i18n-title>
+        <dl>
           <dt>Cluster ID</dt>
           <dd>{{ detailsCardData.fsid }}</dd>
           <dt>Orchestrator</dt>
@@ -23,7 +18,7 @@
           <dd>
             <a routerLink="/api-docs"
                target="_blank">
-               {{ origin }}/api-docs
+              {{ origin }}/api-docs
               <i class="fa fa-external-link"></i>
             </a>
           </dd>
@@ -57,7 +52,7 @@
             </span>
           </ng-container>
         </dl>
-      </cd-card>
+      </cd-productive-card>
 
       <!-- Inventory Card-->
       <cd-card cardTitle="Inventory"
