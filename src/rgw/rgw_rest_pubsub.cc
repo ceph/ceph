@@ -149,47 +149,51 @@ auto get_policy_from_text(req_state* const s, const std::string& policy_text)
   }
 }
 
-using rgw::IAM::Effect;
-using rgw::IAM::Policy;
-
-bool verify_resource_permission(const DoutPrefixProvider* dpp, req_state* s,
-                                const rgw_owner& owner, const rgw::ARN& arn,
-                                const boost::optional<Policy>& policy,
-                                uint64_t op)
+bool verify_resource_permission(
+    const DoutPrefixProvider* dpp,
+    const rgw::IAM::Environment& env,
+    const rgw::auth::Identity& identity,
+    uint64_t op,
+    const rgw::ARN& arn,
+    const rgw_owner& resource_owner,
+    const boost::optional<rgw::IAM::Policy>& resource_policy,
+    const std::vector<rgw::IAM::Policy>& identity_policies,
+    const std::vector<rgw::IAM::Policy>& session_policies)
 {
-  if (s->auth.identity->get_account()) {
-    const bool account_root = (s->auth.identity->get_identity_type() == TYPE_ROOT);
-    if (!s->auth.identity->is_owner_of(owner)) {
+  if (identity.get_account()) {
+    const bool account_root = (identity.get_identity_type() == TYPE_ROOT);
+    if (!identity.is_owner_of(resource_owner)) {
       ldpp_dout(dpp, 4) << "cross-account request for resource owner "
-          << owner << " != " << s->owner.id << dendl;
+          << resource_owner << " != " << identity.get_aclowner().id << dendl;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
       const auto identity_res = evaluate_iam_policies(
-          dpp, s->env, *s->auth.identity, account_root, op, arn,
-          {}, s->iam_identity_policies, s->session_policies);
-      if (identity_res == Effect::Deny) {
+          dpp, env, identity, account_root, op, arn,
+          {}, identity_policies, session_policies);
+      if (identity_res == rgw::IAM::Effect::Deny) {
         return false;
       }
       const auto resource_res = evaluate_iam_policies(
-          dpp, s->env, *s->auth.identity, false, op, arn,
-          policy, {}, {});
-      return identity_res == Effect::Allow && resource_res == Effect::Allow;
+          dpp, env, identity, false, op, arn,
+          resource_policy, {}, {});
+      return identity_res == rgw::IAM::Effect::Allow
+          && resource_res == rgw::IAM::Effect::Allow;
     } else {
       // require an Allow from either identity- or resource-based policy
-      return Effect::Allow == evaluate_iam_policies(
-          dpp, s->env, *s->auth.identity, account_root, op, arn,
-          policy, s->iam_identity_policies, s->session_policies);
+      return rgw::IAM::Effect::Allow == evaluate_iam_policies(
+          dpp, env, identity, account_root, op, arn,
+          resource_policy, identity_policies, session_policies);
     }
   }
 
   constexpr bool account_root = false;
   const auto effect = evaluate_iam_policies(
-      dpp, s->env, *s->auth.identity, account_root, op, arn,
-      policy, s->iam_identity_policies, s->session_policies);
-  if (effect == Effect::Deny) {
+      dpp, env, identity, account_root, op, arn,
+      resource_policy, identity_policies, session_policies);
+  if (effect == rgw::IAM::Effect::Deny) {
     return false;
   }
-  if (effect == Effect::Allow) {
+  if (effect == rgw::IAM::Effect::Allow) {
     return true;
   }
   return false;
@@ -197,10 +201,12 @@ bool verify_resource_permission(const DoutPrefixProvider* dpp, req_state* s,
 
 bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
                              const rgw_owner& owner, const rgw::ARN& arn,
-                             const boost::optional<Policy>& policy,
+                             const boost::optional<rgw::IAM::Policy>& policy,
                              uint64_t op)
 {
-  if (verify_resource_permission(dpp, s, owner, arn, policy, op)) {
+  if (verify_resource_permission(dpp, s->env, *s->auth.identity, op, arn,
+                                 owner, policy, s->iam_identity_policies,
+                                 s->session_policies)) {
     return true;
   }
 
@@ -232,7 +238,7 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
                              const rgw_pubsub_topic& topic,
                              const rgw::ARN& arn, uint64_t op)
 {
-  boost::optional<Policy> policy;
+  boost::optional<rgw::IAM::Policy> policy;
   if (!topic.policy_text.empty()) {
     policy = get_policy_from_text(s, topic.policy_text);
     if (!policy) {
