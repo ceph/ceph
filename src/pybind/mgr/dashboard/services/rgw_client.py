@@ -460,14 +460,15 @@ class RgwClient(RestClient):
         return self._user_exists(self.admin_path, user_id)
 
     @RestClient.api_get('/{admin_path}/metadata/user?key={userid}',
-                        resp_structure='data > system')
-    def _is_system_user(self, admin_path, userid, request=None) -> bool:
+                        resp_structure='data > admin')
+    def _is_admin_user(self, admin_path, userid, request=None) -> bool:
         # pylint: disable=unused-argument
         response = request()
-        return response['data']['system']
+        # for backward compatibility, treat --system users as --admin users
+        return response['data']['admin'] or response['data']['system']
 
-    def is_system_user(self) -> bool:
-        return self._is_system_user(self.admin_path, self.userid)
+    def is_admin_user(self) -> bool:
+        return self._is_admin_user(self.admin_path, self.userid)
 
     @RestClient.api_get(
         '/{admin_path}/user',
