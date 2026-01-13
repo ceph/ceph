@@ -1384,6 +1384,23 @@ Effect evaluate_resource_permission(
       resource_policy, identity_policies, session_policies);
 }
 
+bool verify_resource_permission(
+    const DoutPrefixProvider* dpp,
+    const rgw::IAM::Environment& env,
+    const rgw::auth::Identity& identity,
+    uint64_t op,
+    const rgw::ARN& arn,
+    const rgw_owner& resource_owner,
+    const boost::optional<rgw::IAM::Policy>& resource_policy,
+    const std::vector<rgw::IAM::Policy>& identity_policies,
+    const std::vector<rgw::IAM::Policy>& session_policies)
+{
+  return Effect::Allow == evaluate_resource_permission(
+      dpp, env, identity, op, arn,
+      resource_owner, resource_policy,
+      identity_policies, session_policies);
+}
+
 bool verify_requester_payer_permission(const perm_state_base *s)
 {
   if (!s->bucket_info.requester_pays)

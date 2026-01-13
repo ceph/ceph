@@ -1832,6 +1832,20 @@ rgw::IAM::Effect evaluate_resource_permission(
     const boost::optional<rgw::IAM::Policy>& resource_policy,
     const std::vector<rgw::IAM::Policy>& identity_policies,
     const std::vector<rgw::IAM::Policy>& session_policies);
+
+// verify permissions on a non-s3 resource like a notification topic
+// or role trust policy
+bool verify_resource_permission(
+    const DoutPrefixProvider* dpp,
+    const rgw::IAM::Environment& env,
+    const rgw::auth::Identity& identity,
+    uint64_t op,
+    const rgw::ARN& arn,
+    const rgw_owner& resource_owner,
+    const boost::optional<rgw::IAM::Policy>& resource_policy,
+    const std::vector<rgw::IAM::Policy>& identity_policies,
+    const std::vector<rgw::IAM::Policy>& session_policies);
+
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               const perm_state_base * const s,
                               const rgw::ARN& arn,
