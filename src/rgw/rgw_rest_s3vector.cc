@@ -5,6 +5,7 @@
 #include "rgw_rest_s3vector.h"
 #include "rgw_s3vector.h"
 #include "common/async/yield_context.h"
+#include "rgw_arn.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -67,6 +68,27 @@ class RGWS3VectorCreateIndex : public RGWS3VectorBase {
   void execute(optional_yield y) override {
     op_ret = rgw::s3vector::create_index(configuration, this, y);
   }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    rgw::s3vector::create_index_reply_t reply{
+      rgw::s3vector::index_arn(s->zonegroup_name, s->account_name, configuration.vector_bucket_name, configuration.index_name).to_string()
+    };
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
+  }
 };
 
 class RGWS3VectorCreateVectorBucket : public RGWS3VectorBase {
@@ -92,6 +114,30 @@ class RGWS3VectorCreateVectorBucket : public RGWS3VectorBase {
 
   void execute(optional_yield y) override {
     op_ret = rgw::s3vector::create_vector_bucket(configuration, this, y);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    rgw::s3vector::create_vector_bucket_reply_t reply{
+      rgw::s3vector::vector_bucket_arn(
+        s->zonegroup_name,
+        s->account_name,
+        configuration.vector_bucket_name).to_string()
+    };
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
@@ -201,6 +247,7 @@ class RGWS3VectorPutVectors : public RGWS3VectorBase {
 
 class RGWS3VectorGetVectors : public RGWS3VectorBase {
   rgw::s3vector::get_vectors_t configuration;
+  rgw::s3vector::get_vectors_reply_t reply;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetVectors" << dendl;
@@ -221,12 +268,31 @@ class RGWS3VectorGetVectors : public RGWS3VectorBase {
   }
 
   void execute(optional_yield y) override {
-    op_ret = rgw::s3vector::get_vectors(configuration, this, y);
+    op_ret = rgw::s3vector::get_vectors(configuration, this, y, reply);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
 class RGWS3VectorListVectors : public RGWS3VectorBase {
   rgw::s3vector::list_vectors_t configuration;
+  rgw::s3vector::list_vectors_reply_t reply;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector ListVectors" << dendl;
@@ -247,7 +313,25 @@ class RGWS3VectorListVectors : public RGWS3VectorBase {
   }
 
   void execute(optional_yield y) override {
-    op_ret = rgw::s3vector::list_vectors(configuration, this, y);
+    op_ret = rgw::s3vector::list_vectors(configuration, this, y, reply);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
@@ -305,6 +389,7 @@ class RGWS3VectorGetVectorBucket : public RGWS3VectorBase {
 
 class RGWS3VectorGetIndex : public RGWS3VectorBase {
   rgw::s3vector::get_index_t configuration;
+  rgw::s3vector::get_index_reply_t reply;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetIndex" << dendl;
@@ -325,12 +410,31 @@ class RGWS3VectorGetIndex : public RGWS3VectorBase {
   }
 
   void execute(optional_yield y) override {
-    op_ret = rgw::s3vector::get_index(configuration, this, y);
+    op_ret = rgw::s3vector::get_index(configuration, s->zonegroup_name, s->account_name, this, y, reply);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
 class RGWS3VectorListIndexes : public RGWS3VectorBase {
   rgw::s3vector::list_indexes_t configuration;
+  rgw::s3vector::list_indexes_reply_t reply;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector ListIndexes" << dendl;
@@ -351,7 +455,32 @@ class RGWS3VectorListIndexes : public RGWS3VectorBase {
   }
 
   void execute(optional_yield y) override {
-    op_ret = rgw::s3vector::list_indexes(configuration, this, y);
+    if (!configuration.vector_bucket_arn) {
+      configuration.vector_bucket_arn = rgw::s3vector::vector_bucket_arn(
+        s->zonegroup_name,
+        s->account_name,
+        configuration.vector_bucket_name
+      );
+    }
+    op_ret = rgw::s3vector::list_indexes(configuration, this, y, reply);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
@@ -435,6 +564,7 @@ class RGWS3VectorDeleteVectors : public RGWS3VectorBase {
 
 class RGWS3VectorQueryVectors : public RGWS3VectorBase {
   rgw::s3vector::query_vectors_t configuration;
+  rgw::s3vector::query_vectors_reply_t reply;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector QueryVectors" << dendl;
@@ -455,9 +585,36 @@ class RGWS3VectorQueryVectors : public RGWS3VectorBase {
   }
 
   void execute(optional_yield y) override {
-    op_ret = rgw::s3vector::query_vectors(configuration, this, y);
+    op_ret = rgw::s3vector::query_vectors(configuration, this, y, reply);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
+
+}
+
+int RGWHandler_REST_s3Vector::init(rgw::sal::Driver* driver, req_state *s, rgw::io::BasicClient *cio) {
+  if (int ret = RGWHandler_REST_S3::init(driver, s, cio); ret < 0) {
+    return ret;
+  }
+  // s3vectors API uses JSON formatter
+  return RGWHandler_REST::allocate_formatter(s, RGWFormat::JSON, false);
 }
 
 RGWOp* RGWHandler_REST_s3Vector::op_post() {

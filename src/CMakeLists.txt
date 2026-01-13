@@ -1153,6 +1153,30 @@ if(WITH_RADOSGW)
 
   add_subdirectory(crypto)
   add_subdirectory(libkmip)
+  if(WITH_RADOSGW_LANCEDB)
+    include(ExternalProject)
+
+    # Determine the Rust target directory based on build type
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+      set(LANCEDB_RUST_TARGET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c/target/debug")
+    else()
+      set(LANCEDB_RUST_TARGET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c/target/release")
+    endif()
+
+    ExternalProject_Add(lancedb-c
+      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c
+      CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                 -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/lancedb-c-install
+      BUILD_ALWAYS OFF
+      BUILD_BYPRODUCTS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+      INSTALL_COMMAND ${CMAKE_COMMAND} -E copy
+                      ${LANCEDB_RUST_TARGET_DIR}/liblancedb.so
+                      ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+                  COMMAND ${CMAKE_COMMAND} -E copy
+                      ${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c/include/lancedb.h
+                      ${CMAKE_BINARY_DIR}/src/include/lancedb.h
+    )
+  endif(WITH_RADOSGW_LANCEDB)
   add_subdirectory(rgw)
 endif(WITH_RADOSGW)
 

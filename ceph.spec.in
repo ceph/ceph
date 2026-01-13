@@ -50,6 +50,7 @@
 %bcond_without lttng
 %bcond_without libradosstriper
 %bcond_without ocf
+%bcond_without lancedb
 %global luarocks_package_name luarocks
 %bcond_without lua_packages
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
@@ -314,6 +315,9 @@ BuildRequires:  librdkafka-devel
 %if 0%{with lua_packages}
 Requires:  lua-devel
 Requires:  %{luarocks_package_name}
+%endif
+%if 0%{with lancedb}
+BuildRequires:  cargo
 %endif
 %if 0%{with make_check}
 BuildRequires:  hostname
@@ -1482,6 +1486,11 @@ cmake .. \
 %endif
 %if 0%{without lua_packages}
     -DWITH_RADOSGW_LUA_PACKAGES:BOOL=OFF \
+%endif
+%if 0%{with lancedb}
+    -DWITH_RADOSGW_LANCEDB:BOOL=ON \
+%else
+    -DWITH_RADOSGW_LANCEDB:BOOL=OFF \
 %endif
 %if 0%{with cmake_verbose_logging}
     -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON \
