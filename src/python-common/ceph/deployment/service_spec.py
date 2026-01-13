@@ -1985,18 +1985,19 @@ class NvmeofServiceSpec(ServiceSpec):
         data = super().to_json()
         spec = data.setdefault('spec', {})
 
-        if self.ssl:
-            if self.server_cert and self.server_key:
-                spec['server_cert'] = self.server_cert
-                spec['server_key'] = self.server_key
-            else:
-                spec['ssl_cert'] = self.ssl_cert
-                spec['ssl_key'] = self.ssl_key
+        if self.certificate_source == CertificateSource.INLINE.value:
+            if self.ssl:
+                if self.server_cert and self.server_key:
+                    spec['server_cert'] = self.server_cert
+                    spec['server_key'] = self.server_key
+                else:
+                    spec['ssl_cert'] = self.ssl_cert
+                    spec['ssl_key'] = self.ssl_key
 
-        if self.enable_auth:
-            spec['client_cert'] = self.client_cert
-            spec['client_key'] = self.client_key
-            spec['root_ca_cert'] = self.root_ca_cert
+            if self.enable_auth:
+                spec['client_cert'] = self.client_cert
+                spec['client_key'] = self.client_key
+                spec['root_ca_cert'] = self.root_ca_cert
 
         return data
 
