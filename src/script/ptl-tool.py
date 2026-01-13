@@ -160,6 +160,7 @@ except ModuleNotFoundError:
 import requests
 import signal
 import sys
+import textwrap
 
 from os.path import expanduser
 
@@ -440,14 +441,27 @@ def build_branch(args):
                 sys.exit(1)
             log.info("Labeled PR #{pr} {label}".format(pr=pr, label=label))
 
-    if args.distros or args.archs:
-        message = "ceph-dev-pipeline: configure\n\n"
-        if args.distros:
-            message += f"DISTROS: {' '.join(args.distros)}\n"
-        if args.archs:
-            message += f"ARCHS: {' '.join(args.archs)}\n"
-        if args.flavors:
-            message += f"FLAVORS: {' '.join(args.flavors)}\n"
+    message = """
+    ceph-dev-pipeline: configure
+
+    See documentation: https://github.com/ceph/ceph-build/tree/main/ceph-trigger-build#git-trailer-parameters
+
+    """
+    message = textwrap.dedent(message)
+    trailer_commmit = False
+    if args.build_job:
+        message += f"CEPH-BUILD-JOB: {args.build_job}\n"
+        trailer_commit = True
+    if args.distros:
+        message += f"DISTROS: {' '.join(args.distros)}\n"
+        trailer_commit = True
+    if args.archs:
+        message += f"ARCHS: {' '.join(args.archs)}\n"
+        trailer_commit = True
+    if args.flavors:
+        message += f"FLAVORS: {' '.join(args.flavors)}\n"
+        trailer_commit = True
+    if trailer_commit:
         G.git.commit('--allow-empty', '-m', message)
 
     if args.stop_at_built:
@@ -605,6 +619,7 @@ def main():
 
     group = parser.add_argument_group('Build Control Options')
     group.add_argument('--archs', dest='archs', action=SplitCommaAppendAction, default=[], help='add arch(s) to build. Specify one or more times. Comma separated values are split.')
+    group.add_argument('--build-job', dest='build_job', action='store', help='add ceph build job to execute in CI')
     group.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
     group.add_argument('--distros', dest='distros', action=SplitCommaAppendAction, default=[], help='add distro(s) to build. Specify one or more times. Comma separated values are split.')
     group.add_argument('--flavors', dest='flavors', action=SplitCommaAppendAction, default=[], help='add flavors(s) to build. Specify one or more times. Comma separated values are split.')
