@@ -14,6 +14,8 @@
 
 #include <Python.h>
 
+#include "common/ceph_json.h"
+
 #include "osdc/Objecter.h"
 #include "common/errno.h"
 #include "mon/MonClient.h"
@@ -117,31 +119,33 @@ void MetadataUpdate::finish(int r)
   if (r == 0) {
     if (key.type == "mds" || key.type == "osd" ||
         key.type == "mgr" || key.type == "mon") {
-      json_spirit::mValue json_result;
-      bool read_ok = json_spirit::read(
-          outbl.to_str(), json_result);
-      if (!read_ok) {
+
+      ceph_json::value json_result;
+
+      if (!ceph_json::parse(outbl, json_result)) {
         dout(1) << "mon returned invalid JSON for " << key << dendl;
         return;
       }
-      if (json_result.type() != json_spirit::obj_type) {
+      const ceph_json::value::object_t *json_object =
+        ceph_json::object(json_result);
+      if (!json_object) {
         dout(1) << "mon returned valid JSON " << key
 		<< " but not an object: '" << outbl.to_str() << "'" << dendl;
         return;
       }
       dout(4) << "mon returned valid metadata JSON for " << key << dendl;
 
-      json_spirit::mObject daemon_meta = json_result.get_obj();
+      auto daemon_meta = *json_object;
 
       // Skip daemon who doesn't have hostname yet
-      if (daemon_meta.count("hostname") == 0) {
+      if (!daemon_meta.contains("hostname")) {
         dout(1) << "Skipping incomplete metadata entry for " << key << dendl;
         return;
       }
 
       // Apply any defaults
       for (const auto &i : defaults) {
-        if (daemon_meta.find(i.first) == daemon_meta.end()) {
+        if (!daemon_meta.contains(i.first)) {
           daemon_meta[i.first] = i.second;
         }
       }
@@ -162,7 +166,8 @@ void MetadataUpdate::finish(int r)
 	std::map<string,string> m;
 	{
 	  std::lock_guard l(state->lock);
-	  std::string reported_hostname = daemon_meta.at("hostname").get_str();
+	  std::string reported_hostname = ceph_json::decode_value<std::string>(
+	    daemon_meta.at("hostname"));
 	  if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
 	    daemon_meta.erase("name");
 	  } else if (key.type == "osd") {
@@ -170,7 +175,7 @@ void MetadataUpdate::finish(int r)
 	  }
 	  daemon_meta.erase("hostname");
 	  for (const auto &[key, val] : daemon_meta) {
-	    m.emplace(key, val.get_str());
+	    m.emplace(key, ceph_json::decode_value<std::string>(val));
 	  }
 	  // prefer CRUSH physical host over container/pod hostname (tracker.ceph.com/issues/73080)
 	  // fall back to the reported hostname when CRUSH does not place the OSD
@@ -184,7 +189,8 @@ void MetadataUpdate::finish(int r)
       } else {
         auto state = std::make_shared<DaemonState>(daemon_state.types);
         state->key = key;
-        std::string reported_hostname = daemon_meta.at("hostname").get_str();
+        std::string reported_hostname = ceph_json::decode_value<std::string>(
+          daemon_meta.at("hostname"));
 
         if (key.type == "mds" || key.type == "mgr" || key.type == "mon") {
           daemon_meta.erase("name");
@@ -195,7 +201,7 @@ void MetadataUpdate::finish(int r)
 
 	std::map<string,string> m;
         for (const auto &[key, val] : daemon_meta) {
-          m.emplace(key, val.get_str());
+          m.emplace(key, ceph_json::decode_value<std::string>(val));
         }
 	// prefer CRUSH physical host over container/pod hostname (tracker.ceph.com/issues/73080)
 	// fall back to the reported hostname when CRUSH does not place the OSD
@@ -262,8 +268,8 @@ std::map<std::string, std::string> Mgr::load_store()
 
   std::map<std::string, std::string> loaded;
   
-  for (auto &key_str : cmd.json_result.get_array()) {
-    std::string const key = key_str.get_str();
+  for (const auto& key_value : ceph_json::require_array(cmd.json_result)) {
+    auto key = ceph_json::decode_value<std::string>(key_value);
     
     dout(20) << "saw key '" << key << "'" << dendl;
 
@@ -485,63 +491,67 @@ void Mgr::load_all_metadata()
   ceph_assert(mon_cmd.r == 0);
   ceph_assert(osd_cmd.r == 0);
 
-  for (auto &metadata_val : mds_cmd.json_result.get_array()) {
-    json_spirit::mObject daemon_meta = metadata_val.get_obj();
-    if (daemon_meta.count("hostname") == 0) {
+  for (const auto& metadata_val : ceph_json::require_array(mds_cmd.json_result)) {
+    auto daemon_meta = ceph_json::require_object(metadata_val);
+    if (!daemon_meta.contains("hostname")) {
       dout(1) << "Skipping incomplete metadata entry" << dendl;
       continue;
     }
 
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
-    dm->key = DaemonKey{"mds",
-                        daemon_meta.at("name").get_str()};
-    dm->hostname = daemon_meta.at("hostname").get_str();
+
+    dm->key = DaemonKey {
+      "mds", ceph_json::decode_value<std::string>(daemon_meta.at("name"))};
+    dm->hostname = ceph_json::decode_value<std::string>(
+      daemon_meta.at("hostname"));
 
     daemon_meta.erase("name");
     daemon_meta.erase("hostname");
 
     for (const auto &[key, val] : daemon_meta) {
-      dm->metadata.emplace(key, val.get_str());
+      dm->metadata.emplace(key, ceph_json::decode_value<std::string>(val));
     }
 
     daemon_state.insert(dm);
   }
 
-  for (auto &metadata_val : mon_cmd.json_result.get_array()) {
-    json_spirit::mObject daemon_meta = metadata_val.get_obj();
-    if (daemon_meta.count("hostname") == 0) {
+  for (const auto& metadata_val : ceph_json::require_array(mon_cmd.json_result)) {
+    auto daemon_meta = ceph_json::require_object(metadata_val);
+    if (!daemon_meta.contains("hostname")) {
       dout(1) << "Skipping incomplete metadata entry" << dendl;
       continue;
     }
 
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
-    dm->key = DaemonKey{"mon",
-                        daemon_meta.at("name").get_str()};
-    dm->hostname = daemon_meta.at("hostname").get_str();
+    dm->key = DaemonKey {
+      "mon", ceph_json::decode_value<std::string>(daemon_meta.at("name"))};
+    dm->hostname = ceph_json::decode_value<std::string>(
+      daemon_meta.at("hostname"));
 
     daemon_meta.erase("name");
     daemon_meta.erase("hostname");
 
     std::map<string,string> m;
     for (const auto &[key, val] : daemon_meta) {
-      m.emplace(key, val.get_str());
+      m.emplace(key, ceph_json::decode_value<std::string>(val));
     }
     dm->set_metadata(m);
 
     daemon_state.insert(dm);
   }
 
-  for (auto &osd_metadata_val : osd_cmd.json_result.get_array()) {
-    json_spirit::mObject osd_metadata = osd_metadata_val.get_obj();
-    if (osd_metadata.count("hostname") == 0) {
+  for (const auto& osd_metadata_val :
+       ceph_json::require_array(osd_cmd.json_result)) {
+    auto osd_metadata = ceph_json::require_object(osd_metadata_val);
+    if (!osd_metadata.contains("hostname")) {
       dout(1) << "Skipping incomplete metadata entry" << dendl;
       continue;
     }
-
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
-    int osd_id = osd_metadata.at("id").get_int();
-    dm->key = DaemonKey{"osd", stringify(osd_id)};
-    dm->hostname = osd_metadata.at("hostname").get_str();
+    const int osd_id = ceph_json::decode_value<int>(osd_metadata.at("id"));
+    dm->key = DaemonKey {"osd", stringify(osd_id)};
+    dm->hostname = ceph_json::decode_value<std::string>(
+      osd_metadata.at("hostname"));
 
     // prefer CRUSH physical host over container/pod hostname (tracker.ceph.com/issues/73080)
     std::string crush_host = crush_hostname_for_osd(cluster_state, osd_id);
@@ -553,9 +563,9 @@ void Mgr::load_all_metadata()
     osd_metadata.erase("id");
     osd_metadata.erase("hostname");
 
-    std::map<string,string> m;
-    for (const auto &i : osd_metadata) {
-      m[i.first] = i.second.get_str();
+    map<string,string> m;
+    for (const auto &[k, v] : osd_metadata) {
+      m[k] = ceph_json::decode_value<std::string>(v);
     }
     dm->set_metadata(m);
 
