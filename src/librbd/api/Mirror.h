@@ -142,6 +142,11 @@ struct Mirror {
                                     uint64_t *snap_id, Context *on_finish);
 
   static int group_list(IoCtx &io_ctx, std::vector<std::string> *names);
+  static int group_revert_membership_to_snapshot(IoCtx& group_ioctx,
+                                                 const char *group_name,
+                                                 std::string &global_group_id,
+                                                 bool* requires_orphan,
+                                                 std::string &rollback_snapname);
   static int group_enable(IoCtx &group_ioctx, const char *group_name,
                           mirror_image_mode_t group_image_mode);
   static int group_disable(IoCtx &group_ioctx, const char *group_name,

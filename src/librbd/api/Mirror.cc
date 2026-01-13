@@ -3071,6 +3071,192 @@ int Mirror<I>::group_image_add(IoCtx &group_ioctx,
   }
   return 0;
 }
+template <typename I>
+int Mirror<I>::group_revert_membership_to_snapshot(
+    IoCtx& group_ioctx,
+    const char *group_name,
+    std::string &global_group_id,
+    bool* requires_orphan,
+    std::string &rollback_snapname) {
+
+  CephContext *cct = (CephContext *)group_ioctx.cct();
+  ldout(cct, 20) << "io_ctx=" << &group_ioctx
+                 << ", group_name=" << group_name << dendl;
+
+  if (requires_orphan) {
+    *requires_orphan = false;
+  }
+
+  std::string group_id;
+  int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
+                                 group_name, &group_id);
+  if (r < 0) {
+    lderr(cct) << "error getting the group id: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  std::vector<cls::rbd::GroupImageStatus> images;
+  r = Group<I>::group_image_list_by_id(group_ioctx, group_id, &images);
+  if (r < 0) {
+    lderr(cct) << "failed listing images in the group: " << group_name
+               << " :" << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  std::vector<cls::rbd::GroupImageSpec> current_membership;
+  for (const auto& image : images) {
+    if (image.state == cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED) {
+      current_membership.push_back(image.spec);
+    }
+  }
+
+  // rollback to last good group snapshot
+  std::vector<cls::rbd::GroupSnapshot> snaps;
+  C_SaferCond cond;
+  auto req = group::ListSnapshotsRequest<>::create(group_ioctx, group_id,
+                                                   true, true, &snaps, &cond);
+  req->send();
+  r = cond.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to list snapshots in the group " << group_name
+               << " :" << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  bool need_rollback = false;
+  auto rollback_snap = snaps.rbegin();
+  bool tmp_requires_orphan = false;
+  for (; rollback_snap != snaps.rend(); ++rollback_snap) {
+    auto mirror_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+        &rollback_snap->snapshot_namespace);
+    if (mirror_ns == nullptr || mirror_ns->is_orphan()) {
+      continue;
+    }
+
+    tmp_requires_orphan = !mirror_ns->is_demoted();
+
+    if (!is_mirror_group_snapshot_complete(rollback_snap->state,
+                                           mirror_ns->complete)) {
+      need_rollback = true;
+      continue;
+    }
+    break;
+  }
+
+  if (rollback_snap == snaps.rend()) {
+    lderr(cct) << "cannot rollback, no complete mirror group snapshot available on group: "
+               << group_name << dendl;
+    return -EINVAL;
+  }
+
+  if (need_rollback) {
+    // rollback membership
+    if (requires_orphan) {
+      *requires_orphan = tmp_requires_orphan;
+    }
+    std::vector<cls::rbd::GroupImageSpec> rollback_membership;
+    for (auto& it : rollback_snap->snaps) {
+      rollback_membership.emplace_back(it.image_id, it.pool);
+    }
+
+    if (rollback_membership != current_membership) {
+      ldout(cct, 10) << "rollback group snapshot membership does not match current group membership"
+                     << dendl;
+      // Fix the group membership
+      std::vector<cls::rbd::GroupImageSpec> delta_images;
+      std::set_difference(current_membership.begin(), current_membership.end(),
+                          rollback_membership.begin(), rollback_membership.end(),
+                          std::back_inserter(delta_images));
+
+      std::vector<cls::rbd::GroupImageSpec> removed_images; // from current membership
+      std::vector<cls::rbd::GroupImageSpec> inserted_images; // to current membership
+
+      if (!delta_images.empty()) {
+        for (auto &s : delta_images) {
+          if (std::find(rollback_membership.begin(),
+                        rollback_membership.end(), s)
+              != rollback_membership.end()) {
+            removed_images.push_back(s);
+          } else {
+            inserted_images.push_back(s);
+          }
+        }
+      }
+
+      // insert back to membership
+      for (auto &s : removed_images) {
+        IoCtx image_ioctx;
+        r = librbd::util::create_ioctx(group_ioctx, "image", s.pool_id, {},
+                                       &image_ioctx);
+        if (r < 0) {
+          return r;
+        }
+
+        r = Group<I>::image_add(group_ioctx, group_name,
+                                image_ioctx, s.image_id.c_str());
+        if (r < 0) {
+          lderr(cct) << "error inserting image to group: " << group_name
+                     << " :" << cpp_strerror(r) << dendl;
+          return r;
+        }
+      }
+
+      // remove from the membership
+      for (auto &s : inserted_images) {
+        IoCtx image_ioctx;
+        r = librbd::util::create_ioctx(group_ioctx, "image", s.pool_id, {},
+                                       &image_ioctx);
+        if (r < 0) {
+          return r;
+        }
+
+        librbd::ImageCtx* image_ctx = new ImageCtx("", s.image_id,
+                                                   nullptr, image_ioctx, false);
+
+        C_SaferCond open_cond;
+        image_ctx->state->open(0, &open_cond);
+        r = open_cond.wait();
+        if (r < 0) {
+          lderr(cct) << "failed opening group image: "
+                     << cpp_strerror(r) << dendl;
+          return r;
+        }
+
+        r = image_disable(image_ctx, true /* force */, true);
+        if (r < 0) {
+          lderr(cct) << "failed to disable mirroring on image: " << s.image_id
+                     << " : " << cpp_strerror(r) << dendl;
+          image_ctx->state->close();
+          return r;
+        }
+
+        r = Group<I>::image_remove_by_id(group_ioctx, group_name, image_ioctx,
+                                         s.image_id.c_str(), true /* force */);
+        if (r < 0 && r != -ENOENT) {
+          lderr(cct) << "error removing image from a group: " << group_name
+                     << " :" << cpp_strerror(r) << dendl;
+          image_ctx->state->close();
+          return r;
+        }
+        image_ctx->state->close();
+      }
+
+      r = MirroringWatcher<I>::notify_group_updated(
+          group_ioctx, cls::rbd::MIRROR_GROUP_STATE_ENABLED, group_id,
+          global_group_id, rollback_membership.size());
+      if (r < 0) {
+        lderr(cct) << "failed to notify mirroring group=" << group_name
+                   << " updated: " << cpp_strerror(r) << dendl;
+        // not fatal
+      }
+    } // Fixing membership done.
+    rollback_snapname = rollback_snap->name;
+  } else {
+    ldout(cct, 10) << "no rollback and no orphan snapshot required" << dendl;
+  }
+
+  return 0;
+}
 
 template <typename I>
 int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
@@ -3148,72 +3334,18 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
   }
 
   if (force) {
-    std::vector<cls::rbd::GroupImageStatus> images;
-    r = Group<I>::group_image_list_by_id(group_ioctx, group_id, &images);
+    std::string rollback_snap;
+    bool requires_orphan = false;
+    r = group_revert_membership_to_snapshot(group_ioctx, group_name,
+                                            mirror_group.global_group_id,
+                                            &requires_orphan, rollback_snap);
     if (r < 0) {
-      lderr(cct) << "failed listing images in the group: " << group_name
-                 << " :" << cpp_strerror(r) << dendl;
-      return r;
-    }
-    std::vector<cls::rbd::GroupImageSpec> current_images;
-    for (const auto& image : images) {
-      if (image.state == cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED) {
-        current_images.push_back(image.spec);
-      }
-    }
-    // rollback to last good group snapshot
-    std::vector<cls::rbd::GroupSnapshot> snaps;
-    C_SaferCond cond;
-    auto req = group::ListSnapshotsRequest<>::create(group_ioctx, group_id,
-                                                     true, true, &snaps, &cond);
-    req->send();
-    int r = cond.wait();
-    if (r < 0) {
-      lderr(cct) << "failed to list snapshots in the group " << group_name
-                 << " :" << cpp_strerror(r) << dendl;
+      lderr(cct) << "failed to revert to membership: "
+                 << cpp_strerror(r) << dendl;
       return r;
     }
 
-    if (snaps.empty()) {
-      lderr(cct) << "cannot rollback, no mirror group snapshot available on group: "
-                 << group_name << dendl;
-      return -EINVAL;
-    }
-
-    bool need_rollback = false;
-    auto snap = snaps.rbegin();
-    for (; snap != snaps.rend(); ++snap) {
-      auto mirror_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
-          &snap->snapshot_namespace);
-      if (mirror_ns == nullptr || mirror_ns->is_orphan()) {
-        continue;
-      }
-      if (!is_mirror_group_snapshot_complete(snap->state, mirror_ns->complete)) {
-        need_rollback = true;
-        continue;
-      }
-      break;
-    }
-
-    if (snap == snaps.rend()) {
-      lderr(cct) << "cannot rollback, no complete mirror group snapshot available on group: "
-                 << group_name << dendl;
-      return -EINVAL;
-    }
-
-    if (need_rollback) {
-      // Check for group membership match
-      std::vector<cls::rbd::GroupImageSpec> rollback_images;
-      for (auto& it : snap->snaps) {
-        rollback_images.emplace_back(it.image_id, it.pool);
-      }
-
-      if (rollback_images != current_images) {
-        lderr(cct) << "group membership does not match snapshot membership with rollback_snap_id: "
-                   << snap->id << dendl;
-        return -EINVAL;
-      }
-
+    if (requires_orphan) {
       r = create_orphan_group_snapshot(group_ioctx, group_id,
                                        mirror_group.global_group_id);
       if (r < 0 ) {
@@ -3221,20 +3353,21 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
                    << cpp_strerror(r) << dendl;
         return r;
       }
+    }
 
+    if (!rollback_snap.empty()) {
+      ldout(cct, 5) << "rolling back to: " << rollback_snap << dendl;
       librbd::NoOpProgressContext prog_ctx;
-      r = Group<I>::snap_rollback(group_ioctx,
-                                  group_name, snap->name.c_str(), prog_ctx, false);
+      r = Group<I>::snap_rollback(group_ioctx, group_name,
+                                  rollback_snap.c_str(), prog_ctx, false);
       if (r < 0) {
-        lderr(cct) << "failed to rollback to group snapshot: " << snap->id
+        lderr(cct) << "failed to rollback to group snapshot: " << rollback_snap
                    << " :" << cpp_strerror(r) << dendl;
         return r;
       }
-      ldout(cct, 5) << "successfully rolled back to group snapshot: "
-                    << snap->id << dendl;
+      ldout(cct, 5) << "successfully rollbacked to group snapshot: "
+                    << rollback_snap << dendl;
       // Rollback to last good snapshot done
-    } else {
-      ldout(cct, 10) << "no rollback and no orphan snapshot required" << dendl;
     }
   }
 

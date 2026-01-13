@@ -38,7 +38,8 @@ struct Group {
   static int image_remove_by_id(librados::IoCtx& group_ioctx,
                                 const char *group_name,
                                 librados::IoCtx& image_ioctx,
-                                const char *image_id);
+                                const char *image_id,
+                                bool force);
   static int image_list(librados::IoCtx& group_ioctx, const char *group_name,
 		        std::vector<group_image_info_t> *images);
 
