@@ -536,6 +536,10 @@ namespace ceph {
       constexpr mon_feature_t FEATURE_SQUID(      (1ULL << 10));
       constexpr mon_feature_t FEATURE_TENTACLE(   (1ULL << 11));
 
+
+      // Release-independent features
+      constexpr mon_feature_t FEATURE_NVMEOF_BEACON_DIFF(   (1ULL << 32));
+
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
 
@@ -558,6 +562,10 @@ namespace ceph {
 	  FEATURE_REEF |
 	  FEATURE_SQUID |
 	  FEATURE_TENTACLE |
+
+	  // Release-independent features
+	  FEATURE_NVMEOF_BEACON_DIFF |
+
 	  FEATURE_NONE
 	  );
       }
@@ -585,6 +593,10 @@ namespace ceph {
 	  FEATURE_REEF |
 	  FEATURE_SQUID |
 	  FEATURE_TENTACLE |
+
+	  // Release-independent features
+	  FEATURE_NVMEOF_BEACON_DIFF |
+
 	  FEATURE_NONE
 	  );
       }
@@ -663,6 +675,9 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "squid";
   } else if (f == FEATURE_TENTACLE) {
     return "tentacle";
+  // Release-independent features
+  } else if (f == FEATURE_NVMEOF_BEACON_DIFF) {
+    return "nvmeof_beacon_diff";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -695,6 +710,9 @@ inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string 
     return FEATURE_SQUID;
   } else if (n == "tentacle") {
     return FEATURE_TENTACLE;
+  // Release-independent features
+  } else if (n == "nvmeof_beacon_diff") {
+    return FEATURE_NVMEOF_BEACON_DIFF;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }
