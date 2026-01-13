@@ -1,6 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild, ViewEncapsulation } from '@angular/core';
-import { BehaviorSubject, forkJoin, Observable, of } from 'rxjs';
-import { catchError, map, switchMap, tap } from 'rxjs/operators';
+import { Router } from '@angular/router';
+import { BehaviorSubject, forkJoin, Observable, of, timer } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
 import { GatewayGroup, NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { HostService } from '~/app/shared/api/host.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -41,11 +42,14 @@ export class NvmeofGatewayGroupComponent implements OnInit {
   @ViewChild('dateTpl', { static: true })
   dateTpl: TemplateRef<any>;
 
-  @ViewChild('gatewayStatusTpl', { static: true })
-  gatewayStatusTpl: TemplateRef<any>;
+  @ViewChild('customTableItemTemplate', { static: true })
+  customTableItemTemplate: TemplateRef<any>;
 
   @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
+
+  @ViewChild('gatewayStatusTpl', { static: true })
+  gatewayStatusTpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -72,7 +76,8 @@ export class NvmeofGatewayGroupComponent implements OnInit {
     private cephServiceService: CephServiceService,
     public taskWrapper: TaskWrapperService,
     private notificationService: NotificationService,
-    private urlBuilder: URLBuilderService
+    private urlBuilder: URLBuilderService,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
@@ -81,7 +86,8 @@ export class NvmeofGatewayGroupComponent implements OnInit {
     this.columns = [
       {
         name: $localize`Name`,
-        prop: 'name'
+        prop: 'name',
+        cellTemplate: this.customTableItemTemplate
       },
       {
         name: $localize`Gateways`,
@@ -107,6 +113,14 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
 
+    const viewAction: CdTableAction = {
+      permission: 'read',
+      icon: Icons.eye,
+      click: () => this.getViewDetails(),
+      name: $localize`View details`,
+      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
+    };
+
     const deleteAction: CdTableAction = {
       permission: 'delete',
       icon: Icons.destroy,
@@ -114,7 +128,9 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       name: this.actionLabels.DELETE,
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
-    this.tableActions = [createAction, deleteAction];
+
+    this.tableActions = [createAction, viewAction, deleteAction];
+
     this.gatewayGroup$ = this.subject.pipe(
       switchMap(() =>
         this.nvmeofService.listGatewayGroups().pipe(
@@ -206,7 +222,8 @@ export class NvmeofGatewayGroupComponent implements OnInit {
             call: this.cephServiceService.delete(serviceName)
           })
           .pipe(
-            tap(() => {
+            switchMap(() => timer(25000)),
+            map(() => {
               this.table.refreshBtn();
             }),
             catchError((error) => {
@@ -221,7 +238,6 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       }
     });
   }
-
   private checkNodesAvailability(): void {
     forkJoin([this.nvmeofService.listGatewayGroups(), this.hostService.getAllHosts()]).subscribe(
       ([groups, hosts]: [GatewayGroup[][], any[]]) => {
@@ -243,5 +259,18 @@ export class NvmeofGatewayGroupComponent implements OnInit {
         this.nodesAvailable = false;
       }
     );
+  }
+
+  getViewDetails() {
+    const selectedGroup = this.selection.first();
+    if (!selectedGroup) {
+      return;
+    }
+    const groupName = selectedGroup.spec?.group ?? selectedGroup.name ?? null;
+    if (!groupName) {
+      return;
+    }
+    const url = `/block/nvmeof/gateways/view/${encodeURIComponent(groupName)}`;
+    this.router.navigateByUrl(url);
   }
 }
