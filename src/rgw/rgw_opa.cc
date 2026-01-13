@@ -79,7 +79,7 @@ int rgw_opa_authorize(RGWOp *& op,
 
   /* check OPA response */
   JSONParser parser;
-  if (!parser.parse(bl.c_str(), bl.length())) {
+  if (!parser.parse(bl)) {
     ldpp_dout(op, 2) << "OPA parse error: malformed json" << dendl;
     return -EINVAL;
   }

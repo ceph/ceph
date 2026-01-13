@@ -147,7 +147,6 @@ if(FREEBSD)
   list(APPEND CMAKE_REQUIRED_INCLUDES /usr/local/include)
 endif(FREEBSD)
 
-
 #put all the libs and binaries in one place
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -185,6 +184,12 @@ if(NOT HAVE_CXX11_ATOMIC)
   string(APPEND CMAKE_CXX_STANDARD_LIBRARIES
     " ${LIBATOMIC_LINK_FLAGS}")
 endif()
+
+include(${CMAKE_MODULE_PATH}/CephAddCPM.cmake)
+
+add_cpm("Glaze" FALSE "gh:stephenberry/glaze@7.6.0#v7.6.0")
+get_target_property(GLAZE_INCLUDE_DIRS glaze::glaze INTERFACE_INCLUDE_DIRECTORIES)
+include_directories(SYSTEM ${GLAZE_INCLUDE_DIRS})
 
 option(WITH_RDMA "Enable RDMA in async messenger" ON)
 if(WITH_RDMA)
@@ -532,27 +537,7 @@ option(WITH_CATCH2 "Enable Catch2 unit tests" ON)
 option(WITH_SYSTEM_CATCH2 "Enable Catch2 unit tests (require system packages)" OFF)
 
 if(WITH_CATCH2)
-  # Save pre-existing definitions (if any):
-  set(ORIG_CPM_LOCAL_PACKAGES_ONLY ${CPM_USE_LOCAL_PACKAGES_ONLY})
-
-    if(WITH_SYSTEM_CATCH2)
-   set(CPM_LOCAL_PACKAGES_ONLY ON)
-  endif()
-
-  include(${CMAKE_MODULE_PATH}/CPM.cmake)
-  CPMAddPackage("gh:catchorg/Catch2@3.8.1")
-
-  # Restore the original CPM settings in case someone else wants to use the module:
-  set(CPM_USE_LOCAL_PACKAGES_ONLY, ${ORIG_CPM_USE_LOCAL_PACKAGES_ONLY})
-
-  # CPM skips the fetch silently if downloads are disabled,
-  # e.g. with FETCHCONTENT_FULLY_DISCONNECTED=ON on deb builds
-  if(NOT TARGET Catch2::Catch2WithMain)
-    message(WARNING "Catch2 unavailable, disabling Catch2 tests")
-    set(WITH_CATCH2 OFF)
-  else()
-    message("-- Enabled Catch2 support")
-  endif()
+ add_cpm("Catch2" FALSE "gh:catchorg/Catch2@3.8.1")
 endif()
 
 # enable breakpad unless win32 or power
