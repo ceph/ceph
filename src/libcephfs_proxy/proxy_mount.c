@@ -770,7 +770,7 @@ static void proxy_instance_destroy(proxy_instance_t *instance)
 
 /* Create a new Ceph client instance with the provided id */
 static int32_t proxy_instance_create(proxy_instance_t **pinstance,
-				     const char *id)
+				     proxy_settings_t *settings, const char *id)
 {
 	struct ceph_mount_info *cmount;
 	proxy_instance_t *instance;
@@ -783,6 +783,7 @@ static int32_t proxy_instance_create(proxy_instance_t **pinstance,
 
 	list_init(&instance->siblings);
 	list_init(&instance->changes);
+	instance->settings = settings;
 	instance->cmount = NULL;
 	instance->inited = false;
 	instance->mounted = false;
@@ -1099,7 +1100,8 @@ static int32_t proxy_instance_unmount(proxy_instance_t **pinstance)
 	return 0;
 }
 
-int32_t proxy_mount_create(proxy_mount_t **pmount, const char *id)
+int32_t proxy_mount_create(proxy_mount_t **pmount, proxy_settings_t *settings,
+			   const char *id)
 {
 	proxy_mount_t *mount;
 	int32_t err;
@@ -1110,7 +1112,7 @@ int32_t proxy_mount_create(proxy_mount_t **pmount, const char *id)
 	}
 	mount->root = NULL;
 
-	err = proxy_instance_create(&mount->instance, id);
+	err = proxy_instance_create(&mount->instance, settings, id);
 	if (err < 0) {
 		proxy_free(mount);
 		return err;

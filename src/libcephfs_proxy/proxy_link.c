@@ -678,15 +678,18 @@ void proxy_link_close(proxy_link_t *link)
 	link->sd = -1;
 }
 
-int32_t proxy_link_server(proxy_link_t *link, const char *path,
+int32_t proxy_link_server(proxy_link_t *link, proxy_settings_t *settings,
 			  proxy_link_start_t start, proxy_link_stop_t stop)
 {
 	struct sockaddr_un addr;
+	const char *path;
 	socklen_t len;
 	int32_t cd, err;
 
 	link->stop = stop;
 	link->sd = -1;
+
+	path = settings->socket_path;
 
 	err = proxy_link_prepare(&addr, path);
 	if (err < 0) {
@@ -720,7 +723,7 @@ int32_t proxy_link_server(proxy_link_t *link, const char *path,
 					  "Failed to accept a connection");
 			}
 		} else {
-			start(link, cd);
+			start(link, settings, cd);
 		}
 	}
 
