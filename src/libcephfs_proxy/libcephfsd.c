@@ -2037,15 +2037,48 @@ static bool check_stop(proxy_link_t *link)
 static int32_t server_start(proxy_manager_t *manager)
 {
 	proxy_server_t server;
+	struct stat st;
 	proxy_t *proxy;
+	const char *path;
+	char *wd;
+	int32_t err;
 
 	proxy = container_of(manager, proxy_t, manager);
 
 	server.manager = manager;
 	server.settings = &proxy->settings;
 
-	return proxy_link_server(&server.link, &proxy->settings,
-				 accept_connection, check_stop);
+	path = proxy->settings.work_dir;
+	wd = realpath(path, NULL);
+	if (wd == NULL) {
+		return proxy_log(LOG_ERR, errno,
+				 "Failed to resolve the working directory");
+	}
+
+	if (stat(wd, &st) < 0) {
+		err = proxy_log(LOG_ERR, errno,
+				"Failed to check the working directory");
+		goto done;
+	}
+
+	if (!S_ISDIR(st.st_mode)) {
+		err = proxy_log(LOG_ERR, EINVAL,
+				"The provided path for the working directory "
+				"is not a directory");
+		goto done;
+	}
+
+	proxy->settings.work_dir = wd;
+
+	err = proxy_link_server(&server.link, &proxy->settings,
+				accept_connection, check_stop);
+
+	proxy->settings.work_dir = path;
+
+done:
+	free(wd);
+
+	return err;
 }
 
 static void log_format(struct iovec *iov, char *buffer, size_t size,
@@ -2099,9 +2132,12 @@ static void log_print(proxy_log_handler_t *handler, int32_t level, int32_t err,
 }
 
 static struct option main_opts[] = {
-	{"socket", required_argument, NULL, 's'},
+	{"socket",   required_argument, NULL, 's'},
+	{"work-dir", required_argument, NULL, 'w'},
 	{}
 };
+
+static const char short_opts[] = ":s:w:";
 
 int32_t main(int32_t argc, char *argv[])
 {
@@ -2118,15 +2154,18 @@ int32_t main(int32_t argc, char *argv[])
 	proxy_log_register(&proxy.log_handler, log_print);
 
 	proxy.settings.socket_path = PROXY_SOCKET;
+	proxy.settings.work_dir = ".";
 
 	env = getenv(PROXY_SOCKET_ENV);
 	if (env != NULL) {
 		proxy.settings.socket_path = env;
 	}
 
-	while ((val = getopt_long(argc, argv, ":s:", main_opts, NULL)) >= 0) {
+	while ((val = getopt_long(argc, argv, short_opts, main_opts, NULL)) >= 0) {
 		if (val == 's') {
 			proxy.settings.socket_path = optarg;
+		} else if (val == 'w') {
+			proxy.settings.work_dir = optarg;
 		} else if (val == ':') {
 			proxy_log(LOG_ERR, ENODATA,
 				  "Argument missing for '%s'\n", optopt);

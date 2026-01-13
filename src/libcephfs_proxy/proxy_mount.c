@@ -554,11 +554,11 @@ static int32_t proxy_config_source_validate(int32_t fd, struct stat *before,
 	return 1;
 }
 
-static int32_t proxy_config_destination_prepare(void)
+static int32_t proxy_config_destination_prepare(proxy_settings_t *settings)
 {
 	int32_t fd;
 
-	fd = openat(AT_FDCWD, ".", O_TMPFILE | O_WRONLY, 0600);
+	fd = open(settings->work_dir, O_TMPFILE | O_WRONLY, 0600);
 	if (fd < 0) {
 		return proxy_log(LOG_ERR, errno, "openat() failed");
 	}
@@ -587,16 +587,17 @@ static int32_t proxy_config_destination_write(int32_t fd, void *data,
 	return size;
 }
 
-static int32_t proxy_config_destination_commit(int32_t fd, const char *name)
+static int32_t proxy_config_destination_commit(proxy_settings_t *settings,
+					       int32_t fd, const char *path)
 {
-	char path[32];
+	char fd_path[32];
 	int32_t len;
 
 	if (fsync(fd) < 0) {
 		return proxy_log(LOG_ERR, errno, "fsync() failed");
 	}
 
-	if (linkat(fd, "", AT_FDCWD, name, AT_EMPTY_PATH) < 0) {
+	if (linkat(fd, "", AT_FDCWD, path, AT_EMPTY_PATH) < 0) {
 		if (errno == EEXIST) {
 			return 0;
 		}
@@ -606,12 +607,12 @@ static int32_t proxy_config_destination_commit(int32_t fd, const char *name)
 		 * filesystem. */
 	}
 
-	len = proxy_snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
+	len = proxy_snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
 	if (len < 0) {
 		return len;
 	}
 
-	if (linkat(AT_FDCWD, path, AT_FDCWD, name, AT_SYMLINK_FOLLOW) < 0) {
+	if (linkat(AT_FDCWD, fd_path, AT_FDCWD, path, AT_SYMLINK_FOLLOW) < 0) {
 		if (errno != EEXIST) {
 			return proxy_log(LOG_ERR, errno, "linkat() failed");
 		}
@@ -646,7 +647,8 @@ static int32_t proxy_config_transfer(void **ptr, void *data, int32_t idx)
 
 /* Copies and checksums a given configuration to a file and makes sure that it
  * has not been modified. */
-static int32_t proxy_config_prepare(const char *config, char *path,
+static int32_t proxy_config_prepare(proxy_settings_t *settings,
+				    const char *config, char *path,
 				    int32_t size)
 {
 	char hash[65];
@@ -667,7 +669,7 @@ static int32_t proxy_config_prepare(const char *config, char *path,
 		goto done_mem;
 	}
 
-	cfg.dst = proxy_config_destination_prepare();
+	cfg.dst = proxy_config_destination_prepare(settings);
 	if (cfg.dst < 0) {
 		err = cfg.dst;
 		goto done_src;
@@ -683,12 +685,13 @@ static int32_t proxy_config_prepare(const char *config, char *path,
 		goto done_dst;
 	}
 
-	err = proxy_snprintf(path, size, "ceph-%s.conf", hash);
+	err = proxy_snprintf(path, size, "%s/ceph-%s.conf", settings->work_dir,
+			     hash);
 	if (err < 0) {
 		goto done_dst;
 	}
 
-	err = proxy_config_destination_commit(cfg.dst, path);
+	err = proxy_config_destination_commit(settings, cfg.dst, path);
 
 done_dst:
 	proxy_config_destination_close(cfg.dst);
@@ -826,7 +829,7 @@ static int32_t proxy_instance_release(proxy_instance_t *instance)
 static int32_t proxy_instance_config(proxy_instance_t *instance,
 				     const char *config)
 {
-	char path[128], *ppath;
+	char path[strlen(instance->settings->work_dir) + 128], *ppath;
 	int32_t err;
 
 	if (instance->mounted) {
@@ -836,7 +839,8 @@ static int32_t proxy_instance_config(proxy_instance_t *instance,
 
 	ppath = NULL;
 	if (config != NULL) {
-		err = proxy_config_prepare(config, path, sizeof(path));
+		err = proxy_config_prepare(instance->settings, config, path,
+					   sizeof(path));
 		if (err < 0) {
 			return err;
 		}
