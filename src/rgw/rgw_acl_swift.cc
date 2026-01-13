@@ -285,38 +285,27 @@ int create_account_policy(const DoutPrefixProvider* dpp,
   policy.create_default(owner.id, owner.display_name);
   auto& acl = policy.get_acl();
 
-  JSONParser parser;
-  if (!parser.parse(acl_str.c_str(), acl_str.length())) {
+  ceph_json::value acl_json;
+  if (!ceph_json::parse(acl_str, acl_json)) {
     ldpp_dout(dpp, 0) << "ERROR: JSONParser::parse returned error=" << dendl;
     return -EINVAL;
   }
 
-  JSONObjIter iter = parser.find_first("admin");
-  if (!iter.end() && (*iter)->is_array()) {
-    std::vector<std::string> admin;
-    decode_json_obj(admin, *iter);
-    ldpp_dout(dpp, 0) << "admins: " << admin << dendl;
+  const auto add_acl_grants = [&] (std::string_view name, std::string_view label, int perm) {
+    const auto* values = ceph_json::find_value(acl_json, name);
+    if (!values || !values->is_array()) {
+      return;
+    }
 
-    add_grants(dpp, driver, admin, SWIFT_PERM_ADMIN, acl);
-  }
+    auto grants = ceph_json::decode_value<std::vector<std::string>>(*values);
+    ldpp_dout(dpp, 0) << label << ": " << grants << dendl;
 
-  iter = parser.find_first("read-write");
-  if (!iter.end() && (*iter)->is_array()) {
-    std::vector<std::string> readwrite;
-    decode_json_obj(readwrite, *iter);
-    ldpp_dout(dpp, 0) << "read-write: " << readwrite << dendl;
+    add_grants(dpp, driver, grants, perm, acl);
+  };
 
-    add_grants(dpp, driver, readwrite, SWIFT_PERM_RWRT, acl);
-  }
-
-  iter = parser.find_first("read-only");
-  if (!iter.end() && (*iter)->is_array()) {
-    std::vector<std::string> readonly;
-    decode_json_obj(readonly, *iter);
-    ldpp_dout(dpp, 0) << "read-only: " << readonly << dendl;
-
-    add_grants(dpp, driver, readonly, SWIFT_PERM_READ, acl);
-  }
+  add_acl_grants("admin", "admins", SWIFT_PERM_ADMIN);
+  add_acl_grants("read-write", "read-write", SWIFT_PERM_RWRT);
+  add_acl_grants("read-only", "read-only", SWIFT_PERM_READ);
 
   return 0;
 }
