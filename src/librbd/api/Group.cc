@@ -304,7 +304,8 @@ template <typename I>
 int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
                                  const char *group_name,
                                  librados::IoCtx& image_ioctx,
-                                 const char *image_id)
+                                 const char *image_id,
+                                 bool force)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
@@ -332,11 +333,11 @@ int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
                << cpp_strerror(r) << dendl;
     return r;
   } else if (r == 0) {
-    if (mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
+    if (!force && mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
       lderr(cct) << "cannot remove image from mirror enabled group" << dendl;
       return -EINVAL;
     }
-    if (promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
+    if (!force && promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
       lderr(cct) << "group is not primary, cannot remove image" << dendl;
       return -EINVAL;
     }
