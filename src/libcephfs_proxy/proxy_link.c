@@ -50,14 +50,10 @@ static int32_t proxy_link_prepare(struct sockaddr_un *addr, const char *path)
 
 	memset(addr, 0, sizeof(*addr));
 	addr->sun_family = AF_UNIX;
-	len = snprintf(addr->sun_path, sizeof(addr->sun_path), "%s", path);
+	len = proxy_snprintf(addr->sun_path, sizeof(addr->sun_path), "%s",
+			     path);
 	if (len < 0) {
-		return proxy_log(LOG_ERR, EINVAL,
-				 "Failed to copy Unix socket path");
-	}
-	if (len >= sizeof(addr->sun_path)) {
-		return proxy_log(LOG_ERR, ENAMETOOLONG,
-				 "Unix socket path too long");
+		return len;
 	}
 
 	sd = socket(AF_UNIX, SOCK_STREAM, 0);

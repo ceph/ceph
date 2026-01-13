@@ -590,6 +590,7 @@ static int32_t proxy_config_destination_write(int32_t fd, void *data,
 static int32_t proxy_config_destination_commit(int32_t fd, const char *name)
 {
 	char path[32];
+	int32_t len;
 
 	if (fsync(fd) < 0) {
 		return proxy_log(LOG_ERR, errno, "fsync() failed");
@@ -605,7 +606,11 @@ static int32_t proxy_config_destination_commit(int32_t fd, const char *name)
 		 * filesystem. */
 	}
 
-	snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
+	len = proxy_snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
+	if (len < 0) {
+		return len;
+	}
+
 	if (linkat(AT_FDCWD, path, AT_FDCWD, name, AT_SYMLINK_FOLLOW) < 0) {
 		if (errno != EEXIST) {
 			return proxy_log(LOG_ERR, errno, "linkat() failed");
@@ -678,14 +683,8 @@ static int32_t proxy_config_prepare(const char *config, char *path,
 		goto done_dst;
 	}
 
-	err = snprintf(path, size, "ceph-%s.conf", hash);
+	err = proxy_snprintf(path, size, "ceph-%s.conf", hash);
 	if (err < 0) {
-		err = proxy_log(LOG_ERR, errno, "snprintf() failed");
-		goto done_dst;
-	}
-	if (err >= size) {
-		err = proxy_log(LOG_ERR, ENOBUFS,
-				"Insufficient space to store the name");
 		goto done_dst;
 	}
 
