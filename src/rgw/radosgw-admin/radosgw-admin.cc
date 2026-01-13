@@ -2,8 +2,8 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
- * Copyright (C) 2025 IBM
- */
+ * Copyright (C) 2025-2026 IBM 
+*/
 
 #include <cerrno>
 #include <string>
@@ -21,6 +21,8 @@ extern "C" {
 }
 
 #include <fmt/format.h>
+
+#include <liboath/oath.h>
 
 #include "auth/Crypto.h"
 #include "compressor/Compressor.h"
@@ -1468,7 +1470,7 @@ static int read_decode_json(const string& infile, T& t)
     return ret;
   }
   JSONParser p;
-  if (!p.parse(bl.c_str(), bl.length())) {
+  if (!p.parse(bl)) { 
     cout << "failed to parse JSON" << std::endl;
     return -EINVAL;
   }
@@ -1492,7 +1494,7 @@ static int read_decode_json(const string& infile, T& t, K *k)
     return ret;
   }
   JSONParser p;
-  if (!p.parse(bl.c_str(), bl.length())) {
+  if (!p.parse(bl)) { 
     cout << "failed to parse JSON" << std::endl;
     return -EINVAL;
   }
@@ -2075,7 +2077,7 @@ static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
     return ret;
   }
 
-  ret = parser.parse(response.c_str(), response.length());
+  ret = parser.parse(response);
   if (ret < 0) {
     cerr << "failed to parse response" << std::endl;
     return ret;
@@ -2105,14 +2107,15 @@ static int send_to_url(const string& url,
   if (!result) {
     return result.error();
   }
+
   int ret = rgw_http_error_to_errno(*result);
   if (ret < 0) {
     return ret;
   }
 
-  ret = parser.parse(response.c_str(), response.length());
+  ret = parser.parse(response);
   if (ret < 0) {
-    cout << "failed to parse response" << std::endl;
+    cerr << "failed to parse remote response" << std::endl;
     return ret;
   }
   return 0;
@@ -2157,7 +2160,7 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
                              realm, realm_writer, current_period,
                              period, cerr, force, *site);
     if (ret < 0) {
-      cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
+      cerr << "commit_period(): failed to commit period: " << cpp_strerror(-ret) << std::endl;
     }
     (void) cfgstore->realm_notify_new_period(dpp(), null_yield, period);
     return ret;
@@ -2166,7 +2169,6 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
   if (remote.empty() && url.empty()) {
     // use the new master zone's connection
     remote = master_zone;
-    cerr << "Sending period to new master zone " << remote << std::endl;
   }
   boost::optional<RGWRESTConn> conn;
   RGWRESTConn *remote_conn = nullptr;
@@ -2211,13 +2213,15 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
   try {
     decode_json_obj(period, &p);
   } catch (const JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.what() << std::endl;
+    cerr << "failed to decode JSON input: " << e.what() << std::endl;
     return -EINVAL;
   }
+
   if (period.get_id().empty()) {
-    cerr << "Period commit got back an empty period id" << std::endl;
+    cerr << "commit_period(): Period commit got back an empty period id" << std::endl;
     return -EINVAL;
   }
+
   // the master zone gave us back the period that it committed, so it's
   // safe to save it as our latest epoch
   constexpr bool exclusive = false;
@@ -2288,18 +2292,21 @@ static int update_period(rgw::sal::ConfigStore* cfgstore,
 
   constexpr bool exclusive = false;
   ret = cfgstore->create_period(dpp(), null_yield, exclusive, period);
+
   if (ret < 0) {
     cerr << "failed to driver period: " << cpp_strerror(-ret) << std::endl;
     return ret;
   }
+
   if (commit) {
     ret = commit_period(cfgstore, realm, *realm_writer, period, remote, url,
                         opt_region, access, secret, force, site);
     if (ret < 0) {
-      cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
+      cerr << "update_period(): failed to commit period: " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
   }
+
   encode_json("period", period, formatter);
   formatter->flush(cout);
   return 0;
@@ -2351,6 +2358,7 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
     cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
     return ret;
   }
+
   try {
     decode_json_obj(*period, &p);
   } catch (const JSONDecoder::err& e) {
@@ -3724,6 +3732,7 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
 // would need to be terminated, so the warning is simply suppressed.
 // coverity[root_function:SUPPRESS]
 int main(int argc, const char **argv)
+try
 {
   auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
@@ -5677,10 +5686,19 @@ int main(int argc, const char **argv)
         info.request_uri = "/admin/realm";
 
         map<string, string> &params = info.args.get_params();
-        if (!realm_id.empty())
-          params["id"] = realm_id;
-        if (!realm_name.empty())
-          params["name"] = realm_name;
+
+	if (realm_name.empty()) {
+	  cerr << "missing realm name" << std::endl;
+	  return EINVAL;
+	}
+
+        if (realm_id.empty()) {
+	  cerr << "missing realm id" << std::endl;
+	  return EINVAL;
+        }
+
+        params["id"] = realm_id;
+        params["name"] = realm_name;
 
         bufferlist bl;
         JSONParser p;
@@ -5694,6 +5712,7 @@ int main(int argc, const char **argv)
           }
           return -ret;
         }
+
         RGWRealm realm;
         try {
           decode_json_obj(realm, &p);
@@ -5701,6 +5720,7 @@ int main(int argc, const char **argv)
           cerr << "failed to decode JSON response: " << e.what() << std::endl;
           return EINVAL;
         }
+
         RGWPeriod period;
         auto& current_period = realm.get_current_period();
         if (!current_period.empty()) {
@@ -7374,7 +7394,7 @@ int main(int argc, const char **argv)
                           remote, url, opt_region, access_key, secret_key,
                           yes_i_really_mean_it, site.get());
       if (ret < 0) {
-        cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
+        cerr << "OPT::PERIOD_COMMIT: failed to commit period: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
 
@@ -12311,6 +12331,7 @@ next:
     if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
         driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
       show_topics_info_v2(topic, subscribed_buckets, formatter.get());
+
     } else {
       encode_json("topic", topic, formatter.get());
     }
@@ -12790,4 +12811,10 @@ next:
     formatter->flush(cout);
   }
   return 0;
+}
+catch(const std::exception& e)
+{
+ std::cerr << "exception: " << e.what() << std::endl;
+
+ return 1;
 }

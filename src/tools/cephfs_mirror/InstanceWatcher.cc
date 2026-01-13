@@ -89,10 +89,10 @@ void InstanceWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
   std::string mode;
   bool purging = false;
   try {
-    JSONDecoder jd(bl);
-    JSONDecoder::decode_json("dir_path", dir_path, &jd.parser, true);
-    JSONDecoder::decode_json("mode", mode, &jd.parser, true);
-    JSONDecoder::decode_json("purging", purging, &jd.parser, false);
+    const auto notify = ceph_json::parse(bl);
+    dir_path = ceph_json::require<std::string>(notify, "dir_path");
+    mode = ceph_json::require<std::string>(notify, "mode");
+    purging = ceph_json::field_or(notify, "purging", false);
   } catch (const JSONDecoder::err &e) {
     derr << ": failed to decode notify json: " << e.what() << dendl;
   }
