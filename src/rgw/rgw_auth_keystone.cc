@@ -91,9 +91,6 @@ admin_token_retry:
 
   ret = validate.process(dpp, y);
 
-  /* NULL terminate for debug output. */
-  token_body_bl.append(static_cast<char>(0));
-
   /* Detect Keystone rejection earlier than during the token parsing.
    * Although failure at the parsing phase doesn't impose a threat,
    * this allows to return proper error code (EACCESS instead of EINVAL
@@ -128,7 +125,7 @@ admin_token_retry:
   }
 
   ldpp_dout(dpp, 20) << "received response status=" << validate.get_http_status()
-                 << ", body=" << token_body_bl.c_str() << dendl;
+                 << ", body=" << std::string_view(token_body_bl.c_str()) << dendl;
 
   TokenEngine::token_envelope_t token_body;
   ret = token_body.parse(dpp, token, token_body_bl);
@@ -559,22 +556,17 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
 
   /* now parse response */
 
-  JSONParser parser;
-  if (! parser.parse(token_body_bl.c_str(), token_body_bl.length())) {
+  ceph_json::value response;
+  if (!ceph_json::parse(token_body_bl, response)) {
     ldpp_dout(dpp, 0) << "Keystone credential parse error: malformed json" << dendl;
     return make_pair(boost::none, -EINVAL);
   }
 
-  JSONObjIter credential_iter = parser.find_first("credential");
   std::string secret_string;
 
   try {
-    if (!credential_iter.end()) {
-      JSONDecoder::decode_json("secret", secret_string, *credential_iter, true);
-    } else {
-      ldpp_dout(dpp, 0) << "Keystone credential not present in return from server" << dendl;
-      return make_pair(boost::none, -EINVAL);
-    }
+    const auto& credential = ceph_json::require_object(response, "credential");
+    secret_string = ceph_json::require<std::string>(credential, "secret");
   } catch (const JSONDecoder::err& err) {
     ldpp_dout(dpp, 0) << "Keystone credential parse error: " << err.what() << dendl;
     return make_pair(boost::none, -EINVAL);

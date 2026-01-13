@@ -17,7 +17,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <algorithm>
 #include <iostream>
+#include <iterator>
+#include <ranges>
+#include <span>
 #include <string>
 #include <sstream>
 #include <pthread.h>
@@ -28,7 +32,6 @@
 #include "common/common_init.h"
 #include "common/ceph_json.h"
 #include "common/errno.h"
-#include "common/ceph_json.h"
 #include "common/async/blocked_completion.h"
 #include "include/buffer.h"
 #include "include/stringify.h"
@@ -1141,33 +1144,31 @@ int librados::RadosClient::get_inconsistent_pgs(int64_t pool_id,
     // no pg returned
     return 0;
   }
-  JSONParser parser;
-  if (!parser.parse(outbl.c_str(), outbl.length())) {
+
+  ceph_json::value response;
+  if (!ceph_json::parse(outbl, response)) {
     return -EINVAL;
   }
-  vector<string> v;
-  if (!parser.is_array()) {
-    JSONObj *pgstat_obj = parser.find_obj("pg_stats");
-    if (!pgstat_obj)
-      return 0;
-    auto s = pgstat_obj->get_data();
-    JSONParser pg_stats;
-    if (!pg_stats.parse(s.c_str(), s.length())) {
-      return -EINVAL;
+
+  const auto pg_entries = [&]() -> std::span<const ceph_json::value> {
+    if (response.is_array()) {
+      return ceph_json::array_view(response);
     }
-    v = pg_stats.get_array_elements();
-  } else {
-    v = parser.get_array_elements();
-  }
-  for (auto i : v) {
-    JSONParser pg_json;
-    if (!pg_json.parse(i.c_str(), i.length())) {
-      return -EINVAL;
+
+    auto* pg_stats = ceph_json::find_value(response, "pg_stats");
+    if (!pg_stats) {
+      return {};
     }
+
+    return ceph_json::array_view(*pg_stats);
+  }();
+
+  std::ranges::transform(pg_entries, std::back_inserter(*pgs), [] (const auto& pg) {
     string pgid;
-    JSONDecoder::decode_json("pgid", pgid, &pg_json);
-    pgs->emplace_back(std::move(pgid));
-  }
+    ceph_json::decode_field("pgid", pgid, pg);
+    return pgid;
+  });
+
   return 0;
 }
 

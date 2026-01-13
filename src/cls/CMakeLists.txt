@@ -100,9 +100,9 @@ endif (WITH_RADOSGW)
 # cls_refcount
 set(cls_refcount_srcs
   refcount/cls_refcount.cc
-  refcount/cls_refcount_ops.cc
-  ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
+  refcount/cls_refcount_ops.cc)
 add_library(cls_refcount SHARED ${cls_refcount_srcs})
+target_link_libraries(cls_refcount ceph-json)
 set_target_properties(cls_refcount PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
@@ -202,10 +202,9 @@ if (WITH_RADOSGW)
   set(cls_rgw_srcs
     rgw/cls_rgw.cc
     rgw/cls_rgw_ops.cc
-    rgw/cls_rgw_types.cc
-    ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
+    rgw/cls_rgw_types.cc)
   add_library(cls_rgw SHARED ${cls_rgw_srcs})
-  target_link_libraries(cls_rgw ${FMT_LIB})
+  target_link_libraries(cls_rgw ${FMT_LIB} ceph-json)
   target_include_directories(cls_rgw
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
@@ -300,9 +299,9 @@ install(TARGETS cls_cas DESTINATION ${cls_dir})
 #cls_queue
 set(cls_queue_srcs
   queue/cls_queue.cc
-  queue/cls_queue_src.cc
-  ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
+  queue/cls_queue_src.cc)
 add_library(cls_queue SHARED ${cls_queue_srcs})
+target_link_libraries(cls_queue ceph-json)
 set_target_properties(cls_queue PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
@@ -318,9 +317,9 @@ add_library(cls_queue_client STATIC ${cls_queue_client_srcs})
 if (WITH_RADOSGW)
   set(cls_rgw_gc_srcs
     rgw_gc/cls_rgw_gc.cc
-    queue/cls_queue_src.cc
-    ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
+    queue/cls_queue_src.cc)
   add_library(cls_rgw_gc SHARED ${cls_rgw_gc_srcs})
+  target_link_libraries(cls_rgw_gc ceph-json)
   target_include_directories(cls_rgw_gc
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
@@ -352,9 +351,9 @@ endif (WITH_RADOSGW)
 #cls_2pc_queue
 set(cls_2pc_queue_srcs
   2pc_queue/cls_2pc_queue.cc
-  queue/cls_queue_src.cc
-  ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
+  queue/cls_queue_src.cc)
 add_library(cls_2pc_queue SHARED ${cls_2pc_queue_srcs})
+target_link_libraries(cls_2pc_queue ceph-json)
 set_target_properties(cls_2pc_queue PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"

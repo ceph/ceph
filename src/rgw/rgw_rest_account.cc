@@ -14,6 +14,7 @@
  */
 
 #include "rgw_rest_account.h"
+#include "common/ceph_json.h"
 #include "rgw_account.h"
 #include "rgw_process_env.h"
 
@@ -73,9 +74,8 @@ void RGWOp_Account_Create::execute(optional_yield y)
 
   if (!driver->is_meta_master()) {
     bufferlist data;
-    JSONParser parser;
     op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                           &data, &parser, s->info, s->err, y);
+                                           &data, nullptr, s->info, s->err, y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -83,7 +83,16 @@ void RGWOp_Account_Create::execute(optional_yield y)
 
     // the master zone may have generated its own account id, use the same
     std::string meta_master_id;
-    JSONDecoder::decode_json("id", meta_master_id, &parser);
+    try {
+      const auto response = ceph_json::parse(data);
+      meta_master_id = ceph_json::require<std::string>(response, "id");
+    } catch (const JSONDecoder::err& e) {
+      ldpp_dout(this, 4) << "forward_request_to_master returned invalid account id: "
+                         << e.what() << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
     if (meta_master_id.empty()) {
       ldpp_dout(this, 4) << "forward_request_to_master returned empty account id" << dendl;
       op_ret = -EINVAL;

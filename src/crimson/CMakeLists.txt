@@ -43,6 +43,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_fs.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_hash.cc
+  ${PROJECT_SOURCE_DIR}/src/common/ceph_json.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_time.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_strings.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_releases.cc
@@ -60,7 +61,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/hex.cc
   ${PROJECT_SOURCE_DIR}/src/common/frag.cc
   ${PROJECT_SOURCE_DIR}/src/common/fs_types.cc
-  ${PROJECT_SOURCE_DIR}/src/common/ceph_json.cc
   ${PROJECT_SOURCE_DIR}/src/common/histogram.cc
   ${PROJECT_SOURCE_DIR}/src/common/hobject.cc
   ${PROJECT_SOURCE_DIR}/src/common/hostname.cc
@@ -153,6 +153,8 @@ target_link_libraries(crimson-common
     crimson::cflags
   PRIVATE
     crc32 arch
+    glaze::glaze
+    ${FMT_LIB}
     Boost::iostreams
     Boost::random
     json_spirit
@@ -166,7 +168,6 @@ set(crimson_auth_srcs
   ${PROJECT_SOURCE_DIR}/src/auth/AuthMethodList.cc
   ${PROJECT_SOURCE_DIR}/src/auth/AuthRegistry.cc
   ${PROJECT_SOURCE_DIR}/src/auth/AuthSessionHandler.cc
-  ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
   ${PROJECT_SOURCE_DIR}/src/auth/KeyRing.cc
   ${PROJECT_SOURCE_DIR}/src/auth/RotatingKeyRing.cc
   ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxAuthorizeHandler.cc

@@ -110,6 +110,26 @@ download_liburing() {
     rm -rf src/liburing
 }
 
+download_glaze() {
+    glaze_version=$1
+    shift
+    glaze_sha256=$1
+    shift
+    glaze_fname=v${glaze_version}.tar.gz
+    download_from $glaze_fname $glaze_sha256 $*
+    tar xzf $glaze_fname -C src \
+        --exclude=.devcontainer \
+        --exclude=.github \
+        --exclude=benchmarks \
+        --exclude=docs \
+        --exclude=examples \
+        --exclude=fuzzing \
+        --exclude=tests
+    mv src/glaze-${glaze_version} src/glaze
+    tar cf ${outfile}.glaze.tar ${outfile}/src/glaze
+    rm -rf src/glaze
+}
+
 download_pmdk() {
     pmdk_version=$1
     shift
@@ -199,6 +219,8 @@ download_boost $boost_version af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11
 download_liburing 2.5 456f5f882165630f0dc7b75e8fd53bd01a955d5d4720729b4323097e6e9f2a98 \
                   https://github.com/axboe/liburing/archive \
                   https://git.kernel.dk/cgit/liburing/snapshot
+download_glaze 7.6.0 839cd7bd2bda4db1a4e973f18851c2ecdccf82c75512453f68b2389d43a3e8ad \
+               https://github.com/stephenberry/glaze/archive/refs/tags
 pmdk_version=1.10
 download_pmdk $pmdk_version 08dafcf94db5ac13fac9139c92225d9aa5f3724ea74beee4e6ca19a01a2eb20c \
                https://github.com/pmem/pmdk/releases/download/$pmdk_version
@@ -207,6 +229,7 @@ generate_rook_ceph_client
 for tarball in $outfile.version   \
                $outfile.boost     \
                $outfile.liburing  \
+               $outfile.glaze     \
                $outfile.pmdk  \
                dashboard_frontend \
                rook_ceph_client   \
