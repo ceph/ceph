@@ -164,28 +164,34 @@ auto get_policy_from_text(req_state* const s, const std::string& policy_text)
 using rgw::IAM::Effect;
 using rgw::IAM::Policy;
 
-Effect evaluate_resource_permission(const DoutPrefixProvider* dpp, req_state* s,
-                                    const rgw_owner& owner, const rgw::ARN& arn,
-                                    const boost::optional<Policy>& policy,
-                                    uint64_t op)
+Effect evaluate_resource_permission(
+    const DoutPrefixProvider* dpp,
+    const rgw::IAM::Environment& env,
+    const rgw::auth::Identity& identity,
+    uint64_t op,
+    const rgw::ARN& arn,
+    const rgw_owner& resource_owner,
+    const boost::optional<Policy>& resource_policy,
+    const std::vector<Policy>& identity_policies,
+    const std::vector<Policy>& session_policies)
 {
-  if (s->auth.identity->get_account()) {
-    const bool account_root = (s->auth.identity->get_identity_type() == TYPE_ROOT);
-    if (!s->auth.identity->is_owner_of(owner)) {
+  if (identity.get_account()) {
+    const bool account_root = (identity.get_identity_type() == TYPE_ROOT);
+    if (!identity.is_owner_of(resource_owner)) {
       ldpp_dout(dpp, 4) << "cross-account request for resource owner "
-          << owner << " != " << s->owner.id << dendl;
+          << resource_owner << " != " << identity.get_aclowner().id << dendl;
       constexpr bool cross_account = true;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
       const auto identity_res = evaluate_iam_policies(
-          dpp, s->env, *s->auth.identity, account_root, op, arn, {},
-          s->iam_identity_policies, s->session_policies, cross_account);
+          dpp, env, identity, account_root, op, arn, {},
+          identity_policies, session_policies, cross_account);
       if (identity_res == Effect::Deny) {
         return Effect::Deny;
       }
       const auto resource_res = evaluate_iam_policies(
-          dpp, s->env, *s->auth.identity, false, op, arn,
-          policy, {}, {}, cross_account);
+          dpp, env, identity, false, op, arn,
+          resource_policy, {}, {}, cross_account);
       if (resource_res == Effect::Deny) {
         return Effect::Deny;
       }
@@ -197,24 +203,26 @@ Effect evaluate_resource_permission(const DoutPrefixProvider* dpp, req_state* s,
       // require an Allow from either identity- or resource-based policy
       constexpr bool cross_account = false;
       return evaluate_iam_policies(
-          dpp, s->env, *s->auth.identity, account_root, op, arn, policy,
-          s->iam_identity_policies, s->session_policies, cross_account);
+          dpp, env, identity, account_root, op, arn, resource_policy,
+          identity_policies, session_policies, cross_account);
     }
   }
 
   constexpr bool account_root = false;
   constexpr bool cross_account = false;
   return evaluate_iam_policies(
-      dpp, s->env, *s->auth.identity, account_root, op, arn, policy,
-      s->iam_identity_policies, s->session_policies, cross_account);
+      dpp, env, identity, account_root, op, arn, resource_policy,
+      identity_policies, session_policies, cross_account);
 }
 
 bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
                              const rgw_owner& owner, const rgw::ARN& arn,
-                             const boost::optional<Policy>& policy,
+                             const boost::optional<rgw::IAM::Policy>& policy,
                              uint64_t op)
 {
-  const auto effect = evaluate_resource_permission(dpp, s, owner, arn, policy, op);
+  const auto effect = evaluate_resource_permission(
+      dpp, s->env, *s->auth.identity, op, arn, owner, policy,
+      s->iam_identity_policies, s->session_policies);
   if (effect == Effect::Deny) {
     return false;
   }
@@ -255,7 +263,7 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
                              const rgw_pubsub_topic& topic,
                              const rgw::ARN& arn, uint64_t op)
 {
-  boost::optional<Policy> policy;
+  boost::optional<rgw::IAM::Policy> policy;
   if (!topic.policy_text.empty()) {
     policy = get_policy_from_text(s, topic.policy_text);
     if (!policy) {
