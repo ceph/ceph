@@ -478,26 +478,24 @@ have access to all hosts that you plan to add to the cluster.
    * AlertManager container image
 
 #. Create a temporary configuration file to store the names of the monitoring
-   images. (See :ref:`cephadm_monitoring-images`):
+   images (see :ref:`cephadm_monitoring-images`):
 
-   .. prompt:: bash $
+   .. prompt:: bash $ auto
 
-      cat <<EOF > initial-ceph.conf
-
-   ::
-
+      $ cat <<EOF > initial-ceph.conf
       [mgr]
       mgr/cephadm/container_image_prometheus = <hostname>:5000/prometheus
       mgr/cephadm/container_image_node_exporter = <hostname>:5000/node_exporter
       mgr/cephadm/container_image_grafana = <hostname>:5000/grafana
       mgr/cephadm/container_image_alertmanager = <hostname>:5000/alertmanger
+      EOF
 
-#. Run bootstrap using the ``--image`` flag and pass the name of your
-   container image as the argument of the image flag. For example:
+#. Run bootstrap using the temporary configuration file and pass the name of your
+   container image as the argument of the ``--image`` flag. For example:
 
    .. prompt:: bash #
 
-      cephadm --image <hostname>:5000/ceph/ceph bootstrap --mon-ip <mon-ip>
+      cephadm --image <hostname>:5000/ceph/ceph bootstrap --mon-ip <mon-ip> --conf initial-ceph.conf
 
 
 .. _cephadm-bootstrap-custom-ssh-keys:
