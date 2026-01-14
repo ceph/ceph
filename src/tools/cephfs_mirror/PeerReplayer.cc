@@ -1267,7 +1267,13 @@ int PeerReplayer::pre_sync_check_and_open_handles(
   {
     std::scoped_lock locker(m_lock);
     auto it = m_registered.find(dir_root);
-    ceph_assert(it != m_registered.end());
+    if (it == m_registered.end()) {
+      dout(5) << ": open handle came after unregister, this is from datasync threads"
+              << " on crawl or datasync error - returning EINVAL " << dendl;
+      ceph_close(m_local_mount, fh->c_fd);
+      ceph_close(fh->p_mnt, fh->p_fd);
+      return -EINVAL;
+    }
     fh->r_fd_dir_root = it->second.fd;
   }
 
