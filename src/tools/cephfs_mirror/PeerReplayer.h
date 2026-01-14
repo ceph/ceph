@@ -195,6 +195,10 @@ private:
 
     virtual void finish_sync() = 0;
 
+    void push_dataq_entry(PeerReplayer::SyncEntry e);
+    bool pop_dataq_entry(PeerReplayer::SyncEntry &out);
+    void mark_crawl_finished();
+
   protected:
     MountRef m_local;
     MountRef m_remote;
@@ -203,6 +207,11 @@ private:
     Snapshot m_current;
     boost::optional<Snapshot> m_prev;
     std::stack<PeerReplayer::SyncEntry> m_sync_stack;
+
+    ceph::mutex sdq_lock;
+    ceph::condition_variable sdq_cv;
+    std::queue<PeerReplayer::SyncEntry> m_sync_dataq;
+    bool m_sync_crawl_finished = false;
   };
 
   class RemoteSync : public SyncMechanism {

@@ -1305,10 +1305,40 @@ PeerReplayer::SyncMechanism::SyncMechanism(MountRef local, MountRef remote, FHan
       m_fh(fh),
       m_peer(peer),
       m_current(current),
-      m_prev(prev) {
+      m_prev(prev),
+      sdq_lock(ceph::make_mutex("cephfs::mirror::PeerReplayer::SyncMechanism" + stringify(peer.uuid))) {
   }
 
 PeerReplayer::SyncMechanism::~SyncMechanism() {
+}
+
+void PeerReplayer::SyncMechanism::push_dataq_entry(SyncEntry e) {
+  dout(10) << ": snapshot data replayer dataq pushed" << " syncm=" << this
+	   << " epath=" << e.epath << dendl;
+  std::unique_lock lock(sdq_lock);
+  m_sync_dataq.push(std::move(e));
+  sdq_cv.notify_all();
+}
+
+bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
+  std::unique_lock lock(sdq_lock);
+  dout(20) << ": snapshot data replayer waiting on m_sync_dataq, syncm=" << this << dendl;
+  sdq_cv.wait(lock, [this]{ return !m_sync_dataq.empty() || m_sync_crawl_finished;});
+  dout(20) << ": snapshot data replayer woke up to process m_syncm_dataq, syncm=" << this << dendl;
+  if (m_sync_dataq.empty() && m_sync_crawl_finished)
+     return false; // no more work
+
+  out_entry = std::move(m_sync_dataq.front());
+  m_sync_dataq.pop();
+  dout(10) << ": snapshot data replayer dataq popped" << " syncm=" << this
+	   << " epath=" << out_entry.epath << dendl;
+  return true;
+}
+
+void PeerReplayer::SyncMechanism::mark_crawl_finished() {
+  std::unique_lock lock(sdq_lock);
+  m_sync_crawl_finished = true;
+  sdq_cv.notify_all();
 }
 
 int PeerReplayer::SyncMechanism::get_changed_blocks(const std::string &epath,
@@ -2165,7 +2195,11 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
 
     // TODO pre_sync and open handles
 
-    // TODO Wait and fetch files from syncm data queue and sync
+    // Wait on data sync queue for entries to process
+    SyncEntry entry;
+    while (syncm->pop_dataq_entry(entry)) {
+      //TODO Process entry
+    }
 
     // Dequeue syncm object after processing
     {
