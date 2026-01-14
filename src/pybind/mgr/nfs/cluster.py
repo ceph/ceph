@@ -169,6 +169,9 @@ class NFSCluster:
             tls_debug: bool = False,
             tls_min_version: Optional[str] = None,
             tls_ciphers: Optional[str] = None,
+            ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_port: Optional[int] = None,
             enable_rdma: bool = False,
             rdma_port: Optional[int] = None,
     ) -> None:
@@ -214,6 +217,9 @@ class NFSCluster:
                                   tls_debug=tls_debug,
                                   tls_min_version=tls_min_version,
                                   tls_ciphers=tls_ciphers,
+                                  ip_addrs=ip_addrs,
+                                  monitoring_ip_addrs=monitoring_ip_addrs,
+                                  monitoring_port=monitoring_port,
                                   enable_rdma=enable_rdma,
                                   rdma_port=rdma_port)
             completion = self.mgr.apply_nfs(spec)
@@ -243,6 +249,9 @@ class NFSCluster:
                                   tls_debug=tls_debug,
                                   tls_min_version=tls_min_version,
                                   tls_ciphers=tls_ciphers,
+                                  ip_addrs=ip_addrs,
+                                  monitoring_ip_addrs=monitoring_ip_addrs,
+                                  monitoring_port=monitoring_port,
                                   enable_rdma=enable_rdma,
                                   rdma_port=rdma_port)
             completion = self.mgr.apply_nfs(spec)
@@ -277,6 +286,9 @@ class NFSCluster:
             tls_debug: bool = False,
             tls_min_version: Optional[str] = None,
             tls_ciphers: Optional[str] = None,
+            ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_port: Optional[int] = None,
             enable_rdma: bool = False,
             rdma_port: Optional[int] = None,
     ) -> None:
@@ -317,6 +329,9 @@ class NFSCluster:
                     tls_debug=tls_debug,
                     tls_min_version=tls_min_version,
                     tls_ciphers=tls_ciphers,
+                    ip_addrs=ip_addrs,
+                    monitoring_ip_addrs=monitoring_ip_addrs,
+                    monitoring_port=monitoring_port,
                     enable_rdma=enable_rdma,
                     rdma_port=rdma_port
                 )
@@ -399,7 +414,7 @@ class NFSCluster:
                     ingress_mode = IngressType.haproxy_protocol
                 else:
                     ingress_mode = IngressType.haproxy_standard
-                r['ingress_mode'] = ingress_mode.value
+            r['ingress_mode'] = ingress_mode.value
 
         log.debug("Successfully fetched %s info: %s", cluster_id, r)
         return r
