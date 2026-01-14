@@ -132,6 +132,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
                                 port: Optional[int] = None,
+                                bind_addrs: Optional[str] = None,
+                                monitoring_addrs: Optional[str] = None,
+                                monitoring_port: Optional[int] = None,
                                 inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
         ssl_cert = ssl_key = ssl_ca_cert = tls_min_version = tls_ciphers = None
@@ -147,9 +150,29 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             tls_debug = config.get('tls_debug')
             tls_ciphers = config.get('tls_ciphers')
 
+        # Parse bind_addrs and monitoring_addrs from CLI format
+        ip_addrs = None
+        if bind_addrs:
+            ip_addrs = {}
+            for pair in bind_addrs.split(','):
+                if ':' in pair:
+                    host, ip = pair.split(':', 1)
+                    ip_addrs[host.strip()] = ip.strip()
+
+        monitoring_ip_addrs = None
+        if monitoring_addrs:
+            monitoring_ip_addrs = {}
+            for pair in monitoring_addrs.split(','):
+                if ':' in pair:
+                    host, ip = pair.split(':', 1)
+                    monitoring_ip_addrs[host.strip()] = ip.strip()
+
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
                                            ingress_mode=ingress_mode, port=port,
+                                           ip_addrs=ip_addrs,
+                                           monitoring_ip_addrs=monitoring_ip_addrs,
+                                           monitoring_port=monitoring_port,
                                            ssl=ssl,
                                            ssl_cert=ssl_cert,
                                            ssl_key=ssl_key,
