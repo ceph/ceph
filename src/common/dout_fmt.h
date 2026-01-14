@@ -54,3 +54,25 @@ inline void dout_fmt_use_prefix(std::ostream&) {}
     fmt::print(*_dout, __VA_ARGS__); \
     *_dout << dendl; \
   }
+
+// This is useful for debugging during development, please do NOT leave calls to it lying around in production:
+inline void dout_trace(const std::string_view info, const std::string_view msg_tag = "dout-TRACE", const std::source_location sl = std::source_location::current())
+{
+ // ...this is an attempt only, as the extension is non-standard-- do NOT count on getting the values back:
+#pragma push_macro("dout_subsys")
+#pragma push_macro("dout_context")
+  
+ #define dout_subsys ceph_subsys_rgw
+ #define dout_context g_ceph_context
+
+ dout_fmt(0, "{} [{}]: {}", msg_tag, fmt::format("{}#{}", sl.file_name(), sl.function_name()), info);
+
+#pragma pop_macro("dout_subsys")
+#pragma pop_macro("dout_context")
+} 
+
+inline void dout_trace(const std::source_location sl = std::source_location::current())
+{
+ dout_trace("", "dout-TRACE", sl);
+} 
+
