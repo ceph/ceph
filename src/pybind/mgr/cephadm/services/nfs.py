@@ -130,7 +130,11 @@ class NFSService(CephService):
         rgw_user = f'{rados_user}-rgw'
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
         bind_addr = ''
-        if spec.virtual_ip and not spec.enable_haproxy_protocol:
+        if spec.bind_addr:
+            bind_addr = spec.bind_addr
+            daemon_spec.port_ips = {str(port): spec.bind_addr}
+            daemon_spec.ip = bind_addr
+        elif spec.virtual_ip and not spec.enable_haproxy_protocol:
             bind_addr = spec.virtual_ip
             daemon_spec.port_ips = {str(port): spec.virtual_ip}
             # update daemon spec ip for prometheus, as monitoring will happen on this
@@ -424,6 +428,10 @@ class NFSService(CephService):
     def get_monitoring_details(self, service_name: str, host: str) -> Tuple[Optional[str], Optional[int]]:
         spec = cast(NFSServiceSpec, self.mgr.spec_store[service_name].spec)
         monitoring_port = spec.monitoring_port if spec.monitoring_port else 9587
+
+        # check if monitoring_addr is explicitly set in spec
+        if spec.monitoring_addr:
+            return spec.monitoring_addr, monitoring_port
 
         # check if monitor needs to be bind on specific ip
         monitoring_addr = spec.monitoring_ip_addrs.get(host) if spec.monitoring_ip_addrs else None

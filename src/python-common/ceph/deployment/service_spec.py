@@ -1330,6 +1330,8 @@ class NFSServiceSpec(ServiceSpec):
                  monitoring_networks: Optional[List[str]] = None,
                  monitoring_ip_addrs: Optional[Dict[str, str]] = None,
                  monitoring_port: Optional[int] = None,
+                 monitoring_addr: Optional[str] = None,
+                 bind_addr: Optional[str] = None,
                  virtual_ip: Optional[str] = None,
                  enable_nlm: bool = False,
                  enable_haproxy_protocol: bool = False,
@@ -1366,6 +1368,8 @@ class NFSServiceSpec(ServiceSpec):
         self.monitoring_ip_addrs = monitoring_ip_addrs
         self.monitoring_networks = monitoring_networks
         self.monitoring_port = monitoring_port
+        self.monitoring_addr = monitoring_addr
+        self.bind_addr = bind_addr
 
         self.virtual_ip = virtual_ip
         self.enable_haproxy_protocol = enable_haproxy_protocol
