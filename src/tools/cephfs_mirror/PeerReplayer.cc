@@ -1323,12 +1323,18 @@ bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
   std::unique_lock lock(sdq_lock);
   dout(20) << ": snapshot data replayer waiting on m_sync_dataq, syncm=" << this << dendl;
   sdq_cv.wait(lock, [this]{ return !m_sync_dataq.empty() || m_sync_crawl_finished;});
-  dout(20) << ": snapshot data replayer woke up to process m_syncm_dataq, syncm=" << this << dendl;
-  if (m_sync_dataq.empty() && m_sync_crawl_finished)
+  dout(20) << ": snapshot data replayer woke up to process m_syncm_dataq, syncm=" << this
+	   << " crawl_finished=" << m_sync_crawl_finished << dendl;
+  if (m_sync_dataq.empty() && m_sync_crawl_finished) {
+     dout(20) << ": snapshot data replayer dataq_empty and crawl finished - waiting for other"
+              << " inflight processing threads to finish!!!" << dendl;
+     sdq_cv.wait(lock, [this]{ return m_in_flight == 0;});
      return false; // no more work
+  }
 
   out_entry = std::move(m_sync_dataq.front());
   m_sync_dataq.pop();
+  m_in_flight++;
   dout(10) << ": snapshot data replayer dataq popped" << " syncm=" << this
 	   << " epath=" << out_entry.epath << dendl;
   return true;
@@ -2207,12 +2213,16 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
     SyncEntry entry;
     while (syncm->pop_dataq_entry(entry)) {
       //TODO Process entry
+      syncm->dec_in_flight();
     }
 
     // Dequeue syncm object after processing
     {
-      std::unique_lock lock(smq_lock);
-      if (!syncm_q.empty() && syncm_q.front() == syncm) {
+      std::unique_lock smq_l1(smq_lock);
+      std::unique_lock sdq_l1(syncm->get_sdq_lock());
+      if (!syncm_q.empty() && syncm_q.front() == syncm
+          && syncm->get_in_flight_unlocked() == 0
+          && syncm->get_crawl_finished_unlocked() == true) {
         dout(20) << ": Dequeue syncm object=" << syncm << dendl;
         syncm_q.pop();
         smq_cv.notify_all();

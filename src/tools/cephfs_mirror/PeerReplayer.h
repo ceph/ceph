@@ -198,6 +198,27 @@ private:
     void push_dataq_entry(PeerReplayer::SyncEntry e);
     bool pop_dataq_entry(PeerReplayer::SyncEntry &out);
     void mark_crawl_finished();
+    bool get_crawl_finished_unlocked() {
+      return m_sync_crawl_finished;
+    }
+    void dec_in_flight() {
+      std::unique_lock lock(sdq_lock);
+      --m_in_flight;
+      /* If the crawler is done (m_sync_crawl_finished = true) and m_sync_dataq
+       * is empty, threads will block until other pending threads which are syncing
+       * the entries picked up from queue are completed. So make sure to wake them
+       * up when the processing is complete. This is to avoid the busy loop of jobless
+       * data sync threads.
+       */
+      if (m_in_flight == 0)
+        sdq_cv.notify_all();
+    }
+    int get_in_flight_unlocked() {
+      return m_in_flight;
+    }
+    ceph::mutex& get_sdq_lock() {
+      return sdq_lock;
+    }
 
     int remote_mkdir(const std::string &epath, const struct ceph_statx &stx);
   protected:
@@ -212,6 +233,7 @@ private:
     ceph::mutex sdq_lock;
     ceph::condition_variable sdq_cv;
     std::queue<PeerReplayer::SyncEntry> m_sync_dataq;
+    int m_in_flight = 0;
     bool m_sync_crawl_finished = false;
   };
 
