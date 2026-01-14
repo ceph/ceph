@@ -1362,9 +1362,12 @@ bool verify_resource_permission(
       if (identity_res == rgw::IAM::Effect::Deny) {
         return false;
       }
-      const auto resource_res = evaluate_iam_policies(
-          dpp, env, identity, false, op, arn,
-          resource_policy, {}, {});
+      const auto resource_res = eval_or_pass(dpp, resource_policy, env, identity, op, arn);
+      if (resource_res == Effect::Deny) {
+        ldpp_dout(dpp, 10) << __func__ << ": explicit deny from resource-based policy" << dendl;
+      } else if (resource_res == Effect::Pass) {
+        ldpp_dout(dpp, 10) << __func__ << ": implicit deny from resource-based policy" << dendl;
+      }
       return identity_res == rgw::IAM::Effect::Allow
           && resource_res == rgw::IAM::Effect::Allow;
     } else {
