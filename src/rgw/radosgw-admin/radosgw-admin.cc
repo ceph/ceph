@@ -2,8 +2,8 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
- * Copyright (C) 2025 IBM
- */
+ * Copyright (C) 2025-2026 IBM 
+*/
 
 #include <cerrno>
 #include <string>
@@ -14,11 +14,10 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
-extern "C" {
-#include <liboath/oath.h>
-}
 
 #include <fmt/format.h>
+
+#include <liboath/oath.h>
 
 #include "auth/Crypto.h"
 #include "compressor/Compressor.h"
@@ -2001,6 +2000,7 @@ static int send_to_url(const string& url,
   if (!result) {
     return result.error();
   }
+
   int ret = rgw_http_error_to_errno(*result);
   if (ret < 0) {
     return ret;
@@ -2008,7 +2008,7 @@ static int send_to_url(const string& url,
 
   ret = parser.parse(response);
   if (ret < 0) {
-    cerr << "failed to parse response" << std::endl;
+    cerr << "failed to parse remote response" << std::endl;
     return ret;
   }
   return 0;
@@ -5446,10 +5446,19 @@ int main(int argc, const char **argv)
         info.request_uri = "/admin/realm";
 
         map<string, string> &params = info.args.get_params();
-        if (!realm_id.empty())
-          params["id"] = realm_id;
-        if (!realm_name.empty())
-          params["name"] = realm_name;
+
+	if (realm_name.empty()) {
+	  cerr << "missing realm name" << std::endl;
+	  return EINVAL;
+	}
+
+        if (realm_id.empty()) {
+	  cerr << "missing realm id" << std::endl;
+	  return EINVAL;
+        }
+
+        params["id"] = realm_id;
+        params["name"] = realm_name;
 
         bufferlist bl;
         JSONParser p;
@@ -5463,6 +5472,7 @@ int main(int argc, const char **argv)
           }
           return -ret;
         }
+
         RGWRealm realm;
         try {
           decode_json_obj(realm, &p);
@@ -5470,6 +5480,7 @@ int main(int argc, const char **argv)
           cerr << "failed to decode JSON response: " << e.what() << std::endl;
           return EINVAL;
         }
+
         RGWPeriod period;
         auto& current_period = realm.get_current_period();
         if (!current_period.empty()) {
