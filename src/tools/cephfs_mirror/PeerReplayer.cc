@@ -368,7 +368,7 @@ void PeerReplayer::remove_directory(string_view dir_root) {
 void PeerReplayer::enqueue_syncm(const std::shared_ptr<SyncMechanism>& item) {
   dout(20) << ": Enqueue syncm object=" << item << dendl;
   std::lock_guard lock(smq_lock);
-  syncm_q.push(item);
+  syncm_q.push_back(item);
   smq_cv.notify_all();
 }
 
@@ -1327,9 +1327,8 @@ bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
   dout(20) << ": snapshot data replayer woke up to process m_syncm_dataq, syncm=" << this
 	   << " crawl_finished=" << m_sync_crawl_finished << dendl;
   if (m_sync_dataq.empty() && m_sync_crawl_finished) {
-     dout(20) << ": snapshot data replayer dataq_empty and crawl finished - waiting for other"
-              << " inflight processing threads to finish!!!" << dendl;
-     sdq_cv.wait(lock, [this]{ return m_in_flight == 0;});
+     dout(20) << ": snapshot data replayer - finished processing syncm=" << this
+              << " Proceed with next syncm job " << dendl;
      return false; // no more work
   }
 
@@ -1338,6 +1337,13 @@ bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
   m_in_flight++;
   dout(10) << ": snapshot data replayer dataq popped" << " syncm=" << this
 	   << " epath=" << out_entry.epath << dendl;
+  return true;
+}
+
+bool PeerReplayer::SyncMechanism::has_pending_work() const {
+  std::unique_lock lock(sdq_lock);
+  if (m_sync_dataq.empty() && m_sync_crawl_finished)
+    return false;
   return true;
 }
 
@@ -2176,6 +2182,31 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
   }
 }
 
+void PeerReplayer::remove_syncm(const std::shared_ptr<PeerReplayer::SyncMechanism>& syncm_obj)
+{
+    // caller holds lock
+    auto it = std::find(syncm_q.begin(), syncm_q.end(), syncm_obj);
+    if (it != syncm_q.end()) {
+        syncm_q.erase(it);
+    }
+}
+
+/* The data sync threads should consume the next syncm job if the present syncm has no
+ * pending work. This can evidently happen if the last file being synced in the present
+ * syncm job is a large file. In this case, one data sync thread is busy syncing the
+ * large file, the rest of data sync threads could start consuming the next syncm job
+ * instead of being idle waiting for the last file to be synced from present syncm job.
+ */
+std::shared_ptr<PeerReplayer::SyncMechanism> PeerReplayer::pick_next_syncm() const {
+  // caller holds lock
+  for (auto& syncm : syncm_q) {
+    if (syncm->has_pending_work()) {
+      return syncm;
+    }
+  }
+  return nullptr;
+}
+
 void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
   dout(10) << ": snapshot datasync replayer=" << data_replayer << dendl;
 
@@ -2201,8 +2232,9 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
     {
       std::unique_lock lock(smq_lock);
       dout(20) << ": snapshot data replayer waiting for syncm to process" << dendl;
-      smq_cv.wait(lock, [this]{return !syncm_q.empty();});
-      syncm = syncm_q.front();
+      smq_cv.wait(lock, [this] { return !syncm_q.empty() && pick_next_syncm();});
+      // syncm is gauranteed to be non-null because of the predicate used in above wait.
+      syncm = pick_next_syncm();
       dout(20) << ": snapshot data replayer woke up! syncm=" << syncm << dendl;
     }
 
@@ -2255,13 +2287,18 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
     {
       std::unique_lock smq_l1(smq_lock);
       std::unique_lock sdq_l1(syncm->get_sdq_lock());
-      if (!syncm_q.empty() && syncm_q.front() == syncm
-          && syncm->get_in_flight_unlocked() == 0
-          && syncm->get_crawl_finished_unlocked() == true) {
+      if (!syncm_q.empty() &&
+          syncm->get_in_flight_unlocked() == 0 &&
+          syncm->get_crawl_finished_unlocked() == true) {
         dout(20) << ": Dequeue syncm object=" << syncm << dendl;
         syncm->set_snapshot_unlocked();
         syncm->sdq_cv_notify_all_unlocked(); // To wake up crawler thread waiting to take snapshot
-        syncm_q.pop();
+        if (syncm_q.front() == syncm) {
+          syncm_q.pop_front();
+        } else { // if syncms in the middle finishes first
+          remove_syncm(syncm);
+        }
+        dout(20) << ": syncm_q after removal " << syncm_q << dendl;
         smq_cv.notify_all();
       }
     }
