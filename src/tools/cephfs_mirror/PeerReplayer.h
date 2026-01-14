@@ -178,7 +178,8 @@ private:
 
   class SyncMechanism {
   public:
-    SyncMechanism(MountRef local, MountRef remote, FHandles *fh,
+    SyncMechanism(std::string_view dir_root,
+                  MountRef local, MountRef remote, FHandles *fh,
                   const Peer &peer, /* keep dout happy */
                   const Snapshot &current, boost::optional<Snapshot> prev);
     virtual ~SyncMechanism() = 0;
@@ -219,6 +220,9 @@ private:
     ceph::mutex& get_sdq_lock() {
       return sdq_lock;
     }
+    std::string_view get_m_dir_root() {
+      return m_dir_root;
+    }
 
     int remote_mkdir(const std::string &epath, const struct ceph_statx &stx);
   protected:
@@ -235,11 +239,14 @@ private:
     std::queue<PeerReplayer::SyncEntry> m_sync_dataq;
     int m_in_flight = 0;
     bool m_sync_crawl_finished = false;
+    // It's not used in RemoteSync but required to be accessed in datasync threads
+    std::string m_dir_root;
   };
 
   class RemoteSync : public SyncMechanism {
   public:
-    RemoteSync(MountRef local, MountRef remote, FHandles *fh,
+    RemoteSync(std::string_view dir_root,
+               MountRef local, MountRef remote, FHandles *fh,
                const Peer &peer, /* keep dout happy */
                const Snapshot &current, boost::optional<Snapshot> prev);
     ~RemoteSync();
@@ -278,7 +285,6 @@ private:
     int next_entry(SyncEntry &entry, std::string *e_name, snapid_t *snapid);
     void fini_directory(SyncEntry &entry);
 
-    std::string m_dir_root;
     std::map<std::string, std::set<std::string>> m_deleted;
   };
 
