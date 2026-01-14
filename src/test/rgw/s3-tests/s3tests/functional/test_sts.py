@@ -49,10 +49,14 @@ from . import(
     check_webidentity,
     get_iam_access_key,
     get_iam_secret_key,
+    get_iam_path_prefix,
     get_sub,
     get_azp,
-    get_user_token
+    get_user_token,
+    make_iam_name
     )
+from .iam import iam_root, iam_alt_root
+from .utils import assert_raises, _get_status_and_error_code
 
 log = logging.getLogger(__name__)
 
@@ -2127,3 +2131,125 @@ def test_assume_role_with_web_identity_role_resource_tag():
     oidc_remove=iam_client.delete_open_id_connect_provider(
     OpenIDConnectProviderArn=oidc_response["OpenIDConnectProviderArn"]
     )
+
+@pytest.mark.test_of_sts
+@pytest.mark.iam_account
+def test_same_account_user_policy_assume_role(iam_root):
+    path = get_iam_path_prefix()
+    user_name = make_iam_name('MyUser')
+    role_name = make_iam_name('MyRole')
+    session_name = 'MySession'
+
+    # role trust policy does not allow owning account principal
+    trust_policy = json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Allow',
+            'Action': 'sts:AssumeRole',
+            'Principal': {'AWS': 'OTHERACCOUNT'}
+            }]
+        })
+
+    role = iam_root.create_role(RoleName=role_name, Path=path, AssumeRolePolicyDocument=trust_policy)['Role']
+    role_arn = role['Arn']
+
+    user = iam_root.create_user(UserName=user_name, Path=path)['User']
+    user_arn = user['Arn']
+
+    key = iam_root.create_access_key(UserName=user_name)['AccessKey']
+    sts = get_sts_client(aws_access_key_id=key['AccessKeyId'],
+                         aws_secret_access_key=key['SecretAccessKey'])
+
+    # reject AssumeRole due to lack of identity policy
+    e = assert_raises(ClientError, sts.assume_role, RoleArn=role_arn, RoleSessionName=session_name)
+    assert (403, 'AccessDenied') == _get_status_and_error_code(e.response)
+
+    user_policy_name = 'AllowAssumeRole'
+    user_policy = json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Allow',
+            'Action': 'sts:AssumeRole',
+            'Resource': role_arn
+            }]
+        })
+    iam_root.put_user_policy(UserName=user_name, PolicyName=user_policy_name, PolicyDocument=user_policy)
+
+    sts.assume_role(RoleArn=role_arn, RoleSessionName=session_name)
+
+@pytest.mark.test_of_sts
+@pytest.mark.iam_account
+def test_same_account_trust_policy_assume_role(iam_root):
+    path = get_iam_path_prefix()
+    user_name = make_iam_name('MyUser')
+    role_name = make_iam_name('MyRole')
+    session_name = 'MySession'
+
+    user = iam_root.create_user(UserName=user_name, Path=path)['User']
+    user_arn = user['Arn']
+
+    trust_policy = json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Allow',
+            'Action': 'sts:AssumeRole',
+            'Principal': {'AWS': user_arn}
+            }]
+        })
+
+    role = iam_root.create_role(RoleName=role_name, Path=path, AssumeRolePolicyDocument=trust_policy)['Role']
+    role_arn = role['Arn']
+
+    key = iam_root.create_access_key(UserName=user_name)['AccessKey']
+    sts = get_sts_client(aws_access_key_id=key['AccessKeyId'],
+                         aws_secret_access_key=key['SecretAccessKey'])
+
+    # AssumeRole is granted by role trust policy alone
+    sts.assume_role(RoleArn=role_arn, RoleSessionName=session_name)
+
+@pytest.mark.test_of_sts
+@pytest.mark.iam_account
+@pytest.mark.iam_cross_account
+def test_cross_account_user_policy_assume_role(iam_root, iam_alt_root):
+    path = get_iam_path_prefix()
+    user_name = make_iam_name('MyUser')
+    role_name = make_iam_name('MyRole')
+    session_name = 'MySession'
+
+    # create user with alt account
+    user = iam_alt_root.create_user(UserName=user_name, Path=path)['User']
+    user_arn = user['Arn']
+
+    key = iam_alt_root.create_access_key(UserName=user_name)['AccessKey']
+    sts = get_sts_client(aws_access_key_id=key['AccessKeyId'],
+                         aws_secret_access_key=key['SecretAccessKey'])
+
+    trust_policy = json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Allow',
+            'Action': 'sts:AssumeRole',
+            'Principal': {'AWS': user_arn}
+            }]
+        })
+
+    # create role with main account
+    role = iam_root.create_role(RoleName=role_name, Path=path, AssumeRolePolicyDocument=trust_policy)['Role']
+    role_arn = role['Arn']
+
+    # reject AssumeRole due to lack of identity policy
+    e = assert_raises(ClientError, sts.assume_role, RoleArn=role_arn, RoleSessionName=session_name)
+    assert (403, 'AccessDenied') == _get_status_and_error_code(e.response)
+
+    user_policy_name = 'AllowAssumeRole'
+    user_policy = json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Allow',
+            'Action': 'sts:AssumeRole',
+            'Resource': role_arn
+            }]
+        })
+    iam_alt_root.put_user_policy(UserName=user_name, PolicyName=user_policy_name, PolicyDocument=user_policy)
+
+    sts.assume_role(RoleArn=role_arn, RoleSessionName=session_name)
