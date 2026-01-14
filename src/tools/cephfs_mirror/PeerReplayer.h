@@ -237,6 +237,13 @@ private:
     boost::optional<Snapshot> get_m_prev() const {
       return m_prev;
     }
+    void set_snapshot_unlocked() {
+      m_take_snapshot = true;
+    }
+    void sdq_cv_notify_all_unlocked() {
+      sdq_cv.notify_all();
+    }
+    void wait_until_safe_to_snapshot();
 
     int remote_mkdir(const std::string &epath, const struct ceph_statx &stx);
   protected:
@@ -253,6 +260,7 @@ private:
     std::queue<PeerReplayer::SyncEntry> m_sync_dataq;
     int m_in_flight = 0;
     bool m_sync_crawl_finished = false;
+    bool m_take_snapshot = false;
     // It's not used in RemoteSync but required to be accessed in datasync threads
     std::string m_dir_root;
   };

@@ -1348,6 +1348,18 @@ void PeerReplayer::SyncMechanism::mark_crawl_finished() {
   sdq_cv.notify_all();
 }
 
+void PeerReplayer::SyncMechanism::wait_until_safe_to_snapshot() {
+  std::unique_lock lock(sdq_lock);
+  dout(20) << ": Waiting for data sync to be done to take snapshot - dir_root=" << m_dir_root
+           << " current=" << m_current << " prev=" << (m_prev ? stringify(m_prev) : "")
+	   << " syncm=" << this << dendl;
+  sdq_cv.wait(lock, [this]{return m_take_snapshot;});
+  dout(20) << ": Woke up to take snapshot - dir_root=" << m_dir_root
+           << " current=" << m_current << " prev=" << (m_prev ? stringify(m_prev) : "")
+	   << " syncm=" << this << dendl;
+  m_take_snapshot = false;
+}
+
 int PeerReplayer::SyncMechanism::get_changed_blocks(const std::string &epath,
                                                     const struct ceph_statx &stx, bool sync_check,
                                                     const std::function<int (uint64_t, struct cblock *)> &callback) {
@@ -1899,7 +1911,6 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
       dout(10) << ": tree traversal done for dir_root=" << dir_root << dendl;
       break;
     }
-
   }
 
   syncm->finish_sync();
@@ -1915,6 +1926,20 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
   // c_fd has been used in ceph_fdopendir call so
   // there is no need to close this fd manually.
   ceph_close(fh.p_mnt, fh.p_fd);
+
+  if (r == 0 ) { //Bail out without taking snap if r < 0
+    syncm->wait_until_safe_to_snapshot();
+
+    // All good, take the snapshot
+    auto cur_snap_id_str{stringify(current.second)};
+    snap_metadata snap_meta[] = {{PRIMARY_SNAP_ID_KEY.c_str(), cur_snap_id_str.c_str()}};
+    r = ceph_mksnap(m_remote_mount, dir_root.c_str(), current.first.c_str(), 0755,
+                    snap_meta, sizeof(snap_meta)/sizeof(snap_metadata));
+    if (r < 0) {
+      derr << ": failed to snap remote directory dir_root=" << dir_root
+           << ": " << cpp_strerror(r) << dendl;
+    }
+  }
 
   return r;
 }
@@ -1961,19 +1986,9 @@ int PeerReplayer::synchronize(const std::string &dir_root, const Snapshot &curre
       r = do_synchronize(dir_root, current);
     }
   }
-
   // snap sync failed -- bail out!
   if (r < 0) {
     return r;
-  }
-
-  auto cur_snap_id_str{stringify(current.second)};
-  snap_metadata snap_meta[] = {{PRIMARY_SNAP_ID_KEY.c_str(), cur_snap_id_str.c_str()}};
-  r = ceph_mksnap(m_remote_mount, dir_root.c_str(), current.first.c_str(), 0755,
-                  snap_meta, sizeof(snap_meta)/sizeof(snap_metadata));
-  if (r < 0) {
-    derr << ": failed to snap remote directory dir_root=" << dir_root
-         << ": " << cpp_strerror(r) << dendl;
   }
 
   return r;
@@ -2245,6 +2260,8 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
           && syncm->get_in_flight_unlocked() == 0
           && syncm->get_crawl_finished_unlocked() == true) {
         dout(20) << ": Dequeue syncm object=" << syncm << dendl;
+        syncm->set_snapshot_unlocked();
+        syncm->sdq_cv_notify_all_unlocked(); // To wake up crawler thread waiting to take snapshot
         syncm_q.pop();
         smq_cv.notify_all();
       }
