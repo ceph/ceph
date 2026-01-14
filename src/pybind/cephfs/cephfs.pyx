@@ -2041,6 +2041,7 @@ cdef class LibCephFS(object):
             char *_dpath = dpath
             mode_t _mode = mode
 
+        with nogil:
             ret = ceph_fcopyfile(self.cluster, _spath, _dpath, _mode)
 
         if ret < 0:
