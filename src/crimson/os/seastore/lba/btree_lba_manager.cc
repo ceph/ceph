@@ -996,8 +996,7 @@ BtreeLBAManager::get_physical_extent_if_live(
       if (type == extent_types_t::LADDR_INTERNAL) {
 	return btree.get_internal_if_live(c, addr, laddr, len);
       } else {
-	assert(type == extent_types_t::LADDR_LEAF ||
-	       type == extent_types_t::DINK_LADDR_LEAF);
+	assert(type == extent_types_t::LADDR_LEAF);
 	return btree.get_leaf_if_live(c, addr, laddr, len);
       }
     });

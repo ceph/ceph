@@ -1461,28 +1461,27 @@ std::ostream &operator<<(std::ostream &out, const paddr_list_t &rhs);
  * Cache::get_extent_by_type in cache.cc
  */
 enum class extent_types_t : uint8_t {
-  ROOT = 0,
-  LADDR_INTERNAL = 1,
-  LADDR_LEAF = 2,
-  DINK_LADDR_LEAF = 3, // should only be used for unitttests
-  ROOT_META = 4,
-  OMAP_INNER = 5,
-  OMAP_LEAF = 6,
-  ONODE_BLOCK_STAGED = 7,
-  COLL_BLOCK = 8,
-  OBJECT_DATA_BLOCK = 9,
-  RETIRED_PLACEHOLDER = 10,
+  ROOT,
+  LADDR_INTERNAL,
+  LADDR_LEAF,
+  ROOT_META,
+  OMAP_INNER,
+  OMAP_LEAF,
+  ONODE_BLOCK_STAGED,
+  COLL_BLOCK,
+  OBJECT_DATA_BLOCK,
+  RETIRED_PLACEHOLDER,
   // the following two types are not extent types,
   // they are just used to indicates paddr allocation deltas
-  ALLOC_INFO = 11,
-  JOURNAL_TAIL = 12,
+  ALLOC_INFO,
+  JOURNAL_TAIL,
   // Test Block Types
-  TEST_BLOCK = 13,
-  TEST_BLOCK_PHYSICAL = 14,
-  BACKREF_INTERNAL = 15,
-  BACKREF_LEAF = 16,
+  TEST_BLOCK,
+  TEST_BLOCK_PHYSICAL,
+  BACKREF_INTERNAL,
+  BACKREF_LEAF,
   // None and the number of valid extent_types_t
-  NONE = 17,
+  NONE,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -1509,7 +1508,6 @@ constexpr std::array logical_metadata_types {
 constexpr std::array lba_node_types {
   extent_types_t::LADDR_INTERNAL,
   extent_types_t::LADDR_LEAF,
-  extent_types_t::DINK_LADDR_LEAF
 };
 
 constexpr std::array backref_node_types {
