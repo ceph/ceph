@@ -199,6 +199,7 @@ private:
     bool pop_dataq_entry(PeerReplayer::SyncEntry &out);
     void mark_crawl_finished();
 
+    int remote_mkdir(const std::string &epath, const struct ceph_statx &stx);
   protected:
     MountRef m_local;
     MountRef m_remote;
@@ -453,7 +454,6 @@ private:
                   boost::optional<Snapshot> prev);
   int do_sync_snaps(const std::string &dir_root);
 
-  int remote_mkdir(const std::string &epath, const struct ceph_statx &stx, const FHandles &fh);
   int remote_file_op(std::shared_ptr<SyncMechanism>& syncm, const std::string &dir_root,
                      const std::string &epath, const struct ceph_statx &stx,
                      bool sync_check, const FHandles &fh, bool need_data_sync, bool need_attr_sync);

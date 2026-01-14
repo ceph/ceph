@@ -636,18 +636,17 @@ int PeerReplayer::propagate_snap_renames(
   return 0;
 }
 
-int PeerReplayer::remote_mkdir(const std::string &epath, const struct ceph_statx &stx,
-                               const FHandles &fh) {
+int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const struct ceph_statx &stx) {
   dout(10) << ": remote epath=" << epath << dendl;
 
-  int r = ceph_mkdirat(m_remote_mount, fh.r_fd_dir_root, epath.c_str(), stx.stx_mode & ~S_IFDIR);
+  int r = ceph_mkdirat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_mode & ~S_IFDIR);
   if (r < 0 && r != -EEXIST) {
     derr << ": failed to create remote directory=" << epath << ": " << cpp_strerror(r)
          << dendl;
     return r;
   }
 
-  r = ceph_chownat(m_remote_mount, fh.r_fd_dir_root, epath.c_str(), stx.stx_uid, stx.stx_gid,
+  r = ceph_chownat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_uid, stx.stx_gid,
                    AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
     derr << ": failed to chown remote directory=" << epath << ": " << cpp_strerror(r)
@@ -655,7 +654,7 @@ int PeerReplayer::remote_mkdir(const std::string &epath, const struct ceph_statx
     return r;
   }
 
-  r = ceph_chmodat(m_remote_mount, fh.r_fd_dir_root, epath.c_str(), stx.stx_mode & ~S_IFMT,
+  r = ceph_chmodat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_mode & ~S_IFMT,
                    AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
     derr << ": failed to chmod remote directory=" << epath << ": " << cpp_strerror(r)
@@ -665,7 +664,7 @@ int PeerReplayer::remote_mkdir(const std::string &epath, const struct ceph_statx
 
   struct timespec times[] = {{stx.stx_atime.tv_sec, stx.stx_atime.tv_nsec},
                              {stx.stx_mtime.tv_sec, stx.stx_mtime.tv_nsec}};
-  r = ceph_utimensat(m_remote_mount, fh.r_fd_dir_root, epath.c_str(), times, AT_SYMLINK_NOFOLLOW);
+  r = ceph_utimensat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), times, AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
     derr << ": failed to change [am]time on remote directory=" << epath << ": "
          << cpp_strerror(r) << dendl;
@@ -1882,7 +1881,7 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
     }
 
     if (S_ISDIR(stx.stx_mode)) {
-      r = remote_mkdir(epath, stx, fh);
+      r = syncm->remote_mkdir(epath, stx);
       if (r < 0) {
         break;
       }
