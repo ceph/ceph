@@ -488,6 +488,7 @@ private:
   void run(SnapshotReplayerThread *replayer);
   void run_datasync(SnapshotDataSyncThread *data_replayer);
   void remove_syncm(const std::shared_ptr<SyncMechanism>& syncm_obj);
+  bool is_syncm_active(const std::shared_ptr<SyncMechanism>& syncm_obj);
   std::shared_ptr<SyncMechanism> pick_next_syncm() const;
 
   boost::optional<std::string> pick_directory();

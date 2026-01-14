@@ -2217,6 +2217,10 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
   }
 }
 
+bool PeerReplayer::is_syncm_active(const std::shared_ptr<PeerReplayer::SyncMechanism>& syncm_obj) {
+    return std::find(syncm_q.begin(), syncm_q.end(), syncm_obj) != syncm_q.end();
+}
+
 void PeerReplayer::remove_syncm(const std::shared_ptr<PeerReplayer::SyncMechanism>& syncm_obj)
 {
     // caller holds lock
@@ -2344,16 +2348,20 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
         syncm->get_datasync_error_unlocked() ||
         syncm->get_crawl_error_unlocked();
       if (!syncm_q.empty() && no_in_flight_syncm_jobs && (crawl_finished || sync_error)) {
-        dout(20) << ": Dequeue syncm object=" << syncm << dendl;
-        syncm->set_snapshot_unlocked();
-        syncm->sdq_cv_notify_all_unlocked(); // To wake up crawler thread waiting to take snapshot
-        if (syncm_q.front() == syncm) {
-          syncm_q.pop_front();
-        } else { // if syncms in the middle finishes first
-          remove_syncm(syncm);
-        }
-        dout(20) << ": syncm_q after removal " << syncm_q << dendl;
-        smq_cv.notify_all();
+        if (sync_error && !is_syncm_active(syncm)){
+          dout(20) << ": syncm object=" << syncm << " already dequeued" << dendl;
+        } else {
+          dout(20) << ": Dequeue syncm object=" << syncm << dendl;
+          syncm->set_snapshot_unlocked();
+          syncm->sdq_cv_notify_all_unlocked(); // To wake up crawler thread waiting to take snapshot
+          if (syncm_q.front() == syncm) {
+            syncm_q.pop_front();
+          } else { // if syncms in the middle finishes first
+            remove_syncm(syncm);
+          }
+          dout(20) << ": syncm_q after removal " << syncm_q << dendl;
+          smq_cv.notify_all();
+	}
       }
     }
 
