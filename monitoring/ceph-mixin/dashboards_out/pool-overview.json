@@ -1171,7 +1171,7 @@
             "showHeader": true
          },
          "pluginVersion": "10.4.0",
-         "styles": "",
+         "styles": [ ],
          "targets": [
             {
                "expr": "(\n  ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } /\n    ceph_pool_compress_bytes_used{cluster=~\"$cluster\", } > 0\n) and on(pool_id) (\n  (\n    (ceph_pool_compress_under_bytes{cluster=~\"$cluster\", } > 0) /\n      ceph_pool_stored_raw{cluster=~\"$cluster\", }\n  ) * 100 > 0.5\n)\n",

@@ -3650,7 +3650,7 @@
             "showHeader": true
          },
          "pluginVersion": "9.4.7",
-         "styles": "",
+         "styles": [ ],
          "targets": [
             {
                "datasource": "$datasource",
