@@ -260,7 +260,7 @@
             "showHeader": true
          },
          "pluginVersion": "10.4.0",
-         "styles": "",
+         "styles": [ ],
          "targets": [
             {
                "expr": "topk(10,\n  (sort(\n    (\n      rate(ceph_osd_op_r_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n        on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\"}[$__rate_interval]) *\n        1000\n    )\n  ))\n)\n",
@@ -542,7 +542,7 @@
             "showHeader": true
          },
          "pluginVersion": "10.4.0",
-         "styles": "",
+         "styles": [ ],
          "targets": [
             {
                "expr": "topk(10,\n  (sort(\n    (rate(ceph_osd_op_w_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n      on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\"}[$__rate_interval]) *\n      1000)\n  ))\n)\n",
@@ -1217,7 +1217,7 @@
             "showHeader": true
          },
          "pluginVersion": "10.4.0",
-         "styles": "",
+         "styles": [ ],
          "targets": [
             {
                "expr": "topk(10,\n  (ceph_daemon_health_metrics{type=\"SLOW_OPS\", ceph_daemon=~\"osd.*\"})\n)\n",

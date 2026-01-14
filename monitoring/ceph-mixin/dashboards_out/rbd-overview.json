@@ -480,7 +480,7 @@
             "showHeader": true
          },
          "pluginVersion": "10.4.0",
-         "styles": "",
+         "styles": [ ],
          "targets": [
             {
                "expr": "topk(10,\n  (\n    sort((\n      rate(ceph_rbd_write_ops{job=~\"$job\"}[$__rate_interval]) +\n        on (image, pool, namespace) rate(ceph_rbd_read_ops{job=~\"$job\"}[$__rate_interval])\n    ))\n  )\n)\n",
@@ -629,7 +629,7 @@
             "showHeader": true
          },
          "pluginVersion": "10.4.0",
-         "styles": "",
+         "styles": [ ],
          "targets": [
             {
                "expr": "topk(10,\n  sort(\n    sum(\n      rate(ceph_rbd_read_bytes{job=~\"$job\"}[$__rate_interval]) +\n        rate(ceph_rbd_write_bytes{job=~\"$job\"}[$__rate_interval])\n    ) by (pool, image, namespace)\n  )\n)\n",
@@ -778,7 +778,7 @@
             "showHeader": true
          },
          "pluginVersion": "10.4.0",
-         "styles": "",
+         "styles": [ ],
          "targets": [
             {
                "expr": "topk(10,\n  sum(\n    rate(ceph_rbd_write_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n      clamp_min(rate(ceph_rbd_write_latency_count{job=~\"$job\"}[$__rate_interval]), 1) +\n      rate(ceph_rbd_read_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n      clamp_min(rate(ceph_rbd_read_latency_count{job=~\"$job\"}[$__rate_interval]), 1)\n  ) by (pool, image, namespace)\n)\n",
