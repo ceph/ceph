@@ -211,6 +211,24 @@ private:
     bool get_crawl_finished_unlocked() {
       return m_sync_crawl_finished;
     }
+    void set_datasync_error_and_dec_in_flight(int err) {
+      std::unique_lock lock(sdq_lock);
+      m_datasync_error = true;
+      m_datasync_errno = err;
+      --m_in_flight;
+    }
+    void set_datasync_error(int err) {
+      std::unique_lock lock(sdq_lock);
+      m_datasync_error = true;
+      m_datasync_errno = err;
+    }
+    bool get_datasync_error_unlocked() {
+      return m_datasync_error;
+    }
+    int get_datasync_errno() {
+      std::unique_lock lock(sdq_lock);
+      return m_datasync_errno;
+    }
     void dec_in_flight() {
       std::unique_lock lock(sdq_lock);
       --m_in_flight;
@@ -236,7 +254,7 @@ private:
     void sdq_cv_notify_all_unlocked() {
       sdq_cv.notify_all();
     }
-    void wait_until_safe_to_snapshot();
+    bool wait_until_safe_to_snapshot();
 
     int remote_mkdir(const std::string &epath, const struct ceph_statx &stx);
   protected:
@@ -254,6 +272,8 @@ private:
     int m_in_flight = 0;
     bool m_sync_crawl_finished = false;
     bool m_take_snapshot = false;
+    bool m_datasync_error = false;
+    int m_datasync_errno = 0;
     // It's not used in RemoteSync but required to be accessed in datasync threads
     std::string m_dir_root;
   };
