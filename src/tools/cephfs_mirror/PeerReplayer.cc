@@ -1891,32 +1891,6 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
       break;
     }
 
-    if (S_ISDIR(stx.stx_mode)) {
-      r = syncm->remote_mkdir(epath, stx);
-      if (r < 0) {
-        break;
-      }
-    } else {
-      bool need_data_sync = true;
-      bool need_attr_sync = true;
-      if (sync_check) {
-        r = should_sync_entry(epath, stx, fh,
-                              &need_data_sync, &need_attr_sync);
-        if (r < 0) {
-          break;
-        }
-      }
-
-      dout(5) << ": entry=" << epath << ", data_sync=" << need_data_sync
-              << ", attr_sync=" << need_attr_sync << dendl;
-      if (need_data_sync || need_attr_sync) {
-        r = remote_file_op(syncm, dir_root, epath, stx, sync_check, fh, need_data_sync, need_attr_sync);
-        if (r < 0) {
-          break;
-        }
-      }
-      dout(10) << ": done for epath=" << epath << dendl;
-    }
   }
 
   syncm->finish_sync();
@@ -2209,14 +2183,54 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
       dout(20) << ": snapshot data replayer woke up! syncm=" << syncm << dendl;
     }
 
-    // TODO pre_sync and open handles
+    // FHandles are not thread safe, so don't use FHandles from SyncMechanism, open them locally here.
+    int r = 0;
+    FHandles fh;
+    r = pre_sync_check_and_open_handles(std::string(syncm->get_m_dir_root()),
+		                        syncm->get_m_current(), syncm->get_m_prev(), &fh);
+    if (r < 0) {
+      //TODO - Handle this failure in better way ?
+      dout(5) << ": open_handles failed, cannot proceed sync: " << cpp_strerror(r)
+              << " dir_root=" << syncm->get_m_dir_root() << "syncm=" << syncm << dendl;
+      break;
+    }
+
+    //TODO move sync_check to SyncEntry to make it work with SnapDiffSync.
+    //Always true for Remotesync
+    bool sync_check = true;
 
     // Wait on data sync queue for entries to process
     SyncEntry entry;
     while (syncm->pop_dataq_entry(entry)) {
-      //TODO Process entry
+      //TODO Fix process entry for SnapDiffSync
+      bool need_data_sync = true;
+      bool need_attr_sync = true;
+      if (sync_check) {
+        r = should_sync_entry(entry.epath, entry.stx, fh,
+                              &need_data_sync, &need_attr_sync);
+        if (r < 0) {
+          //TODO Handle bail out with taking remote snap
+        }
+      }
+
+      dout(5) << ": syncm=" << syncm << " entry=" << entry.epath << " data_sync="
+	      << need_data_sync << " attr_sync=" << need_attr_sync << dendl;
+      if (need_data_sync || need_attr_sync) {
+        r = remote_file_op(syncm, std::string(syncm->get_m_dir_root()),
+                           entry.epath, entry.stx, sync_check, fh,
+                           need_data_sync, need_attr_sync);
+        if (r < 0) {
+          //TODO Handle bail out with taking remote snap
+        }
+      }
+      dout(10) << ": done for epath=" << entry.epath << " syncm=" << syncm << dendl;
+
       syncm->dec_in_flight();
     }
+
+    // Close fds
+    ceph_close(m_local_mount, fh.c_fd);
+    ceph_close(fh.p_mnt, fh.p_fd);
 
     // Dequeue syncm object after processing
     {
