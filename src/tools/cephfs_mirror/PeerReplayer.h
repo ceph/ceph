@@ -396,6 +396,10 @@ private:
 
   SnapshotDataReplayers m_data_replayers;
 
+  ceph::mutex smq_lock;
+  ceph::condition_variable smq_cv;
+  std::queue<std::shared_ptr<SyncMechanism>> syncm_q;
+
   ServiceDaemonStats m_service_daemon_stats;
 
   PerfCounters *m_perf_counters;
@@ -441,12 +445,15 @@ private:
   int do_sync_snaps(const std::string &dir_root);
 
   int remote_mkdir(const std::string &epath, const struct ceph_statx &stx, const FHandles &fh);
-  int remote_file_op(SyncMechanism *syncm, const std::string &dir_root,
+  int remote_file_op(std::shared_ptr<SyncMechanism>& syncm, const std::string &dir_root,
                      const std::string &epath, const struct ceph_statx &stx,
                      bool sync_check, const FHandles &fh, bool need_data_sync, bool need_attr_sync);
   int copy_to_remote(const std::string &dir_root, const std::string &epath, const struct ceph_statx &stx,
                      const FHandles &fh, uint64_t num_blocks, struct cblock *b);
   int sync_perms(const std::string& path);
+
+  // add syncm to syncm_q
+  void enqueue_syncm(const std::shared_ptr<SyncMechanism>& item);
 };
 
 } // namespace mirror
