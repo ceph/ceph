@@ -299,14 +299,13 @@ int PeerReplayer::init() {
     m_replayers.push_back(std::move(replayer));
   }
 
-  //TODO: Have a separate tuneable for data sync threads
-  nr_replayers = g_ceph_context->_conf.get_val<uint64_t>(
-    "cephfs_mirror_max_concurrent_directory_syncs");
-  dout(20) << ": spawning " << nr_replayers << " snapshot data replayer(s)" << dendl;
-  while (nr_replayers-- > 0) {
+  auto nr_data_replayers = g_ceph_context->_conf.get_val<uint64_t>(
+    "cephfs_mirror_max_concurrent_data_sync_threads");
+  dout(20) << ": spawning " << nr_data_replayers << " snapshot data replayer(s)" << dendl;
+  while (nr_data_replayers-- > 0) {
     std::unique_ptr<SnapshotDataSyncThread> data_replayer(
       new SnapshotDataSyncThread(this));
-    std::string name("d_replayer-" + stringify(nr_replayers));
+    std::string name("d_replayer-" + stringify(nr_data_replayers));
     data_replayer->create(name.c_str());
     m_data_replayers.push_back(std::move(data_replayer));
   }
