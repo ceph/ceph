@@ -2121,16 +2121,32 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
 void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
   dout(10) << ": snapshot datasync replayer=" << data_replayer << dendl;
 
-  // TODO Do we need separate m_lock/m_cond for synchornization or can you use the same?
-
+  /* The entire snapshot is synced outside the lock. The m_lock and m_cond pair
+   * is used for these threads along with crawler threads to work well with all
+   * terminal conditions like shutdown.
+   */
+  std::unique_lock locker(m_lock);
   while (true) {
-    // TODO is_stopping and is_blocklisted
+    m_cond.wait_for(locker, 1s, [this]{return is_stopping();});
+    if (is_stopping()) {
+      dout(5) << ": exiting snapshot data replayer=" << data_replayer << dendl;
+      break;
+    }
+    // do not check if client is blocklisted under lock
+    locker.unlock();
+    if (m_fs_mirror->is_blocklisted()) {
+      dout(5) << ": exiting snapshot data replayer=" << data_replayer << " as client is blocklisted" << dendl;
+      break;
+    }
 
     // TODO Wait and fetch syncm from SyncMechanism Queue
 
     // TODO pre_sync and open handles
 
     // TODO Wait and fetch files from syncm data queue and sync
+
+    //lock again to satify m_cond
+    locker.lock();
   }
 }
 
