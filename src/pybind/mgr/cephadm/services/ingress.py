@@ -287,8 +287,6 @@ class IngressService(CephService):
             tls_pair = self.get_certificates(daemon_spec)
             combined_pem = tls_pair.cert + '\n' + tls_pair.key
             config_files['files']['haproxy.pem'] = combined_pem
-        elif spec.ssl_cert:
-            config_files['files']['haproxy.pem'] = spec.ssl_cert
 
         if spec.monitor_ssl and spec.monitor_cert_source != MonitorCertSource.REUSE_SERVICE_CERT.value:
             tls_creds = self.get_stats_certs(spec, daemon_spec, monitor_ips)

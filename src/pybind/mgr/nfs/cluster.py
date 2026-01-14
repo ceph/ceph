@@ -65,6 +65,9 @@ class NFSCluster:
             virtual_ip: Optional[str] = None,
             ingress_mode: Optional[IngressType] = None,
             port: Optional[int] = None,
+            ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_port: Optional[int] = None,
             ssl: bool = False,
             ssl_cert: Optional[str] = None,
             ssl_key: Optional[str] = None,
@@ -164,6 +167,9 @@ class NFSCluster:
             ingress: Optional[bool] = None,
             ingress_mode: Optional[IngressType] = None,
             port: Optional[int] = None,
+            ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_ip_addrs: Optional[Dict[str, str]] = None,
+            monitoring_port: Optional[int] = None,
             ssl: bool = False,
             ssl_cert: Optional[str] = None,
             ssl_key: Optional[str] = None,
@@ -196,6 +202,7 @@ class NFSCluster:
 
             if cluster_id not in available_clusters(self.mgr):
                 self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, ingress_mode, port,
+                                          ip_addrs, monitoring_ip_addrs, monitoring_port,
                                           ssl, ssl_cert, ssl_key, ssl_ca_cert, tls_ktls, tls_debug,
                                           tls_min_version, tls_ciphers)
                 return
