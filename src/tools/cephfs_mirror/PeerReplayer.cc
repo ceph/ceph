@@ -1325,12 +1325,12 @@ void PeerReplayer::SyncMechanism::push_dataq_entry(SyncEntry e) {
 bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
   std::unique_lock lock(sdq_lock);
   dout(20) << ": snapshot data replayer waiting on m_sync_dataq, syncm=" << this << dendl;
-  sdq_cv.wait(lock, [this]{ return !m_sync_dataq.empty() || m_sync_crawl_finished || m_datasync_error;});
+  sdq_cv.wait(lock, [this]{ return !m_sync_dataq.empty() || m_sync_crawl_finished || m_datasync_error || m_sync_crawl_error;});
   dout(20) << ": snapshot data replayer woke up to process m_syncm_dataq, syncm=" << this
 	   << " crawl_finished=" << m_sync_crawl_finished << dendl;
-  if (m_datasync_error) {
+  if (m_datasync_error || m_sync_crawl_error) {
      dout(20) << ": snapshot data replayer, datasync_error="<< m_datasync_error
-              << " syncm=" << this << dendl;
+              << " crawl_error=" << m_sync_crawl_error << " syncm=" << this << dendl;
      return false;
   }
   if (m_sync_dataq.empty() && m_sync_crawl_finished) {
@@ -1351,15 +1351,30 @@ bool PeerReplayer::SyncMechanism::has_pending_work() const {
   std::unique_lock lock(sdq_lock);
   const bool job_done =
     m_sync_dataq.empty() && m_sync_crawl_finished;
+
+  /* On crawl error, return true even if the queue is empty to
+   *   - Dequeue the syncm object
+   *   - Notify the crawler as it waits after the error for pending jobs to finish.
+   */
+  if (m_sync_crawl_error) {
+    // If in_flight > 0, those threads will take care of dequeue/notify, you just consume next job
+    if (m_in_flight > 0)
+      return false;
+    else
+      return true;
+  }
+
   // No more work if datasync failed or everything is done
   if (m_datasync_error || job_done)
     return false;
   return true;
 }
 
-void PeerReplayer::SyncMechanism::mark_crawl_finished() {
+void PeerReplayer::SyncMechanism::mark_crawl_finished(int ret) {
   std::unique_lock lock(sdq_lock);
   m_sync_crawl_finished = true;
+  if (ret < 0)
+    m_sync_crawl_error = true;
   sdq_cv.notify_all();
 }
 
@@ -1685,7 +1700,7 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
   return r;
 }
 
-void PeerReplayer::SnapDiffSync::finish_sync() {
+void PeerReplayer::SnapDiffSync::finish_sync(int ret) {
   dout(20) << dendl;
 
   while (!m_sync_stack.empty()) {
@@ -1701,7 +1716,7 @@ void PeerReplayer::SnapDiffSync::finish_sync() {
   }
 
   // Crawl and entry operations are done syncing here. So mark crawl finished here
-  mark_crawl_finished();
+  mark_crawl_finished(ret);
 }
 
 PeerReplayer::RemoteSync::RemoteSync(std::string_view dir_root,
@@ -1838,7 +1853,7 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
   return 0;
 }
 
-void PeerReplayer::RemoteSync::finish_sync() {
+void PeerReplayer::RemoteSync::finish_sync(int ret) {
   dout(20) << dendl;
 
   while (!m_sync_stack.empty()) {
@@ -1854,7 +1869,7 @@ void PeerReplayer::RemoteSync::finish_sync() {
   }
 
   // Crawl and entry operations are done syncing here. So mark stack finished here
-  mark_crawl_finished();
+  mark_crawl_finished(ret);
 }
 
 int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &current,
@@ -1930,7 +1945,7 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
     }
   }
 
-  syncm->finish_sync();
+  syncm->finish_sync(r);
 
   dout(20) << " cur:" << fh.c_fd
            << " prev:" << fh.p_fd
@@ -2258,17 +2273,24 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
       dout(20) << ": snapshot data replayer woke up! syncm=" << syncm << dendl;
     }
 
-    // FHandles are not thread safe, so don't use FHandles from SyncMechanism, open them locally here.
+    /*  - FHandles are not thread safe, so don't use FHandles from SyncMechanism, open them locally here.
+     *  - On crawl error, don't open handles as other threads could have dequeued syncm and notified
+     *    crawler resulting in unregister of dir_root.
+     */
     int r = 0;
     FHandles fh;
-    bool handles_opened = true;
-    r = pre_sync_check_and_open_handles(std::string(syncm->get_m_dir_root()),
-		                        syncm->get_m_current(), syncm->get_m_prev(), &fh);
-    if (r < 0) {
-      dout(5) << ": open_handles failed, cannot proceed sync: " << cpp_strerror(r)
-              << " dir_root=" << syncm->get_m_dir_root() << "syncm=" << syncm << dendl;
-      syncm->set_datasync_error(r); //don't do continue, as it needs to go through dequeue/notify logic
-      handles_opened = false;
+    bool handles_opened = false;
+    const bool crawl_error = syncm->get_crawl_error();
+    if (!crawl_error) {
+      r = pre_sync_check_and_open_handles(std::string(syncm->get_m_dir_root()),
+                                          syncm->get_m_current(), syncm->get_m_prev(), &fh);
+      if (r < 0) {
+        dout(5) << ": open_handles failed, cannot proceed sync: " << cpp_strerror(r)
+                << " dir_root=" << syncm->get_m_dir_root() << "syncm=" << syncm << dendl;
+        syncm->set_datasync_error(r); //don't do continue, as it needs to go through dequeue/notify logic
+      } else {
+        handles_opened = true;
+      }
     }
 
     // Wait on data sync queue for entries to process
@@ -2319,7 +2341,8 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
       const bool no_in_flight_syncm_jobs = syncm->get_in_flight_unlocked() == 0;
       const bool crawl_finished = syncm->get_crawl_finished_unlocked();
       const bool sync_error =
-        syncm->get_datasync_error_unlocked();
+        syncm->get_datasync_error_unlocked() ||
+        syncm->get_crawl_error_unlocked();
       if (!syncm_q.empty() && no_in_flight_syncm_jobs && (crawl_finished || sync_error)) {
         dout(20) << ": Dequeue syncm object=" << syncm << dendl;
         syncm->set_snapshot_unlocked();

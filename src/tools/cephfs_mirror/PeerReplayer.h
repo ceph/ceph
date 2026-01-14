@@ -202,12 +202,12 @@ private:
                                    const struct ceph_statx &stx, bool sync_check,
                                    const std::function<int (uint64_t, struct cblock *)> &callback);
 
-    virtual void finish_sync() = 0;
+    virtual void finish_sync(int ret) = 0;
 
     void push_dataq_entry(PeerReplayer::SyncEntry e);
     bool pop_dataq_entry(PeerReplayer::SyncEntry &out);
     bool has_pending_work() const;
-    void mark_crawl_finished();
+    void mark_crawl_finished(int ret);
     bool get_crawl_finished_unlocked() {
       return m_sync_crawl_finished;
     }
@@ -228,6 +228,13 @@ private:
     int get_datasync_errno() {
       std::unique_lock lock(sdq_lock);
       return m_datasync_errno;
+    }
+    bool get_crawl_error() {
+      std::unique_lock lock(sdq_lock);
+      return m_sync_crawl_error;
+    }
+    bool get_crawl_error_unlocked() {
+      return m_sync_crawl_error;
     }
     void dec_in_flight() {
       std::unique_lock lock(sdq_lock);
@@ -271,6 +278,7 @@ private:
     std::queue<PeerReplayer::SyncEntry> m_sync_dataq;
     int m_in_flight = 0;
     bool m_sync_crawl_finished = false;
+    bool m_sync_crawl_error = false;
     bool m_take_snapshot = false;
     bool m_datasync_error = false;
     int m_datasync_errno = 0;
@@ -292,7 +300,7 @@ private:
                   const std::function<int (const std::string&)> &dirsync_func,
                   const std::function<int (const std::string&)> &purge_func);
 
-    void finish_sync();
+    void finish_sync(int ret);
   };
 
   class SnapDiffSync : public SyncMechanism {
@@ -312,7 +320,7 @@ private:
                            const struct ceph_statx &stx, bool sync_check,
                            const std::function<int (uint64_t, struct cblock *)> &callback);
 
-    void finish_sync();
+    void finish_sync(int ret);
 
   private:
     int init_directory(const std::string &epath,
