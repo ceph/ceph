@@ -8,7 +8,7 @@ overrides:
         rgw crypt s3 kms backend: testing
         rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl: false
-        rgw sts key: abcdefghijklmnop
+        rgw sts key: AQA/3Fxpz2k2AxAAYWJjZGVmZ2hpamtsbW5vcA==
         rgw s3 auth use sts: true
         rgw lc debug interval: 10
   rgw:

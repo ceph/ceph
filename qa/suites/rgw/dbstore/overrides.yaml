@@ -8,7 +8,7 @@ overrides:
         rgw crypt require ssl: false
         rgw config store: dbstore
         rgw backend store: dbstore
-        rgw sts key: abcdefghijklmnop
+        rgw sts key: AQA/3Fxpz2k2AxAAYWJjZGVmZ2hpamtsbW5vcA==
         rgw s3 auth use sts: true
   rgw:
     frontend: beast
