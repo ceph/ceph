@@ -154,7 +154,7 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
                              const boost::optional<rgw::IAM::Policy>& policy,
                              uint64_t op)
 {
-  if (verify_resource_permission(dpp, s->env, *s->auth.identity, op, arn,
+  if (verify_resource_permission(dpp, s->env, *s->auth.identity, op, arn, arn,
                                  owner, policy, s->iam_identity_policies,
                                  s->session_policies)) {
     return true;
