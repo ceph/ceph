@@ -1,0 +1,67 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_FAILED_DAEMON
+    log-only-match:
+      - CEPHADM_
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+- - host.c
+  - mon.c
+  - osd.2
+
+tasks:
+- install:
+- cephadm:
+
+# Deploy a single nvmeof gateway (simple smoke test)
+- cephadm.shell:
+    host.c:
+      - |
+        set -ex
+
+        # 1) Create an RBD pool for nvmeof config/state
+        ceph osd pool create foo 64 64 replicated
+        ceph osd pool application enable foo rbd
+
+        # 2) Create a minimal nvmeof spec (no TLS/auth yet)
+        cat << 'EOT' > /tmp/nvmeof.spec
+        service_type: nvmeof
+        service_id: foo
+        placement:
+          hosts:
+            - host.c
+        spec:
+          pool: foo
+          group: nvmeof-test
+          # keep it minimal: enable_auth=false, ssl=false by default
+          port: 5500
+          transports: tcp
+        EOT
+
+        # 3) Apply spec
+        ceph orch apply -i /tmp/nvmeof.spec
+
+- cephadm.wait_for_service:
+    service: nvmeof.foo
+
+# Basic CLI verification (exercise nvmeof CLI + confirm daemons exist)
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+
+        echo "=== nvmeof daemons ==="
+        ceph orch ps --daemon-type nvmeof -f json-pretty
+
+        echo "=== nvmeof gateway info (group) ==="
+        ceph nvmeof gateway info nvmeof-test
+
+        echo "=== done ==="

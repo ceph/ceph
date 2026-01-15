@@ -1,0 +1,70 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_FAILED_DAEMON
+    log-only-match:
+      - CEPHADM_
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+- - host.c
+  - mon.c
+  - osd.2
+
+tasks:
+- install:
+- cephadm:
+
+# Deploy nvmeof using cephadm-signed certs (ssl=true + enable_auth=true, no inline certs)
+- cephadm.shell:
+    host.c:
+      - |
+        set -ex
+
+        # 1) Create pool used by nvmeof
+        ceph osd pool create nvmeof 64 64 replicated
+        ceph osd pool application enable nvmeof rbd
+
+        # 2) Apply minimal nvmeof spec that relies on cephadm-signed certificates
+        # (supported case: ssl:true + enable_auth:true without inline cert material)
+        cat << 'EOF' > /tmp/nvmeof.yaml
+        service_type: nvmeof
+        service_id: nvmeof.group1
+        placement:
+          hosts:
+            - host.c
+        spec:
+          group: group1
+          pool: nvmeof
+          ssl: true
+          enable_auth: true
+        EOF
+
+        ceph orch apply -i /tmp/nvmeof.yaml
+
+- cephadm.wait_for_service:
+    service: nvmeof.nvmeof.group1
+
+# Basic verification of the CLI path + daemon presence
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+
+        echo "=== nvmeof daemons ==="
+        ceph orch ps --daemon-type nvmeof -f json-pretty
+
+        echo "=== nvmeof gateway info (group) ==="
+        ceph nvmeof gateway info group1
+
+        # Show the applied spec back
+        echo "=== orch ls (nvmeof) ==="
+        ceph orch ls --service_type nvmeof -f json-pretty
+
+        echo "=== done ==="
