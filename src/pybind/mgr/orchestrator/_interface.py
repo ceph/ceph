@@ -604,6 +604,9 @@ class Orchestrator(object):
     def cert_store_key_ls(self, include_cephadm_generated_keys: bool = False) -> OrchResult[Dict[str, Any]]:
         raise NotImplementedError()
 
+    def get_nvmeof_tls_bundle(self, service_name: str) -> OrchResult[Dict[str, str]]:
+        raise NotImplementedError()
+
     def cert_store_get_cert(
         self,
         cert_name: str,
