@@ -211,3 +211,11 @@ input:-webkit-autofill:active {
   -webkit-text-fill-color: inherit;
   transition: background-color 5000s ease-in-out 0s;
 }
+
+.cds--progress-bar__track {
+  background-color: colors.$gray-30;
+}
+
+.cds--progress-bar__bar {
+  background-color: var(--cds-primary);
+}
