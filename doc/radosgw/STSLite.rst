@@ -61,7 +61,7 @@ needs to use STS Lite in conjunction with Keystone. The complete set of
 configurable options will be::
 
   [client.{your-rgw-name}]
-  rgw_sts_key = {sts key for encrypting/ decrypting the session token, exactly 16 hex characters}
+  rgw_sts_key = {sts key for encrypting/ decrypting the session token, base64 encoded}
   rgw_s3_auth_use_sts = true
 
   rgw keystone url = {keystone server url:keystone server admin port}
@@ -82,7 +82,7 @@ The details of the integrating ldap with Ceph Object Gateway can be found here:
 The complete set of configurables to use STS Lite with LDAP are::
 
   [client.{your-rgw-name}]
-  rgw_sts_key = {sts key for encrypting/ decrypting the session token, exactly 16 hex characters}
+  rgw_sts_key = {sts key for encrypting/ decrypting the session token, base64 encoded}
   rgw_s3_auth_use_sts = true
 
   rgw_s3_auth_use_ldap = true
@@ -98,6 +98,10 @@ The details of the integrating ldap with Ceph Object Gateway can be found here:
 
 Note: By default, STS and S3 APIs co-exist in the same namespace, and both S3
 and STS APIs can be accessed via the same endpoint in Ceph Object Gateway.
+
+A suitable value for rgw_sts_key can be genreated with
+``ceph-authtool --gen-print-key``.
+The encoded key will also include a key type and timestamp.
 
 Example showing how to Use STS Lite with Keystone
 =================================================
