@@ -44,6 +44,9 @@ template <typename I>
 void FormatRequest<I>::send() {
   const char* type;
   size_t sector_size;
+  // TODO: Figure out how to handle storing
+  //    metadata size on disk
+  size_t meta_size;
   switch (m_format) {
     case RBD_ENCRYPTION_FORMAT_LUKS1:
       type = CRYPT_LUKS1;
@@ -52,6 +55,7 @@ void FormatRequest<I>::send() {
     case RBD_ENCRYPTION_FORMAT_LUKS2:
       type = CRYPT_LUKS2;
       sector_size = 4096;
+      meta_size = 32;
       break;
     default:
       lderr(m_image_ctx->cct) << "unsupported format type: " << m_format
@@ -124,7 +128,7 @@ void FormatRequest<I>::send() {
 
   r = util::build_crypto(m_image_ctx->cct, key, key_size,
                          m_header.get_sector_size(),
-                         m_header.get_data_offset(), m_result_crypto);
+                         m_header.get_data_offset(), meta_size, m_result_crypto);
   ceph_memzero_s(key, key_size, key_size);
   if (r != 0) {
     finish(r);

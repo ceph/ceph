@@ -12,6 +12,11 @@ namespace librbd {
 namespace crypto {
 namespace openssl {
 
+struct CipherDeleter {
+    void operator()(EVP_CIPHER* c) { EVP_CIPHER_free(c); }
+};
+using CipherPtr = std::unique_ptr<EVP_CIPHER, CipherDeleter>;
+
 class DataCryptor : public crypto::DataCryptor<EVP_CIPHER_CTX> {
 
 public:
@@ -30,16 +35,37 @@ public:
     int init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
                      uint32_t iv_length) const override;
     int update_context(EVP_CIPHER_CTX* ctx, const unsigned char* in,
-                       unsigned char* out, uint32_t len) const override;
+                       unsigned char* out, uint32_t in_len, uint32_t out_len) const override;
 
-private:
+    int decrypt(EVP_CIPHER_CTX* ctx, const unsigned char* in,
+                             unsigned char* out, uint32_t in_len, uint32_t out_len) const override;
+protected:
     CephContext* m_cct;
     unsigned char* m_key = nullptr;
     uint16_t m_key_size = 0;
-    const EVP_CIPHER* m_cipher;
+    CipherPtr m_cipher;
     uint32_t m_iv_size;
 
     void log_errors() const;
+};
+
+class AEADDataCryptor : public DataCryptor {
+public:
+    AEADDataCryptor(CephContext* cct) : DataCryptor(cct) {};
+
+  int init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv, 
+                    uint32_t iv_length) const override;
+
+  int update_context(EVP_CIPHER_CTX* ctx, const unsigned char* in,
+        unsigned char* out, uint32_t in_len, uint32_t out_len) const override;
+
+  int decrypt(EVP_CIPHER_CTX* ctx, const unsigned char* in,
+        unsigned char* out, uint32_t in_len, uint32_t out_len) const override;
+
+private:
+    static constexpr size_t AES_256_SIV_TAG_SIZE = 16;
+    static constexpr size_t AES_256_SIV_NONCE_SIZE = 16;
+    static constexpr size_t AES_256_SIV_OVERHEAD = AES_256_SIV_TAG_SIZE + AES_256_SIV_NONCE_SIZE;
 };
 
 } // namespace openssl
