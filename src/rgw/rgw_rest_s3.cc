@@ -7329,33 +7329,14 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
     return -EINVAL;
   }
 
-  string secret_s = cct->_conf->rgw_sts_key;
-  if (secret_s.empty()) {
+  if (cct->_conf->rgw_sts_key.empty()) {
     ldpp_dout(dpp, 1) << "ERROR: rgw sts key not set" << dendl;
     return -EINVAL;
   }
-
-  auto cryptohandler = cct->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
-  if (! cryptohandler) {
-    return -EINVAL;
-  }
-  buffer::ptr secret(secret_s.c_str(), secret_s.length());
-  int ret = 0;
-  if (ret = cryptohandler->validate_secret(secret); ret < 0) {
-    ldpp_dout(dpp, 0) << "Invalid AES256KRB5 secret key, trying AES key validation" << dendl;
-    //Fallback to old style AES
-    cryptohandler = cct->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
-    if (! cryptohandler) {
-      return -EINVAL;
-    }
-    if (ret = cryptohandler->validate_secret(secret); ret < 0) {
-      ldpp_dout(dpp, 0) << "Invalid AES secret key" << dendl;
-      return -EINVAL;
-    }
-  }
   string error;
-  std::unique_ptr<CryptoKeyHandler> keyhandler(cryptohandler->get_key_handler(secret, error));
+  auto keyhandler = STS::secret_to_handler(cct, cct->_conf->rgw_sts_key, error);
   if (! keyhandler) {
+    ldpp_dout(dpp, 0) << "Invalid rgw sts key; " << error << dendl;
     return -EINVAL;
   }
   error.clear();
@@ -7364,7 +7345,7 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
   buffer::list en_input, dec_output;
   en_input = buffer::list::static_from_string(decodedSessionToken);
 
-  ret = keyhandler->decrypt_ext(cct, 14, en_input, dec_output, &error);
+  int ret = keyhandler->decrypt_ext(cct, 14, en_input, dec_output, &error);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: Decryption failed: " << error << dendl;
     return -EPERM;

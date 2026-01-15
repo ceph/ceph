@@ -72,27 +72,16 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   expiration = ceph::to_iso_8601(exp);
 
   //Session Token - Encrypt using AES
-  auto cryptohandler = cct->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
-  if (! cryptohandler) {
-    ldpp_dout(dpp, 0) << "ERROR: No AES256KRB5 crypto handler found !" << dendl;
-    return -EINVAL;
-  }
-  string secret_s = cct->_conf->rgw_sts_key;
-  if (secret_s.empty()) {
+  if (cct->_conf->rgw_sts_key.empty()) {
     ldpp_dout(dpp, 1) << "ERROR: rgw sts key not set" << dendl;
     return -EINVAL;
   }
 
-  buffer::ptr secret(secret_s.c_str(), secret_s.length());
-  int ret = 0;
-  if (ret = cryptohandler->validate_secret(secret); ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw sts key, please ensure it is an alphanumeric key of minimum length 32" << dendl;
-    return ret;
-  }
   string error;
-  std::unique_ptr<CryptoKeyHandler> keyhandler(cryptohandler->get_key_handler(secret, error));
+  int ret;
+  auto keyhandler = secret_to_handler(cct, cct->_conf->rgw_sts_key, error);
   if (! keyhandler) {
-    ldpp_dout(dpp, 0) << "ERROR: No Key handler found !" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw sts key; " << error << dendl;
     return -EINVAL;
   }
   error.clear();
@@ -481,4 +470,56 @@ GetSessionTokenResponse STSService::getSessionToken(const DoutPrefixProvider *dp
   return make_tuple(0, cred);
 }
 
+class ExposedCryptoKey : public CryptoKey {// XXX do better fix
+public:
+  std::shared_ptr<CryptoKeyHandler> & get_key_handler() {
+    return ckh;
+  }
+};
+
+std::shared_ptr<CryptoKeyHandler> secret_to_handler(CephContext* cct,
+  const std::string &secret, std::string &error)
+{
+  std::shared_ptr<CryptoKeyHandler> r;
+  CryptoKey key;
+  bool good = false;
+  try {
+    key.decode_base64(secret);
+    good = true;
+  } catch (const ceph::buffer::end_of_buffer& e) {
+    error = "decode failed; end of buffer";
+  } catch (const ceph::buffer::malformed_input& e) {
+    error = "decode failed; maiformed input";
+  }
+  if (good) {
+    ExposedCryptoKey *ep = (ExposedCryptoKey*)& key;
+    r.swap(ep->get_key_handler());
+  } else {
+    std::shared_ptr<CryptoHandler> cryptohandler;
+    int len = secret.length();
+    int ret;
+    switch(len) {
+    case 16:
+      cryptohandler = cct->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
+      break;
+    case 32:
+      cryptohandler = cct->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
+      break;
+    default:
+      ;
+    }
+    if (!cryptohandler) {
+      // fail invalid length (return decode failed)
+    } else {
+      buffer::ptr bp(secret.c_str(), len);
+      ret = cryptohandler->validate_secret(bp);
+      if (ret < 0) {
+        error = "invalid secret";
+      } else {
+        r.reset(cryptohandler->get_key_handler(bp, error));
+      }
+    }
+  }
+  return r;
+}
 }
