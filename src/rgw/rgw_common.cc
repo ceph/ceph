@@ -1151,7 +1151,7 @@ Effect eval_or_pass(const DoutPrefixProvider* dpp,
                     const rgw::IAM::Environment& env,
                     boost::optional<const rgw::auth::Identity&> id,
                     const uint64_t op,
-                    const ARN& resource,
+                    boost::optional<const ARN&> resource,
                     boost::optional<rgw::auth::Principal>& principal) {
   if (!policy) {
     return Effect::Pass;
@@ -1185,17 +1185,24 @@ Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
 } // anonymous namespace
 
 // determine whether a request is allowed or denied within an account
+// identity_arn is used to match Resource/NotResource arns for identity policy,
+// while resource_arn is used to match Resource/NotResource arns for resource
+// policy. when the resource policy being evaluated is a role trust policy,
+// the given resource_arn must be boost::none
 Effect evaluate_iam_policies(
     const DoutPrefixProvider* dpp,
     const rgw::IAM::Environment& env,
     const rgw::auth::Identity& identity,
-    bool account_root, uint64_t op, const rgw::ARN& arn,
+    bool account_root, uint64_t op,
+    const rgw::ARN& identity_arn,
+    boost::optional<const ARN&> resource_arn,
     const boost::optional<Policy>& resource_policy,
     const vector<Policy>& identity_policies,
     const vector<Policy>& session_policies,
     bool cross_account)
 {
-  auto identity_res = eval_identity_or_session_policies(dpp, identity_policies, env, op, arn);
+  auto identity_res = eval_identity_or_session_policies(
+      dpp, identity_policies, env, op, identity_arn);
   if (identity_res == Effect::Deny) {
     ldpp_dout(dpp, 10) << __func__ << ": explicit deny from identity-based policy" << dendl;
     return Effect::Deny;
@@ -1204,7 +1211,7 @@ Effect evaluate_iam_policies(
   // Principal matched by resource policy
   boost::optional<rgw::auth::Principal> principal;
   auto resource_res = eval_or_pass(dpp, resource_policy, env, identity,
-                                   op, arn, principal);
+                                   op, resource_arn, principal);
   if (resource_res == Effect::Deny) {
     ldpp_dout(dpp, 10) << __func__ << ": explicit deny from resource-based policy" << dendl;
     return Effect::Deny;
@@ -1212,7 +1219,8 @@ Effect evaluate_iam_policies(
 
   //Take into account session policies, if the identity making a request is a role
   if (!session_policies.empty()) {
-    auto session_res = eval_identity_or_session_policies(dpp, session_policies, env, op, arn);
+    auto session_res = eval_identity_or_session_policies(
+        dpp, session_policies, env, op, identity_arn);
     if (session_res == Effect::Deny) {
       ldpp_dout(dpp, 10) << __func__ << ": explicit deny from session policy" << dendl;
       return Effect::Deny;
@@ -1281,7 +1289,7 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
   const bool account_root = (s->identity->get_identity_type() == TYPE_ROOT);
   constexpr bool cross_account = false;
   const auto effect = evaluate_iam_policies(dpp, s->env, *s->identity,
-                                            account_root, op, res, {},
+                                            account_root, op, res, res, {},
                                             user_policies, session_policies,
                                             cross_account);
   if (effect == Effect::Deny) {
@@ -1348,14 +1356,15 @@ Effect evaluate_resource_permission(
     const rgw::IAM::Environment& env,
     const rgw::auth::Identity& identity,
     uint64_t op,
-    const rgw::ARN& arn,
+    const rgw::ARN& identity_arn,
+    boost::optional<const rgw::ARN&> resource_arn,
     const rgw_owner& resource_owner,
     const boost::optional<rgw::IAM::Policy>& resource_policy,
     const std::vector<rgw::IAM::Policy>& identity_policies,
     const std::vector<rgw::IAM::Policy>& session_policies)
 {
   ldpp_dout(dpp, 16) << __func__ << ": policy: " << resource_policy
-      << " resource: " << arn << dendl;
+      << " resource: " << identity_arn << dendl;
 
   if (identity.get_account()) {
     const bool account_root = (identity.get_identity_type() == TYPE_ROOT);
@@ -1366,14 +1375,14 @@ Effect evaluate_resource_permission(
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
       const auto identity_res = evaluate_iam_policies(
-          dpp, env, identity, account_root, op, arn, {},
-          identity_policies, session_policies, cross_account);
+          dpp, env, identity, account_root, op, identity_arn, resource_arn,
+          {}, identity_policies, session_policies, cross_account);
       if (identity_res == rgw::IAM::Effect::Deny) {
         return Effect::Deny;
       }
       boost::optional<rgw::auth::Principal> principal; // ignored
       const auto resource_res = eval_or_pass(dpp, resource_policy, env, identity,
-                                             op, arn, principal);
+                                             op, resource_arn, principal);
       if (resource_res == Effect::Deny) {
         ldpp_dout(dpp, 10) << __func__ << ": explicit deny from resource-based policy" << dendl;
         return Effect::Deny;
@@ -1387,16 +1396,16 @@ Effect evaluate_resource_permission(
       // require an Allow from either identity- or resource-based policy
       constexpr bool cross_account = false;
       return evaluate_iam_policies(
-          dpp, env, identity, account_root, op, arn, resource_policy,
-          identity_policies, session_policies, cross_account);
+          dpp, env, identity, account_root, op, identity_arn, resource_arn,
+          resource_policy, identity_policies, session_policies, cross_account);
     }
   }
 
   constexpr bool account_root = false;
   constexpr bool cross_account = false;
   return evaluate_iam_policies(
-      dpp, env, identity, account_root, op, arn, resource_policy,
-      identity_policies, session_policies, cross_account);
+      dpp, env, identity, account_root, op, identity_arn, resource_arn,
+      resource_policy, identity_policies, session_policies, cross_account);
 }
 
 bool verify_resource_permission(
@@ -1404,15 +1413,16 @@ bool verify_resource_permission(
     const rgw::IAM::Environment& env,
     const rgw::auth::Identity& identity,
     uint64_t op,
-    const rgw::ARN& arn,
+    const rgw::ARN& identity_arn,
+    boost::optional<const rgw::ARN&> resource_arn,
     const rgw_owner& resource_owner,
     const boost::optional<rgw::IAM::Policy>& resource_policy,
     const std::vector<rgw::IAM::Policy>& identity_policies,
     const std::vector<rgw::IAM::Policy>& session_policies)
 {
   return Effect::Allow == evaluate_resource_permission(
-      dpp, env, identity, op, arn,
-      resource_owner, resource_policy,
+      dpp, env, identity, op, identity_arn,
+      resource_arn, resource_owner, resource_policy,
       identity_policies, session_policies);
 }
 
@@ -1467,7 +1477,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
   }
 
   const auto effect = evaluate_iam_policies(
-      dpp, s->env, *s->identity, account_root, op, arn,
+      dpp, s->env, *s->identity, account_root, op, arn, arn,
       bucket_policy, identity_policies, session_policies, cross_account);
   if (effect == Effect::Deny) {
     return false;
@@ -1640,8 +1650,9 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
     return false;
   }
 
+  const auto arn = rgw::ARN(obj);
   const auto effect = evaluate_iam_policies(
-      dpp, ps->env, *ps->identity, account_root, op, ARN(obj),
+      dpp, ps->env, *ps->identity, account_root, op, arn, arn,
       bucket_policy, identity_policies, session_policies, cross_account);
   if (effect == Effect::Deny) {
     return false;
