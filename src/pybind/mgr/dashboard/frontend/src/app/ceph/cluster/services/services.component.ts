@@ -1,7 +1,6 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { delay } from 'rxjs/operators';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -22,7 +21,6 @@ import { Permissions } from '~/app/shared/models/permissions';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { PlacementPipe } from './placement.pipe';
@@ -63,7 +61,6 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   tableActions: CdTableAction[];
   showDocPanel = false;
   count = 0;
-  bsModalRef: NgbModalRef;
 
   orchStatus: OrchestratorStatus;
   actionOrchFeatures = {
@@ -83,7 +80,6 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   constructor(
     private actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
-    private modalService: ModalService,
     private orchService: OrchestratorService,
     private cephServiceService: CephServiceService,
     private relativeDatePipe: RelativeDatePipe,
@@ -149,7 +145,8 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
             hiddenServices: this.hiddenServices,
             editing: edit
           });
-      this.bsModalRef = this.modalService.show(ServiceFormComponent, initialState, { size: 'lg' });
+      let modalRef = this.cdsModalService.show(ServiceFormComponent);
+      Object.assign(modalRef, initialState);
     }
   }
 

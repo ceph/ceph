@@ -50,13 +50,13 @@ export class ServicesPageHelper extends PageHelper {
         case 'rgw':
           cy.get('#service_id').type('foo');
           unmanaged
-            ? cy.get('label[for=unmanaged]').click()
+            ? cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true })
             : cy.get('#count').clear().type(String(count));
           break;
 
         case 'ingress':
           if (unmanaged) {
-            cy.get('label[for=unmanaged]').click();
+            cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true });
           }
           this.selectOption('backend_service', 'rgw.foo');
           cy.get('#service_id').should('have.value', 'rgw.foo');
@@ -68,14 +68,14 @@ export class ServicesPageHelper extends PageHelper {
         case 'nfs':
           cy.get('#service_id').type('testnfs');
           unmanaged
-            ? cy.get('label[for=unmanaged]').click()
+            ? cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true })
             : cy.get('#count').clear().type(String(count));
           break;
 
         case 'smb':
           cy.get('#service_id').type('testsmb');
           unmanaged
-            ? cy.get('label[for=unmanaged]').click()
+            ? cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true })
             : cy.get('#count').clear().type(String(count));
           cy.get('#cluster_id').type('cluster_foo');
           cy.get('#config_uri').type('rados://.smb/foo/scc.toml');
@@ -108,19 +108,20 @@ export class ServicesPageHelper extends PageHelper {
           cy.get('#oidc_issuer_url').type('http://127.0.0.0:8080/realms/ceph');
           break;
 
+        case 'mgmt-gateway':
+          cy.get('#port').clear().type('8443');
+          cy.get('cds-checkbox#enable_auth input[type="checkbox"]').check({ force: true });
+          break;
+
         default:
           cy.get('#service_id').type('test');
           unmanaged
-            ? cy.get('label[for=unmanaged]').click()
+            ? cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true })
             : cy.get('#count').clear().type(String(count));
           break;
       }
       cy.wait(1000);
-      if (serviceType === 'snmp-gateway') {
-        cy.get('cd-submit-button').dblclick();
-      } else {
-        cy.get('cd-submit-button').click();
-      }
+      cy.get('cd-submit-button').click();
     });
     if (exist) {
       cy.get('#service_id').should('have.class', 'ng-invalid');
@@ -133,7 +134,7 @@ export class ServicesPageHelper extends PageHelper {
   editService(name: string, daemonCount: string) {
     this.navigateEdit(name, true, false);
     cy.get(`${this.pages.create.id}`).within(() => {
-      cy.get('#service_type').should('be.disabled');
+      cy.get('cds-select#service_type select').should('be.disabled');
       cy.get('#service_id').should('be.disabled');
       cy.get('#count').clear().type(daemonCount);
       cy.get('cd-submit-button').click();
@@ -203,9 +204,8 @@ export class ServicesPageHelper extends PageHelper {
   deleteService(serviceName: string) {
     this.clickRowActionButton(serviceName, 'delete', 3 * 1000);
 
-    // Confirms deletion
-    cy.get('cds-modal input#confirmation_input').click({ force: true });
-    cy.contains('cds-modal button', 'Delete').click();
+    cy.get('cds-modal [aria-label="confirmation"]').click({ force: true });
+    cy.get('cds-modal button').contains('Delete', { matchCase: false }).click({ force: true });
 
     // Wait for modal to close
     cy.get('cds-modal').should('not.exist');
