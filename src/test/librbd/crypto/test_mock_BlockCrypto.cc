@@ -76,7 +76,7 @@ struct TestMockCryptoBlockCrypto : public TestFixture {
       _set_last_expectation(
               EXPECT_CALL(*cryptor, update_context(_,
                                                   CompareArrayToString(in_str),
-                                                  _, in_str.length()))
+                                                  _, in_str.length(), _))
               .After(*expectation_set).WillOnce(Return(out_ret)));
     }
 
@@ -147,7 +147,7 @@ TEST_F(TestMockCryptoBlockCrypto, UpdateContextError) {
   data.append(std::string(4096, '1'));
   expect_get_context(CipherMode::CIPHER_MODE_ENC);
   EXPECT_CALL(*cryptor, init_context(_, _, _));
-  EXPECT_CALL(*cryptor, update_context(_, _, _, _)).WillOnce(Return(-123));
+  EXPECT_CALL(*cryptor, update_context(_, _, _, _, _)).WillOnce(Return(-123));
   expect_return_context(CipherMode::CIPHER_MODE_ENC);
   ASSERT_EQ(-123, bc->encrypt(&data, 0));
 }

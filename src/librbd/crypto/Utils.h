@@ -23,7 +23,7 @@ void set_crypto(ImageCtxT *image_ctx,
 
 int build_crypto(
         CephContext* cct, const unsigned char* key, uint32_t key_length,
-        uint64_t block_size, uint64_t data_offset,
+        uint64_t block_size, uint64_t data_offset, uint32_t meta_size,
         std::unique_ptr<CryptoInterface>* result_crypto);
 
 } // namespace util
