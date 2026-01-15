@@ -19,24 +19,29 @@ describe('DateTimePickerComponent', () => {
   });
 
   beforeEach(() => {
-    spyOn(Date, 'now').and.returnValue(new Date('2022-02-22T00:00:00.00'));
+    spyOn(Date, 'now').and.returnValue(new Date('2022-02-26T00:00:00.00'));
     fixture = TestBed.createComponent(DateTimePickerComponent);
     component = fixture.componentInstance;
   });
 
   it('should create with correct datetime', fakeAsync(() => {
-    component.control = new FormControl('2022-02-26 00:00:00');
+    component.control = new FormControl('2022-02-26 12:00:00 AM'); // 12-hour midnight
     fixture.detectChanges();
     tick();
+    component.onModelChange();
+    tick();
+
     expect(component).toBeTruthy();
-    expect(component.control.value).toBe('2022-02-26 00:00:00');
+    expect(component.control.value).toBe('2022-02-26 12:00:00 AM');
   }));
 
   it('should update control value if datetime is not valid', fakeAsync(() => {
     component.control = new FormControl('not valid');
     fixture.detectChanges();
     tick();
-    expect(component.control.value).toBe('2022-02-22 00:00:00');
+    component.onModelChange();
+    tick();
+    expect(component.control.value).toBe('2022-02-26 12:00:00 AM');
   }));
 
   it('should init with only date enabled', () => {
