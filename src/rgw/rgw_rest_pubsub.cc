@@ -157,7 +157,7 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
                              uint64_t op)
 {
   const auto effect = evaluate_resource_permission(
-      dpp, s->env, *s->auth.identity, op, arn, owner, policy,
+      dpp, s->env, *s->auth.identity, op, arn, arn, owner, policy,
       s->iam_identity_policies, s->session_policies);
   if (effect == Effect::Deny) {
     return false;
