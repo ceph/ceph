@@ -72,6 +72,46 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   serviceTypes: string[] = [];
+  // Options with user friendly labels
+  serviceTypeOptions: Array<{ value: string; label: string }> = [];
+  // Grouped options
+  serviceTypeOptionGroups: Array<{ label: string; options: Array<{ value: string; label: string }> }> = [];
+
+  // Map of known service type -> user friendly label. Fallback will be generated
+  readonly SERVICE_TYPE_LABELS: { [key: string]: string } = {
+    rgw: 'Object(RGW)',
+    nfs: 'NFS',
+    iscsi: 'iSCSI',
+    nvmeof: 'NVMe/TCP',
+    'mgmt-gateway': 'Management Gateway',
+    'oauth2-proxy': 'OAuth2 Proxy',
+    smb: 'SMB',
+    ingress: 'Ingress Controller',
+    grafana: 'Grafana',
+    mds: 'Filesystem(MDS)',
+    mon: 'Ceph Monitor',
+    mgr: 'Ceph Manager',
+    'rbd-mirror': 'Block Mirroring',
+    'cephfs-mirror': 'Filesystem Mirroring',
+    loki: 'Grafana Loki',
+    alloy: 'Grafana Alloy',
+    container: 'Container',
+    osd: 'OSD',
+  };
+
+  // Types that should only allow a single instance in the cluster. If one
+  // already exists, the option will be disabled in the UI.
+  readonly SINGLE_INSTANCE_TYPES: string[] = [
+    'mgr',
+    'mon',
+    'mgmt-gateway',
+    'oauth2-proxy',
+    'grafana',
+    'prometheus',
+    'ceph-exporter',
+    'loki',
+    'alloy'
+  ];
   serviceIds: string[] = [];
   hosts: any;
   labels: string[];
@@ -142,6 +182,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       })
     };
     this.createForm();
+  }
+
+  isTypeDisabled(type: string): boolean {
+    // Only disable creation of single-instance types if one exists.
+    if (this.editing) {
+      return false;
+    }
+    if (this.SINGLE_INSTANCE_TYPES.includes(type)) {
+      return !!this.serviceList && this.serviceList.some((s) => s.service_type === type);
+    }
+    return false;
   }
 
   createForm() {
@@ -642,9 +693,64 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       // osd       - This is deployed a different way.
       // container - This should only be used in the CLI.
       // promtail  - This is deprecated and replaced by alloy.
-      this.hiddenServices.push('osd', 'container', 'promtail');
+      this.hiddenServices.push('osd', 'container', 'promtail', 'mon', 'mgr');
 
-      this.serviceTypes = _.difference(resp, this.hiddenServices).sort();
+      const rawTypes = _.difference(resp, this.hiddenServices).sort();
+      this.serviceTypes = rawTypes;
+      this.serviceTypeOptions = rawTypes.map((type) => ({
+        value: type,
+        label: this.SERVICE_TYPE_LABELS[type] || _.startCase(type)
+      }));
+
+      // Build ordered groups
+      const serviceGroups: Array<{ label: string; types: string[] }> = [
+        { label: 'Block', types: ['rbd-mirror', 'iscsi', 'nvmeof'] },
+        { label: 'Object', types: ['rgw'] },
+        { label: 'File', types: ['mds', 'cephfs-mirror', 'nfs', 'smb'] },
+        { label: 'Logs & Observability', types: ['loki', 'alloy'] },
+        {
+          label: 'Monitoring',
+          types: [
+            'grafana',
+            'prometheus',
+            'alertmanager',
+            'snmp-gateway',
+            'ceph-exporter',
+            'node-exporter',
+          ]
+        },
+        { label: 'Security & SSO', types: ['mgmt-gateway', 'oauth2-proxy'] },
+
+      ];
+
+      const remaining = new Set(rawTypes);
+      const groups: Array<{ label: string; options: Array<{ value: string; label: string }> }> = [];
+      for (const serviceGroup of serviceGroups) {
+        const opts: Array<{ value: string; label: string }> = [];
+        for (const type of serviceGroup.types) {
+          if (remaining.has(type)) {
+            remaining.delete(type);
+            opts.push({ value: type, label: this.SERVICE_TYPE_LABELS[type] || _.startCase(type) });
+          }
+        }
+        if (opts.length > 0) {
+          groups.push({ label: serviceGroup.label, options: opts });
+        }
+      }
+
+      // Any remaining types go into "Additional Services"
+      const additional: Array<{ value: string; label: string }> = [];
+      for (const type of rawTypes) {
+        if (remaining.has(type)) {
+          additional.push({ value: type, label: this.SERVICE_TYPE_LABELS[type] || _.startCase(type) });
+          remaining.delete(type);
+        }
+      }
+      if (additional.length > 0) {
+        groups.push({ label: 'Additional Services', options: additional });
+      }
+
+      this.serviceTypeOptionGroups = groups;
     });
     this.hostService.getAllHosts().subscribe((resp: Host[]) => {
       const options: SelectOption[] = [];
@@ -927,6 +1033,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         break;
       case 'mgr':
       case 'mds':
+        this.serviceForm.get('count').setValue(2);
+        break;
       case 'rgw':
       case 'ingress':
       case 'rbd-mirror':
@@ -1064,7 +1172,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   requiresServiceId(serviceType: string) {
-    return ['mds', 'rgw', 'nfs', 'iscsi', 'nvmeof', 'smb', 'ingress'].includes(serviceType);
+    return ['mds', 'rgw', 'nfs', 'iscsi', 'nvmeof', 'smb', 'ingress', 'rbd-mirror', 'cephfs-mirror'].includes(serviceType);
   }
 
   setServiceId(serviceId: string): void {
@@ -1099,6 +1207,24 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     } else {
       this.serviceForm.get('count').enable();
     }
+
+    if (!this.editing) {
+      const shouldPrefill =
+        this.requiresServiceId(selectedServiceType) &&
+        !['nvmeof', 'ingress'].includes(selectedServiceType);
+      if (shouldPrefill) {
+        const generated = this.generateRandomServiceId(selectedServiceType);
+        this.serviceForm.get('service_id').setValue(generated);
+      }
+    }
+  }
+
+  private generateRandomServiceId(serviceType: string): string {
+    const safePrefix = /^[a-zA-Z]/.test(serviceType)
+      ? serviceType.replace(/[^a-zA-Z0-9_.-]/g, '')
+      : 'service';
+    const suffix = Math.random().toString(36).substring(2, 8); // 6 chars
+    return `${safePrefix}-${suffix}`;
   }
 
   onPlacementChange(selected: string) {
