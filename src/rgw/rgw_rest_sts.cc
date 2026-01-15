@@ -862,7 +862,7 @@ int RGWREST_STS::verify_permission(optional_yield y)
       // require sts:TagSession permission
       constexpr uint64_t op = rgw::IAM::stsTagSession;
       if (!verify_resource_permission(this, s->env, *s->auth.identity,
-                                      op, *arn, owner, p,
+                                      op, *arn, boost::none, owner, p,
                                       s->iam_identity_policies,
                                       s->session_policies)) {
         ldout(s->cct, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
@@ -878,7 +878,7 @@ int RGWREST_STS::verify_permission(optional_yield y)
     }
 
     if (!verify_resource_permission(this, s->env, *s->auth.identity,
-                                    op, *arn, owner, p,
+                                    op, *arn, boost::none, owner, p,
                                     s->iam_identity_policies,
                                     s->session_policies)) {
       ldout(s->cct, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
