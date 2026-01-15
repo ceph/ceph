@@ -223,6 +223,9 @@ macro(build_boost version)
     endif()
   endforeach()
   set(Boost_BUILD_COMPONENTS ${components})
+  # Remove the `headers` from the list of components to build as
+  # `headers` is an interface only target we add later.
+  list(REMOVE_ITEM Boost_BUILD_COMPONENTS headers)
   unset(components)
 
   foreach(c ${Boost_BUILD_COMPONENTS})
@@ -278,13 +281,18 @@ macro(build_boost version)
   endforeach()
 
   # for header-only libraries
-  add_library(Boost::boost INTERFACE IMPORTED)
-  set_target_properties(Boost::boost PROPERTIES
+  add_library(Boost::headers INTERFACE IMPORTED)
+  set_target_properties(Boost::headers PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
-  add_dependencies(Boost::boost Boost)
+  add_dependencies(Boost::headers Boost)
   find_package_handle_standard_args(Boost DEFAULT_MSG
     Boost_INCLUDE_DIRS Boost_LIBRARIES)
   mark_as_advanced(Boost_LIBRARIES BOOST_INCLUDE_DIRS)
+
+  add_library(Boost::boost INTERFACE IMPORTED)
+  set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_LINK_LIBRARIES
+    Boost::headers)
+ 
 endmacro()
 
 function(maybe_add_boost_dep target)
@@ -298,7 +306,7 @@ function(maybe_add_boost_dep target)
     get_filename_component(ext ${src} EXT)
     # assuming all cxx source files include boost header(s)
     if(ext MATCHES ".cc|.cpp|.cxx")
-      add_dependencies(${target} Boost::boost)
+      add_dependencies(${target} Boost::headers)
       return()
     endif()
   endforeach()

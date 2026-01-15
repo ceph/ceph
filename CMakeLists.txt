@@ -4,7 +4,11 @@ project(ceph
   VERSION 20.0.0
   LANGUAGES CXX C ASM)
 
-foreach(policy CMP0127 CMP0135 CMP0175)
+foreach(policy CMP0127 CMP0135
+  CMP0144 # Ensure taking `BOOST_ROOT` keeps working. Otherwise,
+	  # config-based `find_package` will take `Boost_ROOT`.
+  CMP0167 # Use Boost's own CMake config files instead of FindBoost module.
+  CMP0175)
   if(POLICY ${policy})
     cmake_policy(SET ${policy} NEW)
   endif()
