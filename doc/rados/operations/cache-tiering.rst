@@ -181,12 +181,12 @@ Setting up a backing storage pool typically involves one of two scenarios:
 In the standard storage scenario, you can setup a CRUSH rule to establish 
 the failure domain (e.g., osd, host, chassis, rack, row, etc.). Ceph OSD 
 Daemons perform optimally when all storage drives in the rule are of the 
-same size, speed (both RPMs and throughput) and type. See `CRUSH Maps`_ 
+same size, speed (both RPMs and throughput) and type. See :ref:`rados-crush-map`
 for details on creating a rule. Once you have created a rule, create 
 a backing storage pool. 
 
 In the erasure coding scenario, the pool creation arguments will generate the
-appropriate rule automatically. See `Create a Pool`_ for details.
+appropriate rule automatically. See :ref:`createpool` for details.
 
 In subsequent examples, we will refer to the backing storage pool 
 as ``cold-storage``.
@@ -207,7 +207,7 @@ In subsequent examples, we will refer to the cache pool as ``hot-storage`` and
 the backing pool as ``cold-storage``.
 
 For cache tier configuration and default values, see 
-`Pools - Set Pool Values`_.
+:ref:`setpoolvalues`.
 
 
 Creating a Cache Tier
@@ -610,8 +610,5 @@ See `Tracker Issue #44286 <https://tracker.ceph.com/issues/44286>`_ for the
 history of this issue.
 
 
-.. _Create a Pool: ../pools#create-a-pool
-.. _Pools - Set Pool Values: ../pools#set-pool-values
 .. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter
-.. _CRUSH Maps: ../crush-map
 .. _Absolute Sizing: #absolute-sizing
