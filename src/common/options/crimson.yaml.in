@@ -28,6 +28,20 @@ options:
   min: 0
   max: 32
 
+- name: crimson_reactor_backend
+  type: str
+  level: advanced
+  default: linux-aio
+  enum_values:
+  - linux-aio
+  - io_uring
+  - epoll
+  desc: Select the seastar reactor IO backend to use for the crimson
+  long_desc: The backend is chosen during OSD bootup and determines how asynchrnous disk I/O
+              is performed.
+  flags:
+  - startup
+
 # Reactor options:
 
 - name: crimson_reactor_task_quota_ms

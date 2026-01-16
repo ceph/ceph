@@ -96,7 +96,8 @@ const std::vector<SeastarOption> seastar_options = {
   {"--task-quota-ms", "crimson_reactor_task_quota_ms", Option::TYPE_FLOAT},
   {"--io-latency-goal-ms", "crimson_reactor_io_latency_goal_ms", Option::TYPE_FLOAT},
   {"--idle-poll-time-us", "crimson_reactor_idle_poll_time_us", Option::TYPE_UINT},
-  {"--poll-mode", "crimson_poll_mode", Option::TYPE_BOOL}
+  {"--poll-mode", "crimson_poll_mode", Option::TYPE_BOOL},
+  {"--reactor-backend", "crimson_reactor_backend", Option::TYPE_STR}
 };
 
 // Function to get the option value as a string
@@ -118,6 +119,12 @@ std::optional<std::string> get_option_value(const SeastarOption& option) {
      if (crimson::common::get_conf<bool>(option.config_key)) {
         return "true";
       }
+      break;
+    }
+    case Option::TYPE_STR: {
+      auto value = crimson::common::get_conf<std::string>(option.config_key);
+      if (!value.empty())
+        return value;
       break;
     }
     default:
@@ -189,6 +196,13 @@ _get_early_config(int argc, const char *argv[])
         for (const auto& option : seastar_options) {
           auto option_value = get_option_value(option);
           if (option_value) {
+            if ((option.config_key == "crimson_reactor_backend") && (option_value == "io_uring")) {
+              #ifndef SEASTAR_IO_URING
+                throw std::runtime_error(
+                  "reactor_backend=io_uring requested, "
+                  "but this build does not support io_uring");
+              #endif
+            }
             logger().info("Configure option_name {} with value : {}", option.config_key, option_value);
             ret.early_args.emplace_back(option.option_name);
             if (option.value_type != Option::TYPE_BOOL) {
@@ -233,6 +247,7 @@ _get_early_config(int argc, const char *argv[])
 	                 "set only using crimson_cpu_set");
 	  ceph_abort();
 	}
+
 	return 0;
       });
     });
