@@ -1,5 +1,7 @@
 :orphan:
 
+.. _man-radosgw-admin:
+
 =================================================================
  radosgw-admin -- rados REST gateway user administration utility
 =================================================================
