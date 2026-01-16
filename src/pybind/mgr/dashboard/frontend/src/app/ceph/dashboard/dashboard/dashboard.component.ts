@@ -1,5 +1,9 @@
 import { Component, inject, OnInit } from '@angular/core';
-import { FeatureTogglesService } from '~/app/shared/services/feature-toggles.service';
+import { Observable } from 'rxjs';
+import {
+  FeatureTogglesMap,
+  FeatureTogglesService
+} from '~/app/shared/services/feature-toggles.service';
 
 @Component({
   selector: 'cd-dashboard',
@@ -8,11 +12,11 @@ import { FeatureTogglesService } from '~/app/shared/services/feature-toggles.ser
   standalone: false
 })
 export class DashboardComponent implements OnInit {
-  useDeprecated: boolean = true;
+  enabledFeature$: Observable<FeatureTogglesMap>;
 
   private featureToggles = inject(FeatureTogglesService);
 
   ngOnInit() {
-    this.useDeprecated = this.featureToggles.isFeatureEnabled('dashboard');
+    this.enabledFeature$ = this.featureToggles.get();
   }
 }

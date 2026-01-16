@@ -1,5 +1,6 @@
-<main aria-label="Cluster Overview">
-@if (useDeprecated === true) {
+<main aria-label="Overview">
+@let features = enabledFeature$ | async;
+@if (features?.dashboard) {
 <!-- OLD OVERVIEW -->
 <cd-dashboard-v3 data-testid="cd-dashboard-v3"></cd-dashboard-v3>
 } @else {

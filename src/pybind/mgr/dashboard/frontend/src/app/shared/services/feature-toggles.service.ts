@@ -35,8 +35,4 @@ export class FeatureTogglesService {
   get(): FeatureTogglesMap$ {
     return this.featureToggleMap$;
   }
-
-  isFeatureEnabled(feature: string): boolean {
-    return this.http.get<FeatureTogglesMap>(this.API_URL)?.[feature];
-  }
 }

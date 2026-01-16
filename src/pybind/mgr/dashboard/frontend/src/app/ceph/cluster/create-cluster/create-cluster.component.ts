@@ -151,7 +151,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
               NotificationType.info,
               $localize`Cluster expansion skipped by user`
             );
-            this.router.navigate(['/dashboard']);
+            this.router.navigate(['/overview']);
             this.modalService.dismissAll();
           }
         });
@@ -179,7 +179,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
                   NotificationType.success,
                   $localize`Cluster expansion was successful`
                 );
-                this.router.navigate(['/dashboard']);
+                this.router.navigate(['/overview']);
               })
             )
           )
