@@ -227,7 +227,7 @@ describe('NavigationComponent', () => {
       fixture.detectChanges();
 
       const expectedTexts = {
-        '.tc_menuitem_dashboard': 'Dashboard',
+        '.tc_menuitem_overview': 'Overview',
         '.tc_submenuitem_multiCluster_overview': 'Overview',
         '.tc_submenuitem_multiCluster_manage_clusters': 'Manage Clusters',
         '.tc_submenuitem_cluster_pool': 'Pools',
