@@ -232,8 +232,8 @@ class NFSCluster:
             daemon_status: Any
     ) -> str:
         """
-        Get simplified daemon status using built-in DaemonDescriptionStatus.to_str() method.
-        
+        Get simplified daemon status using built-in DaemonDescriptionStatus.to_str().
+
         Returns:
         - "running": Daemon is running
         - "error": Daemon is in error state
@@ -320,7 +320,7 @@ class NFSCluster:
         # Determine deployment type based on ingress configuration and actual daemon count
         deployment_type = "standalone"
         placement = None
-        
+
         # Get NFS service spec for placement information first
         nfs_sc = self.mgr.describe_service(
             service_type='nfs',
@@ -331,14 +331,14 @@ class NFSCluster:
             if svc.spec.service_id == cluster_id:
                 placement = svc.spec.placement
                 break
-        
+
         if ingress_mode:
             # Check if multiple NFS daemons are configured
             if len(backends) > 1 or (placement and placement.count and placement.count > 1):
                 deployment_type = "active-active"
             else:
                 deployment_type = "active-passive"
-        
+
         # Build result dictionary
         r: Dict[str, Any] = {
             'deployment_type': deployment_type,
