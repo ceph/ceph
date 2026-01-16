@@ -3,7 +3,7 @@ import { LoginPageHelper } from './login.po';
 describe('Login page', () => {
   const login = new LoginPageHelper();
 
-  it('should login and navigate to dashboard page', () => {
+  it('should login and navigate to overview page', () => {
     login.navigateTo();
     login.doLogin();
   });

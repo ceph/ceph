@@ -3,7 +3,7 @@ import { PageHelper } from '../page-helper.po';
 export class LoginPageHelper extends PageHelper {
   pages = {
     index: { url: '#/login', id: 'cd-login' },
-    dashboard: { url: '#/dashboard', id: 'cd-dashboard' }
+    overview: { url: '#/overview', id: 'cd-dashboard' }
   };
 
   doLogin() {
