@@ -638,6 +638,8 @@ false. Examples:
       - argument: "--annotation=com.example.note=a simple example"
 
 
+.. _cephadm-container-mount:
+
 Mounting Files with Extra Container Arguments
 ---------------------------------------------
 

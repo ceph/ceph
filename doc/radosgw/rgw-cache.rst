@@ -1,3 +1,5 @@
+.. _radosgw-data-caching:
+
 ========================
 RGW Data Caching and CDN
 ========================
@@ -17,7 +19,7 @@ and caching-out on subsequent GET requests, passing through transparently PUT,PO
 
 The feature introduces 2 new APIs: Auth and Cache.
 
-.. note:: The `D3N RGW Data Cache`_ is an alternative data caching mechanism implemented natively in the RADOS Gateway.
+.. note:: The :ref:`radosgw-d3n-datacache` is an alternative data caching mechanism implemented natively in the RADOS Gateway.
 
 New APIs
 --------
@@ -146,5 +148,3 @@ This can be done by commenting the following line in ``nginx-default.conf``:
 
  #auth_request /authentication;
 
-
-.. _D3N RGW Data Cache: ../d3n_datacache/
