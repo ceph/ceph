@@ -96,7 +96,8 @@ const std::vector<SeastarOption> seastar_options = {
   {"--task-quota-ms", "crimson_reactor_task_quota_ms", Option::TYPE_FLOAT},
   {"--io-latency-goal-ms", "crimson_reactor_io_latency_goal_ms", Option::TYPE_FLOAT},
   {"--idle-poll-time-us", "crimson_reactor_idle_poll_time_us", Option::TYPE_UINT},
-  {"--poll-mode", "crimson_poll_mode", Option::TYPE_BOOL}
+  {"--poll-mode", "crimson_poll_mode", Option::TYPE_BOOL},
+  {"--reactor-backend", "crimson_reactor_backend", Option::TYPE_STR}
 };
 
 // Function to get the option value as a string
@@ -117,6 +118,13 @@ std::optional<std::string> get_option_value(const SeastarOption& option) {
     case Option::TYPE_BOOL: {
      if (crimson::common::get_conf<bool>(option.config_key)) {
         return "true";
+      }
+      break;
+    }
+    case Option::TYPE_STR: {
+      auto value = crimson::common::get_conf<std::string>(option.config_key);
+      if (!value.empty()) {
+        return value;
       }
       break;
     }
@@ -196,6 +204,20 @@ _get_early_config(int argc, const char *argv[])
             }
           }
         }
+        if (auto found = std::find_if(
+              std::begin(ret.early_args),
+              std::end(ret.early_args),
+              [](auto& arg) { return arg == "--reactor-backend"; });
+            found == std::end(ret.early_args)) {
+          auto backend = crimson::common::get_conf<std::string>("crimson_reactor_backend");
+          #ifndef SEASTAR_IO_URING
+            if (backend == "io_uring") {
+              ceph_abort_msgf("reactor_backend=io_uring requested but build "
+                              "does not support io_uring");
+            }
+          #endif
+       }
+
 	if (auto found = std::find_if(
 	      std::begin(early_args),
 	      std::end(early_args),
