@@ -97,40 +97,49 @@ struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
     auto buffer_extents_length = destriper.assemble_result(
       cct, &buffer_extent_map, sparse_bufferlist.bl);
 
-    ldout(cct, 20) << "image_extents="
-                   << sparse_bufferlist.image_extents << ", "
-                   << "buffer_extent_map=" << buffer_extent_map << dendl;
+    ldout(cct, 20) << "buffer_extent_map=" << buffer_extent_map << dendl;
 
     sparse_bufferlist.extent_map->clear();
     sparse_bufferlist.extent_map->reserve(buffer_extent_map.size());
 
-    // The extent-map is logically addressed by buffer-extents not image- or
-    // object-extents. Translate this address mapping to image-extent
-    // logical addressing since it's tied to an image-extent read
+    // buffer_extent_map is logically addressed by buffer extents not
+    // image or object extents. Translate buffer offsets (always 0-based)
+    // into image offsets since the buffer is tied to an image read.
     uint64_t buffer_offset = 0;
     auto bem_it = buffer_extent_map.begin();
     for (auto [image_offset, image_length] : sparse_bufferlist.image_extents) {
+      bool found_buffer_extent = false;
       while (bem_it != buffer_extent_map.end()) {
         auto [buffer_extent_offset, buffer_extent_length] = *bem_it;
 
         if (buffer_offset + image_length <= buffer_extent_offset) {
-          // skip any image extent that is not included in the results
+          // no more buffer extents for the current image extent,
+          // current buffer extent belongs to the next image extent
           break;
         }
 
-        // current buffer-extent should be within the current image-extent
+        // current buffer extent should be within the current image extent
         ceph_assert(buffer_offset <= buffer_extent_offset &&
                     buffer_offset + image_length >=
                       buffer_extent_offset + buffer_extent_length);
+        found_buffer_extent = true;
+
         auto image_extent_offset =
           image_offset + (buffer_extent_offset - buffer_offset);
         ldout(cct, 20) << "mapping buffer extent " << buffer_extent_offset
                        << "~" << buffer_extent_length << " to image extent "
                        << image_extent_offset << "~" << buffer_extent_length
+                       << " for " << image_offset << "~" << image_length
                        << dendl;
         sparse_bufferlist.extent_map->emplace_back(
           image_extent_offset, buffer_extent_length);
         ++bem_it;
+      }
+
+      // skip any image extent that is not included in the results
+      if (!found_buffer_extent) {
+        ldout(cct, 20) << "no buffer extents for image extent "
+                       << image_offset << "~" << image_length << dendl;
       }
 
       buffer_offset += image_length;
