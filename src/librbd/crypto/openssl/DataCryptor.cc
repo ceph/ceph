@@ -171,7 +171,8 @@ int AEADDataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
                  << iv_length << dendl;
     return -EINVAL;
   }
-  if (1 != EVP_CipherInit_ex(ctx, nullptr, nullptr, nullptr, nullptr, -1)) {
+  // In AES-256-SIV mode we need to resupply key. 
+  if (1 != EVP_CipherInit_ex(ctx, nullptr, nullptr, m_key, nullptr, -1)) {
     lderr(m_cct) << "EVP_CipherInit_ex reset failed" << dendl;
     log_errors();
     return -EIO;
