@@ -241,17 +241,13 @@ class NFSCluster:
         - "starting": Daemon is starting up
         - "unknown": Status cannot be determined
         """
-        from orchestrator import DaemonDescriptionStatus
-        
-        return DaemonDescriptionStatus.to_str(daemon_status)
+        return orchestrator.DaemonDescriptionStatus.to_str(daemon_status)
 
     def _show_nfs_cluster_info(self, cluster_id: str) -> Dict[str, Any]:
         """
         Retrieve and format NFS cluster information including daemon status,
         placement, and ingress configuration.
         """
-        from orchestrator import DaemonDescriptionStatus
-
         # Get all NFS daemons
         completion = self.mgr.list_daemons(daemon_type='nfs')
         all_nfs_daemons = orchestrator.raise_if_exception(completion)
