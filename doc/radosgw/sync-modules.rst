@@ -17,11 +17,11 @@ tape drives, indexing metadata in ElasticSearch etc.
 
 A sync module configuration is local to a zone. The sync module determines
 whether the zone exports data or can only consume data that was modified in
-another zone. As of Luminous the supported sync plugins are `elasticsearch`_,
+another zone. As of Luminous the supported sync plugins are :ref:`elasticsearch <radosgw-elastic-sync-module>`,
 ``rgw``, which is the default sync plugin that synchronizes data between the
 zones and ``log`` which is a trivial sync plugin that logs the metadata
 operation that happens in the remote zones. The following docs are written with
-the example of a zone using `elasticsearch sync module`_, the process would be similar
+the example of a zone using :ref:`radosgw-elastic-sync-module`, the process would be similar
 for configuring any sync plugin.
 
 .. toctree::
@@ -71,7 +71,7 @@ For example in the ``elasticsearch`` sync module
                                --tier-config=endpoint=http://localhost:9200,num_shards=10,num_replicas=1
 
 
-For the various supported tier-config options refer to the `elasticsearch sync module`_ docs.
+For the various supported tier-config options refer to the :ref:`radosgw-elastic-sync-module` docs.
 
 Finally update the period
 
@@ -87,9 +87,3 @@ Now start the radosgw in the zone
    systemctl start ceph-radosgw@rgw.`hostname -s`
    systemctl enable ceph-radosgw@rgw.`hostname -s`
 
-
-
-.. _`elasticsearch sync module`: ../elastic-sync-module
-.. _`elasticsearch`: ../elastic-sync-module
-.. _`cloud sync module`: ../cloud-sync-module
-.. _`archive sync module`: ../archive-sync-module
