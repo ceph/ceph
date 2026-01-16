@@ -91,7 +91,7 @@
     "@angular-eslint/eslint-plugin-template": "18.4.0",
     "@angular-eslint/schematics": "18.4.0",
     "@angular-eslint/template-parser": "18.4.0",
-    "@angular/cli": "19.2.9",
+    "@angular/cli": "21.1.0",
     "@angular/compiler-cli": "19.2.9",
     "@angular/language-service": "19.2.9",
     "@applitools/eyes-cypress": "3.52.0",
