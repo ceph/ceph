@@ -31,6 +31,45 @@ using std::string;
 #undef dout_prefix
 #define dout_prefix *_dout << "nvmeofgw " << __PRETTY_FUNCTION__ << " "
 
+void  NVMeofGwMap::encode(ceph::buffer::list &bl, uint64_t features) const {
+    using ceph::encode;
+    uint8_t version = 1;
+    if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
+      version = 2;
+    }
+    if (HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)) {
+      version = 3;
+    }
+    ENCODE_START(version, version, bl);
+    encode(epoch, bl);// global map epoch
+
+    encode(created_gws, bl, features); //Encode created GWs
+    encode(fsm_timers, bl, features);
+    if (version >= 2) {
+      encode(gw_epoch, bl);
+    }
+    if (version >=3) {
+      encode(disaster_locations, bl);
+    }
+    ENCODE_FINISH(bl);
+  }
+
+  void  NVMeofGwMap::decode(ceph::buffer::list::const_iterator &bl) {
+    using ceph::decode;
+    DECODE_START(3, bl);
+
+    decode(epoch, bl);
+    decode(created_gws, bl);
+    decode(fsm_timers, bl);
+    if (struct_v >= 2) {
+      decode(gw_epoch, bl);
+    }
+    if (struct_v >=3) {
+      decode(disaster_locations, bl);
+    }
+    DECODE_FINISH(bl);
+  }
+
 void NVMeofGwMap::to_gmap(
   std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const
 {
@@ -247,6 +286,10 @@ int NVMeofGwMap::do_delete_gw(
       }
       dout(10) << " Delete GW :"<< gw_id  << " ANA grpid: "
         << state.ana_grp_id  << dendl;
+      if(is_last_gw_in_location(gw_id, group_key, state.location)) {
+        disaster_map_remove_location(group_key, state.location);
+      }
+
       for (auto& itr: created_gws[group_key]) {
         // Update state map and other maps
 	remove_grp_id(itr.first, group_key, state.ana_grp_id);
@@ -294,7 +337,7 @@ int NVMeofGwMap::cfg_admin_state_change(const NvmeGwId &gw_id,
 
 bool NVMeofGwMap::validate_number_locations(int num_gws, int num_locations)
 {
-  return true; // TODO: add validation
+  return true; // TODO: add validation in the separate PR
 }
 
 int NVMeofGwMap::cfg_set_location(const NvmeGwId &gw_id,
@@ -316,33 +359,28 @@ int NVMeofGwMap::cfg_set_location(const NvmeGwId &gw_id,
     if (st.location == location) {
       dout(4) << "GW-id same location is set " << group_key
               << " " << gw_id << " " << location << dendl;
-      return 0;
-    } else {
-      bool last_gw = true;
+      return -EEXIST;
+    } else { //is_last_gw_in_location
+      bool last_gw = is_last_gw_in_location(gw_id, group_key, st.location);
       for (auto& states: created_gws[group_key]) {
-        auto &state = states.second;
-        // calculate number set locations
-        locations.insert(state.location);
-        if (state.location == st.location && states.first != gw_id) {
-          last_gw = false;
-          break;
-        }
+        locations.insert(states.second.location);
       }
       if (last_gw) { // this location would be removed so erase from set
         locations.erase(st.location);
       }
       locations.insert(location);
       dout(10) << "num GWs " << num_gws << " num set locations "
-              << locations.size() << dendl;
+               << locations.size() << dendl;
       bool rc = validate_number_locations(num_gws, locations.size());
-      if (rc ==false) {
+      if (rc == false) {
         dout(4) << "defined invalid number of locations "
         << locations.size() << dendl;
         return -EINVAL;
       }
       if (last_gw) {
        dout(4) << "remove location:last gw-id " << gw_id << " location "
-              << st.location << dendl;
+               << st.location << dendl;
+       disaster_map_remove_location(group_key, st.location);
       }
       st.location = location;
       dout(10) << "GW-id  location is set " << group_key
@@ -356,21 +394,124 @@ int NVMeofGwMap::cfg_set_location(const NvmeGwId &gw_id,
   }
 }
 
-int NVMeofGwMap::cfg_start_inter_location_failback(
+bool NVMeofGwMap::is_last_gw_in_location(const NvmeGwId &gw_id,
+            const NvmeGroupKey& group_key, NvmeLocation& location) {
+  for (auto& states: created_gws[group_key]) {
+    auto &state = states.second;
+    if (state.location == location && states.first != gw_id) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool NVMeofGwMap::is_location_in_disaster(const NvmeGroupKey& group_key,
+           NvmeLocation& location, bool &cleanup_in_process) {
+  auto grp_it = disaster_locations.find(group_key);
+  if (grp_it != disaster_locations.end()) {
+    auto &loc_states = grp_it->second;
+    if (loc_states.find(location) != loc_states.end()) {
+      cleanup_in_process =
+        disaster_locations[group_key][location].failbacks_in_process;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool NVMeofGwMap::get_location_in_disaster_cleanup(const NvmeGroupKey& group_key,
+           NvmeLocation& returned_location) {
+  auto grp_it = disaster_locations.find(group_key);
+  if (grp_it != disaster_locations.end()) {
+    for (auto &entry : grp_it->second) {
+      const NvmeLocation &location = entry.first;
+      if (entry.second.failbacks_in_process) { // find first location in recovering state and return
+        returned_location = location;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+void NVMeofGwMap::disaster_map_remove_location(const NvmeGroupKey& group_key,
+           NvmeLocation& location) {
+  // this function called when GW with last location removed from the group
+  //or when removed location from the disaster_location map
+  auto grp_it = disaster_locations.find(group_key);
+  if (grp_it != disaster_locations.end()) {
+    auto& locs = grp_it->second;
+    locs.erase(location);
+    if (locs.empty()) {
+      disaster_locations.erase(grp_it);
+    }
+  }
+}
+
+int NVMeofGwMap::cfg_location_disaster_set(
          const NvmeGroupKey& group_key,
          std::string &location, bool &propose_pending) {
+
+  if (!HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF)) {
+    dout(4) << "Command is not allowed - feature is not installed"
+            << group_key << dendl;
+    return -EINVAL;
+  }
+  bool cleanup_in_process;
+  bool location_exists = false;
   auto& gws_states = created_gws[group_key];
-  bool accept = false;
-  // for all the gateways of the subsystem
+  if (is_location_in_disaster(group_key, location, cleanup_in_process)) {
+      dout(4) << "command cannot be accepted since location already in disaster "
+              << location << dendl;
+      return -EEXIST;
+  }
+  // validate: check that all gws in location are not available
+  for (auto& found_gw_state: gws_states) {
+    auto st = found_gw_state.second;
+    if (st.location == location &&
+        st.availability == gw_availability_t::GW_AVAILABLE) {
+      dout(4) << "command cannot be accepted since gw " << found_gw_state.first
+              <<" in location " << location << " is available" << dendl;
+      return -EINVAL;
+    }
+    if (st.location == location) {
+      location_exists = true;
+    }
+  }
+  if (!location_exists) {
+      dout(4) << "command cannot be accepted since in group " << group_key
+             <<" location " << location << " was not configured yet" << dendl;
+      return -EINVAL;
+  }
+  dout(10) << " set disaster location " << location << " in group "
+           << group_key << dendl;
+  disaster_locations[group_key][location];
+  propose_pending = true;
+  return 0;
+}
+
+int NVMeofGwMap::cfg_location_disaster_clear(
+         const NvmeGroupKey& group_key,
+         std::string &location, bool &propose_pending) {
+
   if (!HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF)) {
     dout(4) << "Command is not allowed - feature is not installed"
             << group_key << dendl;
        return -EINVAL;
   }
-  if (failbacks_in_progress.find(group_key) != failbacks_in_progress.end()) {
-     dout(4) << "command cannot be accepted since found active failback for a group "
-             << failbacks_in_progress[group_key] << dendl;
-     return -EEXIST;
+  auto& gws_states = created_gws[group_key];
+  bool accept = false;
+  bool cleanup_in_process;
+  // for all the gateways of the subsystem
+  if (!is_location_in_disaster(group_key, location, cleanup_in_process)) {
+      dout(4) << "command cannot be accepted: in a group " << group_key
+              << " disaster location " << location << " was not found" << dendl;
+      return -EINVAL;
+  } else if (cleanup_in_process) {
+    dout(4)
+    << "command cannot be accepted since recovering already started for group "
+    << group_key << "and location " << location << dendl;
+    return -EEXIST;
   }
   for (auto& found_gw_state: gws_states) {
     auto st = found_gw_state.second;
@@ -384,14 +525,17 @@ int NVMeofGwMap::cfg_start_inter_location_failback(
       }
     }
   }
-  if (accept) {
-    failbacks_in_progress[group_key] = location;
+  if (accept) { // conditions for a cleanup
+    disaster_locations[group_key][location].failbacks_in_process = true;
     propose_pending = true;
     return 0;
   } else {
-    dout(10) << "command  not accepted: not found AVAILABLE GW"
-                "with ANA grp in standby state" << dendl;
-    return -EINVAL;
+    dout(10) << "command  accepted: but not found AVAILABLE GW"
+          "with ANA grp in standby state so disaster just removed"
+           << dendl;
+    disaster_map_remove_location(group_key, location);
+    propose_pending = true;
+    return 0;
   }
 }
 
@@ -622,26 +766,29 @@ void NVMeofGwMap::handle_abandoned_ana_groups(bool& propose)
     for (auto& gw_state : gws_states) { // loop for GWs inside nqn group
       auto& gw_id = gw_state.first;
       NvmeGwMonState& state = gw_state.second;
-
+      bool disaster_cleanup = false;
+      bool in_disaster =
+        is_location_in_disaster(group_key, state.location, disaster_cleanup);
       // 1. Failover missed : is there is a GW in unavailable state?
       // if yes, is its ANA group handled by some other GW?
-      if ((state.availability == gw_availability_t::GW_UNAVAILABLE ||
+      if ( (state.availability == gw_availability_t::GW_UNAVAILABLE ||
           state.availability == gw_availability_t::GW_DELETING ||
-          state.availability == gw_availability_t::GW_CREATED) &&
-	  state.ana_grp_id != REDUNDANT_GW_ANA_GROUP_ID) {
+          state.availability == gw_availability_t::GW_CREATED ||
+	      (in_disaster && !disaster_cleanup)) &&
+ 	      state.ana_grp_id != REDUNDANT_GW_ANA_GROUP_ID) {
 	auto found_gw_for_ana_group = false;
 	for (auto& gw_state2 : gws_states) {
 	  NvmeGwMonState& state2 = gw_state2.second;
 	  if (state2.availability == gw_availability_t::GW_AVAILABLE &&
 	      (state2.sm_state[state.ana_grp_id] ==
 	       gw_states_per_group_t::GW_ACTIVE_STATE)) {
-	    found_gw_for_ana_group = true;
+	    found_gw_for_ana_group = true; // found GW that currently handles the ana group
 	    break;
 	  }
 	}
         // choose the GW for handle ana group
 	if (found_gw_for_ana_group == false) {
-	  dout(20) << "Was not found the GW " << " that handles ANA grp "
+	  dout(10) << "Not found GW  that handles ANA grp "
 		   << (int)state.ana_grp_id << " find candidate "<< dendl;
 	  for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
 	    find_failover_candidate(gw_id, group_key, state_itr.first, propose);
@@ -666,16 +813,21 @@ void NVMeofGwMap::handle_abandoned_ana_groups(bool& propose)
 
 void NVMeofGwMap::check_relocate_ana_groups(const NvmeGroupKey& group_key,
          bool &propose) {
-  /* if location exists in failbacks_in_progress find all gws in location.
+  /* if location in disaster_locations found in recovering state state - find all gws in location.
    * add ana-grp of not Available gws to the list.
    * if ana-grp is already active on some gw in location skip it
    * for ana-grp in list make relocation.
-   * if all ana-grps in location active remove location from the map failbacks_in_progress
+   * if all ana-grps in location active remove location from the map disaster_locations.group
   */
+  if (!HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF)) {
+    dout(4) << "relocate is not allowed - feature is not installed"
+            << group_key << dendl;
+       return ;
+  }
   std::list<NvmeAnaGrpId>  reloc_list;
   auto& gws_states = created_gws[group_key];
-  if (failbacks_in_progress.find(group_key) != failbacks_in_progress.end()) {
-    FailbackLocation location = failbacks_in_progress[group_key];
+  FailbackLocation location;
+  if (get_location_in_disaster_cleanup(group_key, location)) {
     uint32_t num_gw_in_location = 0;
     uint32_t num_active_ana_in_location = 0;
     for (auto& gw_state : gws_states) { // loop for GWs inside group-key
@@ -693,10 +845,11 @@ void NVMeofGwMap::check_relocate_ana_groups(const NvmeGroupKey& group_key,
         }
       }
     }
-    if (num_gw_in_location == num_active_ana_in_location) {
-      failbacks_in_progress.erase(group_key); // All ana groups of location are in Active
+    if (num_gw_in_location == num_active_ana_in_location) {// All ana groups of disaster location are in Active
+      disaster_map_remove_location(group_key, location);
       dout(4) <<  "the location entry is erased "<< location
-          << " num_ana_groups in location " << num_gw_in_location
+          << " from disaster-locations num_ana_groups in location "
+          << num_gw_in_location
           << " from the failbacks-in-progress of group " << group_key <<dendl;
       propose = true;
       return;
@@ -711,7 +864,7 @@ void NVMeofGwMap::check_relocate_ana_groups(const NvmeGroupKey& group_key,
             break;
           } else { // try to relocate
               dout(10) << "ana " << anagrp
-                 << " to relocate to " << location << dendl;
+                  << " to relocate to " << location << dendl;
               relocate_ana_grp(gw_state.first, group_key, anagrp,
                     location, propose);
           }
@@ -757,7 +910,7 @@ int NVMeofGwMap::relocate_ana_grp(const NvmeGwId &src_gw_id,
           // how many ANA groups are handled by this GW
           current_ana_groups_in_gw ++;
           if (current_ana_groups_in_gw < min_num_ana_groups_in_gw ) {
-            min_num_ana_groups_in_gw =  current_ana_groups_in_gw;
+            min_num_ana_groups_in_gw = current_ana_groups_in_gw;
             min_gw_id = gw_state.first;
           }
         }
@@ -817,13 +970,11 @@ void NVMeofGwMap::find_failback_gw(
   auto& gws_states = created_gws[group_key];
   auto& gw_state = created_gws[group_key][gw_id];
   bool do_failback = false;
-  bool force_inter_location = false;
-
-  if (failbacks_in_progress.find(group_key) !=
-       failbacks_in_progress.end()) {
-    FailbackLocation location = failbacks_in_progress[group_key];
-    if (gw_state.location == location) {
-      force_inter_location = true;
+  bool allow_inter_location = true;
+  bool cleanup_in_process;
+  if (is_location_in_disaster(group_key, gw_state.location, cleanup_in_process)) {
+    if (!cleanup_in_process) {
+      allow_inter_location = false;
     }
   }
   dout(10) << "Find failback GW for GW " << gw_id << "location "
@@ -845,6 +996,12 @@ void NVMeofGwMap::find_failback_gw(
   if (do_failback == false) {
     // No other gw currently performs some activity with desired ana
     // group of coming-up GW - so it just takes over on the group
+    if(allow_inter_location == false) {
+      dout (10) << "Failback GW candidate was not found but "
+                << "location of the gw " << gw_id
+                << "is currently in disaster state" <<dendl;
+      return;
+    }
     dout(10) << "Failback GW candidate was not found, "
 	     << "just set Optimized to group " << gw_state.ana_grp_id
 	     << " to GW " << gw_id << dendl;
@@ -863,7 +1020,7 @@ void NVMeofGwMap::find_failback_gw(
 		<< " that previously took over the ANAGRP "
 		<< gw_state.ana_grp_id << " of the available GW "
 		<< gw_id << "location " << st.location << dendl;
-      if (st.location != gw_state.location && !force_inter_location ) {
+      if (st.location != gw_state.location && !allow_inter_location ) {
         //not allowed inter-location failbacks
         dout(10) << "not allowed interlocation failbacks. GW "
         << gw_id << dendl;
@@ -883,7 +1040,8 @@ void NVMeofGwMap::find_failback_gw(
 }
 
 
-int  NVMeofGwMap::find_failover_gw_logic(NvmeGwMonStates& gws_states, NvmeLocation& location,
+int  NVMeofGwMap::find_failover_gw_logic(const NvmeGroupKey& group_key,
+                  NvmeGwMonStates& gws_states, NvmeLocation& location,
                    NvmeGwId& min_loaded_gw_id, bool ignore_locations)
 {
 #define ILLEGAL_GW_ID " "
@@ -900,7 +1058,10 @@ int  NVMeofGwMap::find_failover_gw_logic(NvmeGwMonStates& gws_states, NvmeLocati
           (ignore_locations || st.location == location)) {
 	num_gws ++;
 	active_ana_groups_in_gw = 0;
-	//for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
+	bool cleanup_in_process;
+	if (is_location_in_disaster(group_key, st.location, cleanup_in_process)) {
+	  continue;
+	}
 	for (auto& state_itr: st.sm_state) {
 	  NvmeAnaGrpId anagrp = state_itr.first;
 	  if ((st.sm_state[anagrp] ==
@@ -917,13 +1078,6 @@ int  NVMeofGwMap::find_failover_gw_logic(NvmeGwMonStates& gws_states, NvmeLocati
             // how many ANA groups are handled by this GW
 	    active_ana_groups_in_gw++;
 	  }
-	}
-	if (active_ana_groups_in_gw == 0) {
-	    // dont take into account Available GW with no Active states
-	    // it is probably GW of the cluster that was started after disaster
-	    // so no failbacks are allowed and num active groups = 0
-	    // failovers to such GW also not allowed
-	    continue;
 	}
 	if (min_num_ana_groups_in_gw > active_ana_groups_in_gw) {
 	  min_num_ana_groups_in_gw = active_ana_groups_in_gw;
@@ -980,12 +1134,12 @@ void  NVMeofGwMap::find_failover_candidate(
     }
     // Find a GW that takes over the ANA group(s)
     //Find GW among the GWs belong to the same location
-    int rc = find_failover_gw_logic(gws_states, ana_location,
+    int rc = find_failover_gw_logic(group_key, gws_states, ana_location,
                min_loaded_gw_id, false);
     if (rc == -ENOENT) {
       // looks at all GWs
       dout(10) << "Find Failover GW -look at all Gateways in the pool/group" << dendl;
-      rc = find_failover_gw_logic(gws_states, ana_location,
+      rc = find_failover_gw_logic(group_key, gws_states, ana_location,
                  min_loaded_gw_id, true);
     }
     if (min_loaded_gw_id != ILLEGAL_GW_ID) {

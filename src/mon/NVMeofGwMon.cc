@@ -511,6 +511,14 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
 	f->dump_string("gw-id", gw_id);
 	f->dump_unsigned("anagrp-id",state.ana_grp_id+1);
 	f->dump_string("location", state.location);
+	bool cleanup_in_process;
+	bool is_disaster = map.is_location_in_disaster
+	             (group_key, state.location, cleanup_in_process);
+	if (is_disaster) {
+	  std::string disaster_state = (cleanup_in_process) ? "Disaster-cleanup":
+	                               "Disaster";
+	  f->dump_string("disaster state", disaster_state);
+	}
 	std::string admin_state = (state.gw_admin_state ==
 	    gw_admin_state_t::GW_ADMIN_ENABLED) ? "ENABLED" : "DISABLED";
 	f->dump_string("admin state", admin_state);
@@ -723,7 +731,7 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
     if (rc == 0 && propose == true) {
       response = true;
     }
-  } else if (prefix == "nvme-gw start-failback") {
+  } else if (prefix == "nvme-gw disaster-set") {
     std::string id, pool, group, location;
     bool propose = false;
     cmd_getval(cmdmap, "pool", pool);
@@ -732,7 +740,7 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
     auto group_key = std::make_pair(pool, group);
     dout(10) << id <<" pool "<< pool << " group "<< group
              <<" location "<< location << dendl;
-    rc = pending_map.cfg_start_inter_location_failback(group_key,
+    rc = pending_map.cfg_location_disaster_set(group_key,
                      location, propose);
     if (rc == -EINVAL || rc == -EEXIST) {
       err = rc;
@@ -747,7 +755,31 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
     if (rc == 0 && propose == true) {
       response = true;
     }
-  }
+  } else if (prefix == "nvme-gw disaster-clear") {
+      std::string id, pool, group, location;
+      bool propose = false;
+      cmd_getval(cmdmap, "pool", pool);
+      cmd_getval(cmdmap, "group", group);
+      cmd_getval(cmdmap, "location", location);
+      auto group_key = std::make_pair(pool, group);
+      dout(10) << id <<" pool "<< pool << " group "<< group
+               <<" location "<< location << dendl;
+      rc = pending_map.cfg_location_disaster_clear(group_key,
+                       location, propose);
+      if (rc == -EINVAL || rc == -EEXIST) {
+        err = rc;
+        sstrm.str("");
+        if (rc == -EEXIST) {
+          sstrm.str("command already set please wait until completed");
+        }
+        if (rc == EINVAL) {
+          sstrm.str("command cannot be executed");
+        }
+      }
+      if (rc == 0 && propose == true) {
+        response = true;
+      }
+    }
   getline(sstrm, rs);
   if (response == false) {
     if (err < 0 && rs.length() == 0) {

@@ -287,8 +287,16 @@ struct NvmeGwTimerState {
   NvmeGwTimerState() {};
 };
 
+struct LocationState {
+  bool failbacks_in_process; //failbacks allowed in recovering state
+  LocationState() {
+    failbacks_in_process = 0;
+  }
+};
+
 using NvmeGwMonClientStates = std::map<NvmeGwId, NvmeGwClientState>;
 using NvmeGwTimers = std::map<NvmeGwId, NvmeGwTimerState>;
 using NvmeGwMonStates = std::map<NvmeGwId, NvmeGwMonState>;
+using LocationStates = std::map<NvmeLocation, LocationState>;
 
 #endif /* SRC_MON_NVMEOFGWTYPES_H_ */

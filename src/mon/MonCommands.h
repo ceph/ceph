@@ -1481,12 +1481,20 @@ COMMAND("nvme-gw set-location"
    "set location for nvmeof gateway id for (pool, group)",
    "mgr", "rw")
 
-COMMAND("nvme-gw start-failback"
-  " name=pool,type=CephString"
-  " name=group,type=CephString"
-  " name=location,type=CephString",
-  "start failbacks for recovered location within (pool, group)",
-  "mgr", "rw")
+COMMAND("nvme-gw disaster-set"
+     " name=pool,type=CephString"
+     " name=group,type=CephString"
+     " name=location,type=CephString",
+     " set location to Disaster state",
+     "mgr", "rw")
+
+COMMAND("nvme-gw disaster-clear"
+    " name=pool,type=CephString"
+    " name=group,type=CephString"
+    " name=location,type=CephString",
+    " set location to clear Disaster state - failbacks allowed for recovered location",
+    "mgr", "rw")
+
 
 // these are tell commands that were implemented as CLI commands in
 // the broken pre-octopus way that we want to allow to work when a
