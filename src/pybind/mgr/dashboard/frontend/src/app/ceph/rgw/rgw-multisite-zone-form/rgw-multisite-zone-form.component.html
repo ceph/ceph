@@ -17,9 +17,9 @@
           formControlName="selectedZonegroup"
           [disabled]="action === actionLabels.EDIT ? true : null"
           (change)="onZoneGroupChange($event.target.value)"
-          label="Zone group"
+          label="Zonegroup"
           i18n
-          >Zone group
+          >Zonegroup
           <option
             *ngFor="let zonegroupName of zonegroupList"
             [value]="zonegroupName.name"
@@ -73,7 +73,7 @@
           i18n
           [disabled]="action === actionLabels.EDIT ? true : null"
           >Mark as default zone
-          <cd-help-text *ngIf="disableDefault && action === actionLabels.CREATE">Default zone can only exist in a default zone group.
+          <cd-help-text *ngIf="disableDefault && action === actionLabels.CREATE">Default zone can only exist in a default zonegroup.
           </cd-help-text>
           <cd-help-text *ngIf="isDefaultZone">
             <span>You cannot unset the default flag.</span>
@@ -94,7 +94,7 @@
           [disabled]="action === actionLabels.EDIT ? true : null"
           i18n
           >Master
-          <cd-help-text *ngIf="disableMaster">Master zone already exist for the selected zone group.
+          <cd-help-text *ngIf="disableMaster">Master zone already exist for the selected zonegroup.
           </cd-help-text>
           <cd-help-text *ngIf="isMasterZone">
             <span>You cannot unset the master flag. </span>

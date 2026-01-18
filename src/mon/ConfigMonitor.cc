@@ -219,7 +219,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     if (f) {
       f->open_array_section("options");
     }
-    for (auto& i : ceph_options) {
+    for (auto& i : get_ceph_options()) {
       if (f) {
 	f->dump_string("option", i.name);
       } else {

@@ -321,6 +321,33 @@ std::chrono::seconds parse_timespan(const std::string& s)
   return r;
 }
 
+std::string
+to_pretty_timedelta(timespan duration)
+{
+  using namespace std::chrono;
+
+  auto duration_seconds = duration_cast<seconds>(duration).count();
+
+  if (duration < seconds{120}) {
+    return fmt::format("{}s", duration_seconds);
+  }
+  if (duration < minutes{120}) {
+    return fmt::format("{}m", duration_seconds / 60);
+  }
+  if (duration < hours{48}) {
+    return fmt::format("{}h", duration_seconds / 3600);
+  }
+  if (duration < hours{24 * 14}) {
+    return fmt::format("{}d", duration_seconds / (3600 * 24));
+  }
+  if (duration < hours{24 * 7 * 12}) {
+    return fmt::format("{}w", duration_seconds / (3600 * 24 * 7));
+  }
+  if (duration < hours{24 * 365 * 2}) {
+    return fmt::format("{}M", duration_seconds / (3600 * 24 * 30));
+  }
+  return fmt::format("{}y", duration_seconds / (3600 * 24 * 365));
+}
 }
 
 namespace std {

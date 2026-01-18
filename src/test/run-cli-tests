@@ -26,6 +26,7 @@ if [ ! -e "$CRAM_BIN" ]; then
     # https://bitbucket.org/brodie/cram/issue/9/allow-read-only-directories-for-t
     # -- tv@inktank.com
     python3 -m venv "$VENV" && $VENV/bin/pip --log "$VENV"/log.txt \
+        install --upgrade pip setuptools wheel && $VENV/bin/pip --log "$VENV"/log.txt \
         install 'cram@git+https://github.com/ceph/cram.git@0.7-error-dir'
 fi
 

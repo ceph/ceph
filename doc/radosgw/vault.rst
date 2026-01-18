@@ -167,7 +167,7 @@ only Ceph itself should be doing that.
 Token Authentication
 --------------------
 
-.. note: Never use root tokens with Ceph in production environments.
+.. note:: Never use root tokens with Ceph in production environments.
 
 The token authentication method expects a Vault token to be present in a
 plaintext file. The Object Gateway can be configured to use token authentication

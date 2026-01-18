@@ -65,10 +65,11 @@ public:
   void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const;
   void track_deleting_gws(const NvmeGroupKey& group_key,
     const BeaconSubsystems&  subs, bool &propose_pending);
-  int cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
-  int cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   void check_all_gws_in_deleting_state(const NvmeGwId &gw_id,
     const NvmeGroupKey& group_key);
+  int cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
+    uint64_t features);
+  int cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     epoch_t& last_osd_epoch,  bool &propose_pending);
@@ -92,7 +93,13 @@ public:
        const NvmeGroupKey& group_key, bool &propose_pending);
   void set_addr_vect(const NvmeGwId &gw_id,
       const NvmeGroupKey& group_key, const entity_addr_t &addr_vect);
-  void skip_failovers_for_group(const NvmeGroupKey& group_key);
+  void skip_failovers_for_group(const NvmeGroupKey& group_key,
+      int interval_sec = 0);
+  bool put_gw_beacon_sequence_number(const NvmeGwId &gw_id, int gw_version,
+      const NvmeGroupKey& group_key, uint64_t beacon_sequence,
+      uint64_t& old_sequence);
+  bool set_gw_beacon_sequence_number(const NvmeGwId &gw_id, int gw_version,
+         const NvmeGroupKey& group_key, uint64_t beacon_sequence);
 private:
   int  do_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   int  do_erase_gw_id(const NvmeGwId &gw_id,

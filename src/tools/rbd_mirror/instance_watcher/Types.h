@@ -18,7 +18,7 @@ namespace rbd {
 namespace mirror {
 namespace instance_watcher {
 
-enum NotifyOp {
+enum NotifyOp : uint32_t {
   NOTIFY_OP_IMAGE_ACQUIRE      = 0,
   NOTIFY_OP_IMAGE_RELEASE      = 1,
   NOTIFY_OP_PEER_IMAGE_REMOVED = 2,

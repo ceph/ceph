@@ -86,6 +86,7 @@ export enum Icons {
   idea = 'idea',
   userAccessLocked = 'user--access-locked', // User access locked
   chevronDown = 'chevron--down',
+  connect = 'connect',
   /* Icons for special effect */
   size16 = '16',
   size20 = '20',
@@ -115,6 +116,7 @@ export const ICON_TYPE = {
   check: 'check',
   copy: 'copy',
   danger: 'danger',
+  deploy: 'deploy',
   edit: 'edit',
   error: 'error--filled',
   infoCircle: 'info-circle',

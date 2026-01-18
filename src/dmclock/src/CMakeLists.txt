@@ -6,8 +6,8 @@ add_library(dmclock::dmclock ALIAS dmclock)
 target_compile_options(dmclock PRIVATE
   "-Wno-write-strings" "-Wall")
 target_include_directories(dmclock PUBLIC
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/support/src>)
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/dmclock/src>
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/dmclock/support/src>)
 
 target_link_libraries(dmclock
   PUBLIC Boost::boost

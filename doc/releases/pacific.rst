@@ -2724,13 +2724,13 @@ or canceled with
 Note that canceling the upgrade simply stops the process; there is no ability to
 downgrade back to Octopus.
 
-.. note:
+.. note::
 
    If you have deployed an RGW service on Octopus using the default port (7280), you
    will need to redeploy it because the default port changed (to 80 or 443, depending
    on whether SSL is enabled):
 
-   .. prompt: bash #
+   .. prompt:: bash #
 
      ceph orch apply rgw <realm>.<zone> --port 7280
 

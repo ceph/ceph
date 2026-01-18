@@ -54,7 +54,9 @@ private:
 
   bool first_beacon = true;
   bool set_group_id = false;
-
+  uint64_t beacon_sequence = 0;
+  BeaconSubsystems prev_beacon_subsystems;
+  bool cluster_beacon_diff_included = 0;  // track cluster features for beacon encoding
   // init gw ssl opts
   void init_gw_ssl_opts();
 

@@ -75,12 +75,10 @@ int DB::stopGC() {
 
 int DB::Destroy(const DoutPrefixProvider *dpp)
 {
-  if (!db)
-    return 0;
-
-  stopGC();
-
-  closeDB(dpp);
+  if (db) {
+    stopGC();
+    closeDB(dpp);
+  }
 
   {
     const std::lock_guard lk(mtx);
@@ -219,6 +217,8 @@ int DB::objectmapDelete(const DoutPrefixProvider *dpp, string bucket)
     return 0;
   }
 
+  // Delete the ObjectOp object to prevent memory leak
+  delete iter->second;
   DB::objectmap.erase(iter);
 
   return 0;

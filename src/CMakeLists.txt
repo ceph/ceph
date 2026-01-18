@@ -472,7 +472,21 @@ if(WITH_CRIMSON)
       build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
     endif()
   endif()
+  set(old_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+  if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    # - Debug: shared seastar for faster development iteration
+    #   shared seastar is allowed for faster linking and smaller executables during
+    #   development.
+    #   Note: shared seastar won't be packaged, so this is for developers only
+    # - RelWithDebInfo/Release/MinSizeRel: static seastar for production packages
+    #   This ensures packages don't depend on libseastar.so, and avoids the performance penalty
+    #   of calling functions in shared library.
+    set(BUILD_SHARED_LIBS FALSE)
+  endif()
   add_subdirectory(seastar)
+  set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
+  unset(old_BUILD_SHARED_LIBS)
+
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/include")
@@ -574,7 +588,6 @@ set(ceph_common_deps
   common_utf8 extblkdev arch crc32
   ${LIB_RESOLV}
   Boost::thread
-  Boost::system
   Boost::random
   Boost::program_options
   Boost::date_time
@@ -1084,6 +1097,7 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
     ${nvmeof_monitor_grpc_hdrs}
     ceph_nvmeof_monitor_client.cc
     nvmeof/NVMeofGwClient.cc
+    nvmeof/NVMeofGwUtils.cc
     nvmeof/NVMeofGwMonitorGroupClient.cc
     nvmeof/NVMeofGwMonitorClient.cc)
   add_executable(ceph-nvmeof-monitor-client ${ceph_nvmeof_monitor_client_srcs})

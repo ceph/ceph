@@ -1683,7 +1683,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
                  spdk_ping_interval_in_seconds: Optional[float] = 2.0,
                  ping_spdk_under_lock: Optional[bool] = False,
-                 max_hosts_per_namespace: Optional[int] = 8,
+                 max_hosts_per_namespace: Optional[int] = 16,
                  max_namespaces_with_netmask: Optional[int] = 1000,
                  max_subsystems: Optional[int] = 128,
                  max_hosts: Optional[int] = 2048,
@@ -1713,7 +1713,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  transport_tcp_options: Optional[Dict[str, int]] =
                  {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
                  enable_dsa_acceleration: bool = False,
-                 rbd_with_crc32c: bool = False,
+                 rbd_with_crc32c: bool = True,
                  tgt_cmd_extra_args: Optional[str] = None,
                  iobuf_options: Optional[Dict[str, int]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,

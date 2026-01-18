@@ -38,3 +38,7 @@ Using `color` in css and seyting svg will fill="currentColor does not work.
 .info-icon {
   fill: theme.$support-info !important;
 }
+
+.deploy-icon {
+  fill: theme.$layer-selected-disabled !important;
+}

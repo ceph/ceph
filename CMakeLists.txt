@@ -4,7 +4,11 @@ project(ceph
   VERSION 20.0.0
   LANGUAGES CXX C ASM)
 
-foreach(policy CMP0127 CMP0135 CMP0175)
+foreach(policy CMP0127 CMP0135
+  CMP0144 # Ensure taking `BOOST_ROOT` keeps working. Otherwise,
+	  # config-based `find_package` will take `Boost_ROOT`.
+  CMP0167 # Use Boost's own CMake config files instead of FindBoost module.
+  CMP0175)
   if(POLICY ${policy})
     cmake_policy(SET ${policy} NEW)
   endif()
@@ -734,14 +738,14 @@ if (WITH_SYSTEM_ROCKSDB)
   find_package(RocksDB 5.14 REQUIRED)
 endif()
 
-option(WITH_CRIMSON "Build seastar components")
+option(WITH_CRIMSON "Build Crimson components" OFF)
 
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
 # Boost::thread depends on Boost::atomic, so list it explicitly.
 set(BOOST_COMPONENTS
-  atomic chrono thread system regex random program_options date_time
+  atomic chrono headers thread regex random program_options date_time
   iostreams context coroutine url)
 set(BOOST_HEADER_COMPONENTS container)
 
@@ -760,6 +764,10 @@ endif()
 if(WITH_LIBCEPHFS OR WITH_FUSE)
   find_package(ICU REQUIRED COMPONENTS uc i18n)
   list(APPEND BOOST_COMPONENTS locale)
+endif()
+
+if(WITH_CEPHFS)
+  list(APPEND BOOST_COMPONENTS filesystem)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
