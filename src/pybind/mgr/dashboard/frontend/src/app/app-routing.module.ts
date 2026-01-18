@@ -94,7 +94,7 @@ export class StartCaseBreadcrumbsResolver extends BreadcrumbsResolver {
 
 const routes: Routes = [
   // Dashboard
-  { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+  { path: '', redirectTo: 'multi-cluster/overview', pathMatch: 'full' },
   { path: 'api-docs', component: ApiDocsComponent },
   {
     path: '',
