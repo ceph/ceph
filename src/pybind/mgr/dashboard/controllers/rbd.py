@@ -45,10 +45,9 @@ RBD_GROUP_LIST_SCHEMA = [{
     "num_images": (int, '')
 }]
 
-RBD_GROUP_GET_SCHEMA = [{
-    "group": (str, 'group name'),
-    "images": ([str], '')
-}]
+RBD_GROUP_GET_SCHEMA = {
+    "images": ([dict], 'List of images in the group with their pool, namespace, and name')
+}
 
 RBD_GROUP_SNAPSHOT_LIST_SCHEMA = [{
     "id": (str, 'snapshot id'),
@@ -485,6 +484,11 @@ class RbdNamespace(RESTController):
             return result
 
 
+NAMESPACE_PARAM_DESC = ('Optional RBD namespace within the pool. Provides logical '
+                        'isolation of images. When specified, operations are scoped to '
+                        'that namespace. If omitted, the default namespace is used.')
+
+
 @APIRouter('/block/pool/{pool_name}/group', Scope.RBD_IMAGE)
 @APIDoc("RBD Group Management API", "RbdGroup")
 class RbdGroup(RESTController):
@@ -493,9 +497,10 @@ class RbdGroup(RESTController):
         self.rbd_inst = rbd.RBD()
 
     @handle_rbd_error()
-    @EndpointDoc("List groups by pool name",
+    @EndpointDoc("List all RBD groups in a pool",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
+                     'pool_name': (str, 'Name of the pool to list groups from'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
                  },
                  responses={200: RBD_GROUP_LIST_SCHEMA})
     def list(self, pool_name, namespace=None):
@@ -512,10 +517,11 @@ class RbdGroup(RESTController):
             return result
 
     @handle_rbd_error()
-    @EndpointDoc("Get the list of images in a group",
+    @EndpointDoc("Get details of a specific RBD group including its member images",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
-                     'group_name': (str, 'Name of the group'),
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group to retrieve'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
                  },
                  responses={200: RBD_GROUP_GET_SCHEMA})
     @RESTController.Collection('GET', path='/{group_name}')
@@ -527,7 +533,6 @@ class RbdGroup(RESTController):
             groups = self.rbd_inst.group_list(ioctx)
             if group_name in groups:
                 result.append({
-                    'group': group_name,
                     'images': list(rbd.Group(ioctx, group_name).list_images())
                 })
             else:
@@ -538,10 +543,11 @@ class RbdGroup(RESTController):
             return result
 
     @handle_rbd_error()
-    @EndpointDoc("Create a group",
+    @EndpointDoc("Create a new RBD group in the specified pool",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
-                     'name': (str, 'Name of the group'),
+                     'pool_name': (str, 'Name of the pool where the group will be created'),
+                     'name': (str, 'Name for the new group'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
                  })
     def create(self, pool_name, name, namespace=None):
         with mgr.rados.open_ioctx(pool_name) as ioctx:
@@ -550,10 +556,11 @@ class RbdGroup(RESTController):
             return self.rbd_inst.group_create(ioctx, name)
 
     @handle_rbd_error()
-    @EndpointDoc("Delete a group",
+    @EndpointDoc("Delete an RBD group. All images must be removed from the group first.",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
-                     'group_name': (str, 'Name of the group'),
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group to delete'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
                  },
                  responses={200: None})
     def delete(self, pool_name, group_name, namespace=None):
@@ -563,11 +570,12 @@ class RbdGroup(RESTController):
             return self.rbd_inst.group_remove(ioctx, group_name)
 
     @handle_rbd_error()
-    @EndpointDoc("Update a group (rename)",
+    @EndpointDoc("Rename an existing RBD group",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
-                     'group_name': (str, 'Name of the group'),
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Current name of the group'),
                      'new_name': (str, 'New name for the group'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
                  },
                  responses={200: None})
     def set(self, pool_name, group_name, new_name, namespace=None):
@@ -580,11 +588,12 @@ class RbdGroup(RESTController):
 
     @RESTController.Collection('POST', path='/{group_name}/image')
     @handle_rbd_error()
-    @EndpointDoc("Add image to a group",
+    @EndpointDoc("Add an RBD image to a group. The image must be in the same pool and namespace.",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
-                     'group_name': (str, 'Name of the group'),
-                     'image_name': (str, 'Name of the image'),
+                     'pool_name': (str, 'Name of the pool containing both the group and image'),
+                     'group_name': (str, 'Name of the group to add the image to'),
+                     'image_name': (str, 'Name of the image to add to the group'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
                  },
                  responses={200: None})
     def add_image(self, pool_name, group_name, image_name, namespace=None):
@@ -596,11 +605,12 @@ class RbdGroup(RESTController):
 
     @RESTController.Collection('DELETE', path='/{group_name}/image')
     @handle_rbd_error()
-    @EndpointDoc("Remove image from a group",
+    @EndpointDoc("Remove an RBD image from a group. The image itself is not deleted.",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
-                     'group_name': (str, 'Name of the group'),
-                     'image_name': (str, 'Name of the image'),
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group to remove the image from'),
+                     'image_name': (str, 'Name of the image to remove from the group'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
                  },
                  responses={200: None})
     def remove_image(self, pool_name, group_name, image_name, namespace=None):
@@ -622,10 +632,11 @@ class RbdGroupSnapshot(RESTController):
         self.rbd_inst = rbd.RBD()
 
     @handle_rbd_error()
-    @EndpointDoc("List group snapshots",
+    @EndpointDoc("List all snapshots of an RBD group",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
-                     'group_name': (str, 'Name of the group'),
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group to list snapshots for'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
                  },
                  responses={200: RBD_GROUP_SNAPSHOT_LIST_SCHEMA})
     def list(self, pool_name: str, group_name: str, namespace: Optional[str] = None):
@@ -644,11 +655,12 @@ class RbdGroupSnapshot(RESTController):
             return result
 
     @handle_rbd_error()
-    @EndpointDoc("Get group snapshot information",
+    @EndpointDoc("Get detailed information about a specific group snapshot",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
+                     'pool_name': (str, 'Name of the pool containing the group'),
                      'group_name': (str, 'Name of the group'),
-                     'snapshot_name': (str, 'Name of the snapshot'),
+                     'snapshot_name': (str, 'Name of the snapshot to retrieve'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
                  },
                  responses={200: RBD_GROUP_SNAPSHOT_GET_SCHEMA})
     def get(self, pool_name: str, group_name: str, snapshot_name: str,
@@ -661,12 +673,13 @@ class RbdGroupSnapshot(RESTController):
 
     @RbdTask('group_snap/create',
              ['{pool_name}', '{group_name}', '{snapshot_name}'], 2.0)
-    @EndpointDoc("Create a group snapshot",
+    @EndpointDoc("Create a crash-consistent snapshot of all images in the group",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
-                     'group_name': (str, 'Name of the group'),
-                     'snapshot_name': (str, 'Name of the snapshot'),
-                     'flags': (int, 'Snapshot creation flags'),
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group to snapshot'),
+                     'snapshot_name': (str, 'Name for the new snapshot'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
+                     'flags': (int, 'Snapshot creation flags (optional)'),
                  },
                  responses={200: None})
     def create(self, pool_name: str, group_name: str, snapshot_name: str,
@@ -679,11 +692,12 @@ class RbdGroupSnapshot(RESTController):
 
     @RbdTask('group_snap/delete',
              ['{pool_name}', '{group_name}', '{snapshot_name}'], 2.0)
-    @EndpointDoc("Delete a group snapshot",
+    @EndpointDoc("Delete a group snapshot. This removes the snapshot for all images in the group.",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
+                     'pool_name': (str, 'Name of the pool containing the group'),
                      'group_name': (str, 'Name of the group'),
-                     'snapshot_name': (str, 'Name of the snapshot'),
+                     'snapshot_name': (str, 'Name of the snapshot to delete'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
                  },
                  responses={200: None})
     def delete(self, pool_name: str, group_name: str, snapshot_name: str,
@@ -696,12 +710,13 @@ class RbdGroupSnapshot(RESTController):
 
     @RbdTask('group_snap/update',
              ['{pool_name}', '{group_name}', '{snapshot_name}'], 4.0)
-    @EndpointDoc("Update a group snapshot",
+    @EndpointDoc("Rename a group snapshot",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
+                     'pool_name': (str, 'Name of the pool containing the group'),
                      'group_name': (str, 'Name of the group'),
                      'snapshot_name': (str, 'Current name of the snapshot'),
                      'new_snap_name': (str, 'New name for the snapshot'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
                  },
                  responses={200: None})
     def set(self, pool_name, group_name, snapshot_name, new_snap_name=None, namespace=None):
@@ -718,11 +733,12 @@ class RbdGroupSnapshot(RESTController):
     @RESTController.Resource('POST')
     @UpdatePermission
     @allow_empty_body
-    @EndpointDoc("Rollback group to snapshot",
+    @EndpointDoc("Rollback all images in the group to their state at the time of the snapshot",
                  parameters={
-                     'pool_name': (str, 'Name of the pool'),
-                     'group_name': (str, 'Name of the group'),
-                     'snapshot_name': (str, 'Name of the snapshot'),
+                     'pool_name': (str, 'Name of the pool containing the group'),
+                     'group_name': (str, 'Name of the group to rollback'),
+                     'snapshot_name': (str, 'Name of the snapshot to rollback to'),
+                     'namespace': (str, NAMESPACE_PARAM_DESC),
                  },
                  responses={200: None})
     def rollback(self, pool_name, group_name, snapshot_name, namespace=None):

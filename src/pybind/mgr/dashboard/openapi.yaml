@@ -1593,13 +1593,16 @@ paths:
   /api/block/pool/{pool_name}/group:
     get:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool to list groups from
         in: path
         name: pool_name
         required: true
         schema:
           type: string
       - allowEmptyValue: true
+        description: Optional RBD namespace within the pool. Provides logical isolation
+          of images. When specified, operations are scoped to that namespace. If omitted,
+          the default namespace is used.
         in: query
         name: namespace
         schema:
@@ -1634,12 +1637,12 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: List groups by pool name
+      summary: List all RBD groups in a pool
       tags:
       - RbdGroup
     post:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool where the group will be created
         in: path
         name: pool_name
         required: true
@@ -1651,9 +1654,12 @@ paths:
             schema:
               properties:
                 name:
-                  description: Name of the group
+                  description: Name for the new group
                   type: string
                 namespace:
+                  description: Optional RBD namespace within the pool. Provides logical
+                    isolation of images. When specified, operations are scoped to
+                    that namespace. If omitted, the default namespace is used.
                   type: string
               required:
               - name
@@ -1680,25 +1686,28 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Create a group
+      summary: Create a new RBD group in the specified pool
       tags:
       - RbdGroup
   /api/block/pool/{pool_name}/group/{group_name}:
     delete:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool containing the group
         in: path
         name: pool_name
         required: true
         schema:
           type: string
-      - description: Name of the group
+      - description: Name of the group to delete
         in: path
         name: group_name
         required: true
         schema:
           type: string
       - allowEmptyValue: true
+        description: Optional RBD namespace within the pool. Provides logical isolation
+          of images. When specified, operations are scoped to that namespace. If omitted,
+          the default namespace is used.
         in: query
         name: namespace
         schema:
@@ -1725,24 +1734,27 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Delete a group
+      summary: Delete an RBD group. All images must be removed from the group first.
       tags:
       - RbdGroup
     get:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool containing the group
         in: path
         name: pool_name
         required: true
         schema:
           type: string
-      - description: Name of the group
+      - description: Name of the group to retrieve
         in: path
         name: group_name
         required: true
         schema:
           type: string
       - allowEmptyValue: true
+        description: Optional RBD namespace within the pool. Provides logical isolation
+          of images. When specified, operations are scoped to that namespace. If omitted,
+          the default namespace is used.
         in: query
         name: namespace
         schema:
@@ -1752,21 +1764,16 @@ paths:
           content:
             application/vnd.ceph.api.v1.0+json:
               schema:
-                items:
-                  properties:
-                    group:
-                      description: group name
-                      type: string
-                    images:
-                      description: ''
-                      items:
-                        type: string
-                      type: array
-                  type: object
+                properties:
+                  images:
+                    description: List of images in the group with their pool, namespace,
+                      and name
+                    items:
+                      type: object
+                    type: array
                 required:
-                - group
                 - images
-                type: array
+                type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1779,18 +1786,18 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Get the list of images in a group
+      summary: Get details of a specific RBD group including its member images
       tags:
       - RbdGroup
     put:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool containing the group
         in: path
         name: pool_name
         required: true
         schema:
           type: string
-      - description: Name of the group
+      - description: Current name of the group
         in: path
         name: group_name
         required: true
@@ -1802,6 +1809,9 @@ paths:
             schema:
               properties:
                 namespace:
+                  description: Optional RBD namespace within the pool. Provides logical
+                    isolation of images. When specified, operations are scoped to
+                    that namespace. If omitted, the default namespace is used.
                   type: string
                 new_name:
                   description: New name for the group
@@ -1833,31 +1843,34 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Update a group (rename)
+      summary: Rename an existing RBD group
       tags:
       - RbdGroup
   /api/block/pool/{pool_name}/group/{group_name}/image:
     delete:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool containing the group
         in: path
         name: pool_name
         required: true
         schema:
           type: string
-      - description: Name of the group
+      - description: Name of the group to remove the image from
         in: path
         name: group_name
         required: true
         schema:
           type: string
-      - description: Name of the image
+      - description: Name of the image to remove from the group
         in: query
         name: image_name
         required: true
         schema:
           type: string
       - allowEmptyValue: true
+        description: Optional RBD namespace within the pool. Provides logical isolation
+          of images. When specified, operations are scoped to that namespace. If omitted,
+          the default namespace is used.
         in: query
         name: namespace
         schema:
@@ -1884,18 +1897,18 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Remove image from a group
+      summary: Remove an RBD image from a group. The image itself is not deleted.
       tags:
       - RbdGroup
     post:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool containing both the group and image
         in: path
         name: pool_name
         required: true
         schema:
           type: string
-      - description: Name of the group
+      - description: Name of the group to add the image to
         in: path
         name: group_name
         required: true
@@ -1907,9 +1920,12 @@ paths:
             schema:
               properties:
                 image_name:
-                  description: Name of the image
+                  description: Name of the image to add to the group
                   type: string
                 namespace:
+                  description: Optional RBD namespace within the pool. Provides logical
+                    isolation of images. When specified, operations are scoped to
+                    that namespace. If omitted, the default namespace is used.
                   type: string
               required:
               - image_name
@@ -1936,25 +1952,29 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Add image to a group
+      summary: Add an RBD image to a group. The image must be in the same pool and
+        namespace.
       tags:
       - RbdGroup
   /api/block/pool/{pool_name}/group/{group_name}/snap:
     get:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool containing the group
         in: path
         name: pool_name
         required: true
         schema:
           type: string
-      - description: Name of the group
+      - description: Name of the group to list snapshots for
         in: path
         name: group_name
         required: true
         schema:
           type: string
       - allowEmptyValue: true
+        description: Optional RBD namespace within the pool. Provides logical isolation
+          of images. When specified, operations are scoped to that namespace. If omitted,
+          the default namespace is used.
         in: query
         name: namespace
         schema:
@@ -1997,18 +2017,18 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: List group snapshots
+      summary: List all snapshots of an RBD group
       tags:
       - RbdGroupSnapshot
     post:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool containing the group
         in: path
         name: pool_name
         required: true
         schema:
           type: string
-      - description: Name of the group
+      - description: Name of the group to snapshot
         in: path
         name: group_name
         required: true
@@ -2021,12 +2041,15 @@ paths:
               properties:
                 flags:
                   default: 0
-                  description: Snapshot creation flags
+                  description: Snapshot creation flags (optional)
                   type: integer
                 namespace:
+                  description: Optional RBD namespace within the pool. Provides logical
+                    isolation of images. When specified, operations are scoped to
+                    that namespace. If omitted, the default namespace is used.
                   type: string
                 snapshot_name:
-                  description: Name of the snapshot
+                  description: Name for the new snapshot
                   type: string
               required:
               - snapshot_name
@@ -2053,13 +2076,13 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Create a group snapshot
+      summary: Create a crash-consistent snapshot of all images in the group
       tags:
       - RbdGroupSnapshot
   /api/block/pool/{pool_name}/group/{group_name}/snap/{snapshot_name}:
     delete:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool containing the group
         in: path
         name: pool_name
         required: true
@@ -2071,13 +2094,16 @@ paths:
         required: true
         schema:
           type: string
-      - description: Name of the snapshot
+      - description: Name of the snapshot to delete
         in: path
         name: snapshot_name
         required: true
         schema:
           type: string
       - allowEmptyValue: true
+        description: Optional RBD namespace within the pool. Provides logical isolation
+          of images. When specified, operations are scoped to that namespace. If omitted,
+          the default namespace is used.
         in: query
         name: namespace
         schema:
@@ -2104,12 +2130,13 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Delete a group snapshot
+      summary: Delete a group snapshot. This removes the snapshot for all images in
+        the group.
       tags:
       - RbdGroupSnapshot
     get:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool containing the group
         in: path
         name: pool_name
         required: true
@@ -2121,13 +2148,16 @@ paths:
         required: true
         schema:
           type: string
-      - description: Name of the snapshot
+      - description: Name of the snapshot to retrieve
         in: path
         name: snapshot_name
         required: true
         schema:
           type: string
       - allowEmptyValue: true
+        description: Optional RBD namespace within the pool. Provides logical isolation
+          of images. When specified, operations are scoped to that namespace. If omitted,
+          the default namespace is used.
         in: query
         name: namespace
         schema:
@@ -2178,12 +2208,12 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Get group snapshot information
+      summary: Get detailed information about a specific group snapshot
       tags:
       - RbdGroupSnapshot
     put:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool containing the group
         in: path
         name: pool_name
         required: true
@@ -2207,6 +2237,9 @@ paths:
             schema:
               properties:
                 namespace:
+                  description: Optional RBD namespace within the pool. Provides logical
+                    isolation of images. When specified, operations are scoped to
+                    that namespace. If omitted, the default namespace is used.
                   type: string
                 new_snap_name:
                   description: New name for the snapshot
@@ -2236,25 +2269,25 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Update a group snapshot
+      summary: Rename a group snapshot
       tags:
       - RbdGroupSnapshot
   /api/block/pool/{pool_name}/group/{group_name}/snap/{snapshot_name}/rollback:
     post:
       parameters:
-      - description: Name of the pool
+      - description: Name of the pool containing the group
         in: path
         name: pool_name
         required: true
         schema:
           type: string
-      - description: Name of the group
+      - description: Name of the group to rollback
         in: path
         name: group_name
         required: true
         schema:
           type: string
-      - description: Name of the snapshot
+      - description: Name of the snapshot to rollback to
         in: path
         name: snapshot_name
         required: true
@@ -2266,6 +2299,9 @@ paths:
             schema:
               properties:
                 namespace:
+                  description: Optional RBD namespace within the pool. Provides logical
+                    isolation of images. When specified, operations are scoped to
+                    that namespace. If omitted, the default namespace is used.
                   type: string
               type: object
       responses:
@@ -2290,7 +2326,8 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Rollback group to snapshot
+      summary: Rollback all images in the group to their state at the time of the
+        snapshot
       tags:
       - RbdGroupSnapshot
   /api/block/pool/{pool_name}/namespace:
