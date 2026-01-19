@@ -1310,7 +1310,7 @@
                   "uid": "$datasource"
                },
                "exemplar": false,
-               "expr": "sum(rate(ceph_pool_rd_bytes{cluster=~\"$cluster\"}[$__rate_interval]))",
+               "expr": "sum(rate(ceph_pool_wr_bytes{cluster=~\"$cluster\"}[$__rate_interval]))",
                "format": "time_series",
                "hide": false,
                "instant": false,
@@ -1325,7 +1325,7 @@
                   "uid": "$datasource"
                },
                "exemplar": false,
-               "expr": "sum(rate(ceph_pool_wr_bytes{cluster=~\"$cluster\"}[$__rate_interval]))",
+               "expr": "sum(rate(ceph_pool_rd_bytes{cluster=~\"$cluster\"}[$__rate_interval]))",
                "format": "time_series",
                "hide": false,
                "intervalFactor": 1,
