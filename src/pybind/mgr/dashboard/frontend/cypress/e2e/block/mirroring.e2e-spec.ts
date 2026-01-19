@@ -63,11 +63,9 @@ describe('Mirroring page', () => {
           cy.get('[data-testid="pool-name"]').clear().type(name);
           cy.get('[data-testid="pool-type-select"]').select('replicated');
           cy.get('[data-testid="pool-type-select"] option:checked').contains('replicated');
-          cy.get('.float-start.me-2.select-menu-edit').click();
-          cy.get('.popover-body').should('be.visible');
-          // Choose rbd as the application label
-          cy.get('.select-menu-item-content').contains('rbd').click();
           cy.get('cd-submit-button').click();
+          // Wait for form submission navigation to complete
+          cy.url().should('include', '/pool');
           cy.get('cd-pool-list').should('exist');
 
           cy.visit('#/block/mirroring').wait(1000);

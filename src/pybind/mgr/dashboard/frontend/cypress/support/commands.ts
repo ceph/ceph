@@ -64,8 +64,8 @@ Cypress.Commands.add('ceph2Login', (username, password) => {
       cy.origin(
         url,
         { args },
-        ({ uname, permissions, pwdExpirationDate, pwdUpdateRequired, sso }: any) => {
-          window.localStorage.setItem(LocalStorage.DASHBOARD_USRENAME, uname);
+        ({ username, permissions, pwdExpirationDate, pwdUpdateRequired, sso }: any) => {
+          window.localStorage.setItem('dashboard_username', username);
           window.localStorage.setItem('dashboard_permissions', permissions);
           window.localStorage.setItem('user_pwd_expiration_date', pwdExpirationDate);
           window.localStorage.setItem('user_pwd_update_required', pwdUpdateRequired);
