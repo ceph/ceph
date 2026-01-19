@@ -1557,6 +1557,13 @@ bool MDSMonitor::has_health_warnings(vector<mds_metric_t> warnings)
   return false;
 }
 
+bool MDSMonitor::has_any_health_warning()
+{
+  return std::any_of(
+    pending_daemon_health.begin(), pending_daemon_health.end(),
+    [](auto& it) { return !it.second.metrics.empty() ? true : false; });
+}
+
 int MDSMonitor::filesystem_command(
     FSMap &fsmap,
     MonOpRequestRef op,
