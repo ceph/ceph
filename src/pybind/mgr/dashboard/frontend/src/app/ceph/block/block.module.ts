@@ -65,7 +65,11 @@ import {
   UIShellModule,
   TreeviewModule,
   TabsModule,
-  TagModule
+  TagModule,
+  LayoutModule,
+  ContainedListModule,
+  LayerModule,
+  ThemeModule
 } from 'carbon-components-angular';
 
 // Icons
@@ -74,6 +78,8 @@ import Close from '@carbon/icons/es/close/32';
 import AddFilled from '@carbon/icons/es/add--filled/32';
 import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
 import Reset from '@carbon/icons/es/reset/32';
+import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node/nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
+import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway-node.component';
 
 @NgModule({
   imports: [
@@ -101,7 +107,11 @@ import Reset from '@carbon/icons/es/reset/32';
     DatePickerModule,
     ComboBoxModule,
     TabsModule,
-    TagModule
+    TagModule,
+    LayerModule,
+    LayoutModule,
+    ContainedListModule,
+    ThemeModule
   ],
   declarations: [
     RbdListComponent,
@@ -138,7 +148,9 @@ import Reset from '@carbon/icons/es/reset/32';
     NvmeofNamespacesListComponent,
     NvmeofNamespacesFormComponent,
     NvmeofInitiatorsListComponent,
-    NvmeofInitiatorsFormComponent
+    NvmeofInitiatorsFormComponent,
+    NvmeofGatewayNodeComponent,
+    NvmeofGatewayNodeAddModalComponent
   ],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })

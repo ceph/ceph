@@ -168,4 +168,8 @@ export class HostService extends ApiClient {
   getAllHosts(): Observable<Host[]> {
     return this.http.get<Host[]>(`${this.baseUIURL}/list`);
   }
+
+  checkHostsFactsAvailable(orchStatus: any): boolean {
+    return orchStatus?.available || false;
+  }
 }
