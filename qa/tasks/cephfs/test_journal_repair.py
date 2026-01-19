@@ -3,6 +3,8 @@
 Test our tools for recovering the content of damaged journals
 """
 
+from io import StringIO
+import re
 import json
 import logging
 from textwrap import dedent
@@ -144,6 +146,67 @@ class TestJournalRepair(CephFSTestCase):
 
         # Check that we can do metadata ops in the recovered directory
         self.mount_a.run_shell(["touch", "subdir/subsubdir/subsubdirfile"])
+
+    def test_reset_trim(self):
+        """
+        That after forcibly resetting the journal with disaster recovery, the old
+        journal objects must be trimmed when fs is back online to recover the size
+        of metadata pool
+        """
+
+        self.fs.set_joinable(False) # no unintended failover
+
+        # Create dirs
+        self.mount_a.run_shell_payload("mkdir {alpha,bravo} && touch {alpha,bravo}/file")
+
+        # Do some IO to create multiple journal objects
+        self.mount_a.create_n_files("alpha/file", 5000)
+        self.mount_a.create_n_files("bravo/file", 5000)
+
+        # Stop (hard) the  MDS daemon
+        self.fs.rank_fail(rank=0)
+
+        # journal objects before reset
+        objects = self.fs.radosmo(["ls"], stdout=StringIO()).strip().split("\n")
+        journal_objs_before_reset = [
+            o for o in objects
+            if re.match(r"200\.[0-9A-Fa-f]{8}$", o) and o != "200.00000000"
+        ]
+
+        # Kill the mount as dentries isn't being recovered
+        log.info("Killing mount, it's blocked on the MDS we killed")
+        self.mount_a.kill()
+        self.mount_a.kill_cleanup()
+
+        # Run journal reset to validate it doesn't reset journal trim position
+        self.fs.fail()
+        self.fs.journal_tool(["journal", "reset", "--yes-i-really-really-mean-it"], 0)
+
+        # It may have incorrect dir stats
+        self.config_set('mds', 'mds_verify_scatter', 'false')
+        self.config_set('mds', 'mds_debug_scatterstat', 'false')
+
+        # Bring an MDS back online
+        self.fs.set_joinable(True)
+        self.fs.wait_for_daemons()
+        self.mount_a.mount_wait()
+
+        # Create few more files to validate that fs is intact
+        self.mount_a.run_shell_payload("mkdir dir1 && touch dir1/file_after_reset")
+        self.mount_a.create_n_files("dir1/file_after_reset", 100)
+
+        # Flush the journal to verify if the journal objects are trimmed
+        self.fs.rank_asok(["flush", "journal"], rank=0)
+
+        # journal objects after reset
+        objects = self.fs.radosmo(["ls"], stdout=StringIO()).strip().split("\n")
+        journal_objs_after_reset = [
+            o for o in objects
+            if re.match(r"200\.[0-9A-Fa-f]{8}$", o) and o != "200.00000000"
+        ]
+
+        # Validate that the journal flush has trimmed the old journal objects
+        self.assertGreater(len(journal_objs_before_reset), len(journal_objs_after_reset))
 
     @for_teuthology # 308s
     def test_reset(self):
