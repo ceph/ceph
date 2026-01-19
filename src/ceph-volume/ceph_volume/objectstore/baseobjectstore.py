@@ -183,6 +183,7 @@ class BaseObjectStore:
         self.osd_path = self.get_osd_path()
         self.monmap = os.path.join(self.osd_path, 'activate.monmap')
         cmd = self.build_osd_mkfs_cmd()
+
         system.chown(self.osd_path)
         """
         When running in containers the --mkfs on raw device sometimes fails
