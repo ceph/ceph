@@ -39,7 +39,6 @@
 #include "librbd/api/Image.h"
 #include "librbd/api/Io.h"
 #include "librbd/cache/Utils.h"
-#include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/image/CloneRequest.h"
@@ -948,10 +947,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(cct, 20) << __func__ << ": ictx=" << ictx << ", "
                    << "lock_mode=" << lock_mode << dendl;
 
-    if (lock_mode != RBD_LOCK_MODE_EXCLUSIVE) {
-      return -EOPNOTSUPP;
-    }
-
     C_SaferCond lock_ctx;
     {
       std::unique_lock l{ictx->owner_lock};
@@ -961,9 +956,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	return -EINVAL;
       }
 
-      if (ictx->get_exclusive_lock_policy()->may_auto_request_lock()) {
+      if (lock_mode == RBD_LOCK_MODE_EXCLUSIVE) {
 	ictx->set_exclusive_lock_policy(
 	  new exclusive_lock::StandardPolicy(ictx));
+      } else {
+        return -EOPNOTSUPP;
       }
 
       if (ictx->exclusive_lock->is_lock_owner()) {
