@@ -9,16 +9,12 @@ import {
   ViewChild
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { forkJoin, Subject, Subscription } from 'rxjs';
-import { finalize, mergeMap } from 'rxjs/operators';
+import { Observable, Subject, Subscription } from 'rxjs';
+import { finalize } from 'rxjs/operators';
 
-import { HostService } from '~/app/shared/api/host.service';
-import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
-
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -30,6 +26,8 @@ import { Host } from '~/app/shared/models/host.interface';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
 
 @Component({
   selector: 'cd-nvmeof-gateway-node',
@@ -55,11 +53,13 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
 
   @Output() selectionChange = new EventEmitter<CdTableSelection>();
   @Output() hostsLoaded = new EventEmitter<number>();
+
   @Input() groupName: string | undefined;
-  @Input() mode: NvmeofGatewayNodeMode = NvmeofGatewayNodeMode.SELECTOR;
+  @Input() mode: 'selector' | 'details' = 'selector';
 
   usedHostnames: Set<string> = new Set();
   serviceSpec: CephServiceSpec | undefined;
+  hasAvailableHosts = false;
 
   permission: Permission;
   columns: CdTableColumn[] = [];
@@ -72,50 +72,33 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   icons = Icons;
   HostStatus = HostStatus;
   private tableContext: CdTableFetchDataContext | undefined;
-  totalHostCount = 5;
+  count = 0;
   orchStatus: OrchestratorStatus | undefined;
   private destroy$ = new Subject<void>();
   private sub: Subscription | undefined;
 
   constructor(
     private authStorageService: AuthStorageService,
-    private hostService: HostService,
-    private orchService: OrchestratorService,
     private nvmeofService: NvmeofService,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private modalService: ModalCdsService
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
 
   ngOnInit(): void {
-    this.route.data.subscribe((data) => {
-      if (data?.['mode']) {
-        this.mode = data['mode'];
-      }
-    });
+    const routeData = this.route.snapshot.data;
+    if (routeData?.['mode']) {
+      this.mode = routeData['mode'];
+    }
 
-    this.selectionType = this.mode === NvmeofGatewayNodeMode.SELECTOR ? 'multiClick' : 'single';
+    this.selectionType = this.mode === 'selector' ? 'multiClick' : 'single';
 
-    if (this.mode === NvmeofGatewayNodeMode.DETAILS) {
-      this.route.parent?.params.subscribe((params: { group: string }) => {
+    if (this.mode === 'details') {
+      this.route.parent?.params.subscribe((params: any) => {
         this.groupName = params.group;
       });
-      this.tableActions = [
-        {
-          permission: 'create',
-          icon: Icons.add,
-          click: () => this.addGateway(),
-          name: $localize`Add`,
-          canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
-        },
-        {
-          permission: 'delete',
-          icon: Icons.destroy,
-          click: () => this.removeGateway(),
-          name: $localize`Remove`,
-          disable: (selection: CdTableSelection) => !selection.hasSelection
-        }
-      ];
+      this.setTableActions();
     }
 
     this.columns = [
@@ -146,8 +129,36 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     ];
   }
 
+  private setTableActions() {
+    this.tableActions = [
+      {
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.addGateway(),
+        name: $localize`Add`,
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
+        disable: () => (!this.hasAvailableHosts ? $localize`No available nodes to add` : false)
+      },
+      {
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.removeGateway(),
+        name: $localize`Remove`,
+        disable: (selection: CdTableSelection) => !selection.hasSelection
+      }
+    ];
+  }
+
   addGateway(): void {
-    // TODO
+    const modalRef = this.modalService.show(NvmeofGatewayNodeAddModalComponent, {
+      groupName: this.groupName,
+      usedHostnames: Array.from(this.usedHostnames),
+      serviceSpec: this.serviceSpec
+    });
+
+    modalRef.gatewayAdded.subscribe(() => {
+      this.table.refreshBtn();
+    });
   }
 
   removeGateway(): void {
@@ -183,22 +194,10 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
       this.sub.unsubscribe();
     }
 
-    const fetchData$ =
-      this.mode === NvmeofGatewayNodeMode.DETAILS
+    const fetchData$: Observable<any> =
+      this.mode === 'details'
         ? this.nvmeofService.fetchHostsAndGroups()
-        : forkJoin({
-            groups: this.nvmeofService.listGatewayGroups(),
-            hosts: this.orchService.status().pipe(
-              mergeMap((orchStatus: OrchestratorStatus) => {
-                this.orchStatus = orchStatus;
-                const factsAvailable = this.hostService.checkHostsFactsAvailable(orchStatus);
-                return this.hostService.list(
-                  this.tableContext?.toParams(),
-                  factsAvailable.toString()
-                );
-              })
-            )
-          });
+        : this.nvmeofService.getAvailableHosts(this.tableContext?.toParams());
 
     this.sub = fetchData$
       .pipe(
@@ -208,47 +207,50 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: (result: any) => {
-          this.mode === NvmeofGatewayNodeMode.DETAILS
-            ? this.processHostsForDetailsMode(result.groups, result.hosts)
-            : this.processHostsForSelectorMode(result.groups, result.hosts);
+          if (this.mode === 'details') {
+            this.processDetailsData(result.groups, result.hosts);
+          } else {
+            this.hosts = result;
+            this.count = this.hosts.length;
+            this.hostsLoaded.emit(this.count);
+          }
         },
         error: () => context?.error()
       });
   }
 
-  /**
-   * Selector Mode: Used in 'Add/Create' forms.
-   * Filters the entire cluster inventory to show only **available** candidates
-   * (excluding nodes that are already part of a gateway group).
-   */
-  private processHostsForSelectorMode(groups: CephServiceSpec[][] = [[]], hostList: Host[] = []) {
-    const usedHosts = new Set<string>();
-    (groups?.[0] ?? []).forEach((group: CephServiceSpec) => {
-      group.placement?.hosts?.forEach((hostname: string) => usedHosts.add(hostname));
-    });
-    this.usedHostnames = usedHosts;
-
-    this.hosts = (hostList || []).filter((host: Host) => !this.usedHostnames.has(host.hostname));
-
-    this.updateCount();
-  }
-
-  /**
-   * Details Mode: Used in 'Details' views.
-   * Filters specifically for the nodes that are **configured members**
-   * of the current gateway group, regardless of their status.
-   */
-  private processHostsForDetailsMode(groups: any[][], hostList: Host[]) {
+  private processDetailsData(groups: any[][], hostList: Host[]) {
     const groupList = groups?.[0] ?? [];
-    const currentGroup: CephServiceSpec | undefined = groupList.find(
-      (group: CephServiceSpec) => group.spec?.group === this.groupName
-    );
 
-    if (!currentGroup) {
+    const allUsedHostnames = new Set<string>();
+    groupList.forEach((group: CephServiceSpec) => {
+      const hosts = group.placement?.hosts || (group.spec as any)?.placement?.hosts || [];
+      hosts.forEach((hostname: string) => allUsedHostnames.add(hostname));
+    });
+
+    this.usedHostnames = allUsedHostnames;
+
+    // Check if there are any available hosts globally (not used by any group)
+    this.hasAvailableHosts = (hostList || []).some(
+      (host: Host) => !this.usedHostnames.has(host.hostname)
+    );
+    this.setTableActions();
+
+    const currentGroup = groupList.find((group: CephServiceSpec) => {
+      return (
+        group.spec?.group === this.groupName ||
+        group.service_id === `nvmeof.${this.groupName}` ||
+        group.service_id.endsWith(`.${this.groupName}`)
+      );
+    });
+
+    this.serviceSpec = currentGroup as CephServiceSpec;
+
+    if (!this.serviceSpec) {
       this.hosts = [];
     } else {
       const placementHosts =
-        currentGroup.placement?.hosts || (currentGroup.spec as any)?.placement?.hosts || [];
+        this.serviceSpec.placement?.hosts || (this.serviceSpec.spec as any)?.placement?.hosts || [];
       const currentGroupHosts = new Set<string>(placementHosts);
 
       this.hosts = (hostList || []).filter((host: Host) => {
@@ -256,12 +258,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
       });
     }
 
-    this.serviceSpec = currentGroup;
-    this.updateCount();
-  }
-
-  private updateCount(): void {
-    this.totalHostCount = this.hosts.length;
-    this.hostsLoaded.emit(this.totalHostCount);
+    this.count = this.hosts.length;
+    this.hostsLoaded.emit(this.count);
   }
 }

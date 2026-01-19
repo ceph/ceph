@@ -11,7 +11,12 @@
     [maxLimit]="25"
     identifier="hostname"
     forceIdentifier="true"
+    [autoReload]="false"
     (updateSelection)="updateSelection($event)"
+    emptyStateTitle="No nodes available"
+    i18n-emptyStateTitle
+    emptyStateMessage="Add your first gateway node to start using NVMe over Fabrics. Nodes provide the resources required to expose NVMe/TCP block storage."
+    i18n-emptyStateMessage
   >
     <cd-table-actions
       class="table-actions"
@@ -23,11 +28,17 @@
 </div>
 
 <ng-template
+  #hostNameTpl
+  let-value="data.value"
+>
+  <span class="cds-ml-2">{{ value }}</span>
+</ng-template>
+
+<ng-template
   #addrTpl
   let-value="data.value"
 >
   <span>{{ value || '-' }}</span>
-
 </ng-template>
 
 <ng-template
@@ -40,8 +51,10 @@
     [cdsStack]="'horizontal'"
     gap="4"
   >
-  @if (value === HostStatus.AVAILABLE) {
+  @if (value === HostStatus.AVAILABLE || value === HostStatus.RUNNING) {
     <cd-icon type="success"></cd-icon>
+  } @else {
+    <cd-icon type="error"></cd-icon>
   }
   <span class="cds-ml-3">{{ value | titlecase }}</span>
   </div>
@@ -50,8 +63,10 @@
 }
 </ng-template>
 
-<ng-template #labelsTpl
-             let-value="data.value">
+<ng-template
+  #labelsTpl
+  let-value="data.value"
+>
 @if (value && value.length > 0) {
   <cds-tag *ngFor="let label of value"
            class="tag tag-dark">{{ label }}</cds-tag>

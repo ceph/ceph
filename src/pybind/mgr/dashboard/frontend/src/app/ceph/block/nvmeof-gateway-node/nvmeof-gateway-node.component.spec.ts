@@ -104,9 +104,11 @@ describe('NvmeofGatewayNodeComponent', () => {
         provide: ActivatedRoute,
         useValue: {
           parent: {
-            params: new BehaviorSubject({ group: 'group1' })
+            params: new BehaviorSubject({ group: 'group1' }),
+            snapshot: {
+              params: { group: 'group1' }
+            }
           },
-          data: of({ mode: 'selector' }),
           snapshot: {
             data: { mode: 'selector' }
           }
@@ -149,7 +151,7 @@ describe('NvmeofGatewayNodeComponent', () => {
   it('should initialize with default values', () => {
     expect(component.hosts).toEqual([]);
     expect(component.isLoadingHosts).toBe(false);
-    expect(component.totalHostCount).toBe(5);
+    expect(component.count).toBe(0);
     expect(component.permission).toBeDefined();
   });
 
@@ -184,119 +186,34 @@ describe('NvmeofGatewayNodeComponent', () => {
   });
 
   it('should load hosts with orchestrator available and facts feature enabled', fakeAsync(() => {
-    const hostListSpy = spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
-    const mockOrcStatus: any = {
-      available: true,
-      features: new Map([['get_facts', { available: true }]])
-    };
-
-    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
-    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(
-      of([
-        [
-          {
-            service_id: 'nvmeof.group1',
-            placement: { hosts: ['gateway-node-1'] }
-          }
-        ]
-      ] as any)
-    );
-    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
-    component.groupName = 'group1';
-    fixture.detectChanges();
-
+    spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(of([mockGatewayNodes[2]]));
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
     tick(100);
-    expect(hostListSpy).toHaveBeenCalled();
-    // Hosts NOT in usedHostnames are included (gateway-node-1 is used, so filtered out)
-    // gateway-node-2 and gateway-node-3 are returned (status is not filtered)
-    expect(component.hosts.length).toBe(2);
-    expect(component.hosts.map((h) => h.hostname)).toContain('gateway-node-2');
-    expect(component.hosts.map((h) => h.hostname)).toContain('gateway-node-3');
+    expect(nvmeofService.getAvailableHosts).toHaveBeenCalled();
+    expect(component.hosts.length).toBe(1);
+    expect(component.hosts[0]['hostname']).toBe('gateway-node-3');
   }));
 
   it('should set count to hosts length', fakeAsync(() => {
-    spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
-    const mockOrcStatus: any = {
-      available: true,
-      features: new Map()
-    };
-
-    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
-    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(
-      of([
-        [
-          {
-            service_id: 'nvmeof.group1',
-            placement: { hosts: ['gateway-node-1', 'gateway-node-2'] }
-          }
-        ]
-      ] as any)
-    );
-    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
-    component.groupName = 'group1';
-    fixture.detectChanges();
-
+    spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(of(mockGatewayNodes));
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
     tick(100);
-    // Count should equal the filtered hosts length
-    expect(component.totalHostCount).toBe(component.hosts.length);
+    expect(component.count).toBe(component.hosts.length);
   }));
 
   it('should set count to 0 when no hosts are returned', fakeAsync(() => {
-    spyOn(hostService, 'list').and.returnValue(of([]));
-    const mockOrcStatus: any = {
-      available: true,
-      features: new Map()
-    };
-
-    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
-    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(
-      of([
-        [
-          {
-            service_id: 'nvmeof.group1',
-            placement: { hosts: ['gateway-node-1'] }
-          }
-        ]
-      ] as any)
-    );
-    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
-    component.groupName = 'group1';
-    fixture.detectChanges();
-
+    spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(of([]));
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
     tick(100);
-    expect(component.totalHostCount).toBe(0);
+    expect(component.count).toBe(0);
     expect(component.hosts.length).toBe(0);
   }));
 
   it('should handle error when fetching hosts', fakeAsync(() => {
-    const errorMsg = 'Failed to fetch hosts';
-    spyOn(hostService, 'list').and.returnValue(throwError(() => new Error(errorMsg)));
-    const mockOrcStatus: any = {
-      available: true,
-      features: new Map()
-    };
-
-    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
-    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(
-      of([
-        [
-          {
-            service_id: 'nvmeof.group1',
-            placement: { hosts: ['gateway-node-1', 'gateway-node-2'] }
-          }
-        ]
-      ] as any)
-    );
-    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
-    component.groupName = 'group1';
-    fixture.detectChanges();
-
+    spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(throwError(() => new Error('Error')));
     const context = new CdTableFetchDataContext(() => undefined);
     spyOn(context, 'error');
 
@@ -309,12 +226,12 @@ describe('NvmeofGatewayNodeComponent', () => {
 
   it('should not re-fetch if already loading', fakeAsync(() => {
     component.isLoadingHosts = true;
-    const hostListSpy = spyOn(hostService, 'list');
+    spyOn(nvmeofService, 'getAvailableHosts');
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
     tick(100);
-    expect(hostListSpy).not.toHaveBeenCalled();
+    expect(nvmeofService.getAvailableHosts).not.toHaveBeenCalled();
   }));
 
   it('should unsubscribe on component destroy', fakeAsync(() => {
@@ -461,7 +378,7 @@ describe('NvmeofGatewayNodeComponent', () => {
   }));
 
   it('should fetch data using fetchHostsAndGroups in details mode', fakeAsync(() => {
-    (component as any).route.data = of({ mode: 'details' });
+    (component as any).route.snapshot.data = { mode: 'details' };
     component.ngOnInit();
     component.groupName = 'group1';
 
@@ -487,17 +404,16 @@ describe('NvmeofGatewayNodeComponent', () => {
     expect(nvmeofService.fetchHostsAndGroups).toHaveBeenCalled();
     expect(component.hosts.length).toBe(1);
     expect(component.hosts[0].hostname).toBe('gateway-node-1');
-    expect(component.hosts[0].hostname).toBe('gateway-node-1');
   }));
 
   it('should set selectionType to multiClick in selector mode', () => {
-    (component as any).route.data = of({ mode: 'selector' });
+    (component as any).route.snapshot.data = { mode: 'selector' };
     component.ngOnInit();
     expect(component.selectionType).toBe('multiClick');
   });
 
   it('should set selectionType to single in details mode', () => {
-    (component as any).route.data = of({ mode: 'details' });
+    (component as any).route.snapshot.data = { mode: 'details' };
     component.ngOnInit();
     expect(component.selectionType).toBe('single');
   });

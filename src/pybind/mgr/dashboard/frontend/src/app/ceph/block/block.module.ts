@@ -74,7 +74,8 @@ import {
   LayoutModule,
   ContainedListModule,
   LayerModule,
-  ThemeModule
+  ThemeModule,
+  LayoutModule
 } from 'carbon-components-angular';
 
 // Icons
@@ -90,6 +91,7 @@ import { NvmeofGatewaySubsystemComponent } from './nvmeof-gateway-subsystem/nvme
 import { NvmeGatewayViewComponent } from './nvme-gateway-view/nvme-gateway-view.component';
 import { NvmeGatewayViewBreadcrumbResolver } from './nvme-gateway-view/nvme-gateway-view-breadcrumb.resolver';
 import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
+import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node/nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
 
 @NgModule({
   imports: [
@@ -123,7 +125,8 @@ import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
     LayoutModule,
     ContainedListModule,
     SideNavModule,
-    ThemeModule
+    ThemeModule,
+    LayoutModule
   ],
   declarations: [
     RbdListComponent,
@@ -167,7 +170,8 @@ import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
     NvmeofSubsystemsStepTwoComponent,
     NvmeofSubsystemsStepThreeComponent,
     NvmeGatewayViewComponent,
-    NvmeofGatewaySubsystemComponent
+    NvmeofGatewaySubsystemComponent,
+    NvmeofGatewayNodeAddModalComponent
   ],
 
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]

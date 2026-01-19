@@ -3,9 +3,13 @@ import { HttpClient } from '@angular/common/http';
 
 import _ from 'lodash';
 import { Observable, forkJoin, of as observableOf } from 'rxjs';
-import { catchError, map, mapTo } from 'rxjs/operators';
+import { catchError, map, mapTo, mergeMap } from 'rxjs/operators';
 import { CephServiceSpec } from '../models/service.interface';
 import { HostService } from './host.service';
+import { OrchestratorService } from './orchestrator.service';
+import { HostStatus } from '../enum/host-status.enum';
+import { Host } from '../models/host.interface';
+import { OrchestratorStatus } from '../models/orchestrator.interface';
 
 export const DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM = 512;
 
@@ -49,12 +53,53 @@ const UI_API_PATH = 'ui-api/nvmeof';
   providedIn: 'root'
 })
 export class NvmeofService {
-  constructor(private http: HttpClient, private hostService: HostService) {}
+  constructor(
+    private http: HttpClient,
+    private hostService: HostService,
+    private orchService: OrchestratorService
+  ) {}
 
-  fetchHostsAndGroups() {
+  getAvailableHosts(params: any = {}): Observable<Host[]> {
     return forkJoin({
       groups: this.listGatewayGroups(),
-      hosts: this.hostService.getAllHosts()
+      hosts: this.orchService.status().pipe(
+        mergeMap((orchStatus: OrchestratorStatus) => {
+          const factsAvailable = this.hostService.checkHostsFactsAvailable(orchStatus);
+          return this.hostService.list(params, factsAvailable.toString()) as Observable<Host[]>;
+        }),
+        map((hosts: Host[]) => {
+          return (hosts || []).map((host: Host) => ({
+            ...host,
+            status: host.status || HostStatus.AVAILABLE
+          }));
+        })
+      )
+    }).pipe(
+      map(({ groups, hosts }) => {
+        const usedHosts = new Set<string>();
+        (groups?.[0] ?? []).forEach((group: CephServiceSpec) => {
+          group.placement?.hosts?.forEach((hostname: string) => usedHosts.add(hostname));
+        });
+        return (hosts || []).filter((host: Host) => {
+          const isAvailable =
+            host.status === HostStatus.AVAILABLE || host.status === HostStatus.RUNNING;
+          return !usedHosts.has(host.hostname) && isAvailable;
+        });
+      })
+    );
+  }
+
+  fetchHostsAndGroups(): Observable<{ groups: CephServiceSpec[][]; hosts: Host[] }> {
+    return forkJoin({
+      groups: this.listGatewayGroups(),
+      hosts: this.hostService.getAllHosts().pipe(
+        map((hosts: Host[]) => {
+          return (hosts || []).map((host: Host) => ({
+            ...host,
+            status: host.status || HostStatus.AVAILABLE
+          }));
+        })
+      )
     });
   }
 
