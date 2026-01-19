@@ -37,7 +37,8 @@ import {
   ComboBoxModule,
   ProgressIndicatorModule,
   InlineLoadingModule,
-  TagModule
+  TagModule,
+  LinkModule
 } from 'carbon-components-angular';
 
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
@@ -82,7 +83,8 @@ import { HelpTextComponent } from './help-text/help-text.component';
 import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-advanced-fieldset.component';
 import { UpgradableComponent } from './upgradable/upgradable.component';
 import { ProgressComponent } from './progress/progress.component';
-
+import { TearsheetComponent } from './tearsheet/tearsheet.component';
+import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
@@ -127,7 +129,8 @@ import { IconComponent } from './icon/icon.component';
     ProgressIndicatorModule,
     BaseChartDirective,
     InlineLoadingModule,
-    TagModule
+    TagModule,
+    LinkModule
   ],
   declarations: [
     SparklineComponent,
@@ -170,7 +173,9 @@ import { IconComponent } from './icon/icon.component';
     FormAdvancedFieldsetComponent,
     UpgradableComponent,
     ProgressComponent,
-    IconComponent
+    IconComponent,
+    TearsheetComponent,
+    TearsheetStepComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -210,7 +215,9 @@ import { IconComponent } from './icon/icon.component';
     FormAdvancedFieldsetComponent,
     UpgradableComponent,
     ProgressComponent,
-    IconComponent
+    IconComponent,
+    TearsheetComponent,
+    TearsheetStepComponent
   ]
 })
 export class ComponentsModule {

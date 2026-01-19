@@ -1,0 +1,69 @@
+<!-- Wide Tearsheet -->
+<cds-modal
+  size="lg"
+  [open]="isOpen"
+  (overlaySelected)="closeWizard()">
+  <!-- Tearsheet Header -->
+  <header
+    class="tearsheet-header">
+    <h4 cdsModalHeaderHeading
+        class="cds--type-heading-04 tearsheet-title">
+        {{title}}
+    </h4>
+    <p class="cds--type-body-02 tearsheet-description">
+      {{description}}
+    </p>
+  </header>
+  <section cdsGrid
+           class="tearsheet-body"
+           [useCssGrid]="true"
+           [fullWidth]="true">
+    <!-- Tearsheet Influencer-->
+    <div cdsCol
+         [columnNumbers]="{'lg': 3, 'md': 3, 'sm': 3}"
+         class="tearsheet-influencer">
+      <cds-progress-indicator
+        orientation="vertical"
+        [steps]="steps"
+        [current]="currentStep"
+        spacing="equal"
+        (stepSelected)="onStepSelect($event)">
+      </cds-progress-indicator>
+    </div>
+    <div cdsCol
+         [columnNumbers]="{'lg': 13, 'md': 13, 'sm': 13}"
+         class="tearsheet-main">
+      <!-- Tearsheet Content Area -->
+      <div class="tearsheet-content">
+      <ng-container
+        *ngTemplateOutlet="activeStepTemplate">
+      </ng-container>
+      </div>
+      <!-- Tearsheet Footer -->
+      <cds-modal-footer class="tearsheet-footer">
+        <button cdsButton="ghost"
+                class="tearsheet-footer-cancel"
+                (click)="closeWizard()"
+                size="xl"
+                i18n>Cancel</button>
+        <button cdsButton="secondary"
+                size="xl"
+                [disabled]="currentStep === 0"
+                (click)="onPrevious()"
+                i18n>Previous</button>
+        @if (currentStep === lastStep) {
+        <button cdsButton="primary"
+                size="xl"
+                (click)="onSubmit()"
+                i18n>{{submitButtonLabel}}</button>
+        }
+        @else {
+        <button cdsButton="primary"
+                size="xl"
+                (click)="onNext()"
+                i18n>Next</button>
+        }
+      </cds-modal-footer>
+    </div>
+  </section>
+</cds-modal>
