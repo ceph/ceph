@@ -31,7 +31,7 @@ class TestNvmePreformat:
 
     @patch('ceph_volume.util.nvme.disk.is_partition', return_value=False)
     @patch('ceph_volume.util.nvme.disk.is_device', return_value=True)
-    @patch('ceph_volume.util.nvme.process.call', side_effect=OSError('missing nvme'))
+    @patch('ceph_volume.util.nvme.process.call', side_effect=FileNotFoundError('missing nvme'))
     def test_preformat_handles_missing_cli(self, m_call, *_m_disk):
         assert nvme.preformat_namespace('/dev/nvme0n1') is False
         assert m_call.called

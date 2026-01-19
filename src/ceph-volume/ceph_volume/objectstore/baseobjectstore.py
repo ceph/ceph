@@ -3,10 +3,12 @@ import os
 import errno
 import time
 import tempfile
+from contextlib import nullcontext
 from ceph_volume import conf, terminal, process
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import system, disk
 from ceph_volume.util import encryption as encryption_utils
+from ceph_volume.util.cephconf import MkfsCephConfOverride
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -163,72 +165,24 @@ class BaseObjectStore:
         self.osd_mkfs_cmd.extend(self.supplementary_command)
         return self.osd_mkfs_cmd
 
-    def _mkfs_env_disable_bluestore_discard(self) -> Optional[Dict[str, str]]:
+    def _mkfs_context(self):
         """
-        Disable the mkfs-time BlueStore discard step for this mkfs invocation.
+        Context for `ceph-osd --mkfs`.
 
-        In some cephadm environments, passing a CLI flag to disable mkfs discard
-        is not consistently supported by `ceph-osd --mkfs` across builds.
-        As a workaround we:
-
-        - write a tiny temporary ceph.conf snippet:
-
-            [osd]
-            bluestore_discard_on_mkfs = false
-
-        - set `CEPH_CONF` only for the mkfs subprocess
-        - delete the temp file afterwards
+        When we want to skip the mkfs-time discard step, we pass a small
+        temporary ceph.conf to the mkfs process (scoped to this one call).
         """
         if not (self.disable_bluestore_discard and self.objectstore == 'bluestore'):
-            return None
+            return nullcontext(None)
 
         base_conf = conf.path or f'/etc/ceph/{conf.cluster}.conf'
         snippet = "\n[osd]\nbluestore_discard_on_mkfs = false\n"
-
-        # If we're running in a container with the host root mounted at /rootfs,
-        # write the file into /rootfs/tmp so the host can read it.
-        use_rootfs_tmp = os.path.isdir('/rootfs/tmp')
-        tmp_dir = '/rootfs/tmp' if use_rootfs_tmp else '/tmp'
-        fd, tmp_path = tempfile.mkstemp(prefix='ceph-volume-mkfs-', suffix='.conf', dir=tmp_dir)
-        os.close(fd)
-
-        try:
-            try:
-                with open(base_conf, 'r', encoding='utf-8') as src:
-                    base_contents = src.read()
-            except Exception:
-                base_contents = ''
-
-            with open(tmp_path, 'w', encoding='utf-8') as dst:
-                if base_contents:
-                    dst.write(base_contents)
-                dst.write(snippet)
-
-            # `ceph-osd` runs on the host, so point it at the host visible path.
-            ceph_conf_path = tmp_path.replace('/rootfs', '', 1) if use_rootfs_tmp else tmp_path
-            env = os.environ.copy()
-            env['CEPH_CONF'] = ceph_conf_path
-            logger.info(
-                'mkfs: using temporary ceph.conf to set bluestore_discard_on_mkfs=false: %s',
-                ceph_conf_path,
-            )
-            return env
-        except Exception as exc:
-            logger.warning('mkfs: unable to create temporary ceph.conf override: %s', exc)
-            for p in (tmp_path, tmp_path.replace('/rootfs', '', 1)):
-                try:
-                    os.unlink(p)
-                    break
-                except Exception:
-                    pass
-            return None
+        return MkfsCephConfOverride(base_conf_path=base_conf, extra_conf=snippet)
 
     def osd_mkfs(self) -> None:
         self.osd_path = self.get_osd_path()
         self.monmap = os.path.join(self.osd_path, 'activate.monmap')
         cmd = self.build_osd_mkfs_cmd()
-        mkfs_env = self._mkfs_env_disable_bluestore_discard()
-
         system.chown(self.osd_path)
         """
         When running in containers the --mkfs on raw device sometimes fails
@@ -236,38 +190,29 @@ class BaseObjectStore:
         See KernelDevice.cc and _lock() to understand how ceph-osd acquires the lock.
         Because this is really transient, we retry up to 5 times and wait for 1 sec in-between
         """
-        for retry in range(5):
-            _, _, returncode = process.call(cmd,
-                                            stdin=self.cephx_secret,
-                                            terminal_verbose=True,
-                                            show_command=True,
-                                            env=mkfs_env,
-            )
-            if returncode == 0:
-                break
-            else:
-                if returncode == errno.EWOULDBLOCK:
-                    time.sleep(1)
-                    logger.info('disk is held by another process, '
-                                'trying to mkfs again... (%s/5 attempt)' %
-                                retry)
-                    continue
-                else:
-                    raise RuntimeError('Command failed with exit code %s: %s' %
-                                       (returncode, ' '.join(cmd)))
-        # Clean up the temporary ceph.conf created for mkfs so we don’t leave
-        # stale temp files behind on each OSD creation.
-        if mkfs_env and mkfs_env.get('CEPH_CONF'):
-            p = mkfs_env['CEPH_CONF']
-            # If the file was created via /rootfs/tmp, remove the host-visible
-            # file through /rootfs as well.
-            candidates = (p, '/rootfs' + p) if p.startswith('/tmp/') else (p,)
-            for c in candidates:
-                try:
-                    os.unlink(c)
+        # When we disable mkfs-time discard, we do it by writing a tiny temporary
+        # ceph.conf snippet and pointing only this mkfs process at it via
+        # CEPH_CONF. That only works if we pass the env from the context manager
+        # into process.call(), so `ceph-osd --mkfs` can see it.
+        with self._mkfs_context() as mkfs_env:
+            for retry in range(5):
+                _, _, returncode = process.call(cmd,
+                                                stdin=self.cephx_secret,
+                                                terminal_verbose=True,
+                                                show_command=True,
+                                                env=mkfs_env)
+                if returncode == 0:
                     break
-                except Exception:
-                    pass
+                else:
+                    if returncode == errno.EWOULDBLOCK:
+                        time.sleep(1)
+                        logger.info('disk is held by another process, '
+                                    'trying to mkfs again... (%s/5 attempt)' %
+                                    retry)
+                        continue
+                    else:
+                        raise RuntimeError('Command failed with exit code %s: %s' %
+                                           (returncode, ' '.join(cmd)))
 
         mapping: Dict[str, Any] = {'raw': ['data', 'block_db', 'block_wal'],
                                    'lvm': ['ceph.block_device', 'ceph.db_device', 'ceph.wal_device']}
