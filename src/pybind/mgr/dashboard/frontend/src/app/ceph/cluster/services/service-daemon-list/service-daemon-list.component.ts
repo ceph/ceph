@@ -7,6 +7,8 @@ import {
   OnChanges,
   OnDestroy,
   OnInit,
+  Output,
+  EventEmitter,
   QueryList,
   TemplateRef,
   ViewChild,
@@ -68,6 +70,9 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   @Input()
   flag?: string;
 
+  @Input()
+  mode: 'daemons' | 'events' = 'daemons';
+
   total = 100;
 
   warningThreshold = 0.8;
@@ -83,6 +88,9 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
   permissions: Permissions;
+
+  @Output()
+  editService = new EventEmitter<{ serviceName?: string; serviceType?: string }>();
 
   hasOrchestrator = false;
   showDocPanel = false;

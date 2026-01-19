@@ -1,0 +1,110 @@
+<cd-details-card>
+  <ng-container
+    class="details-body-content">
+    <div cdsStack="horizontal"
+         [gap]="6">
+      <div cdsStack="vertical"
+           [gap]="3">
+        <div cdsStack="vertical"
+             [gap]="1">
+          <span class="cds--type-label-01"
+                i18n>
+            Certificate Name
+          </span>
+          <span class="cds--type-body-compact-01"
+                [title]="certificate?.cert_name || '-'">
+            {{ certificate?.cert_name || '-' }}
+          </span>
+        </div>
+        <div cdsStack="vertical"
+             [gap]="1">
+          <span class="cds--type-label-01"
+                i18n>
+            Valid Until
+          </span>
+          <span class="cds--type-body-compact-01"
+                [title]="formatDate(certificate?.expiry_date) || '-'">
+            {{ formatDate(certificate?.expiry_date) || '-' }}
+          </span>
+        </div>
+      </div>
+
+      <div cdsStack="vertical"
+           [gap]="3">
+        <div cdsStack="horizontal"
+             [gap]="1">
+          <div cdsStack="vertical"
+               [gap]="1">
+            <span class="cds--type-label-01"
+                  i18n>
+              Status
+            </span>
+            <ng-container *ngTemplateOutlet="statusTemplate; context: { status: certificate?.status }"></ng-container>
+          </div>
+          <!-- icon -->
+          <cds-icon-button kind="ghost"
+                           size="sm"
+                           (click)="onEdit()"
+                           class="edit-icon">
+            <cd-icon type="edit">
+            </cd-icon>
+          </cds-icon-button>
+
+        </div>
+        <div cdsStack="vertical"
+             [gap]="1">
+          <span class="cds--type-label-01"
+                i18n>
+            Days Remaining
+          </span>
+          <span class="cds--type-body-compact-01"
+                [title]="certificate?.days_to_expiration !== null && certificate?.days_to_expiration !== undefined
+                ? certificate?.days_to_expiration : '-'">
+            {{ certificate?.days_to_expiration !== null && certificate?.days_to_expiration !== undefined
+              ? certificate?.days_to_expiration : '-' }}
+          </span>
+        </div>
+      </div>
+
+      <div cdsStack="vertical"
+           [gap]="3">
+        <div cdsStack="vertical"
+             [gap]="1">
+          <span class="cds--type-label-01"
+                i18n>
+            Issuer
+          </span>
+          <span class="cds--type-body-compact-01"
+                [title]="certificate?.issuer || certificate?.signed_by || '-'">
+            {{ certificate?.issuer || certificate?.signed_by || '-' }}
+          </span>
+        </div>
+        <div cdsStack="vertical"
+             [gap]="1">
+          <span class="cds--type-label-01"
+                i18n>
+            Common Name
+          </span>
+          <span class="cds--type-body-compact-01"
+                [title]="certificate?.common_name || '-'">
+            {{ certificate?.common_name || '-' }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <ng-template #statusTemplate
+                 let-status="status">
+      <div cdsStack="horizontal"
+           [gap]="2"
+           class="status-row">
+        <cd-icon
+          [type]="statusIconMap[status] || statusIconMap['default']">
+        </cd-icon>
+        <span class="cds--type-body-compact-01">{{ formatCertificateStatus(certificate) }}</span>
+
+      </div>
+    </ng-template>
+
+  </ng-container>
+</cd-details-card>

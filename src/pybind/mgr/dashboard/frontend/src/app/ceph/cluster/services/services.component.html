@@ -20,7 +20,8 @@
     </cd-table-actions>
     <cd-service-details *cdTableDetail
                         [permissions]="permissions"
-                        [selection]="expandedRow">
+                        [selection]="expandedRow"
+                        (editService)="openModal(true, $event)">
     </cd-service-details>
   </cd-table>
 </ng-container>
