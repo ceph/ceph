@@ -26,8 +26,9 @@ export interface CephServiceCertificate {
   has_certificate: boolean;
   certificate_source: string;
   expiry_date: string;
+  issuer: string;
+  common_name: string;
 }
-
 // This will become handy when creating arbitrary services
 export interface CephServiceSpec {
   service_name: string;
