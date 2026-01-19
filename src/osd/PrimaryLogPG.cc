@@ -875,6 +875,19 @@ bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 
     // go to laggy state
     state_set(PG_STATE_LAGGY);
+    {
+      auto acting = get_acting();
+      std::ostringstream ss;
+      ss << "PG " << get_pgid() << " marked LAGGY; acting [";
+      for (size_t i = 0; i < acting.size(); ++i) {
+        if (i)
+          ss << ",";
+        ss << acting[i];
+      }
+      ss << "]";
+      dout(0) << __func__ << " " << ss.str() << dendl;
+      osd->clog->warn() << ss.str();
+    }
     publish_stats_to_osd();
   }
   dout(10) << __func__ << " not readable" << dendl;
