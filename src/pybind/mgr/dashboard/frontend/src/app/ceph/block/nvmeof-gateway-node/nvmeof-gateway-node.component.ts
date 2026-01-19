@@ -24,10 +24,12 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permission } from '~/app/shared/models/permissions';
 
+import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { Host } from '~/app/shared/models/host.interface';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
 
 @Component({
   selector: 'cd-nvmeof-gateway-node',
@@ -53,10 +55,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
 
   @Output() selectionChange = new EventEmitter<CdTableSelection>();
   @Output() hostsLoaded = new EventEmitter<number>();
-  @Input() groupName!: string;
+  @Output() requestRefresh = new EventEmitter<void>();
 
-  usedHostnames: Set<string> = new Set();
-  serviceSpec!: CephServiceSpec;
+  @Input() groupName!: string;
 
   permission: Permission;
   columns: CdTableColumn[] = [];
@@ -73,37 +74,30 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   private sub = new Subscription();
 
+  serviceSpec!: CephServiceSpec;
+  usedHostnames: Set<string> = new Set();
+  hasAvailableHosts = false;
+
   constructor(
     private authStorageService: AuthStorageService,
     private hostService: HostService,
     private orchService: OrchestratorService,
     private nvmeofService: NvmeofService,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private modalService: ModalCdsService
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
 
   ngOnInit(): void {
+    // Initialize synchronously from snapshot to prevent race condition with getHosts
+    this.groupName = this.route.parent?.snapshot.params.group;
+
     this.route.parent.params.subscribe((params: { group: string }) => {
       this.groupName = params.group;
     });
 
-    this.tableActions = [
-      {
-        permission: 'create',
-        icon: Icons.add,
-        click: () => this.addGateway(),
-        name: $localize`Add`,
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
-      },
-      {
-        permission: 'delete',
-        icon: Icons.destroy,
-        click: () => this.removeGateway(),
-        name: $localize`Remove`,
-        disable: (selection: CdTableSelection) => !selection.hasSelection
-      }
-    ];
+    this.setTableActions();
 
     this.columns = [
       {
@@ -134,8 +128,37 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     ];
   }
 
+  private setTableActions() {
+    this.tableActions = [
+      {
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.addGateway(),
+        name: $localize`Add`,
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
+        disable: () => !this.hasAvailableHosts
+      },
+      {
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.removeGateway(),
+        name: $localize`Remove`,
+        disable: (selection: CdTableSelection) => !selection.hasSelection
+      }
+    ];
+  }
+
   addGateway(): void {
-    // TODO: Logic to open add gateway modal
+    const modalRef = this.modalService.show(NvmeofGatewayNodeAddModalComponent, {
+      groupName: this.groupName,
+      usedHostnames: Array.from(this.usedHostnames),
+      serviceSpec: this.serviceSpec
+    });
+
+    modalRef.gatewayAdded.subscribe(() => {
+      this.requestRefresh.emit();
+      this.table.refreshBtn();
+    });
   }
 
   removeGateway(): void {
@@ -150,13 +173,13 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     }
   }
 
+  getSelectedHostnames(): string[] {
+    return this.selection.selected.map((host: Host) => host.hostname);
+  }
+
   updateSelection(selection: CdTableSelection): void {
     this.selection = selection;
     this.selectionChange.emit(selection);
-  }
-
-  getSelectedHostnames(): string[] {
-    return this.selection.selected.map((host: Host) => host.hostname);
   }
 
   getHosts(context: CdTableFetchDataContext): void {
@@ -204,6 +227,20 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
 
   private processGatewayData(groups: any, hostList: Host[]) {
     const groupList = groups?.[0] ?? [];
+
+    const allUsedHostnames = new Set<string>();
+    groupList.forEach((group: CephServiceSpec) => {
+      const hosts = group.placement?.hosts || (group.spec as any)?.placement?.hosts || [];
+      hosts.forEach((hostname: string) => allUsedHostnames.add(hostname));
+    });
+
+    this.usedHostnames = allUsedHostnames;
+
+    // Check if there are any available hosts globally (not used by any group)
+    this.hasAvailableHosts = hostList.some(
+      (host: Host) => !this.usedHostnames.has(host.hostname)
+    );
+    this.setTableActions();
 
     const currentGroup = groupList.find((g: CephServiceSpec) => {
       return (

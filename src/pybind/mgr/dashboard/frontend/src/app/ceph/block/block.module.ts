@@ -85,6 +85,7 @@ import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway
 import { NvmeofGatewaySubsystemComponent } from './nvmeof-gateway-subsystem/nvmeof-gateway-subsystem.component';
 import { NvmeGatewayViewComponent } from './nvme-gateway-view/nvme-gateway-view.component';
 import { NvmeGatewayViewBreadcrumbResolver } from './nvme-gateway-view/nvme-gateway-view-breadcrumb.resolver';
+import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node/nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
 
 @NgModule({
   imports: [
@@ -155,12 +156,14 @@ import { NvmeGatewayViewBreadcrumbResolver } from './nvme-gateway-view/nvme-gate
     NvmeofGatewayNodeComponent,
     NvmeofGroupFormComponent,
     NvmeGatewayViewComponent,
-    NvmeofGatewaySubsystemComponent
+    NvmeofGatewaySubsystemComponent,
+    NvmeofGatewayNodeAddModalComponent
   ],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
 export class BlockModule {
+  // Re-trigger compilation
   constructor(private iconService: IconService) {
     this.iconService.registerAll([
       ChevronDown,
