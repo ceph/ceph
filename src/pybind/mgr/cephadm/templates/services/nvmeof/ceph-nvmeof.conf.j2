@@ -27,6 +27,8 @@ verify_listener_ip = {{ spec.verify_listener_ip }}
 # This is a development flag, do not change it
 abort_on_errors = {{ spec.abort_on_errors }}
 # This is a development flag, do not change it
+abort_on_update_error = {{ spec.abort_on_update_error }}
+# This is a development flag, do not change it
 omap_file_ignore_unlock_errors = {{ spec.omap_file_ignore_unlock_errors }}
 # This is a development flag, do not change it
 omap_file_lock_on_read = {{ spec.omap_file_lock_on_read }}
@@ -48,6 +50,8 @@ max_namespaces_per_subsystem = {{ spec.max_namespaces_per_subsystem }}
 max_hosts_per_subsystem = {{ spec.max_hosts_per_subsystem }}
 subsystem_cache_expiration = {{ spec.subsystem_cache_expiration }}
 force_tls = {{ spec.force_tls }}
+# This is a development flag, do not change it
+max_message_length_in_mb = {{ spec.max_message_length_in_mb }}
 
 [gateway-logs]
 log_level = {{ spec.log_level }}
@@ -64,6 +68,8 @@ addr = {{ discovery_addr }}
 port = {{ spec.discovery_port }}
 # This is a development flag, do not change it
 abort_on_errors = {{ spec.abort_discovery_on_errors }}
+bind_retries_limit = {{ spec.discovery_bind_retries_limit }}
+bind_sleep_interval = {{ spec.discovery_bind_sleep_interval }}
 
 [ceph]
 pool = {{ spec.pool }}

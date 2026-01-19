@@ -477,6 +477,8 @@ verify_listener_ip = True
 # This is a development flag, do not change it
 abort_on_errors = True
 # This is a development flag, do not change it
+abort_on_update_error = True
+# This is a development flag, do not change it
 omap_file_ignore_unlock_errors = False
 # This is a development flag, do not change it
 omap_file_lock_on_read = True
@@ -498,6 +500,8 @@ max_namespaces_per_subsystem = 512
 max_hosts_per_subsystem = 128
 subsystem_cache_expiration = 30
 force_tls = False
+# This is a development flag, do not change it
+max_message_length_in_mb = 4
 
 [gateway-logs]
 log_level = INFO
@@ -514,6 +518,8 @@ addr = 192.168.100.100
 port = 8009
 # This is a development flag, do not change it
 abort_on_errors = True
+bind_retries_limit = 10
+bind_sleep_interval = 0.5
 
 [ceph]
 pool = {pool}
