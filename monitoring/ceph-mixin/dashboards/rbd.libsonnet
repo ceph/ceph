@@ -40,7 +40,7 @@ local info_rbd_stats = std.join(
       'now-1h',
       '30s',
       16,
-      $._config.dashboardTags,
+      $._config.dashboardTags + ['protocol'],
       ''
     )
     .addAnnotation(
