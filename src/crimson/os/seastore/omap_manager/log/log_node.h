@@ -220,6 +220,7 @@ constexpr uint32_t BITMAP_ARRAY_SIZE = ((LOG_NODE_BLOCK_SIZE / 4096) * 32 + 63) 
 struct d_bitmap_t {
   uint64_t bitmap[BITMAP_ARRAY_SIZE] = {0};
   static constexpr size_t BITS_PER_WORD = 64;
+  static constexpr size_t MAX_ENTRY = BITS_PER_WORD * BITMAP_ARRAY_SIZE;
 
   d_bitmap_t() = default;
   void set_bitmap(size_t bit) {
@@ -862,6 +863,12 @@ struct LogNode
   int ow_gap_from_last_entry(const size_t key, const size_t val);
 
   bool expect_overflow(const std::string &key, size_t vsize, bool can_ow);
+  bool expect_overflow(size_t ksize, size_t vsize) const {
+    if (get_size() + reserved_size + 1 > d_bitmap_t::MAX_ENTRY) {
+      return true;
+    }
+    return free_space() < get_entry_size(ksize, vsize) + reserved_len;
+  }
 
   void update_delta() {
     if (!delta_buffer.empty()) {

@@ -245,6 +245,8 @@ bool LogNode::expect_overflow(const std::string &key,
       gap -= d;
     }
     return remain < get_entry_size(ksize, vsize);
+  } else if (get_size() + reserved_size + 1 > d_bitmap_t::MAX_ENTRY) {
+    return true;
   } else if (is_ow_key(key) && !can_ow) {
     // guess there is enough space to store further entry in this node.
     // this makes sure that the last entry of this node is non-ow entry,

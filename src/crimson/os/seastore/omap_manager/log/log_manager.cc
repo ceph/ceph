@@ -83,7 +83,7 @@ LogManager::omap_set_keys(
    * will be appended to a new LogNode.
    */
   bool has_ow_key = false;
-  if (kvs.size() <= 2) {
+  if (kvs.size() <= OW_SIZE) {
     for (auto &p : kvs) {
       if (is_ow_key(p.first)) {
 	ow_kv.first = p.first;
@@ -93,13 +93,38 @@ LogManager::omap_set_keys(
       }
     }
   }
+
+  if (kvs.size() > BATCH_CREATE_SIZE) {
+    auto alloc_log_node = [&](laddr_t prev_laddr) 
+      -> omap_set_key_iertr::future<LogNodeRef> {
+      return tm.alloc_non_data_extent<LogNode>(
+	t, log_root.hint, LOG_NODE_BLOCK_SIZE
+      ).handle_error_interruptible(
+	crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	omap_set_key_iertr::pass_further{}
+      ).si_then([prev_laddr](auto ext) {
+	assert(ext);
+	ext->set_prev_addr(prev_laddr);
+	return omap_set_key_iertr::make_ready_future<LogNodeRef>(ext);
+      });
+    };
+
+    LogNodeRef e = co_await alloc_log_node(ext->get_laddr());
+    for (auto &p : kvs) {
+      if (e->expect_overflow(p.first.size(), p.second.length())) {
+	e = co_await alloc_log_node(e->get_laddr());
+      }
+      e->append_kv(t, p.first, p.second);
+    }
+
+    log_root.update(e->get_laddr(), log_root.depth,
+      log_root.hint, log_root.type);
+    co_return;
+  }
+
   for (auto &p : kvs) {
     if (is_ow_key(p.first)) {
       continue;
-    }
-    if (!is_log_key(p.first) && !is_ow_key(p.first)) {
-      // remove duplicate keys first
-      co_await remove_kv(t, log_root.addr, p.first, nullptr);
     }
     co_await f(p.first, p.second, has_ow_key);
   }
@@ -439,23 +464,44 @@ LogManager::omap_rm_keys(
   Transaction& t,
   std::set<std::string>& keys)
 {
-  LOG_PREFIX(LogManager::omap_rm_key);
+  LOG_PREFIX(LogManager::omap_rm_keys);
   DEBUGT("key size={}", t, keys.size());
   assert(log_root.get_type() == omap_type_t::LOG);
+  
+  std::set<std::string> dup_keys;
+  auto begin = keys.lower_bound("dup_");
+  auto end   = keys.lower_bound("dup`");
+  while (begin != end) {
+    auto nh = keys.extract(begin++); 
+    dup_keys.insert(std::move(nh)); 
+  }
+
+
   // Deletion of pg_log_entry_t entries is performed by omap_rm_keys using a set.
   // For example, omap_rm_keys might be called with a set containing
   // pg_log_entry_t entries ranging from 0011.0001 to 0011.0010.
   // In this case, calling omap_rm_key individually for each entry is inefficient,
   // because each call triggers a traversal of the entire list.
-  bool continous = is_continuous_fixed_width(keys);
-  if (continous) {
-    // fast path
-    co_await remove_kvs(t, log_root.addr, *keys.begin(), *keys.rbegin(), nullptr);
-  } else {
-    for (auto &p : keys) {
-      co_await remove_kv(t, log_root.addr, p, nullptr);
+  auto remove_key_set = [&](auto& key_set) -> omap_rm_key_ret {
+    if (key_set.empty())
+      co_return;
+
+    bool continuous = is_continuous_fixed_width(key_set);
+    if (continuous) {
+      // fast path
+      co_await remove_kvs(
+	  t, log_root.addr,
+	  *key_set.begin(),
+	  *key_set.rbegin(),
+	  nullptr);
+    } else {
+      for (auto& p : key_set) {
+	co_await remove_kv(t, log_root.addr, p, nullptr);
+      }
     }
-  }
+  };
+  co_await remove_key_set(keys);
+  co_await remove_key_set(dup_keys);
   co_return;
 }
 

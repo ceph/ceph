@@ -16,6 +16,8 @@ namespace crimson::os::seastore::log_manager{
 
 class LogNode;
 using LogNodeRef = TCachedExtentRef<LogNode>;
+constexpr uint8_t OW_SIZE = 2;
+constexpr uint8_t BATCH_CREATE_SIZE = 50;
 
 /*
  * 
