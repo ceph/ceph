@@ -1150,7 +1150,7 @@ or ``snaptrim_error`` flag set, which indicates that an earlier data scrub
 operation found a problem, or (2) have the *repair* flag set, which means that
 a repair for such an inconsistency is currently in progress.
 
-For more information, see :doc:`../troubleshooting/troubleshooting-pg`.
+For more information, see :ref:`rados_operations_monitoring_osd_pg`.
 
 OSD_SCRUB_ERRORS
 ________________
@@ -1158,7 +1158,7 @@ ________________
 Recent OSD scrubs have discovered inconsistencies. This alert is generally
 paired with *PG_DAMAGED* (see above).
 
-For more information, see :doc:`../troubleshooting/troubleshooting-pg`.
+For more information, see :ref:`rados_operations_monitoring_osd_pg`.
 
 OSD_TOO_MANY_REPAIRS
 ____________________
