@@ -448,7 +448,7 @@ def build_branch(args):
 
     """
     message = textwrap.dedent(message)
-    trailer_commmit = False
+    trailer_commit = False
     if args.build_job:
         message += f"CEPH-BUILD-JOB: {args.build_job}\n"
         trailer_commit = True
