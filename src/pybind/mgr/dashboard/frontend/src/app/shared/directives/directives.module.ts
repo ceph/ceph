@@ -20,6 +20,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { OptionalFieldDirective } from './optional-field.directive';
 import { DimlessBinaryPerMinuteDirective } from './dimless-binary-per-minute.directive';
 import { DynamicInputComboboxDirective } from './dynamic-input-combobox.directive';
+import { ValidateDirective } from './validate.directive';
 
 @NgModule({
   imports: [ReactiveFormsModule],
@@ -42,7 +43,8 @@ import { DynamicInputComboboxDirective } from './dynamic-input-combobox.directiv
     RequiredFieldDirective,
     OptionalFieldDirective,
     DimlessBinaryPerMinuteDirective,
-    DynamicInputComboboxDirective
+    DynamicInputComboboxDirective,
+    ValidateDirective
   ],
   exports: [
     AutofocusDirective,
@@ -63,7 +65,8 @@ import { DynamicInputComboboxDirective } from './dynamic-input-combobox.directiv
     RequiredFieldDirective,
     OptionalFieldDirective,
     DimlessBinaryPerMinuteDirective,
-    DynamicInputComboboxDirective
+    DynamicInputComboboxDirective,
+    ValidateDirective
   ]
 })
 export class DirectivesModule {}
