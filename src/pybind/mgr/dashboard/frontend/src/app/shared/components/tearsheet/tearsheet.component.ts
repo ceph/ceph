@@ -15,6 +15,7 @@ import { TearsheetStepComponent } from '../tearsheet-step/tearsheet-step.compone
 import { ModalCdsService } from '../../services/modal-cds.service';
 import { ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
+import { ConfirmationModalComponent } from '../confirmation-modal/confirmation-modal.component';
 
 @Component({
   selector: 'cd-tearsheet',
@@ -25,6 +26,8 @@ export class TearsheetComponent implements OnInit, AfterViewChecked {
   @Input() title!: string;
   @Input() steps!: Array<Step>;
   @Input() description!: string;
+  @Input() submitButtonLabel: string = $localize`Create`;
+  @Input() type: 'full' | 'wide' = 'wide';
 
   @Output() submitRequested = new EventEmitter<void>();
 
@@ -57,7 +60,15 @@ export class TearsheetComponent implements OnInit, AfterViewChecked {
     this.currentStep = event.index;
   }
 
-  closeWizard() {
+  closeTearsheet() {
+    if (this.type === 'full') {
+      this.closeFullTearsheet();
+    } else {
+      this.closeWideTearsheet();
+    }
+  }
+
+  closeWideTearsheet() {
     this.isOpen = false;
     if (this.hasModalOutlet) {
       this.location.back();
@@ -82,6 +93,22 @@ export class TearsheetComponent implements OnInit, AfterViewChecked {
     if (!this.steps[this.currentStep].invalid) {
       this.submitRequested.emit();
     }
+  }
+
+  closeFullTearsheet() {
+    this.cdsModalService.show(ConfirmationModalComponent, {
+      titleText: $localize`Are you sure you want to cancel ?`,
+      description: $localize`If you cancel, the information you have entered won't be saved.`,
+      buttonText: $localize`Cancel`,
+      cancelText: $localize`Return to form`,
+      onSubmit: () => {
+        this.isOpen = false;
+        this.cdsModalService.dismissAll();
+        this.location.back();
+      },
+      submitBtnType: 'danger',
+      showCancel: true
+    });
   }
 
   ngAfterViewChecked() {
