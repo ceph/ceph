@@ -22,6 +22,7 @@
 
 #include "crimson/common/coroutine.h"
 #include "crimson/common/exception.h"
+#include "crimson/common/errorator-utils.h"
 #include "crimson/common/tmap_helpers.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
@@ -90,9 +91,8 @@ PGBackend::PGBackend(pg_shard_t whoami,
   logger().info("initialized PGBackend::store with {}", (void*)this->store);
 }
 
-PGBackend::load_metadata_iertr::future
-  <PGBackend::loaded_object_md_t::ref>
-PGBackend::decode_metadata(
+tl::expected<PGBackend::loaded_object_md_t::ref, std::error_code>
+PGBackend::decode_metadata2(
   const hobject_t& oid,
   crimson::os::FuturizedStore::Shard::attrs_t attrs)
 {
@@ -110,7 +110,9 @@ PGBackend::decode_metadata(
     logger().error(
       "load_metadata: object {} present but missing object info",
       oid);
-    return crimson::ct_error::object_corrupted::make();
+    return tl::unexpected(
+      ErrorHelper<load_metadata_ertr>::to_error(
+        crimson::ct_error::object_corrupted::make()));
   }
 
   if (oid.is_head()) {
@@ -140,12 +142,13 @@ PGBackend::decode_metadata(
       logger().error(
         "load_metadata: object {} present but missing snapset",
         oid);
-      return crimson::ct_error::object_corrupted::make();
+      return tl::unexpected(
+        ErrorHelper<load_metadata_ertr>::to_error(
+          crimson::ct_error::object_corrupted::make()));
     }
   }
   ret->attr_cache = std::move(attrs);
-  return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
-    std::move(ret));
+  return loaded_object_md_t::ref(std::move(ret));
 }
 
 PGBackend::load_metadata_iertr::future
@@ -155,8 +158,15 @@ PGBackend::load_metadata(const hobject_t& oid)
   return interruptor::make_interruptible(store->get_attrs(
     coll,
     ghobject_t{oid, ghobject_t::NO_GEN, get_shard()})).safe_then_interruptible(
-      [oid, this](auto &&attrs) {
-        return decode_metadata(oid, std::move(attrs));
+      [oid, this](auto &&attrs) -> load_metadata_iertr::future<PGBackend::loaded_object_md_t::ref> {
+        if (auto maybe_decoded = decode_metadata2(oid, std::move(attrs));
+            maybe_decoded.has_value()) {
+          return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
+            std::move(*maybe_decoded));
+        } else {
+          return ErrorHelper<load_metadata_ertr>\
+	    ::from_error<PGBackend::loaded_object_md_t::ref>(maybe_decoded.error());
+        }
       }, crimson::ct_error::enoent::handle([oid] {
         logger().debug(
           "load_metadata: object {} doesn't exist, returning empty metadata",

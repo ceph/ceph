@@ -183,6 +183,32 @@ ObjectContextLoader::load_obc(
       });
 }
 
+ObjectContextLoader::load_obc_iertr::future<>
+ObjectContextLoader::load_obc(
+  ObjectContextRef obc,
+  PGBackend::loaded_object_md_t::ref md)
+{
+  const hobject_t& oid = md->os.oi.soid;
+  LOG_PREFIX(ObjectContextLoader::load_obc);
+  DEBUGDPP("loaded obs {} for {}", dpp, md->os.oi, oid);
+  if (oid.is_head()) {
+    if (!md->ssc) {
+      ERRORDPP("oid {} missing snapsetcontext", dpp, oid);
+      return crimson::ct_error::object_corrupted::make();
+    }
+    obc->set_head_state(std::move(md->os),
+		      std::move(md->ssc));
+  } else {
+    // we load and set the ssc only for head obc.
+    // For clones, the head's ssc will be referenced later.
+    // See set_clone_ssc
+    obc->set_clone_state(std::move(md->os));
+  }
+  obc->attr_cache = std::move(md->attr_cache);
+  DEBUGDPP("loaded obc {} for {}", dpp, obc->obs.oi, obc->obs.oi.soid);
+  return seastar::now();
+}
+
 void ObjectContextLoader::notify_on_change(bool is_primary)
 {
   LOG_PREFIX(ObjectContextLoader::notify_on_change);
