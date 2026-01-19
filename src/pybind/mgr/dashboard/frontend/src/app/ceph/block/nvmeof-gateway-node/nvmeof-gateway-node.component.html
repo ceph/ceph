@@ -5,13 +5,18 @@
     [columns]="columns"
     columnMode="flex"
     (fetchData)="getHosts($event)"
-    selectionType="none"
+    selectionType="single"
     [searchableObjects]="true"
     [serverSide]="false"
     [maxLimit]="25"
     identifier="hostname"
     forceIdentifier="true"
+    [autoReload]="false"
     (updateSelection)="updateSelection($event)"
+    emptyStateTitle="No nodes available"
+    i18n-emptyStateTitle
+    emptyStateMessage="Add your first gateway node to start using NVMe over Fabrics. Nodes provide the resources required to expose NVMe/TCP block storage."
+    i18n-emptyStateMessage
   >
     <cd-table-actions
       class="table-actions"
@@ -48,8 +53,10 @@
 
 </ng-template>
 
-<ng-template #labelsTpl
-             let-value="data.value">
+<ng-template
+  #labelsTpl
+  let-value="data.value"
+>
 @if (value && value.length > 0) {
   <cds-tag *ngFor="let label of value"
            class="tag tag-dark">{{ label }}</cds-tag>

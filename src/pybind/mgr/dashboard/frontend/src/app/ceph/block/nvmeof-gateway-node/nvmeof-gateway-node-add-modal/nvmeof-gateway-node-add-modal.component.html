@@ -1,0 +1,86 @@
+<cds-modal
+  [open]="open"
+  (overlaySelected)="closeModal()"
+  [size]="'md'">
+  <cds-modal-header
+    (closeSelect)="closeModal()"
+    class="cds-mb-6">
+    <h4
+      class="cds--type-heading-04 cds-ml-3"
+      i18n>
+      Add gateway nodes
+    </h4>
+    <p
+      class="cds--type-body-compact-01 cds-ml-3"
+      i18n>
+      Select NVMe-oF gateway nodes to associate with this gateway group.
+    </p>
+  </cds-modal-header>
+  <section cdsModalContent>
+
+    <div class="cds-mt-5">
+      <p
+        class="cds--type-heading-01"
+        i18n>
+        Select gateway nodes
+      </p>
+      <p
+        class="cds--type-label-01"
+        i18n>
+        Nodes to run NVMe-oF target pods/services
+      </p>
+
+      <cd-table
+        (fetchData)="getHosts($event)"
+        selectionType="multiClick"
+        [searchableObjects]="true"
+        [data]="hosts"
+        [columns]="columns"
+        [selection]="selection"
+        (updateSelection)="updateSelection($event)"
+        [autoReload]="false">
+      </cd-table>
+
+      <ng-template
+        #addrTemplate
+        let-value="data.value">
+        <span>{{ value || '-' }}</span>
+      </ng-template>
+
+      <ng-template
+        #statusTemplate
+        let-value="data.value"
+        let-row="data.row">
+        <div
+          [cdsStack]="'horizontal'"
+          gap="4">
+        @if (value === HostStatus.AVAILABLE) {
+          <cd-icon type="success"></cd-icon>
+        }
+        <span class="cds-ml-3">{{ value | titlecase }}</span>
+        </div>
+      </ng-template>
+
+      <ng-template
+        #labelsTemplate
+        let-value="data.value">
+      @if (value && value.length > 0) {
+        <cds-tag
+          *ngFor="let label of value"
+          class="tag tag-dark">{{ label }}</cds-tag>
+      } @else {
+        <span>-</span>
+      }
+      </ng-template>
+
+    </div>
+  </section>
+  <cd-form-button-panel
+    [modalForm]="true"
+    [showSubmit]="true"
+    submitText="Add"
+    [disabled]="selection.selected.length === 0"
+    (submitActionEvent)="onSubmit()"
+    (backActionEvent)="closeModal()">
+  </cd-form-button-panel>
+</cds-modal>
