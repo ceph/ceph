@@ -1,3 +1,5 @@
+.. _rados-crush-map:
+
 ============
  CRUSH Maps
 ============
@@ -217,6 +219,7 @@ CRUSH rules can be created via the command-line by specifying the *pool type*
 that they will govern (replicated or erasure coded), the *failure domain*, and
 optionally a *device class*.  In rare cases, CRUSH rules must be created by
 manually editing the CRUSH map.
+For more information, see :ref:`rados-crush-map-edits`.
 
 To see the rules that are defined for the cluster, run the following command:
 
@@ -751,6 +754,8 @@ The relevant erasure-code profile properties are as follows:
    explicitly. If only the erasure-code profile is specified and the rule
    argument is omitted, then Ceph will create the CRUSH rule automatically.
 
+
+.. _rados-crush-msr-rules:
 
 CRUSH MSR Rules
 ---------------

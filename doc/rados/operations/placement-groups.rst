@@ -687,7 +687,7 @@ Setting the Number of PGs
 :ref:`Placement Group Link <pgcalc>`
 
 Setting the initial number of PGs in a pool is done implicitly or explicitly
-at the time a pool is created. See `Create a Pool`_ for details. 
+at the time a pool is created. See :ref:`createpool` for details.
 
 However, after a pool is created, if the ``pg_autoscaler`` is not being
 used to manage ``pg_num`` values, you can change the number of PGs by running a
@@ -975,5 +975,4 @@ about it entirely (if it is too new to have a previous version). To mark the
         pg-concepts
 
 
-.. _Create a Pool: ../pools#createpool
 .. _Mapping PGs to OSDs: ../../../architecture#mapping-pgs-to-osds
