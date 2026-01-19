@@ -8,6 +8,7 @@
 #include <string>
 #include <boost/container/flat_set.hpp>
 
+#include "include/expected.hpp"
 #include "include/rados.h"
 
 #include "crimson/os/futurized_store.h"
@@ -455,8 +456,9 @@ public:
     crimson::os::FuturizedStore::Shard::attrs_t attr_cache;
     using ref = std::unique_ptr<loaded_object_md_t>;
   };
-  load_metadata_iertr::future<loaded_object_md_t::ref>
-  decode_metadata(
+
+  tl::expected<typename loaded_object_md_t::ref, std::error_code>
+  decode_metadata2(
     const hobject_t& oid,
     crimson::os::FuturizedStore::Shard::attrs_t attrs);
 
