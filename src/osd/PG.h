@@ -710,9 +710,6 @@ public:
   unsigned int scrub_requeue_priority(Scrub::scrub_prio_t with_priority) const;
 
 private:
-  // auxiliaries used by sched_scrub():
-  double next_deepscrub_interval() const;
-
   using ScrubAPI = void (ScrubPgIF::*)(epoch_t epoch_queued);
   void forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued, std::string_view desc);
   // and for events that carry a meaningful 'activation token'
