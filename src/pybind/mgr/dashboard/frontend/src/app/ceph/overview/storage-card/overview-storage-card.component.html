@@ -41,6 +41,56 @@
     [data]="displayData"
     class="overview-storage-card-chart"></ibm-meter-chart>
   }
+  @if(selectedStorageType === 'All' && trendData) {
+  <div cdsRow class="align-items-center cds-ml-2 cds-mt-6">
+    <div cdsCol [columnNumbers]="{ lg: 14, md: 10, sm: 16 }">
+      <cd-area-chart chartTitle="Consumption trend"
+          [chartKey]="'Consumption trend'"
+          [dataUnit]="'B'"
+          [legendEnabled]="false"
+          [rawData]="trendData"
+          [subHeading]="'Shows last 7 days of storage consumption trends based on recent usage'">
+      </cd-area-chart>
+    </div>
+    <div cdsCol [columnNumbers]="{ lg: 2, md: 8, sm: 8 }">
+      <div cdsStack="vertical" gap="4">
+        <div cdsStack="vertical" gap="1">
+          <span class="cds--type-heading-03">{{ timeUntilFull }}</span>
+          <div class="avg-consumption-wrapper">
+  <cds-tooltip-definition
+    [autoAlign]="true"
+    [highContrast]="true"
+    [openOnHover]="false"
+    [dropShadow]="true"
+    [caret]="true"
+    description="Based on recent average consumption. Actual time until full may vary based on changes in consumption patterns."
+    i18n-description
+    i18n>
+    Estimated days until full
+  </cds-tooltip-definition>
+</div>
+        </div>
+        <div cdsStack="vertical" gap="1">
+          <span class="cds--type-heading-03">{{ averageConsumption }}</span>
+          <div class="avg-consumption-wrapper">
+  <cds-tooltip-definition
+    [autoAlign]="true"
+    [highContrast]="true"
+    [openOnHover]="false"
+    [dropShadow]="true"
+    [caret]="true"
+    description="Based on the average daily consumption over the last 7 days"
+    i18n-description
+    i18n>
+    Average consumption
+  </cds-tooltip-definition>
+</div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+  }
   @else {
   <cds-skeleton-text
     [lines]="1"

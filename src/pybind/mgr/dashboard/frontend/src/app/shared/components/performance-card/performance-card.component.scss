@@ -1,0 +1,43 @@
+.performance-card-wrapper {
+  .overview-storage-card-dropdown {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-end;
+    width: 100%;
+  }
+
+  .cds--dropdown {
+    width: 100%;
+    min-width: 90px;
+  }
+
+  .cds--dropdown__wrapper .cds--label {
+    white-space: nowrap;
+  }
+
+  .cds--dropdown-text {
+    white-space: nowrap;
+  }
+
+  .performance-card-empty-msg {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: var(--cds-spacing-05);
+    height: 350px;
+
+    p {
+      font-size: 12px !important;
+    }
+
+    img {
+      width: 100px !important;
+      height: 100px !important;
+    }
+  }
+
+  .performance-card-latency-chart {
+    margin-right: 10px;
+    margin-left: 10px;
+  }
+}

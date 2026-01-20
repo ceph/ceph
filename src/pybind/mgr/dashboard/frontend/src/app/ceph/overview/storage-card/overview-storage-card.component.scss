@@ -29,3 +29,13 @@
     }
   }
 }
+
+.avg-consumption-wrapper {
+  display: inline-flex;   // shrink to text width
+  width: fit-content;     // prevent full-width stretching
+}
+
+.avg-consumption-wrapper cds-tooltip-definition {
+  display: inline-block;  // prevent block expansion
+  width: auto;
+}
