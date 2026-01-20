@@ -1444,6 +1444,8 @@ public:
 
     void finish_write(TransContext* txc, uint32_t offset, uint32_t length);
 
+    int get_fragmentation_score();
+
     struct printer : public BlueStore::printer {
       const Onode &onode;
       uint16_t mode;
@@ -1673,6 +1675,11 @@ public:
 
     ContextQueue *commit_queue;
     std::unique_ptr<Estimator> estimator;
+
+    std::atomic<uint64_t> runtime_frag_count{0};
+    std::atomic<uint64_t> runtime_read_samples{0};
+    std::atomic<uint64_t> static_frag_score{0};
+    std::atomic<uint64_t> object_read_samples{0};
 
     OnodeCacheShard* get_onode_cache() const {
       return onode_space.cache;
@@ -3293,6 +3300,37 @@ private:
     bool buffered,
     bool* csum_error,
     ceph::buffer::list& bl);
+
+  struct FragTracker {
+    std::unordered_set<uint64_t> endpoints;
+    uint64_t frag_score = 0;
+
+    FragTracker() {}
+
+    inline void note(uint64_t offset, uint64_t length) {
+      bool merge_left = endpoints.count(offset);
+      bool merge_right = endpoints.count(offset + length);
+      if (merge_left && merge_right) {
+        endpoints.erase(offset);
+        endpoints.erase(offset + length);
+        frag_score--;
+      } else if (merge_left) {
+        endpoints.erase(offset);
+        endpoints.insert(offset + length);
+      } else if (merge_right) {
+        endpoints.erase(offset + length);
+        endpoints.insert(offset);
+      } else {
+        endpoints.insert(offset);
+        endpoints.insert(offset + length);
+        frag_score++;
+      }
+    }
+  };
+
+  void _track_runtime_frag(Collection *c, blobs2read_t& blobs2read);
+
+  void _track_static_frag(Collection *c, OnodeRef& o);
 
   int _do_read(
     Collection *c,
