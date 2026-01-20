@@ -48,6 +48,21 @@ BlueStore::SocketHook::SocketHook(BlueStore& store)
       "name=collection,type=CephString,req=false",
       this,
       "print compression stats, per collection");
+    r = admin_socket->register_command(
+      "bluestore runtime frag score "
+      "name=collection,type=CephString,req=false",
+      this,
+      "print runtime fragmentation score, per collection");
+    r = admin_socket->register_command(
+      "bluestore clear runtime frag "
+      "name=collection,type=CephString,req=false",
+      this,
+      "clear runtime fragmentation score, per collection");
+    r = admin_socket->register_command(
+      "bluestore static frag score "
+      "name=collection,type=CephString,req=false",
+      this,
+      "print static fragmentation score, per collection");
     ceph_assert(r == 0);
     r = admin_socket->register_command(
       "bluestore show sharding ",
@@ -192,6 +207,86 @@ int BlueStore::SocketHook::call(
       ss << "Failed to get sharding" << std::endl;
     }
     return r;
+  } else if (command == "bluestore runtime frag score") {
+    std::vector<CollectionRef> copied;
+    {
+      std::shared_lock l(store.coll_lock);
+      copied.reserve(store.coll_map.size());
+      for (const auto& c : store.coll_map) {
+        copied.push_back(c.second);
+      }
+    }
+    std::string coll;
+    cmd_getval(cmdmap, "collection", coll);
+    f->open_array_section("runtime_frag_score");
+    for (const auto& c : copied) {
+      std::shared_lock l(c->lock);
+      if (coll.empty() || coll == c->get_cid().c_str()) {
+        f->open_object_section("collection");
+        f->dump_string("cid", c->get_cid().c_str());
+        auto samples = c->runtime_read_samples.load(std::memory_order_relaxed);
+        auto sum = c->runtime_frag_count.load(std::memory_order_relaxed);
+        if (samples == 0) {
+          f->dump_int("runtime_frag_score", -1);
+        } else {
+          f->dump_unsigned("object_read_samples", samples);
+          f->dump_unsigned("runtime_frag_count", sum);
+          f->dump_float("runtime_frag_score", (float)sum / samples);
+        }
+        f->close_section();
+      }
+    }
+    f->close_section();
+    return 0;
+  } else if (command == "bluestore clear runtime frag") {
+    std::vector<CollectionRef> copied;
+    {
+      std::shared_lock l(store.coll_lock);
+      copied.reserve(store.coll_map.size());
+      for (const auto& c : store.coll_map) {
+        copied.push_back(c.second);
+      }
+    }
+    std::string coll;
+    cmd_getval(cmdmap, "collection", coll);
+    for (const auto& c : copied) {
+      std::shared_lock l(c->lock);
+      if (coll.empty() || coll == c->get_cid().c_str()) {
+        c->runtime_frag_count.store(0, std::memory_order_relaxed);
+        c->runtime_read_samples.store(0, std::memory_order_relaxed);
+      }
+    }
+    return 0;
+  } else if (command == "bluestore static frag score") {
+    std::vector<CollectionRef> copied;
+    {
+      std::shared_lock l(store.coll_lock);
+      copied.reserve(store.coll_map.size());
+      for (const auto& c : store.coll_map) {
+        copied.push_back(c.second);
+      }
+    }
+    std::string coll;
+    cmd_getval(cmdmap, "collection", coll);
+    f->open_array_section("static_frag_score");
+    for (const auto& c : copied) {
+      std::shared_lock l(c->lock);
+      if (coll.empty() || coll == c->get_cid().c_str()) {
+        f->open_object_section("collection");
+        f->dump_string("cid", c->get_cid().c_str());
+        auto score = c->static_frag_score.load(std::memory_order_relaxed);
+        auto count = c->object_read_samples.load(std::memory_order_relaxed);
+        if (count == 0) {
+          f->dump_int("static_frag_score", -1);
+        } else {
+          f->dump_unsigned("static_frag_score", score);
+          f->dump_unsigned("object_read_samples", count);
+        }
+        f->close_section();
+      }
+    }
+    f->close_section();
+    return 0;
   } else {
     ss << "Invalid command" << std::endl;
     r = -ENOSYS;
