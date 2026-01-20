@@ -2,7 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientModule } from '@angular/common/http';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
-import { take } from 'rxjs/operators';
 import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 
@@ -89,13 +88,8 @@ describe('NvmeofNamespacesListComponent', () => {
 
   it('should retrieve namespaces', (done) => {
     component.group = 'g1';
-    component.namespaces$.pipe(take(1)).subscribe((namespaces) => {
-      expect(namespaces).toEqual(
-        mockNamespaces.map((ns) => ({
-          ...ns,
-          unique_id: `${ns.nsid}_${ns['ns_subsystem_nqn']}`
-        }))
-      );
+    component.namespaces$.subscribe((namespaces) => {
+      expect(namespaces).toEqual(mockNamespaces);
       done();
     });
     component.listNamespaces();

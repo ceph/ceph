@@ -1,11 +1,10 @@
-import { Component, Input, NgZone, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NvmeofService, GroupsComboboxItem } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
-
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -15,11 +14,11 @@ import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
-
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
 import { catchError, map, switchMap, takeUntil } from 'rxjs/operators';
 
+const BASE_URL = 'block/nvmeof/subsystems';
 const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
 
 @Component({
@@ -53,7 +52,6 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
     public actionLabels: ActionLabelsI18n,
     private router: Router,
     private route: ActivatedRoute,
-    private ngZone: NgZone,
     private modalService: ModalCdsService,
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService,
@@ -96,40 +94,35 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
         name: this.actionLabels.CREATE,
         permission: 'create',
         icon: Icons.add,
-        click: () => {
-          this.router.navigate(['block/nvmeof/namespaces/create'], {
-            queryParams: {
-              group: this.group,
-              subsystem_nqn: this.subsystemNQN
-            }
-          });
-        },
+        click: () =>
+          this.router.navigate(
+            [BASE_URL, { outlets: { modal: [URLVerbs.CREATE, this.subsystemNQN, 'namespace'] } }],
+            { queryParams: { group: this.group } }
+          ),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
         disable: () => !this.group
       },
       {
-        name: $localize`Expand`,
+        name: this.actionLabels.EDIT,
         permission: 'update',
         icon: Icons.edit,
-        click: (row: NvmeofSubsystemNamespace) => {
-          const namespace = row || this.selection.first();
-          this.ngZone.run(() => {
-            this.router.navigate(
-              [
-                {
-                  outlets: {
-                    modal: [URLVerbs.EDIT, namespace.ns_subsystem_nqn, 'namespace', namespace.nsid]
-                  }
-                }
-              ],
+        click: () =>
+          this.router.navigate(
+            [
+              BASE_URL,
               {
-                relativeTo: this.route,
-                queryParams: { group: this.group },
-                queryParamsHandling: 'merge'
+                outlets: {
+                  modal: [
+                    URLVerbs.EDIT,
+                    this.subsystemNQN,
+                    'namespace',
+                    this.selection.first().nsid
+                  ]
+                }
               }
-            );
-          });
-        }
+            ],
+            { queryParams: { group: this.group } }
+          )
       },
       {
         name: this.actionLabels.DELETE,
@@ -146,20 +139,7 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
         }
         return this.nvmeofService.listNamespaces(this.group).pipe(
           map((res: NvmeofSubsystemNamespace[] | { namespaces: NvmeofSubsystemNamespace[] }) => {
-            const namespaces = Array.isArray(res) ? res : res.namespaces || [];
-            // Deduplicate by nsid + subsystem NQN (API with wildcard can return duplicates per gateway)
-            const seen = new Set<string>();
-            return namespaces
-              .filter((ns) => {
-                const key = `${ns.nsid}_${ns['ns_subsystem_nqn']}`;
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-              })
-              .map((ns) => ({
-                ...ns,
-                unique_id: `${ns.nsid}_${ns['ns_subsystem_nqn']}`
-              }));
+            return Array.isArray(res) ? res : res.namespaces || [];
           }),
           catchError(() => of([]))
         );
@@ -212,18 +192,11 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
   }
 
   updateGroupSelectionState() {
-    if (this.gwGroups.length) {
-      if (!this.group) {
-        this.onGroupSelection(this.gwGroups[0]);
-      } else {
-        this.gwGroups = this.gwGroups.map((g) => ({
-          ...g,
-          selected: g.content === this.group
-        }));
-      }
+    if (!this.group && this.gwGroups.length) {
+      this.onGroupSelection(this.gwGroups[0]);
       this.gwGroupsEmpty = false;
       this.gwGroupPlaceholder = DEFAULT_PLACEHOLDER;
-    } else {
+    } else if (!this.gwGroups.length) {
       this.gwGroupsEmpty = true;
       this.gwGroupPlaceholder = $localize`No groups available`;
     }

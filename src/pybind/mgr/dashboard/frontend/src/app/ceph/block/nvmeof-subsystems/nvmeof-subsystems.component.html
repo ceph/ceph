@@ -1,46 +1,55 @@
-<div class="pb-3"
-     cdsCol
-     [columnNumbers]="{md: 6}">
-  <cds-combo-box
-      type="single"
-      label="Selected Gateway Group"
-      i18n-label
-      [placeholder]="gwGroupPlaceholder"
-      [items]="gwGroups"
-      (selected)="onGroupSelection($event)"
-      (clear)="onGroupClear()"
-      [disabled]="gwGroupsEmpty">
-    <cds-dropdown-list></cds-dropdown-list>
-  </cds-combo-box>
-</div>
-
-<cd-table #table
-          [data]="subsystems"
-          [columns]="subsystemsColumns"
-          columnMode="flex"
-          selectionType="single"
-          [hasDetails]="true"
-          (setExpandedRow)="setExpandedRow($event)"
-          (updateSelection)="updateSelection($event)"
-          emptyStateTitle="No subsystems created"
-          i18n-emptyStateTitle
-          emptyStateMessage="Subsystems group NVMe namespaces and manage host access. Create a subsystem to start mapping NVMe volumes to hosts."
-          i18n-emptyStateMessage>
-
-  <div class="table-actions">
-    <cd-table-actions [permission]="permissions.nvmeof"
-                      [selection]="selection"
-                      class="btn-group"
-                      [tableActions]="tableActions">
-    </cd-table-actions>
+<div cdsGrid
+     [useCssGrid]="true"
+     [narrow]="true"
+     [fullWidth]="true">
+<div cdsCol
+     [columnNumbers]="{sm: 4, md: 8}">
+  <div class="pb-3 form-item"
+       cdsRow>
+    <cds-combo-box
+        type="single"
+        label="Selected Gateway Group"
+        i18n-label
+        [placeholder]="gwGroupPlaceholder"
+        [items]="gwGroups"
+        (selected)="onGroupSelection($event)"
+        (clear)="onGroupClear()"
+        [disabled]="gwGroupsEmpty">
+      <cds-dropdown-list></cds-dropdown-list>
+    </cds-combo-box>
   </div>
+</div>
+</div>
+<ng-container *ngIf="subsystems$ | async as subsystems">
+  <cd-table #table
+            [data]="subsystems"
+            [columns]="subsystemsColumns"
+            columnMode="flex"
+            selectionType="single"
+            [hasDetails]="true"
+            (setExpandedRow)="setExpandedRow($event)"
+            (updateSelection)="updateSelection($event)"
+            (fetchData)="fetchData()"
+            emptyStateTitle="No subsystems created"
+            i18n-emptyStateTitle
+            emptyStateMessage="Subsystems group NVMe namespaces and manage host access. Create a subsystem to start mapping NVMe volumes to hosts."
+            i18n-emptyStateMessage>
 
-  <cd-nvmeof-subsystems-details *cdTableDetail
-                                [selection]="expandedRow"
-                                [permissions]="permissions"
-                                [group]="expandedRow?.gw_group">
-  </cd-nvmeof-subsystems-details>
-</cd-table>
+    <div class="table-actions">
+      <cd-table-actions [permission]="permissions.nvmeof"
+                        [selection]="selection"
+                        class="btn-group"
+                        [tableActions]="tableActions">
+      </cd-table-actions>
+    </div>
+
+    <cd-nvmeof-subsystems-details *cdTableDetail
+                                  [selection]="expandedRow"
+                                  [permissions]="permissions"
+                                  [group]="expandedRow?.gw_group">
+    </cd-nvmeof-subsystems-details>
+  </cd-table>
+</ng-container>
 
 <ng-template #authenticationTpl
              let-row="data.row">
