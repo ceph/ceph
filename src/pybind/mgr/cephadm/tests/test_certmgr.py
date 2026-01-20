@@ -1000,71 +1000,114 @@ class TestCertMgr(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_health_errors_appending(self, _set_store, cephadm_module: CephadmOrchestrator):
-        """ Test in case of appending new errors we also report previous ones """
+        """Test that errors are appended and reported via CEPHADM_CERT_ERROR (and warning id is cleared)."""
         cert_mgr = cephadm_module.cert_mgr
 
-        # Test health error is raised if any invalid cert is detected
+        # First call: ERROR (invalid/expired present) and clears WARNING id
         problematic_certs = [
             CertInfo("test_service_1", "target_1", user_made=True, is_valid=False, error_info="expired"),
             CertInfo("test_service_2", "target_2", is_valid=False, error_info="invalid format"),
         ]
-        with mock.patch.object(cert_mgr.mgr, "set_health_error") as health_mock:
+        with mock.patch.object(cert_mgr.mgr, "set_health_error") as err_mock, \
+             mock.patch.object(cert_mgr.mgr, "set_health_warning") as warn_mock, \
+             mock.patch.object(cert_mgr.mgr, "remove_health_warning") as rm_mock:
             cert_mgr._notify_certificates_health_status(problematic_certs)
-            health_mock.assert_called_with('CEPHADM_CERT_ERROR',
-                                           'Detected 2 cephadm certificate(s) issues: 1 invalid, 1 expired',
-                                           2,
-                                           ["Certificate 'test_service_1 (target_1)' (user-made) has expired",
-                                            "Certificate 'test_service_2 (target_2)' (cephadm-signed) is not valid (error: invalid format)"])
 
-        # Test in case of appending new errors we also report previous ones
+            warn_mock.assert_not_called()
+            err_mock.assert_called_with(
+                CertMgr.CEPHADM_CERT_ERROR,
+                'Detected 2 cephadm certificate(s) issues: 1 invalid, 1 expired',
+                2,
+                [
+                    "Certificate 'test_service_1 (target_1)' (user-made) has expired",
+                    "Certificate 'test_service_2 (target_2)' (cephadm-signed) is not valid (error: invalid format)",
+                ],
+            )
+            # Escalating to error clears WARNING id
+            rm_mock.assert_called_with(CertMgr.CEPHADM_CERT_WARNING)
+
+        # Second call: append expiring, still ERROR overall, still clears WARNING id
         problematic_certs = [
             CertInfo("test_service_3", "target_3", is_valid=True, is_close_to_expiration=True),
         ]
-        with mock.patch.object(cert_mgr.mgr, "set_health_error") as health_mock:
+        with mock.patch.object(cert_mgr.mgr, "set_health_error") as err_mock, \
+             mock.patch.object(cert_mgr.mgr, "set_health_warning") as warn_mock, \
+             mock.patch.object(cert_mgr.mgr, "remove_health_warning") as rm_mock:
             cert_mgr._notify_certificates_health_status(problematic_certs)
-            health_mock.assert_called_with('CEPHADM_CERT_ERROR',
-                                           'Detected 3 cephadm certificate(s) issues: 1 invalid, 1 expired, 1 expiring',
-                                           3,
-                                           ["Certificate 'test_service_1 (target_1)' (user-made) has expired",
-                                            "Certificate 'test_service_2 (target_2)' (cephadm-signed) is not valid (error: invalid format)",
-                                            "Certificate 'test_service_3 (target_3)' (cephadm-signed) is about to expire (remaining days: 0)"])
+
+            warn_mock.assert_not_called()
+            err_mock.assert_called_with(
+                CertMgr.CEPHADM_CERT_ERROR,
+                'Detected 3 cephadm certificate(s) issues: 1 invalid, 1 expired, 1 expiring',
+                3,
+                [
+                    "Certificate 'test_service_1 (target_1)' (user-made) has expired",
+                    "Certificate 'test_service_2 (target_2)' (cephadm-signed) is not valid (error: invalid format)",
+                    "Certificate 'test_service_3 (target_3)' (cephadm-signed) is about to expire (remaining days: 0)",
+                ],
+            )
+            rm_mock.assert_called_with(CertMgr.CEPHADM_CERT_WARNING)
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_health_warning_on_bad_certificates(self, _set_store, cephadm_module: CephadmOrchestrator):
-        """ Test that invalid and expired certificates trigger health warnings """
+        """
+        - INVALID/EXPIRED => health ERROR under CEPHADM_CERT_ERROR (and clears WARNING id)
+        - EXPIRING only  => health WARNING under CEPHADM_CERT_WARNING (and clears ERROR id)
+        - No issues      => clears both ids
+        """
         cert_mgr = cephadm_module.cert_mgr
 
-        # Test health error is raised if any invalid cert is detected
+        # INVALID/EXPIRED => ERROR
         problematic_certs = [
             CertInfo("test_service", "test_target", is_valid=False, error_info="expired"),
             CertInfo("test_service", "test_target", is_valid=False, error_info="invalid format"),
         ]
-
-        with mock.patch.object(cert_mgr.mgr, "set_health_error") as health_mock:
+        with mock.patch.object(cert_mgr.mgr, "set_health_error") as err_mock, \
+             mock.patch.object(cert_mgr.mgr, "set_health_warning") as warn_mock, \
+             mock.patch.object(cert_mgr.mgr, "remove_health_warning") as rm_mock:
             cert_mgr._notify_certificates_health_status(problematic_certs)
-            health_mock.assert_called_once()
 
-        # Test health warning is raised if valid but close to expire cert is detected
+            err_mock.assert_called_once()
+            warn_mock.assert_not_called()
+            # escalating to error clears WARNING id
+            rm_mock.assert_called_with(CertMgr.CEPHADM_CERT_WARNING)
+
+        # EXPIRING only => WARNING
         problematic_certs = [
             CertInfo("test_service", "test_target", is_valid=True, is_close_to_expiration=True, error_info="about to expire"),
         ]
         cert_mgr.certificates_health_report = []
-        with mock.patch.object(cert_mgr.mgr, "set_health_warning") as health_mock:
+        with mock.patch.object(cert_mgr.mgr, "set_health_warning") as warn_mock, \
+             mock.patch.object(cert_mgr.mgr, "set_health_error") as err_mock, \
+             mock.patch.object(cert_mgr.mgr, "remove_health_warning") as rm_mock:
             cert_mgr._notify_certificates_health_status(problematic_certs)
-            health_mock.assert_called_once()
 
-        # Test in case of no bad certificates issues the error is cleared correctly
+            warn_mock.assert_called_once()
+            err_mock.assert_not_called()
+            # de-escalating to warning clears ERROR id
+            rm_mock.assert_called_with(CertMgr.CEPHADM_CERT_ERROR)
+
+        # No issues => clears both ids
         problematic_certs = []
         cert_mgr.certificates_health_report = []
-        with mock.patch.object(cert_mgr.mgr, "set_health_warning") as warning_mock, \
-             mock.patch.object(cert_mgr.mgr, "set_health_error") as error_mock, \
-             mock.patch.object(cert_mgr.mgr, "remove_health_warning") as remove_warning_mock:
-
+        with mock.patch.object(cert_mgr.mgr, "set_health_warning") as warn_mock, \
+             mock.patch.object(cert_mgr.mgr, "set_health_error") as err_mock, \
+             mock.patch.object(cert_mgr.mgr, "remove_health_warning") as rm_mock:
             cert_mgr._notify_certificates_health_status(problematic_certs)
-            # Ensure that neither warnings nor errors were raised
-            warning_mock.assert_not_called()
-            error_mock.assert_not_called()
-            remove_warning_mock.assert_called_once_with(CertMgr.CEPHADM_CERTMGR_HEALTH_ERR)
+
+            warn_mock.assert_not_called()
+            err_mock.assert_not_called()
+
+            # Called twice: clears ERROR id and WARNING id
+            rm_mock.assert_has_calls(
+                [
+                    mock.call(CertMgr.CEPHADM_CERT_ERROR),
+                    mock.call(CertMgr.CEPHADM_CERT_WARNING),
+                ],
+                any_order=False,
+            )
+            assert rm_mock.call_count == 2
+
 
 
 class MockTLSObject(TLSObjectProtocol):
