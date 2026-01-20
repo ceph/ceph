@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { Observable, ReplaySubject, Subscription, combineLatest, of } from 'rxjs';
+import { Observable, ReplaySubject, Subject, Subscription, combineLatest, of } from 'rxjs';
 
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -16,7 +16,7 @@ import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { RgwPromqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
-import { catchError, shareReplay, switchMap, tap } from 'rxjs/operators';
+import { catchError, shareReplay, switchMap, takeUntil, tap } from 'rxjs/operators';
 
 @Component({
   selector: 'cd-rgw-overview-dashboard',
@@ -42,7 +42,7 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   multisiteInfo: object[] = [];
   ZonegroupSub: Subscription;
   ZoneSUb: Subscription;
-  queriesResults: { [key: string]: [] } = {
+  queriesResults: Record<string, [number, string][]> = {
     RGW_REQUEST_PER_SECOND: [],
     BANDWIDTH: [],
     AVG_GET_LATENCY: [],
@@ -62,6 +62,7 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   subject = new ReplaySubject<any>();
   syncCardLoading = true;
   fetchDataSub: Subscription;
+  private destroy$ = new Subject<void>();
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -139,16 +140,18 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     this.ZonegroupSub?.unsubscribe();
     this.ZoneSUb?.unsubscribe();
     this.fetchDataSub?.unsubscribe();
+    this.destroy$.next();
+    this.destroy$.complete();
     this.prometheusService?.unsubscribe();
   }
 
   getPrometheusData(selectedTime: any) {
-    this.queriesResults = this.prometheusService.getRangeQueriesData(
-      selectedTime,
-      queries,
-      this.queriesResults,
-      true
-    );
+    this.prometheusService
+      .getRangeQueriesData(selectedTime, queries, true)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((results) => {
+        this.queriesResults = results;
+      });
   }
 
   getSyncStatus() {
