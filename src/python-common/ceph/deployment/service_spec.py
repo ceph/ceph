@@ -33,7 +33,7 @@ import yaml
 from ceph.deployment.hostspec import HostSpec, SpecValidationError, assert_valid_host
 from ceph.deployment.utils import unwrap_ipv6, valid_addr, verify_non_negative_int
 from ceph.deployment.utils import verify_positive_int, verify_non_negative_number
-from ceph.deployment.utils import verify_boolean, verify_enum
+from ceph.deployment.utils import verify_boolean, verify_enum, verify_int
 from ceph.utils import is_hex
 from ceph.smb import constants as smbconst
 
@@ -1392,6 +1392,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_gws_in_grp: Optional[int] = 16,
                  max_ns_to_change_lb_grp: Optional[int] = 8,
                  abort_on_errors: Optional[bool] = True,
+                 abort_on_update_error: Optional[bool] = True,
                  omap_file_ignore_unlock_errors: Optional[bool] = False,
                  omap_file_lock_on_read: Optional[bool] = True,
                  omap_file_lock_duration: Optional[int] = 20,
@@ -1421,6 +1422,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_hosts_per_subsystem: Optional[int] = 128,
                  subsystem_cache_expiration: Optional[int] = 5,
                  force_tls: Optional[bool] = False,
+                 max_message_length_in_mb: Optional[int] = 4,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -1449,6 +1451,8 @@ class NvmeofServiceSpec(ServiceSpec):
                  discovery_addr: Optional[str] = None,
                  discovery_addr_map: Optional[Dict[str, str]] = None,
                  discovery_port: Optional[int] = None,
+                 discovery_bind_retries_limit: Optional[int] = 10,
+                 discovery_bind_sleep_interval: Optional[float] = 0.5,
                  abort_discovery_on_errors: Optional[bool] = True,
                  log_level: Optional[str] = 'INFO',
                  log_files_enabled: Optional[bool] = True,
@@ -1528,6 +1532,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.verify_listener_ip = verify_listener_ip
         #: ``abort_on_errors`` abort gateway in case of errors
         self.abort_on_errors = abort_on_errors
+        #: ``abort_on_update_error`` abort gateway in case of an error during update
+        self.abort_on_update_error = abort_on_update_error
         #: ``omap_file_ignore_unlock_errors`` ignore errors when unlocking the OMAP file
         self.omap_file_ignore_unlock_errors = omap_file_ignore_unlock_errors
         #: ``omap_file_lock_on_read`` lock omap when reading its content
@@ -1558,6 +1564,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.subsystem_cache_expiration = subsystem_cache_expiration
         #: ``force_tls`` force using TLS when adding hosts and listeners
         self.force_tls = force_tls
+        #: ``max_message_length_in_mb`` max protobuf message length, in mb
+        self.max_message_length_in_mb = max_message_length_in_mb
         #: ``allowed_consecutive_spdk_ping_failures`` # of ping failures before aborting gateway
         self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
         #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
@@ -1632,6 +1640,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.discovery_addr_map = discovery_addr_map
         #: ``discovery_port`` port of the discovery service
         self.discovery_port = discovery_port or 8009
+        #: ``discovery_bind_retries_limit`` how many times to keep trying bind the discovery port
+        self.discovery_bind_retries_limit = discovery_bind_retries_limit
+        #: ``discovery_bind_sleep_interval`` seconds to wait between each bind attempt
+        self.discovery_bind_sleep_interval = discovery_bind_sleep_interval
         #: ``abort_discovery_on_errors`` abort discovery service in case of errors
         self.abort_discovery_on_errors = abort_discovery_on_errors
         #: ``log_level`` the nvmeof gateway log level
@@ -1744,6 +1756,7 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_non_negative_int(self.max_ns_to_change_lb_grp,
                                 "Max namespaces to change load balancing group")
         verify_boolean(self.abort_on_errors, "Abort gateway on errors")
+        verify_boolean(self.abort_on_update_error, "Abort gateway on an update error")
         verify_boolean(self.omap_file_ignore_unlock_errors, "Ignore OMAP file unlock errors")
         verify_boolean(self.omap_file_lock_on_read, "Lock OMAP on read")
         verify_non_negative_int(self.omap_file_lock_duration, "OMAP file lock duration")
@@ -1765,9 +1778,13 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_non_negative_number(self.subsystem_cache_expiration,
                                    "Subsystem cache expiration period")
         verify_boolean(self.force_tls, "Force TLS")
+        verify_positive_int(self.max_message_length_in_mb, "Max protocol message length")
         verify_non_negative_number(self.monitor_timeout, "Monitor timeout")
         verify_non_negative_int(self.port, "Port")
         verify_non_negative_int(self.discovery_port, "Discovery port")
+        verify_int(self.discovery_bind_retries_limit, "Discovery port bind retries limit")
+        verify_non_negative_number(self.discovery_bind_sleep_interval,
+                                   "Sleep between discovery port bind retries")
         verify_boolean(self.abort_discovery_on_errors, "Abort discovery service on errors")
         verify_non_negative_int(self.prometheus_port, "Prometheus port")
         verify_non_negative_int(self.prometheus_stats_interval, "Prometheus stats interval")
