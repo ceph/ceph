@@ -24,6 +24,7 @@ import { OverviewHealthCardComponent } from './health-card/overview-health-card.
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { OverviewAlertsCardComponent } from './alerts-card/overview-alerts-card.component';
+import { PerformanceCardComponent } from '~/app/shared/components/performance-card/performance-card.component';
 
 const sev = {
   ok: 0 as Severity,
@@ -123,7 +124,8 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
     OverviewStorageCardComponent,
     OverviewHealthCardComponent,
     ComponentsModule,
-    OverviewAlertsCardComponent
+    OverviewAlertsCardComponent,
+    PerformanceCardComponent
   ],
   standalone: true,
   templateUrl: './overview.component.html',

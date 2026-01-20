@@ -18,6 +18,7 @@ import { OverviewAlertsCardComponent } from './alerts-card/overview-alerts-card.
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 
 describe('OverviewComponent', () => {
   let component: OverviewComponent;
@@ -51,7 +52,8 @@ describe('OverviewComponent', () => {
         OverviewStorageCardComponent,
         OverviewHealthCardComponent,
         OverviewAlertsCardComponent,
-        RouterModule
+        RouterModule,
+        HttpClientTestingModule
       ],
       providers: [
         provideHttpClient(),
