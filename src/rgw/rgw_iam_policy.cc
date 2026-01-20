@@ -1256,9 +1256,9 @@ Statement::eval(
     uint64_t act,
     boost::optional<const ARN&> res,
     const LogOut& eval_log,
-    boost::optional<PolicyPrincipal&> princ_type) const {
+    boost::optional<rgw::auth::Principal>& principal) const {
 
-  if (eval_principal(e, ida, eval_log, princ_type) == Effect::Deny) {
+  if (eval_principal(e, ida, eval_log, principal) == Effect::Deny) {
     eval_log.format("Passing.");
     return Effect::Pass;
   }
@@ -1328,64 +1328,31 @@ Statement::eval(
   return Effect::Pass;
 }
 
-static bool is_identity(const auth::Identity& ida,
-                        const flat_set<auth::Principal>& princ)
-{
-  return std::any_of(princ.begin(), princ.end(),
-      [&ida] (const auth::Principal& p) {
-        return ida.is_identity(p);
-      });
-}
-
 Effect
 Statement::eval_principal(
     const Environment& e,
     boost::optional<const rgw::auth::Identity&> ida,
     const LogOut& eval_log,
-    boost::optional<PolicyPrincipal&> princ_type) const {
-  if (princ_type) {
-    *princ_type = PolicyPrincipal::Other;
-  }
+    boost::optional<rgw::auth::Principal>& principal) const {
   eval_log.format("Evaluating identity `{}`:", ida);
   if (ida) {
-    if (princ.empty() && noprinc.empty()) {
-      eval_log.format("Principal empty and NotPrincipal empty: Denying.");
-      return Effect::Deny;
-    }
-    if (ida->get_identity_type() != TYPE_ROLE &&
-        !princ.empty() && !is_identity(*ida, princ)) {
-      eval_log.format("Identity is not role, Principal is not empty, and "
-                      "the identity is not in Principal.");
-      return Effect::Deny;
-    }
-    eval_log.format("Checking type of Principal match.");
-    if (ida->get_identity_type() == TYPE_ROLE && !princ.empty()) {
-      bool princ_matched = false;
-      // Check each principal to determine the type of the one that has matched
-      for (auto p : princ) {
-        if (ida->is_identity(p)) {
-          if (p.is_assumed_role() || p.is_user()) {
-            if (princ_type) {
-              eval_log.format("Setting principal type to Session.");
-              *princ_type = PolicyPrincipal::Session;
-            }
-          } else {
-            if (princ_type) {
-              eval_log.format("Setting principal type to Role.");
-              *princ_type = PolicyPrincipal::Role;
-            }
-          }
-          princ_matched = true;
-        }
-      }
-      if (!princ_matched) {
-        eval_log.format("No match in Principal, Denying.");
-        return Effect::Deny;
-      }
-    } else if (!noprinc.empty() && is_identity(*ida, noprinc)) {
+    auto is_identity = [&ida] (const auth::Principal& p) {
+        return ida->is_identity(p);
+      };
+
+    auto p = std::find_if(noprinc.begin(), noprinc.end(), is_identity);
+    if (p != noprinc.end()) { // NotPrincipal matched
       eval_log.format("Match in NotPrincipal, Denying.");
       return Effect::Deny;
     }
+
+    p = std::find_if(princ.begin(), princ.end(), is_identity);
+    if (p == princ.end()) { // no Principal matched
+      eval_log.format("No match in Principal, Denying.");
+      return Effect::Deny;
+    }
+
+    principal = *p; // return first match
   }
   return Effect::Allow;
 }
@@ -2034,7 +2001,7 @@ Effect Policy::eval(const Environment& e,
                     std::uint64_t action,
                     boost::optional<const ARN&> resource,
                     const LogOut& eval_log,
-                    boost::optional<PolicyPrincipal&> princ_type) const
+                    boost::optional<rgw::auth::Principal>& principal) const
 {
   auto allowed = false;
   eval_log.format("Evaluating policy:\n```\n{}\n```\n"
@@ -2047,12 +2014,15 @@ Effect Policy::eval(const Environment& e,
 
   for (auto& s : statements) {
     eval_log.format("Evaluating statement `{}`:", s);
-    auto g = s.eval(e, ida, action, resource, eval_log, princ_type);
+    boost::optional<rgw::auth::Principal> princ_tmp;
+    auto g = s.eval(e, ida, action, resource, eval_log, princ_tmp);
     if (g == Effect::Deny) {
       eval_log.format("Denying.");
       return g;
     } else if (g == Effect::Allow) {
       allowed = true;
+      // only overwrite output principal for matching statements
+      principal = std::move(princ_tmp);
     }
   }
   eval_log.format("{}", allowed ? "Allowing." : "Passing.");
@@ -2064,11 +2034,11 @@ Policy::eval_principal(
     const Environment& e,
     boost::optional<const rgw::auth::Identity&> ida,
     const LogOut& eval_log,
-    boost::optional<PolicyPrincipal&> princ_type) const {
+    boost::optional<rgw::auth::Principal>& principal) const {
   auto allowed = false;
   for (auto& s : statements) {
     eval_log.format("Evaluating identity `{}` in statement `{}`:", ida, s);
-    auto g = s.eval_principal(e, ida, eval_log, princ_type);
+    auto g = s.eval_principal(e, ida, eval_log, principal);
     if (g == Effect::Deny) {
       eval_log.format("Denying.");
       return g;

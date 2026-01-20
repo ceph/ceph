@@ -347,12 +347,6 @@ inline int op_to_perm(std::uint64_t op) {
 
 std::string_view action_bit_string(action_t action);
 
-enum class PolicyPrincipal {
-  Role,
-  Session,
-  Other
-};
-
 using Environment = std::unordered_multimap<std::string, std::string>;
 
 using Address = std::bitset<128>;
@@ -702,13 +696,13 @@ struct Statement {
               std::uint64_t action,
               boost::optional<const ARN&> resource,
               const LogOut& eval_log,
-              boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+              boost::optional<rgw::auth::Principal>& principal) const;
 
   Effect eval_principal(
     const Environment& e,
     boost::optional<const rgw::auth::Identity&> ida,
     const LogOut& eval_log,
-    boost::optional<PolicyPrincipal&> princ_type = boost::none) const;
+    boost::optional<rgw::auth::Principal>& principal) const;
 
   Effect
   eval_conditions(const Environment& e,
@@ -755,16 +749,16 @@ struct Policy {
               boost::optional<const rgw::auth::Identity&> ida,
               std::uint64_t action,
               boost::optional<const ARN&> resource,
-              boost::optional<PolicyPrincipal&> princ_type = boost::none) const {
-    return eval(e, ida, action, resource, out, princ_type);
+              boost::optional<rgw::auth::Principal>& principal) const {
+    return eval(e, ida, action, resource, out, principal);
   }
 
   Effect eval(const Environment& e,
               boost::optional<const rgw::auth::Identity&> ida,
               std::uint64_t action,
               boost::optional<const ARN&> resource,
-              boost::optional<PolicyPrincipal&> princ_type = boost::none) const {
-    return eval(e, ida, action, resource, {}, princ_type);
+              boost::optional<rgw::auth::Principal>& principal) const {
+    return eval(e, ida, action, resource, {}, principal);
   }
 
   Effect eval(const DoutPrefixProvider* dpp,
@@ -772,15 +766,15 @@ struct Policy {
               boost::optional<const rgw::auth::Identity&> ida,
               std::uint64_t action,
               boost::optional<const ARN&> resource,
-              boost::optional<PolicyPrincipal&> princ_type = boost::none) const {
-      return eval(e, ida, action, resource, dpp, princ_type);
+              boost::optional<rgw::auth::Principal>& principal) const {
+      return eval(e, ida, action, resource, dpp, principal);
   }
 
   Effect eval_principal(
       const Environment& e,
       boost::optional<const rgw::auth::Identity&> ida,
       const LogOut& eval_log,
-      boost::optional<PolicyPrincipal&> princ_type = boost::none) const;
+      boost::optional<rgw::auth::Principal>& principal) const;
 
   Effect eval_conditions(const Environment& e,
                          const LogOut& eval_log) const;
@@ -825,7 +819,7 @@ private:
               std::uint64_t action,
               boost::optional<const ARN&> resource,
               const LogOut& eval_log,
-              boost::optional<PolicyPrincipal&> princ_type  =boost::none) const;
+              boost::optional<rgw::auth::Principal>& principal) const;
 
 };
 
