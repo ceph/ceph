@@ -9331,7 +9331,7 @@ paths:
           type: string
       - allowEmptyValue: true
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -9391,7 +9391,7 @@ paths:
           type: string
       - allowEmptyValue: true
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -9424,7 +9424,7 @@ paths:
           type: string
       - allowEmptyValue: true
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -9458,7 +9458,7 @@ paths:
                   type: string
                 log_level:
                   type: string
-                traddr:
+                server_address:
                   type: string
               required:
               - log_level
@@ -9498,7 +9498,7 @@ paths:
           type: string
       - allowEmptyValue: true
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -9531,7 +9531,7 @@ paths:
           type: string
       - allowEmptyValue: true
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -9569,7 +9569,7 @@ paths:
           type: string
       - allowEmptyValue: true
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -9607,7 +9607,7 @@ paths:
                   type: string
                 print_level:
                   type: string
-                traddr:
+                server_address:
                   type: string
               type: object
       responses:
@@ -9647,7 +9647,7 @@ paths:
                   type: string
                 gw_group:
                   type: string
-                traddr:
+                server_address:
                   type: string
               type: object
       responses:
@@ -9685,7 +9685,7 @@ paths:
           type: string
       - allowEmptyValue: true
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -9738,7 +9738,7 @@ paths:
                 serial_number:
                   description: Subsystem serial number
                   type: integer
-                traddr:
+                server_address:
                   description: NVMeoF gateway address
                   type: string
               required:
@@ -9791,8 +9791,9 @@ paths:
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF gateway address
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -9835,8 +9836,9 @@ paths:
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF gateway address
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -9875,8 +9877,9 @@ paths:
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF gateway address
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -9921,8 +9924,9 @@ paths:
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF gateway address
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -9968,7 +9972,8 @@ paths:
                   type: string
                 psk:
                   type: string
-                traddr:
+                server_address:
+                  description: NVMeoF gateway address
                   type: string
               required:
               - host_nqn
@@ -10020,8 +10025,9 @@ paths:
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF gateway address
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -10065,8 +10071,9 @@ paths:
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF gateway address
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -10111,6 +10118,9 @@ paths:
                   type: string
                 host_name:
                   description: NVMeoF hostname
+                  type: string
+                server_address:
+                  description: NVMeoF gateway address
                   type: string
                 traddr:
                   description: NVMeoF transport address
@@ -10192,6 +10202,12 @@ paths:
         name: gw_group
         schema:
           type: string
+      - allowEmptyValue: true
+        description: NVMeoF gateway address
+        in: query
+        name: server_address
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -10239,8 +10255,9 @@ paths:
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF gateway address
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -10304,6 +10321,7 @@ paths:
                   description: Namespace will be visible only for the allowed hosts
                   type: boolean
                 nsid:
+                  description: Create RBD image
                   type: string
                 rbd_image_name:
                   description: RBD image name
@@ -10319,12 +10337,12 @@ paths:
                   default: false
                   description: Read only namespace
                   type: string
+                server_address:
+                  description: NVMeoF gateway address
+                  type: string
                 size:
                   description: Deprecated. Use `rbd_image_size` instead
                   type: integer
-                traddr:
-                  description: Target gateway address
-                  type: string
                 trash_image:
                   default: false
                   description: Trash the RBD image when namespace is removed
@@ -10372,6 +10390,12 @@ paths:
         required: true
         schema:
           type: string
+      - default: 'false'
+        description: Force remove the RBD image
+        in: query
+        name: force
+        schema:
+          type: string
       - allowEmptyValue: true
         description: NVMeoF gateway group
         in: query
@@ -10379,14 +10403,9 @@ paths:
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF gateway address
         in: query
-        name: traddr
-        schema:
-          type: string
-      - default: 'false'
-        description: Force remove the RBD image
-        in: query
-        name: force
+        name: server_address
         schema:
           type: string
       responses:
@@ -10435,8 +10454,9 @@ paths:
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF gateway address
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -10496,7 +10516,8 @@ paths:
                 rw_mbytes_per_second:
                   description: Read/Write MB/s
                   type: integer
-                traddr:
+                server_address:
+                  description: NVMeoF gateway address
                   type: string
                 trash_image:
                   description: Trash RBD image after removing namespace
@@ -10555,7 +10576,7 @@ paths:
                 host_nqn:
                   description: NVMeoF host NQN. Use "*" to allow any host.
                   type: string
-                traddr:
+                server_address:
                   description: NVMeoF gateway address
                   type: string
               required:
@@ -10612,7 +10633,7 @@ paths:
                 load_balancing_group:
                   description: Load balancing group
                   type: integer
-                traddr:
+                server_address:
                   description: NVMeoF gateway address
                   type: string
               type: object
@@ -10666,11 +10687,12 @@ paths:
                   type: boolean
                 force:
                   default: false
+                  description: True if visible to all hosts
                   type: boolean
                 gw_group:
                   description: NVMeoF gateway group
                   type: string
-                traddr:
+                server_address:
                   description: NVMeoF gateway address
                   type: string
               required:
@@ -10728,7 +10750,7 @@ paths:
                 host_nqn:
                   description: NVMeoF host NQN. Use "*" to allow any host.
                   type: string
-                traddr:
+                server_address:
                   description: NVMeoF gateway address
                   type: string
               required:
@@ -10781,8 +10803,9 @@ paths:
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF gateway address
         in: query
-        name: traddr
+        name: server_address
         schema:
           type: string
       responses:
@@ -10828,7 +10851,7 @@ paths:
                 gw_group:
                   description: NVMeoF gateway group
                   type: string
-                traddr:
+                server_address:
                   description: NVMeoF gateway address
                   type: string
               type: object
@@ -10883,7 +10906,7 @@ paths:
                 rbd_image_size:
                   description: RBD image size
                   type: integer
-                traddr:
+                server_address:
                   description: NVMeoF gateway address
                   type: string
               required:
@@ -10941,7 +10964,7 @@ paths:
                 gw_group:
                   description: NVMeoF gateway group
                   type: string
-                traddr:
+                server_address:
                   description: NVMeoF gateway address
                   type: string
               required:
@@ -11008,7 +11031,7 @@ paths:
                 rw_mbytes_per_second:
                   description: Read/Write MB/s
                   type: integer
-                traddr:
+                server_address:
                   description: NVMeoF gateway address
                   type: string
                 w_mbytes_per_second:
@@ -11066,7 +11089,7 @@ paths:
                 rbd_trash_image_on_delete:
                   description: True if active
                   type: boolean
-                traddr:
+                server_address:
                   description: NVMeoF gateway address
                   type: string
               required:
