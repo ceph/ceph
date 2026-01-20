@@ -92,7 +92,7 @@ import { InlineMessageComponent } from './inline-message/inline-message.componen
 import { IconComponent } from './icon/icon.component';
 import { DetailsCardComponent } from './details-card/details-card.component';
 import { ToastComponent } from './notification-toast/notification-toast.component';
-
+import { CdLineChartComponent } from './cd-line-chart/cd-line-chart.component';
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
@@ -190,7 +190,8 @@ import CloseIcon from '@carbon/icons/es/close/16';
     IconComponent,
     InlineMessageComponent,
     DetailsCardComponent,
-    ToastComponent
+    ToastComponent,
+    CdLineChartComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -233,7 +234,8 @@ import CloseIcon from '@carbon/icons/es/close/16';
     IconComponent,
     InlineMessageComponent,
     DetailsCardComponent,
-    ToastComponent
+    ToastComponent,
+    CdLineChartComponent
   ]
 })
 export class ComponentsModule {

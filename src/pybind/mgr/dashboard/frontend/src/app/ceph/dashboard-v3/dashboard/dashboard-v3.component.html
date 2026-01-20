@@ -276,6 +276,14 @@
                                      [labelsArray]="['Recovery Throughput']"
                                      [dataArray]="[queriesResults.RECOVERYBYTES]">
             </cd-dashboard-area-chart>
+            <cd-line-chart title="Recovery Throughput"
+                           [dataUnits]="'B/s'"
+                           [decimals]="2"
+                           [chartDataArray]="[queriesResults.RECOVERYBYTES]"
+                           [labelsArray]="['Recovery Throughput']"
+                           [scaleType]="'time'"
+                           >
+            </cd-line-chart>
           </div>
         </cd-card>
       </div>
