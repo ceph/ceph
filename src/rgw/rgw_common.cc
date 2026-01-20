@@ -43,7 +43,6 @@ using rgw::ARN;
 using rgw::IAM::Effect;
 using rgw::IAM::op_to_perm;
 using rgw::IAM::Policy;
-using rgw::IAM::PolicyPrincipal;
 
 const uint32_t RGWBucketInfo::NUM_SHARDS_BLIND_BUCKET(UINT32_MAX);
 
@@ -1152,11 +1151,11 @@ Effect eval_or_pass(const DoutPrefixProvider* dpp,
                     boost::optional<const rgw::auth::Identity&> id,
                     const uint64_t op,
                     const ARN& resource,
-                    boost::optional<rgw::IAM::PolicyPrincipal&> princ_type=boost::none) {
+                    boost::optional<rgw::auth::Principal>& principal) {
   if (!policy)
     return Effect::Pass;
   else
-    return policy->eval(env, id, op, resource, princ_type);
+    return policy->eval(env, id, op, resource, principal);
 }
 
 Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
@@ -1166,7 +1165,8 @@ Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
                           const ARN& arn) {
   auto policy_res = Effect::Pass, prev_res = Effect::Pass;
   for (auto& policy : policies) {
-    if (policy_res = eval_or_pass(dpp, policy, env, boost::none, op, arn);
+    boost::optional<rgw::auth::Principal> principal; // ignored
+    if (policy_res = policy.eval(env, boost::none, op, arn, principal);
         policy_res == Effect::Deny) {
       ldpp_dout(dpp, 10) << __func__ << " Deny from " << policy << dendl;
       return policy_res;
@@ -1198,9 +1198,10 @@ Effect evaluate_iam_policies(
     return Effect::Deny;
   }
 
-  PolicyPrincipal princ_type = PolicyPrincipal::Other;
+  // Principal matched by resource policy
+  boost::optional<rgw::auth::Principal> principal;
   auto resource_res = eval_or_pass(dpp, resource_policy, env, identity,
-                                   op, arn, princ_type);
+                                   op, arn, principal);
   if (resource_res == Effect::Deny) {
     ldpp_dout(dpp, 10) << __func__ << ": explicit deny from resource-based policy" << dendl;
     return Effect::Deny;
@@ -1217,17 +1218,19 @@ Effect evaluate_iam_policies(
       ldpp_dout(dpp, 10) << __func__ << ": allowed by session and identity-based policy" << dendl;
       return Effect::Allow;
     }
-    if (princ_type == PolicyPrincipal::Role) {
-      //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
-      if (session_res == Effect::Allow && resource_res == Effect::Allow) {
-        ldpp_dout(dpp, 10) << __func__ << ": allowed by session and resource-based policy" << dendl;
-        return Effect::Allow;
-      }
-    } else if (princ_type == PolicyPrincipal::Session) {
-      //Intersection of session policy and identity policy plus bucket policy
-      if (resource_res == Effect::Allow) {
-        ldpp_dout(dpp, 10) << __func__ << ": allowed by resource-based policy" << dendl;
-        return Effect::Allow;
+    if (principal) {
+      if (principal->is_role()) {
+        //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
+        if (session_res == Effect::Allow && resource_res == Effect::Allow) {
+          ldpp_dout(dpp, 10) << __func__ << ": allowed by session and resource-based policy" << dendl;
+          return Effect::Allow;
+        }
+      } else if (principal->is_assumed_role()) { // XXX: does this need is_user() too?
+        //Intersection of session policy and identity policy plus bucket policy
+        if (resource_res == Effect::Allow) {
+          ldpp_dout(dpp, 10) << __func__ << ": allowed by resource-based policy" << dendl;
+          return Effect::Allow;
+        }
       }
     }
     ldpp_dout(dpp, 10) << __func__ << ": implicit deny from session policy" << dendl;

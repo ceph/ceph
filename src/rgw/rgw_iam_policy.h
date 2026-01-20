@@ -339,12 +339,6 @@ inline int op_to_perm(std::uint64_t op) {
 
 const char* action_bit_string(uint64_t action);
 
-enum class PolicyPrincipal {
-  Role,
-  Session,
-  Other
-};
-
 using Environment = std::unordered_multimap<std::string, std::string>;
 
 using Address = std::bitset<128>;
@@ -606,10 +600,12 @@ struct Statement {
 
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,
-	      std::uint64_t action, boost::optional<const ARN&> resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+	      std::uint64_t action, boost::optional<const ARN&> resource,
+	      boost::optional<rgw::auth::Principal>& principal) const;
 
   Effect eval_principal(const Environment& e,
-		       boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+		       boost::optional<const rgw::auth::Identity&> ida,
+		       boost::optional<rgw::auth::Principal>& principal) const;
 
   Effect eval_conditions(const Environment& e) const;
 };
@@ -652,7 +648,8 @@ struct Policy {
 
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,
-	      std::uint64_t action, boost::optional<const ARN&> resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
+	      std::uint64_t action, boost::optional<const ARN&> resource,
+	      boost::optional<rgw::auth::Principal>& principal) const;
 
   Effect eval_conditions(const Environment& e) const;
 
