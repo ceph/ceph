@@ -8,7 +8,7 @@
 #include <seastar/coroutine/parallel_for_each.hh>
 
 #include "crimson/common/log.h"
-#include "crimson/common/errorator-loop.h"
+#include "crimson/common/errorator-utils.h"
 
 #include "include/buffer.h"
 #include "rbm_device.h"
