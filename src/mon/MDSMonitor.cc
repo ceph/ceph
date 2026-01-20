@@ -41,6 +41,7 @@
 #include "include/ceph_assert.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
+#include "include/cephfs/libcephfs.h"
 #include "mds/cephfs_features.h"
 #include "mds/mdstypes.h"
 #include "mds/cephfs_features.h" // for CEPHFS_FEATURE_*
@@ -1358,6 +1359,21 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       }
       r = 0;
     }
+  } else if (prefix == "fs snapdiff") {
+    string snap1_path, snap2_path;
+    cmd_getval(cmdmap, "snap1_path", snap1_path);
+    cmd_getval(cmdmap, "snap2_path", snap2_path);
+    //auto s1 = make_snap_name(snap1.c_str());
+    //auto s2 = make_snap_name(snap2.c_str());
+    ceph_snapdiff_info info;
+    ceph_snapdiff_entry_t res_entry;
+    /*    int r = ceph_open_snapdiff(cmount,
+                               dir_path,
+                               relpath,
+                               s1.c_str(),
+                               s2.c_str(),
+                               &info);
+                               TestMount test_mount;*/
   }
 
 out:

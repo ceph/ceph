@@ -164,6 +164,16 @@ protected:
 private:
   time last_fsmap_struct_flush = clock::zero();
   bool check_fsmap_struct_version = true;
+  std::string make_snap_name(const char* name) {
+    char snap_name[64];
+    if (name && *name) {
+      sprintf(snap_name, "%s_%d", name, getpid());
+    } else {
+      // just simulate empty snapname
+      snap_name[0] = 0;
+    }
+    return snap_name;
+  }
 };
 
 #endif
