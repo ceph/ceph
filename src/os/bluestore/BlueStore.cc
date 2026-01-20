@@ -12767,6 +12767,7 @@ void BlueStore::_read_cache(
 }
 
 int BlueStore::_prepare_read_ioc(
+  Collection *c,
   blobs2read_t& blobs2read,
   vector<bufferlist>* compressed_blob_bls,
   IOContext* ioc)
@@ -12801,6 +12802,7 @@ int BlueStore::_prepare_read_ioc(
         ceph_assert(r == 0);
       }
     } else {
+      RuntimeFragTracker frag(cct->_conf->bluestore_track_runtime_frag);
       // read the pieces
       for (auto& req : r2r) {
         dout(20) << __func__ << "    region 0x" << std::hex
@@ -12814,6 +12816,7 @@ int BlueStore::_prepare_read_ioc(
         auto r = bptr->get_blob().map(
           req.r_off, req.r_len,
           [&](uint64_t offset, uint64_t length) {
+            frag.note(offset, length);
             int r = bdev->aio_read(offset, length, &req.bl, ioc);
             if (r < 0)
               return r;
@@ -12829,6 +12832,9 @@ int BlueStore::_prepare_read_ioc(
           ceph_assert(r == 0);
         }
         ceph_assert(req.bl.length() == req.r_len);
+      }
+      if (c && frag.enabled) {
+        c->runtime_frag_score.fetch_add(frag.frag_score, std::memory_order_relaxed);
       }
     }
   }
@@ -13000,7 +13006,7 @@ int BlueStore::_do_read(
                              // The error isn't that much...
   vector<bufferlist> compressed_blob_bls;
   IOContext ioc(cct, NULL, !cct->_conf->bluestore_fail_eio);
-  r = _prepare_read_ioc(blobs2read, &compressed_blob_bls, &ioc);
+  r = _prepare_read_ioc(c, blobs2read, &compressed_blob_bls, &ioc);
   // we always issue aio for reading, so errors other than EIO are not allowed
   if (r < 0)
     return r;
@@ -13377,7 +13383,7 @@ int BlueStore::_do_readv(
     raw_results.push_back({});
     _read_cache(o, p.get_start(), p.get_len(), read_cache_policy,
                 std::get<0>(raw_results[i]), std::get<2>(raw_results[i]));
-    r = _prepare_read_ioc(std::get<2>(raw_results[i]), &std::get<1>(raw_results[i]), &ioc);
+    r = _prepare_read_ioc(c, std::get<2>(raw_results[i]), &std::get<1>(raw_results[i]), &ioc);
     // we always issue aio for reading, so errors other than EIO are not allowed
     if (r < 0)
       return r;
