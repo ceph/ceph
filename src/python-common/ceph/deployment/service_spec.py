@@ -1774,7 +1774,7 @@ class NvmeofServiceSpec(ServiceSpec):
         self.group = group or ''
         #: ``enable_auth`` enables user authentication on nvmeof gateway
         self.enable_auth = enable_auth
-        self.ssl = enable_auth  # to force enabling ssl field when auth is enabled
+        self.ssl = enable_auth or ssl  # enable ssl if auth is enabled OR if ssl was explicitly set
         #: ``state_update_notify`` enables automatic update from OMAP in nvmeof gateway
         self.state_update_notify = state_update_notify
         #: ``state_update_interval_sec`` number of seconds to check for updates in OMAP
@@ -1997,18 +1997,19 @@ class NvmeofServiceSpec(ServiceSpec):
         data = super().to_json()
         spec = data.setdefault('spec', {})
 
-        if self.ssl:
-            if self.server_cert and self.server_key:
-                spec['server_cert'] = self.server_cert
-                spec['server_key'] = self.server_key
-            else:
-                spec['ssl_cert'] = self.ssl_cert
-                spec['ssl_key'] = self.ssl_key
+        if self.certificate_source == CertificateSource.INLINE.value:
+            if self.ssl:
+                if self.server_cert and self.server_key:
+                    spec['server_cert'] = self.server_cert
+                    spec['server_key'] = self.server_key
+                else:
+                    spec['ssl_cert'] = self.ssl_cert
+                    spec['ssl_key'] = self.ssl_key
 
-        if self.enable_auth:
-            spec['client_cert'] = self.client_cert
-            spec['client_key'] = self.client_key
-            spec['root_ca_cert'] = self.root_ca_cert
+            if self.enable_auth:
+                spec['client_cert'] = self.client_cert
+                spec['client_key'] = self.client_key
+                spec['root_ca_cert'] = self.root_ca_cert
 
         return data
 

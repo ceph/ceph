@@ -120,35 +120,11 @@ class NvmeofGatewaysConfig(object):
             )
 
     @classmethod
-    def get_client_cert(cls, service_name: str):
-        client_cert = cls.from_cert_store('nvmeof_client_cert', service_name)
-        return client_cert.encode() if client_cert else None
-
-    @classmethod
-    def get_client_key(cls, service_name: str):
-        client_key = cls.from_cert_store('nvmeof_client_key', service_name, key=True)
-        return client_key.encode() if client_key else None
-
-    @classmethod
-    def get_root_ca_cert(cls, service_name: str):
-        root_ca_cert = cls.from_cert_store('nvmeof_root_ca_cert', service_name)
-        return root_ca_cert.encode() if root_ca_cert else None
-
-    @classmethod
-    def get_ssl_cert(cls, service_name: str):
-        server_cert = cls.from_cert_store('nvmeof_ssl_cert', service_name)
-        return server_cert.encode() if server_cert else None
-
-    @classmethod
-    def from_cert_store(cls, entity: str, service_name: str, key=False):
+    def get_nvmeof_tls_bundle(cls, service_name: str):
         try:
             orch = OrchClient.instance()
             if orch.available():
-                if key:
-                    return orch.cert_store.get_key(entity, service_name,
-                                                   ignore_missing_exception=True)
-                return orch.cert_store.get_cert(entity, service_name,
-                                                ignore_missing_exception=True)
+                return orch.cert_store.get_nvmeof_tls_bundle(service_name)
             return None
         except OrchestratorError:
             # just return None if any orchestrator error is raised
