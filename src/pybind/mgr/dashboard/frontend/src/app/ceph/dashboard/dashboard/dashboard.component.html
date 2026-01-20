@@ -1,8 +1,10 @@
-<main aria-label="Dashboard">
-  <a href="#main"
-     class="sr-only">skip to content</a>
-
-  <ng-container class="main-padding">
-    <cd-dashboard-v3></cd-dashboard-v3>
-  </ng-container>
+<main aria-label="Overview">
+@let features = enabledFeature$ | async;
+@if (features?.dashboard) {
+<!-- OLD OVERVIEW -->
+<cd-dashboard-v3 data-testid="cd-dashboard-v3"></cd-dashboard-v3>
+} @else {
+<!-- NEWER OVERVIEW -->
+<cd-overview data-testid="cd-overview"></cd-overview>
+}
 </main>
