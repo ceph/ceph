@@ -7,7 +7,7 @@
 #include "test/crimson/gtest_seastar.h"
 
 #include "crimson/common/errorator.h"
-#include "crimson/common/errorator-loop.h"
+#include "crimson/common/errorator-utils.h"
 #include "crimson/common/log.h"
 #include "seastar/core/sleep.hh"
 

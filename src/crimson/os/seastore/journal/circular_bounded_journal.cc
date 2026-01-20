@@ -3,7 +3,7 @@
 
 #include <boost/iterator/counting_iterator.hpp>
 
-#include "crimson/common/errorator-loop.h"
+#include "crimson/common/errorator-utils.h"
 #include "include/intarith.h"
 #include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"

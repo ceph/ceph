@@ -3,7 +3,7 @@
 
 #include "crimson/os/seastore/extent_placement_manager.h"
 
-#include "crimson/common/errorator-loop.h"
+#include "crimson/common/errorator-utils.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/logging.h"
 

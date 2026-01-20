@@ -12,7 +12,7 @@
 #include "include/buffer.h"
 
 #include "crimson/common/config_proxy.h"
-#include "crimson/common/errorator-loop.h"
+#include "crimson/common/errorator-utils.h"
 #include "crimson/common/coroutine.h"
 
 #include "crimson/os/seastore/logging.h"
