@@ -433,7 +433,7 @@ Removing an OSD
 ---------------
 
 .. note:: OSDs are normally removed from the CRUSH map as a result of the
-   `ceph osd purge`` command. This command is rarely needed.
+   ``ceph osd purge`` command. This command is rarely needed.
 
 To remove an OSD from the CRUSH map of a running cluster, run a command of the
 following form:

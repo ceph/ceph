@@ -397,7 +397,7 @@ OSDs being evacuated or slowly brought into service.
 
 Operators of deployments that utilize Nautilus or newer (or later revisions of
 Luminous and Mimic) and that have no pre-Luminous clients might likely instead
-want to enable the `balancer`` module for ``ceph-mgr``.
+want to enable the ``balancer`` module for ``ceph-mgr``.
 
 The blocklist can be modified by adding or removing an IP address or a CIDR
 range. If an address is blocklisted, it will be unable to connect to any OSD.
