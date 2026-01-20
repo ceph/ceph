@@ -41,7 +41,7 @@ else:
                 else:
                     res = NvmeofGatewaysConfig.get_service_info(gw_group)
                 if res is None:
-                    raise DashboardException("Gateway group does not exists")
+                    raise DashboardException("Gateway group does not exist")
                 service_name, self.gateway_addr = res
             except TypeError as e:
                 raise DashboardException(
