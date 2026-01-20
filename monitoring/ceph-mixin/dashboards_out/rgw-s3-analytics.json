@@ -107,7 +107,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "__auto",
@@ -170,7 +170,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum\n(ceph_rgw_op_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum\n(ceph_rgw_op_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "__auto",
@@ -233,7 +233,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "__auto",
@@ -296,7 +296,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum\n((sum by(instance_id)(ceph_rgw_op_put_obj_bytes) > 0) / (sum by(instance_id)(ceph_rgw_op_put_obj_ops) > 0) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum\n((sum by(instance_id)(ceph_rgw_op_put_obj_bytes) > 0) / (sum by(instance_id)(ceph_rgw_op_put_obj_ops) > 0) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "__auto",
@@ -346,7 +346,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_list_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_list_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -356,7 +356,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_list_buckets_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_list_buckets_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "List Buckets",
@@ -365,7 +365,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -375,7 +375,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -385,7 +385,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_del_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_del_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -395,7 +395,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_del_bucket_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_del_bucket_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -405,7 +405,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_copy_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_copy_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Copy Objects",
@@ -468,7 +468,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -478,7 +478,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_per_bucket_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -488,7 +488,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_del_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_del_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -498,7 +498,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Copy Objects",
@@ -561,7 +561,7 @@
          "targets": [
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_list_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_list_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -571,7 +571,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_list_buckets_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_list_buckets_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "List Bucket",
@@ -580,7 +580,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -590,7 +590,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_get_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_get_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -600,7 +600,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_del_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_del_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -610,7 +610,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_del_bucket_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_del_bucket_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -620,7 +620,7 @@
             },
             {
                "datasource": "${datasource}",
-               "expr": "sum(ceph_rgw_op_copy_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_rgw_op_copy_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Copy Object",
@@ -705,7 +705,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -721,7 +721,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -737,7 +737,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_del_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_del_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -753,7 +753,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+               "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -951,7 +951,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_bucket_list_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_bucket_list_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -967,7 +967,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_bucket_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_bucket_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -983,7 +983,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_bucket_get_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_bucket_get_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -999,7 +999,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_bucket_del_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_bucket_del_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1015,7 +1015,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_bucket_copy_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_bucket_copy_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1225,7 +1225,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_user_put_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1241,7 +1241,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_user_get_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1257,7 +1257,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_del_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_user_del_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1273,7 +1273,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_user_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1473,7 +1473,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_list_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_user_list_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1489,7 +1489,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_user_put_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1505,7 +1505,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_get_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_user_get_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1521,7 +1521,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_del_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_user_del_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1537,7 +1537,7 @@
                   "uid": "${datasource}"
                },
                "exemplar": false,
-               "expr": "ceph_rgw_op_per_user_copy_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }",
+               "expr": "ceph_rgw_op_per_user_copy_obj_lat_sum *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", }",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -1740,7 +1740,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "topk(5, \n    sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })\n)",
+                     "expr": "topk(5, \n    sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })\n)",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 1,
@@ -1808,7 +1808,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "topk(5, \n    sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_get_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })\n)",
+                     "expr": "topk(5, \n    sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_get_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })\n)",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 1,
@@ -1855,7 +1855,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "topk(5,\n    sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })\n)",
+                     "expr": "topk(5,\n    sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })\n)",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 1,
@@ -1902,7 +1902,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "topk(5,\n    sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_get_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })\n)",
+                     "expr": "topk(5,\n    sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_get_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })\n)",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 1,
@@ -1953,6 +1953,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2011,7 +2012,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -2121,7 +2122,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_get_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_get_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -2231,7 +2232,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_copy_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_copy_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -2341,7 +2342,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_del_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_del_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -2451,7 +2452,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_get_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_get_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -2561,7 +2562,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_put_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -2671,7 +2672,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_list_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_list_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -2781,7 +2782,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_del_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_del_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -2891,7 +2892,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_copy_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) ((ceph_rgw_op_per_bucket_copy_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -2977,7 +2978,7 @@
                         "uid": "${datasource}"
                      },
                      "exemplar": false,
-                     "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "table",
                      "hide": false,
                      "instant": true,
@@ -2993,7 +2994,7 @@
                         "uid": "${datasource}"
                      },
                      "exemplar": false,
-                     "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "table",
                      "hide": false,
                      "instant": true,
@@ -3009,7 +3010,7 @@
                         "uid": "${datasource}"
                      },
                      "exemplar": false,
-                     "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_del_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_del_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "table",
                      "hide": false,
                      "instant": true,
@@ -3025,7 +3026,7 @@
                         "uid": "${datasource}"
                      },
                      "exemplar": false,
-                     "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_copy_obj_bytes *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "table",
                      "hide": false,
                      "instant": true,
@@ -3041,7 +3042,7 @@
                         "uid": "${datasource}"
                      },
                      "exemplar": false,
-                     "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_list_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (bucket, ceph_daemon) (ceph_rgw_op_per_bucket_list_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "table",
                      "hide": false,
                      "instant": true,
@@ -3253,7 +3254,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "topk(5, \n    sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_put_obj_ops ) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })\n)\n",
+                     "expr": "topk(5, \n    sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_put_obj_ops ) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })\n)\n",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 1,
@@ -3321,7 +3322,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "topk(5, \n    sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_get_obj_ops ) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })\n)\n",
+                     "expr": "topk(5, \n    sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_get_obj_ops ) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })\n)\n",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 1,
@@ -3368,7 +3369,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "topk(5, \n    sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_put_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })\n)",
+                     "expr": "topk(5, \n    sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_put_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })\n)",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 1,
@@ -3415,7 +3416,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "topk(5, \n    sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_get_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })\n)",
+                     "expr": "topk(5, \n    sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_get_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })\n)",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 1,
@@ -3524,7 +3525,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_put_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_put_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -3634,7 +3635,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_get_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_get_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -3744,7 +3745,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_del_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_del_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -3854,7 +3855,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_copy_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_copy_obj_bytes) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -3964,7 +3965,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_get_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_get_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -4074,7 +4075,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_put_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_put_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -4184,7 +4185,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_list_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_list_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -4294,7 +4295,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_del_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_del_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -4404,7 +4405,7 @@
                "targets": [
                   {
                      "datasource": "${datasource}",
-                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_copy_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) ((ceph_rgw_op_per_user_copy_obj_ops) *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
@@ -4490,7 +4491,7 @@
                         "uid": "${datasource}"
                      },
                      "exemplar": false,
-                     "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_put_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "table",
                      "hide": false,
                      "instant": true,
@@ -4506,7 +4507,7 @@
                         "uid": "${datasource}"
                      },
                      "exemplar": false,
-                     "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_get_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "table",
                      "hide": false,
                      "instant": true,
@@ -4522,7 +4523,7 @@
                         "uid": "${datasource}"
                      },
                      "exemplar": false,
-                     "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_del_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_del_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "table",
                      "hide": false,
                      "instant": true,
@@ -4538,7 +4539,7 @@
                         "uid": "${datasource}"
                      },
                      "exemplar": false,
-                     "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_copy_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_copy_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "table",
                      "hide": false,
                      "instant": true,
@@ -4554,7 +4555,7 @@
                         "uid": "${datasource}"
                      },
                      "exemplar": false,
-                     "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_list_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", })",
+                     "expr": "sum by (user, ceph_daemon) (ceph_rgw_op_per_user_list_obj_ops *\n    on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster|\", })",
                      "format": "table",
                      "hide": false,
                      "instant": true,
@@ -4710,7 +4711,7 @@
             "multi": false,
             "name": "rgw_servers",
             "options": [ ],
-            "query": "label_values(ceph_rgw_metadata{cluster=~\"$cluster\", }, ceph_daemon)",
+            "query": "label_values(ceph_rgw_metadata{cluster=~\"$cluster|\", }, ceph_daemon)",
             "refresh": 2,
             "regex": "",
             "sort": 0,

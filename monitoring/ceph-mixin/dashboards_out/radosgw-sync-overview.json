@@ -102,7 +102,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_fetch_bytes_sum{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_fetch_bytes_sum{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{source_zone}}",
@@ -197,7 +197,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_fetch_bytes_count{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_fetch_bytes_count{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{source_zone}}",
@@ -292,7 +292,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_poll_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_poll_latency_sum{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{source_zone}}",
@@ -387,7 +387,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_fetch_errors{cluster=~\"$cluster\", }[$__rate_interval]))",
+               "expr": "sum by (source_zone) (rate(ceph_data_sync_from_zone_fetch_errors{cluster=~\"$cluster|\", }[$__rate_interval]))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{source_zone}}",
@@ -581,7 +581,7 @@
             "multi": false,
             "name": "rgw_servers",
             "options": [ ],
-            "query": "label_values(ceph_rgw_metadata{cluster=~\"$cluster\", }, ceph_daemon)",
+            "query": "label_values(ceph_rgw_metadata{cluster=~\"$cluster|\", }, ceph_daemon)",
             "refresh": 1,
             "regex": "rgw.(.*)",
             "sort": 1,
