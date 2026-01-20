@@ -78,12 +78,6 @@ run_prefix=''.join(random.choice(string.ascii_lowercase) for _ in range(6))
 num_roles = 0
 num_topic = 0
 
-def get_zone_connection(zone, credentials):
-    """ connect to the zone's first gateway """
-    if isinstance(credentials, list):
-        credentials = credentials[0]
-    return get_gateway_connection(zone.gateways[0], credentials)
-
 def mdlog_list(zone, period = None):
     cmd = ['mdlog', 'list']
     if period:
