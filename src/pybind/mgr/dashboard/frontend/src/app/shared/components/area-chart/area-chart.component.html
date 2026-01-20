@@ -1,6 +1,25 @@
 @if(chartData && chartOptions){
-<ibm-line-chart
+<div class="chart-container">
+  <div class="chart-header">
+    <div class="cds--type-heading-compact-02">
+      {{ chartTitle }}
+    </div>
+    @if(subHeading) {
+    <div class="cds--type-body-compact-01 chart-subheading cds-mb-3">
+      {{ subHeading }}
+    </div>
+    }
+  </div>
+  @if(chartType === 'area') {
+  <ibm-area-chart
     [data]="chartData"
     [options]="chartOptions">
-</ibm-line-chart>
+  </ibm-area-chart>
+  } @else {
+  <ibm-line-chart
+    [data]="chartData"
+    [options]="chartOptions">
+  </ibm-line-chart>
+  }
+</div>
 }

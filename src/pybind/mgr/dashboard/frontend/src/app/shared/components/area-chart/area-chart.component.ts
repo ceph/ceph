@@ -35,12 +35,16 @@ import {
   imports: [ChartsModule]
 })
 export class AreaChartComponent implements OnChanges {
+  @Input() chartType = 'line';
   @Input() chartTitle = '';
   @Input() dataUnit = '';
   @Input() rawData!: ChartPoint[];
   @Input() chartKey = '';
   @Input() decimals = DECIMAL;
   @Input() customOptions?: Partial<AreaChartOptions>;
+  @Input() legendEnabled = true;
+  @Input() subHeading = '';
+  @Input() height = '300px';
 
   @Output() currentFormattedValues = new EventEmitter<{
     key: string;
@@ -126,10 +130,11 @@ export class AreaChartComponent implements OnChanges {
 
   private getChartOptions(max: number, labels: string[], divisor: number): AreaChartOptions {
     return {
-      title: this.chartTitle,
+      legend: {
+        enabled: this.legendEnabled
+      },
       axes: {
         bottom: {
-          title: 'Time',
           mapsTo: 'date',
           scaleType: ScaleTypes.TIME,
           ticks: {
@@ -180,7 +185,7 @@ export class AreaChartComponent implements OnChanges {
         ]
       },
       animations: false,
-      height: '300px',
+      height: this.height,
       data: {
         loading: !this.chartData?.length
       }

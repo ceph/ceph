@@ -264,7 +264,5 @@ describe('AreaChartComponent', () => {
     component.ngOnChanges({
       rawData: new SimpleChange(null, mockData, false)
     });
-
-    expect(component.chartOptions?.title).toBe('Test Chart');
   });
 });
