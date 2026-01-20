@@ -1237,8 +1237,9 @@ Effect evaluate_iam_policies(
     return Effect::Pass;
   }
 
-  // Allow from resource policy overrides implicit deny from identity
-  if (resource_res == Effect::Allow) {
+  // unless granted to the account principal, Allow from resource policy
+  // overrides implicit deny from identity
+  if (resource_res == Effect::Allow && principal && !principal->is_account()) {
     ldpp_dout(dpp, 10) << __func__ << ": allowed by resource-based policy" << dendl;
     return Effect::Allow;
   }
