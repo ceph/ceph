@@ -206,9 +206,6 @@ that have the high performance drives while omitting the hosts that don't. See
 In subsequent examples, we will refer to the cache pool as ``hot-storage`` and
 the backing pool as ``cold-storage``.
 
-For cache tier configuration and default values, see 
-:ref:`setpoolvalues`.
-
 
 Creating a Cache Tier
 =====================
@@ -264,7 +261,7 @@ cache tier configuration options with the following usage:
 
    ceph osd pool set {cachepool} {key} {value}
    
-See `Pools - Set Pool Values`_ for details.
+See :ref:`setpoolvalues` for details.
 
 
 Target Size and Type
