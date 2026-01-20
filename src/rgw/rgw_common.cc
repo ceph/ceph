@@ -1213,29 +1213,20 @@ Effect evaluate_iam_policies(
       ldpp_dout(dpp, 10) << __func__ << ": explicit deny from session policy" << dendl;
       return Effect::Deny;
     }
+    if (session_res == Effect::Allow && identity_res == Effect::Allow) {
+      ldpp_dout(dpp, 10) << __func__ << ": allowed by session and identity-based policy" << dendl;
+      return Effect::Allow;
+    }
     if (princ_type == PolicyPrincipal::Role) {
       //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
-      if (session_res == Effect::Allow && identity_res == Effect::Allow) {
-        ldpp_dout(dpp, 10) << __func__ << ": allowed by session and identity-based policy" << dendl;
-        return Effect::Allow;
-      }
       if (session_res == Effect::Allow && resource_res == Effect::Allow) {
         ldpp_dout(dpp, 10) << __func__ << ": allowed by session and resource-based policy" << dendl;
         return Effect::Allow;
       }
     } else if (princ_type == PolicyPrincipal::Session) {
       //Intersection of session policy and identity policy plus bucket policy
-      if (session_res == Effect::Allow && identity_res == Effect::Allow) {
-        ldpp_dout(dpp, 10) << __func__ << ": allowed by session and identity-based policy" << dendl;
-        return Effect::Allow;
-      }
       if (resource_res == Effect::Allow) {
         ldpp_dout(dpp, 10) << __func__ << ": allowed by resource-based policy" << dendl;
-        return Effect::Allow;
-      }
-    } else if (princ_type == PolicyPrincipal::Other) {// there was no match in the bucket policy
-      if (session_res == Effect::Allow && identity_res == Effect::Allow) {
-        ldpp_dout(dpp, 10) << __func__ << ": allowed by session and identity-based policy" << dendl;
         return Effect::Allow;
       }
     }
