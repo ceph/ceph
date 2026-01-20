@@ -111,5 +111,9 @@ export const ICON_TYPE = {
   danger: 'warning--filled',
   infoCircle: 'information--filled',
   success: 'checkmark--filled',
-  warning: 'warning--alt--filled'
+  warning: 'warning--alt--filled',
+  deploy: 'deploy',
+  edit: 'edit',
+  error: 'error--filled',
+  notification: 'notification'
 } as const;

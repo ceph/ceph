@@ -17,3 +17,7 @@
 .warning-icon {
   color: theme.$support-caution-major;
 }
+
+.deploy-icon {
+  fill: theme.$layer-selected-disabled !important;
+}

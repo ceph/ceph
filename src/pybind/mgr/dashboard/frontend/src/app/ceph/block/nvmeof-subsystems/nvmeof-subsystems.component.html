@@ -29,7 +29,11 @@
           selectionType="single"
           [hasDetails]="true"
           (setExpandedRow)="setExpandedRow($event)"
-          (updateSelection)="updateSelection($event)">
+          (updateSelection)="updateSelection($event)"
+          emptyStateTitle="No subsystems created"
+          i18n-emptyStateTitle
+          emptyStateMessage="Subsystems group NVMe namespaces and manage host access. Create a subsystem to start mapping NVMe volumes to hosts."
+          i18n-emptyStateMessage>
 
   <div class="table-actions">
     <cd-table-actions [permission]="permissions.nvmeof"
@@ -45,4 +49,5 @@
                                 [group]="group">
   </cd-nvmeof-subsystems-details>
 </cd-table>
+
 <router-outlet name="modal"></router-outlet>
