@@ -97,6 +97,7 @@ import { DetailsCardComponent } from './details-card/details-card.component';
 import { ToastComponent } from './notification-toast/notification-toast.component';
 import { TearsheetComponent } from './tearsheet/tearsheet.component';
 
+import { CdLineChartComponent } from './cd-line-chart/cd-line-chart.component';
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
@@ -109,6 +110,7 @@ import NotificationFilledIcon from '@carbon/icons/es/notification--filled/16';
 import CloseIcon from '@carbon/icons/es/close/16';
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { ProductiveCardComponent } from './productive-card/productive-card.component';
+import { AreaChartComponent } from './area-chart/area-chart.component';
 
 @NgModule({
   imports: [
@@ -206,7 +208,9 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     ToastComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent
+    ProductiveCardComponent,
+    CdLineChartComponent,
+    AreaChartComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -252,7 +256,9 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     ToastComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent
+    ProductiveCardComponent,
+    CdLineChartComponent,
+    AreaChartComponent
   ]
 })
 export class ComponentsModule {

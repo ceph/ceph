@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable, Subscription, forkJoin, of, timer } from 'rxjs';
+import { Observable, Subject, Subscription, forkJoin, of, timer } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { AlertmanagerSilence } from '../models/alertmanager-silence';
@@ -23,6 +23,9 @@ export type PromqlGuageMetric = {
   result: PromethuesGaugeMetricResult[];
 };
 
+export const STORAGE_TYPE_WARNING =
+  'Storage type details are unavailable. Upgrade this cluster to version 9.0 or later to access them.';
+
 @Injectable({
   providedIn: 'root'
 })
@@ -40,6 +43,7 @@ export class PrometheusService {
     prometheus: 'ui-api/prometheus/prometheus-api-host'
   };
   private settings: { [url: string]: string } = {};
+  updatedChrtData = new Subject<any>();
 
   constructor(private http: HttpClient) {}
 
@@ -172,55 +176,55 @@ export class PrometheusService {
     return isFinite(value) ? value : null;
   }
 
-  getRangeQueriesData(selectedTime: any, queries: any, queriesResults: any, checkNan?: boolean) {
-    this.ifPrometheusConfigured(() => {
-      if (this.timerGetPrometheusDataSub) {
-        this.timerGetPrometheusDataSub.unsubscribe();
-      }
-      this.timerGetPrometheusDataSub = timer(0, this.timerTime)
-        .pipe(
-          switchMap(() => {
-            selectedTime = this.updateTimeStamp(selectedTime);
-            const observables = [];
-            for (const queryName in queries) {
-              if (queries.hasOwnProperty(queryName)) {
-                const query = queries[queryName];
-                observables.push(
-                  this.getPrometheusData({
-                    params: encodeURIComponent(query),
-                    start: selectedTime['start'],
-                    end: selectedTime['end'],
-                    step: selectedTime['step']
-                  }).pipe(map((data: any) => ({ queryName, data })))
-                );
-              }
-            }
-            return forkJoin(observables);
-          })
-        )
-        .subscribe((results: any) => {
-          results.forEach(({ queryName, data }: any) => {
-            if (data.result.length) {
-              queriesResults[queryName] = data.result[0].values;
-            } else {
-              queriesResults[queryName] = [];
-            }
-            if (
-              queriesResults[queryName] !== undefined &&
-              queriesResults[queryName] !== '' &&
-              checkNan
-            ) {
-              queriesResults[queryName].forEach((valueArray: any[]) => {
-                if (isNaN(parseFloat(valueArray[1]))) {
-                  valueArray[1] = '0';
-                }
-              });
-            }
-          });
-        });
-    });
-    return queriesResults;
-  }
+  // getRangeQueriesData(selectedTime: any, queries: any, queriesResults: any, checkNan?: boolean) {
+  //   this.ifPrometheusConfigured(() => {
+  //     if (this.timerGetPrometheusDataSub) {
+  //       this.timerGetPrometheusDataSub.unsubscribe();
+  //     }
+  //     this.timerGetPrometheusDataSub = timer(0, this.timerTime)
+  //       .pipe(
+  //         switchMap(() => {
+  //           selectedTime = this.updateTimeStamp(selectedTime);
+  //           const observables = [];
+  //           for (const queryName in queries) {
+  //             if (queries.hasOwnProperty(queryName)) {
+  //               const query = queries[queryName];
+  //               observables.push(
+  //                 this.getPrometheusData({
+  //                   params: encodeURIComponent(query),
+  //                   start: selectedTime['start'],
+  //                   end: selectedTime['end'],
+  //                   step: selectedTime['step']
+  //                 }).pipe(map((data: any) => ({ queryName, data })))
+  //               );
+  //             }
+  //           }
+  //           return forkJoin(observables);
+  //         })
+  //       )
+  //       .subscribe((results: any) => {
+  //         results.forEach(({ queryName, data }: any) => {
+  //           if (data.result.length) {
+  //             queriesResults[queryName] = data.result[0].values;
+  //           } else {
+  //             queriesResults[queryName] = [];
+  //           }
+  //           if (
+  //             queriesResults[queryName] !== undefined &&
+  //             queriesResults[queryName] !== '' &&
+  //             checkNan
+  //           ) {
+  //             queriesResults[queryName].forEach((valueArray: any[]) => {
+  //               if (isNaN(parseFloat(valueArray[1]))) {
+  //                 valueArray[1] = '0';
+  //               }
+  //             });
+  //           }
+  //         });
+  //       });
+  //   });
+  //   return queriesResults;
+  // }
 
   private updateTimeStamp(selectedTime: any): any {
     let formattedDate = {};
@@ -322,5 +326,118 @@ export class PrometheusService {
         });
       });
     });
+  }
+
+  getRangeQueriesData(
+    selectedTime: any,
+    queries: any,
+    queriesResults: any,
+    checkNan?: boolean
+  ) {
+    this.ifPrometheusConfigured(() => {
+      if (this.timerGetPrometheusDataSub) {
+        this.timerGetPrometheusDataSub.unsubscribe();
+      }
+
+      this.timerGetPrometheusDataSub = timer(0, this.timerTime)
+        .pipe(
+          switchMap(() => {
+            selectedTime = this.updateTimeStamp(selectedTime);
+            const observables = [];
+
+            for (const queryName in queries) {
+              if (queries.hasOwnProperty(queryName)) {
+                const query = queries[queryName];
+                observables.push(
+                  this.getPrometheusData({
+                    params: encodeURIComponent(query),
+                    start: selectedTime.start,
+                    end: selectedTime.end,
+                    step: selectedTime.step
+                  }).pipe(map((data: any) => ({ queryName, data })))
+                );
+              }
+            }
+
+            return forkJoin(observables);
+          })
+        )
+        .subscribe((results: any) => {
+          // STEP 1: Build raw Prometheus results
+          results.forEach(({ queryName, data }: any) => {
+            if (data.result.length) {
+              queriesResults[queryName] = data.result[0].values;
+            } else {
+              queriesResults[queryName] = [];
+            }
+
+            // Fix NaN
+            if (checkNan && Array.isArray(queriesResults[queryName])) {
+              queriesResults[queryName].forEach((valueArray: any[]) => {
+                if (isNaN(parseFloat(valueArray[1]))) {
+                  valueArray[1] = "0";
+                }
+              });
+            }
+          });
+
+          // console.log("RAW PROM RESULTS:", JSON.parse(JSON.stringify(queriesResults)));
+
+          // const chartData = this.convertPerformanceData(queriesResults);
+
+          // console.log("CARBON-READY DATA:", chartData);
+          this.updatedChrtData.next(queriesResults);
+        });
+      
+    });
+
+    return queriesResults;
+  }
+
+  public convertPerformanceData(raw: any) {
+    return {
+      iops: this.mergeSeries(
+        this.toSeries(raw.READIOPS || [], "Read IOPS"),
+        this.toSeries(raw.WRITEIOPS || [], "Write IOPS")
+      ),
+
+      latency: this.mergeSeries(
+        this.toSeries(raw.READLATENCY || [], "Read Latency"),
+        this.toSeries(raw.WRITELATENCY || [], "Write Latency")
+      ),
+
+      throughput: this.mergeSeries(
+        this.toSeries(raw.READCLIENTTHROUGHPUT || [], "Read Throughput"),
+        this.toSeries(raw.WRITECLIENTTHROUGHPUT || [], "Write Throughput")
+      )
+    };
+  }
+
+  private toSeries(metric: [number, string][], label: string) {
+    return metric.map(([ts, val]) => ({
+      timestamp: new Date(ts * 1000),
+      values: { [label]: Number(val) }
+    }));
+  }
+
+  private mergeSeries(...series: any[]) {
+    const map = new Map<number, any>();
+
+    for (const s of series) {
+      for (const p of s) {
+        const t = p.timestamp.getTime();
+
+        if (!map.has(t)) {
+          map.set(t, {
+            timestamp: p.timestamp,
+            values: { ...p.values }
+          });
+        } else {
+          Object.assign(map.get(t)!.values, p.values);
+        }
+      }
+    }
+
+    return [...map.values()].sort((a, b) => a.timestamp - b.timestamp);
   }
 }
