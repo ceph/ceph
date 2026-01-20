@@ -14,7 +14,7 @@
     NVMeoFMaxGatewaysPerCluster: 32,
     NVMeoFHighGatewayCPU: 80,
     NVMeoFMaxSubsystemsPerGateway: 128,
-    NVMeoFMaxNamespaces: 2048,
+    NVMeoFMaxNamespaces: 4096,
     NVMeoFHighClientCount: 128,
     NVMeoFHostKeepAliveTimeoutTrackDurationHours: 24,
     NVMeoFHighHostCPU: 80,
