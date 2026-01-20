@@ -110,7 +110,7 @@ QA suite
 - [ ] update qa/ upgrade suites require-osd-release calls to tentacle
 - [x] create qa/releases/X.yaml
 - [ ] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
-- [x] update qa/suites/rados/encoder/1-task.yaml to remove (X-3) and add X
+- [ ] update qa/suites/rados/encoder/1-task.yaml to remove (X-3) and add X
 
 
 ceph-build
