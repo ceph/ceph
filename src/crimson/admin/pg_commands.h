@@ -5,6 +5,7 @@
 
 namespace crimson::admin::pg {
 
+class PGOldFormCommand;
 class QueryCommand;
 class MarkUnfoundLostCommand;
 template <bool deep>
