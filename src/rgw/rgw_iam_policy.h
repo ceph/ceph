@@ -654,9 +654,6 @@ struct Policy {
 	      boost::optional<const rgw::auth::Identity&> ida,
 	      std::uint64_t action, boost::optional<const ARN&> resource, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
 
-  Effect eval_principal(const Environment& e,
-	      boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type=boost::none) const;
-
   Effect eval_conditions(const Environment& e) const;
 
   template <typename F>

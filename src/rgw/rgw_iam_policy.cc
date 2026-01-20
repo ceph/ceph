@@ -1879,20 +1879,6 @@ Effect Policy::eval(const Environment& e,
   return allowed ? Effect::Allow : Effect::Pass;
 }
 
-Effect Policy::eval_principal(const Environment& e,
-		    boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type) const {
-  auto allowed = false;
-  for (auto& s : statements) {
-    auto g = s.eval_principal(e, ida, princ_type);
-    if (g == Effect::Deny) {
-      return g;
-    } else if (g == Effect::Allow) {
-      allowed = true;
-    }
-  }
-  return allowed ? Effect::Allow : Effect::Deny;
-}
-
 Effect Policy::eval_conditions(const Environment& e) const {
   auto allowed = false;
   for (auto& s : statements) {
