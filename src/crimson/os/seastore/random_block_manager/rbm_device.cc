@@ -7,7 +7,7 @@
 #include <fcntl.h>
 
 #include "crimson/common/log.h"
-#include "crimson/common/errorator-loop.h"
+#include "crimson/common/errorator-utils.h"
 #include "crimson/os/seastore/logging.h"
 
 #include "include/buffer.h"
