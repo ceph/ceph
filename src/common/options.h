@@ -434,4 +434,4 @@ constexpr unsigned long long operator""_T (unsigned long long n) {
   return n << 40;
 }
 
-const std::vector<Option>& get_ceph_options();
+extern const std::vector<Option> ceph_options;
