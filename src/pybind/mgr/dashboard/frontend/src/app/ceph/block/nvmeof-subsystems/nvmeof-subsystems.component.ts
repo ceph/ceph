@@ -23,7 +23,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
-import { forkJoin, of, Subject } from 'rxjs';
+import { BehaviorSubject, forkJoin, Observable, of, Subject } from 'rxjs';
 import { catchError, map, switchMap, takeUntil } from 'rxjs/operators';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
@@ -45,7 +45,6 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
   @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
 
-  subsystems: (NvmeofSubsystem & { gw_group?: string; initiator_count?: number })[] = [];
   subsystemsColumns: any;
   permissions: Permissions;
   selection = new CdTableSelection();
@@ -57,6 +56,8 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
   gwGroupsEmpty: boolean = false;
   gwGroupPlaceholder: string = DEFAULT_PLACEHOLDER;
   authType = NvmeofSubsystemAuthType;
+  subsystems$: Observable<(NvmeofSubsystem & { gw_group?: string; initiator_count?: number })[]>;
+  private subsystemSubject = new BehaviorSubject<void>(undefined);
 
   private destroy$ = new Subject<void>();
 
@@ -129,6 +130,31 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
         click: () => this.deleteSubsystemModal()
       }
     ];
+
+    this.subsystems$ = this.subsystemSubject.pipe(
+      switchMap(() => {
+        if (!this.group) {
+          return of([]);
+        }
+        return this.nvmeofService.listSubsystems(this.group).pipe(
+          switchMap((subsystems: NvmeofSubsystem[] | NvmeofSubsystem) => {
+            const subs = Array.isArray(subsystems) ? subsystems : [subsystems];
+            if (subs.length === 0) return of([]);
+            return forkJoin(subs.map((sub) => this.enrichSubsystemWithInitiators(sub)));
+          }),
+          catchError((error) => {
+            this.notificationService.show(
+              NotificationType.error,
+              $localize`Unable to fetch Gateway group`,
+              $localize`Gateway group does not exist`
+            );
+            this.handleError(error);
+            return of([]);
+          })
+        );
+      }),
+      takeUntil(this.destroy$)
+    );
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -136,35 +162,11 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
   }
 
   getSubsystems() {
-    if (this.group) {
-      this.nvmeofService
-        .listSubsystems(this.group)
-        .pipe(
-          switchMap((subsystems: NvmeofSubsystem[] | NvmeofSubsystem) => {
-            const subs = Array.isArray(subsystems) ? subsystems : [subsystems];
-            if (subs.length === 0) return of([]);
+    this.subsystemSubject.next();
+  }
 
-            return forkJoin(subs.map((sub) => this.enrichSubsystemWithInitiators(sub)));
-          })
-        )
-        .pipe(takeUntil(this.destroy$))
-        .subscribe({
-          next: (subsystems: NvmeofSubsystem[]) => {
-            this.subsystems = subsystems;
-          },
-          error: (error) => {
-            this.subsystems = [];
-            this.notificationService.show(
-              NotificationType.error,
-              $localize`Unable to fetch Gateway group`,
-              $localize`Gateway group does not exist`
-            );
-            this.handleError(error);
-          }
-        });
-    } else {
-      this.subsystems = [];
-    }
+  fetchData() {
+    this.subsystemSubject.next();
   }
 
   deleteSubsystemModal() {

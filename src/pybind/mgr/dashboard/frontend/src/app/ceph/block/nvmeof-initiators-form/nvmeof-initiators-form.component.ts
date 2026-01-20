@@ -12,12 +12,15 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ActivatedRoute, Router } from '@angular/router';
 import { InitiatorRequest, NvmeofService } from '~/app/shared/api/nvmeof.service';
 
+import { Icons } from '~/app/shared/enum/icons.enum';
+
 @Component({
   selector: 'cd-nvmeof-initiators-form',
   templateUrl: './nvmeof-initiators-form.component.html',
   styleUrls: ['./nvmeof-initiators-form.component.scss']
 })
 export class NvmeofInitiatorsFormComponent implements OnInit {
+  icons = Icons;
   permission: Permission;
   initiatorForm: CdFormGroup;
   action: string;

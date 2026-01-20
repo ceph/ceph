@@ -1,24 +1,44 @@
-<legend>
-  <cd-help-text>
-    An NVMe namespace is a quantity of non-volatile storage that can be formatted into logical blocks and presented to a host as a standard block device.
-  </cd-help-text>
-</legend>
-<cd-table [data]="namespaces"
-          columnMode="flex"
-          (fetchData)="listNamespaces()"
-          [columns]="namespacesColumns"
-          selectionType="single"
-          (updateSelection)="updateSelection($event)"
-          emptyStateTitle="No namespaces created."
-          i18n-emptyStateTitle
-          emptyStateMessage="Namespaces are storage volumes mapped to subsystems for host access. Create a namespace to start provisioning storage within a subsystem."
-          i18n-emptyStateMessage>
-
-  <div class="table-actions">
-    <cd-table-actions [permission]="permission"
-                      [selection]="selection"
-                      class="btn-group"
-                      [tableActions]="tableActions">
-    </cd-table-actions>
+<div cdsGrid
+     [useCssGrid]="true"
+     [narrow]="true"
+     [fullWidth]="true">
+<div cdsCol
+     [columnNumbers]="{sm: 4, md: 8}">
+  <div class="pb-3 form-item"
+       cdsRow>
+    <cds-combo-box
+        type="single"
+        label="Selected Gateway Group"
+        i18n-label
+        [placeholder]="gwGroupPlaceholder"
+        [items]="gwGroups"
+        (selected)="onGroupSelection($event)"
+        (clear)="onGroupClear()"
+        [disabled]="gwGroupsEmpty">
+      <cds-dropdown-list></cds-dropdown-list>
+    </cds-combo-box>
   </div>
-</cd-table>
+</div>
+</div>
+
+<ng-container *ngIf="namespaces$ | async as namespaces">
+  <cd-table [data]="namespaces"
+            columnMode="flex"
+            (fetchData)="fetchData()"
+            [columns]="namespacesColumns"
+            selectionType="single"
+            (updateSelection)="updateSelection($event)"
+            emptyStateTitle="No namespaces created."
+            i18n-emptyStateTitle
+            emptyStateMessage="Namespaces are storage volumes mapped to subsystems for host access. Create a namespace to start provisioning storage within a subsystem."
+            i18n-emptyStateMessage>
+
+    <div class="table-actions">
+      <cd-table-actions [permission]="permission"
+                        [selection]="selection"
+                        class="btn-group"
+                        [tableActions]="tableActions">
+      </cd-table-actions>
+    </div>
+  </cd-table>
+</ng-container>
