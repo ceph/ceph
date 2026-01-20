@@ -9,6 +9,7 @@ from ..context_getters import (
     fetch_configs,
     get_config_and_keyring,
     should_log_to_journald,
+    should_log_mon_cluster_to_file,
 )
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
@@ -121,7 +122,6 @@ class Ceph(ContainerDaemonForm):
             'ceph',
             '--setgroup',
             'ceph',
-            '--default-log-to-file=false',
         ]
         log_to_journald = should_log_to_journald(self.ctx)
         if log_to_journald:
@@ -135,9 +135,12 @@ class Ceph(ContainerDaemonForm):
                 '--default-log-stderr-prefix=debug ',
             ]
         if self.identity.daemon_type == 'mon':
-            r += [
-                '--default-mon-cluster-log-to-file=false',
-            ]
+            mon_cluster_log_to_file = should_log_mon_cluster_to_file(self.ctx)
+            if mon_cluster_log_to_file:
+                r += [
+                    '--default-mon-cluster-log-to-file=true',
+                    '--default-log-to-file=true',
+                ]
             if log_to_journald:
                 r += [
                     '--default-mon-cluster-log-to-journald=true',

@@ -205,3 +205,11 @@ def should_log_to_journald(ctx: CephadmContext) -> bool:
         isinstance(ctx.container_engine, Podman)
         and ctx.container_engine.supports_split_cgroups
     )
+
+def should_log_mon_cluster_to_file(ctx: CephadmContext) -> bool:
+    if ctx.mon_cluster_log_to_file is not None:
+        return ctx.mon_cluster_log_to_file
+    return (
+        isinstance(ctx.container_engine, Podman)
+        and ctx.container_engine.supports_split_cgroups
+    )
