@@ -41,6 +41,94 @@
     [data]="displayData"
     class="overview-storage-card-chart"></ibm-meter-chart>
   }
+  <!-- TREND CHARTS AND TOP POOLS -->
+  @if(selectedStorageType === 'All' && trendData) {
+  <div cdsRow
+       class="align-items-center cds-ml-2 cds-mt-6">
+    <div cdsCol
+         [columnNumbers]="{ lg: 14, md: 10, sm: 16 }">
+      <cd-area-chart chartTitle="Consumption trend"
+                     [chartKey]="'Consumption trend'"
+                     [dataUnit]="'B'"
+                     [legendEnabled]="false"
+                     [rawData]="trendData"
+                     [subHeading]="'Shows last 7 days of storage consumption trends based on recent usage'"
+                     [height]="'200px'"
+                     [chartType]="'area'">
+      </cd-area-chart>
+    </div>
+    <div cdsCol
+         [columnNumbers]="{ lg: 2, md: 8, sm: 8 }">
+      <div cdsStack="vertical"
+           gap="4">
+        <div cdsStack="vertical"
+             gap="1">
+          <span class="cds--type-heading-03">{{ timeUntilFull }}</span>
+          <div class="consumption-stats-wrapper">
+            <cds-tooltip-definition
+              [autoAlign]="true"
+              [highContrast]="true"
+              [openOnHover]="false"
+              [dropShadow]="true"
+              [caret]="true"
+              description="Based on recent average consumption. Actual time until full may vary based on changes in consumption patterns."
+              i18n-description
+              i18n>
+              Estimated days until full
+            </cds-tooltip-definition>
+          </div>
+        </div>
+        <div cdsStack="vertical"
+             gap="1">
+          <span class="cds--type-heading-03">{{ averageConsumption }}</span>
+          <div class="consumption-stats-wrapper">
+            <cds-tooltip-definition
+              [autoAlign]="true"
+              [highContrast]="true"
+              [openOnHover]="false"
+              [dropShadow]="true"
+              [caret]="true"
+              description="Based on the average daily consumption over the last 7 days"
+              i18n-description
+              i18n>
+              Average consumption
+            </cds-tooltip-definition>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  }
+  @if (selectedStorageType !== 'All' && topPoolsData) {
+  @if (topPoolsData) {
+  <div cdsRow
+       class="align-items-center">
+    <div cdsCol
+         [columnNumbers]="{ lg: 4, md: 8, sm: 16 }">
+      <div cdsStack="vertical"
+           gap="4"
+           class="cds-mb-3 cds-ml-3">
+        @for(metric of storageMetrics[selectedStorageType].metrics; track metric.label){
+        <div class="cds-mb-5 cds-ml-3">
+          <span class="cds--type-heading-05">{{metric.value}}</span>
+          <span class="cds--type-heading-03 cds-ml-3">{{metric.label}}</span>
+        </div>
+        }
+      </div>
+    </div>
+    <div cdsCol
+         [columnNumbers]="{ lg: 6, md: 8, sm: 16 }">
+      <cd-pie-chart
+        [chartData]="topPoolsData"
+        [data]="topPoolsData"
+        [title]="'Top 5 ' + selectedStorageType + ' pools'"
+        [legendPosition]="'right'"
+        [showPercentage]="true"
+        [height]="'250px'">
+      </cd-pie-chart>
+    </div>
+  </div>
+  }
   @else {
   <cds-skeleton-text
     [lines]="1"
@@ -52,5 +140,6 @@
     [minLineWidth]="200"
     [maxLineWidth]="200">
   </cds-skeleton-text>
+  }
   }
 </cd-productive-card>
