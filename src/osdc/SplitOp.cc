@@ -521,7 +521,7 @@ std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
   uint64_t replica_min_read_size
     = replica_min_shard_read_size * kReplicaMinShardReads;
 
-  uint64_t suitable_read_found = false;
+  bool suitable_read_found = false;
   for (auto & o : op->ops) {
     switch (o.op.op) {
       case CEPH_OSD_OP_READ:
