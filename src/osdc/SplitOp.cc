@@ -93,6 +93,8 @@ void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
     uint64_t src_len = details.bl.length();
     uint64_t buf_off = buffer_offset[(int)chunk_info.raw_shard];
     if (src_len <= buf_off) {
+      // Early termination: we've exhausted the available buffer data.
+      // This is a normal completion scenario, not an error condition.
       break;
     }
     uint64_t len = std::min(chunk_info.length, src_len - buf_off);
