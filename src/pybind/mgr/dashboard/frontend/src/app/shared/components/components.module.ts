@@ -41,7 +41,8 @@ import {
   TagModule,
   LinkModule,
   LayerModule,
-  TilesModule
+  TilesModule,
+  ThemeModule
 } from 'carbon-components-angular';
 
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
@@ -141,7 +142,8 @@ import { ChartsModule } from '@carbon/charts-angular';
     TagModule,
     LinkModule,
     LayerModule,
-    TilesModule
+    TilesModule,
+    ThemeModule
   ],
   declarations: [
     SparklineComponent,
