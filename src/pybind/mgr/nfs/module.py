@@ -132,6 +132,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
                                 port: Optional[int] = None,
+                                enable_nfsv3: bool = False,
                                 inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
         ssl_cert = ssl_key = ssl_ca_cert = tls_min_version = tls_ciphers = None
@@ -150,6 +151,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
                                            ingress_mode=ingress_mode, port=port,
+                                           enable_nfsv3=enable_nfsv3,
                                            ssl=ssl,
                                            ssl_cert=ssl_cert,
                                            ssl_key=ssl_key,
