@@ -1185,6 +1185,7 @@ class NFSServiceSpec(ServiceSpec):
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  idmap_conf: Optional[Dict[str, Dict[str, str]]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 enable_nfsv3: bool = False,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1199,6 +1200,7 @@ class NFSServiceSpec(ServiceSpec):
         self.enable_haproxy_protocol = enable_haproxy_protocol
         self.idmap_conf = idmap_conf
         self.enable_nlm = enable_nlm
+        self.enable_nfsv3 = enable_nfsv3
 
     def get_port_start(self) -> List[int]:
         if self.port:
