@@ -315,7 +315,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	       << " class " << device_class << dendl;
     }
 
-    std::unordered_map<std::string,ConfigMap::ValueSource> src;
+    std::map<std::string,ConfigMap::ValueSource,std::less<>> src;
     auto config = config_map.generate_entity_map(
       entity,
       crush_location,

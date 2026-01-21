@@ -142,7 +142,7 @@ struct ConfigMap {
     const std::map<std::string,std::string>& crush_location,
     const CrushWrapper *crush,
     const std::string& device_class,
-    std::unordered_map<std::string,ValueSource> *src = nullptr);
+    std::map<std::string,ValueSource,std::less<>> *src = nullptr);
 
   void parse_key(
     const std::string& key,
