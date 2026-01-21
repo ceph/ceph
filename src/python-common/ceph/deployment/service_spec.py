@@ -1393,6 +1393,7 @@ class NFSServiceSpec(ServiceSpec):
                  tls_min_version: Optional[str] = None,
                  tls_ciphers: Optional[str] = None,
                  colocation_ports: Optional[List[Dict[str, int]]] = None,
+                 enable_nfsv3: bool = False,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1421,6 +1422,7 @@ class NFSServiceSpec(ServiceSpec):
         self.rdma_port = rdma_port
         self.cluster_qos_config = cluster_qos_config
         self.cluster_qos_port = cluster_qos_port
+        self.enable_nfsv3 = enable_nfsv3
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
         # The first daemon always uses port and monitoring_port from the spec
