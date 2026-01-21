@@ -114,6 +114,10 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   // This calculation is wrong for length = 0, but such IOs should not have
   // reached here!
   ceph_assert( op.op.extent.length != 0);
+  // No overflow: length >= 1 (asserted above), so offset + length - 1 <= offset + length.
+  // Since offset and length are uint64_t, their sum cannot exceed UINT64_MAX in practice
+  // due to object size limits and memory constraints. Even if offset + length == UINT64_MAX + 1
+  // (impossible in uint64_t), subtracting 1 brings it back to UINT64_MAX (valid).
   uint64_t end_chunk = (offset + op.op.extent.length - 1) / chunk_size;
 
   unsigned count = std::min(data_chunk_count, end_chunk - start_chunk + 1);
