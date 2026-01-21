@@ -380,6 +380,8 @@ void SplitOp::complete() {
       read_bl = bufferlist();
     }
 
+    // Copy is necessary: process_op_reply_handlers() reads out_ops while
+    // modifying orig_op state. Overhead is acceptable for typical 1-3 ops.
     for (unsigned ops_index=0; ops_index < out_ops.size(); ++ops_index) {
       auto &out_osd_op = out_ops[ops_index];
       switch (out_osd_op.op.op) {
@@ -400,7 +402,7 @@ void SplitOp::complete() {
           break;
         }
         default: {
-          out_osd_op.outdata = sub_reads.at(reference_sub_read).details[ops_index].bl;
+          out_osd_op.outdata = std::move(sub_reads.at(reference_sub_read).details[ops_index].bl);
           out_osd_op.rval = sub_reads.at(reference_sub_read).details[ops_index].rval;
           break;
         }
@@ -519,35 +521,56 @@ std::pair<bool, bool> is_single_chunk(const pg_pool_t *pi, uint64_t offset, uint
   return {true, offset % stripe_width < chunk_size};
 }
 
-std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
-                               const pg_pool_t *pi, CephContext *cct) {
-
-  bool is_erasure = pi->is_erasure();
-
-  if ((op->target.flags & CEPH_OSD_FLAG_BALANCE_READS) == 0 ) {
-    ldout(cct, DBG_LVL) << __func__ <<" REJECT: Client rejects balanced read" << dendl;
-    return {false, false};
+/**
+ * Validate operation flags for split operation eligibility.
+ *
+ * Checks that the operation has the required BALANCE_READS flag and
+ * is not a write operation.
+ *
+ * @param op The operation to validate
+ * @param cct CephContext for logging
+ * @return true if flags are valid, false otherwise
+ */
+bool validate_flags(Objecter::Op *op, CephContext *cct) {
+  if ((op->target.flags & CEPH_OSD_FLAG_BALANCE_READS) == 0) {
+    ldout(cct, DBG_LVL) << __func__ << " REJECT: Client rejects balanced read" << dendl;
+    return false;
   }
 
   // We really should not have a WRITE flagged as balanced read, but out of
   // paranoia ignore it.
   if (op->target.flags & CEPH_OSD_FLAG_WRITE) {
-    ldout(cct, DBG_LVL) << __func__ <<" REJECT: Flagged as write!" << dendl;
-    return {false, false};
+    ldout(cct, DBG_LVL) << __func__ << " REJECT: Flagged as write!" << dendl;
+    return false;
   }
 
-  bool has_primary_ops = nullptr != op->objver;
-  bool single_direct_op = is_erasure;
+  return true;
+}
+
+/**
+ * Validate operation types and check read size constraints.
+ *
+ * Processes all operations in the op list, checking for:
+ * - Supported operation types (READ, SPARSE_READ, and various metadata ops)
+ * - Valid read sizes (non-zero length, meets minimum size requirements)
+ * - Single chunk constraints for erasure coded pools
+ *
+ * @param op The operation to validate
+ * @param pi Pool information
+ * @param is_erasure Whether the pool is erasure coded
+ * @param replica_min_read_size Minimum read size for replica pools
+ * @param cct CephContext for logging
+ * @param[out] has_primary_ops Set to true if primary-only ops are found
+ * @param[out] single_direct_op Set to true if op can be sent directly to single OSD
+ * @return true if a suitable read operation was found, false otherwise
+ */
+bool validate_operations(Objecter::Op *op, const pg_pool_t *pi, bool is_erasure,
+                        uint64_t replica_min_read_size, CephContext *cct,
+                        bool &has_primary_ops, bool &single_direct_op) {
   bool is_first_chunk = true;
-
-  uint64_t replica_min_shard_read_size
-    = objecter.get_min_split_replica_read_size();
-
-  uint64_t replica_min_read_size
-    = replica_min_shard_read_size * kReplicaMinShardReads;
-
   bool suitable_read_found = false;
-  for (auto & o : op->ops) {
+
+  for (auto &o : op->ops) {
     switch (o.op.op) {
       case CEPH_OSD_OP_READ:
       case CEPH_OSD_OP_SPARSE_READ: {
@@ -555,8 +578,8 @@ std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
         if (length == 0) {
           // length of zero actually means "the whole object". This code cannot
           // know the size of the object efficiently, so reject the op.
-          ldout(cct, DBG_LVL) << __func__ <<" REJECT: Zero length read" << dendl;
-          return {false, false};
+          ldout(cct, DBG_LVL) << __func__ << " REJECT: Zero length read" << dendl;
+          return false;
         }
         if ((is_erasure && length > 0) ||
             (!is_erasure && length >= replica_min_read_size)) {
@@ -579,8 +602,8 @@ std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
         break; // Do not block validate.
       }
       default: {
-        ldout(cct, DBG_LVL) << __func__ <<" REJECT: unsupported op" << dendl;
-        return {false, false};
+        ldout(cct, DBG_LVL) << __func__ << " REJECT: unsupported op" << dendl;
+        return false;
       }
     }
   }
@@ -588,6 +611,46 @@ std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
   if (single_direct_op && has_primary_ops) {
     single_direct_op = is_first_chunk;
   }
+
+  return suitable_read_found;
+}
+
+/**
+ * Validate if an operation is eligible for split operation optimization.
+ *
+ * This function performs a multi-stage validation to determine if an operation
+ * can be split across multiple OSDs for improved read performance:
+ * 1. Validates operation flags (BALANCE_READS required, no WRITE flag)
+ * 2. Validates operation types and read size constraints
+ *
+ * @param op The operation to validate
+ * @param objecter Objecter instance for configuration access
+ * @param pi Pool information
+ * @param cct CephContext for logging
+ * @return A pair of bools: {suitable_read_found, single_direct_op}
+ *         - suitable_read_found: true if operation contains valid read(s)
+ *         - single_direct_op: true if operation can be sent to single OSD
+ */
+std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
+                               const pg_pool_t *pi, CephContext *cct) {
+  bool is_erasure = pi->is_erasure();
+
+  // Validate flags
+  if (!validate_flags(op, cct)) {
+    return {false, false};
+  }
+
+  // Initialize state for operation validation
+  bool has_primary_ops = nullptr != op->objver;
+  bool single_direct_op = is_erasure;
+
+  uint64_t replica_min_shard_read_size = objecter.get_min_split_replica_read_size();
+  uint64_t replica_min_read_size = replica_min_shard_read_size * kReplicaMinShardReads;
+
+  // Validate operations and read sizes
+  bool suitable_read_found = validate_operations(op, pi, is_erasure,
+                                                 replica_min_read_size, cct,
+                                                 has_primary_ops, single_direct_op);
 
   return {suitable_read_found, single_direct_op};
 }
