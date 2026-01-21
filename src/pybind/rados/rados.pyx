@@ -18,10 +18,12 @@ from cpython.pycapsule cimport *
 from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
-IF BUILD_DOC:
-    include "mock_rados.pxi"
-ELSE:
-    from c_rados cimport *
+
+{{if BUILD_DOC}}
+include "mock_rados.pxi"
+{{else}}
+from c_rados cimport *
+{{endif}}
 
 import threading
 import time
@@ -232,42 +234,45 @@ class ConnectionShutdown(OSError):
                 "RADOS connection was shutdown (%s)" % message, errno)
 
 
-IF UNAME_SYSNAME == "FreeBSD":
-    cdef errno_to_exception = {
-        errno.EPERM     : PermissionError,
-        errno.ENOENT    : ObjectNotFound,
-        errno.EIO       : IOError,
-        errno.ENOSPC    : NoSpace,
-        errno.EEXIST    : ObjectExists,
-        errno.EBUSY     : ObjectBusy,
-        errno.ENOATTR   : NoData,
-        errno.EINTR     : InterruptedOrTimeoutError,
-        errno.ETIMEDOUT : TimedOut,
-        errno.EACCES    : PermissionDeniedError,
-        errno.EINPROGRESS : InProgress,
-        errno.EISCONN   : IsConnected,
-        errno.EINVAL    : InvalidArgumentError,
-        errno.ENOTCONN  : NotConnected,
-        errno.ESHUTDOWN : ConnectionShutdown,
-    }
-ELSE:
-    cdef errno_to_exception = {
-        errno.EPERM     : PermissionError,
-        errno.ENOENT    : ObjectNotFound,
-        errno.EIO       : IOError,
-        errno.ENOSPC    : NoSpace,
-        errno.EEXIST    : ObjectExists,
-        errno.EBUSY     : ObjectBusy,
-        errno.ENODATA   : NoData,
-        errno.EINTR     : InterruptedOrTimeoutError,
-        errno.ETIMEDOUT : TimedOut,
-        errno.EACCES    : PermissionDeniedError,
-        errno.EINPROGRESS : InProgress,
-        errno.EISCONN   : IsConnected,
-        errno.EINVAL    : InvalidArgumentError,
-        errno.ENOTCONN  : NotConnected,
-        errno.ESHUTDOWN : ConnectionShutdown,
-    }
+# Build errno mapping based on platform
+# FreeBSD uses ENOATTR while Linux uses ENODATA
+{{if UNAME_SYSNAME == "FreeBSD"}}
+cdef errno_to_exception = {
+    errno.EPERM     : PermissionError,
+    errno.ENOENT    : ObjectNotFound,
+    errno.EIO       : IOError,
+    errno.ENOSPC    : NoSpace,
+    errno.EEXIST    : ObjectExists,
+    errno.EBUSY     : ObjectBusy,
+    errno.ENOATTR   : NoData,
+    errno.EINTR     : InterruptedOrTimeoutError,
+    errno.ETIMEDOUT : TimedOut,
+    errno.EACCES    : PermissionDeniedError,
+    errno.EINPROGRESS : InProgress,
+    errno.EISCONN   : IsConnected,
+    errno.EINVAL    : InvalidArgumentError,
+    errno.ENOTCONN  : NotConnected,
+    errno.ESHUTDOWN : ConnectionShutdown,
+}
+{{else}}
+cdef errno_to_exception = {
+    errno.EPERM     : PermissionError,
+    errno.ENOENT    : ObjectNotFound,
+    errno.EIO       : IOError,
+    errno.ENOSPC    : NoSpace,
+    errno.EEXIST    : ObjectExists,
+    errno.EBUSY     : ObjectBusy,
+    errno.ENODATA   : NoData,
+    errno.EINTR     : InterruptedOrTimeoutError,
+    errno.ETIMEDOUT : TimedOut,
+    errno.EACCES    : PermissionDeniedError,
+    errno.EINPROGRESS : InProgress,
+    errno.EISCONN   : IsConnected,
+    errno.EINVAL    : InvalidArgumentError,
+    errno.ENOTCONN  : NotConnected,
+    errno.ESHUTDOWN : ConnectionShutdown,
+}
+{{endif}}
 
 
 cdef make_ex(ret: int, msg: str):

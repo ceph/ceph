@@ -10,14 +10,15 @@ from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
 
 from types cimport *
-IF BUILD_DOC:
-    include "mock_cephfs.pxi"
-    cdef class Rados:
-        cdef:
-            rados_t cluster
-ELSE:
-    from c_cephfs cimport *
-    from rados cimport Rados
+{{if BUILD_DOC}}
+include "mock_cephfs.pxi"
+cdef class Rados:
+    cdef:
+        rados_t cluster
+{{else}}
+from c_cephfs cimport *
+from rados cimport Rados
+{{endif}}
 
 from collections import namedtuple, deque
 from datetime import datetime
