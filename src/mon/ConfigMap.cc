@@ -76,6 +76,7 @@ void MaskedOption::dump(Formatter *f) const
   f->dump_string("level", Option::level_to_str(opt->level));
   f->dump_bool("can_update_at_runtime", opt->can_update_at_runtime());
   f->dump_string("mask", mask.to_str());
+  f->dump_string("annotation", annotation);
   mask.dump(f);
 }
 
@@ -260,6 +261,7 @@ int ConfigMap::add_option(
   const std::string& name,
   const std::string& who,
   const std::string& orig_value,
+  const std::string& annotation,
   std::function<const Option *(const std::string&)> get_opt)
 {
   const Option *opt = get_opt(name);
@@ -283,6 +285,7 @@ int ConfigMap::add_option(
   MaskedOption mopt(opt);
   mopt.raw_value = value;
   mopt.localized_name = name;
+  mopt.annotation = annotation;
   string section_name;
   if (who.size() &&
       !ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
@@ -326,6 +329,16 @@ void ConfigChangeSet::dump(Formatter *f) const
     if (i.second.second) {
       f->dump_string("new_value", *i.second.second);
     }
+    auto adiff_it = adiff.find(i.first);
+    if (adiff_it != adiff.end()) {
+      auto a = *adiff_it;
+      if (a.second.first) {
+	f->dump_string("previous_annotation", *a.second.first);
+      }
+      if (a.second.second) {
+	f->dump_string("new_annotation", *a.second.second);
+      }
+    }
     f->close_section();
   }
   f->close_section();
@@ -339,11 +352,24 @@ void ConfigChangeSet::print(ostream& out) const
   }
   out << " ---\n";
   for (auto& i : diff) {
+    auto adiff_it = adiff.find(i.first);
     if (i.second.first) {
-      out << "- " << i.first << " = " << *i.second.first << "\n";
+      out << "- " << i.first << " = " << *i.second.first;
+      if (adiff_it != adiff.end()) {
+        if(auto& a = *adiff_it; a.second.first) {
+	  out << " ; " << *a.second.first;
+	}
+      }
+      out << "\n";
     }
     if (i.second.second) {
-      out << "+ " << i.first << " = " << *i.second.second << "\n";
+      out << "+ " << i.first << " = " << *i.second.second;
+      if (adiff_it != adiff.end()) {
+	if (auto& a = *adiff_it; a.second.second) {
+	  out << " ; " << *a.second.second;
+	}
+      }
+      out << "\n";
     }
   }
 }

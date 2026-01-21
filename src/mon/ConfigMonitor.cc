@@ -57,7 +57,9 @@ static ostream& _prefix(std::ostream *_dout, const Monitor &mon,
 }
 
 const string KEY_PREFIX("config/");
+const string KEY_ANNOTATION_PREFIX("config-annotation/");
 const string HISTORY_PREFIX("config-history/");
+const string HISTORY_ANNOTATION_PREFIX("config-history-annotation/");
 
 ConfigMonitor::ConfigMonitor(Monitor &m, Paxos &p, const string& service_name)
   : PaxosService(m, p, service_name) {
@@ -110,7 +112,7 @@ void ConfigMonitor::encode_pending_to_kvmon()
     if (pending.count(key) == 0) {
       derr << __func__ << " repair: adjusting config key '" << key << "'"
 	   << dendl;
-      pending[key] = value;
+      pending[key] = std::make_pair(*value, bufferlist());
     }
   }
   pending_cleanup.clear();
@@ -118,6 +120,7 @@ void ConfigMonitor::encode_pending_to_kvmon()
   // TODO: record changed sections (osd, mds.foo, rack:bar, ...)
 
   string history = HISTORY_PREFIX + stringify(version+1) + "/";
+  string ahistory = HISTORY_ANNOTATION_PREFIX + stringify(version + 1) + "/";
   {
     bufferlist metabl;
     ::encode(ceph_clock_now(), metabl);
@@ -126,22 +129,36 @@ void ConfigMonitor::encode_pending_to_kvmon()
   }
   for (auto& p : pending) {
     string key = KEY_PREFIX + p.first;
+    string akey = KEY_ANNOTATION_PREFIX + p.first;
     auto q = current.find(p.first);
     if (q != current.end()) {
       if (p.second && *p.second == q->second) {
 	continue;
       }
-      mon.kvmon()->enqueue_set(history + "-" + p.first, q->second);
+      mon.kvmon()->enqueue_set(history + "-" + p.first, q->second.first);
+      if (q->second.second.length() &&
+          (!p.second || (p.second && p.second->second != q->second.second))) {
+        mon.kvmon()->enqueue_set(ahistory + "-" + p.first, q->second.second);
+      }
     } else if (!p.second) {
       continue;
     }
     if (p.second) {
       dout(20) << __func__ << " set " << key << dendl;
-      mon.kvmon()->enqueue_set(key, *p.second);
-      mon.kvmon()->enqueue_set(history + "+" + p.first, *p.second);
-   } else {
+      mon.kvmon()->enqueue_set(key, p.second->first);
+      if (p.second->second.length()) {
+        mon.kvmon()->enqueue_set(akey, p.second->second);
+      } else {
+	mon.kvmon()->enqueue_rm(akey);
+      }
+      mon.kvmon()->enqueue_set(history + "+" + p.first, p.second->first);
+      if (p.second->second.length()) {
+        mon.kvmon()->enqueue_set(ahistory + "+" + p.first, p.second->second);
+      }
+    } else {
       dout(20) << __func__ << " rm " << key << dendl;
       mon.kvmon()->enqueue_rm(key);
+      mon.kvmon()->enqueue_rm(akey);
     }
   }
 }
@@ -263,6 +280,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("RO", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("ANNOTATION", TextTable::LEFT, TextTable::LEFT);
     } else {
       f->open_array_section("config");
     }
@@ -275,6 +293,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
           tbl << opt_name;
 	  tbl << masked_opt.raw_value;
 	  tbl << (masked_opt.opt->can_update_at_runtime() ? "" : "*");
+	  tbl << masked_opt.annotation;
 	  tbl << TextTable::endrow;
 	} else {
 	  f->open_object_section("option");
@@ -369,6 +388,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
 	tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
 	tbl.define_column("RO", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("ANNOTATION", TextTable::LEFT, TextTable::LEFT);
       } else {
 	f->open_object_section("config");
       }
@@ -385,6 +405,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	  tbl << p->first;
 	  tbl << p->second;
 	  tbl << (q->second.option->opt->can_update_at_runtime() ? "" : "*");
+	  tbl << (q->second.option->annotation);
 	  tbl << TextTable::endrow;
 	} else {
 	  f->open_object_section(p->first.c_str());
@@ -393,6 +414,8 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	  f->dump_object("mask", q->second.option->mask);
 	  f->dump_bool("can_update_at_runtime",
 		       q->second.option->opt->can_update_at_runtime());
+	  f->dump_string("annotation",
+	    q->second.option->annotation);
 	  f->close_section();
 	}
       }
@@ -535,11 +558,13 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       prefix == "config rm") {
     string who;
     string name, value;
+    string annotation;
     bool force = false;
     cmd_getval(cmdmap, "who", who);
     cmd_getval(cmdmap, "name", name);
     cmd_getval(cmdmap, "value", value);
     cmd_getval(cmdmap, "force", force);
+    cmd_getval(cmdmap, "annotation", annotation);
     name = ConfFile::normalize_key_name(name);
     
     if (prefix == "config set" && !force) {
@@ -591,7 +616,9 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     if (prefix == "config set") {
       bufferlist bl;
       bl.append(value);
-      pending[key] = bl;
+      bufferlist abl;
+      abl.append(annotation);
+      pending[key] = std::make_pair(bl, abl);
     } else {
       pending[key].reset();
     }
@@ -615,10 +642,17 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       ConfigChangeSet ch;
       load_changeset(v, &ch);
       for (auto& i : ch.diff) {
+        auto adiff_it = ch.adiff.find(i.first);
 	if (i.second.first) {
 	  bufferlist bl;
+	  bufferlist abl;
 	  bl.append(*i.second.first);
-	  pending[i.first] = bl;
+	  if (adiff_it != ch.adiff.end()) {
+	    if (auto a = *adiff_it; a.second.first && a.second.first->length()) {
+	      abl.append(*a.second.first);
+	    }
+	  }
+	  pending[i.first] = std::make_pair(bl, abl);
 	} else if (i.second.second) {
 	  pending[i.first].reset();
 	}
@@ -685,7 +719,8 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 	{
 	  bufferlist bl;
 	  bl.append(value);
-	  pending[section + "/" + key] = bl;
+	  bufferlist abl;
+	  pending[section + "/" + key] = std::make_pair(bl, abl);
 	  updated = true;
 	}
 	continue;
@@ -792,8 +827,14 @@ void ConfigMonitor::load_config()
        it->next(), ++num) {
     string key = it->key().substr(KEY_PREFIX.size());
     string value = it->value().to_str();
+    string akey = KEY_ANNOTATION_PREFIX + key;
+    string annotation;
+    bufferlist abl;
 
-    current[key] = it->value();
+    if (0 == mon.store->get(KV_PREFIX, akey, abl)) {
+      annotation = abl.to_str();
+    }
+    current[key] = std::make_pair(it->value(), abl);
 
     string name;
     string who;
@@ -814,7 +855,7 @@ void ConfigMonitor::load_config()
     }
 
     int r = config_map.add_option(
-      g_ceph_context, name, who, value,
+      g_ceph_context, name, who, value, annotation,
       [&](const std::string& name) {
 	const Option *opt = g_conf().find_option(name);
 	if (!opt) {
@@ -847,6 +888,7 @@ void ConfigMonitor::load_changeset(version_t v, ConfigChangeSet *ch)
 {
   ch->version = v;
   string prefix = HISTORY_PREFIX + stringify(v) + "/";
+  string aprefix = HISTORY_ANNOTATION_PREFIX + stringify(v) + "/";
   KeyValueDB::Iterator it = mon.store->get_iterator(KV_PREFIX);
   it->lower_bound(prefix);
   while (it->valid() && it->key().find(prefix) == 0) {
@@ -863,10 +905,19 @@ void ConfigMonitor::load_changeset(version_t v, ConfigChangeSet *ch)
     } else {
       char op = it->key()[prefix.length()];
       string key = it->key().substr(prefix.length() + 1);
+      string akey = aprefix + op + key;
+      bufferlist abl;
+
       if (op == '-') {
 	ch->diff[key].first = it->value().to_str();
+	if (0 == mon.store->get(KV_PREFIX, akey, abl) && abl.length()) {
+	  ch->adiff[key].first = abl.to_str();
+	}
       } else if (op == '+') {
 	ch->diff[key].second = it->value().to_str();
+	if (0 == mon.store->get(KV_PREFIX, akey, abl) && abl.length()) {
+	  ch->adiff[key].second = abl.to_str();
+	}
       }
     }
     it->next();

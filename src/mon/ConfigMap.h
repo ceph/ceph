@@ -67,6 +67,7 @@ struct MaskedOption {
   OptionMask mask;
   std::unique_ptr<const Option> unknown_opt; ///< if fabricated for an unknown option
   std::string localized_name;     ///< localized name for the option
+  std::string annotation;         ///< annotation for the option
 
   MaskedOption(const Option *o, bool fab=false) : opt(o) {
     if (fab) {
@@ -79,6 +80,7 @@ struct MaskedOption {
     mask = std::move(o.mask);
     unknown_opt = std::move(o.unknown_opt);
     localized_name = std::move(o.localized_name);
+    annotation = std::move(o.annotation);
   }
   const MaskedOption& operator=(const MaskedOption& o) = delete;
   const MaskedOption& operator=(MaskedOption&& o) = delete;
@@ -158,6 +160,7 @@ struct ConfigMap {
     const std::string& name,
     const std::string& who,
     const std::string& value,
+    const std::string& annotation,
     std::function<const Option *(const std::string&)> get_opt);
 };
 
@@ -169,6 +172,8 @@ struct ConfigChangeSet {
 
   // key -> (old value, new value)
   std::map<std::string,std::pair<std::optional<std::string>,std::optional<std::string>>> diff;
+  // key -> (old annotation, new annotation)
+  std::map<std::string, std::pair<std::optional<std::string>, std::optional<std::string>>> adiff;
 
   void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;
