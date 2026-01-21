@@ -101,9 +101,9 @@ public:
   RGWRESTConn& operator=(RGWRESTConn&& other);
   virtual ~RGWRESTConn() = default;
 
-  int get_url(std::string& endpoint);
-  std::string get_url();
-  void set_url_unconnectable(const std::string& endpoint);
+  int get_endpoint(RGWEndpoint& endpoint);
+  RGWEndpoint get_endpoint();
+  void set_endpoint_unconnectable(const RGWEndpoint& endpoint);
   const std::string& get_self_zonegroup() {
     return self_zone_group;
   }
@@ -358,7 +358,7 @@ public:
     int ret = req.wait(dpp, y);
     if (ret < 0) {
       if (ret == -ERR_INTERNAL_ERROR) {
-        conn->set_url_unconnectable(req.get_url_orig());
+        conn->set_endpoint_unconnectable(req.get_endpoint_orig());
       }
       return ret;
     }
@@ -414,7 +414,7 @@ int RGWRESTReadResource::wait(const DoutPrefixProvider* dpp, T *dest,
   int ret = req.wait(dpp, y);
   if (ret < 0) {
     if (ret == -ERR_INTERNAL_ERROR) {
-      conn->set_url_unconnectable(req.get_url_orig());
+      conn->set_endpoint_unconnectable(req.get_endpoint_orig());
     }
     return ret;
   }
@@ -489,7 +489,7 @@ public:
     *pbl = bl;
 
     if (ret == -ERR_INTERNAL_ERROR) {
-      conn->set_url_unconnectable(req.get_url_orig());
+      conn->set_endpoint_unconnectable(req.get_endpoint_orig());
     }
 
     if (ret < 0 && err_result ) {
@@ -510,7 +510,7 @@ int RGWRESTSendResource::wait(const DoutPrefixProvider* dpp, T *dest,
 {
   int ret = req.wait(dpp, y);
   if (ret == -ERR_INTERNAL_ERROR) {
-    conn->set_url_unconnectable(req.get_url_orig());
+    conn->set_endpoint_unconnectable(req.get_endpoint_orig());
   }
 
   if (ret >= 0) {
