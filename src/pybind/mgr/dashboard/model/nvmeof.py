@@ -30,7 +30,6 @@ class GatewayInfo(NamedTuple):
     status: int
     error_message: str
     hostname: str
-    cli_version: Annotated[str, CliFlags.DROP]
     version: str
     name: str
     group: str
