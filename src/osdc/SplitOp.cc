@@ -117,9 +117,18 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   uint64_t end_chunk = (offset + op.op.extent.length - 1) / chunk_size;
 
   unsigned count = std::min(data_chunk_count, end_chunk - start_chunk + 1);
-  //FIXME: This is not quite right - the ops.size() > 1 does not necessarily mean
-  // that the primary is required - it could be two reads to the same shard.
-  bool primary_required = count > 1 || orig_op->objver || orig_op->ops.size() > 1;
+  // Primary is required if:
+  // 1. Reading from multiple chunks (count > 1)
+  // 2. Version information is needed (orig_op->objver)
+  // 3. There are non-read operations that need the primary
+  bool has_non_read_ops = false;
+  for (const auto &op : orig_op->ops) {
+    if (op.op.op != CEPH_OSD_OP_READ && op.op.op != CEPH_OSD_OP_SPARSE_READ) {
+      has_non_read_ops = true;
+      break;
+    }
+  }
+  bool primary_required = count > 1 || orig_op->objver || has_non_read_ops;
 
   int first_shard = start_chunk % data_chunk_count;
   // Check all shards are online.
