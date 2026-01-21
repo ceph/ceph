@@ -480,6 +480,26 @@ struct ScrubPgIF {
     ceph::Formatter* f,
     scrub_level_t scrub_level) = 0;
 
+  /**
+   * reschedule the named scrub target (the 'scrub_level' parameter).
+   * This is called when the operator requests to 'clean the slate' regarding
+   * un-scrubbed PGs: the operator command names a pool, and all PGs in that
+   * pool have their 'last scrub' stamp modified:
+   * If 'starting_now' is false, the relevant timestamps are reset to 'now'.
+   * This means that, for example, the next shallow scrub will be scheduled
+   * to now + min-interval(*) + randomization.
+   * If 'starting_now' is true, the time stam is modified so that the expected
+   * scheduling period starts immediately. For deep scrubs, for example, this
+   * means setting it to 'now - deep_interval - two sdvs' (see
+   * adjust_deep_schedule(), and the relevant configuration params
+   * documentation).
+   */
+  virtual void on_operator_defer_request(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    bool starting_now) = 0;
+
+
   virtual void dump_scrubber(ceph::Formatter* f) const = 0;
 
   /**

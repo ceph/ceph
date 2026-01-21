@@ -771,6 +771,40 @@ void PgScrubber::on_operator_forced_scrub(
 }
 
 
+void PgScrubber::on_operator_defer_request(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    bool starting_now)
+{
+  dout(10) << fmt::format(
+                  "{}: reschedule {} scrubs, {}", __func__,
+                  (scrub_level == scrub_level_t::deep ? "deep" : "shallow"),
+                  starting_now ? "with first scrubs now" :
+                        "assuming scrubs just completed")
+           << dendl;
+
+  utime_t stamp_sh = ceph_clock_now();
+  utime_t stamp_dp = stamp_sh;
+
+  if (starting_now) {
+    const auto cnf = populate_config_params();
+    stamp_dp -= cnf.deep_interval * (1 + 2 * cnf.deep_randomize_ratio);
+    stamp_sh -= cnf.shallow_interval;
+  }
+
+  if (scrub_level == scrub_level_t::deep) {
+    const auto saved_shallow_stamp = m_pg->info.history.last_scrub_stamp;
+    // this call sets both stamps
+    m_pg->set_last_deep_scrub_stamp(stamp_dp);
+    // reset the shallow_stamp, using the relevant calculated new value
+    m_pg->set_last_scrub_stamp(saved_shallow_stamp);
+  } else {
+    m_pg->set_last_scrub_stamp(stamp_sh);
+  }
+  asok_response_section(f, true, scrub_level);
+}
+
+
 // ----------------------------------------------------------------------------
 
 bool PgScrubber::has_pg_marked_new_updates() const

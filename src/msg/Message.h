@@ -113,6 +113,7 @@
 #define MSG_OSD_SCRUB          91
 #define MSG_OSD_SCRUB_RESERVE  92  // previous PG_MISSING
 #define MSG_OSD_REP_SCRUB      93
+#define MSG_OSD_SCRUB_RESCHEDULE 137
 
 #define MSG_OSD_PG_SCAN        94
 #define MSG_OSD_PG_BACKFILL    95
