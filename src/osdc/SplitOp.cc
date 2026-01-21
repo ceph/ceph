@@ -661,7 +661,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   }
 
   if (split_read->abort) {
-    ldout(cct, DBG_LVL) << __func__ <<" ABORTED 1" << dendl;return false;
+    ldout(cct, DBG_LVL) << __func__ <<" ABORTED 1" << dendl;
     return false;
   }
 
