@@ -34,6 +34,16 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.change_subsystem_key_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
                 )
+        self.add_subsystem_network = channel.unary_unary(
+                '/Gateway/add_subsystem_network',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.add_subsystem_network_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
+        self.del_subsystem_network = channel.unary_unary(
+                '/Gateway/del_subsystem_network',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.del_subsystem_network_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
         self.list_namespaces = channel.unary_unary(
                 '/Gateway/list_namespaces',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.list_namespaces_req.SerializeToString,
@@ -62,6 +72,11 @@ class GatewayStub(object):
         self.namespace_change_visibility = channel.unary_unary(
                 '/Gateway/namespace_change_visibility',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_change_visibility_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
+        self.namespace_change_location = channel.unary_unary(
+                '/Gateway/namespace_change_location',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_change_location_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
                 )
         self.namespace_set_rbd_trash_image = channel.unary_unary(
@@ -184,6 +199,11 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_gateway_stats_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gateway_stats_info.FromString,
                 )
+        self.get_thread_stats = channel.unary_unary(
+                '/Gateway/get_thread_stats',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_thread_stats_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.thread_stats_info.FromString,
+                )
 
 
 class GatewayServicer(object):
@@ -212,6 +232,20 @@ class GatewayServicer(object):
 
     def change_subsystem_key(self, request, context):
         """Changes subsystem key
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def add_subsystem_network(self, request, context):
+        """Add a subsystem network
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def del_subsystem_network(self, request, context):
+        """Delete a subsystem network
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -254,6 +288,13 @@ class GatewayServicer(object):
 
     def namespace_change_visibility(self, request, context):
         """Changes namespace's visibility
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def namespace_change_location(self, request, context):
+        """Changes namespace's location
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -427,6 +468,13 @@ class GatewayServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def get_thread_stats(self, request, context):
+        """Gets spdk thread stats
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GatewayServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -448,6 +496,16 @@ def add_GatewayServicer_to_server(servicer, server):
             'change_subsystem_key': grpc.unary_unary_rpc_method_handler(
                     servicer.change_subsystem_key,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.change_subsystem_key_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'add_subsystem_network': grpc.unary_unary_rpc_method_handler(
+                    servicer.add_subsystem_network,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.add_subsystem_network_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'del_subsystem_network': grpc.unary_unary_rpc_method_handler(
+                    servicer.del_subsystem_network,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.del_subsystem_network_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
             'list_namespaces': grpc.unary_unary_rpc_method_handler(
@@ -478,6 +536,11 @@ def add_GatewayServicer_to_server(servicer, server):
             'namespace_change_visibility': grpc.unary_unary_rpc_method_handler(
                     servicer.namespace_change_visibility,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_change_visibility_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'namespace_change_location': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_change_location,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_change_location_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
             'namespace_set_rbd_trash_image': grpc.unary_unary_rpc_method_handler(
@@ -600,6 +663,11 @@ def add_GatewayServicer_to_server(servicer, server):
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_gateway_stats_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gateway_stats_info.SerializeToString,
             ),
+            'get_thread_stats': grpc.unary_unary_rpc_method_handler(
+                    servicer.get_thread_stats,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_thread_stats_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.thread_stats_info.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'Gateway', rpc_method_handlers)
@@ -674,6 +742,40 @@ class Gateway(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/change_subsystem_key',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.change_subsystem_key_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def add_subsystem_network(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/add_subsystem_network',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.add_subsystem_network_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def del_subsystem_network(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/del_subsystem_network',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.del_subsystem_network_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
@@ -776,6 +878,23 @@ class Gateway(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_change_visibility',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_change_visibility_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def namespace_change_location(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_change_location',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_change_location_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
@@ -1185,5 +1304,22 @@ class Gateway(object):
         return grpc.experimental.unary_unary(request, target, '/Gateway/get_gateway_stats',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.get_gateway_stats_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.gateway_stats_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def get_thread_stats(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/get_thread_stats',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.get_thread_stats_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.thread_stats_info.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
