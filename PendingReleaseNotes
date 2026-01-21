@@ -215,6 +215,7 @@
   address for the selected gateway. And a config can be unset by
   `ceph dashboard unset-rgw-hostname <daemon>`. 
   With this dashboard no longer relies on `rgw_dns_name`.
+* Dashboard: Added support for QAT compression in RGW service form. Users can select 'Hardware' or 'Software' for QAT compression . If 'None' is selected, compression is removed altogether.
 
 >=19.2.1
 

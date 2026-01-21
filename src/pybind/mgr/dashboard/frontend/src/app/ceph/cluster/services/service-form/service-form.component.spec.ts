@@ -16,6 +16,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper, Mocks } from '~/testing/unit-test-helper';
 import { ServiceFormComponent } from './service-form.component';
 import { PoolService } from '~/app/shared/api/pool.service';
+import { SelectModule } from 'carbon-components-angular';
 
 // for 'nvmeof' service
 const mockPools = [
@@ -45,6 +46,7 @@ describe('ServiceFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
+      SelectModule,
       ToastrModule.forRoot()
     ]
   });
@@ -290,6 +292,21 @@ describe('ServiceFormComponent', () => {
         fixture.detectChanges();
         const ssl_key = fixture.debugElement.query(By.css('#ssl_key'));
         expect(ssl_key).toBeNull();
+      });
+
+      it('should submit rgw with QAT Compression (None)', () => {
+        formHelper.setValue('service_type', 'rgw');
+        formHelper.setValue(component.serviceForm.get('qat').get('compression'), 'none');
+      });
+
+      it('should submit rgw with QAT Compression (Hardware)', () => {
+        formHelper.setValue('service_type', 'rgw');
+        formHelper.setValue(component.serviceForm.get('qat')?.get('compression'), 'hw');
+      });
+
+      it('should submit rgw with QAT Compression (Software)', () => {
+        formHelper.setValue('service_type', 'rgw');
+        formHelper.setValue(component.serviceForm.get('qat')?.get('compression'), 'sw');
       });
 
       it('should test .pem file', () => {
