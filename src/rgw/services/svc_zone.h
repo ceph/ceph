@@ -92,7 +92,7 @@ public:
   bool zone_is_writeable();
   bool zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const;
   bool zone_syncs_from(const RGWZone& source_zone) const;
-  bool get_redirect_zone_endpoint(std::string *endpoint);
+  bool get_redirect_zone_endpoint_url(std::string *url);
   bool sync_module_supports_writes() const { return writeable_zone; }
   bool sync_module_exports_data() const { return exports_data; }
 
