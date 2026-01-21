@@ -191,7 +191,34 @@ class SplitOp {
   Objecter &objecter;
   mini_flat_map<int, SubRead> sub_reads;
   CephContext *cct;
-  bool abort = false; // Last minute abort... We want to keep this to a minimum.
+  
+  /**
+   * Abort flag pattern for split operation creation:
+   *
+   * This flag implements a multi-stage validation and creation pattern that
+   * minimizes wasted work when a split operation cannot be completed:
+   *
+   * 1. Cheap validation tests run first in validate() and create() before
+   *    creating the split op object (e.g., checking pool flags, operation types)
+   *
+   * 2. If validation fails, return false immediately without creating split op
+   *
+   * 3. If validation passes, create the split op and begin initialization
+   *
+   * 4. During init_read() and init(), set abort=true if problems are detected
+   *    that prevent successful operation (e.g., missing OSDs, invalid state)
+   *
+   * 5. After initialization, check abort flag in create() and discard the
+   *    split op if set (return false to fall back to normal operation)
+   *
+   * 6. The complete() method only runs for successfully sent operations where
+   *    abort=false, ensuring cleanup only happens for valid split ops
+   *
+   * This pattern ensures expensive initialization work is only done when likely
+   * to succeed, while still catching edge cases that can only be detected during
+   * the creation process itself.
+   */
+  bool abort = false;
   int flags = 0;
   int reference_sub_read = -1;
   std::map<int, std::vector<int>> op_offset_map;
