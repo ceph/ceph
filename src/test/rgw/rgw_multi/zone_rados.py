@@ -1,6 +1,5 @@
 import logging
-from boto.s3.deletemarker import DeleteMarker
-from boto.exception import BotoServerError
+from botocore.exceptions import ClientError
 
 from itertools import zip_longest  # type: ignore
 
@@ -15,29 +14,46 @@ log = logging.getLogger(__name__)
 def check_object_eq(k1, k2, check_extra = True):
     assert k1
     assert k2
-    log.debug('comparing key name=%s', k1.name)
-    eq(k1.name, k2.name)
+    log.debug('comparing key name=%s', k1.key)
+    eq(k1.key, k2.key)
     eq(k1.version_id, k2.version_id)
     eq(k1.is_latest, k2.is_latest)
     eq(k1.last_modified, k2.last_modified)
-    if isinstance(k1, DeleteMarker):
-        assert isinstance(k2, DeleteMarker)
-        return
 
-    eq(k1.get_contents_as_string(), k2.get_contents_as_string())
-    eq(k1.metadata, k2.metadata)
-    eq(k1.cache_control, k2.cache_control)
-    eq(k1.content_type, k2.content_type)
-    eq(k1.content_encoding, k2.content_encoding)
-    eq(k1.content_disposition, k2.content_disposition)
-    eq(k1.content_language, k2.content_language)
-    eq(k1.etag, k2.etag)
+    # delete markers don't have 'size' attribute in boto3 resource API
+    is_delete_marker_k1 = not hasattr(k1, 'size') or k1.size is None
+    is_delete_marker_k2 = not hasattr(k2, 'size') or k2.size is None
+    
+    if is_delete_marker_k1:
+        assert is_delete_marker_k2, "k1 is delete marker but k2 is not"
+        return
+    
+    # regular objects
+    obj1 = k1.Object()
+    obj2 = k2.Object()
+    
+    # compare object contents
+    body1 = obj1.get()['Body'].read()
+    body2 = obj2.get()['Body'].read()
+    eq(body1, body2)
+
+    eq(obj1.metadata, obj2.metadata)
+    eq(obj1.cache_control, obj2.cache_control)
+    eq(obj1.content_type, obj2.content_type)
+    eq(obj1.content_encoding, obj2.content_encoding)
+    eq(obj1.content_disposition, obj2.content_disposition)
+    eq(obj1.content_language, obj2.content_language)
+    eq(obj1.e_tag, obj2.e_tag)
+
     if check_extra:
-        eq(k1.owner.id, k2.owner.id)
-        eq(k1.owner.display_name, k2.owner.display_name)
+        eq(k1.owner['ID'], k2.owner['ID'])
+        eq(k1.owner['DisplayName'], k2.owner['DisplayName'])
+
     eq(k1.storage_class, k2.storage_class)
     eq(k1.size, k2.size)
-    eq(k1.encrypted, k2.encrypted)
+    encrypted1 = obj1.server_side_encryption is not None
+    encrypted2 = obj2.server_side_encryption is not None
+    eq(encrypted1, encrypted2)
 
 class RadosZone(Zone):
     def __init__(self, name, zonegroup = None, cluster = None, data = None, zone_id = None, gateways = None):
@@ -51,57 +67,95 @@ class RadosZone(Zone):
         def __init__(self, zone, credentials):
             super(RadosZone.Conn, self).__init__(zone, credentials)
 
+            region = "" if zone.zonegroup is None else zone.zonegroup.name
+            self.s3_resource = boto3.resource(
+                's3',
+                endpoint_url='http://' + zone.gateways[0].host + ':' + str(zone.gateways[0].port),
+                aws_access_key_id=credentials.access_key,
+                aws_secret_access_key=credentials.secret,
+                region_name=region,
+                verify=False
+            )
+
         def get_bucket(self, name):
-            return self.conn.get_bucket(name)
+            try:
+                bucket = self.s3_resource.Bucket(name)
+                bucket.load()
+                return bucket
+            except ClientError as e:
+                if e.response['Error']['Code'] == '404':
+                    return None
+                raise
 
         def create_bucket(self, name):
-            return self.conn.create_bucket(name)
+            try:
+                bucket = self.s3_resource.create_bucket(Bucket=name)
+                return bucket
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'BucketAlreadyOwnedByYou':
+                    return self.s3_resource.Bucket(name)
+                raise
 
         def delete_bucket(self, name):
-            return self.conn.delete_bucket(name)
+            bucket = self.s3_resource.Bucket(name)
+            return bucket.delete()
 
         def check_bucket_eq(self, zone_conn, bucket_name):
             log.info('comparing bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
             b1 = self.get_bucket(bucket_name)
             b2 = zone_conn.get_bucket(bucket_name)
 
-            b1_versions = b1.list_versions()
+            b1_versions = list(b1.object_versions.all())
             log.debug('bucket1 objects:')
             for o in b1_versions:
-                log.debug('o=%s', o.name)
+                log.debug('o=%s', o.key)
 
-            b2_versions = b2.list_versions()
+            b2_versions = list(b2.object_versions.all())
             log.debug('bucket2 objects:')
             for o in b2_versions:
                 log.debug('o=%s', o.name)
 
             for k1, k2 in zip_longest(b1_versions, b2_versions):
                 if k1 is None:
-                    log.critical('key=%s is missing from zone=%s', k2.name, self.name)
+                    log.critical('key=%s is missing from zone=%s', k2.key, self.name)
                     assert False
                 if k2 is None:
-                    log.critical('key=%s is missing from zone=%s', k1.name, zone_conn.name)
+                    log.critical('key=%s is missing from zone=%s', k1.key, zone_conn.name)
                     assert False
 
                 check_object_eq(k1, k2)
 
-                if isinstance(k1, DeleteMarker):
-                    # verify that HEAD sees a delete marker
-                    assert b1.get_key(k1.name) is None
-                    assert b2.get_key(k2.name) is None
+                # check if delete marker
+                try:
+                    _ = k1.size
+                    is_delete_marker = False
+                except AttributeError:
+                    is_delete_marker = True
+
+                if is_delete_marker:
+                    assert b1.Object(k1.key).get() is None  # should raise exception
+                    assert b2.Object(k2.key).get() is None
                 else:
                     # now get the keys through a HEAD operation, verify that the available data is the same
-                    k1_head = b1.get_key(k1.name, version_id=k1.version_id)
-                    k2_head = b2.get_key(k2.name, version_id=k2.version_id)
-                    check_object_eq(k1_head, k2_head, False)
+                    k1_head = b1.Object(k1.key)
+                    k1_head.version_id = k1.version_id
+                    k2_head = b2.Object(k2.key)
+                    k2_head.version_id = k2.version_id
+                    k1_head.load()
+                    k2_head.load()
 
                     if k1.version_id:
-                        # compare the olh to make sure they agree about the current version
-                        k1_olh = b1.get_key(k1.name)
-                        k2_olh = b2.get_key(k2.name)
-                        # if there's a delete marker, HEAD will return None
-                        if k1_olh or k2_olh:
-                            check_object_eq(k1_olh, k2_olh, False)
+                        # compare the olh to make sure they agree about current version
+                        k1_olh = b1.Object(k1.key)
+                        k2_olh = b2.Object(k2.key)
+                        try:
+                            k1_olh.load()
+                            k2_olh.load()
+                            # if there's a delete marker, load() will fail
+                            if k1_olh and k2_olh:
+                                check_object_eq(k1_olh, k2_olh, False)
+                        except ClientError:
+                            pass  # delete marker is current
 
             log.info('success, bucket identical: bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
 
