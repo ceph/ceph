@@ -224,6 +224,15 @@ sc::result Session::react(const IntervalChanged&)
   return transit<NotActive>();
 }
 
+sc::result Session::react(const OperatorAbort&)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "Session::react(const OperatorAbort&)" << dendl;
+  ceph_assert(m_reservations);
+  m_abort_reason = delay_cause_t::operator_abort;
+  return transit<PrimaryIdle>();
+}
+
 std::optional<pg_scrubbing_status_t> Session::get_reservation_status() const
 {
   if (!m_reservations) {
