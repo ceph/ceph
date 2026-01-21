@@ -4838,6 +4838,19 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluestore_track_runtime_frag
+  type: bool
+  level: advanced
+  desc: Enable tracking of runtime object fragmentation during reads.
+  long_desc: When enabled, BlueStore measures runtime object fragmentation
+    by counting how many physical extents are accessed for a read operation.
+    Higher values indicate more fragmented object data and potential
+    performance impact. The collected metric reflects runtime access patterns
+    rather than static object layout.
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
 # Specifies minimum expected amount of saved allocation units
 # per single blob to enable compressed blobs garbage collection
 - name: bluestore_gc_enable_blob_threshold
