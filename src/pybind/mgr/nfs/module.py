@@ -10,7 +10,7 @@ from orchestrator.module import IngressType
 from mgr_util import CephFSEarmarkResolver
 
 from .export import ExportMgr, AppliedExportResults
-from .cluster import NFSCluster
+from .cluster import NFSCluster, ClusterQosAction
 from .utils import available_clusters
 from .qos_conf import QOSType, QOSBandwidthControl, UserQoSType, QOSOpsControl
 
@@ -331,10 +331,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_qos_ops(self,
                                  cluster_id: str,
-                                 action: str,
+                                 action: ClusterQosAction,
                                  msg_interval: int = 0) -> None:
         """Enable or disable cluster-level QoS for a given NFS cluster"""
-        return self.nfs.global_cluster_qos_action(cluster_id, action, msg_interval)
+        return self.nfs.global_cluster_qos_action(cluster_id, action.name, msg_interval)
 
     @CLICommand('nfs cluster qos get', perm='r')
     @object_format.Responder()

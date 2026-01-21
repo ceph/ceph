@@ -3,6 +3,7 @@ import logging
 import re
 import socket
 from typing import cast, Dict, List, Any, Union, Optional, TYPE_CHECKING
+from enum import Enum
 
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
@@ -37,6 +38,11 @@ if TYPE_CHECKING:
 
 
 log = logging.getLogger(__name__)
+
+
+class ClusterQosAction(Enum):
+    enable = 'Enable'
+    disable = 'Disable'
 
 
 def resolve_ip(hostname: str) -> str:
@@ -75,6 +81,7 @@ def config_cluster_qos_from_dict(
         raise NFSInvalidOperation('qos_type is not specified in qos dict')
     qos_type = QOSType[str(qos_type)]
     enable_cluster_qos = qos_dict.get(QOSParams.enable_cluster_qos.value)
+    clust_qos_msg_interval = int(qos_dict.get(QOSParams.clust_qos_msg_interval.value, 0))
     assert isinstance(enable_cluster_qos, (bool, type(None)))
     enable_bw_ctrl = qos_dict.get(QOSParams.enable_bw_ctrl.value)
     combined_bw_ctrl = qos_dict.get(QOSParams.combined_bw_ctrl.value)
@@ -106,6 +113,7 @@ def config_cluster_qos_from_dict(
         qos_obj=None,
         enable_qos=True,
         enable_cluster_qos=enable_cluster_qos,
+        clust_qos_msg_interval=clust_qos_msg_interval,
         qos_type=qos_type,
         bw_obj=bw_obj,
         ops_obj=ops_obj,
@@ -659,15 +667,11 @@ class NFSCluster:
         msg_interval: int = 0
     ) -> None:
         try:
-            if action not in ['enable', 'disable']:
-                raise ValueError(f"Invalid action '{action}'. Must be 'enable' or 'disable'")
-
             qos_obj = self.get_cluster_qos_config(cluster_id)
             if not qos_obj:
-                log.error(f'No existing QoS configuration found for cluster {cluster_id}. '
-                          f'Can not {action} cluster-qos')
-                raise Exception(f'No existing QoS configuration found for cluster {cluster_id}. '
-                                f'Can not {action} cluster-qos')
+                err_msg = f'No existing QoS configuration found for cluster {cluster_id}. Can not {action} cluster-qos'
+                log.error(err_msg)
+                raise Exception(err_msg)
 
             clust_qos_msg_interval = 0
             if action == 'enable':

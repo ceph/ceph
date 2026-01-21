@@ -65,10 +65,12 @@ def validate_clust_qos_msg_interval(msg_interval: int = 0) -> int:
     max_interval = 300  # ms
 
     if not msg_interval:
+        # msg_interval of 0 is treated as unset
         return 0
     if msg_interval < min_interval or msg_interval > max_interval:
         raise Exception(
-            f'Provided message interval is not in range, Please enter a value between {min_interval}ms and {max_interval}ms.'
+            f'Provided message interval {msg_interval} is not in range, Please '
+            f'enter a value between {min_interval}ms and {max_interval}ms.'
         )
     return msg_interval
 
