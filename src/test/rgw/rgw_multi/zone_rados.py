@@ -1,4 +1,5 @@
 import logging
+import boto3
 from botocore.exceptions import ClientError
 
 from itertools import zip_longest  # type: ignore
@@ -67,16 +68,6 @@ class RadosZone(Zone):
         def __init__(self, zone, credentials):
             super(RadosZone.Conn, self).__init__(zone, credentials)
 
-            region = "" if zone.zonegroup is None else zone.zonegroup.name
-            self.s3_resource = boto3.resource(
-                's3',
-                endpoint_url='http://' + zone.gateways[0].host + ':' + str(zone.gateways[0].port),
-                aws_access_key_id=credentials.access_key,
-                aws_secret_access_key=credentials.secret,
-                region_name=region,
-                verify=False
-            )
-
         def get_bucket(self, name):
             try:
                 bucket = self.s3_resource.Bucket(name)
@@ -92,7 +83,7 @@ class RadosZone(Zone):
                 bucket = self.s3_resource.create_bucket(Bucket=name)
                 return bucket
             except ClientError as e:
-                if e.response['Error']['Code'] == 'BucketAlreadyOwnedByYou':
+                if e.response['Error']['Code'] == '409':
                     return self.s3_resource.Bucket(name)
                 raise
 
@@ -194,7 +185,7 @@ class RadosZone(Zone):
         def has_role(self, role_name):
             try:
                 self.get_role(role_name)
-            except BotoServerError:
+            except ClientError:
                 return False
             return True
 

@@ -3,7 +3,7 @@ from io import StringIO
 
 import json
 
-from .conn import get_gateway_connection, get_gateway_iam_connection, get_gateway_secure_connection, get_gateway_sns_client, get_gateway_sts_connection, get_gateway_temp_s3_client
+from .conn import get_gateway_connection, get_gateway_s3_resource, get_gateway_iam_connection, get_gateway_secure_connection, get_gateway_sns_client, get_gateway_sts_connection, get_gateway_temp_s3_client
 
 class Cluster:
     """ interface to run commands against a distinct ceph cluster """
@@ -25,6 +25,8 @@ class Gateway:
         self.zone = zone
         self.connection = None
         self.secure_connection = None
+        self.s3_client = None
+        self.s3_resource = None
         self.ssl_port = ssl_port
         self.iam_connection = None
         self.sns_client = None
@@ -190,7 +192,8 @@ class ZoneConn(object):
         if self.zone.gateways is not None:
             region = "" if self.zone.zonegroup is None else self.zone.zonegroup.name
             self.iam_conn = get_gateway_iam_connection(self.zone.gateways[0], self.credentials, region)
-            self.conn = get_gateway_connection(self.zone.gateways[0], self.credentials, region)
+            self.s3_client = get_gateway_connection(self.zone.gateways[0], self.credentials, region)
+            self.s3_resource = get_gateway_s3_resource(self.zone.gateways[0], self.credentials, region)
             self.secure_conn = get_gateway_connection(self.zone.gateways[0], self.credentials, region)
             self.sns_client = get_gateway_sns_client(self.zone.gateways[0], self.credentials, region)
             self.temp_s3_client = None
