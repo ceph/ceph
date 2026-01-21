@@ -466,7 +466,7 @@ std::pair<bool, bool> is_single_chunk(const pg_pool_t *pi, uint64_t offset, uint
 
   uint64_t stripe_width = pi->get_stripe_width();
 
-  // k is a minimum of 2
+  // k is a minimum of 2 - short cut with minimal processing.
   if (len > stripe_width / 2) {
     return {false, false};
   }
