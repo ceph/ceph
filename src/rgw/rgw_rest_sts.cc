@@ -311,7 +311,7 @@ WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, o
   }
   openidc_wellknown_url.append("/.well-known/openid-configuration");
 
-  RGWHTTPTransceiver openidc_req(cct, "GET", openidc_wellknown_url, &openidc_resp);
+  RGWHTTPTransceiver openidc_req(cct, "GET", RGWEndpoint{openidc_wellknown_url}, &openidc_resp);
 
   //Headers
   openidc_req.append_header("Content-Type", "application/x-www-form-urlencoded");
@@ -619,7 +619,7 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
 
     // Get certificate
     bufferlist cert_resp;
-    RGWHTTPTransceiver cert_req(cct, "GET", cert_url, &cert_resp);
+    RGWHTTPTransceiver cert_req(cct, "GET", RGWEndpoint{cert_url}, &cert_resp);
     //Headers
     cert_req.append_header("Content-Type", "application/x-www-form-urlencoded");
 

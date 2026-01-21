@@ -168,7 +168,7 @@ int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
   }
 
   bufferlist token_bl;
-  RGWGetKeystoneAdminToken token_req(dpp->get_cct(), "POST", "", &token_bl);
+  RGWGetKeystoneAdminToken token_req(dpp->get_cct(), "POST", RGWEndpoint{}, &token_bl);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
@@ -230,7 +230,7 @@ int Service::get_keystone_barbican_token(const DoutPrefixProvider *dpp,
   }
 
   bufferlist token_bl;
-  RGWKeystoneHTTPTransceiver token_req(cct, "POST", "", &token_bl);
+  RGWKeystoneHTTPTransceiver token_req(cct, "POST", RGWEndpoint{}, &token_bl);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 

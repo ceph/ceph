@@ -671,7 +671,7 @@ int RGWSI_Zone::select_bucket_placement(const DoutPrefixProvider *dpp, const RGW
                                     pselected_rule, rule_info, y);
 }
 
-bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)
+bool RGWSI_Zone::get_redirect_zone_endpoint(string *url)
 {
   if (zone_public_config->redirect_zone.empty()) {
     return false;
@@ -685,11 +685,13 @@ bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)
 
   RGWRESTConn *conn = iter->second;
 
-  int ret = conn->get_url(*endpoint);
+  RGWEndpoint ep{*url};
+  int ret = conn->get_endpoint(ep);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: redirect zone, conn->get_endpoint() returned ret=" << ret << dendl;
     return false;
   }
+  *url = ep.get_url();
 
   return true;
 }

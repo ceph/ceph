@@ -1994,7 +1994,7 @@ static int send_to_url(const string& url,
   key.key = secret;
 
   param_vec_t params;
-  RGWRESTSimpleRequest req(g_ceph_context, info.method, url, NULL, &params, opt_region);
+  RGWRESTSimpleRequest req(g_ceph_context, info.method, RGWEndpoint{url}, NULL, &params, opt_region);
 
   bufferlist response;
   auto result = req.forward_request(dpp(), key, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
