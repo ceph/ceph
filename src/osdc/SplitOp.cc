@@ -112,7 +112,9 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
   uint64_t start_chunk = offset / chunk_size;
   // This calculation is wrong for length = 0, but such IOs should not have
-  // reached here!
+  // reached here! Zero-length reads are rejected earlier in the validate()
+  // function (see lines 551-556), which returns {false, false} for any
+  // operation with length == 0, preventing it from being split and processed.
   ceph_assert( op.op.extent.length != 0);
   // No overflow: length >= 1 (asserted above), so offset + length - 1 <= offset + length.
   // Since offset and length are uint64_t, their sum cannot exceed UINT64_MAX in practice
