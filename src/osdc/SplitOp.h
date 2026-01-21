@@ -180,11 +180,11 @@ class SplitOp {
     }
   };
 
-  int assemble_rc();
-  virtual std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) = 0;
-  virtual void assemble_buffer_read(bufferlist &bl_out, int ops_index) = 0;
+  int assemble_rc() const;
+  virtual std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) const = 0;
+  virtual void assemble_buffer_read(bufferlist &bl_out, int ops_index) const = 0;
   virtual void init_read(OSDOp &op, bool sparse, int ops_index) = 0;
-  virtual bool version_mismatch() = 0;
+  virtual bool version_mismatch() const = 0;
   void init(OSDOp &op, int ops_index);
 
   Objecter::Op *orig_op;
@@ -209,10 +209,10 @@ class SplitOp {
 class ECSplitOp : public SplitOp{
  public:
   using SplitOp::SplitOp;
-  std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) override;
-  void assemble_buffer_read(bufferlist &bl_out, int ops_index) override;
+  std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) const override;
+  void assemble_buffer_read(bufferlist &bl_out, int ops_index) const override;
   void init_read(OSDOp &op, bool sparse, int ops_index) override;
-  bool version_mismatch() override;
+  bool version_mismatch() const override;
   ECSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count);
   ~ECSplitOp() {
     complete();
@@ -222,10 +222,10 @@ class ECSplitOp : public SplitOp{
 class ReplicaSplitOp : public SplitOp {
  public:
   using SplitOp::SplitOp;
-  std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) override;
-  void assemble_buffer_read(bufferlist &bl_out, int ops_index) override;
+  std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) const override;
+  void assemble_buffer_read(bufferlist &bl_out, int ops_index) const override;
   void init_read(OSDOp &op, bool sparse, int ops_index) override;
-  bool version_mismatch() override;
+  bool version_mismatch() const override;
   ReplicaSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int pool_size) :
     SplitOp(op, objecter, cct, pool_size) {}
   ~ReplicaSplitOp() {
