@@ -289,17 +289,17 @@ bool ECSplitOp::version_mismatch() {
 
     shard_id_t shard(shard_index);
     if (!ref_vers.contains(shard)) {
-      ldout(cct, 20) << __func__ << ": "
+      ldout(cct, DBG_LVL) << __func__ << ": "
          << "Reference shard version missing, failing split op." << dendl;
       return true;
     }
     if (!shard_vers.contains(shard)) {
-      ldout(cct, 20) << __func__ << ": "
+      ldout(cct, DBG_LVL) << __func__ << ": "
          << "Shard version missing, failing split op." << dendl;
       return true;
     }
     if (ref_vers.at(shard) != shard_vers.at(shard)) {
-      ldout(cct, 20) << __func__ << ": "
+      ldout(cct, DBG_LVL) << __func__ << ": "
                << "Primary version (" << ref_vers.at(shard) << ") != "
                << "shard version (" << shard_vers.at(shard) <<") "
                << "for shard " << shard << dendl;
@@ -323,7 +323,7 @@ bool ReplicaSplitOp::version_mismatch() {
     decode(shard_vers, sub_read.internal_version->bl);
 
     if (!shard_vers.contains(shard)) {
-      ldout(cct, 20) << __func__ << ": "
+      ldout(cct, DBG_LVL) << __func__ << ": "
          << "Shard version missing, failing split op." << dendl;
       return true;
     }
@@ -342,7 +342,7 @@ void SplitOp::complete() {
   if (abort) {
     return;
   }
-  ldout(cct, 20) << __func__ << " entry this=" << this << dendl;
+  ldout(cct, DBG_LVL) << __func__ << " entry this=" << this << dendl;
   boost::system::error_code handler_error;
 
   int rc = assemble_rc();
