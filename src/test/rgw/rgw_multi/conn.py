@@ -1,9 +1,7 @@
-import boto
-import boto.s3.connection
+
 import boto.iam.connection
 import boto.sts.connection
 import boto3
-from boto.regioninfo import RegionInfo
 
 def get_gateway_connection(gateway, credentials, region):
     """ connect to the given gateway """
