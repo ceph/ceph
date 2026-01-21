@@ -1327,19 +1327,6 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
-  if (prefix == "config set") {
-    std::string key;
-    std::string val;
-    cmd_getval(cmdctx->cmdmap, "key", key);
-    cmd_getval(cmdctx->cmdmap, "value", val);
-    r = cct->_conf.set_val(key, val, &ss);
-    if (r == 0) {
-      cct->_conf.apply_changes(nullptr);
-    }
-    cmdctx->reply(0, ss);
-    return true;
-  }
-
   // -----------
   // PG commands
 
