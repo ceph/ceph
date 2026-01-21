@@ -5421,7 +5421,7 @@ bool RadosZone::is_writeable()
 bool RadosZone::get_redirect_endpoint(std::string* endpoint)
 {
   if (local_zone)
-    return store->svc()->zone->get_redirect_zone_endpoint(endpoint);
+    return store->svc()->zone->get_redirect_zone_endpoint_url(endpoint);
 
   endpoint = &rgw_zone.redirect_zone;
   return true;

@@ -76,7 +76,7 @@ TEST(HTTPManager, ReadTruncated)
   }};
   const auto url = std::string{"http://127.0.0.1:"} + std::to_string(acceptor.local_endpoint().port());
 
-  RGWHTTPClient client{g_ceph_context, "GET", url};
+  RGWHTTPClient client{g_ceph_context, "GET", RGWEndpoint{url}};
   const auto dpp = NoDoutPrefix{g_ceph_context, ceph_subsys_rgw};
   EXPECT_EQ(-EAGAIN, RGWHTTP::process(&dpp, &client, null_yield));
 
@@ -101,7 +101,7 @@ TEST(HTTPManager, Head)
   }};
   const auto url = std::string{"http://127.0.0.1:"} + std::to_string(acceptor.local_endpoint().port());
 
-  RGWHTTPClient client{g_ceph_context, "HEAD", url};
+  RGWHTTPClient client{g_ceph_context, "HEAD", RGWEndpoint{url}};
   const auto dpp = NoDoutPrefix{g_ceph_context, ceph_subsys_rgw};
   EXPECT_EQ(0, RGWHTTP::process(&dpp, &client, null_yield));
 
@@ -128,7 +128,7 @@ TEST(HTTPManager, SignalThread)
   constexpr size_t num_requests = max_requests + 1;
 
   for (size_t i = 0; i < num_requests; i++) {
-    RGWHTTPClient client{cct, "PUT", "http://127.0.0.1:80"};
+    RGWHTTPClient client{cct, "PUT", RGWEndpoint{"http://127.0.0.1:80"}};
     http.add_request(&client);
   }
 }
