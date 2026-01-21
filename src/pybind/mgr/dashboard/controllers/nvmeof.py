@@ -310,6 +310,14 @@ else:
                 )
             )
 
+        @NvmeofCLICommand("nvmeof get_subsystems", model.GetSubsystems)
+        @convert_to_model(model.GetSubsystems)
+        @handle_nvmeof_error
+        def get_subsystems(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+            return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.get_subsystems(
+                NVMeoFClient.pb2.get_subsystems_req()
+            )
+
     @APIRouter("/nvmeof/subsystem/{nqn}/listener", Scope.NVME_OF)
     @APIDoc("NVMe-oF Subsystem Listener Management API", "NVMe-oF Subsystem Listener")
     class NVMeoFListener(RESTController):
