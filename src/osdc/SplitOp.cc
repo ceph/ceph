@@ -104,8 +104,8 @@ void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
 }
 
 void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
-  auto &t = orig_op->target;
-  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
+  auto &target = orig_op->target;
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   uint64_t offset = op.op.extent.offset;
   uint64_t length = op.op.extent.length;
   uint64_t data_chunk_count = pi->nonprimary_shards.size() + 1;
@@ -143,8 +143,8 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
     shard_id_t shard(pi->get_shard(raw_shard));
     int shard_index = (int)shard;
 
-    int direct_osd = t.acting[shard_index];
-    if (t.actual_pgid.shard == shard) {
+    int direct_osd = target.acting[shard_index];
+    if (target.actual_pgid.shard == shard) {
       reference_sub_read = shard_index;
     }
     if (!objecter.osdmap->exists(direct_osd)) {
@@ -167,7 +167,7 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   if (primary_required && reference_sub_read == -1) {
     // _calc_target will have picked the primary by default on EC. The "primary"
     // on replica is an arbitrary shard.
-    reference_sub_read = (int)t.actual_pgid.shard;
+    reference_sub_read = (int)target.actual_pgid.shard;
     sub_reads.emplace(reference_sub_read, orig_op->ops.size() + 1);
   }
   
@@ -202,10 +202,10 @@ void ReplicaSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) con
 
 void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 
-  auto &t = orig_op->target;
+  auto &target = orig_op->target;
 
   std::set<int> osds;
-  for (int direct_osd : t.acting) {
+  for (int direct_osd : target.acting) {
     if (objecter.osdmap->exists(direct_osd)) {
       osds.insert(direct_osd);
     }
@@ -591,13 +591,13 @@ std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
 }
 
 void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct) {
-  auto &t = op->target;
+  auto &target = op->target;
   ldout(cct, DBG_LVL) << str
-    << " pool=" << t.base_oloc.pool
-    << " pgid=" << t.actual_pgid
-    << " osd=" << t.osd
-    << " force_osd=" << ((t.flags & CEPH_OSD_FLAG_FORCE_OSD) != 0)
-    << " balance_reads=" << ((t.flags & CEPH_OSD_FLAG_BALANCE_READS) != 0)
+    << " pool=" << target.base_oloc.pool
+    << " pgid=" << target.actual_pgid
+    << " osd=" << target.osd
+    << " force_osd=" << ((target.flags & CEPH_OSD_FLAG_FORCE_OSD) != 0)
+    << " balance_reads=" << ((target.flags & CEPH_OSD_FLAG_BALANCE_READS) != 0)
     << " ops.size()=" << op->ops.size()
     << " needs_version=" << (op->objver?"true":"false");
 
@@ -618,8 +618,8 @@ void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct
 }
 
 void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContext *cct) {
-  auto &t = op->target;
-  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
+  auto &target = op->target;
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
 
   objecter._calc_target(&op->target, op);
   uint64_t data_chunk_count = pi->nonprimary_shards.size() + 1;
@@ -635,8 +635,8 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContex
       if (objecter.osdmap->exists(op->target.acting[acting_index])) {
         op->target.flags |= CEPH_OSD_FLAG_EC_DIRECT_READ;
         op->target.flags |= CEPH_OSD_FLAG_FORCE_OSD;
-        t.osd = t.acting[acting_index];
-        t.actual_pgid.reset_shard(shard);
+        target.osd = target.acting[acting_index];
+        target.actual_pgid.reset_shard(shard);
       }
       break;
     }
@@ -682,8 +682,8 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContex
 bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   shunique_lock<ceph::shared_mutex>& sul, CephContext *cct) {
 
-  auto &t = op->target;
-  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
+  auto &target = op->target;
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
 
   // STAGE 1: Cheap validation tests run first before creating split op
   if (!pi) {
@@ -727,7 +727,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   }
 
   // Populate the target, to extract the acting set from it.
-  t.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
+  target.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
   objecter._calc_target(&op->target, op);
 
   // STAGE 4: Initialize sub-operations (may set abort if problems detected)
@@ -772,11 +772,11 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     }
 
     auto sub_op = objecter.prepare_read_op(
-      t.base_oid, t.base_oloc, split_read->sub_reads.at(index).rd, op->snapid,
+      target.base_oid, target.base_oloc, split_read->sub_reads.at(index).rd, op->snapid,
       nullptr, split_read->flags, -1, fin, objver);
 
     auto &st = sub_op->target;
-    st = t; // Target can start off in same state as parent.
+    st = target; // Target can start off in same state as parent.
     st.flags |= CEPH_OSD_FLAG_FORCE_OSD;
     st.flags |= CEPH_OSD_FLAG_FAIL_ON_EAGAIN;
     if (pi->is_erasure()) {
