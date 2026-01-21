@@ -1,19 +1,29 @@
-
-import boto.iam.connection
-import boto.sts.connection
 import boto3
 
 def get_gateway_connection(gateway, credentials, region):
     """ connect to the given gateway """
     # Always create a new connection to the gateway to ensure each set of credentials gets its own connection
-    conn = boto3.client('s3',
+    s3_client = boto3.client('s3',
                         endpoint_url='http://' + gateway.host + ':' + str(gateway.port),
                         aws_access_key_id=credentials.access_key,
                         aws_secret_access_key=credentials.secret,
                         region_name=region)
-    if gateway.connection is None:
-        gateway.connection = conn
-    return conn
+    if gateway.s3_client is None:
+        gateway.s3_client = s3_client
+    return s3_client
+
+def get_gateway_s3_resource(gateway, credentials, region):
+    """ connect to boto3 s3 resource api of the given gateway """
+    print(f"Credentials: {credentials.access_key}")
+    s3_resource = boto3.resource('s3',
+                            endpoint_url='http://' + gateway.host + ':' + str(gateway.port),
+                            aws_access_key_id=credentials.access_key,
+                            aws_secret_access_key=credentials.secret,
+                            region_name=region,
+        )
+    if gateway.s3_resource is None:
+        gateway.s3_resource = s3_resource
+    return s3_resource
 
 def get_gateway_secure_connection(gateway, credentials, region):
     """ secure connect to the given gateway """
