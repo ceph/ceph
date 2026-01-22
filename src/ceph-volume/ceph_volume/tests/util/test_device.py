@@ -306,7 +306,7 @@ class TestDevice(object):
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_readonly_device(self, fake_call, device_info):
-        data = {"/dev/cdrom": {"ro": "1"}}
+        data = {"/dev/cdrom": {"ro": "1", "partitions": {}}}
         lsblk = {"TYPE": "disk", "NAME": "cdrom"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/cdrom")
