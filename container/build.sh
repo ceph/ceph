@@ -163,10 +163,16 @@ repopath=${CONTAINER_REPO_HOSTNAME}/${CONTAINER_REPO_ORGANIZATION}/${CONTAINER_R
 if [[ ${CI_CONTAINER} == "true" ]] ; then
     # ceph-ci conventions for remote tags:
     # requires ARCH, BRANCH, CEPH_SHA1, FLAVOR
-    full_repo_tag=${repopath}:${BRANCH}-${fromtag}-${ARCH}-devel
-    branch_repo_tag=${repopath}:${BRANCH}
-    sha1_repo_tag=${repopath}:${CEPH_SHA1}
-
+    if [[ ${FLAVOR} == "debug" ]]; then
+        # add -debug suffix to flavor debug builds
+        full_repo_tag=${repopath}:${BRANCH}-${fromtag}-${ARCH}-devel-${FLAVOR}
+        branch_repo_tag=${repopath}:${BRANCH}-${FLAVOR}
+        sha1_repo_tag=${repopath}:${CEPH_SHA1}-${FLAVOR}
+    else
+        full_repo_tag=${repopath}:${BRANCH}-${fromtag}-${ARCH}-devel
+        branch_repo_tag=${repopath}:${BRANCH}
+        sha1_repo_tag=${repopath}:${CEPH_SHA1}
+    fi
     # while we have more than just centos9 containers:
     # anything that's not gets suffixed with its fromtag
     # for the branch and sha1 tags (for example, <branch>-rocky-10).
