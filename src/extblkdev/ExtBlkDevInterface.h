@@ -100,6 +100,18 @@ namespace ceph {
      * @return 0 on success or a negative errno on error.
      */
     virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) = 0;
+
+    /**
+     * Retrieve the identification string of the plugin.
+     * This can be used to verify that proper plugin is loaded.
+     * It is best if id is printable string.
+     *
+     * Return 0 on success or a negative errno on error.
+     *
+     * @param [out] id_str identification of current plugin
+     * @return 0 on success or a negative errno on error.
+     */
+    virtual int get_plugin_id(std::string& id_str) = 0;
   };
 
   typedef std::shared_ptr<ExtBlkDevInterface> ExtBlkDevInterfaceRef;
