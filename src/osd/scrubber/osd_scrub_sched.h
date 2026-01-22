@@ -198,7 +198,7 @@ class ScrubQueue {
   std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
 
  public:
-  void dump_scrubs(ceph::Formatter* f) const;
+  void dump_scrubs(ceph::Formatter& f) const;
 
   void for_each_job(
       std::function<void(const Scrub::SchedEntry&)> fn,

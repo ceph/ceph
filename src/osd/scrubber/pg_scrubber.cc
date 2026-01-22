@@ -713,7 +713,7 @@ void asok_response_section(
   Formatter::ObjectSection asok_resp_section{*f, "result"sv};
   f->dump_bool("deep", (scrub_level == scrub_level_t::deep));
   f->dump_bool("must", !is_periodic);
-  f->dump_stream("stamp") << stamp;
+  f->dump_named_fmt("stamp", "{}", stamp);
 }
 }  // namespace
 
@@ -2428,8 +2428,7 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
 
 
 ///\todo modify the fields dumped here to match the new scrub-job structure
-void PgScrubber::dump_scrubber(
-    ceph::Formatter* f) const
+void PgScrubber::dump_scrubber(ceph::Formatter* f) const
 {
   Formatter::ObjectSection scrubber_section{*f, "scrubber"sv};
 
@@ -2442,15 +2441,15 @@ void PgScrubber::dump_scrubber(
     const auto& earliest = m_scrub_job->earliest_target(now_is);
     f->dump_bool("must_scrub", earliest.is_high_priority());
     f->dump_bool(
-	"must_deep_scrub", m_scrub_job->deep_target.is_high_priority());
+        "must_deep_scrub", m_scrub_job->deep_target.is_high_priority());
     // the following data item is deprecated. Will be replaced by a set
     // of reported attributes that match the updated scrub-job state.
     f->dump_bool("must_repair", earliest.urgency() == urgency_t::must_repair);
-
-    f->dump_stream("scrub_reg_stamp")
-	<< earliest.sched_info.schedule.not_before;
+    f->dump_named_fmt(
+        "sched_time", "{}", earliest.sched_info.schedule.not_before);
     auto sched_state = m_scrub_job->scheduling_state(now_is);
     f->dump_string("schedule", sched_state);
+    f->dump_named_fmt("urgency", "{}", earliest.urgency());
   }
 
   if (m_publish_sessions) {
@@ -2458,16 +2457,44 @@ void PgScrubber::dump_scrubber(
     // The 'test_sequence' is an ever-increasing number used by tests.
     f->dump_int("test_sequence", m_sessions_counter);
   }
+
+  // always (also) dump the two targets (as some tests expect their specific
+  // format)
+  const auto query_time = ceph_clock_now();
+  {
+    Formatter::ObjectSection shallow_section{*f, "shallow-target"sv};
+    m_scrub_job->shallow_target.queued_element().dump(*f);
+    f->dump_bool(
+        "eligible",
+        m_scrub_job->shallow_target.queued_element().schedule.not_before <=
+            query_time);
+    f->dump_bool("queued", m_scrub_job->shallow_target.queued);
+    f->dump_bool(
+        "active",
+        (m_active_target && m_active_target->is_shallow()) ? true : false);
+  }
+  {
+    Formatter::ObjectSection deep_section{*f, "deep-target"sv};
+    m_scrub_job->deep_target.queued_element().dump(*f);
+    f->dump_bool(
+        "eligible",
+        m_scrub_job->deep_target.queued_element().schedule.not_before <=
+            query_time);
+    f->dump_bool("queued", m_scrub_job->deep_target.queued);
+    f->dump_bool(
+        "active",
+        (m_active_target && m_active_target->is_deep()) ? true : false);
+  }
 }
 
 
 void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
 {
-  f->dump_stream("epoch_start") << m_interval_start;
-  f->dump_stream("start") << m_start;
-  f->dump_stream("end") << m_end;
-  f->dump_stream("max_end") << m_max_end;
-  f->dump_stream("subset_last_update") << m_subset_last_update;
+  f->dump_named_fmt("epoch_start", "{}", m_interval_start);
+  f->dump_named_fmt("start", "{}", m_start);
+  f->dump_named_fmt("end", "{}", m_end);
+  f->dump_named_fmt("max_end", "{}", m_max_end);
+  f->dump_named_fmt("subset_last_update", "{}", m_subset_last_update);
   f->dump_bool("deep", m_active_target->is_deep());
 
   // dump the scrub-type flags
@@ -2482,7 +2509,9 @@ void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
   f->dump_int("fixed", m_fixed_count);
   f->with_array_section(
       "waiting_on_whom"sv, m_maps_status.get_awaited(),
-      [](Formatter& f, const pg_shard_t& sh) { f.dump_stream("shard") << sh; });
+      [](Formatter& f, const pg_shard_t& sh) {
+        f.dump_named_fmt("shard", "{}", sh);
+      });
 
   if (m_scrub_job->blocked) {
     f->dump_string("schedule", "blocked");
@@ -2494,11 +2523,13 @@ void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
     f->dump_bool("is_reserving_replicas", true);
     f->dump_int("osd_to_respond", maybe_register->m_osd_to_respond);
     f->dump_int("duration_seconds", maybe_register->m_duration_seconds);
-    f->dump_int("requested_in_order", maybe_register->m_ordinal_of_requested_replica);
+    f->dump_int(
+        "requested_in_order", maybe_register->m_ordinal_of_requested_replica);
     f->dump_int("num_to_reserve", maybe_register->m_num_to_reserve);
   } else {
     f->dump_bool("is_reserving_replicas", false);
   }
+  f->dump_named_fmt("urgency", "{}", m_active_target->urgency());
 }
 
 pg_scrubbing_status_t PgScrubber::get_schedule() const
@@ -2609,16 +2640,18 @@ void PgScrubber::handle_query_state(ceph::Formatter* f)
   dout(15) << __func__ << dendl;
 
   Formatter::ObjectSection scrub_section{*f, "scrub"sv};
-  f->dump_stream("scrubber.epoch_start") << m_interval_start;
+  f->dump_named_fmt("scrubber.epoch_start", "{}", m_interval_start);
   f->dump_bool("scrubber.active", m_active);
-  f->dump_stream("scrubber.start") << m_start;
-  f->dump_stream("scrubber.end") << m_end;
-  f->dump_stream("scrubber.max_end") << m_max_end;
-  f->dump_stream("scrubber.subset_last_update") << m_subset_last_update;
+  f->dump_named_fmt("scrubber.start", "{}", m_start);
+  f->dump_named_fmt("scrubber.end", "{}", m_end);
+  f->dump_named_fmt("scrubber.max_end", "{}", m_max_end);
+  f->dump_named_fmt("scrubber.subset_last_update", "{}", m_subset_last_update);
   f->dump_bool("scrubber.deep", m_is_deep);
   f->with_array_section(
       "waiting_on_whom"sv, m_maps_status.get_awaited(),
-      [](Formatter& f, const pg_shard_t& sh) { f.dump_stream("shard") << sh; });
+      [](Formatter& f, const pg_shard_t& sh) {
+        f.dump_named_fmt("shard", "{}", sh);
+      });
   f->dump_string("comment", "DEPRECATED - may be removed in the next release");
 }
 

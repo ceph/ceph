@@ -10,6 +10,10 @@
 #include "osd/osd_types.h"
 #include "osd/scrubber_common.h"
 
+namespace ceph {
+class Formatter;
+}  // namespace ceph
+
 namespace Scrub {
 
 /**
@@ -84,6 +88,8 @@ struct SchedEntry {
   /// either 'none', or the reason for the latest failure/delay (for
   /// logging/reporting purposes)
   delay_cause_t last_issue{delay_cause_t::none};
+
+  void dump(ceph::Formatter& f) const;
 };
 
 
