@@ -130,6 +130,7 @@ private:
 
   bool m_check_creating_snaps = true; // check and identify creating snaps just after restart
   bool m_resync_requested = false;
+  std::set<std::string> m_pruning_group_snaps_inflight;
 
   bool is_replay_interrupted(std::unique_lock<ceph::mutex>* locker);
 
@@ -252,6 +253,8 @@ private:
   void prune_user_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void prune_mirror_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void prune_group_snapshots(std::unique_lock<ceph::mutex>* locker);
+  void remove_group_snapshot(const cls::rbd::GroupSnapshot *local_snap);
+  void finish_pending_snapshot_pruning();
   void prune_creating_group_snapshots_if_any(
       std::unique_lock<ceph::mutex>* locker);
   void handle_prune_creating_group_snapshots_if_any(
