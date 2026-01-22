@@ -79,6 +79,94 @@ address is not present and ``monitoring_networks`` is specified, an IP address
 that matches one of the specified networks will be used. If neither condition
 is met, the default binding will happen on all available network interfaces.
 
+NFS Daemon Colocation
+----------------------
+
+By default, cephadm avoids placing multiple NFS daemons on the same host. However,
+you can enable colocation to deploy multiple NFS daemons on the same host for
+increased capacity or redundancy.
+
+.. note::
+   When a host becomes unavailable, cephadm will automatically redeploy the
+   affected NFS daemons on the remaining available hosts to maintain the desired
+   ``count``. This may result in multiple daemons running on the same host,
+   even if colocation was not explicitly configured. The system ensures that
+   the total number of running daemons matches the specified count across
+   all available hosts.
+
+Colocation with Custom Ports
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For more control over port assignments, you can specify custom ports for colocated daemons
+using the ``colocation_ports`` parameter:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 4
+      hosts:
+        - host1
+        - host2
+    spec:
+      port: 2049
+      monitoring_port: 9587
+      colocation_ports:
+        - data_port: 3049
+          monitoring_port: 9588
+        - data_port: 3050
+          monitoring_port: 9589
+        - data_port: 3051
+          monitoring_port: 9590
+
+In this configuration, 4 daemons total are deployed (2 per host), distributed across
+``host1`` and ``host2``:
+
+* **host1, daemon 1**: ``port: 2049`` and ``monitoring_port: 9587``
+* **host1, daemon 2**: ``data_port: 3049`` and ``monitoring_port: 9588``
+* **host2, daemon 1**: ``port: 2049`` and ``monitoring_port: 9587``
+* **host2, daemon 2**: ``data_port: 3049`` and ``monitoring_port: 9588``
+
+.. note::
+   * The ``colocation_ports`` list defines ports for **additional** daemons only
+     (2nd, 3rd, 4th, etc.). The first daemon always uses the base ``port`` and
+     ``monitoring_port`` from the spec.
+   * The number of entries in ``colocation_ports`` should be ``count - 1``,
+     to cover the node down scenario (or ``count_per_host - 1`` when using ``count_per_host``).
+   * Each entry must specify both ``data_port`` and ``monitoring_port``.
+   * **If ``colocation_ports`` is not specified**, ports will be automatically
+     incremented for colocated daemons (e.g., 2049 → 2050 → 2051 for data ports,
+     and 9587 → 9588 → 9589 for monitoring ports).
+
+Per-Host Colocation
+~~~~~~~~~~~~~~~~~~~
+
+You can also use ``count_per_host`` to specify exactly how many daemons should
+run on each host:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count_per_host: 3
+      hosts:
+        - host1
+        - host2
+        - host3
+    spec:
+      port: 2049
+      monitoring_port: 9587
+      colocation_ports:
+        - data_port: 3049
+          monitoring_port: 9588
+        - data_port: 4049
+          monitoring_port: 9589
+
+This will deploy exactly 3 NFS daemons on each of the 3 hosts (9 daemons total),
+with custom ports for the 2nd and 3rd daemons on each host.
+
 TLS/SSL Example
 ---------------
 

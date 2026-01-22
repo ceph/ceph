@@ -10,6 +10,7 @@ from ceph.deployment.service_spec import (
     ServiceSpec,
     PlacementSpec,
     IngressSpec,
+    NFSServiceSpec,
     PatternType,
     HostPattern,
 )
@@ -801,7 +802,7 @@ class NodeAssignmentTest(NamedTuple):
             ['nfs:host3(rank=1.4 *:2049,9587)'],
             ['nfs.1.2']
         ),
-        # ranked, not enough hosts
+        # ranked, not enough hosts (with colocation, 4th daemon can be placed)
         NodeAssignmentTest(
             'nfs',
             PlacementSpec(count=4),
@@ -811,9 +812,9 @@ class NodeAssignmentTest(NamedTuple):
                 DaemonDescription('nfs', '1.2', 'host2', rank=1, rank_generation=2),
             ],
             {0: {2: '0.2'}, 1: {2: '1.2'}},
-            {0: {2: '0.2'}, 1: {2: '1.2'}, 2: {0: None}},
-            ['nfs:host1(rank=0.2 *:2049,9587)', 'nfs:host2(rank=1.2 *:2049,9587)', 'nfs:host3(rank=2.0 *:2049,9587)'],
-            ['nfs:host3(rank=2.0 *:2049,9587)'],
+            {0: {2: '0.2'}, 1: {2: '1.2'}, 2: {0: None}, 3: {0: None}},
+            ['nfs:host1(rank=0.2 *:2049,9587)', 'nfs:host2(rank=1.2 *:2049,9587)', 'nfs:host3(rank=2.0 *:2049,9587)', 'nfs:host3(rank=3.0 *:2050,9588)'],
+            ['nfs:host3(rank=2.0 *:2049,9587)', 'nfs:host3(rank=3.0 *:2050,9588)'],
             []
         ),
         # ranked, scale down
@@ -832,7 +833,50 @@ class NodeAssignmentTest(NamedTuple):
             ['nfs:host2(rank=0.3 *:2049,9587)'],
             ['nfs.0.2', 'nfs.1.2', 'nfs.2.2']
         ),
-
+        # NFS colocation - count > hosts, ports should increment
+        NodeAssignmentTest(
+            'nfs',
+            PlacementSpec(count=4),
+            'host1 host2'.split(),
+            [],
+            {},
+            {0: {0: None}, 1: {0: None}, 2: {0: None}, 3: {0: None}},
+            ['nfs:host2(rank=0.0 *:2049,9587)', 'nfs:host1(rank=1.0 *:2049,9587)',
+             'nfs:host2(rank=2.0 *:2050,9588)', 'nfs:host1(rank=3.0 *:2050,9588)'],
+            ['nfs:host2(rank=0.0 *:2049,9587)', 'nfs:host1(rank=1.0 *:2049,9587)',
+             'nfs:host2(rank=2.0 *:2050,9588)', 'nfs:host1(rank=3.0 *:2050,9588)'],
+            []
+        ),
+        # NFS colocation with existing daemons
+        NodeAssignmentTest(
+            'nfs',
+            PlacementSpec(count=4),
+            'host1 host2'.split(),
+            [
+                DaemonDescription('nfs', '0.1', 'host1', rank=0, rank_generation=1, ports=[2049, 9587]),
+                DaemonDescription('nfs', '1.1', 'host2', rank=1, rank_generation=1, ports=[2049, 9587]),
+            ],
+            {0: {1: '0.1'}, 1: {1: '1.1'}},
+            {0: {1: '0.1'}, 1: {1: '1.1'}, 2: {0: None}, 3: {0: None}},
+            ['nfs:host1(rank=0.1 *:2049,9587)', 'nfs:host2(rank=1.1 *:2049,9587)',
+             'nfs:host2(rank=2.0 *:2050,9588)', 'nfs:host1(rank=3.0 *:2050,9588)'],
+            ['nfs:host2(rank=2.0 *:2050,9588)', 'nfs:host1(rank=3.0 *:2050,9588)'],
+            []
+        ),
+        # NFS colocation with custom ports
+        NodeAssignmentTest(
+            'nfs',
+            PlacementSpec(count=4),
+            'host1 host2'.split(),
+            [],
+            {},
+            {0: {0: None}, 1: {0: None}, 2: {0: None}, 3: {0: None}},
+            ['nfs:host2(rank=0.0 *:2049,9587)', 'nfs:host1(rank=1.0 *:2049,9587)',
+             'nfs:host2(rank=2.0 *:3049,9588)', 'nfs:host1(rank=3.0 *:3049,9588)'],
+            ['nfs:host2(rank=0.0 *:2049,9587)', 'nfs:host1(rank=1.0 *:2049,9587)',
+             'nfs:host2(rank=2.0 *:3049,9588)', 'nfs:host1(rank=3.0 *:3049,9588)'],
+            []
+        ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons, rank_map, post_rank_map,
                          expected, expected_add, expected_remove):
@@ -847,9 +891,27 @@ def test_node_assignment(service_type, placement, hosts, daemons, rank_map, post
         allow_colo = True
     elif service_type == 'nfs':
         service_id = 'mynfs'
-        spec = ServiceSpec(service_type=service_type,
-                           service_id=service_id,
-                           placement=placement)
+        allow_colo = True
+        # Check if this is the custom ports test by looking at expected ports
+        if expected and any('3049' in str(e) for e in expected):
+            # Custom colocation ports test case
+            # First daemon uses base ports (port, monitoring_port)
+            # colocation_ports defines ADDITIONAL daemons only
+            spec = NFSServiceSpec(service_type=service_type,
+                                  service_id=service_id,
+                                  placement=placement,
+                                  port=2049,
+                                  monitoring_port=9587,
+                                  colocation_ports=[
+                                      {'data_port': 3049, 'monitoring_port': 9588},
+                                      {'data_port': 3050, 'monitoring_port': 9589},
+                                      {'data_port': 3051, 'monitoring_port': 9590},
+                                      {'data_port': 3052, 'monitoring_port': 9591}
+                                  ])
+        else:
+            spec = ServiceSpec(service_type=service_type,
+                               service_id=service_id,
+                               placement=placement)
 
     if not spec:
         spec = ServiceSpec(service_type=service_type,
@@ -1264,6 +1326,50 @@ def test_bad_specs(service_type, placement, hosts, daemons, expected):
             daemons=daemons,
         ).place()
     assert str(e.value) == expected
+
+
+def test_nfs_colocation_ports_validation():
+    """Test validation of colocation_ports in NFSServiceSpec"""
+    from ceph.deployment.service_spec import SpecValidationError
+    # Valid case: correct number of colocation_ports (count=3, need 2 additional)
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=3),
+        port=2049,
+        monitoring_port=9587,
+        colocation_ports=[
+            {'data_port': 3049, 'monitoring_port': 9588},
+            {'data_port': 4049, 'monitoring_port': 9589}
+        ]
+    )
+    spec.validate()  # Should not raise
+
+    # Invalid case: too few colocation_ports (count=4, need 3 additional, but only 1 provided)
+    with pytest.raises(SpecValidationError) as e:
+        spec = NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=4),
+            port=2049,
+            monitoring_port=9587,
+            colocation_ports=[{'data_port': 3049, 'monitoring_port': 9588}]
+        )
+        spec.validate()
+    assert "colocation_ports requires 3 entries for count=4 (got 1)" in str(e.value)
+
+    # Invalid case: missing required field
+    with pytest.raises(SpecValidationError) as e:
+        spec = NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=3),
+            port=2049,
+            monitoring_port=9587,
+            colocation_ports=[
+                {'data_port': 3049},  # Missing monitoring_port
+                {'data_port': 4049, 'monitoring_port': 9589}
+            ]
+        )
+        spec.validate()
+    assert "missing required fields: monitoring_port" in str(e.value)
 
 
 class ActiveAssignmentTest(NamedTuple):
