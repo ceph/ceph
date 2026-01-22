@@ -137,7 +137,7 @@ md_config_t::md_config_t(ConfigValues& values,
 {
   // Load the compile-time list of Option into
   // a map so that we can resolve keys quickly.
-  for (const auto &i : get_ceph_options()) {
+  for (const auto &i : ceph_options) {
     if (schema.count(i.name)) {
       // We may be instantiated pre-logging so send 
       std::cerr << "Duplicate config key in schema: '" << i.name << "'"

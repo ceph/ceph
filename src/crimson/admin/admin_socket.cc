@@ -574,7 +574,7 @@ public:
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     // Output all
     f->open_array_section("options");
-    for (const auto &option : get_ceph_options()) {
+    for (const auto &option : ceph_options) {
       f->dump_object("option", option);
     }
     f->close_section();
