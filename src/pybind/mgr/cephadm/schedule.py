@@ -347,6 +347,24 @@ class HostAssignment(object):
 
         def expand_candidates(ls: List[DaemonPlacement], num: int) -> List[DaemonPlacement]:
             r = []
+            # Check if spec has custom colocation ports (converted to list format)
+            if hasattr(self.spec, 'get_colocation_ports_list'):
+                custom_ports_list = self.spec.get_colocation_ports_list()
+                if custom_ports_list:
+                    # First daemon (i=0) always uses base ports from spec
+                    # Additional daemons (i=1,2,...) use colocation_ports if available
+                    for i in range(num):
+                        if i == 0:
+                            r.extend([dp.renumber_ports(0) for dp in ls])
+                        elif i - 1 < len(custom_ports_list):
+                            ports = custom_ports_list[i - 1]
+                            r.extend([DaemonPlacement(
+                                dp.daemon_type, dp.hostname, dp.network, dp.name,
+                                dp.ip, ports, dp.rank, dp.rank_generation
+                            ) for dp in ls])
+                        else:
+                            r.extend([dp.renumber_ports(i) for dp in ls])
+                    return r
             for offset in range(num):
                 r.extend([dp.renumber_ports(offset) for dp in ls])
             return r
