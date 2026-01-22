@@ -711,7 +711,6 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   }
   if (!num_new) {
     dout(10) << "  nothing new" << dendl;
-    goto done;
   }
 
   done:
