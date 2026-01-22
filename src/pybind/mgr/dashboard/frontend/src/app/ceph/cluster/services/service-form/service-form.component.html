@@ -13,7 +13,7 @@
                         i18n>
           <a class="text-decoration-underline"
              (click)="createMultisiteSetup()">
-             Click here</a> to create a new Realm/Zone Group/Zone
+             Click here</a> to create a new Realm/Zonegroup/Zone
         </cd-alert-panel>
 
         <cd-alert-panel *ngIf="serviceForm.controls.service_type.value === 'oauth2-proxy'"
@@ -209,7 +209,7 @@
              *ngIf="serviceForm.controls.service_type.value === 'rgw'">
           <label class="cd-col-form-label"
                  for="zonegroup_name"
-                 i18n>Zone Group</label>
+                 i18n>Zonegroup</label>
           <div class="cd-col-form-input">
             <select class="form-select"
                     id="zonegroup_name"

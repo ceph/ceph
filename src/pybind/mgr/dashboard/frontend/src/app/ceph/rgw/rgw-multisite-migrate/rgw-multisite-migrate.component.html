@@ -2,7 +2,7 @@
   <ng-container i18n="form title"
                 class="modal-title">Migrate Single Site to Multi-site
     <cd-helper>
-      <span>Migrate from a single-site deployment with a default zone group and zone to a multi-site system</span>
+      <span>Migrate from a single-site deployment with a default zonegroup and zone to a multi-site system</span>
     </cd-helper>
   </ng-container>
 
@@ -34,11 +34,11 @@
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="zonegroupName"
-               i18n>Rename default zone group</label>
+               i18n>Rename default zonegroup</label>
         <div class="cd-col-form-input">
           <input class="form-control"
                  type="text"
-                 placeholder="Zone group name..."
+                 placeholder="Zonegroup name..."
                  id="zonegroupName"
                  name="zonegroupName"
                  formControlName="zonegroupName">
@@ -47,13 +47,13 @@
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
                 *ngIf="multisiteMigrateForm.showError('zonegroupName', formDir, 'uniqueName')"
-                i18n>The chosen zone group name is already in use.</span>
+                i18n>The chosen zonegroup name is already in use.</span>
         </div>
       </div>
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="zonegroup_endpoints"
-               i18n>Zone group Endpoints
+               i18n>Zonegroup Endpoints
         </label>
         <div class="cd-col-form-input">
           <input class="form-control"
