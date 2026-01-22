@@ -4515,6 +4515,16 @@ options:
   flags:
   - create
   with_legacy: true
+- name: bluestore_verify_ebd
+  type: bool
+  level: advanced
+  desc: If present at mkfs, make sure EBD plugin is present.
+  long_desc: When deploying bluestore check EBD plugin used.
+    If plugin was used make at mkfs make sure it is present on any bluestore mount.
+  default: true
+  see_also:
+  - osd_extblkdev_plugins
+  with_legacy: true
 - name: bluestore_bdev_label_multi
   type: bool
   level: advanced
