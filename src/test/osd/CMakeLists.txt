@@ -110,7 +110,12 @@ add_executable(unittest_pglog
   )
 add_ceph_unittest(unittest_pglog)
 target_link_libraries(unittest_pglog osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
-
+# unittest_peeringstate
+add_executable(unittest_peeringstate
+  TestPeeringState.cc
+  )
+add_ceph_unittest(unittest_peeringstate)
+target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc
