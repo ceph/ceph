@@ -249,6 +249,9 @@ public:
   virtual int get_ebd_state(ExtBlkDevState &state) const {
     return -ENOENT;
   }
+  virtual int get_ebd_id(std::string& id) const {
+    return -ENOENT;
+  }
 
   virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const = 0;
 
