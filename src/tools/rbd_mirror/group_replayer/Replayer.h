@@ -127,6 +127,8 @@ private:
 
   uint64_t m_last_snapshot_bytes = 0;
 
+  std::set<std::string> m_pruning_group_snaps_inflight;
+
   bool is_replay_interrupted(std::unique_lock<ceph::mutex>* locker);
 
   void schedule_load_group_snapshots();
