@@ -29,6 +29,17 @@ constexpr static uint64_t kReplicaMinShardReads = 2;
 #undef dout_prefix
 #define dout_prefix *_dout << " ECSplitOp::"
 
+/**
+ * @brief Assemble sparse read results from EC shards into logical object view.
+ *
+ * Iterates through the EC stripe using ECStripeView, collecting extent maps
+ * and data buffers from each shard. The resulting buffer is built up in order,
+ * only extending (never inserting into the middle), which maintains buffer
+ * efficiency and allows for zero-copy operations where possible.
+ *
+ * @param ops_index Index of the operation in the operation list
+ * @return Pair containing the extent set and assembled buffer list
+ */
 std::pair<SplitOp::extent_set, bufferlist> ECSplitOp::assemble_buffer_sparse_read(int ops_index) const {
   bufferlist bl_out;
   extent_set extents_out;
@@ -36,6 +47,7 @@ std::pair<SplitOp::extent_set, bufferlist> ECSplitOp::assemble_buffer_sparse_rea
 
   auto &orig_osd_op = orig_op->ops[ops_index].op;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(orig_op->target.base_oloc.pool);
+  ceph_assert(pi);
   ECStripeView stripe_view(orig_osd_op.extent.offset, orig_osd_op.extent.length, pi);
   ldout(cct, DBG_LVL) << __func__ << " start:"
     << orig_osd_op.extent.offset << "~" << orig_osd_op.extent.length << dendl;
@@ -77,9 +89,20 @@ std::pair<SplitOp::extent_set, bufferlist> ECSplitOp::assemble_buffer_sparse_rea
   return std::pair(extents_out, bl_out);
 }
 
+/**
+ * @brief Assemble dense read results from EC shards into contiguous buffer.
+ *
+ * Iterates through the EC stripe, extracting data from each shard in order.
+ * The output buffer is built sequentially by appending data, never inserting
+ * into the middle, which maintains buffer efficiency.
+ *
+ * @param bl_out Output buffer to append assembled data
+ * @param ops_index Index of the operation in the operation list
+ */
 void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
   auto &orig_osd_op = orig_op->ops[ops_index].op;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(orig_op->target.base_oloc.pool);
+  ceph_assert(pi);
   ECStripeView stripe_view(orig_osd_op.extent.offset, orig_osd_op.extent.length, pi);
 
   std::vector<uint64_t> buffer_offset(stripe_view.data_chunk_count);
@@ -105,9 +128,24 @@ void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
   }
 }
 
+/**
+ * @brief Initialize read sub-operations for erasure-coded pool.
+ *
+ * Determines which EC shards need to be read based on stripe geometry and
+ * creates sub-operations for each required shard. Sets the abort flag if
+ * any required OSD is unavailable.
+ *
+ * Primary shard is required when reading from multiple chunks, when version
+ * information is requested, or when non-read operations are present.
+ *
+ * @param op Operation descriptor containing offset and length
+ * @param sparse Whether this is a sparse read operation
+ * @param ops_index Index of the operation in the operation list
+ */
 void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   auto &target = orig_op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
+  ceph_assert(pi);
   uint64_t offset = op.op.extent.offset;
   uint64_t length = op.op.extent.length;
   uint64_t data_chunk_count = pi->nonprimary_shards.size() + 1;
@@ -182,6 +220,15 @@ ECSplitOp::ECSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int
 #undef dout_prefix
 #define dout_prefix *_dout << " ReplicaSplitOp::"
 
+/**
+ * @brief Assemble sparse read results from replicas.
+ *
+ * Collects extent maps and buffers from each sub-operation. Results are
+ * assembled in order by appending, maintaining buffer efficiency.
+ *
+ * @param ops_index Index of the operation in the operation list
+ * @return Pair containing the combined extent set and buffer list
+ */
 std::pair<SplitOp::extent_set, bufferlist> ReplicaSplitOp::assemble_buffer_sparse_read(int ops_index) const {
   extent_set extents_out;
   bufferlist bl_out;
@@ -196,12 +243,35 @@ std::pair<SplitOp::extent_set, bufferlist> ReplicaSplitOp::assemble_buffer_spars
   return std::pair(extents_out, bl_out);
 }
 
+/**
+ * @brief Assemble dense read results from replicas.
+ *
+ * Appends buffers from each sub-operation in order.
+ *
+ * @param bl_out Output buffer to append assembled data
+ * @param ops_index Index of the operation in the operation list
+ */
 void ReplicaSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
   for (auto && [acting_index, sr] : sub_reads) {
     bl_out.append(sr.details.at(ops_index).bl);
   }
 }
 
+/**
+ * @brief Initialize read sub-operations for replicated pool.
+ *
+ * Divides the operation into chunks and distributes them across available
+ * replicas for parallel execution. Chunk size is calculated based on the
+ * minimum shard read size configuration and number of available OSDs.
+ * Chunks are aligned to page boundaries for efficiency.
+ *
+ * If the operation is too small to benefit from splitting across all replicas,
+ * fewer OSDs are used with a random starting offset for load balancing.
+ *
+ * @param op Operation descriptor containing offset and length
+ * @param sparse Whether this is a sparse read operation
+ * @param ops_index Index of the operation in the operation list
+ */
 void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 
   auto &target = orig_op->target;
@@ -259,6 +329,15 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 #undef dout_prefix
 #define dout_prefix *_dout << " SplitOp::"
 
+/**
+ * @brief Assemble the final return code from all sub-operations.
+ *
+ * Returns the first non-EAGAIN error encountered, or EAGAIN if any
+ * sub-operation returned EAGAIN or if version mismatch is detected.
+ * Otherwise returns the reference sub-operation's return code.
+ *
+ * @return Combined return code for the operation
+ */
 int SplitOp::assemble_rc() const {
   int rc = 0;
   bool eagain = false;
@@ -286,6 +365,15 @@ int SplitOp::assemble_rc() const {
   return rc;
 }
 
+/**
+ * @brief Check for version mismatches across EC shards.
+ *
+ * Implements torn read detection by comparing internal versions returned
+ * by each shard. The reference shard maintains a map of all shard versions,
+ * allowing detection of inconsistencies across the EC stripe.
+ *
+ * @return true if versions mismatch, false if consistent
+ */
 bool ECSplitOp::version_mismatch() const {
   // First we need to decode the version list from the reference.
   ceph_assert(reference_sub_read != -1);
@@ -326,8 +414,15 @@ bool ECSplitOp::version_mismatch() const {
   return false;
 }
 
-// On a replica, no shard maintains a list of "reference" versions, so this
-// simply checks that all versions are the same.
+/**
+ * @brief Check for version mismatches across replicas.
+ *
+ * For replicated pools, checks that all replicas returned the same version.
+ * No single replica maintains a reference version list, so the first replica's
+ * version becomes the reference for comparison.
+ *
+ * @return true if versions mismatch, false if consistent
+ */
 bool ReplicaSplitOp::version_mismatch() const {
   std::optional<eversion_t> ref_version;
 
@@ -355,6 +450,19 @@ bool ReplicaSplitOp::version_mismatch() const {
   return false;
 }
 
+/**
+ * @brief Complete the split operation by assembling and returning results.
+ *
+ * Assembles results from all sub-operations and invokes the original operation's
+ * completion handlers. For successful operations, results are assembled based on
+ * operation type (SPARSE_READ, READ, or other). For failures or version mismatches,
+ * triggers retry through the normal operation path.
+ *
+ * The buffer handling maintains compatibility with librados expectations, including
+ * special handling for pre-allocated buffers used by RadosStriper.
+ *
+ * @note Only called for successfully sent operations where abort=false
+ */
 void SplitOp::complete() {
   // STAGE 6: complete() only runs for successfully sent operations.
   // If abort was set during creation, the split op was discarded and
@@ -450,6 +558,13 @@ void SplitOp::complete() {
   objecter.op_post_split_op_complete(orig_op, handler_error, rc);
 }
 
+/**
+ * @brief Add version tracking to sub-operations for torn read protection.
+ *
+ * Adds internal version queries to all sub-operations to enable detection of
+ * version mismatches. If sub-operations read different versions of the object
+ * (torn read), the operation will be retried.
+ */
 void SplitOp::protect_torn_reads() {
   // If multiple reads are emitted from objecter, then it is essential that
   // each read reads the same version. It is not possible to efficiently
@@ -682,9 +797,25 @@ void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct
 }
 }
 
+/**
+ * @brief Prepare a single-chunk operation for direct execution.
+ *
+ * When an operation can be satisfied by reading from a single OSD (e.g.,
+ * single chunk in EC pool), configures the operation for direct execution
+ * without splitting. Sets EC_DIRECT_READ and FORCE_OSD flags and updates
+ * the target OSD and shard ID.
+ *
+ * This optimization avoids split operation overhead when data can be
+ * retrieved from a single shard.
+ *
+ * @param op Operation to prepare
+ * @param objecter Objecter instance
+ * @param cct CephContext for logging
+ */
 void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContext *cct) {
   auto &target = op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
+  ceph_assert(pi);
 
   objecter._calc_target(&op->target, op);
   uint64_t data_chunk_count = pi->nonprimary_shards.size() + 1;
