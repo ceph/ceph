@@ -12,6 +12,17 @@
 using std::map;
 using std::set;
 
+Backoff::Backoff(spg_t pgid, PGRef pg, ceph::ref_t<Session> s,
+                 uint64_t i,
+                 const hobject_t& b, const hobject_t& e)
+: RefCountedObject(g_ceph_context),
+  pgid(pgid),
+  id(i),
+  pg(pg),
+  session(std::move(s)),
+  begin(b),
+  end(e) {}
+
 void Session::clear_backoffs()
 {
   map<spg_t,map<hobject_t,set<ceph::ref_t<Backoff>>>> ls;
