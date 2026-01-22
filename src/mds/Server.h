@@ -26,6 +26,8 @@
 #include "include/Context.h" // for C_GatherBase
 #include "include/mempool.h"
 
+#include "messages/MClientReclaimReply.h"
+
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
@@ -71,7 +73,6 @@ class MClientRequest;
 class MClientSession;
 class MClientSnap;
 class MClientReclaim;
-class MClientReclaimReply;
 class MLock;
 class MMDSPeerRequest;
 class filepath;
