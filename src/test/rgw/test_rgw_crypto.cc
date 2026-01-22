@@ -26,6 +26,11 @@ using namespace std;
 
 
 std::unique_ptr<BlockCrypt> AES_256_CBC_create(const DoutPrefixProvider *dpp, CephContext* cct, const uint8_t* key, size_t len);
+std::unique_ptr<BlockCrypt> AES_256_GCM_create_with_iv_prefix(const DoutPrefixProvider *dpp,
+                                                              CephContext* cct,
+                                                              const uint8_t* key,
+                                                              size_t len,
+                                                              std::string_view iv_prefix);
 
 class ut_get_sink : public RGWGetObj_Filter {
   std::stringstream sink;
@@ -78,18 +83,20 @@ public:
                        optional_yield y) override
   {
     output.clear();
-    output.append(input.c_str(), input.length());
+    output.append(input.c_str() + in_ofs, size);
     return true;
   }
   bool decrypt(bufferlist& input,
                        off_t in_ofs,
                        size_t size,
+                       size_t& out_size,
                        bufferlist& output,
                        off_t stream_offset,
                        optional_yield y) override
   {
     output.clear();
-    output.append(input.c_str(), input.length());
+    output.append(input.c_str() + in_ofs, size);
+    out_size = size;
     return true;
   }
 };
@@ -137,7 +144,9 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity)
       bufferlist encrypted;
       ASSERT_TRUE(aes->encrypt(input, begin, end - begin, encrypted, offset, null_yield));
       bufferlist decrypted;
-      ASSERT_TRUE(aes->decrypt(encrypted, 0, end - begin, decrypted, offset, null_yield));
+      const size_t decrypt_size = end - begin;
+      size_t out_size = 0;
+      ASSERT_TRUE(aes->decrypt(encrypted, 0, decrypt_size, out_size, decrypted, offset, null_yield));
 
       ASSERT_EQ(decrypted.length(), end - begin);
       ASSERT_EQ(std::string_view(input.c_str() + begin, end - begin),
@@ -186,7 +195,9 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_2)
       bufferlist encrypted;
       ASSERT_TRUE(aes->encrypt(input, begin, end, encrypted, offset, null_yield));
       bufferlist decrypted;
-      ASSERT_TRUE(aes->decrypt(encrypted, 0, end, decrypted, offset, null_yield));
+      const size_t decrypt_size = end;
+      size_t out_size = 0;
+      ASSERT_TRUE(aes->decrypt(encrypted, 0, decrypt_size, out_size, decrypted, offset, null_yield));
 
       ASSERT_EQ(decrypted.length(), end);
       ASSERT_EQ(std::string_view(input.c_str(), end),
@@ -750,7 +761,8 @@ TEST(TestRGWCrypto, verify_RGWPutObj_BlockEncrypt_chunks)
     bufferlist encrypted;
     bufferlist decrypted;
     encrypted.append(put_sink.get_sink());
-    ASSERT_TRUE(cbc->decrypt(encrypted, 0, test_size, decrypted, 0, null_yield));
+    size_t out_size = 0;
+    ASSERT_TRUE(cbc->decrypt(encrypted, 0, test_size, out_size, decrypted, 0, null_yield));
 
     ASSERT_EQ(decrypted.length(), test_size);
     ASSERT_EQ(std::string_view(decrypted.c_str(), test_size),

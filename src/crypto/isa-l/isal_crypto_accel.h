@@ -38,5 +38,15 @@ class ISALCryptoAccel : public CryptoAccel {
                    const unsigned char iv[][AES_256_IVSIZE],
                    const unsigned char (&key)[AES_256_KEYSIZE],
                    optional_yield y) override { return false; }
+  bool gcm_encrypt(unsigned char* out, const unsigned char* in, size_t size,
+                   const unsigned char (&iv)[AES_GCM_IVSIZE],
+                   const unsigned char (&key)[AES_256_KEYSIZE],
+                   unsigned char* tag,
+                   optional_yield y) override;
+  bool gcm_decrypt(unsigned char* out, const unsigned char* in, size_t size,
+                   const unsigned char (&iv)[AES_GCM_IVSIZE],
+                   const unsigned char (&key)[AES_256_KEYSIZE],
+                   unsigned char* tag,
+                   optional_yield y) override;
 };
 #endif

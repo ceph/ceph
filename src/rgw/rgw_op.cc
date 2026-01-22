@@ -2571,6 +2571,30 @@ void RGWGetObj::execute(optional_yield y)
   // present, we have to skip the decompression filter too
   encrypted = attrs.count(RGW_ATTR_CRYPT_MODE);
 
+  // For AEAD modes like AES-256-GCM, ciphertext size can be larger than the
+  // plaintext size (eg, per-chunk auth tags). When decryption is enabled, we
+  // must report/compute ranges using the logical (plaintext) size.
+  // Backward compatibility:
+  // - CBC objects have no RGW_ATTR_CRYPT_BLOCKS and keep existing behavior.
+  // - If the request explicitly skips decrypt, keep ciphertext size.
+  if (encrypted && !skip_decrypt) {
+    if (auto i = attrs.find(RGW_ATTR_CRYPT_BLOCKS); i != attrs.end()) {
+      try {
+        auto p = i->second.cbegin();
+        RGWEncryptionInfo tmp;
+        decode(tmp, p);
+        if (tmp.orig_size > 0 && !tmp.blocks.empty()) {
+          s->obj_size = tmp.orig_size;
+          s->object->set_obj_size(tmp.orig_size);
+        }
+      } catch (const buffer::error&) {
+        ldpp_dout(this, 0) << "failed to decode " << RGW_ATTR_CRYPT_BLOCKS << dendl;
+        op_ret = -EIO;
+        goto done_err;
+      }
+    }
+  }
+  
   if (need_decompress && (!encrypted || !skip_decrypt)) {
     s->obj_size = cs_info.orig_size;
     s->object->set_obj_size(cs_info.orig_size);
@@ -4765,6 +4789,25 @@ void RGWPutObj::execute(optional_yield y)
         << ", compressor_message=" << cs_info.compressor_message
         << ", blocks=" << cs_info.blocks.size() << dendl;
   }
+
+  if (encrypt) {
+    if (auto* enc = dynamic_cast<RGWPutObj_BlockEncrypt*>(encrypt.get());
+        enc && enc->has_encryption_blocks()) {
+      const uint64_t enc_size = enc->get_encrypted_size();
+      if (enc_size != s->obj_size) {
+        bufferlist tmp;
+        RGWEncryptionInfo enc_info;
+        enc_info.orig_size = s->obj_size;
+        enc_info.blocks = enc->get_encryption_blocks();
+        encode(enc_info, tmp);
+        attrs[RGW_ATTR_CRYPT_BLOCKS] = std::move(tmp);
+        ldpp_dout(this, 20) << "storing " << RGW_ATTR_CRYPT_BLOCKS
+            << " with orig_size=" << enc_info.orig_size
+            << ", blocks=" << enc_info.blocks.size()
+            << ", enc_size=" << enc_size << dendl;
+      }
+    }
+  }
   if (torrent) {
     auto bl = torrent->bencode_torrent(s->object->get_name());
     if (bl.length()) {
@@ -5156,6 +5199,21 @@ void RGWPostObj::execute(optional_yield y)
       cs_info.blocks = std::move(compressor->get_compression_blocks());
       encode(cs_info, tmp);
       emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
+    }
+
+    if (encrypt) {
+      if (auto* enc = dynamic_cast<RGWPutObj_BlockEncrypt*>(encrypt.get());
+          enc && enc->has_encryption_blocks()) {
+        const uint64_t enc_size = enc->get_encrypted_size();
+        if (enc_size != s->obj_size) {
+          bufferlist tmp;
+          RGWEncryptionInfo enc_info;
+          enc_info.orig_size = s->obj_size;
+          enc_info.blocks = enc->get_encryption_blocks();
+          encode(enc_info, tmp);
+          emplace_attr(RGW_ATTR_CRYPT_BLOCKS, std::move(tmp));
+        }
+      }
     }
 
     if (cksum_filter) {
@@ -9980,6 +10038,22 @@ int get_decrypt_filter(
   // correctly decrypt across part boundaries
   std::vector<size_t> parts_len;
 
+  std::optional<RGWEncryptionInfo> enc_info;
+  if (auto i = attrs.find(RGW_ATTR_CRYPT_BLOCKS); i != attrs.end()) {
+    try {
+      auto p = i->second.cbegin();
+      RGWEncryptionInfo tmp;
+      using ceph::decode;
+      decode(tmp, p);
+      if (!tmp.blocks.empty()) {
+        enc_info = std::move(tmp);
+      }
+    } catch (const buffer::error&) {
+      ldpp_dout(s, 1) << "failed to decode " << RGW_ATTR_CRYPT_BLOCKS << dendl;
+      return -EIO;
+    }
+  }
+
   // for replicated objects, the original part lengths are preserved in an xattr
   if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
     try {
@@ -10001,6 +10075,6 @@ int get_decrypt_filter(
 
   *filter = std::make_unique<RGWGetObj_BlockDecrypt>(
       s, s->cct, cb, std::move(block_crypt),
-      std::move(parts_len), s->yield);
+      std::move(parts_len), s->yield, std::move(enc_info));
   return 0;
 }
