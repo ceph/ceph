@@ -1595,6 +1595,108 @@ protected:
   }
 
   // ============================================================================
+  // Helpers for upmap and upmap_primary
+  // ============================================================================
+
+  // Helper to set pg_upmap for a PG
+  // upmap - vector of OSD IDs
+  void set_pg_upmap(const vector<int32_t>& upmap)
+  {
+    dout(0) << "= set_pg_upmap for pg " << pg_t(0, pool_id)
+            << " to " << upmap << " =" << dendl;
+
+    pg_t pgid(0, pool_id);
+
+    // Validate the mapping
+    int pool_min_size = osdmap->get_pg_pool_min_size(pgid);
+    ceph_assert((int)upmap.size() >= pool_min_size);
+
+    int pool_size = osdmap->get_pg_pool_size(pgid);
+    ceph_assert((int)upmap.size() <= pool_size);
+
+    // Verify all OSDs exist
+    for (auto osd : upmap) {
+      if (osd != CRUSH_ITEM_NONE) {
+        ceph_assert(osdmap->exists(osd));
+      }
+    }
+
+    OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
+    pending_inc.fsid = osdmap->get_fsid();
+    pending_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
+      upmap.begin(), upmap.end());
+    apply_incremental(pending_inc);
+  }
+
+  // Helper to clear pg_upmap for a PG
+  void clear_pg_upmap()
+  {
+    dout(0) << "= clear_pg_upmap for pg " << pg_t(0, pool_id) << " =" << dendl;
+
+    pg_t pgid(0, pool_id);
+    OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
+    pending_inc.fsid = osdmap->get_fsid();
+    pending_inc.old_pg_upmap.insert(pgid);
+    apply_incremental(pending_inc);
+  }
+
+  // Helper to set pg_upmap_primary for a PG
+  // primary_osd - OSD ID to set as primary
+  void set_pg_upmap_primary(int32_t primary_osd)
+  {
+    dout(0) << "= set_pg_upmap_primary for pg " << pg_t(0, pool_id)
+            << " to osd." << primary_osd << " =" << dendl;
+
+    pg_t pgid(0, pool_id);
+
+    // Verify this is a replicated pool
+    const pg_pool_t *pt = osdmap->get_pg_pool(pgid.pool());
+    ceph_assert(pt->is_replicated());
+
+    // Verify OSD exists
+    if (primary_osd != CRUSH_ITEM_NONE) {
+      ceph_assert(osdmap->exists(primary_osd));
+    }
+
+    // Get current acting set
+    vector<int> acting_osds;
+    int current_primary;
+    osdmap->pg_to_acting_osds(pgid, &acting_osds, &current_primary);
+
+    // Verify the new primary is in the acting set
+    int found_idx = 0;
+    for (int i = 0; i < (int)acting_osds.size(); i++) {
+      if (acting_osds[i] == primary_osd) {
+        found_idx = i;
+        break;
+      }
+    }
+    ceph_assert(found_idx > 0);
+
+    // Create new acting set with swapped primary
+    vector<int> new_acting(acting_osds);
+    new_acting[found_idx] = new_acting[0];
+    new_acting[0] = primary_osd;
+
+    OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
+    pending_inc.fsid = osdmap->get_fsid();
+    pending_inc.new_pg_upmap_primary[pgid] = primary_osd;
+    apply_incremental(pending_inc);
+  }
+
+  // Helper to clear pg_upmap_primary for a PG
+  void clear_pg_upmap_primary()
+  {
+    dout(0) << "= clear_pg_upmap_primary for pg " << pg_t(0, pool_id) << " =" << dendl;
+
+    pg_t pgid(0, pool_id);
+    OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
+    pending_inc.fsid = osdmap->get_fsid();
+    pending_inc.old_pg_upmap_primary.insert(pgid);
+    apply_incremental(pending_inc);
+  }
+
+  // ============================================================================
   // Dispatchers - Send work (peering messages) to other OSDs and process queued
   // peering events. These functions emulate Messenger and the OSD Scheduler.
   // Normally dispatch_all() is called to process all the queues until they are
