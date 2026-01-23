@@ -646,20 +646,6 @@ class ClusterConfigHandler:
     def _users_and_groups_entry(self, ug_id: str) -> UsersAndGroupsEntry:
         return UsersAndGroupsEntry.from_store(self.internal_store, ug_id)
 
-    def generate_config(self, cluster_id: str) -> Dict[str, Any]:
-        """Demo function that generates a config on demand."""
-        cluster = self._cluster_entry(cluster_id).get_cluster()
-        shares = [
-            self._share_entry(cluster_id, shid).get_share()
-            for shid in self.share_ids_by_cluster()[cluster_id]
-        ]
-        return _generate_config(
-            cluster,
-            shares,
-            self._path_resolver,
-            _cephx_data_entity(cluster_id),
-        )
-
 
 def order_resources(
     resource_objs: Iterable[SMBResource],
