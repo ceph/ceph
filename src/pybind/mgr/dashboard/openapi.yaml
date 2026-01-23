@@ -15984,6 +15984,9 @@ paths:
                   type: boolean
                 secret_key:
                   type: string
+                tier_type:
+                  default: ''
+                  type: string
                 zone_endpoints:
                   type: string
                 zone_name:
@@ -16353,6 +16356,9 @@ paths:
                   default: ''
                   type: string
                 storage_class:
+                  default: ''
+                  type: string
+                tier_type:
                   default: ''
                   type: string
                 zone_endpoints:

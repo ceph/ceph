@@ -28,7 +28,8 @@ export class RgwZoneService {
       master: master,
       zone_endpoints: endpoints,
       access_key: zone.system_key.access_key,
-      secret_key: zone.system_key.secret_key
+      secret_key: zone.system_key.secret_key,
+      tier_type: zone.tier_type
     });
     return this.http.post(`${this.url}`, null, { params: params });
   }
@@ -93,7 +94,8 @@ export class RgwZoneService {
       data_extra_pool: dataExtraPool,
       storage_class: storageClass,
       data_pool_class: dataPoolClass,
-      compression: compression
+      compression: compression,
+      tier_type: zone.tier_type
     };
     return this.http.put(`${this.url}/${zone.name}`, requestBody);
   }
@@ -120,6 +122,7 @@ export class RgwZoneService {
     nodes['is_default'] = zone.id === defaultZoneId ? true : false;
     nodes['endpoints'] = zone.endpoints;
     nodes['is_master'] = zonegroup && zonegroup.master_zone === zone.id ? true : false;
+    nodes['tier_type'] = zonegroup?.zones?.find((z) => z.name === zone.name)?.tier_type || '';
     nodes['type'] = 'zone';
     const zoneNames = zones.map((zone: RgwZone) => {
       return zone['name'];
