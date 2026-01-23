@@ -189,6 +189,7 @@ void GroupImageCreatePrimaryRequest<I>::handle_notify_quiesce(int r) {
 
   if (r < 0 &&
       (m_group_snap_create_flags & SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR) == 0) {
+    lderr(m_cct) << "failed to notify quiesce: " << cpp_strerror(r) << dendl;
     m_ret_code = r;
     notify_unquiesce();
     return;
@@ -372,9 +373,6 @@ void GroupImageCreatePrimaryRequest<I>::handle_release_exclusive_locks(int r) {
   if (r < 0) {
     lderr(m_cct) << "failed to release exclusive locks for images: "
                  << cpp_strerror(r) << dendl;
-    if (m_ret_code == 0) {
-      m_ret_code = r;
-    }
   }
 
   notify_unquiesce();
@@ -410,11 +408,7 @@ void GroupImageCreatePrimaryRequest<I>::handle_notify_unquiesce(int r) {
   ldout(m_cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "failed to unquiesce requests: "
-                 << cpp_strerror(r) << dendl;
-    if (m_ret_code == 0) {
-      m_ret_code = r;
-    }
+    lderr(m_cct) << "failed to notify unquiesce: " << cpp_strerror(r) << dendl;
   }
 
   finish(m_ret_code);
