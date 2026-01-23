@@ -8,7 +8,7 @@
 
 The Ceph Object Gateway supports *user accounts* as an optional feature to
 enable the self-service management of :ref:`Users <radosgw-user-management>`,
-Groups and `Roles`_ similar to those in `AWS Identity and Access Management`_
+Groups and :ref:`Roles <radosgw-role>` similar to those in `AWS Identity and Access Management`_
 (IAM).
 
 .. _radosgw-account-root-user:
@@ -22,7 +22,7 @@ accounts and account root users must be created by an administrator using
 
 The account root user has default permissions on all resources owned by
 the account. The root user's credentials (access and secret keys) can be
-used with the `Ceph Object Gateway IAM API`_ to create additional IAM users
+used with the :ref:`radosgw-iam` to create additional IAM users
 and roles for use with the :ref:`Ceph Object Gateway S3 API <radosgw s3>`, as
 well as to manage their associated access keys and policies.
 
@@ -198,7 +198,7 @@ Migrating Notification Topics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Account topics are supported only when the ``notification_v2`` feature is enabled,
-as described in `Bucket Notifications`_ and `Supported Zone Features`_.
+as described in :ref:`radosgw-notifications` and :ref:`Supported Zone Features <radosgw-zone-features>`.
 
 #. **Migration Impact:** When a non-account user is migrated to an account, the
    the existing notification topics remain accessible through the RADOS Gateway admin API,
@@ -235,7 +235,7 @@ as described in `Bucket Notifications`_ and `Supported Zone Features`_.
 Account Root Example
 --------------------
 
-The account root user's credentials unlock the `Ceph Object Gateway IAM API`_.
+The account root user's credentials unlock the :ref:`radosgw-iam`.
 
 This example uses `awscli`_ to create an IAM user for S3 operations.
 
@@ -288,12 +288,8 @@ This example uses `awscli`_ to create an IAM user for S3 operations.
     make_bucket: testbucket
 
 
-.. _Roles: ../role/
 .. _AWS Identity and Access Management: https://aws.amazon.com/iam/
-.. _Ceph Object Gateway IAM API: ../iam/
 .. _Amazon Resource Names: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html
 .. _Evaluating policies within a single account: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics
 .. _Cross-account policy evaluation logic: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html
 .. _awscli: https://docs.aws.amazon.com/cli/latest/
-.. _Bucket Notifications: ../notifications/
-.. _Supported Zone Features: ../zone-features/#supported-features
