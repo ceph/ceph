@@ -35,10 +35,16 @@ public:
     int init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
                      uint32_t iv_length) const override;
     int update_context(EVP_CIPHER_CTX* ctx, const unsigned char* in,
-                       unsigned char* out, uint32_t in_len, uint32_t out_len) const override;
+                       unsigned char* out, uint32_t in_len, 
+                       uint32_t out_len, 
+                       const unsigned char* index = 0,
+                       uint32_t index_len = 0) const override;
 
     int decrypt(EVP_CIPHER_CTX* ctx, const unsigned char* in,
-                             unsigned char* out, uint32_t in_len, uint32_t out_len) const override;
+                             unsigned char* out, uint32_t in_len, 
+                             uint32_t out_len, 
+                             const unsigned char* index = nullptr,
+                             uint32_t index_len = 0) const override;
 protected:
     CephContext* m_cct;
     unsigned char* m_key = nullptr;
@@ -57,10 +63,12 @@ public:
                     uint32_t iv_length) const override;
 
   int update_context(EVP_CIPHER_CTX* ctx, const unsigned char* in,
-        unsigned char* out, uint32_t in_len, uint32_t out_len) const override;
+        unsigned char* out, uint32_t in_len, uint32_t out_len, 
+        const unsigned char* index = nullptr, uint32_t index_len = 0) const override;
 
   int decrypt(EVP_CIPHER_CTX* ctx, const unsigned char* in,
-        unsigned char* out, uint32_t in_len, uint32_t out_len) const override;
+        unsigned char* out, uint32_t in_len, uint32_t out_len, 
+        const unsigned char* index = nullptr, uint32_t index_len = 0) const override;
 
 private:
     static constexpr size_t AES_256_SIV_TAG_SIZE = 16;
