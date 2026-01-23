@@ -82,6 +82,7 @@ extern "C" {
 #include "rgw_account.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_dedup_cluster.h"
+#include "rgw_resolve.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
@@ -4477,6 +4478,8 @@ int main(int argc, const char **argv)
 
   /* common_init_finish needs to be called after g_conf().set_val() */
   common_init_finish(g_ceph_context);
+
+  rgw_init_resolver();
 
   std::unique_ptr<rgw::sal::ConfigStore> cfgstore;
   std::unique_ptr<rgw::SiteConfig> site;
