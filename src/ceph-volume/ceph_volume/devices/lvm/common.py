@@ -50,7 +50,7 @@ common_args = {
     },
     '--data-slots': {
         'help': ('Intended number of slots on data device. The new OSD gets one'
-              'of those slots or 1/nth of the available capacity'),
+              ' of those slots or 1/nth of the available capacity'),
         'type': int,
         'default': 1,
     },
@@ -102,7 +102,7 @@ bluestore_args = {
     '--block.db-slots': {
         'dest': 'block_db_slots',
         'help': ('Intended number of slots on db device. The new OSD gets one'
-              'of those slots or 1/nth of the available capacity'),
+              ' of those slots or 1/nth of the available capacity'),
         'type': int,
         'default': 1,
     },
@@ -120,7 +120,7 @@ bluestore_args = {
     '--block.wal-slots': {
         'dest': 'block_wal_slots',
         'help': ('Intended number of slots on wal device. The new OSD gets one'
-              'of those slots or 1/nth of the available capacity'),
+              ' of those slots or 1/nth of the available capacity'),
         'type': int,
         'default': 1,
     },
@@ -142,7 +142,7 @@ filestore_args = {
     },
     '--journal-slots': {
         'help': ('Intended number of slots on journal device. The new OSD gets one'
-              'of those slots or 1/nth of the available capacity'),
+              ' of those slots or 1/nth of the available capacity'),
         'type': int,
         'default': 1,
     },
