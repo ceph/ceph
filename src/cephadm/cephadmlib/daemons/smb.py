@@ -882,6 +882,9 @@ class SMB(ContainerDaemonForm):
         if self._tls_files:
             tls_dir = str(data_dir / 'tls')
             mounts[tls_dir] = f'{_ETC_SAMBA_TLS}:z'
+        for filename in self._files or []:
+            if filename.endswith(('.ceph.conf', '.ceph.keyring')):
+                mounts[str(data_dir / filename)] = f'/etc/ceph/{filename}'
         if self._cfg.clustered:
             ctdb_persistent = str(data_dir / 'ctdb/persistent')
             ctdb_run = str(data_dir / 'ctdb/run')  # TODO: tmpfs too!
