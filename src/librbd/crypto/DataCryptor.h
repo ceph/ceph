@@ -28,10 +28,12 @@ public:
   virtual int init_context(T* ctx, const unsigned char* iv,
                            uint32_t iv_length) const = 0;
   virtual int update_context(T* ctx, const unsigned char* in,
-                             unsigned char* out, uint32_t in_len, uint32_t out_len) const = 0;
+                             unsigned char* out, uint32_t in_len, uint32_t out_len, 
+                             const unsigned char* index, uint32_t index_len) const = 0;
   // TODO: Maybe Update function names
   virtual int decrypt(T* ctx,  const unsigned char* in,
-                             unsigned char* out, uint32_t in_len, uint32_t out_len) const = 0;
+                             unsigned char* out, uint32_t in_len, uint32_t out_len, 
+                             const unsigned char* index, uint32_t index_len) const = 0;
 };
 
 } // namespace crypto

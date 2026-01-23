@@ -113,10 +113,14 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
         const unsigned char* src_ptr = (leftover_size == 0) ? in_buf_ptr : leftover_block;
         if (mode == CIPHER_MODE_DEC)  {
           crypto_output_length = m_data_cryptor->decrypt(
-              ctx, src_ptr, out_buf_ptr, block_in_size, block_out_size);
+              ctx, src_ptr, out_buf_ptr,
+              block_in_size, block_out_size,
+              iv, m_iv_size);
         } else {
           crypto_output_length = m_data_cryptor->update_context(
-            ctx, src_ptr, out_buf_ptr, block_in_size, block_out_size);
+            ctx, src_ptr, out_buf_ptr,
+            block_in_size, block_out_size,
+            iv, m_iv_size);
         }
         if (std::cmp_not_equal(crypto_output_length, block_out_size)) {
           lderr(m_cct) << "output size not expected\n expected: "

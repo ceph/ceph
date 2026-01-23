@@ -130,7 +130,8 @@ int DataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
 }
 
 int DataCryptor::update_context(EVP_CIPHER_CTX* ctx, const unsigned char* in,
-                                unsigned char* out, uint32_t in_len, uint32_t out_len) const {
+                                unsigned char* out, uint32_t in_len, uint32_t out_len, 
+                                const unsigned char* index, uint32_t index_len) const {
   if (in_len != out_len) {
     lderr(m_cct) << "EVP_CipherUpdate failed. in_len= " << in_len
                  << " and out_len=" << out_len << " not equal" << dendl;
@@ -158,7 +159,8 @@ void DataCryptor::log_errors() const {
 }
 
 int DataCryptor::decrypt(EVP_CIPHER_CTX *ctx, const unsigned char *in,
-                         unsigned char *out, uint32_t in_len, uint32_t out_len) const {
+                         unsigned char *out, uint32_t in_len, uint32_t out_len, 
+                         const unsigned char* index, uint32_t index_len) const {
   return update_context(ctx, in, out, in_len, out_len);
 }
 
@@ -171,26 +173,14 @@ int AEADDataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
                  << iv_length << dendl;
     return -EINVAL;
   }
-  // In AES-256-SIV mode we need to resupply key. 
-  if (1 != EVP_CipherInit_ex(ctx, nullptr, nullptr, m_key, nullptr, -1)) {
-    lderr(m_cct) << "EVP_CipherInit_ex reset failed" << dendl;
-    log_errors();
-    return -EIO;
-  }
-  int len = 0;
-  if (1 != EVP_CipherUpdate(ctx, nullptr, &len, iv, iv_length)) {
-    lderr(m_cct) << "Sector IV AAD update failed" << dendl;
-    log_errors();
-    return -EIO;
-  }
+  // TODO: Maybe Rework AEAD context initialization to match 
+  //  original init_context() semantics
   return 0;
 }
 
-  int AEADDataCryptor::update_context(
-    EVP_CIPHER_CTX* ctx,
-    const unsigned char* in,
-    unsigned char* out,
-    uint32_t in_len, uint32_t out_len) const {
+  int AEADDataCryptor::update_context(EVP_CIPHER_CTX* ctx, const unsigned char* in,
+                              unsigned char* out,uint32_t in_len, uint32_t out_len, 
+                              const unsigned char* index,uint32_t index_len) const {
     int result_len = 0;
     int ciphertext_len = 0;
     if (out_len != (in_len + AES_256_SIV_OVERHEAD)) {
@@ -210,8 +200,14 @@ int AEADDataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
         log_errors();
         return -EIO;
     }
-    if (1 != EVP_EncryptUpdate(ctx, NULL, &result_len, random_nonce, AES_256_SIV_NONCE_SIZE)) {
-      lderr(m_cct) << "Failed to encrypt update context with nonce, in_len=" << in_len << " out_len=" << out_len << dendl;
+    // TODO: Maybe do full EVP_EncryptInit_ex re-init to match semantics 
+    if (1 != EVP_CipherInit_ex(ctx, nullptr, nullptr, m_key, random_nonce, -1)) {
+      lderr(m_cct) << "EVP_CipherInit_ex reset failed" << dendl;
+      log_errors();
+      return -EIO;
+    }
+    if (1 != EVP_EncryptUpdate(ctx, nullptr, &result_len, index, index_len)) {
+      lderr(m_cct) << "Sector IV AAD update failed" << dendl;
       log_errors();
       return -EIO;
     }
@@ -248,7 +244,8 @@ int AEADDataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
   }
 
   int AEADDataCryptor::decrypt(EVP_CIPHER_CTX* ctx, const unsigned char* in, 
-                          unsigned char* out, uint32_t in_len, uint32_t out_len) const {                      
+                          unsigned char* out, uint32_t in_len, uint32_t out_len, 
+                          const unsigned char* index, uint32_t index_len) const {                      
     if (in_len != (out_len + AES_256_SIV_OVERHEAD)) {
       lderr(m_cct) << "Encryption buffer size mismatch. "
                    << "Input Length: " << in_len
@@ -268,6 +265,11 @@ int AEADDataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
     uint32_t data_len = in_len - AES_256_SIV_OVERHEAD;
     const unsigned char* tag = in + data_len;
     const unsigned char* nonce = tag + AES_256_SIV_TAG_SIZE;
+    if (1 != EVP_CipherInit_ex(ctx, nullptr, nullptr, m_key, nonce, -1)) {
+      lderr(m_cct) << "EVP_CipherInit_ex reset failed" << dendl;
+      log_errors();
+      return -EIO;
+    }
     if (!EVP_CIPHER_CTX_ctrl(
             ctx, EVP_CTRL_AEAD_SET_TAG, AES_256_SIV_TAG_SIZE,
             const_cast<void*>(static_cast<const void*>(tag)))) {
@@ -276,16 +278,16 @@ int AEADDataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
       return -EIO;
     }
 
-    if (1 != EVP_DecryptUpdate(ctx, NULL, &result_len, nonce, AES_256_SIV_NONCE_SIZE)) {
+    if (1 != EVP_DecryptUpdate(ctx, NULL, &result_len, index, index_len)) {
       lderr(m_cct) << "Failed to decrypt update context with nonce, in_len=" << in_len << " out_len=" << out_len << dendl;
       log_errors();
       return -EIO;
     }
-
     if (1 != EVP_DecryptUpdate(ctx, out, &result_len, in, in_len - (AES_256_SIV_NONCE_SIZE+AES_256_SIV_TAG_SIZE))) {
       lderr(m_cct) << "Failed decryption, in_len=" << in_len << " out_len=" << out_len << dendl;
       log_errors();
-      return -EIO;
+      // TODO: Correct error code? 
+      return -EBADMSG;
     }
     plaintext_len += result_len;
     if (1 != EVP_DecryptFinal_ex(ctx, out + result_len, &result_len)) {
