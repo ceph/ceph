@@ -115,7 +115,7 @@ public:
       ceph_abort();
   }
 
-  PyObject *get()
+  virtual PyObject *get()
   {
     finish_pending_streams();
 
@@ -125,13 +125,12 @@ public:
 
   void finish_pending_streams();
 
-private:
+protected:
   PyObject *root;
   PyObject *cursor;
   std::stack<PyObject *> stack;
-
   void dump_pyobject(std::string_view name, PyObject *p);
-
+private:
   class PendingStream {
     public:
     PyObject *cursor;
@@ -143,22 +142,145 @@ private:
 
 };
 
-class PyJSONFormatter : public JSONFormatter {
+class PyFormatterRO : public PyFormatter {
 public:
-  PyObject *get();
-  PyJSONFormatter (const PyJSONFormatter&) = default;
-  PyJSONFormatter(bool pretty=false, bool is_array=false) : JSONFormatter(pretty) {
-    if(is_array) {
-      open_array_section("");
-    } else {
-      open_object_section("");
+  using PyFormatter::PyFormatter;
+  PyObject* get() override {
+    finish_pending_streams();
+    if (!is_converted_to_readonly) {
+      convert_to_readonly();
     }
-}
+    Py_INCREF(root);
+    return root;
+  }
 
+  void reset() override {
+    PyFormatter::reset();
+    is_converted_to_readonly = false;
+  }
 private:
-  using json_formatter = JSONFormatter;
-  template <class T> void add_value(std::string_view name, T val);
-  void add_value(std::string_view name, std::string_view val, bool quoted);
+  bool is_converted_to_readonly = false;
+
+  /// Convert entire data structure to read-only once
+  void convert_to_readonly() {
+    PyObject* readonly_root = make_immutable(root);
+
+    if (readonly_root != root) {
+      Py_DECREF(root);
+      root = readonly_root;
+      cursor = root;
+    }
+    is_converted_to_readonly = true;
+  }
+
+  /// Recursively convert object to immutable equivalent
+  PyObject* make_immutable(PyObject* obj) {
+    if (PyList_Check(obj)) {
+      return convert_list_to_tuple(obj);
+    }
+    if (PyDict_Check(obj)) {
+      return convert_dict_to_proxy(obj);
+    }
+    if (PySet_Check(obj)) {
+      return convert_set_to_frozenset(obj);
+    }
+    if (PyTuple_Check(obj)) {
+      return convert_tuple_contents(obj);
+    }
+    // Already immutable
+    Py_INCREF(obj);
+    return obj;
+  }
+
+  PyObject* convert_list_to_tuple(PyObject* list) {
+    Py_ssize_t size = PyList_Size(list);
+    PyObject* tuple = PyTuple_New(size);
+
+    for (Py_ssize_t i = 0; i < size; i++) {
+      PyObject* item = PyList_GetItem(list, i);
+      PyObject* immutable_item = make_immutable(item);
+      if (!immutable_item) {
+        Py_DECREF(tuple);
+        Py_INCREF(list);
+        return list;
+      }
+      PyTuple_SET_ITEM(tuple, i, immutable_item);
+    }
+    return tuple;
+  }
+
+  PyObject* convert_dict_to_proxy(PyObject* dict) {
+    PyObject* immutable_dict = PyDict_New();
+    PyObject* key, *value;
+    Py_ssize_t pos = 0;
+
+    while (PyDict_Next(dict, &pos, &key, &value)) {
+      PyObject* immutable_value = make_immutable(value);
+      if (!immutable_value) {
+        Py_DECREF(immutable_dict);
+        Py_INCREF(dict);
+        return dict;
+      }
+      
+      if (PyDict_SetItem(immutable_dict, key, immutable_value) < 0) {
+        Py_DECREF(immutable_value);
+        Py_DECREF(immutable_dict);
+        Py_INCREF(dict);
+        return dict;
+      }
+      Py_DECREF(immutable_value);
+    }
+
+    PyObject* types_module = PyImport_ImportModule("types");
+    if (types_module) {
+      PyObject* mapping_proxy_type = PyObject_GetAttrString(types_module, "MappingProxyType");
+      if (mapping_proxy_type) {
+        PyObject* proxy = PyObject_CallFunctionObjArgs(mapping_proxy_type, immutable_dict, nullptr);
+        Py_DECREF(mapping_proxy_type);
+        Py_DECREF(types_module);
+        Py_DECREF(immutable_dict);
+        
+        if (proxy) {
+          return proxy;
+        }
+      }
+      Py_DECREF(types_module);
+    }
+    return immutable_dict;
+  }
+
+  PyObject* convert_set_to_frozenset(PyObject* set) {
+    PyObject* frozenset = PyFrozenSet_New(set);
+    if (frozenset) {
+      return frozenset;
+    }
+
+    // Fallback
+    Py_INCREF(set);
+    return set;
+  }
+
+  PyObject* convert_tuple_contents(PyObject* tuple) {
+    Py_ssize_t size = PyTuple_Size(tuple);
+    PyObject* new_tuple = PyTuple_New(size);
+    if (!new_tuple) {
+      Py_INCREF(tuple);
+      return tuple;
+    }
+
+    for (Py_ssize_t i = 0; i < size; i++) {
+      PyObject* item = PyTuple_GetItem(tuple, i);
+      PyObject* immutable_item = make_immutable(item);
+
+      if (!immutable_item) {
+        Py_DECREF(new_tuple);
+        Py_INCREF(tuple);
+        return tuple;
+      }
+      PyTuple_SET_ITEM(new_tuple, i, immutable_item);
+    }
+    return new_tuple;
+  }
 };
 
 #endif

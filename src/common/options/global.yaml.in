@@ -6611,6 +6611,15 @@ options:
   desc: Enable / disable the Manager op tracker
   default: true
   with_legacy: true
+- name: mgr_map_cache_enabled
+  type: bool
+  level: dev
+  desc: Enable the manager's map cache for API calls
+  default: true
+  services:
+  - mgr
+  flags:
+  - runtime
 - name: mgr_num_op_tracker_shard
   type: uint
   level: advanced
@@ -6887,13 +6896,6 @@ options:
   services:
   - rgw
   - osd
-- name: mgr_ttl_cache_expire_seconds
-  type: uint
-  level: dev
-  desc: Set the Manager cache time to live in seconds; set to 0 to disable the cache.
-  default: 0
-  services:
-  - mgr
 - name: objectstore_debug_throw_on_failed_txc
   type: bool
   level: dev
