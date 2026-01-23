@@ -61,8 +61,15 @@ void RGWRESTConn::resolve_endpoints() {
     int rr = rgw_resolver->resolve_all_addrs(res_ep.host, &addrs);
     if (rr >= 0 && !addrs.empty()) {
       res_ep.ips = std::move(addrs);
-      ldout(cct, 1) << "endpoint=" << ep_url << " resolved to "
-                << res_ep.ips.size() << " IP address" << dendl;
+      ldout(cct, 2) << "endpoint=" << ep_url << " resolved to "
+                << res_ep.ips.size() << " IP addresses" << dendl;
+
+      // Pre-compute host:port prefix and port string once
+      std::string port_str = std::to_string(res_ep.port);
+      std::string host_port_prefix = res_ep.host + ":" + port_str + ":";
+
+      // Pre-compute full connect_to strings
+      res_ep.connect_to_strings.reserve(res_ep.ips.size());
       for (const auto& ea : res_ep.ips) {
         char ipbuf[INET6_ADDRSTRLEN] = {0};
         const sockaddr* sa = ea.get_sockaddr();
@@ -73,13 +80,17 @@ void RGWRESTConn::resolve_endpoints() {
           auto sin6 = reinterpret_cast<const sockaddr_in6*>(sa);
           inet_ntop(AF_INET6, &sin6->sin6_addr, ipbuf, sizeof(ipbuf));
         }
-        ldout(cct, 1) << "endpoint_url=" << ep_url << " resolved to ip=" << ipbuf << dendl;
+        if (ipbuf[0] != '\0') {
+          // Pre-compute: "host:port:ip:port"
+          res_ep.connect_to_strings.emplace_back(host_port_prefix + ipbuf + ":" + port_str);
+          ldout(cct, 2) << "endpoint_url=" << ep_url << " resolved to ip=" << ipbuf << dendl;
+        }
       }
     } else {
       ldout(cct, 0) << "WARNING: RGWRESTConn no IP addresses found for endpoint=" << ep_url << dendl;
     }
 
-    resolved_endpoints.push_back(std::move(res_ep));
+    resolved_endpoints.emplace(ep_url, std::move(res_ep));
   }
 }
 
@@ -159,6 +170,24 @@ RGWRESTConn& RGWRESTConn::operator=(RGWRESTConn&& other)
   return *this;
 }
 
+void RGWRESTConn::get_connect_to_mapping_for_url(RGWEndpoint& endpoint)
+{
+  if (!cct->_conf->rgw_resolve_endpoints_into_all_addresses) {
+    return;
+  }
+
+  std::string connect_to;
+
+  auto it = resolved_endpoints.find(endpoint.get_url());
+  if (it != resolved_endpoints.end() && !it->second.connect_to_strings.empty()) {
+    auto& res_ep = it->second;
+    size_t idx = res_ep.rr_index++;
+    connect_to = res_ep.connect_to_strings[idx % res_ep.connect_to_strings.size()];
+  }
+
+  endpoint.set_connect_to(connect_to);
+}
+
 int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
 {
   if (endpoints.empty()) {
@@ -205,7 +234,9 @@ int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
     ldout(cct, 5) << "ERROR: no valid endpoint" << dendl;
     return -EINVAL;
   }
-  ldout(cct, 20) << "get_endpoint picked url=" << endpoint.get_url()
+
+  get_connect_to_mapping_for_url(endpoint);
+  ldout(cct, 20) << "get_endpoint picked endpoint url=" << endpoint.get_url()
     << " connect_to=" << endpoint.get_connect_to() << dendl;
 
   return 0;
