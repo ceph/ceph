@@ -71,6 +71,7 @@ struct ResolvedEndpoint {
   std::string host;               // e.g., "s3.abc.com"
   int port = -1;                  // e.g., 443
   std::vector<entity_addr_t> ips; // the IPs the endpoint resolves to
+  std::vector<std::string> connect_to_strings;  // Pre-computed full connect_to strings for each IP
   size_t rr_index = 0;            // round-robin index for IPs
 };
 
@@ -81,7 +82,7 @@ class RGWRESTConn
 
   CephContext *cct;
   std::vector<std::string> endpoints;
-  std::vector<ResolvedEndpoint> resolved_endpoints;
+  std::unordered_map<std::string, ResolvedEndpoint> resolved_endpoints;
   endpoint_status_map endpoints_status;
   RGWAccessKey key;
   std::string self_zone_group;
@@ -115,7 +116,7 @@ public:
 
   int get_endpoint(RGWEndpoint& endpoint);
   RGWEndpoint get_endpoint();
-  const std::vector<ResolvedEndpoint>& get_resolved_endpoints() const { return resolved_endpoints; }
+  const std::unordered_map<std::string, ResolvedEndpoint>& get_resolved_endpoints() const { return resolved_endpoints; }
   void set_endpoint_unconnectable(const RGWEndpoint& endpoint);
   const std::string& get_self_zonegroup() {
     return self_zone_group;
@@ -161,6 +162,9 @@ public:
   int complete_request(const DoutPrefixProvider* dpp,
                        RGWRESTStreamS3PutObj *req, std::string& etag,
                        ceph::real_time *mtime, optional_yield y);
+
+  /* pick an IP to 'connect-to' given the endpoint url */
+  void get_connect_to_mapping_for_url(RGWEndpoint& endpoint);
 
   struct get_obj_params {
     const rgw_owner *uid{nullptr};
