@@ -161,6 +161,9 @@ public:
                        RGWRESTStreamS3PutObj *req, std::string& etag,
                        ceph::real_time *mtime, optional_yield y);
 
+  /* pick an IP to 'connect-to' given the endpoint url */
+  void get_connect_to_mapping_for_url(RGWEndpoint& endpoint);
+
   struct get_obj_params {
     const rgw_owner *uid{nullptr};
     const rgw_user *perm_check_uid{nullptr};

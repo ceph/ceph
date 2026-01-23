@@ -159,6 +159,52 @@ RGWRESTConn& RGWRESTConn::operator=(RGWRESTConn&& other)
   return *this;
 }
 
+void RGWRESTConn::get_connect_to_mapping_for_url(RGWEndpoint& endpoint)
+{
+  if (!cct->_conf->rgw_resolve_endpoints_into_all_addresses) {
+    return;
+  }
+
+  endpoint.set_connect_to("");
+  const std::string& url = endpoint.get_url();
+
+  for (auto& res_ep : resolved_endpoints) {
+    if (res_ep.url != url) {
+      continue;
+    }
+    if (res_ep.ips.empty()) {
+      return;
+    }
+
+    // round-robin across the available IPs for this endpoint
+    size_t idx = res_ep.rr_index++;
+    const entity_addr_t& ea = res_ep.ips[idx % res_ep.ips.size()];
+
+    char ipbuf[INET6_ADDRSTRLEN] = {0};
+    const sockaddr* sa = ea.get_sockaddr();
+
+    if (sa->sa_family == AF_INET) {
+      auto sin = reinterpret_cast<const sockaddr_in*>(sa);
+      inet_ntop(AF_INET, &sin->sin_addr, ipbuf, sizeof(ipbuf));
+    } else if (sa->sa_family == AF_INET6) {
+      auto sin6 = reinterpret_cast<const sockaddr_in6*>(sa);
+      inet_ntop(AF_INET6, &sin6->sin6_addr, ipbuf, sizeof(ipbuf));
+    }
+
+    if (ipbuf[0] == '\0') {
+      return;
+    }
+
+    std::string ip(ipbuf);
+
+    // host:port:ip:port
+    endpoint.set_connect_to(
+      res_ep.host + ":" + std::to_string(res_ep.port) + ":" + ip + ":" + std::to_string(res_ep.port)
+    );
+    return;
+  }
+}
+
 int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
 {
   if (endpoints.empty()) {
@@ -205,7 +251,10 @@ int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
     ldout(cct, 5) << "ERROR: no valid endpoint" << dendl;
     return -EINVAL;
   }
-  ldout(cct, 20) << "get_url picked endpoint=" << endpoint << dendl;
+
+  get_connect_to_mapping_for_url(endpoint);
+  ldout(cct, 0) << " get_endpoint picked endpoint url=" << endpoint.get_url()
+    << " connect_to=" << endpoint.get_connect_to() << dendl;
 
   return 0;
 }
