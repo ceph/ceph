@@ -5,7 +5,11 @@ from typing import Any, Dict, List, Tuple, cast, Optional, Iterable, Union
 
 from mgr_module import HandleCommandResult
 
-from ceph.deployment.service_spec import ServiceSpec, SMBSpec
+from ceph.deployment.service_spec import (
+    SMBExternalCephCluster,
+    SMBSpec,
+    ServiceSpec,
+)
 from .service_registry import register_cephadm_service
 
 from orchestrator import DaemonDescription
@@ -179,6 +183,12 @@ class SMBService(CephService):
                 'remote_control.ca.crt',
                 self._cert_or_uri(smb_spec.remote_control_ca_cert),
             )
+        for ext_cluster in smb_spec.ceph_cluster_configs or []:
+            files = config_blobs.setdefault('files', {})
+            c_name = f'{ext_cluster.alias}.ceph.conf'
+            _add_cfg(files, c_name, _to_conf(ext_cluster))
+            k_name = f'{ext_cluster.alias}.ceph.keyring'
+            _add_cfg(files, k_name, _to_keyring(ext_cluster))
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
@@ -419,3 +429,24 @@ class AddressPool:
             for net in baddr.as_networks():
                 nets.add(net)
         return cls(nets)
+
+
+def _to_conf(ext_cluster: SMBExternalCephCluster) -> str:
+    return '\n'.join(
+        (
+            '[global]',
+            f'fsid = {ext_cluster.fsid}',
+            f'mon_host = {ext_cluster.mon_host}',
+            '',
+        )
+    )
+
+
+def _to_keyring(ext_cluster: SMBExternalCephCluster) -> str:
+    return '\n'.join(
+        [
+            f'[{ext_cluster.user}]',
+            f'key = {ext_cluster.key}',
+            '',
+        ]
+    )
