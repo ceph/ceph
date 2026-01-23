@@ -35,6 +35,7 @@ static void do_curl_easy_cleanup(RGWCurlHandle *curl_handle);
 struct rgw_http_req_data : public RefCountedObject {
   RGWCurlHandle *curl_handle{nullptr};
   curl_slist *h{nullptr};
+  curl_slist *connect_to_slist{nullptr};
   uint64_t id;
   int ret{0};
   std::atomic<bool> done = { false };
@@ -106,7 +107,14 @@ struct rgw_http_req_data : public RefCountedObject {
 
     curl_handle = NULL;
     h = NULL;
+
+    if (connect_to_slist) {
+      curl_slist_free_all(connect_to_slist);
+      connect_to_slist = nullptr;
+    }
+
     done = true;
+
     if (completion) {
       boost::system::error_code ec(-ret, boost::system::system_category());
       Completion::post(std::move(completion), ec);
@@ -588,6 +596,23 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
 
   curl_easy_setopt(easy_handle, CURLOPT_CUSTOMREQUEST, method.c_str());
   curl_easy_setopt(easy_handle, CURLOPT_URL, endpoint.get_url().c_str());
+
+  // apply CONNECT_TO mapping if provided for this request
+  if (! endpoint.get_connect_to().empty()) {
+    if (req_data->connect_to_slist) {
+      curl_slist_free_all(req_data->connect_to_slist);
+      req_data->connect_to_slist = nullptr;
+    }
+
+    req_data->connect_to_slist = curl_slist_append(req_data->connect_to_slist, endpoint.get_connect_to().c_str());
+    if (! req_data->connect_to_slist) {
+      dout(0) << "ERROR: RGWHTTPClient::init_request failed to allocate connect_to_slist" << dendl;
+    } else {
+      dout(20) << "applying CURLOPT_CONNECT_TO=" << endpoint.get_connect_to() << " for url=" << endpoint.get_url() << dendl;
+      curl_easy_setopt(easy_handle, CURLOPT_CONNECT_TO, req_data->connect_to_slist);
+    }
+  }
+
   curl_easy_setopt(easy_handle, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(easy_handle, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(easy_handle, CURLOPT_HEADERFUNCTION, receive_http_header);
