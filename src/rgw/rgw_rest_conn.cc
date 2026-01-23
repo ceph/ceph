@@ -63,19 +63,23 @@ void RGWRESTConn::resolve_endpoints() {
     boost::system::error_code ec;
     auto results = resolver.resolve(res_ep.host, "", ec);
     if (!ec && !results.empty()) {
+      std::string port_str = std::to_string(res_ep.port);
+      std::string host_port_prefix = res_ep.host + ":" + port_str + ":";
+
       for (const auto& entry : results) {
         auto ip_str = entry.endpoint().address().to_string();
         res_ep.ips.push_back(ip_str);
-        ldout(cct, 1) << "endpoint_url=" << ep_url << " resolved to ip=" << ip_str << dendl;
+        res_ep.connect_to_strings.emplace_back(host_port_prefix + ip_str + ":" + port_str);
+        ldout(cct, 2) << "endpoint_url=" << ep_url << " resolved to ip=" << ip_str << dendl;
       }
-      ldout(cct, 1) << "endpoint=" << ep_url << " resolved to "
+      ldout(cct, 2) << "endpoint=" << ep_url << " resolved to "
                 << res_ep.ips.size() << " IP addresses" << dendl;
     } else {
       ldout(cct, 0) << "WARNING: RGWRESTConn no IP addresses found for endpoint=" << ep_url
                     << (ec ? " err=" + ec.message() : "") << dendl;
     }
 
-    resolved_endpoints.push_back(std::move(res_ep));
+    resolved_endpoints.emplace(ep_url, std::move(res_ep));
   }
 }
 
@@ -155,6 +159,24 @@ RGWRESTConn& RGWRESTConn::operator=(RGWRESTConn&& other)
   return *this;
 }
 
+void RGWRESTConn::get_connect_to_mapping_for_url(RGWEndpoint& endpoint)
+{
+  if (!cct->_conf->rgw_rest_conn_connect_to_resolved_ips) {
+    return;
+  }
+
+  std::string connect_to;
+
+  auto it = resolved_endpoints.find(endpoint.get_url());
+  if (it != resolved_endpoints.end() && !it->second.connect_to_strings.empty()) {
+    auto& res_ep = it->second;
+    size_t idx = res_ep.rr_index++;
+    connect_to = res_ep.connect_to_strings[idx % res_ep.connect_to_strings.size()];
+  }
+
+  endpoint.set_connect_to(connect_to);
+}
+
 int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
 {
   if (endpoints.empty()) {
@@ -201,7 +223,9 @@ int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
     ldout(cct, 5) << "ERROR: no valid endpoint" << dendl;
     return -EINVAL;
   }
-  ldout(cct, 20) << "get_endpoint picked url=" << endpoint.get_url()
+
+  get_connect_to_mapping_for_url(endpoint);
+  ldout(cct, 20) << "get_endpoint picked endpoint url=" << endpoint.get_url()
     << " connect_to=" << endpoint.get_connect_to() << dendl;
 
   return 0;
