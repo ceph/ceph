@@ -5,10 +5,83 @@
 #include "rgw_rest_conn.h"
 #include "rgw_http_errors.h"
 #include "rgw_sal.h"
+#include "rgw_resolve.h"
+#include <boost/url.hpp>
+
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+
+void RGWRESTConn::resolve_endpoints() {
+  resolved_endpoints.reserve(endpoints.size());
+
+  for (const auto& ep : endpoints) {
+    ResolvedEndpoint res_ep;
+    res_ep.url = ep;
+
+    // parse URL
+    boost::system::result<boost::urls::url_view> r = boost::urls::parse_uri(ep);
+    if (r.has_error()) {
+      ldout(cct, 0) << "RGWRESTConn: invalid endpoint url=" << ep
+                    << " err=" << r.error().message() << dendl;
+      continue;
+    }
+    boost::urls::url_view u = r.value();
+
+    // scheme
+    std::string scheme = std::string(u.scheme());
+    if (scheme.empty()) {
+      scheme = "http";
+    }
+    res_ep.scheme = scheme;
+
+    // host
+    res_ep.host = std::string(u.host());
+    if (res_ep.host.empty()) {
+      ldout(cct, 0) << "RGWRESTConn: endpoint url=" << ep
+                    << " has empty host" << dendl;
+      continue;
+    }
+
+    // port
+    if (u.has_port()) {
+      try {
+        res_ep.port = static_cast<uint16_t>(std::stoi(std::string(u.port())));
+      } catch (...) {
+        ldout(cct, 0) << "RGWRESTConn: invalid port in endpoint url=" << ep << dendl;
+        continue;
+      }
+    } else {
+      res_ep.port = (scheme == "https" ? 443 : 80);
+    }
+
+    // resolve all IP addresses for the host
+    std::vector<entity_addr_t> addrs;
+    int rr = rgw_resolver->resolve_all_addrs(res_ep.host, &addrs);
+    if (rr >= 0 && !addrs.empty()) {
+      res_ep.ips = std::move(addrs);
+      ldout(cct, 1) << "endpoint=" << ep << " resolved to "
+                << res_ep.ips.size() << " IP address" << dendl;
+      for (const auto& ea : res_ep.ips) {
+        char ipbuf[INET6_ADDRSTRLEN] = {0};
+        const sockaddr* sa = ea.get_sockaddr();
+        if (sa->sa_family == AF_INET) {
+          auto sin = reinterpret_cast<const sockaddr_in*>(sa);
+          inet_ntop(AF_INET, &sin->sin_addr, ipbuf, sizeof(ipbuf));
+        } else if (sa->sa_family == AF_INET6) {
+          auto sin6 = reinterpret_cast<const sockaddr_in6*>(sa);
+          inet_ntop(AF_INET6, &sin6->sin6_addr, ipbuf, sizeof(ipbuf));
+        }
+        ldout(cct, 1) << "endpoint=" << ep << " resolved to ip=" << ipbuf << dendl;
+      }
+    } else {
+      ldout(cct, 0) << "WARNING: RGWRESTConn no IP addresses found for endpoint=" << ep << dendl;
+    }
+
+    resolved_endpoints.push_back(std::move(res_ep));
+  }
+}
 
 RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Driver* driver,
                          const string& _remote_id,
@@ -30,6 +103,10 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Driver* driver,
   if (driver) {
     key = driver->get_zone()->get_system_key();
     self_zone_group = driver->get_zone()->get_zonegroup().get_id();
+  }
+
+  if (cct->_conf->rgw_resolve_endpoints_into_all_addresses) {
+    resolve_endpoints();
   }
 }
 
@@ -53,6 +130,10 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct,
                 [this](const auto& url) {
                   this->endpoints_status.emplace(url, ceph::real_clock::zero());
                 });
+
+  if (cct->_conf->rgw_resolve_endpoints_into_all_addresses) {
+    resolve_endpoints();
+  }
 }
 
 RGWRESTConn::RGWRESTConn(RGWRESTConn&& other)
