@@ -155,7 +155,7 @@ else:
     sys.exit(1)
 
 cmdclass = {}
-compiler_directives={'language_level': sys.version_info.major}
+compiler_directives = {}
 try:
     from Cython.Build import cythonize
     from Cython.Distutils import build_ext
