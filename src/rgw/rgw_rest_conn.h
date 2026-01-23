@@ -65,6 +65,15 @@ inline param_vec_t make_param_list(const std::map<std::string, std::string> *pp)
   return params;
 }
 
+struct ResolvedEndpoint {
+  std::string url;                // e.g., "https://s3.abc.com:8443"
+  std::string scheme;             // e.g., "https"
+  std::string host;               // e.g., "s3.abc.com"
+  int port = -1;                  // e.g., 443
+  std::vector<entity_addr_t> ips; // the IPs the endpoint resolves to
+  size_t rr_index = 0;            // round-robin index for IPs
+};
+
 class RGWRESTConn
 {
   /* the endpoint is not able to connect if the timestamp is not real_clock::zero */
@@ -72,6 +81,7 @@ class RGWRESTConn
 
   CephContext *cct;
   std::vector<std::string> endpoints;
+  std::vector<ResolvedEndpoint> resolved_endpoints;
   endpoint_status_map endpoints_status;
   RGWAccessKey key;
   std::string self_zone_group;
@@ -79,6 +89,8 @@ class RGWRESTConn
   std::optional<std::string> api_name;
   HostStyle host_style;
   std::atomic<int64_t> counter = { 0 };
+
+  void resolve_endpoints(void);
 
 public:
 
@@ -103,6 +115,7 @@ public:
 
   int get_endpoint(RGWEndpoint& endpoint);
   RGWEndpoint get_endpoint();
+  const std::vector<ResolvedEndpoint>& get_resolved_endpoints() const { return resolved_endpoints; }
   void set_endpoint_unconnectable(const RGWEndpoint& endpoint);
   const std::string& get_self_zonegroup() {
     return self_zone_group;
