@@ -42,7 +42,8 @@ import {
   PopoverModule,
   InlineLoadingModule,
   TagModule,
-  LinkModule
+  LinkModule,
+  LayerModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/20';
 import CodeIcon from '@carbon/icons/es/code/16';
@@ -102,6 +103,7 @@ import downloadIcon from '@carbon/icons/es/download/16';
 import IdeaIcon from '@carbon/icons/es/idea/20';
 import CloseIcon from '@carbon/icons/es/close/16';
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
+import { ProductiveCardComponent } from './productive-card/productive-card.component';
 
 @NgModule({
   imports: [
@@ -148,7 +150,8 @@ import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.componen
     PopoverModule,
     InlineLoadingModule,
     TagModule,
-    LinkModule
+    LinkModule,
+    LayerModule
   ],
   declarations: [
     SparklineComponent,
@@ -196,7 +199,8 @@ import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.componen
     DetailsCardComponent,
     ToastComponent,
     TearsheetComponent,
-    TearsheetStepComponent
+    TearsheetStepComponent,
+    ProductiveCardComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -241,7 +245,8 @@ import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.componen
     DetailsCardComponent,
     ToastComponent,
     TearsheetComponent,
-    TearsheetStepComponent
+    TearsheetStepComponent,
+    ProductiveCardComponent
   ]
 })
 export class ComponentsModule {

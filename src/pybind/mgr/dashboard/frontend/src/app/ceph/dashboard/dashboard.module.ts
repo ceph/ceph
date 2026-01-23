@@ -12,8 +12,14 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
 import { FeedbackComponent } from '../shared/feedback/feedback.component';
 import { DashboardComponent } from './dashboard/dashboard.component';
 import { HealthPieComponent } from './health-pie/health-pie.component';
-import { InputModule, ModalModule, SelectModule, ToggletipModule } from 'carbon-components-angular';
 import { OverviewComponent } from '../overview/overview.component';
+import {
+  InputModule,
+  ModalModule,
+  SelectModule,
+  ThemeModule,
+  ToggletipModule
+} from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -30,7 +36,8 @@ import { OverviewComponent } from '../overview/overview.component';
     ModalModule,
     InputModule,
     SelectModule,
-    OverviewComponent
+    OverviewComponent,
+    ThemeModule
   ],
   exports: [OverviewComponent],
   declarations: [DashboardComponent, HealthPieComponent, FeedbackComponent],
