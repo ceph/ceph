@@ -1,3 +1,4 @@
+# cython: language_level=3
 """
 This module is a thin wrapper around rgw_file.
 """

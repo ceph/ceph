@@ -1,3 +1,4 @@
+# cython: language_level=3
 # cython: embedsignature=True
 """
 This module is a thin wrapper around librbd.
