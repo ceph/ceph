@@ -1,6 +1,12 @@
 overrides:
   ceph:
     conf:
+      global:
+        ebug osd: 20
+        debug ms: 20
+        debug monc: 30
+        debug auth: 20
+        debug cephx: 30
       osd:
         osd op queue: debug_random
         osd op queue cut off: debug_random
@@ -9,6 +15,11 @@ overrides:
         bluestore zero block detection: true
         osd mclock override recovery settings: true
         osd mclock profile: high_recovery_ops
+        debug osd: 20
+        debug ms: 20
+        debug monc: 30
+        debug auth: 20
+        debug cephx: 30
       mon:
         mon scrub interval: 300
         debug mon: 30

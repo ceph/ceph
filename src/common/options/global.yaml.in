@@ -1375,6 +1375,14 @@ options:
   desc: Hexdump message to debug log on message send
   default: false
   with_legacy: true
+- name: ms_inject_drop_mon_forward_msgs
+  type: float
+  level: dev
+  desc: Drop a random fraction of mon forward messages. Value must be between 
+    0.0 and 1.0. For example, 0.2 drops ~20% of such messages.
+  default: 0
+  min: 0
+  max: 1
 - name: ms_dump_corrupt_message_level
   type: int
   level: advanced
@@ -2310,6 +2318,15 @@ options:
   level: advanced
   default: 3
   with_legacy: true
+# how many mons connections are we keeping in the aux list
+- name: mon_aux_list_connections
+  type: uint
+  level: advanced
+  desc: Max number of auxiliary monitor connections to keep for quick 
+    failover or get quorum changes
+  default: 0
+  min: 0
+  with_legacy: false
 - name: mon_client_target_rank
   type: int
   level: advanced
