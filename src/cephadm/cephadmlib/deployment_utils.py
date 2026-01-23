@@ -16,17 +16,21 @@ def enhance_container(ctx: CephadmContext, ctr: BasicContainer) -> None:
     if 'extra_entrypoint_args' in ctx and ctx.extra_entrypoint_args:
         ctr.args.extend(ctx.extra_entrypoint_args)
     ccfiles = fetch_custom_config_files(ctx)
+    assert ctr.identity
+    if parentfn := getattr(ctr.identity, 'parent_identity', None):
+        identity = parentfn()
+    else:
+        identity = ctr.identity
     if ccfiles:
         mandatory_keys = ['mount_path', 'content']
         for conf in ccfiles:
             if all(k in conf for k in mandatory_keys):
                 mount_path = conf['mount_path']
-                assert ctr.identity
                 file_path = os.path.join(
                     ctx.data_dir,
-                    ctr.identity.fsid,
+                    identity.fsid,
                     'custom_config_files',
-                    ctr.identity.daemon_name,
+                    identity.daemon_name,
                     os.path.basename(mount_path),
                 )
                 ctr.volume_mounts[file_path] = mount_path
