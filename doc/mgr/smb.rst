@@ -618,6 +618,10 @@ remote_control
     ca_cert
         Optional object. The fields are described in :ref:`tls source
         fields<tls-source-fields>`
+external_ceph_cluster:
+    Optional object. The fields are described in :ref:`external Ceph cluster
+    source fields<external-ceph-cluster-source-fields>`. This is an
+    advanced option and should be used with caution.
 custom_smb_global_options
     Optional mapping. Specify key-value pairs that will be directly added to
     the global ``smb.conf`` options (or equivalent) of a Samba server.  Do
@@ -683,6 +687,17 @@ source_type
 ref
     String. Required for ``source_type: resource``. Must refer to the ID of a
     ``ceph.smb.tls.credential`` resource
+
+
+.. _external-ceph-cluster-source-fields:
+
+An external Ceph cluster source object supports the following fields:
+
+source_type:
+    Optional. Must be ``resource`` if specified.
+ref:
+    String. Required for ``source_type: resource``. Must refer to the ID of
+    a ``ceph.smb.ext.cluster`` resource
 
 .. note::
    The ``source_type`` ``empty`` is generally only for debugging and testing
@@ -988,6 +1003,47 @@ Example:
       d8XNc4ajEBcSUoRj3UwWwiA4oht0SyoJIfwVGp/kF5jxHhVCLdoaaqAxv7nAghWM
       6Dg=
       -----END CERTIFICATE-----
+
+
+External Ceph Cluster Resource
+------------------------------
+
+This resource can be used to configure an SMB Cluster hosted on Ceph cluster to
+use CephFS volumes provided by an external Ceph cluster.  The values provided
+below allow the SMB server to connect to a cluster other than the one it is
+running on.
+
+.. warning::
+   This is an advanced feature that should be used with care. It allows
+   SMB servers to contact CephFS on a different cluster. Because of that, many
+   values provided below can not be validated and other validations that smb
+   mgr module normally does are disabled.
+   In addition, automatic subvolume to path mapping is diabled. Shares in SMB
+   clusters making use of an external Ceph cluster *must* not specify a
+   subvolume by name and *must* specify an absolute path to a subvolume.
+
+An external ceph cluster resource supports the following fields.
+
+resource_type
+    A literal string ``ceph.smb.ext.cluster``
+external_ceph_cluster_id
+    A short string identifying the cluster
+intent
+    One of ``present`` or ``removed``. If not provided, ``present`` is
+    assumed. If ``removed`` all following fields are optional
+fsid
+    String. The UUID/FSID of the external cluster
+mon_host
+    String. The ``mon_host`` string (as sourced from a ceph.conf file)
+cephfs_user
+    Object. Fields:
+
+    name
+        String. A ceph user name indicating the cephx user that will
+        access the CephFS volume(s) on the external cluster
+    key
+        String. The Base64 encoded key value corresponding to the cephx
+        user name provided
 
 
 A Declarative Configuration Example
