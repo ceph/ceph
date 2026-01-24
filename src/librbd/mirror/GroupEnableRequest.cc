@@ -14,6 +14,7 @@
 #include "librbd/mirror/ImageRemoveRequest.h"
 #include "librbd/mirror/snapshot/GroupImageCreatePrimaryRequest.h"
 #include "librbd/mirror/snapshot/RemoveGroupSnapshotRequest.h"
+#include "librbd/mirror/snapshot/GroupPrepareImagesRequest.h"
 
 #include <shared_mutex>
 
@@ -118,239 +119,39 @@ void GroupEnableRequest<I>::handle_get_mirror_group(int r) {
   m_mirror_group.global_group_id = uuid_gen.to_string();
   m_mirror_group.mirror_image_mode = m_mode;
 
-  get_mirror_peer_list();
+  prepare_group_images();
 }
 
-template <typename I>
-void GroupEnableRequest<I>::get_mirror_peer_list() {
+template<typename I>
+void GroupEnableRequest<I>::prepare_group_images() {
   ldout(m_cct, 10) << dendl;
 
-  m_default_ns_ioctx.dup(m_group_ioctx);
-  m_default_ns_ioctx.set_namespace("");
-
-  librados::ObjectReadOperation op;
-  cls_client::mirror_peer_list_start(&op);
-
-  auto comp = create_rados_callback<
-      GroupEnableRequest<I>,
-      &GroupEnableRequest<I>::handle_get_mirror_peer_list>(this);
-
-  int r = m_default_ns_ioctx.aio_operate(RBD_MIRRORING, comp, &op,
-                                         &m_out_bls[0]);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-void GroupEnableRequest<I>::handle_get_mirror_peer_list(int r) {
-  ldout(m_cct, 10) << "r=" << r << dendl;
-
-  std::vector<cls::rbd::MirrorPeer> peers;
-  if (r == 0) {
-    auto it = m_out_bls[0].cbegin();
-    r = cls_client::mirror_peer_list_finish(&it, &peers);
-  }
-
-  m_out_bls[0].clear();
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to retrieve mirror peers: " << cpp_strerror(r)
-                 << dendl;
-    finish(r);
-    return;
-  }
-
-  for (auto &peer : peers) {
-    if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
-      continue;
-    }
-    m_mirror_peer_uuids.insert(peer.uuid);
-  }
-
-  if (m_mirror_peer_uuids.empty()) {
-    lderr(m_cct) << "no mirror tx peers configured for the pool" << dendl;
-    finish(-EINVAL);
-    return;
-  }
-
-  list_group_images();
-}
-
-template <typename I>
-void GroupEnableRequest<I>::list_group_images() {
-  ldout(m_cct, 10) << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::group_image_list_start(&op, m_start_after, MAX_RETURN);
-
-  auto comp = create_rados_callback<
+  auto ctx = create_context_callback<
     GroupEnableRequest<I>,
-    &GroupEnableRequest<I>::handle_list_group_images>(this);
+    &GroupEnableRequest<I>::handle_prepare_group_images>(this);
 
-  int r = m_group_ioctx.aio_operate(
-    librbd::util::group_header_name(m_group_id), comp, &op, &m_out_bls[0]);
-  ceph_assert(r == 0);
-  comp->release();
+  auto req = snapshot::GroupPrepareImagesRequest<I>::create(m_group_ioctx, m_group_id,
+      m_image_ctxs, m_images, &m_mirror_images, nullptr, nullptr, &m_mirror_peer_uuids,
+      "enable", false, ctx);
+  req->send();
 }
 
-template <typename I>
-void GroupEnableRequest<I>::handle_list_group_images(int r) {
+template<typename I>
+void GroupEnableRequest<I>::handle_prepare_group_images(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
-  std::vector<cls::rbd::GroupImageStatus> images;
-  if (r == 0) {
-    auto iter = m_out_bls[0].cbegin();
-    r = cls_client::group_image_list_finish(&iter, &images);
-  }
-
-  m_out_bls[0].clear();
-
   if (r < 0) {
-    lderr(m_cct) << "error listing images in group: " << cpp_strerror(r)
-                 << dendl;
-    finish(r);
-    return;
-  }
-
-  auto image_count = images.size();
-  m_images.insert(m_images.end(), images.begin(), images.end());
-  if (image_count == MAX_RETURN) {
-    m_start_after = images.rbegin()->spec;
-    list_group_images();
+    lderr(m_cct) << "failed to prepare group images" << dendl;
+    m_ret_val = r;
+    close_images();
     return;
   }
 
   if (m_images.empty()) {
     set_mirror_group_enabling();
   } else {
-    check_mirror_images_disabled();
+    validate_images();
   }
-}
-
-template <typename I>
-void GroupEnableRequest<I>::check_mirror_images_disabled() {
-  ldout(m_cct, 10) << dendl;
-
-  auto ctx = create_context_callback<
-    GroupEnableRequest<I>,
-    &GroupEnableRequest<I>::handle_check_mirror_images_disabled>(this);
-  auto gather_ctx = new C_Gather(m_cct, ctx);
-
-  m_mirror_images.resize(m_images.size());
-  m_out_bls.resize(m_images.size());
-  for (size_t i = 0; i < m_images.size(); i++) {
-    librados::ObjectReadOperation op;
-    cls_client::mirror_image_get_start(&op, m_images[i].spec.image_id);
-
-    auto on_mirror_image_get = new LambdaContext(
-      [this, i, new_sub_ctx=gather_ctx->new_sub()](int r) {
-        if (r == 0) {
-          auto iter = m_out_bls[i].cbegin();
-          r = cls_client::mirror_image_get_finish(&iter, &m_mirror_images[i]);
-        }
-
-        if (r == -ENOENT) {
-          // image is disabled for mirroring as required
-          r = 0;
-        } else if (r == 0) {
-          lderr(m_cct) << "image_id=" << m_images[i].spec.image_id
-                       << " is not disabled for mirroring" << dendl;
-          r = -EINVAL;
-        } else {
-          lderr(m_cct) << "failed to get mirror image info for image_id="
-                       << m_images[i].spec.image_id << dendl;
-        }
-
-        new_sub_ctx->complete(r);
-      });
-
-    auto comp = create_rados_callback(on_mirror_image_get);
-
-    int r = m_group_ioctx.aio_operate(RBD_MIRRORING, comp, &op,
-                                      &m_out_bls[i]);
-    ceph_assert(r == 0);
-    comp->release();
-  }
-
-  gather_ctx->activate();
-}
-
-template <typename I>
-void GroupEnableRequest<I>::handle_check_mirror_images_disabled(int r) {
-  ldout(m_cct, 10) << "r=" << r <<  dendl;
-
-  m_out_bls.clear();
-
-  if (r < 0) {
-    lderr(m_cct) << "images not disabled for mirroring: "
-                 << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
-  open_images();
-}
-
-template <typename I>
-void GroupEnableRequest<I>::open_images() {
-  ldout(m_cct, 10) << dendl;
-
-  auto ctx = create_context_callback<
-    GroupEnableRequest<I>, &GroupEnableRequest<I>::handle_open_images>(this);
-  auto gather_ctx = new C_Gather(m_cct, ctx);
-  int r = 0;
-  std::vector<librados::IoCtx> ioctxs;
-
-  for (const auto& image: m_images) {
-    librados::IoCtx image_io_ctx;
-    r = librbd::util::create_ioctx(m_group_ioctx, "image",
-                                   image.spec.pool_id, {},
-                                   &image_io_ctx);
-    if (r < 0) {
-      finish(r);
-      return;
-    }
-
-    ioctxs.push_back(std::move(image_io_ctx));
-  }
-
-  for (size_t i = 0; i < m_images.size(); i++) {
-    m_image_ctxs.push_back(
-      new ImageCtx("", m_images[i].spec.image_id.c_str(), nullptr, ioctxs[i],
-                   false));
-
-    auto on_open = new LambdaContext(
-      [this, i, new_sub_ctx=gather_ctx->new_sub()](int r) {
-        // If asynchronous ImageState::open() fails, ImageState together with
-        // ImageCtx is destroyed. Simply NULL-out the respective image_ctxs[i]
-        // pointer to record that it's no longer valid.
-        if (r < 0) {
-          m_image_ctxs[i] = nullptr;
-        }
-        new_sub_ctx->complete(r);
-      });
-
-    // Open parent as well to check if the image is a clone
-    m_image_ctxs[i]->state->open(0, on_open);
-  }
-
-  gather_ctx->activate();
-}
-
-template <typename I>
-void GroupEnableRequest<I>::handle_open_images(int r) {
-  ldout(m_cct, 10) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to open group images: " << cpp_strerror(r)
-                 << dendl;
-    m_ret_val = r;
-
-    close_images();
-    return;
-  }
-
-  validate_images();
 }
 
 template <typename I>
@@ -510,7 +311,7 @@ void GroupEnableRequest<I>::create_primary_image_snapshots() {
   auto req = snapshot::GroupImageCreatePrimaryRequest<I>::create(
     m_cct, m_image_ctxs, m_global_image_ids, m_group_snap_create_flags,
     snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS, m_group_snap.id,
-    &m_snap_ids, ctx);
+    &m_snap_ids, true, ctx);
   req->send();
 }
 
@@ -682,6 +483,10 @@ void GroupEnableRequest<I>::handle_notify_mirroring_watcher(int r) {
 
 template <typename I>
 void GroupEnableRequest<I>::close_images() {
+  if (m_image_ctxs.empty()) {
+    finish(m_ret_val);
+    return;
+  }
   ldout(m_cct, 10) << dendl;
 
   auto ctx = create_context_callback<
