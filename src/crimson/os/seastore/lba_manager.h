@@ -269,7 +269,7 @@ public:
     Transaction &t,
     laddr_t begin,
     laddr_t end,
-    scan_mappings_func_t &&f) = 0;
+    scan_mappings_func_t f) = 0;
 
   /**
    * rewrite_extent
