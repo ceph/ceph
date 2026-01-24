@@ -177,6 +177,21 @@ public:
       extent_len_t>(get_intermediate_key());
   }
 
+  extent_types_t get_extent_type() const {
+    if (direct_cursor && indirect_cursor) {
+      assert(direct_cursor->get_extent_type()
+	     == indirect_cursor->get_extent_type());
+    }
+    if (direct_cursor) {
+      return direct_cursor->get_extent_type();
+    } else if (indirect_cursor) {
+      return indirect_cursor->get_extent_type();
+    } else {
+      ceph_abort("invalid LBAMapping");
+      return extent_types_t::NONE;
+    }
+  }
+
   get_child_ret_t<lba::LBALeafNode, LogicalChildNode>
   get_logical_extent(Transaction &t) const;
 

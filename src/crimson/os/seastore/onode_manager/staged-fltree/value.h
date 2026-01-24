@@ -201,7 +201,13 @@ class Value {
     return read_value_header()->payload_size;
   }
 
-  laddr_t get_hint() const;
+  laddr_hint_t init_hint(
+    extent_len_t block_size,
+    bool is_metadata) const;
+  laddr_hint_t generate_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const;
 
   bool operator==(const Value& v) const { return p_cursor == v.p_cursor; }
   bool operator!=(const Value& v) const { return !(*this == v); }

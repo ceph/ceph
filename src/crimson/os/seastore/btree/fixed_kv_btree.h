@@ -886,6 +886,10 @@ public:
       c.trans,
       laddr,
       iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
+    if constexpr (std::is_same_v<node_key_t, laddr_t>) {
+      // avoid unexpect default extent type for lba btree
+      assert(val.type != extent_types_t::ROOT);
+    }
     return seastar::do_with(
       iter,
       [this, c, laddr, val](auto &ret) {
