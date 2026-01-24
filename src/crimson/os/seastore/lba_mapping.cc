@@ -85,51 +85,26 @@ base_iertr::future<LBAMapping> LBAMapping::next()
   LOG_PREFIX(LBAMapping::next);
   auto ctx = get_effective_cursor().ctx;
   SUBDEBUGT(seastore_lba, "{}", ctx.trans, *this);
-  return refresh().si_then([ctx](auto mapping) {
-    return with_btree_state<lba::LBABtree, LBAMapping>(
-      ctx.cache,
-      ctx,
-      std::move(mapping),
-      [ctx](auto &btree, auto &mapping) mutable {
-      auto &cursor = mapping.get_effective_cursor();
-      auto iter = btree.make_partial_iter(ctx, cursor);
-      return iter.next(ctx).si_then([ctx, &mapping](auto iter) {
-	if (!iter.is_end() && iter.get_val().pladdr.is_laddr()) {
-	  mapping = LBAMapping::create_indirect(nullptr, iter.get_cursor(ctx));
-	} else {
-	  mapping = LBAMapping::create_direct(iter.get_cursor(ctx));
-	}
-      });
+  LBAMapping mapping(*this);
+  co_await mapping.mapping_refresh();
+  co_return co_await with_btree_state<lba::LBABtree, LBAMapping>(
+    ctx.cache,
+    ctx,
+    std::move(mapping),
+    [ctx](auto &btree, auto &mapping) mutable {
+    auto &cursor = mapping.get_effective_cursor();
+    auto iter = btree.make_partial_iter(ctx, cursor);
+    return iter.next(ctx).si_then([ctx, &mapping](auto iter) {
+      if (!iter.is_end() && iter.get_val().pladdr.is_laddr()) {
+        mapping = LBAMapping::create_indirect(nullptr, iter.get_cursor(ctx));
+      } else {
+        mapping = LBAMapping::create_direct(iter.get_cursor(ctx));
+      }
     });
   });
 }
 
-base_iertr::future<LBAMapping> LBAMapping::refresh()
-{
-  if (is_viewable()) {
-    return base_iertr::make_ready_future<LBAMapping>(*this);
-  }
-  return seastar::do_with(
-    direct_cursor,
-    indirect_cursor,
-    [](auto &direct_cursor, auto &indirect_cursor) {
-    return seastar::futurize_invoke([&direct_cursor] {
-      if (direct_cursor) {
-	return direct_cursor->refresh();
-      }
-      return base_iertr::now();
-    }).si_then([&indirect_cursor] {
-      if (indirect_cursor) {
-	return indirect_cursor->refresh();
-      }
-      return base_iertr::now();
-    }).si_then([&direct_cursor, &indirect_cursor] {
-      return LBAMapping(direct_cursor, indirect_cursor);
-    });
-  });
-}
-
-base_iertr::future<> LBAMapping::co_refresh()
+base_iertr::future<> LBAMapping::mapping_refresh()
 {
   if (is_viewable()) {
     co_return;

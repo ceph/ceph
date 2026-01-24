@@ -82,6 +82,13 @@ struct get_child_ret_t {
     ceph_assert(ret.index() == 1);
     return std::get<1>(ret);
   }
+
+  template <typename T>
+  get_child_ifut<T> get_child_fut_as() {
+    return std::move(get_child_fut()).si_then([](auto e) {
+      return e->template cast<T>();
+    });
+  }
 };
 
 template <typename T, typename key_t>

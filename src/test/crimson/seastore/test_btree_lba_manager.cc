@@ -565,16 +565,16 @@ struct btree_lba_manager_test : btree_test_base {
 	});
       }).unsafe_get();
     for (auto &ret : rets) {
-      logger().debug("alloc'd: {}", ret);
-      EXPECT_EQ(len, ret.get_length());
-      auto [b, e] = get_overlap(t, ret.get_key(), len);
+      logger().debug("alloc'd: {}", *ret);
+      EXPECT_EQ(len, ret->get_length());
+      auto [b, e] = get_overlap(t, ret->get_laddr(), len);
       EXPECT_EQ(b, e);
       t.mappings.emplace(
 	std::make_pair(
-	  ret.get_key(),
+	  ret->get_laddr(),
 	  test_extent_t{
-	    ret.get_val(),
-	    ret.get_length(),
+	    ret->get_paddr(),
+	    ret->get_length(),
 	    1
 	  }
 	));
@@ -597,19 +597,24 @@ struct btree_lba_manager_test : btree_test_base {
 
     (void) with_trans_intr(
       *t.t,
-      [=, this](auto &t) {
-	return lba_manager->remove_mapping(
+      seastar::coroutine::lambda([=, this](auto &t)
+				 -> LBAManager::ref_iertr::future<> {
+
+	auto cursor = co_await lba_manager->get_cursor(
 	  t,
-	  target->first
-	).si_then([this, &t, target](auto result) {
-	  EXPECT_EQ(result.result.refcount, target->second.refcount);
-	  if (result.result.refcount == 0) {
-	    return cache->retire_extent_addr(
-	      t, result.result.addr.get_paddr(), result.result.length);
-	  }
-	  return Cache::retire_extent_iertr::now();
-	});
-      }).unsafe_get();
+	  target->first);
+	auto refcount = cursor->get_refcount() - 1;
+	co_await lba_manager->update_mapping_refcount(
+	  t,
+	  cursor,
+	  -1
+	);
+	EXPECT_EQ(refcount, target->second.refcount);
+	if (refcount == 0) {
+	  co_await cache->retire_extent_addr(
+	    t, cursor->get_paddr(), cursor->get_length());
+	}
+      })).unsafe_get();
     if (target->second.refcount == 0) {
       t.mappings.erase(target);
     }
@@ -651,24 +656,24 @@ struct btree_lba_manager_test : btree_test_base {
       auto ret_list = with_trans_intr(
 	*t.t,
 	[=, this](auto &t) {
-	  return lba_manager->get_mappings(
+	  return lba_manager->get_cursors(
 	    t, laddr, len);
 	}).unsafe_get();
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
-      EXPECT_EQ(i.second.addr, ret.get_val());
-      EXPECT_EQ(laddr, ret.get_key());
-      EXPECT_EQ(len, ret.get_length());
+      EXPECT_EQ(i.second.addr, ret->get_paddr());
+      EXPECT_EQ(laddr, ret->get_laddr());
+      EXPECT_EQ(len, ret->get_length());
 
       auto ret_pin = with_trans_intr(
 	*t.t,
 	[=, this](auto &t) {
-	  return lba_manager->get_mapping(
+	  return lba_manager->get_cursor(
 	    t, laddr);
 	}).unsafe_get();
-      EXPECT_EQ(i.second.addr, ret_pin.get_val());
-      EXPECT_EQ(laddr, ret_pin.get_key());
-      EXPECT_EQ(len, ret_pin.get_length());
+      EXPECT_EQ(i.second.addr, ret_pin->get_paddr());
+      EXPECT_EQ(laddr, ret_pin->get_laddr());
+      EXPECT_EQ(len, ret_pin->get_length());
     }
     with_trans_intr(
       *t.t,
