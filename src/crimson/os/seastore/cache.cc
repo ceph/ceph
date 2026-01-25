@@ -1446,11 +1446,13 @@ record_t Cache::prepare_record(
 	  extent->get_paddr(),
 	  extent->get_length(),
 	  extent->get_type()));
-      backref_entries.emplace_back(
-	backref_entry_t::create_retire(
-	  extent->get_paddr(),
-	  extent->get_length(),
-	  extent->get_type()));
+      if (!can_drop_backref()) {
+        backref_entries.emplace_back(
+          backref_entry_t::create_retire(
+            extent->get_paddr(),
+            extent->get_length(),
+            extent->get_type()));
+      }
     } else if (is_backref_node(extent->get_type())) {
       // The retire alloc deltas are used to identify the invalid backref extent
       // deltas during replay when using CircularBoundedJournal, see
@@ -1460,7 +1462,9 @@ record_t Cache::prepare_record(
 	  extent->get_paddr(),
 	  extent->get_length(),
 	  extent->get_type()));
-      remove_backref_extent(extent->get_paddr());
+      if (!can_drop_backref()) {
+        remove_backref_extent(extent->get_paddr());
+      }
     } else {
       ERRORT("Got unexpected extent type: {}", t, *extent);
       ceph_abort_msg("imposible");
@@ -1632,6 +1636,10 @@ record_t Cache::prepare_record(
 	i->get_length(),
 	i->get_type()));
 
+    if (can_drop_backref()) {
+      continue;
+    }
+
     // Note: commit extents and backref allocations in the same place
     // Note: remapping is split into 2 steps, retire and alloc, they must be
     //       committed atomically together
@@ -1696,8 +1704,10 @@ record_t Cache::prepare_record(
     record.push_back(std::move(delta));
   }
 
-  apply_backref_mset(backref_entries);
-  t.set_backref_entries(std::move(backref_entries));
+  if (!can_drop_backref()) {
+    apply_backref_mset(backref_entries);
+    t.set_backref_entries(std::move(backref_entries));
+  }
 
   ceph_assert(t.get_fresh_block_stats().num ==
               t.inline_block_list.size() +
@@ -1871,6 +1881,9 @@ void Cache::complete_commit(
     i->complete_io();
     epm.commit_space_used(i->get_paddr(), i->get_length());
 
+    if (can_drop_backref()) {
+      return;
+    }
     // Note: commit extents and backref allocations in the same place
     if (is_backref_mapped_type(i->get_type())) {
       DEBUGT("backref_entry alloc {}~0x{:x}",
@@ -1944,8 +1957,10 @@ void Cache::complete_commit(
 
   last_commit = start_seq;
 
-  apply_backref_byseq(t.move_backref_entries(), start_seq);
-  commit_backref_entries(std::move(backref_entries), start_seq);
+  if (!can_drop_backref()) {
+    apply_backref_byseq(t.move_backref_entries(), start_seq);
+    commit_backref_entries(std::move(backref_entries), start_seq);
+  }
 }
 
 void Cache::init()
@@ -2017,7 +2032,9 @@ Cache::replay_delta(
 {
   LOG_PREFIX(Cache::replay_delta);
   assert(dirty_tail != JOURNAL_SEQ_NULL);
-  assert(alloc_tail != JOURNAL_SEQ_NULL);
+  if (!can_drop_backref()) {
+    assert(alloc_tail != JOURNAL_SEQ_NULL);
+  }
   ceph_assert(modify_time != NULL_TIME);
 
   // FIXME: This is specific to the segmented implementation
@@ -2055,6 +2072,11 @@ Cache::replay_delta(
 
   // replay alloc
   if (delta.type == extent_types_t::ALLOC_INFO) {
+    if (can_drop_backref()) {
+      return replay_delta_ertr::make_ready_future<
+        std::pair<bool, CachedExtentRef>>(std::make_pair(false, nullptr));
+    }
+
     if (journal_seq < alloc_tail) {
       DEBUG("journal_seq {} < alloc_tail {}, don't replay {}",
 	journal_seq, alloc_tail, delta);

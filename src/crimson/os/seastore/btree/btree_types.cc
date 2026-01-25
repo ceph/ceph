@@ -90,6 +90,7 @@ std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
   return out << "lba_map_val_t("
              << v.pladdr
              << "~0x" << std::hex << v.len
+             << ", type=" << (extent_types_t)v.type
              << ", checksum=0x" << v.checksum
              << ", refcount=" << std::dec << v.refcount
              << ")";

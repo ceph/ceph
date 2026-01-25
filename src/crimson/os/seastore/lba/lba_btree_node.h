@@ -96,7 +96,7 @@ using LBAInternalNodeRef = LBAInternalNode::Ref;
  * TODO: update FixedKVNodeLayout to handle the above calculation
  * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t LEAF_NODE_CAPACITY = 140;
+constexpr size_t LEAF_NODE_CAPACITY = 135;
 
 struct LBALeafNode
   : FixedKVLeafNode<

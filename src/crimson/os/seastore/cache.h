@@ -743,6 +743,10 @@ public:
     return query_cache(offset);
   }
 
+  bool can_drop_backref() const {
+    return epm.is_pure_rbm();
+  }
+
 private:
   using get_extent_ertr = base_ertr;
   template <typename T>

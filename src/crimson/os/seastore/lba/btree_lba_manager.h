@@ -358,6 +358,10 @@ public:
     Transaction &t,
     LBAMapping mapping) final;
 
+  scan_mapped_space_ret scan_mapped_space(
+    Transaction &t,
+    scan_mapped_space_func_t &&f) final;
+
 private:
   Cache &cache;
 
@@ -387,7 +391,8 @@ private:
 	  len,
 	  pladdr_t(P_ADDR_ZERO),
 	  EXTENT_DEFAULT_REF_COUNT,
-	  0
+	  0,
+          extent_types_t::NONE
 	}};
     }
     static alloc_mapping_info_t create_indirect(
@@ -400,8 +405,9 @@ private:
 	  len,
 	  pladdr_t(intermediate_key),
 	  EXTENT_DEFAULT_REF_COUNT,
-	  0	// crc will only be used and checked with LBA direct mappings
+	  0,	// crc will only be used and checked with LBA direct mappings
 		// also see pin_to_extent(_by_type)
+          extent_types_t::NONE
 	}};
     }
     static alloc_mapping_info_t create_direct(
@@ -411,7 +417,14 @@ private:
       extent_ref_count_t refcount,
       checksum_t checksum,
       LogicalChildNode& extent) {
-      return {laddr, {len, pladdr_t(paddr), refcount, checksum}, &extent};
+      return {
+        laddr,
+        {len,
+         pladdr_t(paddr),
+         refcount,
+         checksum,
+         extent.get_type()},
+        &extent};
     }
   };
 

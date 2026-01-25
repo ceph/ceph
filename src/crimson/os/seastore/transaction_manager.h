@@ -1172,6 +1172,10 @@ private:
 
   shard_stats_t& shard_stats;
 
+  bool can_drop_backref() const {
+    return cache->can_drop_backref();
+  }
+
   using LBALeafNode = lba::LBALeafNode;
   struct unlinked_child_t {
     LBAMapping mapping;

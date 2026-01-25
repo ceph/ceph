@@ -336,7 +336,12 @@ BtreeLBAManager::reserve_region(
     [pos=std::move(pos), c, addr, len](auto &btree) mutable {
     auto &cursor = pos.get_effective_cursor();
     auto iter = btree.make_partial_iter(c, cursor);
-    lba_map_val_t val{len, P_ADDR_ZERO, EXTENT_DEFAULT_REF_COUNT, 0};
+    lba_map_val_t val{
+      len,
+      P_ADDR_ZERO,
+      EXTENT_DEFAULT_REF_COUNT,
+      0,
+      extent_types_t::NONE};
     return btree.insert(c, iter, addr, val
     ).si_then([c](auto p) {
       auto &[iter, inserted] = p;
@@ -391,7 +396,8 @@ BtreeLBAManager::alloc_extents(
 	      ext->get_length(),
 	      ext->get_paddr(),
 	      EXTENT_DEFAULT_REF_COUNT,
-	      ext->get_last_committed_crc()}
+	      ext->get_last_committed_crc(),
+              ext->get_type()}
 	  ).si_then([ext, c, FNAME, &iter, &ret](auto p) {
 	    auto &[it, inserted] = p;
 	    ceph_assert(inserted);
@@ -490,7 +496,12 @@ BtreeLBAManager::clone_mapping(
 	    c,
 	    btree.make_partial_iter(c, cursor),
 	    state.laddr,
-            lba_map_val_t{state.len, inter_key, EXTENT_DEFAULT_REF_COUNT, 0});
+            lba_map_val_t{
+              state.len,
+              inter_key,
+              EXTENT_DEFAULT_REF_COUNT,
+              0,
+              extent_types_t::NONE});
 	}).si_then([c, &state](auto p) {
 	  auto &[iter, inserted] = p;
 	  auto &leaf_node = *iter.get_leaf_node();
@@ -1185,6 +1196,60 @@ BtreeLBAManager::_update_mapping(
 	}
       });
     });
+}
+
+BtreeLBAManager::scan_mapped_space_ret
+BtreeLBAManager::scan_mapped_space(
+  Transaction &t,
+  BtreeLBAManager::scan_mapped_space_func_t &&f)
+{
+  LOG_PREFIX(BtreeLBAManager::scan_mapped_space);
+  DEBUGT("scan lba tree", t);
+  auto c = get_context(t);
+  auto scan_visitor = std::move(f);
+  auto btree = co_await get_btree<LBABtree>(c);
+  auto block_size = cache.get_block_size();
+  auto pos = co_await btree.lower_bound(c, L_ADDR_MIN);
+  while (!pos.is_end()) {
+    if (pos.get_val().pladdr.is_laddr() ||
+        pos.get_val().pladdr.get_paddr().is_zero()) {
+      pos = co_await pos.next(c);
+      continue;
+    }
+    TRACET("tree value {}~{} {}~{} used, type {}",
+           c.trans,
+           pos.get_key(),
+           pos.get_val().len,
+           pos.get_val().pladdr.get_paddr(),
+           pos.get_val().len,
+           pos.get_val().type);
+    ceph_assert(pos.get_val().len > 0 &&
+                pos.get_val().len % block_size == 0);
+    ceph_assert(pos.get_val().pladdr != L_ADDR_NULL);
+    scan_visitor(
+        pos.get_val().pladdr.get_paddr(),
+        pos.get_val().len,
+        pos.get_val().type,
+        pos.get_key());
+    pos = co_await pos.next(c);
+  }
+
+  LBABtree::mapped_space_visitor_t tree_visitor =
+    [&scan_visitor, block_size, FNAME, c](
+      paddr_t paddr, laddr_t key, extent_len_t len,
+      depth_t depth, extent_types_t type, LBABtree::iterator&) {
+    TRACET("tree node {}~{} {}, depth={} used",
+           c.trans, paddr, len, type, depth);
+    ceph_assert(paddr.is_absolute());
+    ceph_assert(len > 0 && len % block_size == 0);
+    ceph_assert(depth >= 1);
+    return scan_visitor(paddr, len, type, key);
+  };
+
+  pos = co_await btree.lower_bound(c, L_ADDR_MIN, &tree_visitor);
+  while (!pos.is_end()) {
+    pos = co_await pos.next(c, &tree_visitor);
+  }
 }
 
 BtreeLBAManager::_get_cursor_ret
