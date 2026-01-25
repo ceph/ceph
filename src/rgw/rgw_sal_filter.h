@@ -32,6 +32,7 @@ public:
   virtual bool is_tier_type_s3() { return next->is_tier_type_s3(); }
   virtual const std::string& get_storage_class() override { return next->get_storage_class(); }
   virtual bool retain_head_object() override { return next->retain_head_object(); }
+  virtual bool retain_current_version() override { return next->retain_current_version(); }
   virtual bool allow_read_through() { return next->allow_read_through(); }
   virtual uint64_t get_read_through_restore_days() { return next->get_read_through_restore_days(); }
 
