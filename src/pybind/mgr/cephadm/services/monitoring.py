@@ -480,6 +480,7 @@ class PrometheusService(CephadmService):
     DEFAULT_MGR_PROMETHEUS_PORT = 9283
     USER_CFG_KEY = 'prometheus/web_user'
     PASS_CFG_KEY = 'prometheus/web_password'
+    BASIC_AUTH_CREDS = 'prometheus_basic_auth_credentials'
 
     def config(self, spec: ServiceSpec) -> None:
         # make sure module is enabled
