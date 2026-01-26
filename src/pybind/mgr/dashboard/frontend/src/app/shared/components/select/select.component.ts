@@ -3,7 +3,7 @@ import { UntypedFormControl, ValidatorFn } from '@angular/forms';
 
 import _ from 'lodash';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize } from '~/app/shared/enum/icons.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SelectMessages } from './select-messages.model';
 import { SelectOption } from './select-option.model';
@@ -37,7 +37,7 @@ export class SelectComponent implements OnInit, OnChanges {
   filter: UntypedFormControl;
   Object = Object;
   filteredOptions: Array<SelectOption> = [];
-  icons = Icons;
+  iconSize = IconSize;
 
   ngOnInit() {
     this.initFilter();

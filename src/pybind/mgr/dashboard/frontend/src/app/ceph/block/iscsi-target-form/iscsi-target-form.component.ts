@@ -11,7 +11,7 @@ import { RbdService } from '~/app/shared/api/rbd.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { ActionLabelsI18n, USER } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize } from '~/app/shared/enum/icons.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -43,7 +43,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
   unsupported_rbd_features: any;
   required_rbd_features: any;
 
-  icons = Icons;
+  iconSize = IconSize;
 
   isEdit = false;
   target_iqn: string;

@@ -7,9 +7,9 @@
            [customBadgeValidators]="customBadgeValidators"
            elemClass="me-2 select-menu-edit"
            (selection)="selection.emit($event)">
-  <svg [cdsIcon]="icons.edit"
-       [size]="icons.size20"
-       class="cds-info-color"></svg>
+  <cd-icon type="edit"
+           [size]="iconSize.size20"
+           class="cds-info-color"></cd-icon>
 </cd-select>
 
 <span *ngFor="let dataItem of data">
@@ -17,9 +17,9 @@
     <span class="me-2">{{ dataItem }}</span>
       <a  class="tags-remove"
           (click)="cdSelect.removeItem(dataItem)">
-      <svg [cdsIcon]="icons.destroy"
-           [size]="icons.size20"
-           class="cds-white"></svg>
+      <cd-icon type="destroy"
+               [size]="iconSize.size20"
+               class="cds-white"></cd-icon>
     </a>
   </cds-tag>
 </span>

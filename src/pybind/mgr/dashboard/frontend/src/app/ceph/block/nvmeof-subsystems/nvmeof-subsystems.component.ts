@@ -9,7 +9,7 @@ import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -104,7 +104,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () =>
           this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.CREATE] } }], {
             queryParams: { group: this.group }
@@ -115,7 +115,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         click: () => this.deleteSubsystemModal()
       }
     ];

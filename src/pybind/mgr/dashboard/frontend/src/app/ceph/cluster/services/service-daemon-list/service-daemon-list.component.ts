@@ -23,7 +23,7 @@ import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -74,7 +74,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
 
   errorThreshold = 0.9;
 
-  icons = Icons;
+  iconSize = IconSize;
 
   daemons: Daemon[] = [];
   services: Array<CephServiceSpec> = [];
@@ -109,28 +109,28 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     this.tableActions = [
       {
         permission: 'update',
-        icon: Icons.start,
+        icon: ICON_TYPE.playFilled,
         click: () => this.daemonAction('start'),
         name: this.actionLabels.START,
         disable: () => this.actionDisabled('start')
       },
       {
         permission: 'update',
-        icon: Icons.stop,
+        icon: ICON_TYPE.stopFilled,
         click: () => this.daemonAction('stop'),
         name: this.actionLabels.STOP,
         disable: () => this.actionDisabled('stop')
       },
       {
         permission: 'update',
-        icon: Icons.restart,
+        icon: ICON_TYPE.restart,
         click: () => this.daemonAction('restart'),
         name: this.actionLabels.RESTART,
         disable: () => this.actionDisabled('restart')
       },
       {
         permission: 'update',
-        icon: Icons.deploy,
+        icon: ICON_TYPE.deploy,
         click: () => this.daemonAction('redeploy'),
         name: this.actionLabels.REDEPLOY,
         disable: () => this.actionDisabled('redeploy')

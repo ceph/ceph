@@ -15,7 +15,7 @@ import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { SMBCluster } from '../smb.model';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
@@ -74,20 +74,20 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
       {
         name: `${this.actionLabels.CREATE} cluster`,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         routerLink: () => this.urlBuilder.getCreate(),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
       },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         routerLink: () =>
           this.selection.first() && this.urlBuilder.getEdit(this.selection.first().cluster_id)
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         click: () => this.removeSMBClusterModal(),
         name: this.actionLabels.DELETE
       }

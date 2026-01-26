@@ -26,9 +26,9 @@
                       id="ecp-info-button"
                       type="button"
                       (click)="targetSettingsModal()">
-                <svg [cdsIcon]="icons.deepCheck"
-                     [size]="icons.size16"
-                     ></svg>
+                <cd-icon type="settings"
+                         [size]="iconSize.size20"
+                         aria-hidden="true"></cd-icon>
               </button>
             </div>
 
@@ -75,9 +75,7 @@
                 <button class="btn btn-light"
                         type="button"
                         (click)="removePortal(i, portal)">
-                  <svg [cdsIcon]="icons.destroy"
-                       [size]="icons.size16"
-                       ></svg>
+                  <cd-icon type="settings"></cd-icon>
                 </button>
               </div>
             </ng-container>
@@ -89,9 +87,8 @@
                            [messages]="messages.portals"
                            (selection)="onPortalSelection($event)"
                            elemClass="btn btn-light float-end">
-                  <svg [cdsIcon]="icons.add"
-                       [size]="icons.size16"
-                       ></svg>
+                  <cd-icon type="add"
+  ></cd-icon>
                   <ng-container i18n>Add portal</ng-container>
                 </cd-select>
               </div>
@@ -128,16 +125,13 @@
                 <button class="btn btn-light"
                         type="button"
                         (click)="imageSettingsModal(image)">
-                  <svg [cdsIcon]="icons.deepCheck"
-                       [size]="icons.size16"
-                       ></svg>
+                  <cd-icon type="settings"></cd-icon>
                 </button>
                 <button class="btn btn-light"
                         type="button"
                         (click)="removeImage(i, image)">
-                  <svg [cdsIcon]="icons.destroy"
-                       [size]="icons.size16"
-                       ></svg>
+                  <cd-icon type="destroy"
+  ></cd-icon>
                 </button>
 
               </div>
@@ -172,9 +166,8 @@
                            [messages]="messages.images"
                            (selection)="onImageSelection($event)"
                            elemClass="btn btn-light float-end">
-                  <svg [cdsIcon]="icons.add"
-                       [size]="icons.size16"
-                       ></svg>
+                  <cd-icon type="add"
+  ></cd-icon>
                   <ng-container i18n>Add image</ng-container>
                 </cd-select>
               </div>
@@ -496,9 +489,7 @@
                         <button class="btn btn-light"
                                 type="button"
                                 (click)="removeInitiatorImage(initiator, li, ii, image)">
-                          <svg [cdsIcon]="icons.destroy"
-                               [size]="icons.size16"
-                               ></svg>
+                          <cd-icon type="close"></cd-icon>
                         </button>
                       </div>
                     </ng-container>
@@ -513,9 +504,7 @@
                                    [options]="imagesInitiatorSelections[ii]"
                                    [messages]="messages.initiatorImage"
                                    elemClass="btn btn-light float-end">
-                          <svg [cdsIcon]="icons.add"
-                               [size]="icons.size16"
-                               ></svg>
+                          <cd-icon type="add"></cd-icon>
                           <ng-container i18n>Add image</ng-container>
                         </cd-select>
                       </div>
@@ -533,9 +522,8 @@
 
                 <button (click)="addInitiator(); false"
                         class="btn btn-light float-end">
-                  <svg [cdsIcon]="icons.add"
-                       [size]="icons.size16"
-                       ></svg>
+                  <cd-icon type="add"
+  ></cd-icon>
                   <ng-container i18n>Add initiator</ng-container>
                 </button>
               </div>
@@ -592,9 +580,7 @@
                         <button class="btn btn-light"
                                 type="button"
                                 (click)="removeGroupInitiator(group, i, gi)">
-                          <svg [cdsIcon]="icons.destroy"
-                               [size]="icons.size16"
-                               ></svg>
+                          <cd-icon type="close"></cd-icon>
                         </button>
                       </div>
                     </ng-container>
@@ -606,9 +592,7 @@
                                    [messages]="messages.groupInitiator"
                                    (selection)="onGroupMemberSelection($event, gi)"
                                    elemClass="btn btn-light float-end">
-                          <svg [cdsIcon]="icons.add"
-                               [size]="icons.size16"
-                               ></svg>
+                          <cd-icon type="add"></cd-icon>
                           <ng-container i18n>Add initiator</ng-container>
                         </cd-select>
                       </div>
@@ -634,9 +618,7 @@
                         <button class="btn btn-light"
                                 type="button"
                                 (click)="removeGroupDisk(group, i, gi)">
-                          <svg [cdsIcon]="icons.destroy"
-                               [size]="icons.size16"
-                               ></svg>
+                          <cd-icon type="close"></cd-icon>
                         </button>
                       </div>
                     </ng-container>
@@ -647,9 +629,7 @@
                                    [options]="groupDiskSelections[gi]"
                                    [messages]="messages.initiatorImage"
                                    elemClass="btn btn-light float-end">
-                          <svg [cdsIcon]="icons.add"
-                               [size]="icons.size16"
-                               ></svg>
+                            <cd-icon type="add"></cd-icon>
                           <ng-container i18n>Add image</ng-container>
                         </cd-select>
                       </div>
@@ -669,9 +649,8 @@
 
                 <button (click)="addGroup(); false"
                         class="btn btn-light float-end">
-                  <svg [cdsIcon]="icons.add"
-                       [size]="icons.size16"
-                       ></svg>
+                  <cd-icon type="add"
+  ></cd-icon>
                   <ng-container i18n>Add group</ng-container>
                 </button>
               </div>

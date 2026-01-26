@@ -17,7 +17,7 @@ import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, TimerServiceInterval } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -65,7 +65,7 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
     disableExport: $localize`Please create master zonegroup and master zone for each of the realms`
   };
 
-  icons = Icons;
+  iconSize = IconSize;
   permissions: Permissions;
   selection = new CdTableSelection();
   createTableActions: CdTableAction[];
@@ -237,14 +237,14 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
     this.createTableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         name: this.actionLabels.CREATE + ' Realm',
         click: () => this.openModal('realm'),
         visible: () => !this.showMigrateAndReplicationActions
       },
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         name: this.actionLabels.CREATE + ' Zonegroup',
         click: () => this.openModal('zonegroup'),
         disable: () => this.getDisable(),
@@ -252,21 +252,21 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
       },
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         name: this.actionLabels.CREATE + ' Zone',
         click: () => this.openModal('zone'),
         visible: () => !this.showMigrateAndReplicationActions
       },
       {
         permission: 'create',
-        icon: Icons.download,
+        icon: ICON_TYPE.download,
         name: this.actionLabels.IMPORT,
         click: () => this.openImportModal(),
         disable: () => this.getDisableImport()
       },
       {
         permission: 'create',
-        icon: Icons.upload,
+        icon: ICON_TYPE.upload,
         name: this.actionLabels.EXPORT,
         click: () => this.openExportModal(),
         disable: () => this.getDisableExport()
@@ -275,7 +275,7 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
     this.migrateTableAction = [
       {
         permission: 'create',
-        icon: Icons.wrench,
+        icon: ICON_TYPE.tools,
         name: this.actionLabels.MIGRATE,
         click: () => this.openMigrateModal()
       }
@@ -283,7 +283,7 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
     this.multisiteReplicationActions = [
       {
         permission: 'create',
-        icon: Icons.wrench,
+        icon: ICON_TYPE.tools,
         name: this.actionLabels.SETUP_MULTISITE_REPLICATION,
         click: () =>
           this.router.navigate([BASE_URL, { outlets: { modal: 'setup-multisite-replication' } }])

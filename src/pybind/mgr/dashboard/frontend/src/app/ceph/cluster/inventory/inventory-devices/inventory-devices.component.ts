@@ -16,7 +16,7 @@ import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -69,7 +69,6 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
 
   @Output() fetchInventory = new EventEmitter();
 
-  icons = Icons;
   columns: Array<CdTableColumn> = [];
   selection: CdTableSelection = new CdTableSelection();
   permission: Permission;
@@ -96,7 +95,7 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
     this.tableActions = [
       {
         permission: 'update',
-        icon: Icons.show,
+        icon: ICON_TYPE.view,
         click: () => this.identifyDevice(),
         name: $localize`Identify`,
         disable: (selection: CdTableSelection) => this.getDisable('identify', selection),

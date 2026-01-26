@@ -10,7 +10,7 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -43,7 +43,6 @@ export class RbdTrashListComponent implements OnInit {
   @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
 
-  icons = Icons;
 
   columns: CdTableColumn[];
   executingTasks: ExecutingTask[] = [];
@@ -68,13 +67,13 @@ export class RbdTrashListComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const restoreAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.undo,
+      icon: ICON_TYPE.undo,
       click: () => this.restoreModal(),
       name: this.actionLabels.RESTORE
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: ICON_TYPE.destroy,
       click: () => this.deleteModal(),
       name: this.actionLabels.DELETE
     };

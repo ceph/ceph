@@ -7,9 +7,8 @@
       <legend (click)="toggleSectionVisibility(section.class)"
               class="collapsible">
         {{ section.heading }}&nbsp;
-        <svg [cdsIcon]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
-             [size]="icons.size20"
-             ></svg>
+        <cd-icon [type]="!sectionVisibility[section.class] ? 'addCircle' : 'minusCircle'"
+                 [size]="iconSize.size20"></cd-icon>
       </legend>
     </h5>
     <div class="{{ section.class }}"

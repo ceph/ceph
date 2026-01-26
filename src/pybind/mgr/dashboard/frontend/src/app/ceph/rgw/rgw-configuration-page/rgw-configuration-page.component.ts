@@ -13,7 +13,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { RgwConfigModalComponent } from '../rgw-config-modal/rgw-config-modal.component';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -87,14 +87,14 @@ export class RgwConfigurationPageComponent extends ListWithDetails implements On
     this.tableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         name: this.actionLabels.CREATE,
         click: () => this.openRgwConfigModal(false),
         disable: () => this.disableCreate
       },
       {
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         name: this.actionLabels.EDIT,
         click: () => this.openRgwConfigModal(true)
       }

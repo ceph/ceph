@@ -20,8 +20,7 @@
             [offset]="{ x: -210, y: 65 }"
             [cdsOverflowMenu]="overflowMenuTpl"
             data-testid="table-action-btn">
-      <svg
-           [cdsIcon]="icons.chevronDown"></svg>
+      <cd-icon type="chevronDown"></cd-icon>
     </button>
     <ng-template #overflowMenuTpl>
       <ng-container *ngFor="let action of dropDownActions">
@@ -45,8 +44,8 @@
 <ng-template #caret>
   <button [cdsButton]="currentAction.buttonKind"
           class="caret-btn">
-    <svg class="cds--btn__icon"
-         [cdsIcon]="icons.chevronDown"></svg>
+    <cd-icon type="chevronDown"
+             class="cds--btn__icon"></cd-icon>
   </button>
 </ng-template>
 
@@ -76,7 +75,7 @@
 <ng-template #customTrigger>
   <button [cdsButton]="dropDownOnlyBtnColor">
     <span i18n>{{ dropDownOnly }}</span>
-    <svg class="override-position-static cds--btn__icon"
-         [cdsIcon]="icons.chevronDown"></svg>
+    <cd-icon type="chevronDown"
+             class="override-position-static cds--btn__icon"></cd-icon>
   </button>
 </ng-template>

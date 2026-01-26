@@ -28,7 +28,7 @@ import { TopicConfiguration } from '~/app/shared/models/notification-configurati
 import { RgwNotificationFormComponent } from '../rgw-notification-form/rgw-notification-form.component';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 
 const BASE_URL = 'rgw/bucket';
 @Component({
@@ -95,20 +95,20 @@ export class RgwBucketNotificationListComponent extends ListWithDetails implemen
 
     const createAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: ICON_TYPE.add,
       click: () => this.openNotificationModal(this.actionLabels.CREATE),
       name: this.actionLabels.CREATE
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       disable: () => this.selection.hasMultiSelection,
       click: () => this.openNotificationModal(this.actionLabels.EDIT),
       name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: ICON_TYPE.destroy,
       click: () => this.deleteAction(),
       disable: () => !this.selection.hasSelection,
       name: this.actionLabels.DELETE,

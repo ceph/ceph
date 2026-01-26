@@ -9,7 +9,7 @@ import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -73,7 +73,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   services: Array<CephServiceSpec> = [];
   isLoadingServices = false;
   selection: CdTableSelection = new CdTableSelection();
-  icons = Icons;
+  iconSize = IconSize;
   serviceUrls = { grafana: '', prometheus: '', alertmanager: '' };
   isMgmtGateway: boolean = false;
 
@@ -93,7 +93,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     this.tableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () => this.openModal(),
         name: this.actionLabels.CREATE,
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
@@ -101,14 +101,14 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       },
       {
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () => this.openModal(true),
         name: this.actionLabels.EDIT,
         disable: (selection: CdTableSelection) => this.getDisable('update', selection)
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         click: () => this.deleteAction(),
         name: this.actionLabels.DELETE,
         disable: (selection: CdTableSelection) => this.getDisable('delete', selection)

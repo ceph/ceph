@@ -1,5 +1,5 @@
 import { Component, Input } from '@angular/core';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-card',
@@ -8,7 +8,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
   standalone: false
 })
 export class CardComponent {
-  icons = Icons;
+  iconSize = IconSize;
 
   @Input()
   cardTitle: string;

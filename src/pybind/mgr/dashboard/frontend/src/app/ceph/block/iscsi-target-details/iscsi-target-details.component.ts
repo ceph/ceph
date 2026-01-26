@@ -5,7 +5,7 @@ import _ from 'lodash';
 import { USER } from '~/app/shared/constants/app.constants';
 
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize, Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { BooleanTextPipe } from '~/app/shared/pipes/boolean-text.pipe';
 import { IscsiBackstorePipe } from '~/app/shared/pipes/iscsi-backstore.pipe';
@@ -40,6 +40,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   @ViewChild('treeNodeTemplate', { static: true }) labelTpl: TemplateRef<any>;
 
   icons = Icons;
+  iconSize = IconSize;
   columns: CdTableColumn[];
   data: any;
   metadata: any = {};
@@ -93,6 +94,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       _.extend(target_meta, _.cloneDeep(this.selectedItem.auth));
     }
     this.metadata = { root: target_meta };
+    // TODO: update to cd-icon and loading component
     const cssClasses = {
       target: {
         expanded: _.join(

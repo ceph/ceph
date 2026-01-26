@@ -7,7 +7,7 @@ import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -55,7 +55,7 @@ export class CephfsClientsComponent extends BaseModal implements OnInit {
     this.permission = this.authStorageService.getPermissions().cephfs;
     const evictAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.signOut,
+      icon: ICON_TYPE.logout,
       click: () => this.evictClientModal(),
       name: this.actionLabels.EVICT
     };

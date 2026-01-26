@@ -1,4 +1,4 @@
-import { Icons } from '../enum/icons.enum';
+import { ICON_TYPE } from '../enum/icons.enum';
 import { NotificationType } from '../enum/notification-type.enum';
 import { ToastContent } from 'carbon-components-angular';
 
@@ -56,7 +56,7 @@ export class CdNotification extends CdNotificationConfig {
   silenceId?: string;
 
   private textClasses = ['text-danger', 'text-info', 'text-success'];
-  private iconClasses = [Icons.warning, Icons.info, Icons.check];
+  private iconClasses = [ICON_TYPE.warning, ICON_TYPE.info, ICON_TYPE.check];
   private borderClasses = ['border-danger', 'border-info', 'border-success'];
 
   constructor(private config: CdNotificationConfig = new CdNotificationConfig()) {

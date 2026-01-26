@@ -9,7 +9,7 @@ import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { AlertmanagerSilence } from '~/app/shared/models/alertmanager-silence';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -73,7 +73,7 @@ export class SilenceListComponent extends PrometheusListHelper {
     this.tableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         routerLink: () => this.urlBuilder.getCreate(),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
         name: this.actionLabels.CREATE
@@ -87,13 +87,13 @@ export class SilenceListComponent extends PrometheusListHelper {
           selection.first().cdExecuting ||
           (selection.first().cdExecuting && selectionExpired(selection)) ||
           !selectionExpired(selection),
-        icon: Icons.copy,
+        icon: ICON_TYPE.copy,
         routerLink: () => this.urlBuilder.getRecreate(this.selection.first().id),
         name: this.actionLabels.RECREATE
       },
       {
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         canBePrimary: (selection: CdTableSelection) =>
           selection.hasSingleSelection && !selectionExpired(selection),
         disable: (selection: CdTableSelection) =>
@@ -106,7 +106,7 @@ export class SilenceListComponent extends PrometheusListHelper {
       },
       {
         permission: 'delete',
-        icon: Icons.trash,
+        icon: ICON_TYPE.trash,
         canBePrimary: (selection: CdTableSelection) =>
           selection.hasSingleSelection && !selectionExpired(selection),
         disable: (selection: CdTableSelection) =>

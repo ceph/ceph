@@ -4,7 +4,7 @@ import { UntypedFormControl, Validators } from '@angular/forms';
 import _ from 'lodash';
 import { ReplaySubject } from 'rxjs';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize } from '~/app/shared/enum/icons.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import {
   RbdConfigurationEntry,
@@ -31,7 +31,7 @@ export class RbdConfigurationFormComponent implements OnInit {
   @Output()
   changes = new EventEmitter<any>();
 
-  icons = Icons;
+  iconSize = IconSize;
 
   ngDataReady = new EventEmitter<any>();
   initialData: RbdConfigurationEntry[];
