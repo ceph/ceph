@@ -222,7 +222,7 @@ class CephadmSecrets:
         try:
             creds = self.secret_get(
                 namespace=CEPHADM_NAMESPACE,
-                scope=SecretScope.GLOBAL,
+                scope=SecretScope.SERVICE,
                 target=target,
                 name=secret_name,
             )
