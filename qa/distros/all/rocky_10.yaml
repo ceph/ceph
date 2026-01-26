@@ -1,2 +1,6 @@
 os_type: rocky
 os_version: "10.1"
+overrides:
+  selinux:
+    allowlist:
+      - 'comm="systemd".*denied.*\{ prog_run \}.*tclass=bpf.*permissive=1'
