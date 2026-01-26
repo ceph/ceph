@@ -15023,6 +15023,79 @@ void PrimaryLogPG::pool_migration_delete(hobject_t oid)
 }
 
 /**
+ * Get the pg_t for the migration target PG from a hash position
+ */
+pg_t PrimaryLogPG::get_target_pg_from_hash(const hobject_t &hobj)
+{
+  std::optional<int64_t> migration_target_pool = get_pgpool().info.migration_target;
+  ceph_assert(migration_target_pool.has_value());
+  const pg_pool_t *tpi = get_osdmap()->get_pg_pool((int) migration_target_pool.value());
+  return { tpi->raw_hash_to_pg(hobj.get_hash()), (uint64_t) migration_target_pool.value() };
+}
+
+/**
+ * Work out how many target PGs are still to be migrated from
+ * from a hash position within this PG.
+ *
+ * Does not have knowledge of other source PGs which may also be
+ * migrating simultaneously, these will be included in the returned count.
+ */
+uint16_t PrimaryLogPG::count_remaining_target_pgs(const hobject_t &hobj)
+{
+  std::optional<int64_t> migration_target_pool = get_pgpool().info.migration_target;
+  ceph_assert(migration_target_pool.has_value());
+
+  const pg_pool_t *spi = get_osdmap()->get_pg_pool((int) get_pgid().pool());
+  const pg_pool_t *tpi = get_osdmap()->get_pg_pool((int) migration_target_pool.value());
+  const uint32_t position_hash = hobj.get_hash();
+  const uint32_t mask = (1UL << 32) - 1;
+  vector<pg_t> still_to_migrate;
+
+  for (unsigned pgid = 0;
+                pgid < std::max(spi->get_pg_num(), tpi->get_pg_num());
+                pgid++) {
+    uint32_t lowest_hash = ~((pgid + 1) ^ mask) - 1;
+    unsigned source_pgid = spi->raw_hash_to_pg(lowest_hash);
+    unsigned target_pgid = tpi->raw_hash_to_pg(lowest_hash);
+    pg_t source_pg{source_pgid, (uint64_t) get_pgid().pool()};
+    pg_t target_pg{target_pgid, (uint64_t) migration_target_pool.value()};
+
+    if (source_pg == get_pgid().pgid &&
+       (tpi->raw_hash_to_pg(position_hash) == target_pgid ||
+       reverse_bits(position_hash) <= reverse_bits(lowest_hash))) {
+      // Watermark hash position is in the current or a higher target PG - include
+      still_to_migrate.push_back(target_pg);
+    }
+  }
+
+  // May have duplicate entries if source pg_num > target pg_num
+  std::sort(still_to_migrate.begin(), still_to_migrate.end());
+  auto last = std::unique(still_to_migrate.begin(), still_to_migrate.end());
+  still_to_migrate.erase(last, still_to_migrate.end());
+
+  dout(20) << __func__ << " hobj hash: " << std::hex << reverse_bits(position_hash)
+           << ". source pg: " << spi->raw_hash_to_pg(position_hash)
+           << ". target pg: " << tpi->raw_hash_to_pg(position_hash)
+           << ". still_to_migrate: " << still_to_migrate << dendl;
+
+  return still_to_migrate.size();
+}
+
+// TODO: Placeholder for Jamie's reservation request message send function
+bool PrimaryLogPG::send_request_remote_reservation_message(const pg_t &target_pg, const hobject_t &hobj) {
+  // TODO: Primitive calculation - Do we need to consider backfill numbers etc?
+  // EC alignment numbers will be calculated on receiving end
+  unsigned remaining_target_pgs = count_remaining_target_pgs(hobj);
+  int64_t num_objects = std::ceil(info.stats.stats.sum.num_objects / remaining_target_pgs);
+  int64_t num_bytes = std::ceil(info.stats.stats.sum.num_bytes / remaining_target_pgs);
+
+  // TODO: pool_migration_reservations_established should be set in callback instead, fudge for now
+  pool_migration_reservations_established = true;
+  dout(20) << __func__ << " num_objects: " << num_objects << ". num_bytes: " << num_bytes << dendl;
+  return true;
+}
+
+/**
  * recover_pool_migration
  *
  * Schedule work for pool migration
@@ -15048,10 +15121,16 @@ uint64_t PrimaryLogPG::recover_pool_migration(
       return ops;
     }
 
+    if (pool_migration_waiting_for_reservations) {
+      *work_started = true;
+      return ops;
+    }
+
     // Start next pool migration
     *work_started = true;
-    update_range(&pool_migration_info, &handle);
 
+    // Process log updates and ensure our interval is populated
+    update_range(&pool_migration_info, &handle);
     if (last_pool_migration_started >= pool_migration_info.end || pool_migration_info.empty()) {
       dout(20) << __func__ << " no migration targets in interval, trying rescan" << dendl;
       scan_range_migration(
@@ -15072,6 +15151,32 @@ uint64_t PrimaryLogPG::recover_pool_migration(
       // Object was deleted after last_pool_migration_started was previously incremented
       dout(20) << __func__ << " skip (dne) " << obc->obs.oi.soid << dendl;
       last_pool_migration_started = next_pool_migration(last_pool_migration_started);
+      continue;
+    }
+
+    pg_t current_target_pg = get_target_pg_from_hash(soid);
+    dout(20) << __func__ << " current_target_pg: " << current_target_pg << dendl;
+    if (pool_migration_reservations_established &&
+        *pool_migration_target_pg != current_target_pg) {
+      // Reached the end of the current target PG - release reservation once migrations in flight complete
+      if (!pool_migrations_in_flight.empty()) {
+        dout(20) << __func__ << " waiting for migrations in flight to complete before releasing reservation" << dendl;
+        // TODO: should return ops, currently stalls migration
+        //return ops;
+        continue;
+      }
+      // TODO: send reservation release message to pool_migration_target_pg here
+      dout(20) << __func__ << " releasing reservation to PG " << pool_migration_target_pg << dendl;
+      pool_migration_reservations_established = false;
+      pool_migration_target_pg.reset();
+    }
+
+    if (!pool_migration_reservations_established) {
+      // Not currently transferring to a target PG - request reservations now
+      pool_migration_target_pg = get_target_pg_from_hash(soid);
+      send_request_remote_reservation_message(*pool_migration_target_pg, soid);
+      // TODO: should return ops, currently stalls migration
+      //return ops;
       continue;
     }
 
@@ -15121,6 +15226,14 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 
 void PrimaryLogPG::start_target_pool_migration(int64_t num_bytes, int64_t num_objects)
 {
+
+  // For erasure coded pool overestimate by a full stripe per object
+  // because we don't know how each object rounded to the nearest stripe
+  if (pool.info.is_erasure()) {
+    num_bytes /= (int) get_pgbackend()->get_ec_data_chunk_count();
+    num_bytes += get_pgbackend()->get_ec_stripe_chunk_size() * num_objects;
+  }
+
   queue_peering_event(
     PGPeeringEventRef(
       std::make_shared<PGPeeringEvent>(
@@ -15128,7 +15241,7 @@ void PrimaryLogPG::start_target_pool_migration(int64_t num_bytes, int64_t num_ob
         get_osdmap_epoch(),
         StartTargetPoolMigration(
           num_bytes,
-	  num_objects))));
+          num_objects))));
 }
 
 void PrimaryLogPG::stop_target_pool_migration()

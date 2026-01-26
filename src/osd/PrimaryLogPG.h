@@ -1199,6 +1199,12 @@ protected:
   /// set while migrating 1st object after activate
   bool new_pool_migration_interval_in_flight;
 
+  /// current migration target pg
+  std::optional<pg_t> pool_migration_target_pg;
+  /// set when we get GRANT from all target PGs and can start copy_from
+  bool pool_migration_reservations_established;
+  /// waiting for GRANT from target PGs
+  bool pool_migration_waiting_for_reservations;
   hobject_t next_pool_migration(std::optional<hobject_t> start);
   hobject_t earliest_pool_migration()
   {
@@ -1410,6 +1416,9 @@ protected:
    */
   uint64_t recover_pool_migration(uint64_t max, ThreadPool::TPHandle &handle,
 			          bool *work_started);
+  pg_t get_target_pg_from_hash(const hobject_t &hobj);
+  uint16_t count_remaining_target_pgs(const hobject_t &hobj);
+  bool send_request_remote_reservation_message(const pg_t &target_pg, const hobject_t &hobj);
 
   void start_target_pool_migration(int64_t num_bytes, int64_t num_objects);
   void stop_target_pool_migration();
