@@ -3262,14 +3262,20 @@ Then run the following:
             raise
 
     def _get_alertmanager_credentials(self) -> Tuple[str, str]:
-        user = self.get_store(AlertmanagerService.USER_CFG_KEY)
-        password = self.get_store(AlertmanagerService.PASS_CFG_KEY)
-        if user is None or password is None:
-            user = 'admin'
-            password = 'admin'
-            self.set_store(AlertmanagerService.USER_CFG_KEY, user)
-            self.set_store(AlertmanagerService.PASS_CFG_KEY, password)
-        return (user, password)
+        creds = self.cephadm_secrets._load_basic_auth_secret(AlertmanagerService.BASIC_AUTH_CREDS, target=AlertmanagerService.TYPE)
+        if creds is None:
+            creds = self.cephadm_secrets._load_basic_auth_legacy(AlertmanagerService.USER_CFG_KEY, AlertmanagerService.PASS_CFG_KEY)
+            if creds is None:
+                creds = {'username': 'admin', 'password': 'admin'}
+            # only persist if not coming from secret store
+            self.cephadm_secrets.set(name=AlertmanagerService.BASIC_AUTH_CREDS,
+                                     target=AlertmanagerService.TYPE,
+                                     data=creds,
+                                     secret_type='basic-auth',
+                                     user_made=True,
+                                     editable=True)
+
+        return (creds['username'], creds['password'])
 
     def _get_prometheus_credentials(self) -> Tuple[str, str]:
         creds = self.cephadm_secrets._load_basic_auth_secret(PrometheusService.BASIC_AUTH_CREDS, target=PrometheusService.TYPE)
@@ -3368,8 +3374,12 @@ Then run the following:
 
     @handle_orch_error
     def set_alertmanager_access_info(self, user: str, password: str) -> str:
-        self.set_store(AlertmanagerService.USER_CFG_KEY, user)
-        self.set_store(AlertmanagerService.PASS_CFG_KEY, password)
+        self.cephadm_secrets.set(name=AlertmanagerService.BASIC_AUTH_CREDS,
+                                 data={'username': user, 'password': password},
+                                 target='alertmanager',  # service type
+                                 secret_type='basic-auth',
+                                 user_made=True,
+                                 editable=True)
         return 'alertmanager credentials updated correctly'
 
     @handle_orch_error

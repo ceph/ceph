@@ -281,6 +281,7 @@ class AlertmanagerService(CephadmService):
     DEFAULT_SERVICE_PORT = 9093
     USER_CFG_KEY = 'alertmanager/web_user'
     PASS_CFG_KEY = 'alertmanager/web_password'
+    BASIC_AUTH_CREDS = 'alertmanager_basic_auth_credentials'
 
     @property
     def needs_monitoring(self) -> bool:
