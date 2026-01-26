@@ -1562,7 +1562,7 @@ void ECBackendL::submit_transaction(
   rmw_pipeline.start_rmw(std::move(op));
 }
 
-int ECBackendL::objects_read_sync(
+int ECBackendL::objects_read_local(
   const hobject_t &hoid,
   uint64_t off,
   uint64_t len,
