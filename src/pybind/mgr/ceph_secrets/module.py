@@ -171,3 +171,12 @@ class Module(MgrModule):
         sc = scope if isinstance(scope, SecretScope) else SecretScope.from_str(scope)
         rec = self.secret_mgr.store.get(namespace, sc, target, name)
         return rec.version if rec is not None else None
+    def resolve_object(self, obj: Any, namespace: str) -> Any:
+        return self.secret_mgr.resolve_object(obj, namespace)
+
+    def scan_refs(self, obj: Any, namespace: str) -> Any:
+        return self.secret_mgr.scan_refs(obj, namespace)
+
+    def scan_unresolved_refs(self, obj: Any, namespace: str) -> Any:
+        return self.secret_mgr.scan_unresolved_refs(obj, namespace)
+
