@@ -13116,10 +13116,9 @@ hobject_t PrimaryLogPG::next_pool_migration(std::optional<hobject_t> start)
     current = *start;
   }
   hobject_t next;
-  hobject_t _max = hobject_t::get_max();
+  hobject_t end = pool_migration_info.end;
   auto missing_iter_end = recovery_state.get_pg_log().get_missing().get_items().end();
-  map<hobject_t, eversion_t> sentries = pool_migration_info.objects;
-  map<hobject_t, eversion_t>::const_iterator current_iter;
+  map<hobject_t, eversion_t> *sentries = &pool_migration_info.objects;
 
   // Find the lowest object in the PG searching both the object store and the
   // missing list
@@ -13127,10 +13126,10 @@ hobject_t PrimaryLogPG::next_pool_migration(std::optional<hobject_t> start)
     map<hobject_t, pg_missing_item>::const_iterator missing_iter =
       recovery_state.get_pg_log().get_missing().get_items().lower_bound(current);
     map<hobject_t, eversion_t>::const_iterator current_iter =
-      sentries.upper_bound(current);
+      sentries->upper_bound(current);
 
-    if (sentries.empty() || current_iter == sentries.end()) {
-      current = _max;
+    if (current_iter == sentries->end()) {
+      current = end;
     } else {
       current = current_iter->first;
     }
@@ -13169,6 +13168,11 @@ std::optional<hobject_t> PrimaryLogPG::consider_updating_migration_watermark(std
   if (deleted.contains(pool_migration_watermark)) {
     hobject_t current(pool_migration_watermark);
     do {
+      if (pool_migration_info.is_end(current)) {
+        // Would it make sense to call objects_list_partial for the next object in this (rare) case?
+        dout(20) << __func__ << " end of interval reached (" << current <<  "), rescan required" << dendl;
+        break;
+      }
       dout(20) << __func__ << " deleting object " << current << dendl;
       current = next_pool_migration(current);
     } while (deleted.contains(current));
@@ -13196,7 +13200,6 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
   new_pool_migration_interval_in_flight = false;
   if (pool.info.is_pg_migrating(info.pgid.pgid)) {
     pool_migration_info.reset(hobject_t());
-    pool_migration_info.end = hobject_t::get_max();
     scan_range_migration(
       cct->_conf->osd_backfill_scan_min,
       cct->_conf->osd_backfill_scan_max,
@@ -13207,10 +13210,10 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
     //If there are no missing objects pool_migration_info is returning the same
     //answer as earliest_pool_migration on the primary. It doesn't work on/the
     //other shards because projected_last_update isn't being set on those shards
-    //dout(10) << __func__ << " " << pool_migration_info.begin << " " << pool_migration_watermark << dendl;
-    //if (is_primary()) {
-    //  ceph_assert(pool_migration_info.begin == pool_migration_watermark);
-    //}
+    dout(10) << __func__ << " " << pool_migration_info.begin << " " << pool_migration_watermark << dendl;
+    if (is_primary()) {
+      ceph_assert(pool_migration_info.begin == pool_migration_watermark);
+    }
     new_pool_migration_interval = true;
     //BILL:FIXME: If we transition from migrating back to recovery/backfill we currently block I/O to the
     //migration watermark object until we get back to migrating and migrate that object. That is wrong - we
@@ -14645,6 +14648,7 @@ void PrimaryLogPG::update_range(
 
   if (pmi->version < info.log_tail) {
     dout(10) << __func__<< ": pmi is old, rescanning local pool_migration_info" << dendl;
+    pmi->clear();
     pmi->version = info.last_update;
     scan_range_migration(local_min, local_max, pmi, handle);
   }
@@ -14665,22 +14669,22 @@ void PrimaryLogPG::update_range(
     }
 
     dout(10) << __func__<< ": pmi is old, (" << pmi->version
-	     << ") can be updated with log to projected_last_update "
-	     << projected_last_update << dendl;
+             << ") can be updated with log to projected_last_update "
+             << projected_last_update << dendl;
 
     auto func = [&](const pg_log_entry_t &e) {
       dout(10) << __func__ << ": updating from version " << e.version << dendl;
       const hobject_t &soid = e.soid;
       if (soid >= pmi->begin && soid < pmi->end) {
-	if (e.is_update()) {
-	  dout(10) << __func__ << ": " << e.soid << " updated to version "
-		   << e.version << dendl;
+        if (e.is_update()) {
+          dout(10) << __func__ << ": " << e.soid << " updated to version "
+                   << e.version << dendl;
           pmi->objects.erase(e.soid);
           pmi->objects.insert(make_pair(e.soid, e.version));
-	} else if (e.is_delete()) {
-	  dout(10) << __func__ << ": " << e.soid << " removed" << dendl;
-	  pmi->objects.erase(e.soid);
-	}
+        } else if (e.is_delete()) {
+          dout(10) << __func__ << ": " << e.soid << " removed" << dendl;
+          pmi->objects.erase(e.soid);
+        }
       }
     };
 
@@ -14726,11 +14730,11 @@ void PrimaryLogPG::scan_range_primary(
 
     if (obc) {
       if (!obc->obs.exists) {
-	/* If the object does not exist here, it must have been removed
-	 * between the collection_list_partial and here.  This can happen
-	 * for the first item in the range, which is usually last_backfill.
-	 */
-	continue;
+        /* If the object does not exist here, it must have been removed
+         * between the collection_list_partial and here.  This can happen
+         * for the first item in the range, which is usually last_backfill.
+         */
+        continue;
       }
       version = obc->obs.oi.version;
       shard_versions = obc->obs.oi.shard_versions;
@@ -14742,7 +14746,7 @@ void PrimaryLogPG::scan_range_primary(
        * for the first item in the range, which is usually last_backfill.
        */
       if (r == -ENOENT)
-	continue;
+        continue;
 
       ceph_assert(r >= 0);
       object_info_t oi(bl);
@@ -14805,17 +14809,22 @@ void PrimaryLogPG::scan_range_replica(
   }
 }
 
+/**
+ * Scan the PG for pool migration candidate objects
+ *
+ * Tacks any new objects onto the end of the existing
+ * interval instead of clearing it like happens with backfill
+ */
 void PrimaryLogPG::scan_range_migration(
   int min, int max, PoolMigrationInterval *pmi,
   HBHandle *handle)
 {
   ceph_assert(is_locked());
-  dout(10) << "scan_range_migration from " << pmi->begin << dendl;
-  pmi->clear_objects();
+  dout(10) << "scan_range_migration from " << pmi->end << dendl;
 
   vector<hobject_t> ls;
   ls.reserve(max);
-  int r = pgbackend->objects_list_partial(pmi->begin, min, max, &ls, &pmi->end);
+  int r = pgbackend->objects_list_partial(pmi->end, min, max, &ls, &pmi->end);
   ceph_assert(r >= 0);
   dout(10) << " got " << ls.size() << " items, next " << pmi->end << dendl;
   dout(20) << ls << dendl;
@@ -14828,10 +14837,10 @@ void PrimaryLogPG::scan_range_migration(
 
     if (obc) {
       if (!obc->obs.exists) {
-	/* If the object does not exist here, it must have been removed
-	 * between the objects_list_partial and here.
-	 */
-	continue;
+        /* If the object does not exist here, it must have been removed
+         * between the objects_list_partial and here.
+         */
+        continue;
       }
       version = obc->obs.oi.version;
     } else {
@@ -14841,7 +14850,7 @@ void PrimaryLogPG::scan_range_migration(
        * between the objects_list_partial and here.
        */
       if (r == -ENOENT)
-	continue;
+        continue;
 
       ceph_assert(r >= 0);
       object_info_t oi(bl);
@@ -14850,6 +14859,7 @@ void PrimaryLogPG::scan_range_migration(
 
     dout(20) << "  " << *p << " " << version << dendl;
     pmi->objects.insert(make_pair(*p, version));
+    dout(20) << "pmi->objects.size(): "  << pmi->objects.size() << dendl;
   }
 }
 
@@ -14913,75 +14923,102 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 	   << (new_pool_migration_interval ? " new_pool_migration_interval":"")
 	   << dendl;
 
-  if (last_pool_migration_started.is_max()) {
-    // Finished pool migration
-    if (!pool_migrations_in_flight.empty()) {
-      // but still waiting for in flight migrations
-      *work_started = true;
-    }
-    return 0;
-  }
-  // Start next pool migration
-  *work_started = true;
-
   //BILL:FIXME: Currently we just delete the object from the source
   //pool, we should be copying it to the target pool first!
-  hobject_t soid = last_pool_migration_started;
-  ceph_assert(new_pool_migration_interval ||
-	      !is_degraded_or_backfilling_object(soid));
-  ObjectContextRef obc = get_object_context(soid, false);
-  ceph_assert(obc);
-  OpContextUPtr ctx = simple_opc_create(obc);
-  if (!ctx->lock_manager.get_pool_migration_write(
-	soid,
-	obc)) {
-    close_op_ctx(ctx.release());
-    dout(20) << "pool migration delayed on " << soid
-	     << "; could not get rw_manager lock" << dendl;
-    return 0;
-  }
-  // Writes to the migration watermark object are blocked at the start of each
-  // new interval. This ensures that any in flight migrations that got disrupted
-  // in the previous epoch can be cleaned up on the target. In particular a
-  // previous interrupted attempt at copying the object to the target pool
-  // followed by a new interval and the object being deleted in the source pool
-  // must not leave the object in the target pool.
-  // BILL:FIXME: Need to pass this flag on the copy_from request. Target pool
-  // needs to scan for objects >= copy from object and delete them if this flag
-  // is set.
-  if (new_pool_migration_interval) {
-    new_pool_migration_interval = false;
-    new_pool_migration_interval_in_flight = true;
-  }
-  start_recovery_op(soid);
-  ceph_assert(!recovering.count(soid));
-  recovering.insert(make_pair(soid, obc));
-  pool_migrations_in_flight.insert(soid);
-  update_range(&pool_migration_info, &handle);
-  last_pool_migration_started = next_pool_migration(last_pool_migration_started);
+  unsigned ops = 0;
+  while (ops < max) {
 
-  ctx->register_on_finish(
-    [this,soid]() {
-      dout(20) << "pool migration finished migrating " << soid << dendl;
-      auto i = recovering.find(soid);
-      ceph_assert(i != recovering.end());
-      object_stat_sum_t stat_diff;
-      new_pool_migration_interval_in_flight = false;
-      on_global_recover(soid, stat_diff, false);
-    });
-  ctx->at_version = get_next_version();
-  ceph_assert(ctx->new_obs.exists);
-  int r = _delete_oid(ctx.get(), false, false);
-  ceph_assert(r == 0);
-  if (obc->obs.oi.is_omap()) {
-    ctx->delta_stats.num_objects_omap--;
+    if (last_pool_migration_started.is_max()) {
+      // Finished pool migration
+      if (!pool_migrations_in_flight.empty()) {
+        // but still waiting for in flight migrations
+        *work_started = true;
+      }
+      return ops;
+    }
+
+    // Start next pool migration
+    *work_started = true;
+    update_range(&pool_migration_info, &handle);
+
+    if (last_pool_migration_started >= pool_migration_info.end || pool_migration_info.empty()) {
+      dout(20) << __func__ << " no migration targets in interval, trying rescan" << dendl;
+      scan_range_migration(
+              cct->_conf->osd_backfill_scan_min,
+              cct->_conf->osd_backfill_scan_max,
+              &pool_migration_info,
+              &handle);
+    }
+
+    hobject_t soid = last_pool_migration_started;
+    ceph_assert(new_pool_migration_interval ||
+                !is_degraded_or_backfilling_object(soid));
+
+    ObjectContextRef obc = get_object_context(soid, false);
+    ceph_assert(obc);
+    OpContextUPtr ctx = simple_opc_create(obc);
+
+    if (!ctx->lock_manager.get_pool_migration_write(
+            soid,
+            obc)) {
+      close_op_ctx(ctx.release());
+      dout(20) << "pool migration delayed on " << soid
+               << "; could not get rw_manager lock" << dendl;
+      *work_started = true;
+      break;
+    }
+
+    if (!obc->obs.exists) {
+      // Object was deleted after last_pool_migration_started was previously incremented
+      close_op_ctx(ctx.release());
+      dout(20) << __func__ << " skip (dne) " << obc->obs.oi.soid << dendl;
+      last_pool_migration_started = next_pool_migration(last_pool_migration_started);
+      continue;
+    }
+
+    // Writes to the migration watermark object are blocked at the start of each
+    // new interval. This ensures that any in flight migrations that got disrupted
+    // in the previous epoch can be cleaned up on the target. In particular a
+    // previous interrupted attempt at copying the object to the target pool
+    // followed by a new interval and the object being deleted in the source pool
+    // must not leave the object in the target pool.
+    // BILL:FIXME: Need to pass this flag on the copy_from request. Target pool
+    // needs to scan for objects >= copy from object and delete them if this flag
+    // is set.
+    if (new_pool_migration_interval) {
+      new_pool_migration_interval = false;
+      new_pool_migration_interval_in_flight = true;
+    }
+
+    ops++;
+    start_recovery_op(soid);
+    ceph_assert(!recovering.count(soid));
+    recovering.insert(make_pair(soid, obc));
+    pool_migrations_in_flight.insert(soid);
+    last_pool_migration_started = next_pool_migration(last_pool_migration_started);
+
+    ctx->register_on_finish(
+            [this, soid]() {
+                dout(20) << "pool migration finished migrating " << soid << dendl;
+                auto i = recovering.find(soid);
+                ceph_assert(i != recovering.end());
+                object_stat_sum_t stat_diff;
+                new_pool_migration_interval_in_flight = false;
+                on_global_recover(soid, stat_diff, false);
+            });
+    ctx->at_version = get_next_version();
+    ceph_assert(ctx->new_obs.exists);
+    int r = _delete_oid(ctx.get(), false, false);
+    ceph_assert(r == 0);
+    if (obc->obs.oi.is_omap()) {
+      ctx->delta_stats.num_objects_omap--;
+    }
+    finish_ctx(ctx.get(), pg_log_entry_t::DELETE);
+    dout(20) << "pool migration deleting " << soid << dendl;
+    simple_opc_submit(std::move(ctx));
   }
-  finish_ctx(ctx.get(), pg_log_entry_t::DELETE);
-  pool_migration_info.objects.erase(soid);
-  dout(20) << "pool migration deleting " << soid << dendl;
-  simple_opc_submit(std::move(ctx));
-  *work_started = true;
-  return 1;
+
+  return ops;
 }
 
 // ===========================

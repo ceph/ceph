@@ -1207,7 +1207,6 @@ protected:
   void update_migration_watermark(const hobject_t &watermark) override
   {
     pool_migration_watermark = watermark;
-    last_pool_migration_started = watermark; // BILL:FIXME: should be updated when work is scheduled
   }
   std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) override;
 

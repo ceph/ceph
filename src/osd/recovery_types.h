@@ -85,6 +85,11 @@ public:
     return end.is_max();
   }
 
+  /// true if e is the interval end object
+  bool is_end(hobject_t e) const {
+    return (e == end);
+  }
+
   /// removes items <= soid and adjusts begin to the first object
   void trim_to(const hobject_t &soid) {
     trim();
@@ -194,7 +199,7 @@ public:
   }
 
   /// drop first entry, and adjust @begin accordingly
-  void pop_front() {
+  void pop_front() override {
     ceph_assert(!objects.empty());
     objects.erase(objects.begin());
     trim();
