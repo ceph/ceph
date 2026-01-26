@@ -17,6 +17,7 @@ from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
+from cephadm.cephadm_secrets import CephadmSecrets
 from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
 
 import string
@@ -675,6 +676,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         service_registry.init_services(self)
         self._init_cert_mgr()
+        self._init_cephadm_secrets()
 
         self.migration = Migrations(self)
 
@@ -746,6 +748,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.cert_mgr.register_cert_key_pair('ingress', 'haproxy_monitor_ssl_cert', 'haproxy_monitor_ssl_key', TLSObjectScope.SERVICE)
 
         self.cert_mgr.init_tlsobject_store()
+
+    def _init_cephadm_secrets(self) -> None:
+        # Secrets are owned by the dedicated 'secrets' mgr module.
+        # cephadm uses a thin proxy client (SecretMgr) that forwards requests via `remote(...)`.
+        #
+        # The proxy performs a best-effort migration of any existing cephadm-local
+        # secret_store/v1/* entries into the secrets module namespace.
+        self.cephadm_secrets = CephadmSecrets(self)
 
     def _get_mgr_ips(self) -> List[str]:
         return [self.inventory.get_addr(d.hostname)
@@ -3771,6 +3781,14 @@ Then run the following:
             results.append(self._plan(cast(ServiceSpec, spec)))
         return results
 
+    def _check_secrets_refs(self, spec: ServiceSpec) -> None:
+        unresolved_secrets = self.cephadm_secrets.find_unresolved_secrets(spec.to_json())
+        if unresolved_secrets:
+            unresovled_uris = sorted(ref.to_uri() for ref in unresolved_secrets)
+            raise OrchestratorError(
+                "Found unresolved secrets:\n  - " + "\n  - ".join(unresovled_uris)
+            )
+
     def _check_cert_source(self, spec: ServiceSpec) -> str:
         cert_warning = ''
         if spec.is_using_certificates_source(CertificateSource.REFERENCE):
@@ -3837,6 +3855,7 @@ Then run the following:
         host_count = len(self.inventory.keys())
         max_count = self.max_count_per_host
 
+        self._check_secrets_refs(spec)
         cert_warning = self._check_cert_source(spec)
 
         if spec.service_type == 'nvmeof':

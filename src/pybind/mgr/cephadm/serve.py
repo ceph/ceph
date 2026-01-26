@@ -1444,6 +1444,8 @@ class CephadmServe:
                 if termination_grace_period is not None:
                     daemon_params['termination_grace_period_seconds'] = int(termination_grace_period)
 
+                daemon_spec.final_config = self.mgr.cephadm_secrets.resolve_object(daemon_spec.final_config)
+
                 out, err, code = await self._run_cephadm(
                     daemon_spec.host,
                     daemon_spec.name(),
