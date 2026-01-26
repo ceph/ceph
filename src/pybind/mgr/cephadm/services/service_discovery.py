@@ -35,6 +35,8 @@ class Route(NamedTuple):
 
 class ServiceDiscovery:
 
+    SD_AUTH_SECRET_NAME = 'service_discovery_creds'
+
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
         self.username: Optional[str] = None
@@ -73,13 +75,27 @@ class ServiceDiscovery:
         return d
 
     def enable_auth(self) -> None:
-        self.username = self.mgr.get_store('service_discovery/root/username')
-        self.password = self.mgr.get_store('service_discovery/root/password')
-        if not self.password or not self.username:
-            self.username = 'admin'  # TODO(redo): what should be the default username
-            self.password = secrets.token_urlsafe(20)
-            self.mgr.set_store('service_discovery/root/password', self.password)
-            self.mgr.set_store('service_discovery/root/username', self.username)
+        legacy_user_key = 'service_discovery/root/username'
+        legacy_pass_key = 'service_discovery/root/password'
+        creds = self.mgr.cephadm_secrets._load_basic_auth_secret(self.SD_AUTH_SECRET_NAME)
+        if creds is None:
+            creds = self.mgr.cephadm_secrets._load_basic_auth_legacy(legacy_user_key, legacy_pass_key)
+            if creds is None:
+                creds = {
+                    'username': 'admin',  # TODO configurable
+                    'password': secrets.token_urlsafe(20),
+                }
+            # only persist if not coming from secret store
+            self.mgr.cephadm_secrets.set(
+                name=self.SD_AUTH_SECRET_NAME,
+                data=creds,
+                secret_type='basic-auth',
+                user_made=False,
+                editable=False,
+            )
+
+        self.username = creds['username']
+        self.password = creds['password']
 
     def configure_tls(self) -> Dict[str, str]:
         addr = self.mgr.get_mgr_ip()
