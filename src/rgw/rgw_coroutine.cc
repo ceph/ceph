@@ -1000,7 +1000,8 @@ bool RGWCoroutine::drain_children(int num_cr_left,
   ceph_assert(num_cr_left >= 0);
 
   reenter(&drain_status.cr) {
-    while (num_spawned() > (size_t)num_cr_left) {
+    drain_status.num_cr_left = num_cr_left;
+    while (num_spawned() > (size_t)drain_status.num_cr_left) {
       yield wait_for_child();
       int ret;
       uint64_t stack_id;
@@ -1017,7 +1018,7 @@ bool RGWCoroutine::drain_children(int num_cr_left,
           if (r < 0) {
             drain_status.ret = r;
             drain_status.should_exit = true;
-            num_cr_left = 0; /* need to drain all */
+            drain_status.num_cr_left = 0; /* need to drain all */
           }
         }
       } while (again);
