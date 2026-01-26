@@ -15,6 +15,8 @@ from typing import List, Optional, Sequence
 from ceph.cryptotools.select import get_crypto_caller
 from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteCommand
 from mgr_util import password_hash
+from ceph_secrets_client import CephSecretsClient
+from ceph_secrets_types import SecretScope
 
 from .. import mgr
 from ..exceptions import PasswordPolicyException, PermissionNotValid, \
@@ -29,6 +31,57 @@ DEFAULT_FILE_DESC = 'password/secret'
 
 
 _P = Permission  # short alias
+
+
+DASHBOARD_SECRETS_NAMESPACE = "dashboard"
+DASHBOARD_AC_SECRET_TYPE = "dashboard_access_control"
+
+
+class DashboardAccessControlStore:
+    """
+    Persist the dashboard access control DB in the secrets mgr-module.
+
+    Falls back to mgr KV store if secrets mgr-module is not available/enabled.
+    """
+
+    def __init__(self):
+        self.client = CephSecretsClient(mgr)
+
+    def _secret_name(self, version: int) -> str:
+        # keep same naming convention (accessdb_v{N})
+        return AccessControlDB.accessdb_config_key(version)
+
+    def load(self, version: int) -> Optional[dict]:
+        name = self._secret_name(version)
+        try:
+            data = self.client.secret_get_data(
+                namespace=DASHBOARD_SECRETS_NAMESPACE,
+                scope=SecretScope.GLOBAL,
+                target='',
+                name=name,
+            )
+            return data if isinstance(data, dict) and data else None
+        except Exception as e:
+            logger.debug("ACDB: cannot load from secrets (%s), will fallback to KV store", e)
+            return None
+
+    def save(self, version: int, payload: dict) -> bool:
+        name = self._secret_name(version)
+        try:
+            self.client.secret_set_record(
+                namespace=DASHBOARD_SECRETS_NAMESPACE,
+                scope=SecretScope.GLOBAL,
+                target='',
+                name=name,
+                data=payload,
+                secret_type=DASHBOARD_AC_SECRET_TYPE,
+                user_made=False,
+                editable=False,
+            )
+            return True
+        except Exception as e:
+            logger.debug("ACDB: cannot save to secrets (%s), will fallback to KV store", e)
+            return False
 
 
 class PasswordPolicy(object):
@@ -548,6 +601,12 @@ class AccessControlDB(object):
                 'roles': {rn: r.to_dict() for rn, r in self.roles.items()},
                 'version': self.version
             }
+
+            store = DashboardAccessControlStore()
+            if store.save(self.version, db):
+                return
+
+            # fallback (during development / if ceph_secrets disabled)
             mgr.set_store(self.accessdb_config_key(), json.dumps(db))
 
     @classmethod
@@ -583,20 +642,39 @@ class AccessControlDB(object):
     def load(cls):
         logger.info("Loading user roles DB version=%s", cls.VERSION)
 
+        store = DashboardAccessControlStore()
+        dict_db = store.load(cls.VERSION)
+        if isinstance(dict_db, dict) and dict_db:
+            roles = {rn: Role.from_dict(r) for rn, r in dict_db.get('roles', {}).items()}
+            users = {un: User.from_dict(u, dict(roles, **SYSTEM_ROLES))
+                     for un, u in dict_db.get('users', {}).items()}
+            return cls(dict_db.get('version', cls.VERSION), users, roles)
+
+        # fallback: existing mgr KV store (optional, but very useful while migrating)
         json_db = mgr.get_store(cls.accessdb_config_key())
         if json_db is None:
             logger.debug("No DB v%s found, creating new...", cls.VERSION)
             db = cls(cls.VERSION, {}, {})
-            # check if we can update from a previous version database
             db.check_and_update_db()
             return db
 
         dict_db = json.loads(json_db)
-        roles = {rn: Role.from_dict(r)
-                 for rn, r in dict_db.get('roles', {}).items()}
+        roles = {rn: Role.from_dict(r) for rn, r in dict_db.get('roles', {}).items()}
         users = {un: User.from_dict(u, dict(roles, **SYSTEM_ROLES))
                  for un, u in dict_db.get('users', {}).items()}
-        return cls(dict_db['version'], users, roles)
+        db = cls(dict_db.get('version', cls.VERSION), users, roles)
+
+        # opportunistic migrate to secrets (don’t care about backward compat? you can remove fallback later)
+        try:
+            store.save(cls.VERSION, {
+                'users': {un: u.to_dict() for un, u in db.users.items()},
+                'roles': {rn: r.to_dict() for rn, r in db.roles.items()},
+                'version': db.version
+            })
+        except Exception:
+            pass
+
+        return db
 
 
 def load_access_control_db():
