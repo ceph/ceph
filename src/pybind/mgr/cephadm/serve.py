@@ -302,11 +302,11 @@ class CephadmServe:
                         failures.append(r)
                 self.mgr.cache.metadata_up_to_date[host] = True
 
-            if self.mgr.cache.host_needs_registry_login(host) and self.mgr.get_store('registry_credentials'):
+            registry_credentials_json = self.mgr.get_registry_credentials_json()
+            if self.mgr.cache.host_needs_registry_login(host) and registry_credentials_json:
                 self.log.debug(f"Logging `{host}` into custom registry")
                 with self.mgr.async_timeout_handler(host, 'cephadm registry-login'):
-                    r = self.mgr.wait_async(self._registry_login(
-                        host, json.loads(str(self.mgr.get_store('registry_credentials')))))
+                    r = self.mgr.wait_async(self._registry_login(host, registry_credentials_json))
                 if r:
                     bad_hosts.append(r)
 
@@ -1430,7 +1430,9 @@ class CephadmServe:
                             {'custom_config_files': [c.to_json() for c in configs]})
 
                 if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
-                    await self._registry_login(daemon_spec.host, json.loads(str(self.mgr.get_store('registry_credentials'))))
+                    creds = self.mgr.get_registry_credentials_json()
+                    if creds:
+                        await self._registry_login(daemon_spec.host, creds)
 
                 self.log.info('%s daemon %s on %s' % (
                     'Reconfiguring' if reconfig else 'Deploying',
@@ -1827,7 +1829,9 @@ class CephadmServe:
         if not host:
             raise OrchestratorError('no hosts defined')
         if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
-            await self._registry_login(host, json.loads(str(self.mgr.get_store('registry_credentials'))))
+            creds = self.mgr.get_registry_credentials_json()
+            if creds:
+                await self._registry_login(host, creds)
 
         j = None
         if not self.mgr.use_repo_digest:
