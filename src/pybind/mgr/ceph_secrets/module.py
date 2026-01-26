@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 import re
-from typing import Any, Dict, Optional, Union, List
+from typing import Any, Dict, Optional, List, Tuple
 import errno
 
 from mgr_module import (
@@ -112,13 +112,14 @@ class Module(MgrModule):
                 tgt = r.get('target', '')
                 name = r.get('name', '')
                 key = f"{ns}:{sc}:{tgt}:{name}"
-                if not (ns and sc and tgt and name):
+                if not (ns and sc and name):  # target is optional for global scope
                     out[key] = None
                     continue
                 ver = self.secret_get_version(namespace=ns, scope=sc, target=tgt, name=name)
                 out[key] = ver
-            except Exception:
+            except Exception as e:
                 # never fail the whole batch for one bad entry
+                self.log.warning("secret_get_versions: failed for %r: %s", key, e)
                 out[key] = None
         return out
 
@@ -131,26 +132,31 @@ class Module(MgrModule):
                     name: str,
                     reveal: bool = False) -> Dict[str, Any]:
         sc = SecretScope.from_str(scope)
-        rec = self.secret_mgr.store.get(namespace, sc, target, name)
-        if rec is None:
+        ref = self.secret_mgr.make_ref(namespace, sc, target, name)
+        try:
+            rec = self.secret_mgr.get(ref)
+        except CephSecretException:
             return {}
         return rec.to_json(include_data=reveal, include_internal=False)
 
     # ---------------------- RPC-ish helpers ----------------------
 
     def secret_ls(self,
-                  namespace: str,
-                  scope: str = '',
-                  target: str = '',
+                  namespace: Optional[str] = None,
+                  scope: Optional[str] = None,
+                  target: Optional[str] = None,
                   show_values: bool = False,
-                  show_internals: bool = False) -> Dict[str, Any]:
+                  show_internals: bool = False) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         sc = SecretScope.from_str(scope) if scope else None
-        recs = self.secret_mgr.ls(namespace=namespace, scope=sc, target=target or None)
-        out: Dict[str, Any] = {}
-        for r in recs:
+        good, bad = self.secret_mgr.ls(namespace=namespace, scope=sc, target=target)
+        out_good: Dict[str, Any] = {}
+        for r in good:
             key = f'{r.namespace}/{r.scope.value}/{r.target}/{r.name}'
-            out[key] = r.to_json(include_data=bool(show_values), include_internal=show_internals)
-        return out
+            out_good[key] = r.to_json(include_data=bool(show_values), include_internal=show_internals)
+        out_bad: Dict[str, Any] = {}
+        for b in bad:
+            out_bad[b.raw_key] = {'raw_key': b.raw_key, 'namespace': b.namespace, 'error': b.error}
+        return out_good, out_bad
 
     def secret_get_data(self,
                         namespace: str,
@@ -165,14 +171,58 @@ class Module(MgrModule):
 
     def secret_get_version(self,
                            namespace: str,
-                           scope: Union[str, SecretScope],
+                           scope: str,
                            target: str,
                            name: str) -> Optional[int]:
-        sc = scope if isinstance(scope, SecretScope) else SecretScope.from_str(scope)
+        sc = SecretScope.from_str(scope)
         rec = self.secret_mgr.store.get(namespace, sc, target, name)
         return rec.version if rec is not None else None
-    def resolve_object(self, obj: Any, namespace: str) -> Any:
-        return self.secret_mgr.resolve_object(obj, namespace)
+
+    def secret_set_cli(self,
+                       namespace: str,
+                       scope: str,
+                       target: str,
+                       name: str,
+                       data: str,
+                       secret_type: str = 'Opaque') -> str:
+        parsed_data = _parse_data_arg(data)
+        self.secret_set_record(namespace=namespace, scope=scope, target=target, name=name,
+                               data=parsed_data, secret_type=secret_type,
+                               user_made=True, editable=True)
+        return 'secret updated'
+
+    def secret_set_record(self,
+                          namespace: str,
+                          scope: str,
+                          target: str,
+                          name: str,
+                          data: Dict[str, Any],
+                          secret_type: str = 'Opaque',
+                          user_made: bool = True,
+                          editable: bool = True) -> Dict[str, Any]:
+        """Internal entrypoint (data is a dict)."""
+        sc = SecretScope.from_str(scope)
+        rec = self.secret_mgr.set(name, data, namespace=namespace, scope=sc,
+                                  target=target or None,
+                                  secret_type=secret_type,
+                                  user_made=user_made,
+                                  editable=editable)
+        self._bump_epoch()
+        return rec.to_json(include_data=True)
+
+    def secret_rm(self,
+                  namespace: str,
+                  scope: str,
+                  target: str,
+                  name: str) -> str:
+        sc = SecretScope.from_str(scope)
+        existed = self.secret_mgr.store.rm(namespace, sc, target, name)
+        if existed:
+            self._bump_epoch()
+        return 'removed' if existed else 'not found'
+
+    def resolve_object(self, obj: Any) -> Any:
+        return self.secret_mgr.resolve_object(obj)
 
     def scan_refs(self, obj: Any, namespace: str) -> Any:
         return self.secret_mgr.scan_refs(obj, namespace)
@@ -180,3 +230,114 @@ class Module(MgrModule):
     def scan_unresolved_refs(self, obj: Any, namespace: str) -> Any:
         return self.secret_mgr.scan_unresolved_refs(obj, namespace)
 
+    # ---------------------- Module CLI commands ----------------------
+
+    @CLICommand('secret ls', perm='r')
+    def _cli_secret_ls(self,
+                       namespace: Optional[str] = None,
+                       scope: Optional[str] = None,
+                       sec_target: Optional[str] = None,
+                       reveal: bool = False,
+                       show_internals: bool = False) -> HandleCommandResult:
+        try:
+            good, bad = self.secret_ls(namespace=namespace,
+                                       scope=scope,
+                                       target=sec_target,
+                                       show_values=reveal,
+                                       show_internals=show_internals)
+            out = good | bad
+            return HandleCommandResult(0, json.dumps(out, indent=2, sort_keys=True), '')
+        except CephSecretException as e:
+            return HandleCommandResult(-errno.EINVAL, f'secret error: {e}', '')
+
+    @CLICommand('secret get', perm='r')
+    def _cli_secret_get(self,
+                        namespace: str,
+                        scope: str,
+                        sec_target: str,
+                        sec_name: str,
+                        reveal: bool = False) -> HandleCommandResult:
+        try:
+            res = self._secret_get(namespace=namespace, scope=scope, target=sec_target, name=sec_name, reveal=reveal)
+            if not res:
+                return HandleCommandResult(-errno.ENOENT, 'secret error: not found', '')
+            return HandleCommandResult(0, json.dumps(res, indent=2, sort_keys=True), '')
+        except CephSecretException as e:
+            return HandleCommandResult(-errno.EINVAL, f'secret error: {e}', '')
+
+    @CLICommand('secret set', perm='rw')
+    def _cli_secret_set(self,
+                        namespace: str,
+                        scope: str,
+                        sec_target: str,
+                        sec_name: str,
+                        data: str = '',
+                        secret_type: str = 'Opaque',
+                        inbuf: Optional[str] = None) -> HandleCommandResult:
+
+        try:
+            input_data = inbuf or data
+            if not input_data:
+                return HandleCommandResult(-errno.EINVAL, 'secret error: use --data or -i to provide secret data', '')
+
+            msg = self.secret_set_cli(namespace=namespace, scope=scope, target=sec_target,
+                                      name=sec_name, data=input_data, secret_type=secret_type)
+            return HandleCommandResult(0, msg, '')
+        except CephSecretException as e:
+            return HandleCommandResult(-errno.EINVAL, f'secret error: {e}', '')
+
+    @CLICommand('secret get-key', perm='r')
+    def _cli_secret_get_by_path(self, path: str, reveal: bool = False) -> HandleCommandResult:
+        try:
+            ns, sc, target, name = parse_secret_path(path)
+            res = self._secret_get(namespace=ns, scope=sc, target=target, name=name, reveal=reveal)
+            if not res:
+                return HandleCommandResult(-errno.ENOENT, 'secret error: not found', '')
+            return HandleCommandResult(0, json.dumps(res, indent=2, sort_keys=True), '')
+        except CephSecretException as e:
+            return HandleCommandResult(-errno.EINVAL, f'secret error: {e}', '')
+
+    @CLICommand('secret set-key', perm='rw')
+    def _cli_secret_set_by_path(self,
+                                path: str,
+                                data: str = '',
+                                secret_type: str = 'Opaque',
+                                inbuf: Optional[str] = None) -> HandleCommandResult:
+        try:
+            input_data = inbuf or data
+            if not input_data:
+                return HandleCommandResult(-errno.EINVAL, 'secret error: use --data or -i to provide secret data', '')
+
+            ns, sc, target, name = parse_secret_path(path)
+            msg = self.secret_set_cli(namespace=ns, scope=sc.value, target=target,
+                                      name=name, data=input_data,
+                                      secret_type=secret_type)
+
+            return HandleCommandResult(0, msg, '')
+        except CephSecretException as e:
+            return HandleCommandResult(-errno.EINVAL, f'secret error: {e}', '')
+
+    @CLICommand('secret rm', perm='rw')
+    def _cli_secret_rm(self,
+                       namespace: str,
+                       scope: str,
+                       target: str,
+                       name: str) -> HandleCommandResult:
+        try:
+            msg = self.secret_rm(namespace=namespace, scope=scope, target=target, name=name)
+            if msg == 'not found':
+                return HandleCommandResult(-errno.ENOENT, 'secret error: not found', '')
+            return HandleCommandResult(0, msg, '')
+        except CephSecretException as e:
+            return HandleCommandResult(-errno.EINVAL, f'secret error: {e}', '')
+
+    @CLICommand('secret rm-key', perm='rw')
+    def _cli_secret_rm_by_path(self, path: str) -> HandleCommandResult:
+        try:
+            ns, sc, target, name = parse_secret_path(path)
+            msg = self.secret_rm(namespace=ns, scope=sc.value, target=target, name=name)
+            if msg == 'not found':
+                return HandleCommandResult(-errno.ENOENT, 'secret error: not found', '')
+            return HandleCommandResult(0, msg, '')
+        except CephSecretException as e:
+            return HandleCommandResult(-errno.EINVAL, f'secret error: {e}', '')
