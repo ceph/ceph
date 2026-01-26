@@ -230,6 +230,20 @@ class Module(MgrModule):
     def scan_unresolved_refs(self, obj: Any, namespace: str) -> Any:
         return self.secret_mgr.scan_unresolved_refs(obj, namespace)
 
+    def import_raw_kv(self, entries: Dict[str, str], overwrite: bool = False) -> int:
+        """Import raw KV entries into this module's store namespace.
+
+        `entries` maps key -> raw JSON string.
+        Keys MUST be in the module-local namespace (no leading 'mgr/<module>/').
+        """
+        imported = 0
+        for k, v in entries.items():
+            if not overwrite and self.get_store(k) is not None:
+                continue
+            self.set_store(k, v)
+            imported += 1
+        return imported
+
     # ---------------------- Module CLI commands ----------------------
 
     @CLICommand('secret ls', perm='r')
