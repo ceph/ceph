@@ -55,6 +55,9 @@ bool OpInfo::allows_returnvec() const {
 bool OpInfo::ec_direct_read() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_EC_DIRECT_READ);
 }
+bool OpInfo::ec_sync_read() const {
+  return check_rmw(CEPH_OSD_RMW_FLAG_EC_SYNC_READ);
+}
 /**
  * may_read_data()
  * 
@@ -83,6 +86,7 @@ void OpInfo::set_force_rwordered() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RWORDERED);
 void OpInfo::set_returnvec() { set_rmw_flags(CEPH_OSD_RMW_FLAG_RETURNVEC); }
 void OpInfo::set_read_data() { set_rmw_flags(CEPH_OSD_RMW_FLAG_READ_DATA); }
 void OpInfo::set_ec_direct_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_EC_DIRECT_READ); }
+void OpInfo::set_ec_sync_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_EC_SYNC_READ); }
 
 
 int OpInfo::set_from_op(

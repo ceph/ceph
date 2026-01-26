@@ -722,7 +722,19 @@ public:
     uint64_t off,
     uint64_t len,
     uint32_t op_flags,
-    ceph::buffer::list *bl) override {
+    ceph::buffer::list *bl,
+    uint64_t object_size,
+    std::optional<CoroHandles> coro
+  ) override {
+    return 0;
+  }
+
+  int objects_read_local(
+   const hobject_t &hoid,
+   uint64_t off,
+   uint64_t len,
+   uint32_t op_flags,
+   ceph::buffer::list *bl) override {
     return 0;
   }
 

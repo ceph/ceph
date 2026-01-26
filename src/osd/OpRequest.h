@@ -19,6 +19,8 @@
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 #include "common/tracer.h"
+#include "osd/Coroutines.h"
+
 /**
  * The OpRequest takes in a Message* and takes over a single reference
  * to it, which it puts() when destroyed.
@@ -30,6 +32,8 @@ private:
   OpInfo op_info;
 
 public:
+  std::optional<CoroHandles> coro_handles = std::nullopt;
+
   int maybe_init_op_info(const OSDMap &osdmap);
 
   auto get_flags() const { return op_info.get_flags(); }
@@ -50,6 +54,8 @@ public:
   bool allows_returnvec() const { return op_info.allows_returnvec(); }
   bool ec_direct_read() const { return op_info.ec_direct_read(); }
   void set_ec_direct_read() { return op_info.set_ec_direct_read(); }
+  bool ec_sync_read() const { return op_info.ec_sync_read(); }
+  void set_ec_sync_read() { return op_info.set_ec_sync_read(); }
 
   std::vector<OpInfo::ClassInfo> classes() const {
     return op_info.get_classes();
