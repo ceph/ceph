@@ -1,9 +1,9 @@
 meta:
 - desc: |
-   install ceph/reef v18.2.7
+   install ceph/tentacle v20.2.0
 tasks:
 - install:
-    tag: v18.2.7
+    tag: v20.2.0
     exclude_packages:
       - librados3
       - ceph-mgr-dashboard
@@ -14,7 +14,7 @@ tasks:
       - cephadm
       - ceph-volume
     extra_packages: ['librados2']
-- print: "**** done installing v18.2.7"
+- print: "**** done installing v20.2.0"
 - ceph:
     log-ignorelist:
       - AUTH_INSECURE_KEYS_ALLOWED
@@ -30,5 +30,5 @@ tasks:
         mon warn on pool no app: false
 - exec:
     osd.0:
-      - ceph osd set-require-min-compat-client reef
+      - ceph osd set-require-min-compat-client tentacle
 - print: "**** done ceph"
