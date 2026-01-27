@@ -43,7 +43,8 @@ import {
   InlineLoadingModule,
   TagModule,
   LinkModule,
-  LayerModule
+  LayerModule,
+  ThemeModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/20';
 import CodeIcon from '@carbon/icons/es/code/16';
@@ -151,7 +152,8 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     InlineLoadingModule,
     TagModule,
     LinkModule,
-    LayerModule
+    LayerModule,
+    ThemeModule
   ],
   declarations: [
     SparklineComponent,
