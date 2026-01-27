@@ -130,7 +130,6 @@ class NFSService(CephService):
         rgw_user = f'{rados_user}-rgw'
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
         bind_addr = ''
-        # check if bind address is specified for this host in ip_addrs
         if spec.virtual_ip and not spec.enable_haproxy_protocol:
             # keepalive_only mode: prioritize virtual_ip
             bind_addr = spec.virtual_ip
@@ -138,11 +137,8 @@ class NFSService(CephService):
             # update daemon spec ip for prometheus, as monitoring will happen on this
             # ip, if no monitor ip specified
             daemon_spec.ip = bind_addr
-        elif spec.ip_addrs and spec.ip_addrs.get(host):
-            daemon_spec.ip = spec.ip_addrs.get(host)
-            daemon_spec.port_ips = {str(port): daemon_spec.ip}
-            bind_addr = daemon_spec.ip
         elif daemon_spec.ip:
+            # daemon_spec.ip is already set by scheduler from ip_addrs if specified
             bind_addr = daemon_spec.ip
             daemon_spec.port_ips = {str(port): daemon_spec.ip}
         if not bind_addr:
