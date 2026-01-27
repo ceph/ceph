@@ -307,6 +307,8 @@ class TestCertMgr(object):
         grafana_cert_host_2 = 'grafana-cert-host-2'
         nfs_ssl_cert = 'nfs-ssl-cert'
         nfs_ssl_ca_cert = 'nfs-ssl-ca-cert'
+        smb_ssl_cert = 'smb-ssl-cert'
+        smb_ssl_ca_cert = 'smb-ssl-ca-cert'
         cephadm_module.cert_mgr.save_cert('rgw_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
         cephadm_module.cert_mgr.save_cert('nvmeof_ssl_cert', nvmeof_ssl_cert, service_name='nvmeof.self-signed.foo', user_made=False)
         cephadm_module.cert_mgr.save_cert('nvmeof_client_cert', nvmeof_client_cert, service_name='nvmeof.foo', user_made=True)
@@ -315,6 +317,8 @@ class TestCertMgr(object):
         cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', grafana_cert_host_2, host='host-2', user_made=True)
         cephadm_module.cert_mgr.save_cert('nfs_ssl_cert', nfs_ssl_cert, service_name='nfs.foo', user_made=True)
         cephadm_module.cert_mgr.save_cert('nfs_ssl_ca_cert', nfs_ssl_ca_cert, service_name='nfs.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('smb_ssl_cert', smb_ssl_cert, service_name='smb.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('smb_ssl_ca_cert', smb_ssl_ca_cert, service_name='smb.foo', user_made=True)
 
         expected_calls = [
             mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}rgw_ssl_cert', json.dumps({'rgw.foo': Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json()})),
@@ -326,6 +330,8 @@ class TestCertMgr(object):
                                                                                     'host-2': Cert(grafana_cert_host_2, True).to_json()})),
             mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nfs_ssl_cert', json.dumps({'nfs.foo': Cert(nfs_ssl_cert, True).to_json()})),
             mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nfs_ssl_ca_cert', json.dumps({'nfs.foo': Cert(nfs_ssl_ca_cert, True).to_json()})),
+            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}smb_ssl_cert', json.dumps({'smb.foo': Cert(smb_ssl_cert, True).to_json()})),
+            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}smb_ssl_ca_cert', json.dumps({'smb.foo': Cert(smb_ssl_ca_cert, True).to_json()})),
         ]
         _set_store.assert_has_calls(expected_calls)
 
@@ -444,6 +450,24 @@ class TestCertMgr(object):
             "scope": "service",
             "certificates": {
                 "nfs.foo": get_generated_cephadm_cert_info_2(),
+            },
+        }
+        compare_certls_dicts(expected_ls)
+
+        cephadm_module.cert_mgr.save_cert('smb_ssl_cert', CEPHADM_SELF_GENERATED_CERT_1, service_name='smb.foo', user_made=True)
+        expected_ls["smb_ssl_cert"] = {
+            "scope": "service",
+            "certificates": {
+                "smb.foo": get_generated_cephadm_cert_info_1(),
+            },
+        }
+        compare_certls_dicts(expected_ls)
+
+        cephadm_module.cert_mgr.save_cert('smb_ssl_ca_cert', CEPHADM_SELF_GENERATED_CERT_2, service_name='smb.foo', user_made=True)
+        expected_ls["smb_ssl_ca_cert"] = {
+            "scope": "service",
+            "certificates": {
+                "smb.foo": get_generated_cephadm_cert_info_2(),
             },
         }
         compare_certls_dicts(expected_ls)
@@ -612,6 +636,8 @@ class TestCertMgr(object):
             'mgmt_gateway_ssl_cert': ('mgmt-gateway', 'mgmt-gw-cert', TLSObjectScope.GLOBAL),
             'nfs_ssl_cert': ('nfs.foo', 'nfs-ssl-cert', TLSObjectScope.SERVICE),
             'nfs_ssl_ca_cert': ('nfs.foo', 'nfs-ssl-ca-cert', TLSObjectScope.SERVICE),
+            'smb_ssl_cert': ('smb.foo', 'smb-ssl-cert', TLSObjectScope.SERVICE),
+            'smb_ssl_ca_cert': ('smb.foo', 'smb-ssl-ca-cert', TLSObjectScope.SERVICE),
         }
         unknown_certs = {
             'unknown_per_service_cert': ('unknown-svc.foo', 'unknown-cert', TLSObjectScope.SERVICE),
@@ -629,6 +655,7 @@ class TestCertMgr(object):
             'ingress_ssl_key': ('ingress', 'ingress-ssl-key', TLSObjectScope.SERVICE),
             'iscsi_ssl_key': ('iscsi', 'iscsi-ssl-key', TLSObjectScope.SERVICE),
             'nfs_ssl_key': ('nfs.foo', 'nfs-ssl-key', TLSObjectScope.SERVICE),
+            'smb_ssl_key': ('smb.foo', 'smb-ssl-key', TLSObjectScope.SERVICE),
         }
         unknown_keys = {
             'unknown_per_service_key': ('unknown-svc.foo', 'unknown-key', TLSObjectScope.SERVICE),
@@ -703,10 +730,13 @@ class TestCertMgr(object):
             'mgmt_gateway_ssl_cert': ('mgmt-gateway', 'good-global-cert', TLSObjectScope.GLOBAL),
             'nfs_ssl_cert': ('nfs.foo', 'nfs-ssl-cert', TLSObjectScope.SERVICE),
             'nfs_ssl_ca_cert': ('nfs.foo', 'nfs-ssl-ca-cert', TLSObjectScope.SERVICE),
+            'smb_ssl_cert': ('smb.foo', 'smb-ssl-cert', TLSObjectScope.SERVICE),
+            'smb_ssl_ca_cert': ('smb.foo', 'smb-ssl-ca-cert', TLSObjectScope.SERVICE),
         }
         good_keys = {
             'rgw_ssl_key': ('rgw.foo', 'good-key', TLSObjectScope.SERVICE),
             'nfs_ssl_key': ('nfs.foo', 'nfs-ssl-key', TLSObjectScope.SERVICE),
+            'smb_ssl_key': ('smb.foo', 'smb-ssl-key', TLSObjectScope.SERVICE),
         }
 
         # Helpers to dump valid JSON structures
@@ -757,12 +787,18 @@ class TestCertMgr(object):
         assert cert_store['nfs_ssl_cert']['nfs.foo'] == Cert('nfs-ssl-cert', True)
         assert 'nfs_ssl_ca_cert' in cert_store
         assert cert_store['nfs_ssl_ca_cert']['nfs.foo'] == Cert('nfs-ssl-ca-cert', True)
+        assert 'smb_ssl_cert' in cert_store
+        assert cert_store['smb_ssl_cert']['smb.foo'] == Cert('smb-ssl-cert', True)
+        assert 'smb_ssl_ca_cert' in cert_store
+        assert cert_store['smb_ssl_ca_cert']['smb.foo'] == Cert('smb-ssl-ca-cert', True)
         assert 'mgmt_gateway_ssl_cert' in cert_store
         assert cert_store['mgmt_gateway_ssl_cert'] == Cert('good-global-cert', True)
         assert 'rgw_ssl_key' in key_store
         assert key_store['rgw_ssl_key']['rgw.foo'] == PrivKey('good-key')
         assert 'nfs_ssl_key' in key_store
         assert key_store['nfs_ssl_key']['nfs.foo'] == PrivKey('nfs-ssl-key')
+        assert 'smb_ssl_key' in key_store
+        assert key_store['smb_ssl_key']['smb.foo'] == PrivKey('smb-ssl-key')
 
         # Bad ones: object names exist (pre-registered), but **no targets** were added
         # Service / Host scoped => dict should be empty
