@@ -414,10 +414,10 @@ class TestMDS(TestArgparse):
 
 
 class TestFS(TestArgparse):
-    
+
     def test_dump(self):
         self.check_0_or_1_natural_arg('fs', 'dump')
-    
+
     def test_fs_new(self):
         self._assert_valid_command(['fs', 'new', 'default', 'metadata', 'data'])
 
@@ -910,6 +910,18 @@ class TestOSD(TestArgparse):
                                         '1.2.3.4/567', '600.40'])
             self._assert_valid_command(['osd', 'blocklist', action,
                                         '1.2.3.4', '600.40'])
+            self._assert_valid_command(['osd', 'blocklist', action,
+                                        'v1:1.2.3.4', '600.40'])
+            self._assert_valid_command(['osd', 'blocklist', action,
+                                        'v1:1.2.3.4/0', '600.40'])
+            self._assert_valid_command(['osd', 'blocklist', action,
+                                        'v2:2001:0db8:85a3:0000:0000:8a2e:0370:7334', '600.40'])
+            self._assert_valid_command(['osd', 'blocklist', action,
+                                        'v2:fe80::1/0', '600.40'])
+            self._assert_valid_command(['osd', 'blocklist', action,
+                                        'v2:[2607:f298:4:2243::5522]:0/0', '600.40'])
+            self._assert_valid_command(['osd', 'blocklist', action,
+                                        '[2001:0db8::85a3:0000:8a2e:0370:7334]:0/0', '600.40'])
             self.assertEqual({}, validate_command(sigdict, ['osd', 'blocklist',
                                                             action,
                                                             'invalid',
