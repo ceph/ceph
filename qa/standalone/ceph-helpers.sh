@@ -676,6 +676,106 @@ EOF
 
 }
 
+#######################################################################
+
+##
+# Create (prepare) and run (activate) a crimson osd by the name osd.**id**
+# with data in **dir**/**id**.
+#
+# The remaining arguments are passed verbatim to crimson-osd.
+#
+# Two mandatory arguments must be provided: --fsid and --mon-host
+# Instead of adding them to every call to run_crimson_osd, they can be
+# set in the CEPH_ARGS environment variable to be read implicitly by
+# every ceph command.
+#
+# Crimson standalone tests also require msgr2 and require setting either
+# crimson_cpu_num or crimson_cpu_set.
+#
+# @param dir path name of the environment
+# @param id osd identifier
+# @param ... can be any option valid for crimson-osd
+# @return 0 on success, 1 on error
+#
+function run_crimson_osd() {
+    local dir=$1
+    shift
+    local id=$1
+    shift
+    local osd_data=$dir/$id
+
+    local ceph_args="$CEPH_ARGS"
+    ceph_args+=" --osd-failsafe-full-ratio=.99"
+    ceph_args+=" --osd-journal-size=100"
+    ceph_args+=" --osd-scrub-load-threshold=2000"
+    ceph_args+=" --osd-data=$osd_data"
+    ceph_args+=" --osd-journal=${osd_data}/journal"
+    ceph_args+=" --chdir="
+    ceph_args+=$EXTRA_OPTS
+    ceph_args+=" --run-dir=$dir"
+    ceph_args+=" --admin-socket=$(get_asok_path)"
+    ceph_args+=" --log-file=$dir/\$name.log"
+    ceph_args+=" --pid-file=$dir/\$name.pid"
+    ceph_args+=" --osd-max-object-name-len=460"
+    ceph_args+=" --osd-max-object-namespace-len=64"
+    # Crimson requires msgr2
+    ceph_args+=" --ms-bind-msgr2=true"
+    ceph_args+=" --ms-bind-msgr1=false"
+    ceph_args+=" "
+    ceph_args+="$@"
+    mkdir -p $osd_data
+
+    # Find crimson-osd binary
+    local crimson_osd=""
+    if [ -f "./bin/crimson-osd" ]; then
+        crimson_osd="./bin/crimson-osd"
+    elif [ -f "$CEPH_ROOT/build/bin/crimson-osd" ]; then
+        crimson_osd="$CEPH_ROOT/build/bin/crimson-osd"
+    else
+        echo "ERROR: crimson-osd binary not found"
+        return 1
+    fi
+
+    # Enable crimson in the cluster
+    ceph config set global enable_experimental_unrecoverable_data_corrupting_features crimson || return 1
+    ceph osd set-allow-crimson --yes-i-really-mean-it || return 1
+
+    # Standalone tests do not set crimson_cpu_set/crimson_cpu_num (vstart.sh does).
+    # Without this, crimson-osd aborts in get_early_config.
+    ceph config set osd.$id crimson_cpu_num 1 || return 1
+
+    local uuid=`uuidgen`
+    echo "add crimson osd$id $uuid"
+    OSD_SECRET=$(ceph-authtool --gen-print-key)
+    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $osd_data/new.json
+    ceph osd new $uuid -i $osd_data/new.json
+    rm $osd_data/new.json
+    
+    # Use crimson-osd for mkfs (not ceph-osd!)
+    echo "Running crimson-osd mkfs..."
+    if ! $crimson_osd -i $id $ceph_args --mkfs --key $OSD_SECRET --osd-uuid $uuid 2>&1; then
+        echo "ERROR: crimson-osd --mkfs failed"
+        return 1
+    fi
+
+    local key_fn=$osd_data/keyring
+    cat > $key_fn<<EOF
+[osd.$id]
+key = $OSD_SECRET
+EOF
+    echo adding osd$id key to auth repository
+    ceph -i "$key_fn" auth add osd.$id osd "allow *" mon "allow profile osd" mgr "allow profile osd"
+    
+    echo "start crimson osd.$id"
+    $crimson_osd -i $id $ceph_args &
+
+    # If noup is set, then can't wait for this osd
+    if ceph osd dump --format=json | jq '.flags_set[]' | grep -q '"noup"' ; then
+      return 0
+    fi
+    wait_for_osd up $id || return 1
+}
+
 function run_osd_filestore() {
     local dir=$1
     shift
@@ -2147,11 +2247,8 @@ function test_erasure_code_plugin_exists() {
 function display_logs() {
     local dir=$1
 
-    find $dir -maxdepth 1 -name '*.log' | \
-        while read file ; do
-            echo "======================= $file"
-            cat $file
-        done
+    find "$dir" -maxdepth 1 -name '*.log' -print0 2>/dev/null |
+        xargs -0 -r -I{} sh -c 'echo "======================= {}"; cat "{}" || true' || true
 }
 
 function test_display_logs() {
