@@ -70,14 +70,14 @@ class TestScrub2(CephFSTestCase):
         self._wait_subtrees([('/d1/d2/d3/d4', 1), ('/d1/d2/d3/d4/d5/d6', 2)], status, 2)
 
         for rank in range(3):
-            self.fs.rank_tell(["flush", "journal"], rank)
+            self.fs.rank_tell(["flush", "journal"], rank=rank)
 
     def test_apply_tag(self):
         self._setup_subtrees()
         inos = self._find_path_inos('d1/d2/d3/')
 
         tag = "tag123"
-        out_json = self.fs.rank_tell(["tag", "path", "/d1/d2/d3", tag], 0)
+        out_json = self.fs.rank_tell(["tag", "path", "/d1/d2/d3", tag], rank=0)
         self.assertNotEqual(out_json, None)
         self.assertEqual(out_json["return_code"], 0)
         self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
@@ -103,7 +103,7 @@ class TestScrub2(CephFSTestCase):
         self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
         def _check_damage(mds_rank, inos):
-            all_damage = self.fs.rank_tell(["damage", "ls"], mds_rank)
+            all_damage = self.fs.rank_tell(["damage", "ls"], rank=mds_rank)
             damage = [d for d in all_damage if d['ino'] in inos and d['damage_type'] == "backtrace"]
             return len(damage) >= len(inos)
 
