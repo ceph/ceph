@@ -1935,11 +1935,10 @@ void PG::PGLogEntryHandler::partial_write(pg_info_t *info,
     return;
   }
   logger().debug("{}: version version={} written_shards={}"
-                 "present_shards={} pwlc={} previous_version={}",
+                 " pwlc={} previous_version={}",
                  __func__,
                  entry.version,
                  entry.written_shards,
-                 entry.present_shards,
                  info->partial_writes_last_complete,
                  previous_version);
   const pg_pool_t &pool = pg->get_pool();
