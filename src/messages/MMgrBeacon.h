@@ -53,7 +53,9 @@ public:
   MMgrBeacon()
     : PaxosServiceMessage{MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION},
       gid(0), available(false)
-  {}
+  {
+    set_priority(CEPH_MSG_PRIO_HIGH);
+  }
 
   MMgrBeacon(const uuid_d& fsid_, uint64_t gid_, const std::string &name_,
              entity_addrvec_t server_addrs_, bool available_,
@@ -67,6 +69,7 @@ public:
       clients(std::move(clients_)),
       mgr_features(feat)
   {
+    set_priority(CEPH_MSG_PRIO_HIGH);
   }
 
   uint64_t get_gid() const { return gid; }
