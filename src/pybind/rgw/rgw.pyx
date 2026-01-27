@@ -29,7 +29,6 @@ cdef extern from "Python.h":
     PyObject *PyBytes_FromStringAndSize(char *v, Py_ssize_t len) except NULL
     char* PyBytes_AsString(PyObject *string) except NULL
     int _PyBytes_Resize(PyObject **string, Py_ssize_t newsize) except -1
-    void PyEval_InitThreads()
 
 
 class Error(Exception):
@@ -200,7 +199,6 @@ cdef class LibRGWFS(object):
                                   "RGWFS object in state %s." % (self.state))
 
     def __cinit__(self, uid, key, secret):
-        PyEval_InitThreads()
         self.state = "umounted"
         ret = librgw_create(&self.cluster, 0, NULL)
         if ret != 0:
