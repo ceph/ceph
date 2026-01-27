@@ -17,7 +17,7 @@ fi
 
 # Check new collections
 COLLECTIONS=$(ceph telemetry collection ls)
-NEW_COLLECTIONS=("perf_perf" "basic_mds_metadata" "basic_pool_usage" "basic_rook_v01" "perf_memory_metrics")
+NEW_COLLECTIONS=("perf_perf" "basic_mds_metadata" "basic_pool_usage" "basic_rook_v01" "perf_memory_metrics" "basic_stretch_cluster")
 for col in ${NEW_COLLECTIONS[@]}; do
     if ! [[ $COLLECTIONS == *$col* ]];
     then
