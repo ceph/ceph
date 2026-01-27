@@ -427,10 +427,6 @@ class NFSService(CephService):
         spec = cast(NFSServiceSpec, self.mgr.spec_store[service_name].spec)
         monitoring_port = spec.monitoring_port if spec.monitoring_port else 9587
 
-        # check if monitoring_addr is explicitly set in spec
-        if spec.monitoring_addr:
-            return spec.monitoring_addr, monitoring_port
-
         # check if monitor needs to be bind on specific ip
         monitoring_addr = spec.monitoring_ip_addrs.get(host) if spec.monitoring_ip_addrs else None
         if monitoring_addr and monitoring_addr not in self.mgr.cache.get_host_network_ips(host):
