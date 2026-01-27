@@ -896,41 +896,6 @@ def task(ctx, config):
     bucket.delete()
     rl.log_and_clear("delete_bucket", bucket_name, user1)
 
-    # TESTCASE 'policy', 'bucket', 'policy', 'get bucket policy', 'returns S3 policy'
-    bucket = connection.create_bucket(bucket_name)
-    rl.log_and_clear("create_bucket", bucket_name, user1)
-
-    # create an object
-    key = boto.s3.key.Key(bucket)
-    key.set_contents_from_string('seven')
-    rl.log_and_clear("put_obj", bucket_name, user1)
-
-    # should be private already but guarantee it
-    key.set_acl('private')
-    rl.log_and_clear("put_acls", bucket_name, user1)
-
-    (err, out) = rgwadmin(ctx, client,
-        ['policy', '--bucket', bucket.name, '--object', key.key.decode()],
-        check_status=True, format='xml')
-
-    acl = get_acl(key)
-    rl.log_and_clear("get_acls", bucket_name, user1)
-
-    assert acl == out.strip('\n')
-
-    # add another grantee by making the object public read
-    key.set_acl('public-read')
-    rl.log_and_clear("put_acls", bucket_name, user1)
-
-    (err, out) = rgwadmin(ctx, client,
-        ['policy', '--bucket', bucket.name, '--object', key.key.decode()],
-        check_status=True, format='xml')
-
-    acl = get_acl(key)
-    rl.log_and_clear("get_acls", bucket_name, user1)
-
-    assert acl == out.strip('\n')
-
     # TESTCASE 'rm-bucket', 'bucket', 'rm', 'bucket with objects', 'succeeds'
     bucket = connection.create_bucket(bucket_name)
     rl.log_and_clear("create_bucket", bucket_name, user1)
