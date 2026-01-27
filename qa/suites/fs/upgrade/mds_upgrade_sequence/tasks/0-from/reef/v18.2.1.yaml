@@ -7,6 +7,8 @@ tasks:
     tag: v18.2.1
     exclude_packages:
       - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
 - print: "**** done install task..."
 - cephadm:
     image: quay.io/ceph/ceph:v18.2.1
