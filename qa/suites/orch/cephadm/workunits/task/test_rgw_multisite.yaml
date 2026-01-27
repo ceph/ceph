@@ -5,6 +5,8 @@ overrides:
       - mons down
       - mon down
       - out of quorum
+      - PG_AVAILABILITY
+      - POOL_APP_NOT_ENABLED
 roles:
 - - host.a
   - mon.a
