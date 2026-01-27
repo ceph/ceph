@@ -2005,8 +2005,6 @@ Usage:
                    placement: Optional[str] = None,
                    format: Format = Format.plain,
                    port: Optional[int] = None,
-                   monitoring_addr: Optional[str] = None,
-                   bind_addr: Optional[str] = None,
                    dry_run: bool = False,
                    unmanaged: bool = False,
                    no_overwrite: bool = False,
@@ -2018,8 +2016,6 @@ Usage:
         spec = NFSServiceSpec(
             service_id=svc_id,
             port=port,
-            monitoring_addr=monitoring_addr,
-            bind_addr=bind_addr,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             preview_only=dry_run
