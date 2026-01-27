@@ -77,6 +77,17 @@ where the properties of a service specification are:
     below the directory `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
     The absolute path of the directory where the file will be created must
     exist. Use the `dirs` property to create them if necessary.
+* ``prometheus_sd``
+    A boolean to enable automatic Prometheus service discovery registration.
+    When set to ``true``, the container will be automatically added to
+    Prometheus scrape targets via the cephadm service discovery endpoint.
+    Requires at least one port to be specified in ``ports``. Default: ``false``.
+* ``prometheus_sd_port_index``
+    The index of the port (from ``ports`` list) to use for Prometheus scraping.
+    Default: ``0`` (first port).
+* ``prometheus_sd_labels``
+    A dictionary of extra labels to add to the Prometheus targets.
+    The ``instance`` label is always set to the hostname automatically.
 * ``init_containers``
     A list of "init container" definitions. An init container exists to
     run prepratory steps before the primary container starts. Init containers
@@ -150,3 +161,65 @@ Example with init containers:
    before the service is started and is subject to start-up timeouts.
    The total run time of all init containers can not exceed 200 seconds
    or the service will fail to start.
+
+
+Prometheus Service Discovery
+============================
+
+Custom containers that expose Prometheus metrics can be automatically registered
+with cephadm's Prometheus service discovery. This allows Prometheus to
+automatically scrape metrics from your custom containers without manual
+configuration. This is useful for custom exporters that you want to hook up to 
+prometheus.
+
+Example with an eBPF exporter:
+
+.. code-block:: yaml
+
+    service_type: container
+    service_id: ebpf-exporter
+    placement:
+      host_pattern: '*'
+    extra_container_args:
+      - --privileged
+      - --network=host
+    extra_entrypoint_args:
+      - --config.dir=/examples
+      - --config.names=biolatency
+    spec:
+      image: ghcr.io/cloudflare/ebpf_exporter:latest
+      entrypoint: /ebpf_exporter
+      ports:
+        - 9435
+      bind_mounts:
+        - ['type=bind', 'source=/lib/modules', 'destination=/lib/modules', 'ro=true']
+        - ['type=bind', 'source=/sys/kernel/btf', 'destination=/sys/kernel/btf', 'ro=true']
+        - ['type=bind', 'source=/sys/fs/cgroup', 'destination=/sys/fs/cgroup', 'ro=true']
+      prometheus_sd: true
+      prometheus_sd_labels:
+        job: ebpf
+
+When ``prometheus_sd`` is enabled, cephadm will:
+
+1. Register the container with the service discovery endpoint
+2. Automatically add the container to the Prometheus scrape configuration
+3. Reconfigure Prometheus when container daemons are added or removed
+
+Verify the service discovery registration:
+
+.. prompt:: bash #
+
+   curl "http://<mgr-ip>:8765/sd/prometheus/sd-config?service=container.ebpf-exporter"
+
+This returns the discovered targets:
+
+.. code-block:: json
+
+    [
+      {"targets": ["node-01:9435"], "labels": {"instance": "node-01", "job": "ebpf"}},
+      {"targets": ["node-02:9435"], "labels": {"instance": "node-02", "job": "ebpf"}}
+    ]
+
+Prometheus will automatically include a scrape job for the container using
+``http_sd_configs``, so targets are dynamically discovered as you add or
+remove container daemons on hosts.
