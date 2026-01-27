@@ -325,8 +325,6 @@ def build_branch(args):
         branch = branch + "-" + args.branch_release
     if args.branch_append:
         branch += f"-{args.branch_append}"
-    if args.debug_build:
-        branch += "-debug"
     label = args.label
     merge_branch_name = args.merge_branch_name
     if merge_branch_name is False:
