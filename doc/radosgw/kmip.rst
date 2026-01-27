@@ -1,3 +1,5 @@
+.. _radosgw-kmip:
+
 ================
 KMIP Integration
 ================
