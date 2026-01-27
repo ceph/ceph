@@ -48,7 +48,8 @@ setup_teuthology() {
     source venv/bin/activate
     pip install -U pip 'setuptools>=12,<60'
 
-    local TEUTH_REF="${TEUTH_REF:-3ae1592c30adc5875a8aeb1f50a30ed9dd04dc04}"
+    local TEUTH_REF="${TEUTH_REF:-f3d1e601d9123cd8c839d1c32745a294ec8dd15d}"
+    printf "Cloning teuthology at ref %s\n" "$TEUTH_REF"
     git clone https://github.com/ceph/teuthology
     pushd teuthology
     git checkout -q "$TEUTH_REF"
