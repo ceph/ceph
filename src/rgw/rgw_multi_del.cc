@@ -18,6 +18,9 @@ bool RGWMultiDelObject::xml_end(const char *el)
 {
   RGWMultiDelKey *key_obj = static_cast<RGWMultiDelKey *>(find_first("Key"));
   RGWMultiDelVersionId *vid = static_cast<RGWMultiDelVersionId *>(find_first("VersionId"));
+  XMLObj *etag_match = static_cast<XMLObj *>(find_first("ETag"));
+  XMLObj *last_modified_time = static_cast<XMLObj *>(find_first("LastModifiedTime"));
+  XMLObj *size = static_cast<XMLObj *>(find_first("Size"));
 
   if (!key_obj)
     return false;
@@ -30,6 +33,29 @@ bool RGWMultiDelObject::xml_end(const char *el)
 
   if (vid) {
     version_id = vid->get_data();
+  }
+
+  if (etag_match) {
+    if_match = etag_match->get_data().c_str();
+  }
+
+  if(last_modified_time) {
+    string last_modified_time_str = last_modified_time->get_data();
+    if (last_modified_time_str.empty())
+      return false;
+
+    string last_modified_time_str_decoded = url_decode(last_modified_time_str);
+    if (parse_time(last_modified_time_str_decoded.c_str(), &last_mod_time) < 0)
+      return false;
+  }
+
+  if (size) {
+    string err;
+    long long size_tmp = strict_strtoll(size->get_data(), 10, &err);
+    if (!err.empty()) {
+      return false;
+    }
+    size_match = uint64_t(size_tmp);
   }
 
   return true;
@@ -45,10 +71,7 @@ bool RGWMultiDelDelete::xml_end(const char *el) {
   XMLObjIter iter = find("Object");
   RGWMultiDelObject *object = static_cast<RGWMultiDelObject *>(iter.get_next());
   while (object) {
-    const string& key = object->get_key();
-    const string& instance = object->get_version_id();
-    rgw_obj_key k(key, instance);
-    objects.push_back(k);
+    objects.push_back(*object);
     object = static_cast<RGWMultiDelObject *>(iter.get_next());
   }
   return true;
