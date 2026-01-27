@@ -225,6 +225,8 @@ void usage(ostream& out)
 "        set the filter_prefix parameter for OMAP list benchmarking\n"
 "   --omap-read-max-return\n"
 "        set the max number of entries for OMAP list benchmarking\n"
+"   --output=filename\n"
+"        specify the file path to which structured output should be written\n"
 "   -s name\n"
 "   --snap name\n"
 "        select given snap name for (read) IO\n"
