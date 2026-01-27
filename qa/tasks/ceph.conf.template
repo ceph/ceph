@@ -3,8 +3,6 @@
 	pid file = /var/run/ceph/$cluster-$name.pid
         auth supported = cephx
 
-	filestore xattr use omap = true
-
 	mon clock drift allowed = 1.000
 
 	osd crush chooseleaf type = 0
@@ -66,9 +64,6 @@
 
         journal zero on create = true
 
-	filestore ondisk finisher threads = 3
-	filestore apply finisher threads = 3
-
 	bdev debug aio = true
 	osd debug misdirected ops = true
 
@@ -103,8 +98,6 @@
 
 	# 1m isn't quite enough
 	mon_down_mkfs_grace = 2m
-
-	mon_warn_on_filestore_osds = false
 
 [client]
 	rgw cache enabled = true

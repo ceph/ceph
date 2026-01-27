@@ -12,9 +12,6 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
-    # avoid running out of fds in rados bench
-    CEPH_ARGS+="--filestore_wbthrottle_xfs_ios_hard_limit=900 "
-    CEPH_ARGS+="--filestore_wbthrottle_btrfs_ios_hard_limit=900 "
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
         setup $dir || return 1

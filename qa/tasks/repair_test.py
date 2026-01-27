@@ -246,7 +246,6 @@ def task(ctx, config):
     The config should be as follows:
 
       Must include the log-ignorelist below
-      Must enable filestore_debug_inject_read_err config
 
     example:
 
@@ -271,9 +270,6 @@ def task(ctx, config):
           - 'attr name mismatch'
           - 'Regular scrub request, deep-scrub details will be lost'
           - 'candidate size [0-9]+ info size [0-9]+ mismatch'
-        conf:
-          osd:
-            filestore debug inject read err: true
     - repair_test:
 
     """

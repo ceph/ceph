@@ -2681,12 +2681,6 @@ function test_osd_bench()
   ceph tell osd.0 bench 104857600 2097152
 }
 
-function test_osd_negative_filestore_merge_threshold()
-{
-  $SUDO ceph daemon osd.0 config set filestore_merge_threshold -1
-  expect_config_value "osd.0" "filestore_merge_threshold" -1
-}
-
 function test_mon_tell()
 {
   for m in mon.a mon.b; do
@@ -2993,7 +2987,6 @@ MON_TESTS+=" mon_stdin_stdout"
 MON_TESTS+=" mon_messenger_dump"
 
 OSD_TESTS+=" osd_bench"
-OSD_TESTS+=" osd_negative_filestore_merge_threshold"
 OSD_TESTS+=" tiering_agent"
 OSD_TESTS+=" admin_heap_profiler"
 OSD_TESTS+=" osd_tell_help_command"

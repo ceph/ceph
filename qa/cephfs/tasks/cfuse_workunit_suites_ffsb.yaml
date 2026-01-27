@@ -3,9 +3,6 @@ overrides:
     log-ignorelist:
     - SLOW_OPS
     - slow request
-    conf:
-      osd:
-        filestore flush min: 0
 tasks:
 - check-counter:
     counters:
