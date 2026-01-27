@@ -1,8 +1,9 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -10,8 +11,6 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NvmeofSubsystemNamespace } from '~/app/shared/models/nvmeof';
 import { Permission } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
-import { IopsPipe } from '~/app/shared/pipes/iops.pipe';
-import { MbpersecondPipe } from '~/app/shared/pipes/mbpersecond.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -29,7 +28,8 @@ export class NvmeofNamespacesListComponent implements OnInit {
   subsystemNQN: string;
   @Input()
   group: string;
-
+  @ViewChild('deleteTpl', { static: true })
+  deleteTpl: TemplateRef<any>;
   namespacesColumns: any;
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
@@ -43,9 +43,7 @@ export class NvmeofNamespacesListComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService,
     private nvmeofService: NvmeofService,
-    private dimlessBinaryPipe: DimlessBinaryPipe,
-    private mbPerSecondPipe: MbpersecondPipe,
-    private iopsPipe: IopsPipe
+    private dimlessBinaryPipe: DimlessBinaryPipe
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
@@ -53,65 +51,25 @@ export class NvmeofNamespacesListComponent implements OnInit {
   ngOnInit() {
     this.namespacesColumns = [
       {
-        name: $localize`ID`,
+        name: $localize`Namespace ID`,
         prop: 'nsid'
       },
       {
-        name: $localize`Bdev Name`,
-        prop: 'bdev_name'
-      },
-      {
-        name: $localize`Pool `,
-        prop: 'rbd_pool_name',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Image`,
-        prop: 'rbd_image_name',
-        flexGrow: 3
-      },
-      {
-        name: $localize`Image Size`,
+        name: $localize`Size`,
         prop: 'rbd_image_size',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: $localize`Block Size`,
-        prop: 'block_size',
-        pipe: this.dimlessBinaryPipe
+        name: $localize`Pool`,
+        prop: 'rbd_pool_name'
       },
       {
-        name: $localize`IOPS`,
-        prop: 'rw_ios_per_second',
-        sortable: false,
-        pipe: this.iopsPipe,
-        flexGrow: 1.5
+        name: $localize`Image`,
+        prop: 'rbd_image_name'
       },
       {
-        name: $localize`R/W Throughput`,
-        prop: 'rw_mbytes_per_second',
-        sortable: false,
-        pipe: this.mbPerSecondPipe,
-        flexGrow: 1.5
-      },
-      {
-        name: $localize`Read Throughput`,
-        prop: 'r_mbytes_per_second',
-        sortable: false,
-        pipe: this.mbPerSecondPipe,
-        flexGrow: 1.5
-      },
-      {
-        name: $localize`Write Throughput`,
-        prop: 'w_mbytes_per_second',
-        sortable: false,
-        pipe: this.mbPerSecondPipe,
-        flexGrow: 1.5
-      },
-      {
-        name: $localize`Load Balancing Group`,
-        prop: 'load_balancing_group',
-        flexGrow: 1.5
+        name: $localize`Subsystem`,
+        prop: 'ns_subsystem_nqn'
       }
     ];
     this.tableActions = [
@@ -162,17 +120,18 @@ export class NvmeofNamespacesListComponent implements OnInit {
   }
 
   listNamespaces() {
-    this.nvmeofService
-      .listNamespaces(this.subsystemNQN, this.group)
-      .subscribe((res: NvmeofSubsystemNamespace[]) => {
-        this.namespaces = res;
-      });
+    this.nvmeofService.getNamespaceList().subscribe((res) => {
+      this.namespaces = res as any;
+    });
   }
 
   deleteNamespaceModal() {
     const namespace = this.selection.first();
+    this.group = 'Test1';
     this.modalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: 'Namespace',
+      itemDescription: $localize`Namespace`,
+      impact: DeletionImpact.high,
+      bodyTemplate: this.deleteTpl,
       itemNames: [namespace.nsid],
       actionDescription: 'delete',
       submitActionObservable: () =>

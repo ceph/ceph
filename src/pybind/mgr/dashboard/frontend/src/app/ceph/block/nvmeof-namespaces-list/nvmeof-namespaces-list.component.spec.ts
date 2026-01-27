@@ -29,7 +29,7 @@ const mockNamespaces = [
 ];
 
 class MockNvmeOfService {
-  listNamespaces() {
+  getNamespaceList() {
     return of(mockNamespaces);
   }
 }
@@ -66,6 +66,7 @@ describe('NvmeofNamespacesListComponent', () => {
     component.subsystemNQN = 'nqn.2001-07.com.ceph:1721040751436';
     fixture.detectChanges();
   });
+
 
   it('should create', () => {
     expect(component).toBeTruthy();
