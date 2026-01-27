@@ -3418,6 +3418,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
            << std::endl;
       return 1;
     }
+    if(formatter && !output) {
+      cerr << "When --format is given, --output is required but was not given. Please use --output to specify the file name to which formatted output should be written." << std::endl;
+      return 1;
+    }
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     bencher.set_show_time(show_time);
     bencher.set_destination(static_cast<OpDest>(bench_dest));
