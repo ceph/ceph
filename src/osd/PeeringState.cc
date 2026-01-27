@@ -3482,6 +3482,10 @@ void PeeringState::proc_master_log(
   // log to be authoritative (i.e., their entries are by definitely
   // non-divergent).
   merge_log(t, oinfo, std::move(olog), from);
+  if (info.last_backfill.is_max() &&
+      pool.info.is_nonprimary_shard(from.shard)) {
+    invalidate_stats = true;
+  }
   info.stats.stats_invalid |= invalidate_stats;
   peer_info[from] = oinfo;
   psdout(10) << " peer osd." << from << " now " << oinfo
