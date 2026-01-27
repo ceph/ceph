@@ -1291,6 +1291,11 @@ class Module(MgrModule, OrchestratorClientMixin):
             obj_store = osd_metadata.get('osd_objectstore', '')
             f_iface = osd_metadata.get('front_iface', '')
             b_iface = osd_metadata.get('back_iface', '')
+            bs_min_alloc = osd_metadata.get('bluestore_min_alloc_size','')
+            bs_dedicated_db    = osd_metadata.get('bluestore_dedicated_db','')
+            bs_dedicated_wal   = osd_metadata.get('bluestore_dedicated_wal','')
+            c_version_created = osd_metadata.get('ceph_version_when_created','')
+            c_created_at      = osd_metadata.get('created_at','')
 
             self.metrics['osd_metadata'].set(1, (
                 b_iface,
@@ -1301,7 +1306,12 @@ class Module(MgrModule, OrchestratorClientMixin):
                 osd_version[0],
                 obj_store,
                 p_addr,
-                osd_version[1]
+                osd_version[1],
+                bs_min_alloc,
+                bs_dedicated_db,
+                bs_dedicated_wal,
+                c_version_created,
+                c_created_at
             ))
 
             # collect osd status
