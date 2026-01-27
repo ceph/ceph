@@ -1867,6 +1867,7 @@ protected:
   // which pgs were scanned for min_lec
   std::vector<pg_t> min_last_epoch_clean_pgs;
   void send_beacon(const ceph::coarse_mono_clock::time_point& now);
+  void maybe_send_beacon();
 
   ceph_tid_t get_tid() {
     return service.get_tid();
