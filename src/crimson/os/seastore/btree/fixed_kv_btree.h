@@ -678,7 +678,7 @@ public:
           if (node->is_pending()) {
             auto &n = node->get_stable_for_key(i->get_key());
             assert(cnode->peek_parent_node().get() == &n);
-            auto pos = n.lower_bound(i->get_key()).get_offset();
+            [[maybe_unused]] auto pos = n.lower_bound(i->get_key()).get_offset();
             assert(pos < n.get_size());
             assert(n.children[pos] == cnode.get());
           } else {
@@ -687,13 +687,14 @@ public:
           }
         } else if (child_node->is_pending()) {
           if (child_node->is_mutation_pending()) {
-            auto &prior = (child_node_t &)*child_node->get_prior_instance();
+            [[maybe_unused]] auto &prior =
+              (child_node_t &)*child_node->get_prior_instance();
             assert(prior.is_valid());
             assert(prior.is_parent_valid());
             if (node->is_pending()) {
               auto &n = node->get_stable_for_key(i->get_key());
               assert(prior.peek_parent_node().get() == &n);
-              auto pos = n.lower_bound(i->get_key()).get_offset();
+              [[maybe_unused]] auto pos = n.lower_bound(i->get_key()).get_offset();
               assert(pos < n.get_size());
               assert(n.children[pos] == &prior);
             } else {
@@ -703,7 +704,7 @@ public:
           } else {
             auto cnode = child_node->template cast<child_node_t>();
             auto pos = node->find(i->get_key()).get_offset();
-            auto child = node->children[pos];
+            [[maybe_unused]] auto child = node->children[pos];
             assert(child);
             assert(child == cnode.get());
             assert(cnode->is_parent_valid());
@@ -746,7 +747,7 @@ public:
             }
           }
         } else {
-          auto c = static_cast<child_node_t*>(child);
+          [[maybe_unused]] auto c = static_cast<child_node_t*>(child);
           assert(c->has_parent_tracker());
           assert(c->peek_parent_node().get() == node.get()
             || (node->is_pending() && c->is_stable()
@@ -1696,7 +1697,7 @@ private:
           *parent_entry.node,
           parent_entry.pos,
           *child);
-        auto &cnode = (typename internal_node_t::base_t &)*child;
+        [[maybe_unused]] auto &cnode = (typename internal_node_t::base_t &)*child;
         assert(cnode.get_node_meta().begin == node_iter.get_key());
         assert(cnode.get_node_meta().end > node_iter.get_key());
         return on_found(child->template cast<internal_node_t>());
@@ -2334,7 +2335,7 @@ private:
           *parent_pos.node,
           donor_iter.get_offset(),
           *child);
-        auto &node = (typename internal_node_t::base_t&)*child;
+        [[maybe_unused]] auto &node = (typename internal_node_t::base_t&)*child;
         assert(donor_is_left ?
           node.get_node_meta().end == pos.node->get_node_meta().begin :
           node.get_node_meta().begin == pos.node->get_node_meta().end);
