@@ -465,6 +465,8 @@ class TestMonitoring:
         receivers:
         - name: 'default'
           webhook_configs:
+        - name: 'custom-receiver'
+          webhook_configs:
         - name: 'ceph-dashboard'
           webhook_configs:
           - url: '{url}/api/prometheus_receiver'
@@ -594,6 +596,8 @@ class TestMonitoring:
 
                 receivers:
                 - name: 'default'
+                  webhook_configs:
+                - name: 'custom-receiver'
                   webhook_configs:
                 - name: 'ceph-dashboard'
                   webhook_configs:
