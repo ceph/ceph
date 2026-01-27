@@ -133,7 +133,11 @@ def delete_volume(mgr, volname, metadata_pool, data_pools):
         r, outb, outs = remove_pool(mgr, data_pool)
         if r != 0:
             return r, outb, outs
-    result_str = "metadata pool: {0} data pool: {1} removed".format(metadata_pool, str(data_pools))
+    result_str = f"metadata pool: {metadata_pool} data pool: {str(data_pools)} removed.\n"
+    result_str += "If there are active snapshot schedules associated with this "
+    result_str += "volume, you might see EIO errors in the mgr logs or at the "
+    result_str += "snap-schedule command-line due to the missing volume. "
+    result_str += "However, these errors are transient and will get auto-resolved."
     return r, result_str, ""
 
 def rename_volume(mgr, volname: str, newvolname: str) -> Tuple[int, str, str]:
