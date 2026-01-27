@@ -6,7 +6,9 @@ NFS_CORE_PARAM {
         mount_path_pseudo = true;
         Enable_UDP = false;
         NFS_Port = {{ port }};
+{% if monitoring_addr %}
         allow_set_io_flusher_fail = true;
+{% endif %}
 {% if bind_addr %}
         Bind_addr = {{ bind_addr }};
 {% endif %}
@@ -15,12 +17,12 @@ NFS_CORE_PARAM {
 {% endif %}
 }
 
-NFS_MONITORING {
 {% if monitoring_addr %}
-        Monitoring_Addr = {{ monitoring_addr }};
-{% endif %}
+NFS_MONITORING {
+	Monitoring_Addr = {{ monitoring_addr }};
         Monitoring_Port = {{ monitoring_port }};
 }
+{% endif %}
 
 NFSv4 {
         Delegations = false;
@@ -39,6 +41,7 @@ RADOS_KV {
         namespace = "{{ namespace }}";
 }
 
+{% if rados_config %}
 RADOS_URLS {
         UserId = "{{ user }}";
         watch_url = "{{ url }}";
@@ -48,6 +51,7 @@ RGW {
         cluster = "ceph";
         name = "client.{{ rgw_user }}";
 }
+{% endif %}
 
 {% if tls_add %}
 TLS_CONFIG{
@@ -70,4 +74,6 @@ TLS_CONFIG{
 }
 
 {% endif %}
+{% if rados_config %}
 %url    {{ url }}
+{% endif %}

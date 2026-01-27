@@ -3754,12 +3754,7 @@ class TestIngressService:
             '        mount_path_pseudo = true;\n'
             '        Enable_UDP = false;\n'
             '        NFS_Port = 2049;\n'
-            '        allow_set_io_flusher_fail = true;\n'
             '        HAProxy_Hosts = 192.168.122.111, 10.10.2.20, 192.168.122.222;\n'
-            '}\n'
-            '\n'
-            'NFS_MONITORING {\n'
-            '        Monitoring_Port = 9587;\n'
             '}\n'
             '\n'
             'NFSv4 {\n'
@@ -4028,6 +4023,8 @@ class TestNFS:
                     CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Monitoring_Addr = 1.2.3.1" in ganesha_conf
+                assert "allow_set_io_flusher_fail = true" in ganesha_conf
+                assert "NFS_MONITORING {" in ganesha_conf
 
             nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
                                       monitoring_networks=['1.2.3.0/24'])
