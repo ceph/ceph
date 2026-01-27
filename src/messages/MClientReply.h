@@ -326,21 +326,17 @@ public:
   epoch_t get_mdsmap_epoch() const { return head.mdsmap_epoch; }
 
   int get_result() const {
-    #ifdef _WIN32
-    // libclient and libcephfs return CEPHFS_E* errors, which are basically
-    // Linux errno codes. If we convert mds errors to host errno values, we
-    // end up mixing error codes.
-    //
-    // For Windows, we'll preserve the original error value, which is expected
-    // to be a linux (CEPHFS_E*) error. It may be worth doing the same for
-    // other platforms.
+    // MDS now uses host errors, as defined in errno.cc, for current platform.
+    // errorcode32_t is converting, internally, the error code from host to ceph, when encoding, and vice versa,
+    // when decoding, resulting having LINUX codes on the wire, and HOST code on the receiver.
+    // assumes this code is executing after decode_payload() function has been called
     return head.result;
-    #else
-    return ceph_to_hostos_errno((__s32)(__u32)head.result);
-    #endif
   }
 
-  void set_result(int r) { head.result = r; }
+  // errorcode32_t is used in decode/encode methods
+  void set_result(int r) {
+    head.result = r;
+  }
 
   void set_unsafe() { head.safe = 0; }
 
@@ -353,8 +349,8 @@ protected:
     memset(&head, 0, sizeof(head));
     header.tid = req.get_tid();
     head.op = req.get_op();
-    head.result = result;
     head.safe = 1;
+    set_result(result);
   }
   ~MClientReply() final {}
 
@@ -380,6 +376,13 @@ public:
     using ceph::decode;
     auto p = payload.cbegin();
     decode(head, p);
+    // errorcode32_t implements conversion from/to different host error codes
+    // casting needed since error codes are signed int32 and head.result is unsigned int32
+    // errortype_t::code_t is alias for __s32, which is signed
+    // ceph_mds_reply_head::code_t is alias for __le32 which is unsigned
+    errorcode32_t temp;
+    temp.set_wire_to_host(static_cast<errorcode32_t::code_t>(head.result));
+    head.result = static_cast<ceph_mds_reply_head::code_t>(temp.code);
     decode(trace_bl, p);
     decode(extra_bl, p);
     decode(snapbl, p);
@@ -387,7 +390,16 @@ public:
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
-    encode(head, payload);
+    // errorcode32_t implements conversion from/to different host error codes
+    // casting needed since error codes are signed int32 and head.result is unsigned int32
+    // errortype_t::code_t is alias for __s32, which is signed
+    // ceph_mds_reply_head::code_t is alias for __le32 which is unsigned
+    // the Messenger layer expects to be able to call encode_payload multiple times on message retries
+    // this is the reason we must copy the head and to modify the copy's 'result' field
+    auto temp_head = head;
+    errorcode32_t temp{static_cast<errorcode32_t::code_t>(temp_head.result)};
+    temp_head.result = static_cast<ceph_mds_reply_head::code_t>(temp.get_host_to_wire());
+    encode(temp_head, payload);
     encode(trace_bl, payload);
     encode(extra_bl, payload);
     encode(snapbl, payload);

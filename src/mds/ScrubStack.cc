@@ -65,7 +65,7 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
   if (CInode *in = dynamic_cast<CInode*>(obj)) {
     if (in->scrub_is_in_progress()) {
       dout(10) << __func__ << " with {" << *in << "}" << ", already in scrubbing" << dendl;
-      return -CEPHFS_EBUSY;
+      return -EBUSY;
     }
     if(in->state_test(CInode::STATE_PURGING)) {
       dout(10) << *obj << " is purging, skip pushing into scrub stack" << dendl;
@@ -78,7 +78,7 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
   } else if (CDir *dir = dynamic_cast<CDir*>(obj)) {
     if (dir->scrub_is_in_progress()) {
       dout(10) << __func__ << " with {" << *dir << "}" << ", already in scrubbing" << dendl;
-      return -CEPHFS_EBUSY;
+      return -EBUSY;
     }
     if(dir->get_inode()->state_test(CInode::STATE_PURGING)) {
       dout(10) << *obj << " is purging, skip pushing into scrub stack" << dendl;
@@ -110,14 +110,14 @@ int ScrubStack::enqueue(CInode *in, ScrubHeaderRef& header, bool top)
 {
   // abort in progress
   if (clear_stack)
-    return -CEPHFS_EAGAIN;
+    return -EAGAIN;
 
   header->set_origin(in->ino());
   auto ret = scrubbing_map.emplace(header->get_tag(), header);
   if (!ret.second) {
     dout(10) << __func__ << " with {" << *in << "}"
 	     << ", conflicting tag " << header->get_tag() << dendl;
-    return -CEPHFS_EEXIST;
+    return -EEXIST;
   }
   if (header->get_scrub_mdsdir()) {
     filepath fp;
@@ -793,7 +793,7 @@ void ScrubStack::scrub_pause(Context *on_finish) {
   // abort is in progress
   if (clear_stack) {
     if (on_finish)
-      on_finish->complete(-CEPHFS_EINVAL);
+      on_finish->complete(-EINVAL);
     return;
   }
 
@@ -820,10 +820,10 @@ bool ScrubStack::scrub_resume() {
   int r = 0;
 
   if (clear_stack) {
-    r = -CEPHFS_EINVAL;
+    r = -EINVAL;
   } else if (state == STATE_PAUSING) {
     set_state(STATE_RUNNING);
-    complete_control_contexts(-CEPHFS_ECANCELED);
+    complete_control_contexts(-ECANCELED);
   } else if (state == STATE_PAUSED) {
     set_state(STATE_RUNNING);
     kick_off_scrubs();

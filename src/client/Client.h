@@ -378,7 +378,7 @@ public:
 
   /**
    * Returns the length of the buffer that got filled in, or -errno.
-   * If it returns -CEPHFS_ERANGE you just need to increase the size of the
+   * If it returns -ERANGE you just need to increase the size of the
    * buffer and try again.
    */
   int _getdents(dir_result_t *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
@@ -1581,7 +1581,7 @@ private:
   ino_t last_used_faked_ino;
   ino_t last_used_faked_root;
 
-  int local_osd = -CEPHFS_ENXIO;
+  int local_osd = -ENXIO;
   epoch_t local_osd_epoch = 0;
 
   // mds requests

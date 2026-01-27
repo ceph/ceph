@@ -524,7 +524,7 @@ private:
   MDLog *mdlog;
   PerfCounters *logger = nullptr;
 
-  // OSDMap full status, used to generate CEPHFS_ENOSPC on some operations
+  // OSDMap full status, used to generate ENOSPC on some operations
   bool is_full = false;
 
   // State for while in reconnect
