@@ -4948,9 +4948,15 @@ next:
       // check each dirfrag...
       for (const auto &p : in->dirfrags) {
 	CDir *dir = p.second;
-	ceph_assert(dir->get_version() > 0);
-	nest_info.add(dir->get_fnode()->accounted_rstat);
-	dir_info.add(dir->get_fnode()->accounted_fragstat);
+        /* If the dirfrag is damaged, we can not do any checks on the fragment. */
+        if (in->mdcache->mds->damage_table.is_dirfrag_damaged(dir)) {
+          results->raw_stats.error_str << "one or more dirfrags are damaged";
+          goto next;
+        } else {
+	  ceph_assert(dir->get_version() > 0);
+	  nest_info.add(dir->get_fnode()->accounted_rstat);
+	  dir_info.add(dir->get_fnode()->accounted_fragstat);
+        }
       }
       nest_info.rsubdirs++; // it gets one to account for self
       if (const sr_t *srnode = in->get_projected_srnode(); srnode)
@@ -4964,9 +4970,6 @@ next:
 	    << "freshly-calculated rstats don't match existing ones (will be fixed)";
 	  in->mdcache->repair_inode_stats(in);
           results->raw_stats.repaired = true;
-          for (const auto &p : in->dirfrags){
-            in->mdcache->mds->damage_table.remove_dirfrag_damage_entry(p.second);
-          }
 	} else {
 	  results->raw_stats.error_str
 	    << "freshly-calculated rstats don't match existing ones";
