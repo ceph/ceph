@@ -71,6 +71,9 @@ if(WITH_LTTNG)
 endif()
 
 # For crimson-alienstore WITH_CRIMSON is not defined
+target_compile_definitions(crimson-alienstore
+  PRIVATE OBJSTORE_NAME_PREFIX="alienstore-")
+
 target_link_libraries(crimson-alienstore
   PRIVATE
     seastar
