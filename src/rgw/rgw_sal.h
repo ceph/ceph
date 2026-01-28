@@ -1146,6 +1146,8 @@ class Object {
 
         /// If non-null, read data/attributes from the given multipart part.
         int* part_num{nullptr};
+        std::optional<uint64_t> part_ofs;
+        std::optional<uint64_t> full_obj_size;
         /// If the object is multipart, the total number of multipart
         /// parts is assigned to this output parameter.
         std::optional<int> parts_count;
