@@ -648,4 +648,4 @@ class FSPerfStats(object):
         with self.lock:
             user_query = self.register_query(filter_spec)
             result = self.generate_report(user_query)
-        return 0, json.dumps(result), ""
+        return result
