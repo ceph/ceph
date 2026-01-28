@@ -3310,6 +3310,8 @@ void PGMap::get_health_checks(
         summary += " have spurious read errors";
       } else if (asum.first == "BLUESTORE_SLOW_OP_ALERT") {
         summary += " experiencing slow operations in BlueStore";
+      } else if (asum.first == "BLUESTORE_SLOW_SCRUB_OP_ALERT") {
+        summary += " experiencing slow operations during scrub in BlueStore";
       } else if (asum.first == "BLOCK_DEVICE_STALLED_READ_ALERT") {
         summary += " experiencing stalled read in block device of BlueStore";
       } else if (asum.first == "WAL_DEVICE_STALLED_READ_ALERT") {

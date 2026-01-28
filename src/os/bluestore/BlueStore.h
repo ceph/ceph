@@ -3565,7 +3565,8 @@ public:
     const ceph::timespan& lat,
     double lat_threshold,
     const char* info = "",
-    int idx2 = l_bluestore_first);
+    int idx2 = l_bluestore_first,
+    bool scrub_op = false);
 
   inline void log_latency_fn(const char* name,
     int idx,
@@ -3606,10 +3607,12 @@ private:
   std::string no_per_pg_omap_alert;
   std::string disk_size_mismatch_alert;
   std::string spurious_read_errors_alert;
-  std::queue <ceph::mono_clock::time_point> slow_op_event_queue;
+  std::queue <std::pair<ceph::mono_clock::time_point, bool>> slow_op_event_queue;
+  size_t slow_op_event_count = 0;
+  size_t slow_scrub_op_event_count = 0;
 
-  size_t _trim_slow_op_event_queue(ceph::mono_clock::time_point cur_time);
-  void _add_slow_op_event();
+  std::pair<size_t, size_t> _trim_slow_op_event_queue(ceph::mono_clock::time_point cur_time);
+  void _add_slow_op_event(bool scrub_op = false);
   void _log_alerts(osd_alert_list_t& alerts);
   bool _set_compression_alert(bool cmode, const char* s) {
     std::lock_guard l(qlock);
