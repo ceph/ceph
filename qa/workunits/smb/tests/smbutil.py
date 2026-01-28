@@ -6,8 +6,8 @@ import smbclient
 from smbprotocol.header import NtStatus
 
 
-class SMBTestServer:
-    """Server configuration wrapper."""
+class SMBTestHost:
+    """Host configuration wrapper."""
 
     def __init__(self, data):
         self._server_data = data
@@ -20,9 +20,17 @@ class SMBTestServer:
     def name(self):
         return self._server_data.get('name', '')
 
+
+class SMBTestServer(SMBTestHost):
+    """Server configuration wrapper."""
+
     @property
     def port(self):
         return 445
+
+    @property
+    def ssh_user(self):
+        return self._server_data.get('user', '')
 
 
 class SMBTestConf:
@@ -53,6 +61,30 @@ class SMBTestConf:
     def server(self):
         nodes = self._data.get('smb_nodes', [])
         return SMBTestServer(nodes[0])
+
+    @property
+    def admin_node(self):
+        return SMBTestServer(self._data.get('admin_node', {}))
+
+    @property
+    def ssh_user(self):
+        uname = self.admin_node.ssh_user
+        assert uname, 'no ssh_user found'
+        return uname
+
+    @property
+    def ssh_admin_host(self):
+        return self.admin_node.ip_address
+
+    def clients(self):
+        clients = self._data.get('client_nodes') or []
+        return [SMBTestHost(node_info) for node_info in clients]
+
+    @property
+    def default_client(self):
+        # ideally we check that this is *our* ip or name, but we'll just wing
+        # it for now until we really need to check
+        return self.clients()[0]
 
 
 @contextlib.contextmanager

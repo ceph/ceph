@@ -804,6 +804,23 @@ login_control
         or ``admin``. Specific access level to grant to the user or group when
         logging into this share. The ``none`` value denies access to the share
         regardless of the ``restrict_access`` value.
+hosts_access
+    Optional list of objects. Items in the ``hosts_access`` list are used to
+    restrict the share to use by specific client addresses. If any ``allow``
+    entries are found all other hosts will be denied. Fields:
+
+    access
+        Required string. One of ``allow`` or ``deny``.
+    address
+        Optional string. Required if ``network`` field is not supplied. The
+        string value must be either an IPv4 address or an IPv6 address. The
+        specific host will be allowed or denied access to the share.
+    network
+        Optional string. Required if ``address`` field is not supplied. The
+        string value must be either an IPv4 network or an IPv6 network (for
+        example ``192.0.2.0/24``). If the client's IP address is found within
+        the specified network that host will be allowed or denied access to the
+        share.
 custom_smb_share_options
     Optional mapping. Specify key-value pairs that will be directly added to
     the ``smb.conf`` (or equivalent) of a Samba server.  Do *not* use this

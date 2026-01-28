@@ -40,6 +40,7 @@ from ceph.deployment.utils import verify_boolean, verify_enum, verify_int
 from ceph.deployment.utils import parse_combined_pem_file
 from ceph.utils import is_hex
 from ceph.smb import constants as smbconst
+from ceph.smb import network as smbnet
 
 ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -3601,29 +3602,13 @@ class SMBClusterBindIPSpec:
         self.validate()
 
     def validate(self) -> None:
-        if self.address and self.network:
-            raise SpecValidationError('only one of address or network may be given')
-        if not (self.address or self.network):
-            raise SpecValidationError('one of address or network is required')
-        if self.address:
-            # verify that address is an address
-            try:
-                ip_address(self.address)
-            except ValueError as err:
-                raise SpecValidationError(
-                    f'Cannot parse address {self.address}'
-                ) from err
-        # but we internallly store a list of networks
-        # this is slight bit of YAGNI violation, but I actually plan on
-        # adding IP ranges soon.
-        addr = self.network if self.network else self.address
         try:
-            assert addr
-            self._networks = [ip_network(addr)]
+            netval = smbnet.to_network(
+                network=self.network, address=self.address
+            )
+            self._networks = [netval]
         except ValueError as err:
-            raise SpecValidationError(
-                f'Cannot parse network address {addr}'
-            ) from err
+            raise SpecValidationError(str(err)) from err
 
     def as_networks(self) -> List[Union[IPv4Network, IPv6Network]]:
         """Return a list of one or more IPv4 or IPv6 network objects."""

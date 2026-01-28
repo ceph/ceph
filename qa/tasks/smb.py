@@ -10,6 +10,7 @@ import shlex
 import time
 
 from teuthology.exceptions import ConfigError, CommandFailedError
+from teuthology.task import ssh_keys
 
 
 log = logging.getLogger(__name__)
@@ -350,16 +351,16 @@ def workunit(ctx, config):
     from . import workunit
 
     _config = copy.deepcopy(config)
-    clients = _config.get('clients') or {}
-    env = _config.get('env') or {}
+    clients = _config.get("clients") or {}
+    env = _config.get("env") or {}
 
     clients = {k: _workunit_commands(k, v) for k, v in clients.items()}
-    mfile = _config.get('metadata_file_path', _DEFAULT_META_FILE)
-    env['SMB'] = 'yes'
-    env['SMB_TEST_META'] = mfile
+    mfile = _config.get("metadata_file_path", _DEFAULT_META_FILE)
+    env["SMB"] = "yes"
+    env["SMB_TEST_META"] = mfile
 
-    _config['clients'] = clients
-    _config['env'] = env
+    _config["clients"] = clients
+    _config["env"] = env
     # annoyingly the stock workunit helper script command uses a tool (from the
     # ceph/teuthology repo) called adjust-ulimits *and* a tool (from packages)
     # called ceph-coverage. They're glued together under the
@@ -369,12 +370,27 @@ def workunit(ctx, config):
     # teuthology tasks that installs adjust-ulimits. Just skip the whole thing
     # for now and we can set ulimits via pytest if we really want to set
     # ulimits. Allow the yaml to override our default, however unlikely.
-    _config['no_coverage_and_limits'] = config.get(
-        'no_coverage_and_limits', True
+    _config["no_coverage_and_limits"] = config.get(
+        "no_coverage_and_limits", True
     )
-    log.info('Passing workunit config: %r', _config)
-    with write_metadata_file(ctx, _config):
+    _ssh_keys_config = config.get("ssh_keys", {})
+    _config["enable_ssh_keys"] = _ssh_keys_config not in (False, None)
+    log.info("Passing workunit config: %r", _config)
+    with contextlib.ExitStack() as estack:
+        if _config["enable_ssh_keys"]:
+            estack.enter_context(ssh_keys.task(ctx, _ssh_keys_config))
+        estack.enter_context(write_metadata_file(ctx, _config))
         return workunit.task(ctx, _config)
+
+
+def _node_info(ctx, role_name, **kwargs):
+    (remote,) = ctx.cluster.only(role_name).remotes.keys()
+    info = dict(remote.inventory_info)
+    info['_role_name'] = role_name
+    info['shortname'] = remote.shortname
+    info['ip_address'] = remote.ip_address
+    info.update(kwargs)
+    return info
 
 
 @contextlib.contextmanager
@@ -389,18 +405,16 @@ def write_metadata_file(ctx, config, *, roles=None):
     }
     if config.get('admin_node'):
         role = config.get('admin_node')
-        (remote,) = ctx.cluster.only(role).remotes.keys()
-        n = obj['admin_node'] = remote.inventory_info
-        n['shortname'] = remote.shortname
-        n['ip_address'] = remote.ip_address
+        obj['admin_node'] = _node_info(ctx, role)
     if config.get('smb_nodes'):
-        snodes = obj['smb_nodes'] = []
-        for node in config.get('smb_nodes'):
-            (remote,) = ctx.cluster.only(node).remotes.keys()
-            n = dict(remote.inventory_info)
-            n['shortname'] = remote.shortname
-            n['ip_address'] = remote.ip_address
-            snodes.append(n)
+        obj['smb_nodes'] = [
+            _node_info(ctx, node) for node in config.get('smb_nodes')
+        ]
+    if config.get('clients'):
+        obj['client_nodes'] = [
+            _node_info(ctx, node, client_name=node)
+            for node in config.get('clients')
+        ]
     data = json.dumps(obj)
     log.debug('smb metadata: %r', obj)
 
