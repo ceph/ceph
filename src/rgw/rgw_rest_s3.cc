@@ -39,6 +39,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_s3website.h"
 #include "rgw_rest_pubsub.h"
+#include "rgw_rest_s3vector.h"
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
@@ -2764,12 +2765,10 @@ void RGWCreateBucket_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s);
 
-  if (op_ret < 0)
-    return;
-
-  if (s->system_request) {
+  if (op_ret == 0 && s->system_request) {
+    s->format = RGWFormat::JSON;
+    end_header(s, this, to_mime_type(s->format));
     JSONFormatter f; /* use json formatter for system requests output */
 
     const RGWBucketInfo& info = s->bucket->get_info();
@@ -2780,7 +2779,9 @@ void RGWCreateBucket_ObjStore_S3::send_response()
     encode_json("bucket_info", info, &f);
     f.close_section();
     rgw_flush_formatter_and_reset(s, &f);
+    return;
   }
+  end_header(s);
 }
 
 void RGWDeleteBucket_ObjStore_S3::send_response()
@@ -5940,6 +5941,23 @@ void parse_post_action(const std::string& post_body, req_state* s)
   }
 }
 
+// s3vector requests looks like bucket POST operations
+// where the "bucket name" is the operation name.
+// with JSON payload
+// and no user provided params
+// POST /<op name> HTTP/1.1
+// Content-type: application/json
+bool is_s3vector_op(const req_state* s) {
+  const auto content_type = s->info.env->get_optional("CONTENT_TYPE");
+  const auto& params = s->info.args.get_params();
+  return std::string_view(s->info.method) == "POST" &&
+    std::count_if(params.begin(), params.end(), [](const auto& p) {
+        return !p.first.starts_with(RGW_SYS_PARAM_PREFIX);
+    }) == 0 &&
+    content_type &&
+    *content_type == "application/json";
+}
+
 RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
 					    req_state* const s,
                                             const rgw::auth::StrategyRegistry& auth_registry,
@@ -5998,6 +6016,10 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
     return nullptr;
   }
   // has bucket
+  if (enable_s3vector && is_s3vector_op(s)) {
+    ldpp_dout(s, 20) << "INFO: s3vector op: " << s->init_state.url_bucket << dendl;
+    return new RGWHandler_REST_s3Vector(auth_registry);
+  }
   return new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
 }
 

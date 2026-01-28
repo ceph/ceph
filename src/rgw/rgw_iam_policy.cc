@@ -223,6 +223,22 @@ static const actpair actpairs[] =
  { "organizations:ListRoots", organizationsListRoots},
  { "organizations:ListPolicies", organizationsListPolicies},
  { "organizations:ListTargetsForPolicy", organizationsListTargetsForPolicy},
+ { "s3vectors:CreateIndex", s3vectorsCreateIndex},
+ { "s3vectors:CreateVectorBucket", s3vectorsCreateVectorBucket},
+ { "s3vectors:DeleteIndex", s3vectorsDeleteIndex},
+ { "s3vectors:DeleteVectorBucket", s3vectorsDeleteVectorBucket},
+ { "s3vectors:DeleteVectorBucketPolicy", s3vectorsDeleteVectorBucketPolicy},
+ { "s3vectors:DeleteVectors", s3vectorsDeleteVectors},
+ { "s3vectors:GetIndex", s3vectorsGetIndex},
+ { "s3vectors:GetVectorBucket", s3vectorsGetVectorBucket},
+ { "s3vectors:GetVectorBucketPolicy", s3vectorsGetVectorBucketPolicy},
+ { "s3vectors:GetVectors", s3vectorsGetVectors},
+ { "s3vectors:ListIndexes", s3vectorsListIndexes},
+ { "s3vectors:ListVectorBuckets", s3vectorsListVectorBuckets},
+ { "s3vectors:ListVectors", s3vectorsListVectors},
+ { "s3vectors:PutVectorBucketPolicy", s3vectorsPutVectorBucketPolicy},
+ { "s3vectors:PutVectors", s3vectorsPutVectors},
+ { "s3vectors:QueryVectors", s3vectorsQueryVectors},
 };
 
 struct PolicyParser;
@@ -688,6 +704,12 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
         }
         if ((t->notaction & organizationsAllValue) == organizationsAllValue) {
           t->notaction[organizationsAll] = 1;
+        }
+        if ((t->action & s3vectorsAllValue) == s3vectorsAllValue) {
+          t->action[s3vectorsAll] = 1;
+        }
+        if ((t->notaction & s3vectorsAllValue) == s3vectorsAllValue) {
+          t->notaction[s3vectorsAll] = 1;
         }
       }
     }
@@ -1751,6 +1773,39 @@ const char* action_bit_string(uint64_t action) {
 
   case organizationsListTargetsForPolicy:
     return "organizations:ListTargetsForPolicy";
+
+  case s3vectorsCreateIndex:
+    return "s3vectors:CreateIndex";
+  case s3vectorsCreateVectorBucket:
+    return "s3vectors:CreateVectorBucket";
+  case s3vectorsDeleteIndex:
+    return "s3vectors:DeleteIndex";
+  case s3vectorsDeleteVectorBucket:
+    return "s3vectors:DeleteVectorBucket";
+  case s3vectorsDeleteVectorBucketPolicy:
+    return "s3vectors:DeleteVectorBucketPolicy";
+  case s3vectorsDeleteVectors:
+    return "s3vectors:DeleteVectors";
+  case s3vectorsGetIndex:
+    return "s3vectors:GetIndex";
+  case s3vectorsGetVectorBucket:
+    return "s3vectors:GetVectorBucket";
+  case s3vectorsGetVectorBucketPolicy:
+    return "s3vectors:GetVectorBucketPolicy";
+  case s3vectorsGetVectors:
+    return "s3vectors:GetVectors";
+  case s3vectorsListIndexes:
+    return "s3vectors:ListIndexes";
+  case s3vectorsListVectorBuckets:
+    return "s3vectors:ListVectorBuckets";
+  case s3vectorsListVectors:
+    return "s3vectors:ListVectors";
+  case s3vectorsPutVectorBucketPolicy:
+    return "s3vectors:PutVectorBucketPolicy";
+  case s3vectorsPutVectors:
+    return "s3vectors:PutVectors";
+  case s3vectorsQueryVectors:
+    return "s3vectors:QueryVectors";
   }
   return "s3Invalid";
 }

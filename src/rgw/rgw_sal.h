@@ -151,6 +151,7 @@ namespace rgw { namespace sal {
 struct MPSerializer;
 class GCChain;
 class RGWRole;
+class VectorBucket;
 
 enum AttrsMod {
   ATTRSMOD_NONE    = 0,
@@ -712,6 +713,17 @@ class Driver {
     virtual const std::string& get_compression_type(const rgw_placement_rule& rule) = 0;
     /** Check to see if this placement rule is valid */
     virtual bool valid_placement(const rgw_placement_rule& rule) = 0;
+
+    /** Load a VectorBucket by key.  Queries driver for vector bucket info.  On -ENOENT, the
+     * bucket must still be allocated to support bucket->create(). */
+    virtual int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                            std::unique_ptr<VectorBucket>* bucket, optional_yield y) = 0;
+    /** List the vector buckets of a given owner */
+    virtual int list_vector_buckets(const DoutPrefixProvider* dpp,
+			     const rgw_owner& owner, const std::string& tenant,
+			     const std::string& marker, const std::string& end_marker,
+			     uint64_t max, BucketList& buckets,
+			     optional_yield y) = 0;
 
     /** Shut down background tasks, to be called while Asio is running. */
     virtual void shutdown(void) { };
@@ -1938,6 +1950,129 @@ public:
   virtual const std::string& luarocks_path() const = 0;
   /** Set the path to the loarocks install location **/
   virtual void set_luarocks_path(const std::string& path) = 0;
+};
+
+class VectorBucket {
+  public:
+    VectorBucket() = default;
+    virtual ~VectorBucket() = default;
+
+    /** Remove this vector bucket from the backing store */
+    virtual int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) = 0;
+
+    using CreateParams = Bucket::CreateParams;
+    /// Create this bucket in the backing store.
+    virtual int create(const DoutPrefixProvider* dpp,
+                       const CreateParams& params,
+                       optional_yield y) = 0;
+
+    /** Get the cached attributes associated with this vector bucket */
+    virtual Attrs& get_attrs(void) = 0;
+    /** Set the cached attributes on this vector bucket */
+    virtual int set_attrs(Attrs a) = 0;
+    /** Load this vector bucket from the backing store. Requires the key to be set, fills other fields. */
+    virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    /** Get the owner of this vector bucket */
+    virtual const rgw_owner& get_owner() const = 0;
+    /** Check in the backing store if this vector bucket is empty */
+    virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    /** Check if this instantiation is empty */
+    virtual bool empty() const = 0;
+    /** Get the cached name of this vector bucket */
+    virtual const std::string& get_name() const = 0;
+    /** Get the cached tenant of this vector bucket */
+    virtual const std::string& get_tenant() const = 0;
+    /** Get the cached marker of this vector bucket */
+    virtual const std::string& get_marker() const = 0;
+    /** Get the cached ID of this vector bucket */
+    virtual const std::string& get_bucket_id() const = 0;
+    /** Get the cached placement rule of this vector bucket */
+    virtual const rgw_placement_rule& get_placement_rule() const = 0;
+    /** Get the cached creation time of this vector bucket */
+    virtual ceph::real_time get_creation_time() const = 0;
+    /** Get the cached modification time of this vector bucket */
+    virtual const ceph::real_time& get_modification_time() const = 0;
+    /** Get the cached version of this vector bucket */
+    virtual const obj_version& get_version() const = 0;
+    /** Set the cached version of this vector bucket */
+    virtual void set_version(obj_version &ver) = 0;
+    /** Get the key for this vector bucket */
+    virtual const rgw_bucket& get_key() const = 0;
+    /** Get the info for this vector bucket */
+    virtual const RGWBucketInfo& get_info() const = 0;
+
+    /** Check if a VectorBucket pointer is empty */
+    static bool empty(const VectorBucket* b) { return (!b || b->empty()); }
+    /** Check if a VectorBucket unique pointer is empty */
+    static bool empty(const std::unique_ptr<VectorBucket>& b) { return (!b || b->empty()); }
+    /** Clone a copy of this vector bucket.  Used when modification is necessary of the copy */
+    virtual std::unique_ptr<VectorBucket> clone() = 0;
+
+    /** Print the User to @a out */
+    virtual void print(std::ostream& out) const = 0;
+
+    friend inline std::ostream& operator<<(std::ostream& out, const VectorBucket& b) {
+      b.print(out);
+      return out;
+    }
+
+    friend inline std::ostream& operator<<(std::ostream& out, const VectorBucket* b) {
+      if (!b)
+	out << "<NULL>";
+      else
+	b->print(out);
+      return out;
+    }
+
+    friend inline std::ostream& operator<<(std::ostream& out, const std::unique_ptr<VectorBucket>& p) {
+      out << p.get();
+      return out;
+    }
+
+    virtual bool operator==(const VectorBucket& b) const = 0;
+    virtual bool operator!=(const VectorBucket& b) const = 0;
+
+    /** Store the cached bucket info into the backing store */
+    virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) = 0;
+
+    /** Try to refresh the cached bucket info from the backing store.  Used in
+     * read-modify-update loop. */
+    virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) = 0;
+
+    // TODO check if we need these API from Bucket class:
+    /** Read the bucket stats from the backing Store, synchronous */
+    //virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y,
+    //			   const bucket_index_layout_generation& idx_layout,
+    //			   int shard_id, std::string* bucket_ver, std::string* master_ver,
+    //			   std::map<RGWObjCategory, RGWStorageStats>& stats,
+    //			   std::string* max_marker = nullptr,
+    //			   bool* syncstopped = nullptr) = 0;
+    /** Read the bucket stats from the backing Store, asynchronous */
+    //virtual int read_stats_async(const DoutPrefixProvider *dpp,
+    //				 const bucket_index_layout_generation& idx_layout,
+    //				 int shard_id, boost::intrusive_ptr<ReadStatsCB> cb) = 0;
+    /** Sync this bucket's stats to the owning user's stats in the backing store */
+    //virtual int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+    //                             RGWBucketEnt* optional_ent) = 0;
+    /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not
+     * change ownership of the objects in the bucket. */
+    //virtual int chown(const DoutPrefixProvider* dpp,
+    //                  const rgw_owner& new_owner,
+    //                  const std::string& new_owner_name,
+    //                  optional_yield y) = 0;
+    /** Check if the given size fits within the quota */
+    // virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
+    /** Set the attributes in attrs, leaving any other existing attrs set, and
+     * write them to the backing store; a merge operation */
+    //virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) = 0;
+    /** Read usage information about this bucket from the backing store */
+    //virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+    //			   bool* is_truncated, RGWUsageIter& usage_iter,
+    //			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
+    /** Trim the usage information to the given epoch range */
+    //virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) = 0;
+    /** Remove this specific vector bucket instance from the backing store.  May be removed from API */
+    //virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) = 0;
 };
 
 /** @} namespace rgw::sal in group RGWSAL */
