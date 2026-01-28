@@ -6839,6 +6839,41 @@ bool OSD::ms_handle_refused(Connection *con)
   return true;
 }
 
+bool OSD::ms_handle_throttle(ms_throttle_t ttype, const ThrottleInfo& tinfo) {
+  switch (ttype) {
+  case ms_throttle_t::MESSAGE:
+    break; // TODO
+  case ms_throttle_t::BYTES:
+    break; // TODO
+  case ms_throttle_t::DISPATCH_QUEUE:
+    {
+      //save the latest throttled time, save the number of messages throttled.
+      std::lock_guard l(dispatch_queue_throttle_lock);
+      last_throttled.store(ceph::coarse_mono_clock::now());
+      messages_throttled.store(tinfo.failedrequests);
+    }
+    break;
+  case ms_throttle_t::NONE:
+    {
+      //No Throttling
+      std::lock_guard l(dispatch_queue_throttle_lock);
+      if (last_throttled.load() != ceph::coarse_mono_clock::zero()) {
+        //Don't be hurry to reset last_throttled. Give get_health_metrics()
+        //THROTTLE_STATUS_INTERVAL seconds to read and display the previous status.
+        if (std::chrono::duration_cast<std::chrono::seconds>
+            (ceph::coarse_mono_clock::now() - last_throttled) >= THROTTLE_STATUS_INTERVAL) {
+          last_throttled.store(ceph::coarse_mono_clock::zero());
+          messages_throttled.store(0);
+        }
+      }
+    }
+    break;
+  default:
+    return false;
+  }
+  return true;
+}
+
 struct CB_OSD_GetVersion {
   OSD *osd;
   explicit CB_OSD_GetVersion(OSD *o) : osd(o) {}
@@ -8030,6 +8065,16 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
       }
     }
     metrics.emplace_back(daemon_metric::PENDING_CREATING_PGS, n_primaries);
+  }
+  {
+    std::lock_guard l(dispatch_queue_throttle_lock);
+    if (messages_throttled.load() > 0) {
+      stringstream ss;
+      ss << "Dispatch Queue Throttling, " << messages_throttled.load() << " messages throttled.";
+      lgeneric_subdout(cct,osd,1) << ss.str() << dendl;
+      clog->warn() << ss.str();
+      metrics.emplace_back(daemon_metric::DISPATCH_QUEUE_THROTTLE, messages_throttled.load());
+    }
   }
   return metrics;
 }
