@@ -27,6 +27,7 @@ from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from tasks.daemonwatchdog import DaemonWatchdog
 from tasks.util import chacra
 from tasks import template
+from tasks.ceph import check_enable_crimson
 
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
@@ -783,6 +784,9 @@ def ceph_bootstrap(ctx, config):
                    ['ceph', 'orch', 'client-keyring', 'set', 'client.admin',
                     '*', '--mode', '0755'],
                    check_status=False)
+
+        log.info('Bootstrapping:checking and enabling crimson if needed')
+        check_enable_crimson(ctx, config)
 
         # add other hosts
         for remote, roles in _cephadm_remotes(ctx, log_excluded=True):
