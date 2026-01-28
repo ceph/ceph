@@ -1,3 +1,4 @@
+// vim: ts=8 sw=2 sts=2 expandtab
 /*
  * ceph_fs.h - Ceph constants and data types to share between kernel and
  * user space.
