@@ -442,6 +442,7 @@ void C_DiscardRequest<T>::setup_log_operations() {
       ceph_assert(discard_req->get_cell());
       discard_req->complete_user_request(r);
       discard_req->release_cell();
+      discard_req->complete(r);
     });
   op->init_op(current_sync_gen, persist_on_flush, pwl.get_last_op_sequence_num(),
               on_write_persist, on_write_append);
