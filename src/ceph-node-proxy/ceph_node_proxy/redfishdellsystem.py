@@ -132,7 +132,8 @@ class RedfishDellSystem(BaseRedfishSystem):
                   'PhysicalLocation']
         result: Dict[str, Dict[str, Dict]] = dict()
         self.log.debug('Updating storage')
-        for member in self.endpoints['systems'].get_members_names():
+        members_names = self.endpoints['systems'].get_members_names()
+        for member in members_names:
             result[member] = {}
             members_data = self.endpoints['systems'][member]['Storage'].get_members_data()
             for entity in members_data:
@@ -142,7 +143,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                     result[member][drive_id] = dict()
                     result[member][drive_id]['redfish_endpoint'] = data['@odata.id']
                     for field in fields:
-                        result[member][drive_id][to_snake_case(field)] = data[field]
+                        result[member][drive_id][to_snake_case(field)] = data.get(field)
                         result[member][drive_id]['entity'] = entity
             self._sys['storage'] = normalize_dict(result)
 
