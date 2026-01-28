@@ -113,14 +113,15 @@ class GaneshaConfParser:
                 value = self.stream()[:idx]
                 self.pos += idx + 1
             block_dict = RawBlock('%url', values={'value': value})
-            return block_dict
+            return ('%url', block_dict)
 
-        block_dict = RawBlock(self.parse_block_name().upper())
+        block_name = self.parse_block_name().upper()
+        block_dict = RawBlock(block_name)
         self.parse_block_body(block_dict)
         if self.stream()[0] != '}':
             raise Exception("No closing bracket '}' found at the end of block")
         self.pos += 1
-        return block_dict
+        return (block_name, block_dict)
 
     def parse_parameter_value(self, raw_value: str) -> Any:
         if raw_value.find(',') != -1:
@@ -164,7 +165,7 @@ class GaneshaConfParser:
                 self.parse_stanza(block_dict)
             elif is_lbracket and ((is_semicolon and not is_semicolon_lt_lbracket)
                                   or (not is_semicolon)):
-                block_dict.blocks.append(self.parse_block_or_section())
+                block_dict.blocks.append(self.parse_block_or_section()[1])
             else:
                 raise Exception("Malformed stanza: no semicolon found.")
 
@@ -172,9 +173,10 @@ class GaneshaConfParser:
                 raise Exception("Infinite loop while parsing block content")
 
     def parse(self) -> List[RawBlock]:
-        blocks = []
+        blocks = {}
         while self.stream():
-            blocks.append(self.parse_block_or_section())
+            (block_name, block) = self.parse_block_or_section()
+            blocks[block_name] = block
         return blocks
 
 
@@ -326,10 +328,12 @@ class Client:
     def __init__(self,
                  addresses: List[str],
                  access_type: str,
-                 squash: str):
+                 squash: str,
+                 delegations: str):
         self.addresses = addresses
         self.access_type = access_type
         self.squash = squash
+        self.delegations: delegations
 
     @classmethod
     def from_client_block(cls, client_block: RawBlock) -> 'Client':
@@ -338,7 +342,8 @@ class Client:
             addresses = [addresses]
         return cls(addresses,
                    client_block.values.get('access_type', None),
-                   client_block.values.get('squash', None))
+                   client_block.values.get('squash', None),
+                   client_block.values.get('delegations', None))
 
     def to_client_block(self) -> RawBlock:
         result = RawBlock('CLIENT', values={'clients': self.addresses})
@@ -346,20 +351,87 @@ class Client:
             result.values['access_type'] = self.access_type
         if self.squash:
             result.values['squash'] = self.squash
+        if self.delegations:
+            result.values['delegations'] = self.delegations
         return result
 
     @classmethod
     def from_dict(cls, client_dict: Dict[str, Any]) -> 'Client':
         return cls(client_dict['addresses'], client_dict['access_type'],
-                   client_dict['squash'])
+                   client_dict['squash'], client_dict['delegations'])
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             'addresses': self.addresses,
             'access_type': self.access_type,
-            'squash': self.squash
+            'squash': self.squash,
+            'delegations': self.delegations
         }
 
+class CephBlock:
+    def __init__(self,
+                 is_async: bool,
+                 is_zerocopy: bool):
+        self.is_async = is_async
+        self.is_zerocopy = is_zerocopy
+
+    @classmethod
+    def from_ceph_block(cls, ceph_block: RawBlock) -> 'CephBlock':
+        return cls(ceph_block.values.get('async', False),
+                   ceph_block.values.get('zerocopy', False))
+
+    def to_ceph_block(self) -> RawBlock:
+        values = {
+            'async': self.is_async,
+            'zerocopy': self.is_zerocopy
+        }
+        result = RawBlock("CEPH", values=values)
+        return result
+
+    @classmethod
+    def from_dict(cls, ex_dict: Dict[str, Any]) -> 'CephBlock':
+        return cls(ex_dict.get('async', False),
+                   ex_dict.get('zerocopy', False))
+
+    def to_dict(self) -> Dict[str, Any]:
+        values = {
+            'async': self.is_async,
+            'zerocopy': self.is_zerocopy
+        }
+        return values
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, CephBlock):
+            return False
+        return self.to_dict() == other.to_dict()
+
+class NFSV4Block:
+    def __init__(self,
+                 delegations: bool):
+        self.delegations = delegations
+
+    @classmethod
+    def from_nfsv4_block(cls, nfsv4_block: RawBlock) -> 'NFSV4Block':
+        return cls(nfsv4_block.values.get('delegations', False))
+
+    def to_nfsv4_block(self) -> RawBlock:
+        result = RawBlock("NFSV4", values={'delegations': self.delegations})
+        return result
+
+    @classmethod
+    def from_dict(cls, ex_dict: Dict[str, Any]) -> 'NFSV4Block':
+        return cls(ex_dict['delegations'])
+
+    def to_dict(self) -> Dict[str, Any]:
+        values = {
+            'delegations': self.delegations
+        }
+        return values
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, NFSV4Block):
+            return False
+        return self.to_dict() == other.to_dict()
 
 class Export:
     def __init__(
@@ -375,7 +447,8 @@ class Export:
             transports: List[str],
             fsal: FSAL,
             clients: Optional[List[Client]] = None,
-            sectype: Optional[List[str]] = None) -> None:
+            sectype: Optional[List[str]] = None,
+            delegations: Optional[str] = "none"):
         self.export_id = export_id
         self.path = path
         self.fsal = fsal
@@ -389,6 +462,7 @@ class Export:
         self.transports = transports
         self.clients: List[Client] = clients or []
         self.sectype = sectype
+        self.delegations = delegations
 
     @classmethod
     def from_export_block(cls, export_block: RawBlock, cluster_id: str) -> 'Export':
@@ -430,7 +504,8 @@ class Export:
                    FSAL.from_fsal_block(fsal_blocks[0]),
                    [Client.from_client_block(client)
                     for client in client_blocks],
-                   sectype=sectype)
+                   sectype=sectype,
+                   delegations=export_block.values.get("delegations", "none"))
 
     def to_export_block(self) -> RawBlock:
         values = {
@@ -443,6 +518,7 @@ class Export:
             'security_label': self.security_label,
             'protocols': self.protocols,
             'transports': self.transports,
+            'delegations': self.delegations
         }
         if self.sectype:
             values['SecType'] = self.sectype
@@ -468,7 +544,8 @@ class Export:
                    ex_dict.get('transports', ['TCP']),
                    FSAL.from_dict(ex_dict.get('fsal', {})),
                    [Client.from_dict(client) for client in ex_dict.get('clients', [])],
-                   sectype=ex_dict.get("sectype"))
+                   sectype=ex_dict.get("sectype"),
+                   delegations=ex_dict.get("delegations", "none"))
 
     def to_dict(self) -> Dict[str, Any]:
         values = {
@@ -482,7 +559,8 @@ class Export:
             'protocols': sorted([p for p in self.protocols]),
             'transports': sorted([t for t in self.transports]),
             'fsal': self.fsal.to_dict(),
-            'clients': [client.to_dict() for client in self.clients]
+            'clients': [client.to_dict() for client in self.clients],
+            "delegations": self.delegations
         }
         if self.sectype:
             values['sectype'] = self.sectype
@@ -528,6 +606,10 @@ class Export:
 
         for st in (self.sectype or []):
             _validate_sec_type(st)
+
+        valid_delegations = ["R", "RW", "NONE"]
+        if not self.delegations.upper() in valid_delegations:
+            raise NFSInvalidOperation(f'invalid delegations in export block: {self.delegations}')
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Export):
