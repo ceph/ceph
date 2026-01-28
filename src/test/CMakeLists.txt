@@ -225,8 +225,38 @@ if(${WITH_RADOSGW})
     ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
 
+  # ceph_test_cls_rgw_admin_account_quota_set
+  set(test_cls_rgw_admin_account_quota_set_srcs 
+    test_rgw_admin_account_quota_set.cc
+    test_rgw_admin_helper.cc
+  )
+  add_executable(ceph_test_cls_rgw_admin_account_quota_set
+    ${test_cls_rgw_admin_account_quota_set_srcs}
+    )
+  target_link_libraries(ceph_test_cls_rgw_admin_account_quota_set
+    librados
+    ${rgw_libs}
+    global
+    cls_version_client
+    cls_log_client
+    cls_refcount_client
+    cls_rgw_client
+    cls_user_client
+    cls_lock_client
+    ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
+    ${CMAKE_DL_LIBS} ${UNITTEST_LIBS} ${CRYPTO_LIBS})
+
+  install(TARGETS
+    ceph_test_cls_rgw_admin_account_quota_set
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
   # ceph_test_cls_rgw_meta
-  set(test_cls_rgw_meta_srcs test_rgw_admin_meta.cc)
+  set(test_cls_rgw_meta_srcs
+    test_rgw_admin_meta.cc
+    test_rgw_admin_helper.cc
+  )
   add_executable(ceph_test_cls_rgw_meta
     ${test_cls_rgw_meta_srcs}
     )
