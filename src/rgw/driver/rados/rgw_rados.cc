@@ -8641,6 +8641,8 @@ int RGWRados::olh_init_modification_impl(const DoutPrefixProvider *dpp, const RG
   if (ret < 0) {
     return ret;
   }
+  ldpp_dout(dpp, 10) << "OLH " << olh_obj.key << ' ' << __func__
+      << " added op_tag=" << *op_tag << dendl;
 
   state.exists = true;
   state.attrset[attr_name] = bl;
@@ -9306,9 +9308,11 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
     for (; viter != iter->second.end(); ++viter) {
       rgw_bucket_olh_log_entry& entry = *viter;
 
-      ldpp_dout(dpp, 20) << "olh_log_entry: epoch=" << iter->first << " op=" << (int)entry.op
-                     << " key=" << entry.key.name << "[" << entry.key.instance << "] "
-                     << (entry.delete_marker ? "(delete)" : "") << dendl;
+      ldpp_dout(dpp, 10) << "OLH " << obj.key << ' ' << __func__
+          << " olh_log_entry: epoch=" << iter->first << " op=" << (int)entry.op
+          << " tag=" << entry.op_tag
+          << " key=" << entry.key.name << "[" << entry.key.instance << "] "
+          << (entry.delete_marker ? "(delete)" : "") << dendl;
 
       if (link_epoch == iter->first)
         ldpp_dout(dpp, 1) << "apply_olh_log epoch collision detected for " << entry.key
@@ -9389,7 +9393,9 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   if (need_to_remove) {
     string olh_tag(state.olh_tag.c_str(), state.olh_tag.length());
     r = clear_olh(dpp, obj_ctx, obj, bucket_info, ref, olh_tag, last_ver, y);
-    if (r < 0 && r != -ECANCELED) {
+    if (r == -ECANCELED) {
+      ldpp_dout(dpp, 10) << "ERROR: OLH " << obj.key << " could not clear olh, r=" << r << dendl;
+    } else if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not clear olh, r=" << r << dendl;
       return r;
     }
@@ -9789,6 +9795,8 @@ int RGWRados::remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RG
     bucket_index_guard_olh_op(dpp, state, op);
 
     for (int n = 0; n < max_entries && i != pending_attrs.end(); ++n, ++i) {
+      ldpp_dout(dpp, 10) << "OLH " << olh_obj.key << ' ' << __func__
+          << " found expired " << i->first << dendl;
       op.rmxattr(i->first.c_str());
     }
 
