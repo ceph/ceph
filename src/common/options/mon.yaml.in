@@ -360,6 +360,12 @@ options:
   desc: log health detail to cluster log
   default: true
   with_legacy: true
+- name: mon_health_detail_check_message_max_bytes
+  type: uint
+  level: advanced
+  desc: max health detail check message size in bytes
+  default: 8192
+  with_legacy: true
 - name: mon_warn_on_filestore_osds
   type: bool
   level: dev

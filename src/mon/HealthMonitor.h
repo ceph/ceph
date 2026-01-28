@@ -65,7 +65,8 @@ public:
     ceph::Formatter *f,
     std::string *plain,
     const char *sep1 = " ",
-    const char *sep2 = "; ");
+    const char *sep2 = "; ",
+    bool truncate_detail = false);
 
   /**
    * @} // HealthMonitor_Inherited_h
