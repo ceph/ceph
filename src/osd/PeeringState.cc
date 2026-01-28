@@ -3291,7 +3291,7 @@ void PeeringState::rewind_divergent_log(
   PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
   pg_log.rewind_divergent_log(
     newhead, info, rollbacker.get(), dirty_info, dirty_big_info,
-    pool.info.allows_ecoptimizations());
+    pool.info.allows_ecoptimizations(), pg_whoami);
 }
 
 
@@ -3538,7 +3538,7 @@ void PeeringState::proc_replica_log(
     apply_pwlc(info.partial_writes_last_complete[from.shard], from, oinfo,
 	       &olog);
   }
-  pg_log.proc_replica_log(oinfo, olog, omissing, from, pool.info.allows_ecoptimizations());
+  pg_log.proc_replica_log(oinfo, olog, omissing, from, pg_whoami, pool.info.allows_ecoptimizations());
 
   peer_info[from] = oinfo;
   update_peer_info(from, oinfo);
