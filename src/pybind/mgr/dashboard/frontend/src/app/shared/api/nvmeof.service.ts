@@ -168,8 +168,8 @@ export class NvmeofService {
   }
 
   // Namespaces
-  listNamespaces(subsystemNQN: string, group: string) {
-    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/namespace?gw_group=${group}`);
+  listNamespaces(group: string) {
+    return this.http.get(`${API_PATH}/gateway_group/${group}/namespace`);
   }
 
   getNamespace(subsystemNQN: string, nsid: string, group: string) {
