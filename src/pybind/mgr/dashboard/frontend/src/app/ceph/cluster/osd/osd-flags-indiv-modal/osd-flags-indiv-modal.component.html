@@ -1,48 +1,65 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container class="modal-title"
-                i18n>Individual OSD Flags</ng-container>
+<cds-modal size="sm"
+           [open]="open"
+           [hasScrollingContent]="false"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>Individual OSD Flags</h3>
+  </cds-modal-header>
 
-  <ng-container class="modal-content">
+  <div cdsModalContent>
     <form name="osdFlagsForm"
           #formDir="ngForm"
           [formGroup]="osdFlagsForm"
           novalidate>
-      <div class="modal-body osd-modal">
-        <div class="custom-control custom-checkbox"
-             *ngFor="let flag of flags; let last = last">
-          <input class="custom-control-input"
-                 type="checkbox"
-                 [checked]="flag.value"
-                 [indeterminate]="flag.indeterminate"
-                 (change)="changeValue(flag)"
-                 [name]="flag.code"
-                 [id]="flag.code">
-          <label class="custom-control-label"
-                 [for]="flag.code"
-                 ng-class="['tc_' + key]">
+      <div class="osd-modal">
+        @for (flag of flags; track flag.code; let last = $last) {
+        <div>
+          <cds-checkbox
+            [checked]="flag.value"
+            [indeterminate]="flag.indeterminate"
+            (checkedChange)="changeValue(flag)"
+            [name]="flag.code"
+            [id]="flag.code"
+          >
             <strong>{{ flag.name }}</strong>
-            <cds-tag class="tag-hdd ms-2"
-                     [ngbTooltip]="clusterWideTooltip"
-                     *ngIf="flag.clusterWide"
+            @if (flag.clusterWide) {
+            <cds-tag class="tag-hdd"
+                     [cdsTooltip]="clusterWideTooltip"
+                     trigger="hover"
                      i18n>Cluster-wide</cds-tag>
-            <br>
-            <span class="form-text text-muted">{{ flag.description }}</span>
-          </label>
-          <hr class="m-1"
-              *ngIf="!last">
-        </div>
-      </div>
+            }
 
-      <div class="modal-footer">
-        <button type="button"
-                class="btn btn-light"
-                (click)="resetSelection()"
-                i18n>Restore previous selection</button>
-        <cd-form-button-panel (submitActionEvent)="submitAction()"
-                              [form]="osdFlagsForm"
-                              [showSubmit]="permissions.osd.update"
-                              [submitText]="actionLabels.UPDATE"></cd-form-button-panel>
+            <span class="cds--label-description">{{ flag.description }}</span>
+          </cds-checkbox>
+          @if (!last) {
+          <hr />
+          }
+        </div>
+        }
       </div>
     </form>
-  </ng-container>
-</cd-modal>
+  </div>
+
+  <cds-modal-footer>
+    <button [cdsButton]="'secondary'"
+            (click)="resetSelection()"
+            type="button"
+            i18n>
+      Restore previous selection
+    </button>
+    <button [cdsButton]="'secondary'"
+            (click)="closeModal()"
+            type="button"
+            i18n>
+      Cancel
+    </button>
+    @if (permissions.osd.update) {
+    <cd-submit-button
+      (submitAction)="submitAction()"
+      [form]="osdFlagsForm"
+      [submitText]="actionLabels.UPDATE"
+    >{{ actionLabels.UPDATE }}</cd-submit-button>
+    }
+  </cds-modal-footer>
+</cds-modal>
