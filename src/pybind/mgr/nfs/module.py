@@ -329,11 +329,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @CLICommand('nfs cluster cluster_qos', perm='rw')
     @object_format.EmptyResponder()
-    def _cmd_nfs_cluster_qos_ops(self,
-                                 cluster_id: str,
-                                 action: ClusterQosAction,
-                                 msg_interval: int = 0) -> None:
-        """Enable or disable cluster-level QoS for a given NFS cluster"""
+    def _cmd_nfs_cluster_global_qos(self,
+                                    cluster_id: str,
+                                    action: ClusterQosAction,
+                                    msg_interval: int = 0) -> None:
+        """Enable or disable cluster-wide QoS. If disabled, QoS remains enabled,
+        but the configured values apply on a per-host basis"""
         return self.nfs.global_cluster_qos_action(cluster_id, action.name, msg_interval)
 
     @CLICommand('nfs cluster qos get', perm='r')

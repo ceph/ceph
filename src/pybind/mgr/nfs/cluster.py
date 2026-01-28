@@ -41,8 +41,8 @@ log = logging.getLogger(__name__)
 
 
 class ClusterQosAction(Enum):
-    enable = 'Enable'
-    disable = 'Disable'
+    enable = 'enable'
+    disable = 'disable'
 
 
 def resolve_ip(hostname: str) -> str:
@@ -80,7 +80,7 @@ def config_cluster_qos_from_dict(
     if not qos_type:
         raise NFSInvalidOperation('qos_type is not specified in qos dict')
     qos_type = QOSType[str(qos_type)]
-    enable_cluster_qos = qos_dict.get(QOSParams.enable_cluster_qos.value)
+    enable_cluster_qos = qos_dict.get(QOSParams.enable_cluster_qos.value, True)
     clust_qos_msg_interval = int(qos_dict.get(QOSParams.clust_qos_msg_interval.value, 0))
     assert isinstance(enable_cluster_qos, (bool, type(None)))
     enable_bw_ctrl = qos_dict.get(QOSParams.enable_bw_ctrl.value)
@@ -578,7 +578,14 @@ class NFSCluster:
             if qos_obj:
                 self.validate_qos_type(qos_obj, qos_type, bw_obj=bw_obj)
             bw_obj.qos_bandwidth_checks(qos_type)
-            self.update_cluster_qos(cluster_id, qos_obj, True, qos_type=qos_type, bw_obj=bw_obj)
+            self.update_cluster_qos(
+                cluster_id,
+                qos_obj,
+                True,
+                enable_cluster_qos=True,
+                qos_type=qos_type,
+                bw_obj=bw_obj
+            )
             log.info(f"QoS bandwidth control has been successfully enabled for cluster {cluster_id}. "
                      "If the qos_type is changed during this process, ensure that the bandwidth "
                      "values for all exports are updated accordingly.")
@@ -627,7 +634,14 @@ class NFSCluster:
             if qos_obj:
                 self.validate_qos_type(qos_obj, qos_type, ops_obj=ops_obj)
             ops_obj.qos_ops_checks(qos_type)
-            self.update_cluster_qos(cluster_id, qos_obj, True, qos_type=qos_type, ops_obj=ops_obj)
+            self.update_cluster_qos(
+                cluster_id,
+                qos_obj,
+                True,
+                enable_cluster_qos=True,
+                qos_type=qos_type,
+                ops_obj=ops_obj
+            )
             log.info(f"QOS IOPS control has been successfully enabled for cluster {cluster_id}. "
                      "If the qos_type is changed during this process, ensure that ops count "
                      "values for all exports are updated accordingly.")

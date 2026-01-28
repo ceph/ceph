@@ -147,6 +147,7 @@ EXPORT {
     qos_cluster_block = """
 QOS {
     enable_qos = true;
+    enable_cluster_qos = true;
     enable_bw_control = true;
     combined_rw_bw_control = false;
     qos_type = 3;
@@ -177,6 +178,7 @@ QOS_BLOCK {
     qos_cluster_dict = {
         "enable_bw_control": True,
         "enable_qos": True,
+        "enable_cluster_qos": True,
         "combined_rw_bw_control": False,
         "max_client_read_bw": bytes_to_human(4000000, mode='binary'),
         "max_client_write_bw": bytes_to_human(3000000, mode='binary'),
@@ -189,6 +191,7 @@ QOS_BLOCK {
     qos_cluster_dict_bw_in_bytes = {
         "enable_bw_control": True,
         "enable_qos": True,
+        "enable_cluster_qos": True,
         "combined_rw_bw_control": False,
         "max_client_read_bw": "4000000",
         "max_client_write_bw": "3000000",
@@ -1387,7 +1390,7 @@ NFS_CORE_PARAM {
         if not positive_tc:
             raise Exception("This TC was supposed to fail")
         out = cluster.get_cluster_qos(self.cluster_id)
-        expected_out = {"enable_bw_control": True, "enable_qos": True, "combined_rw_bw_control": combined_bw_ctrl, "qos_type": qos_type.name, "enable_iops_control": False}
+        expected_out = {"enable_bw_control": True, "enable_qos": True, "combined_rw_bw_control": combined_bw_ctrl, "qos_type": qos_type.name, "enable_iops_control": False, "enable_cluster_qos": True}
         for key in params:
             expected_out[QOSParams[key].value] = bytes_to_human(with_units_to_int(params[key]), mode='binary')
         assert out == expected_out
@@ -1495,7 +1498,7 @@ NFS_CORE_PARAM {
         if not positive_tc:
             raise Exception("This TC was supposed to fail")
         out = cluster.get_cluster_qos(self.cluster_id)
-        expected_out = {"enable_bw_control": False, "enable_qos": True, "combined_rw_bw_control": False, "qos_type": qos_type.name, "enable_iops_control": True}
+        expected_out = {"enable_bw_control": False, "enable_qos": True, "combined_rw_bw_control": False, "qos_type": qos_type.name, "enable_iops_control": True, "enable_cluster_qos": True}
         for key in params:
             expected_out[QOSParams[key].value] = params[key]
         assert out == expected_out
@@ -1584,7 +1587,7 @@ NFS_CORE_PARAM {
         if not positive_tc:
             raise Exception("This TC passed but it was supposed to fail")
         out = cluster.get_cluster_qos(self.cluster_id)
-        expected_out = {"enable_bw_control": True, "enable_qos": True, "combined_rw_bw_control": False, "qos_type": ops_qos_type.name, "enable_iops_control": True}
+        expected_out = {"enable_bw_control": True, "enable_qos": True, "combined_rw_bw_control": False, "qos_type": ops_qos_type.name, "enable_iops_control": True, "enable_cluster_qos":True}
         bw_out = {}
         ops_out = {}
         for key in bw_params:
@@ -1597,7 +1600,7 @@ NFS_CORE_PARAM {
         # disable bandwidth control
         cluster.disable_cluster_qos_bw(self.cluster_id)
         out = cluster.get_cluster_qos(self.cluster_id)
-        ops_out.update({"enable_bw_control": False, "enable_qos": True, "combined_rw_bw_control": False, "enable_iops_control": True, "qos_type": ops_qos_type.name})
+        ops_out.update({"enable_bw_control": False, "enable_qos": True, "combined_rw_bw_control": False, "enable_iops_control": True, "qos_type": ops_qos_type.name, "enable_cluster_qos": True})
         assert out == ops_out
         # disable ops control
         cluster.disable_cluster_qos_ops(self.cluster_id)
