@@ -97,8 +97,24 @@ static inline string get_key_oid(const rgw_obj_key& key)
 
 static inline string obj_to_aws_path(const rgw_obj& obj)
 {
-  string path = obj.bucket.name + "/" + get_key_oid(obj.key);
-  return path;
+  return obj.bucket.name + "/" + get_key_oid(obj.key);
+}
+
+static inline string make_target_obj_name(const RGWLCCloudTierCtx& tier_ctx)
+{
+  string target_obj_name;
+  if (tier_ctx.target_by_bucket) {
+    // Per-bucket targeting: object key only, no source bucket prefix
+    target_obj_name = tier_ctx.obj->get_name();
+  } else {
+    // Legacy: include source bucket name as prefix
+    target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
+                      tier_ctx.obj->get_name();
+  }
+  if (!tier_ctx.o.is_current()) {
+    target_obj_name += get_key_instance(tier_ctx.obj->get_key());
+  }
+  return target_obj_name;
 }
 
 static int read_upload_status(const DoutPrefixProvider *dpp, rgw::sal::Driver *driver,
@@ -271,11 +287,7 @@ int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
 
   rgw_bucket dest_bucket;
   dest_bucket.name = tier_ctx.target_bucket_name;
-  target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-                    tier_ctx.obj->get_name();
-  if (!tier_ctx.o.is_current()) {
-    target_obj_name += get_key_instance(tier_ctx.obj->get_key());
-  }
+  target_obj_name = make_target_obj_name(tier_ctx);
 
   if (!in_progress) { // first time. Send RESTORE req.
 
@@ -338,11 +350,7 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
 
   rgw_bucket dest_bucket;
   dest_bucket.name = tier_ctx.target_bucket_name;
-  target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-                    tier_ctx.obj->get_name();
-  if (!tier_ctx.o.is_current()) {
-    target_obj_name += get_key_instance(tier_ctx.obj->get_key());
-  }
+  target_obj_name = make_target_obj_name(tier_ctx);
 
   rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
@@ -920,11 +928,7 @@ static int cloud_tier_plain_transfer(RGWLCCloudTierCtx& tier_ctx) {
   rgw_bucket dest_bucket;
   dest_bucket.name = tier_ctx.target_bucket_name;
 
-  target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-    tier_ctx.obj->get_name();
-  if (!tier_ctx.o.is_current()) {
-    target_obj_name += get_key_instance(tier_ctx.obj->get_key());
-  }
+  target_obj_name = make_target_obj_name(tier_ctx);
 
   rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
@@ -964,11 +968,7 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
   rgw_bucket dest_bucket;
   dest_bucket.name = tier_ctx.target_bucket_name;
 
-  target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-    tier_ctx.obj->get_name();
-  if (!tier_ctx.o.is_current()) {
-    target_obj_name += get_key_instance(tier_ctx.obj->get_key());
-  }
+  target_obj_name = make_target_obj_name(tier_ctx);
 
   rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
@@ -1321,11 +1321,7 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
 
   target_bucket.name = tier_ctx.target_bucket_name;
 
-  target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
-    tier_ctx.obj->get_name();
-  if (!tier_ctx.o.is_current()) {
-    target_obj_name += get_key_instance(tier_ctx.obj->get_key());
-  }
+  target_obj_name = make_target_obj_name(tier_ctx);
   dest_obj.init(target_bucket, target_obj_name);
 
   rgw_pool pool = static_cast<rgw::sal::RadosStore*>(tier_ctx.driver)->svc()->zone->get_zone_params().log_pool;
@@ -1452,6 +1448,24 @@ static int cloud_tier_check_object(RGWLCCloudTierCtx& tier_ctx, bool& already_ti
   return ret;
 }
 
+static int cloud_tier_bucket_exists(RGWLCCloudTierCtx& tier_ctx)
+{
+  bufferlist out_bl;
+  string resource = tier_ctx.target_bucket_name;
+
+  int ret = tier_ctx.conn.send_resource(tier_ctx.dpp, "HEAD", resource,
+                                        nullptr, nullptr, out_bl, nullptr,
+                                        nullptr, null_yield);
+  if (ret == -ERR_NO_SUCH_BUCKET || ret == -ENOENT) {
+    return -ENOENT;
+  }
+  if (ret < 0) {
+    ldpp_dout(tier_ctx.dpp, 0) << "HEAD target bucket " << resource
+                               << " returned ret=" << ret << dendl;
+  }
+  return ret;
+}
+
 static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
   bufferlist out_bl;
   int ret = 0;
@@ -1531,18 +1545,21 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
 int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<std::string>& cloud_targets) {
   int ret = 0;
 
-  // check if target_path is already created
-  std::set<std::string>::iterator it;
-
-  it = cloud_targets.find(tier_ctx.target_bucket_name);
+  // check if target bucket is in local cache
+  auto it = cloud_targets.find(tier_ctx.target_bucket_name);
   tier_ctx.target_bucket_created = (it != cloud_targets.end());
 
-  /* If run first time attempt to create the target bucket */
   if (!tier_ctx.target_bucket_created) {
-    ret = cloud_tier_create_bucket(tier_ctx);
-
-    if (ret < 0) {
-      ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to create target bucket on the cloud endpoint ret=" << ret << dendl;
+    // not in cache; check if bucket exists on remote
+    ret = cloud_tier_bucket_exists(tier_ctx);
+    if (ret == -ENOENT) {
+      ret = cloud_tier_create_bucket(tier_ctx);
+      if (ret < 0) {
+        ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to create target bucket on the cloud endpoint ret=" << ret << dendl;
+        return ret;
+      }
+    } else if (ret < 0) {
+      ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to check target bucket on the cloud endpoint ret=" << ret << dendl;
       return ret;
     }
     tier_ctx.target_bucket_created = true;
