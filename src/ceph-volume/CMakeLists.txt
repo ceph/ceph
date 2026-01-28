@@ -20,7 +20,7 @@ add_custom_command(
 add_custom_command(
   OUTPUT ${CEPH_VOLUME_VIRTUALENV}/bin/ceph-volume
   DEPENDS ${CEPH_VOLUME_VIRTUALENV}/bin/python
-  COMMAND . ${CEPH_VOLUME_VIRTUALENV}/bin/activate && ${CEPH_VOLUME_VIRTUALENV}/bin/python setup.py develop && deactivate
+  COMMAND . ${CEPH_VOLUME_VIRTUALENV}/bin/activate && ${CEPH_VOLUME_VIRTUALENV}/bin/pip install setuptools ../python-common && ${CEPH_VOLUME_VIRTUALENV}/bin/python setup.py develop && deactivate
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/ceph-volume
   COMMENT "${CMAKE_SOURCE_DIR}/src/ceph-volume")
 
