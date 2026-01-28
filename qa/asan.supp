@@ -1,3 +1,10 @@
 # ASan's interceptor is not able to find the real throw function because of
 # https://github.com/google/sanitizers/issues/934
 interceptor_via_fun:__interceptor___cxa_throw
+
+# Note: The above suppression only works for ASan reports about the interceptor.
+# It does NOT prevent CHECK failures when __cxa_throw is called before ASan is
+# fully initialized (e.g., during early library initialization in Python bindings).
+# For those cases, we disable exception interception entirely by setting
+# ASAN_OPTIONS=intercept_cxx_exceptions=0 in cmake/modules/AddCephTest.cmake.
+
