@@ -281,6 +281,7 @@ options:
 	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
 	--require-osd-and-client-version: if supplied, do set-require-min-compat-client and require-osd-release to specified value
 	--use-crush-tunables: if supplied, set tunables to specified value
+        --reactor-backend: configre seastar reactor backend options like io_uring or linux-aio
 \n
 EOF
 
@@ -379,6 +380,7 @@ prep_balance_cpu() {
 
 # Default values for the crimson options
 crimson_smp=1
+crimson_reactor_backend="linux-aio"
 crimson_alien_num_threads=0
 crimson_reactor_physical_only=0
 crimson_alien_num_cores=0
@@ -614,6 +616,10 @@ case $1 in
         ;;
     --crimson-smp)
         crimson_smp=$2
+        shift
+        ;;
+    --reactor-backend)
+        crimson_reactor_backend=$2
         shift
         ;;
     --crimson-alien-num-threads)
@@ -1207,6 +1213,10 @@ start_cephexporter() {
 do_balance_cpu() {
     local osd=$1
     local alienstore_idx=$(( osd + CEPH_NUM_OSD ))
+
+    local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_reactor_backend $crimson_reactor_backend"
+    echo $cmd
+    $cmd
 
     local reactor_interval=${cpu_table[${osd}]}
     if ! [ "${reactor_interval}" == "" ]; then
