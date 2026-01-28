@@ -100,8 +100,14 @@ public:
   }
 
   void prune_snapshot(uint64_t snap_id) {
-    std::unique_lock locker(m_lock);
-    m_prune_snap_ids_by_gr.insert(snap_id);
+    {
+      std::unique_lock locker(m_lock);
+      m_prune_snap_ids_by_gr.insert(snap_id);
+      if (m_state != STATE_IDLE) {
+        return;
+      }
+    }
+    handle_image_update_notify();
   }
 
   void set_remote_snap_id_end_limit(uint64_t snap_id) {

@@ -571,6 +571,48 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
       ++remote_snap;
     }
   }
+
+  auto unlink_snap = m_remote_group_snaps.end();
+  bool has_newer_snap = false;
+  for (auto remote_snap = m_remote_group_snaps.begin();
+       remote_snap != m_remote_group_snaps.end(); ++remote_snap) {
+    auto remote_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+        &remote_snap->snapshot_namespace);
+    if (remote_snap_ns == nullptr) {
+      continue;
+    }
+    if (unlink_snap != m_remote_group_snaps.end()) {
+      // check if snapshot is synced to local
+      auto itr = std::find_if(
+        m_local_group_snaps.begin(), m_local_group_snaps.end(),
+        [remote_snap](const cls::rbd::GroupSnapshot &s) {
+        return s.id == remote_snap->id;
+      });
+      if (itr == m_local_group_snaps.end()) {
+        dout(10) << "corresponding local group snapshot not found: " << remote_snap->id << dendl;
+        continue;
+      }
+      auto next_local_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+        &itr->snapshot_namespace);
+      if (!is_mirror_group_snapshot_complete(itr->state,
+                                                    next_local_snap_ns->complete)) {
+        dout(10) << "next local mirror snapshot is incomplete, waiting: "
+                 << itr->id << dendl;
+        break;
+      }
+      has_newer_snap = true;
+      break;
+    }
+    if (remote_snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED) {
+      unlink_snap = remote_snap;
+    }
+  }
+  if(has_newer_snap) {
+    mirror_group_snapshot_unlink_peer(unlink_snap->id);
+    locker.unlock();
+    schedule_load_group_snapshots();
+    return;
+  }
   is_resync_requested();
 }
 
@@ -682,6 +724,14 @@ void Replayer<I>::check_local_group_snapshots(
         last_local_snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED &&
         !m_remote_group_snaps.empty()) {
       if (last_local_snap->id == m_remote_group_snaps.rbegin()->id) {
+        // wait for pruning to complete
+        if (m_pruning_group_snaps_inflight.size() > 0) {
+          dout(10) << "waiting for pruning of snapshots to complete" << dendl;
+          locker->unlock();
+          schedule_load_group_snapshots();
+          return;
+        }
+        dout(10) << "remote group demoted" << dendl;
         handle_replay_complete(locker, -EREMOTEIO, "remote group demoted");
         return;
       }
@@ -1826,6 +1876,12 @@ void Replayer<I>::prune_mirror_group_snapshots(
       }
     }
     mirror_group_snapshot_unlink_peer(prune_snap->id);
+    if (m_pruning_group_snaps_inflight.count(prune_snap->id) == 0) {
+      m_pruning_group_snaps_inflight.insert(prune_snap->id);
+      m_in_flight_op_tracker.start_op();
+      dout(10) << "starting pruning of group snap: "
+               << prune_snap->name << ", with id: " << prune_snap->id << dendl;
+    }
     const auto& ns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
         prune_snap->snapshot_namespace);
     if (ns.is_primary() ||
@@ -1842,6 +1898,8 @@ void Replayer<I>::prune_mirror_group_snapshots(
       derr << "failed to remove group snapshot : "
            << prune_snap->id << " : " << cpp_strerror(r) << dendl;
     }
+    m_pruning_group_snaps_inflight.erase(prune_snap->id);
+    m_in_flight_op_tracker.finish_op();
     prune_snap = nullptr;
     skip_next_snap_check = false;
   }
