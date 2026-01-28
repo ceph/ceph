@@ -86,10 +86,7 @@
             "output": "."
           }
         ],
-        "styles": [
-          "node_modules/ngx-toastr/toastr.css",
-          "src/styles.scss"
-        ],
+        "styles": ["node_modules/ngx-toastr/toastr.css", "src/styles.scss"],
         "stylePreprocessorOptions": {
           "includePaths": ["src"]
         },
@@ -222,7 +219,8 @@
         "zh-Hant": {
           "buildTarget": "ceph-dashboard:build:zh-Hant"
         }
-      }
+      },
+      "continuous": true
     },
     "extract-i18n": {
       "executor": "@angular-devkit/build-angular:extract-i18n",
