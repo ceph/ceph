@@ -63,6 +63,26 @@ namespace rgw::dedup {
   static_assert(sizeof(key_t) == 24);
 
   class dedup_table_t {
+    struct __attribute__ ((packed)) table_flags_t {
+    private:
+      static constexpr uint8_t RGW_TABLE_FLAG_HAS_VALID_HASH  = 0x01;
+      static constexpr uint8_t RGW_TABLE_FLAG_SHARED_MANIFEST = 0x02;
+      static constexpr uint8_t RGW_TABLE_FLAG_OCCUPIED        = 0x04;
+    public:
+      table_flags_t() : flags(0) {}
+      table_flags_t(uint8_t _flags) : flags(_flags) {}
+      inline void clear() { this->flags = 0; }
+      inline bool has_valid_hash() const { return ((flags & RGW_TABLE_FLAG_HAS_VALID_HASH) != 0); }
+      inline void set_has_valid_hash()  { flags |= RGW_TABLE_FLAG_HAS_VALID_HASH; }
+      inline bool has_shared_manifest() const { return ((flags & RGW_TABLE_FLAG_SHARED_MANIFEST) != 0); }
+      inline void set_shared_manifest() { flags |= RGW_TABLE_FLAG_SHARED_MANIFEST; }
+      inline bool is_occupied() const {return ((this->flags & RGW_TABLE_FLAG_OCCUPIED) != 0); }
+      inline void set_occupied() {this->flags |= RGW_TABLE_FLAG_OCCUPIED; }
+      inline void clear_occupied() { this->flags &= ~RGW_TABLE_FLAG_OCCUPIED; }
+    private:
+      uint8_t flags;
+    };
+
   public:
     // 8 Bytes Value
     struct value_t {
@@ -88,11 +108,13 @@ namespace rgw::dedup {
       inline uint16_t        get_count() { return this->count; }
       inline disk_block_id_t get_src_block_id() { return this->block_idx; }
       inline record_id_t     get_src_rec_id() { return this->rec_id; }
+      inline bool has_valid_hash() const {return flags.has_valid_hash(); }
     private:
       inline void set_shared_manifest_src() { this->flags.set_shared_manifest(); }
       inline void inc_count() { count ++; }
       inline void reset_count() { count = 0; }
       inline void clear_flags() { flags.clear(); }
+      inline void set_has_valid_hash_src() { this->flags.set_has_valid_hash(); }
       inline bool is_singleton() const { return (count == 1); }
       inline bool is_occupied() const { return flags.is_occupied(); }
       inline void set_occupied() { this->flags.set_occupied();  }
@@ -102,12 +124,14 @@ namespace rgw::dedup {
       disk_block_id_t block_idx; // 32 bits
       uint16_t        count;     // 16 bits
       record_id_t     rec_id;    //  8 bits
-      dedup_flags_t   flags;     //  8 bits
+      table_flags_t   flags;     //  8 bits
     } __attribute__((__packed__));
     static_assert(sizeof(value_t) == 8);
 
     dedup_table_t(const DoutPrefixProvider* _dpp,
                   uint32_t _head_object_size,
+                  uint32_t _min_obj_size_for_dedup,
+                  uint32_t _max_obj_size_for_split,
                   uint8_t *p_slab,
                   uint64_t slab_size);
     int add_entry(key_t *p_key,
@@ -129,6 +153,12 @@ namespace rgw::dedup {
                                      disk_block_id_t block_id,
                                      record_id_t rec_id);
 
+    int set_src_mode(const key_t *p_key,
+                     disk_block_id_t block_id,
+                     record_id_t rec_id,
+                     bool set_shared_manifest_src,
+                     bool set_has_valid_hash_src);
+
     void count_duplicates(dedup_stats_t *p_small_objs_stat,
                           dedup_stats_t *p_big_objs_stat);
 
@@ -142,10 +172,16 @@ namespace rgw::dedup {
     static_assert(sizeof(table_entry_t) == 32);
 
     uint32_t find_entry(const key_t *p_key) const;
-    uint32_t       values_count = 0;
+    void     inc_counters(const key_t *p_key,
+                          dedup_stats_t *p_small_objs,
+                          dedup_stats_t *p_big_objs,
+                          uint64_t *p_duplicate_head_bytes);
+
     uint32_t       entries_count = 0;
     uint32_t       occupied_count = 0;
-    uint32_t       head_object_size = (4ULL * 1024 * 1024);
+    uint32_t       head_object_size;
+    uint32_t       min_obj_size_for_dedup;
+    uint32_t       max_obj_size_for_split;
     table_entry_t *hash_tab = nullptr;
 
     // stat counters
