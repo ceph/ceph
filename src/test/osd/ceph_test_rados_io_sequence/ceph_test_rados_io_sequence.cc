@@ -1050,7 +1050,7 @@ ceph::io_sequence::tester::TestObject::TestObject(
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(
         rados, asio, pool, primary_oid, secondary_oid, sbs.select(), rng(),
         threads, lock, cond, spo.is_replicated_pool(),
-        spo.get_allow_pool_ec_optimizations());
+        spo.get_allow_pool_ec_optimizations(), seq);
     dout(0) << "= " << primary_oid << " pool=" << pool << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size() << " ="
             << dendl;
@@ -1202,7 +1202,7 @@ void ceph::io_sequence::tester::TestRunner::list_sequence(bool testrecovery) {
   // List sequences
   std::pair<int, int> obj_size_range = sos.select();
   ceph::io_exerciser::Sequence s = ceph::io_exerciser::Sequence::SEQUENCE_BEGIN;
-  std::unique_ptr<ceph::io_exerciser::IoSequence> seq;
+  std::shared_ptr<ceph::io_exerciser::IoSequence> seq;
   std::optional<std::pair<int, int>> km;
   std::optional<std::pair<std::string_view, std::string_view>> mappinglayers;
   if (testrecovery) {

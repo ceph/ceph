@@ -473,7 +473,7 @@ class TestObject {
   std::pair<ceph::io_exerciser::Sequence, ceph::io_exerciser::Sequence>
       seq_range;
   ceph::io_exerciser::Sequence curseq;
-  std::unique_ptr<ceph::io_exerciser::IoSequence> seq;
+  std::shared_ptr<ceph::io_exerciser::IoSequence> seq;
   std::unique_ptr<ceph::io_exerciser::IoOp> op;
   bool done;
   ceph::util::random_number_generator<int>& rng;

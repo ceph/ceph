@@ -6,6 +6,7 @@
 #include <boost/asio/io_context.hpp>
 
 #include "IoOp.h"
+#include "common/io_exerciser/IoSequence.h"
 #include "common/Thread.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
