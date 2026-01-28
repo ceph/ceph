@@ -1,5 +1,14 @@
 # cython: language_level=3
+# cython: legacy_implicit_noexcept=True
 # cython: embedsignature=True
+
+# legacy_implicit_noexcept is needed for building with Cython 0.x and
+# Cython 3 from the same file, preserving the same behavior.
+# When Cython 0.x builds go away, replace this compiler directive with
+# noexcept on rbd_callback_t and librbd_progress_fn_t (or consider doing
+# something similar to except? -9000 on rbd_diff_iterate2() callback for
+# progress callbacks to propagate exceptions).
+
 """
 This module is a thin wrapper around librbd.
 
