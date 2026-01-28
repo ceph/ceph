@@ -189,3 +189,51 @@ def strtobool(value: str) -> bool:
     if value.lower() in _FALSE_VALS:
         return False
     raise ValueError(f'invalid truth value {value!r}')
+
+
+def bytes_to_human(num: float, mode: str = 'decimal') -> str:
+    """Convert a bytes value into it's human-readable form.
+
+    :param num: number, in bytes, to convert
+    :param mode: Either decimal (default) or binary to determine divisor
+    :returns: string representing the bytes value in a more readable format
+    """
+    unit_list = ['', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB']
+    divisor = 1000.0
+    yotta = 'YB'
+
+    if mode == 'binary':
+        unit_list = ['', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB']
+        divisor = 1024.0
+        yotta = 'YiB'
+
+    for unit in unit_list:
+        if abs(num) < divisor:
+            return '%3.1f%s' % (num, unit)
+        num /= divisor
+    return '%.1f%s' % (num, yotta)
+
+
+def with_units_to_int(v: str) -> int:
+    if not v:
+        return 0
+    if v.endswith('iB'):
+        v = v[:-2]
+        bytes_mult = 1024
+    elif v.endswith('B'):
+        v = v[:-1]
+        bytes_mult = 1000
+    mult = 1
+    if v[-1].upper() == 'K':
+        mult = bytes_mult
+        v = v[:-1]
+    elif v[-1].upper() == 'M':
+        mult = bytes_mult * bytes_mult
+        v = v[:-1]
+    elif v[-1].upper() == 'G':
+        mult = bytes_mult * bytes_mult * bytes_mult
+        v = v[:-1]
+    elif v[-1].upper() == 'T':
+        mult = bytes_mult * bytes_mult * bytes_mult * bytes_mult
+        v = v[:-1]
+    return int(float(v) * mult)

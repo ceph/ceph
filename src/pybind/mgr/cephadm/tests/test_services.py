@@ -3648,7 +3648,7 @@ class TestIngressService:
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
         def fake_resolve_ip(hostname: str) -> str:
-            if hostname in ('host1', "192.168.122.111"):
+            if hostname in ('host1', '192.168.122.111'):
                 return '192.168.122.111'
             elif hostname in ('host2', '192.168.122.222'):
                 return '192.168.122.222'
@@ -3772,6 +3772,10 @@ class TestIngressService:
             '        nodeid = 0;\n'
             '        pool = ".nfs";\n'
             '        namespace = "foo";\n'
+            '}\n'
+            '\n'
+            'CEPH_NODES_LIST {\n'
+            '        Ceph_Nodes = 192.168.122.111, 192.168.122.222;\n'
             '}\n'
             '\n'
             'RADOS_URLS {\n'
