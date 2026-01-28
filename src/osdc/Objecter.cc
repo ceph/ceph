@@ -191,6 +191,8 @@ enum {
   l_osdc_replica_read_bounced,
   l_osdc_replica_read_completed,
 
+  l_osdc_split_op_reads,
+
   l_osdc_last,
 };
 
@@ -400,6 +402,8 @@ void Objecter::init()
 			"Operations bounced by replica to be resent to primary");
     pcb.add_u64_counter(l_osdc_replica_read_completed, "replica_read_completed",
 			"Operations completed by replica");
+    pcb.add_u64_counter(l_osdc_split_op_reads, "split_op_reads",
+                    "Client read ops split by SplitOp");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2367,11 +2371,7 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
     ptid = &tid;
   op->trace.event("op submit");
 
-  bool was_split = SplitOp::create(op, *this, rl, ptid, ctx_budget, cct);
-
-  if (!was_split) {
-    _op_submit_with_budget(op, rl, ptid, ctx_budget);
-  }
+  _op_submit_with_budget(op, rl, ptid, ctx_budget);
 }
 
 void Objecter::_op_submit_with_budget(Op *op,
@@ -2394,6 +2394,21 @@ void Objecter::_op_submit_with_budget(Op *op,
     if (ctx_budget && (*ctx_budget == -1)) {
       *ctx_budget = op_budget;
     }
+  }
+
+  bool was_split = SplitOp::create(op, *this, sul, ptid, cct);
+
+  if (!was_split) {
+    _op_submit_with_timeout(op, sul, ptid);
+  }
+}
+
+void Objecter::_op_submit_with_timeout(Op *op,
+                                      shunique_lock<ceph::shared_mutex>& sul,
+                                      ceph_tid_t *ptid)
+{
+  if (op->target.force_shard) {
+    logger->inc(l_osdc_split_op_reads);
   }
 
   if (osd_timeout > timespan(0)) {
@@ -2511,17 +2526,22 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   OSDSession *s = NULL;
 
   bool check_for_latest_map = false;
-  int r = _calc_target(&op->target);
-  switch(r) {
-  case RECALC_OP_TARGET_POOL_DNE:
-    check_for_latest_map = true;
-    break;
-  case RECALC_OP_TARGET_POOL_EIO:
-    if (op->has_completion()) {
-      op->complete(make_error_code(osdc_errc::pool_eio), -EIO,
-		   service.get_executor());
+  int r = 0;
+  // Avoid duplicating _calc_target for direct reads, where _calc_target has
+  // already been called.
+  if ((op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ) == 0) {
+    r = _calc_target(&op->target);
+    switch(r) {
+    case RECALC_OP_TARGET_POOL_DNE:
+      check_for_latest_map = true;
+      break;
+    case RECALC_OP_TARGET_POOL_EIO:
+      if (op->has_completion()) {
+        op->complete(make_error_code(osdc_errc::pool_eio), -EIO,
+                     service.get_executor());
+      }
+      return;
     }
-    return;
   }
 
   // Try to get a session, including a retry if we need to take write lock
@@ -3129,7 +3149,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
         return RECALC_OP_TARGET_POOL_DNE;
       }
       if (pi->is_erasure()) {
-        spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, *t->force_shard));
+        spgid.reset_shard(*t->force_shard);
       }
     } else if (pi->is_erasure()) {
       // Optimized EC pools need to be careful when calculating the shard
@@ -3521,6 +3541,9 @@ void Objecter::_send_op(Op *op)
   if (op->trace.valid()) {
     m->trace.init("op msg", nullptr, &op->trace);
   }
+  if (op->target.force_shard) {
+    ceph_assert(op->target.osd == op->target.acting[(int)*op->target.force_shard]);
+  }
   op->session->con->send_message(m);
 }
 
@@ -3760,7 +3783,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     }
   }
 
-  if (rc == -EAGAIN && !op->target.force_shard) {
+  if (rc == -EAGAIN && (op->target.flags & CEPH_OSD_FLAG_FAIL_ON_EAGAIN) == 0) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
     if (op->has_completion())
       num_in_flight--;
@@ -3768,8 +3791,12 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     sl.unlock();
 
     op->tid = 0;
-    op->target.flags &= ~(CEPH_OSD_FLAG_BALANCE_READS |
-			  CEPH_OSD_FLAG_LOCALIZE_READS);
+    op->target.flags &= ~CEPH_OSD_FLAGS_DIRECT_READ;
+
+    // If IGNORE_EAGAIN is not set and force_shard is set, the implication is
+    // that it is safe to redrive the IO to the primary, without any balanced
+    // read flag.
+    op->target.force_shard.reset();
     op->target.pgid = pg_t();
     _op_submit(op, sul, NULL);
     m->put();
