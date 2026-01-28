@@ -535,6 +535,7 @@ namespace ceph {
       constexpr mon_feature_t FEATURE_REEF(       (1ULL << 9));
       constexpr mon_feature_t FEATURE_SQUID(      (1ULL << 10));
       constexpr mon_feature_t FEATURE_TENTACLE(   (1ULL << 11));
+      constexpr mon_feature_t FEATURE_UMBRELLA(   (1ULL << 12));
 
 
       // Release-independent features
@@ -562,6 +563,7 @@ namespace ceph {
 	  FEATURE_REEF |
 	  FEATURE_SQUID |
 	  FEATURE_TENTACLE |
+	  FEATURE_UMBRELLA |
 
 	  // Release-independent features
 	  FEATURE_NVMEOF_BEACON_DIFF |
@@ -593,6 +595,7 @@ namespace ceph {
 	  FEATURE_REEF |
 	  FEATURE_SQUID |
 	  FEATURE_TENTACLE |
+	  FEATURE_UMBRELLA |
 
 	  // Release-independent features
 	  FEATURE_NVMEOF_BEACON_DIFF |
@@ -615,6 +618,9 @@ namespace ceph {
 
 static inline ceph_release_t infer_ceph_release_from_mon_features(mon_feature_t f)
 {
+  if (f.contains_all(ceph::features::mon::FEATURE_UMBRELLA)) {
+    return ceph_release_t::tentacle;
+  }
   if (f.contains_all(ceph::features::mon::FEATURE_TENTACLE)) {
     return ceph_release_t::tentacle;
   }
@@ -675,6 +681,8 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "squid";
   } else if (f == FEATURE_TENTACLE) {
     return "tentacle";
+  } else if (f == FEATURE_UMBRELLA) {
+    return "umbrella";
   // Release-independent features
   } else if (f == FEATURE_NVMEOF_BEACON_DIFF) {
     return "nvmeof_beacon_diff";
@@ -710,6 +718,8 @@ inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string 
     return FEATURE_SQUID;
   } else if (n == "tentacle") {
     return FEATURE_TENTACLE;
+  } else if (n == "umbrella") {
+    return FEATURE_UMBRELLA;
   // Release-independent features
   } else if (n == "nvmeof_beacon_diff") {
     return FEATURE_NVMEOF_BEACON_DIFF;
