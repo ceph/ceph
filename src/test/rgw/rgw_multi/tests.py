@@ -661,7 +661,7 @@ def test_bucket_create_with_tenant():
         log.info("bucket exists in tenant namespace")
 
         e = assert_raises(ClientError, primary.s3_client.head_bucket, Bucket=bucket_name)
-        assert e.response['Error']['Code'] == 'NoSuchBucket'
+        assert e.response['Error']['Code'] == '404'
         log.info("bucket does not exist in default user namespace")
     finally:
         cmd = ['user', 'rm', '--tenant', tenant, '--uid', uid, '--purge-data']
@@ -705,7 +705,11 @@ def test_bucket_remove():
         zonegroup_meta_checkpoint(zonegroup)
 
         for zone in zonegroup_conns.zones:
-            assert check_all_buckets_dont_exist(zone, buckets)
+            log.info("Checking zone=%s for deleted buckets", zone.name)
+            result = check_all_buckets_dont_exist(zone, buckets)
+            if not result:
+                log.error("Zone %s still has buckets: %s", zone.name, buckets)
+            assert result
 
 def check_bucket_eq(zone_conn1, zone_conn2, bucket):
     if zone_conn2.zone.has_buckets():
@@ -2351,7 +2355,7 @@ def test_replication_status():
     zonegroup_conns = ZonegroupConns(zonegroup)
     zone = zonegroup_conns.rw_zones[0]
 
-    bucket = zone.conn.create_bucket(gen_bucket_name())
+    bucket = zone.create_bucket(gen_bucket_name())
     obj_name = "a"
     zone.s3_client.put_object(Bucket=bucket.name, Key=obj_name, Body='foo')
     zonegroup_meta_checkpoint(zonegroup)
