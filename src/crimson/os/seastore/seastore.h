@@ -400,6 +400,7 @@ public:
 
     struct {
       std::array<seastar::metrics::histogram, LAT_MAX> op_lat;
+      std::array<uint64_t, LAT_MAX> op_lat_max{};
     } stats;
 
     seastar::metrics::histogram& get_latency(
@@ -410,9 +411,15 @@ public:
 
     void add_latency_sample(op_type_t op_type,
         std::chrono::steady_clock::duration dur) {
+      uint64_t ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
       seastar::metrics::histogram& lat = get_latency(op_type);
       lat.sample_count++;
-      lat.sample_sum += std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+      lat.sample_sum += ms;
+      auto& max = stats.op_lat_max[static_cast<size_t>(op_type)];
+      if (ms > max) {
+        max = ms;
+      }
     }
 
     /*
