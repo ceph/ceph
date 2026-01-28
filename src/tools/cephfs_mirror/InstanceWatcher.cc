@@ -87,19 +87,27 @@ void InstanceWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
 
   std::string dir_path;
   std::string mode;
+  std::string prio_mode;
+  JSONDecoder jd(bl);
   try {
-    JSONDecoder jd(bl);
     JSONDecoder::decode_json("dir_path", dir_path, &jd.parser, true);
     JSONDecoder::decode_json("mode", mode, &jd.parser, true);
   } catch (const JSONDecoder::err &e) {
     derr << ": failed to decode notify json: " << e.what() << dendl;
   }
 
+  try {
+    JSONDecoder::decode_json("prio_mode", prio_mode, &jd.parser, true);
+  } catch (const JSONDecoder::err &e) {
+    // fallback to thread-shared mode
+    dout(10) << ": mode is directory release OR falling back to thread-sharead-mode" << dendl;
+  }
+
   dout(20) << ": notifier_id=" << notifier_id << ", dir_path=" << dir_path
-           << ", mode=" << mode << dendl;
+           << ", mode=" << mode << ", prio_mode=" << prio_mode << dendl;
 
   if (mode == "acquire") {
-    m_listener.acquire_directory(dir_path);
+    m_listener.acquire_directory(dir_path, prio_mode);
   } else if (mode == "release") {
     m_listener.release_directory(dir_path);
   } else {

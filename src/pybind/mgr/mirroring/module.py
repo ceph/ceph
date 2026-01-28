@@ -111,3 +111,11 @@ class Module(MgrModule):
     def snapshot_mirror_daemon_status(self):
         """Get mirror daemon status"""
         return self.fs_snapshot_mirror.daemon_status()
+
+    @CLIWriteCommand('fs snapshot mirror set-prio-mode')
+    def snapshot_mirror_remove_dir(self,
+                                   fs_name: str,
+                                   path: str,
+                                   mode: str):
+        """Remove a snapshot mirrored directory"""
+        return self.fs_snapshot_mirror.set_prio_mode(fs_name, path, mode)
