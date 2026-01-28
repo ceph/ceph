@@ -332,7 +332,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         c = 'ss1clone1'
 
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
@@ -369,14 +369,14 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         c = 'ss1clone1'
 
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 10, 1024)
+        size = self._do_subvolume_io(sv, None, None, 100, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
 
         self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
 
-        with safe_while(tries=10, sleep=1) as proceed:
+        with safe_while(tries=10, sleep=2) as proceed:
             while proceed():
                 pev = self.get_pevs_from_ceph_status(c)
 
@@ -417,7 +417,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
 
         self.run_ceph_cmd(f'fs subvolumegroup create {v} {group}')
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} {group} --mode=777')
-        size = self._do_subvolume_io(sv, group, None, 10, 1024)
+        size = self._do_subvolume_io(sv, group, None, 100, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss} {group}')
         self.wait_till_rbytes_is_right(v, sv, size, group)
@@ -425,7 +425,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c} '
                           f'--group-name {group}')
 
-        with safe_while(tries=10, sleep=1) as proceed:
+        with safe_while(tries=10, sleep=2) as proceed:
             while proceed():
                 pev = self.get_pevs_from_ceph_status(c)
 
@@ -469,7 +469,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         self.config_set('mds', 'mds_snap_rstat', 'true')
 
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 10, 1024)
+        size = self._do_subvolume_io(sv, None, None, 100, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
@@ -513,7 +513,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         c = self._gen_subvol_clone_name(4)
 
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 10, 1024)
+        size = self._do_subvolume_io(sv, None, None, 100, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
@@ -521,7 +521,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         for i in c:
             self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
 
-        with safe_while(tries=10, sleep=1) as proceed:
+        with safe_while(tries=10, sleep=2) as proceed:
             while proceed():
                 pev = self.get_pevs_from_ceph_status(c)
 
@@ -563,7 +563,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
 
         self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
@@ -573,7 +573,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
 
         msg = ('messages for progress bars for snapshot cloning are not how '
                'they were expected')
-        with safe_while(tries=20, sleep=1, action=msg) as proceed:
+        with safe_while(tries=20, sleep=2, action=msg) as proceed:
             while proceed():
                 pevs = self.get_pevs_from_ceph_status(c)
 
@@ -614,7 +614,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
 
         self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
@@ -673,7 +673,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
         sv_path = sv_path[1:]
 
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
 
@@ -716,7 +716,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
         sv_path = sv_path[1:]
 
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
 
@@ -763,7 +763,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
         sv_path = sv_path[1:]
 
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
 
@@ -797,7 +797,7 @@ class TestOngoingClonesCounter(CloneProgressReporterHelper):
     '''
     Class CloneProgressReporter contains the code that lets it figure out the
     number of ongoing clones on its own, without referring the MGR config
-    option mgr/volumes/max_concurrenr_clones. This class contains tests to
+    option mgr/volumes/max_concurrent_clones. This class contains tests to
     ensure that this code, that does the figuring out, is working fine.
     '''
 
@@ -814,7 +814,7 @@ class TestOngoingClonesCounter(CloneProgressReporterHelper):
         sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
         sv_path = sv_path[1:]
 
-        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        size = self._do_subvolume_io(sv, None, None, 30, 100)
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
 
