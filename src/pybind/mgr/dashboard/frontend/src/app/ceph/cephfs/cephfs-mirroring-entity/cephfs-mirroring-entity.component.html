@@ -1,0 +1,125 @@
+<div cdsCol>
+  <div class="bold-text" i18n>Create or Select Entity</div>
+  <p i18n>
+    Choose an existing CephFS mirroring entity or create a new one to be used for mirroring.
+  </p>
+</div>
+
+<div>
+  <cds-radio-group [(ngModel)]="isCreatingNewEntity">
+    <cds-radio [value]="true" i18n> Create New Entity </cds-radio>
+    <cds-radio [value]="false" i18n> Use Existing Entity </cds-radio>
+  </cds-radio-group>
+</div>
+
+<div *ngIf="isCreatingNewEntity">
+  <cd-alert-panel type="warning" class="mx-3" i18n>
+    This entity will be used by the mirroring service to manage snapshots and replication.
+    It must have rwps capabilities on MDS, MON, and OSD.
+  </cd-alert-panel>
+
+   <cd-alert-panel
+    type="info"
+    class="mb-3"
+    i18n
+  >
+  <div>
+      <strong class="entity-note-title">Capabilities added automatically.</strong>
+      </div>
+   <div>
+        If you create a new entity, the following capabilities will be assigned automatically:
+        </div>
+       
+         <ul>
+    <li *ngFor="let cap of capabilities">
+      {{ cap.name }}: {{ cap.permission }}
+    </li>
+  </ul>
+  </cd-alert-panel>
+
+<form name="entityForm"
+      #formDir="ngForm"
+      [formGroup]="entityForm"
+      novalidate>
+
+  <div cdsRow class="form-item form-item-append">
+    <div cdsCol [columnNumbers]="{ sm: 12, md: 6, lg: 6 }">
+      <cds-text-label labelInputID="user_entity"
+                      i18n
+                      helperText="Ceph Authentication entity used by mirroring."
+                      i18n-helperText
+                      cdRequiredField="Ceph Entity"
+                      [helperText]="user_entityHelperText"
+                      [invalid]="!entityForm.controls['user_entity'].valid && (entityForm.controls['user_entity'].dirty)"
+                      [invalidText]="user_entityError"
+                      i18n-invalidText>
+        Ceph Entity
+        <div cdsGrid>
+          <div cdsRow>
+            <div cdsCol [columnNumbers]="{ sm: 12, md: 4, lg: 4 }">
+              <input cdsText value="client." readonly />
+            </div>
+            <div cdsCol [columnNumbers]="{ sm: 12, md: 8, lg: 8 }">
+              <input cdsText
+                     id="user_entity"
+                     name="user_entity"
+                     formControlName="user_entity"
+                     [invalid]="!entityForm.controls['user_entity'].valid && (entityForm.controls['user_entity'].dirty)" />
+            </div>
+          </div>
+        </div>
+      </cds-text-label>
+
+      <ng-template #user_entityError>
+        <span class="invalid-feedback"
+              *ngIf="entityForm.showError('user_entity', formDir, 'required')"
+              i18n>This field is required.</span>
+        <span class="invalid-feedback"
+              *ngIf="entityForm.showError('user_entity', formDir, 'forbiddenClientPrefix')"
+              i18n>Do not include 'client.' prefix. Enter only the entity suffix.</span>
+      </ng-template>
+    </div>
+  </div>
+
+  <div cdsRow>
+    <div cdsCol [columnNumbers]="{ sm: 12, md: 6, lg: 6 }" class="text-right">
+      <cd-form-button-panel
+        (submitActionEvent)="submitAction()"
+        [form]="entityForm"
+        [submitText]="'Create Entity'">
+      </cd-form-button-panel>
+    </div>
+  </div>
+</form>
+  </div>
+
+  <div *ngIf="!isCreatingNewEntity">
+   <cd-alert-panel type="warning" class="mx-3" i18n>
+    This selected entity will be used by the mirroring service to manage snapshots and replication.
+    It must have rwps capabilities on MDS, MON, and OSD.
+  </cd-alert-panel> 
+  <cd-alert-panel
+    type="info"
+    class="mb-3"
+    i18n
+  >
+  <div>
+      <strong class="entity-note-title">Entity Selection Note</strong>
+      </div>
+        Only entities with valid rwps capabilities can be used for mirroring.
+  </cd-alert-panel>
+ </div>
+
+<ng-container *ngIf="!isCreatingNewEntity && entities$ | async as entities">
+  <cd-table
+    #table
+    [data]="entities"
+    [columns]="columns"
+    columnMode="flex"
+    selectionType="single"
+    identifier="entity"
+    (updateSelection)="updateSelection($event)"
+    (fetchData)="loadEntities($event)"
+  >
+  </cd-table>
+</ng-container>

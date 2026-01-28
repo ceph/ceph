@@ -115,7 +115,7 @@ export class CephfsService {
     });
   }
 
-  setAuth(fsName: string, clientId: number, caps: string[], rootSquash: boolean) {
+  setAuth(fsName: string, clientId: any, caps: string[], rootSquash: boolean) {
     return this.http.put(`${this.baseURL}/auth`, {
       fs_name: fsName,
       client_id: `client.${clientId}`,
@@ -130,5 +130,13 @@ export class CephfsService {
 
   listDaemonStatus(): Observable<Daemon[]> {
     return this.http.get<Daemon[]>(`${this.baseURL}/mirror/daemon-status`);
+  }
+
+  listUser() {
+    return this.http.get<any[]>(`api/cluster/user`);
+  }
+
+  createUser(payload: { user_entity: string; capabilities: any } ) {
+    return this.http.post(`api/cluster/user`, payload);
   }
 }

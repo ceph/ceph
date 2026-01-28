@@ -313,7 +313,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   get showSelectionColumn() {
-    return this.selectionType === 'multiClick';
+    return this.selectionType === 'multiClick' || this.selectionType === 'single';
   }
 
   get enableSingleSelect() {
