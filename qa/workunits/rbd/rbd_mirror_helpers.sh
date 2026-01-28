@@ -442,10 +442,9 @@ stop_mirror()
 
     local pid
     pid=$(cat $(daemon_pid_file "${cluster}") 2>/dev/null) || :
-    if [ -n "${pid}" ]
-    then
+    if [ -n "${pid}" ]; then
         kill ${sig} ${pid}
-        for s in 1 2 4 8 16 32; do
+        for s in 0 1 2 4 8 16 32; do
             sleep $s
             ps auxww | awk -v pid=${pid} '$2 == pid {print; exit 1}' && break
         done
