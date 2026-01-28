@@ -171,7 +171,7 @@ class DaemonPlacement(NamedTuple):
             if self.ports:
                 if self.ports != dd.ports and dd.ports:
                     return False
-                if self.ip != dd.ip and dd.ip:
+                if self.ip and dd.ip and self.ip != dd.ip:
                     return False
         return True
 
@@ -436,10 +436,36 @@ class HostAssignment(object):
             # The number of new slots that need to be selected in order to fulfill count
             need = count - len(existing)
 
-            # we don't need any additional placements
-            if need <= 0:
-                to_remove.extend(existing[count:])
-                del existing_slots[count:]
+            # Scaling down: more daemons exist than required.
+            # When related services exist, prioritize keeping daemons co-located with them
+            # by removing from non-related hosts first, then from related hosts if needed.
+            if need < 0:
+                non_matching_daemons = []
+                if self.related_service_daemons:
+                    # Get unique hostnames where related service daemons are running
+                    related_service_hosts = list(set(dd.hostname for dd in self.related_service_daemons))
+
+                    total_excess = len(existing) - count
+                    to_delete = []
+                    # First, prefer removing daemons from hosts that don't have related services
+                    non_related = [dd for dd in existing if dd.hostname not in related_service_hosts]
+                    to_delete.extend(non_related[-total_excess:])
+
+                    # If we still need to remove more, remove from hosts with related services
+                    remaining_needed = total_excess - len(to_delete)
+                    if remaining_needed > 0:
+                        remaining = [dd for dd in existing if dd not in to_delete]
+                        to_delete.extend(remaining[count:])
+
+                    non_matching_daemons = to_delete
+                else:
+                    # No related services - simply remove excess daemons beyond target count
+                    non_matching_daemons = existing[count:]
+
+                to_remove.extend(non_matching_daemons)
+                # remove from  existing_slots
+                non_matching_hostnames = {dd.hostname for dd in non_matching_daemons}
+                existing_slots = [slot for slot in existing_slots if slot.hostname not in non_matching_hostnames]
                 return self.place_per_host_daemons(existing_slots, [], to_remove)
 
             if self.related_service_daemons:
