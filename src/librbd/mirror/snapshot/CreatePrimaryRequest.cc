@@ -209,7 +209,7 @@ void CreatePrimaryRequest<I>::unlink_peer() {
         if (info->mirror_peer_uuids.empty() ||
             (info->mirror_peer_uuids.count(peer) != 0 &&
              info->is_primary() && !info->complete)) {
-          if (info->group_spec.is_valid() || !info->group_snap_id.empty()) {
+          if (info->group_spec.is_valid()) {
             // snap is part of a group snap
             continue;
           }
@@ -239,7 +239,7 @@ void CreatePrimaryRequest<I>::unlink_peer() {
           // snapshot is not linked with this peer
           continue;
         }
-        if (info->group_spec.is_valid() || !info->group_snap_id.empty()) {
+        if (info->group_spec.is_valid()) {
           // snap is part of a group snap
           continue;
         }

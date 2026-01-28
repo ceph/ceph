@@ -108,6 +108,7 @@ private:
 
   std::vector<cls::rbd::GroupSnapshot> m_local_group_snaps;
   std::vector<cls::rbd::GroupSnapshot> m_remote_group_snaps;
+  std::vector<std::pair<std::string, ImageReplayer<ImageCtxT> *>> m_replayers_by_image_id;
 
   bool m_update_group_state = true;
 
@@ -126,6 +127,8 @@ private:
   uint64_t m_last_snapshot_complete_seconds = 0;
 
   uint64_t m_last_snapshot_bytes = 0;
+
+  bool m_check_creating_snaps = true; // check and identify creating snaps just after restart
 
   bool is_replay_interrupted(std::unique_lock<ceph::mutex>* locker);
 
@@ -235,13 +238,30 @@ private:
   void handle_mirror_group_snapshot_unlink_peer(
       int r, const std::string &snap_id);
 
+  void prune_image_snapshot(ImageReplayer<ImageCtxT>* image_replayer,
+      uint64_t snap_id,
+      std::unique_lock<ceph::mutex>& locker);
+  bool prune_all_image_snapshots_by_gsid(
+      const std::string &group_snap_id,
+      const std::vector<cls::rbd::GroupImageStatus>& local_images,
+      std::unique_lock<ceph::mutex>* locker);
   bool prune_all_image_snapshots(
       cls::rbd::GroupSnapshot *local_snap,
       std::unique_lock<ceph::mutex>* locker);
   void prune_user_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void prune_mirror_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void prune_group_snapshots(std::unique_lock<ceph::mutex>* locker);
+  void prune_creating_group_snapshots_if_any(
+      std::unique_lock<ceph::mutex>* locker);
+  void handle_prune_creating_group_snapshots_if_any(
+      const std::vector<cls::rbd::GroupImageStatus>& local_images,
+      const std::vector<cls::rbd::GroupSnapshot>& prune_group_snaps);
 
+  void get_replayers_by_image_id(std::unique_lock<ceph::mutex>* locker);
+  std::string get_global_image_id(ImageReplayer<ImageCtxT>* image_replayer,
+      std::unique_lock<ceph::mutex>& locker);
+  void set_image_replayer_end_limits(ImageReplayer<ImageCtxT>* image_replayer,
+      uint64_t snap_id, std::unique_lock<ceph::mutex>& locker);
   void set_image_replayer_limits(const std::string &image_id,
                                  const cls::rbd::GroupSnapshot *remote_snap,
                                  std::unique_lock<ceph::mutex>* locker);
