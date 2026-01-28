@@ -2078,9 +2078,9 @@ class TestCephadm(object):
             CephadmServe(cephadm_module)._write_all_client_files()
             # Make sure both ceph conf locations (default and per fsid) are called
             _write_file.assert_has_calls([mock.call('test', '/etc/ceph/ceph.conf', b'',
-                                          0o644, 0, 0, None),
+                                          0o644, 0, 0, None, False),
                                          mock.call('test', '/var/lib/ceph/fsid/config/ceph.conf', b'',
-                                          0o644, 0, 0, None)]
+                                          0o644, 0, 0, None, False)]
                                          )
             ceph_conf_files = cephadm_module.cache.get_host_client_files('test')
             assert len(ceph_conf_files) == 2
@@ -2092,10 +2092,10 @@ class TestCephadm(object):
             CephadmServe(cephadm_module)._write_all_client_files()
             _write_file.assert_has_calls([mock.call('test',
                                                     '/etc/ceph/ceph.conf',
-                                                    b'[mon]\nk=v\n', 0o644, 0, 0, None),
+                                                    b'[mon]\nk=v\n', 0o644, 0, 0, None, False),
                                           mock.call('test',
                                                     '/var/lib/ceph/fsid/config/ceph.conf',
-                                                    b'[mon]\nk=v\n', 0o644, 0, 0, None)])
+                                                    b'[mon]\nk=v\n', 0o644, 0, 0, None, False)])
             # reload
             cephadm_module.cache.last_client_files = {}
             cephadm_module.cache.load()
