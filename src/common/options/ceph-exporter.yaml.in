@@ -66,3 +66,12 @@ options:
   - ceph-exporter
   flags:
   - runtime
+- name: exporter_enable_process_metrics
+  type: bool
+  level: advanced
+  desc: if true enable the collection of process metrics
+  default: true
+  services:
+  - ceph-exporter
+  flags:
+  - runtime
