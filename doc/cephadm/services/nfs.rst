@@ -60,6 +60,7 @@ Alternatively, an NFS service can be applied using a YAML specification.
         host2: 10.0.0.124
       monitoring_networks:
       - 192.168.124.0/24
+      enable_nfsv3: true
 
 
 In this example, we run the server on the non-default ``port`` of
@@ -78,6 +79,8 @@ IP address is assigned to the host, that IP address will be used. If the IP
 address is not present and ``monitoring_networks`` is specified, an IP address
 that matches one of the specified networks will be used. If neither condition
 is met, the default binding will happen on all available network interfaces.
+By default, only the NFSv4 protocol is enabled. NFSv3 can be enabled by setting
+``enable_nfsv3`` to ``true`` in the service specification.
 
 TLS/SSL Example
 ---------------
