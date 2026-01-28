@@ -1,7 +1,8 @@
 import { Component, HostBinding, OnDestroy, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRouteSnapshot, NavigationEnd, Router } from '@angular/router';
 
 import { Subscription } from 'rxjs';
+import { filter } from 'rxjs/operators';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -24,6 +25,9 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
   notifications: string[] = [];
   private subs = new Subscription();
   permissions: Permissions;
+  pageHeaderTitle: string | null = null;
+  pageHeaderDescription: string | null = null;
+
   @HostBinding('class') get class(): string {
     return 'top-notification-' + this.notifications.length;
   }
@@ -65,7 +69,23 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
       })
     );
     this.faviconService.init();
+
+    this.updatePageHeaderFromRoute();
+    this.subs.add(
+      this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => this.updatePageHeaderFromRoute())
+    );
   }
+
+  private updatePageHeaderFromRoute(): void {
+    let route: ActivatedRouteSnapshot | null = this.router.routerState.snapshot.root;
+    while (route?.firstChild) {
+      route = route.firstChild;
+    }
+    const pageHeader = route?.routeConfig?.data?.['pageHeader'] as { title?: string; description?: string } | undefined;
+    this.pageHeaderTitle = pageHeader?.title ?? null;
+    this.pageHeaderDescription = pageHeader?.description ?? null;
+  }
+
   showTopNotification(name: string, isDisplayed: boolean) {
     if (isDisplayed) {
       if (!this.notifications.includes(name)) {

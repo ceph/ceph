@@ -1,0 +1,24 @@
+<cds-inline-notification
+  [notificationObj]="{
+                      type: 'warning',
+                      title: 'CephFS Mirroring module is not enabled',
+                      message: 'To create mirror links and configure replication, the CephFS Mirroring module must be enabled on this cluster.',
+                      lowContrast: true,
+                      showClose: false
+                    }"
+  class="mt-2 mb-2 full-width padding-inline-0"></cds-inline-notification>
+
+<div cdsGrid
+     class="mt-5">
+  <div cdsRow>
+    <div cdsCol>
+      <cd-icon type="deploy"
+               [size]="iconSize.size32"></cd-icon>
+    </div>
+  </div>
+  <div cdsRow>
+    <div cdsCol>
+      <p class="cds--body-compact-02">No CephFS mirror links available</p>
+    </div>
+  </div>
+</div>

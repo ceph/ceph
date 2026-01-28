@@ -35,7 +35,11 @@ import { BlankLayoutComponent } from './core/layouts/blank-layout/blank-layout.c
 import { LoginLayoutComponent } from './core/layouts/login-layout/login-layout.component';
 import { WorkbenchLayoutComponent } from './core/layouts/workbench-layout/workbench-layout.component';
 import { ApiDocsComponent } from './core/navigation/api-docs/api-docs.component';
-import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
+import {
+  ActionLabels,
+  CEPHFS_MIRRORING_PAGE_HEADER,
+  URLVerbs
+} from './shared/constants/app.constants';
 import { CrudFormComponent } from './shared/forms/crud-form/crud-form.component';
 import { CRUDTableComponent } from './shared/datatable/crud-table/crud-table.component';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
@@ -62,6 +66,7 @@ import { MultiClusterFormComponent } from './ceph/cluster/multi-cluster/multi-cl
 import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-list/cephfs-mirroring-list.component';
 import { NotificationsPageComponent } from './core/navigation/notification-panel/notifications-page/notifications-page.component';
 import { CephfsMirroringWizardComponent } from './ceph/cephfs/cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
+import { CephfsMirroringErrorComponent } from './ceph/cephfs/cephfs-mirroring-error/cephfs-mirroring-error.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -107,6 +112,15 @@ const routes: Routes = [
     children: [
       { path: 'overview', component: DashboardComponent },
       { path: 'error', component: ErrorComponent },
+      {
+        path: 'cephfs/mirroring/error',
+        component: CephfsMirroringErrorComponent,
+        data: {
+          breadcrumbs: 'File/Mirroring',
+          pageHeader: CEPHFS_MIRRORING_PAGE_HEADER
+        }
+      },
+
       // Cluster
       {
         path: 'notifications',
@@ -427,8 +441,18 @@ const routes: Routes = [
           },
           {
             path: 'mirroring',
+            canActivate: [ModuleStatusGuardService],
             component: CephfsMirroringListComponent,
-            data: { breadcrumbs: 'File/Mirroring' }
+            data: {
+              moduleStatusGuardConfig: {
+                uiApiPath: 'cephfs/mirror',
+                redirectTo: 'cephfs/mirroring/error',
+                module_name: 'mirroring',
+                navigate_to: 'File/Mirroring'
+              },
+              breadcrumbs: 'File/Mirroring',
+              pageHeader: CEPHFS_MIRRORING_PAGE_HEADER
+            }
           },
           {
             path: `mirroring/${URLVerbs.CREATE}`,
