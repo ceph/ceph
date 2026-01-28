@@ -4189,6 +4189,72 @@ def test_timestamp_based_epochs():
             else:
                 assert False, f"Object {name}: found {out_of_order_versions} versions which are out of order"
 
+def bucket_check_olh(zone, bucket, args = None):
+    cmd = ['bucket', 'check', 'olh', '--bucket', bucket, '--dump-keys', '--hide-progress'] + (args or [])
+    keys, _ = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(keys)
+
+def bucket_check_unlinked(zone, bucket, args = None):
+    cmd = ['bucket', 'check', 'unlinked', '--bucket', bucket, '--dump-keys', '--hide-progress'] + (args or [])
+    keys, _ = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(keys)
+
+def test_timestamp_based_epoch_deletes():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    # create a versioned bucket on each zone
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    for zone, bucket in zone_bucket:
+        zone.s3_client.put_bucket_versioning(Bucket=bucket.name, VersioningConfiguration={'Status': 'Enabled'})
+
+    realm_meta_checkpoint(realm)
+
+    # upload lots of objects/versions
+    NUM_OBJECTS = 100
+    NUM_VERSIONS = 20
+
+    for zone, bucket in zone_bucket:
+        for i in range(0, NUM_OBJECTS):
+            key = f"obj-{i}.txt"
+            for vid in range(0, NUM_VERSIONS):
+                zone.s3_client.put_object(Bucket=bucket.name, Key=key, Body=f"This is version {vid}")
+            # create a delete marker for each name
+            zone.s3_client.delete_object(Bucket=bucket.name, Key=key)
+        log.info(f"Finished uploads on zone={zone.name} bucket={bucket.name}")
+
+    # wait for all uploads to sync
+    for _, bucket in zone_bucket:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # delete all versions
+    DELETES_PER_REQUEST = 50
+
+    for zone, bucket in zone_bucket:
+        log.info(f"Listing bucket {bucket.name}")
+        paginator = zone.s3_client.get_paginator('list_object_versions')
+        for response in paginator.paginate(Bucket=bucket.name, PaginationConfig={'PageSize': DELETES_PER_REQUEST}):
+            entries = response.get('Versions', []) + response.get('DeleteMarkers', [])
+            objects = [{'Key': e['Key'], 'VersionId': e['VersionId']} for e in entries]
+            log.info(f"Deleting {len(objects)} object versions")
+            zone.s3_client.delete_objects(Bucket=bucket.name, Delete={'Objects': objects})
+        log.info(f"Finished deletes on zone={zone.name} bucket={bucket.name}")
+
+    # wait for all deletes to sync
+    for zone, bucket in zone_bucket:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+        # verify the bucket is empty
+        response = zone.s3_client.list_object_versions(Bucket=bucket.name)
+        assert 'Versions' not in response
+        assert 'DeleteMarkers' not in response
+
+        # check for orphaned index entries
+        olh = bucket_check_olh(zone.zone, bucket.name)
+        assert len(olh) == 0
+        unlinked = bucket_check_unlinked(zone.zone, bucket.name)
+        assert len(unlinked) == 0
 
 def run_per_zonegroup(func):
     def wrapper(*args, **kwargs):
