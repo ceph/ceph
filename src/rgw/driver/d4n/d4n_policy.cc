@@ -597,10 +597,13 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
     uint64_t len = 0;
     rgw::sal::Attrs obj_attrs;
     bool invalid = false;
+    // end_transaction_rc is used to indicate whether the transaction was successful or not.
+    int end_transaction_rc = 0;
   
     ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "" << __LINE__ << "(): Before acquiring cleaning-lock" << dendl;
     std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
     LFUDAObjEntry* e;
+    ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "object_heap size: " << object_heap.size() << dendl;
     if (object_heap.size() > 0) {
       e = object_heap.top();
     } else {
@@ -613,6 +616,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
     ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->bucket_name=" << e->bucket_name << dendl;
     ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->bucket_id=" << e->bucket_id << dendl;
     ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->user=" << e->user << dendl;
+    ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->creationTime=" << e->creationTime << dendl;
     ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->obj_key=" << e->obj_key << dendl;
     l.unlock();
 
@@ -630,7 +634,9 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
         p->second.second = State::IN_PROGRESS;
       }
       l.unlock();
-      
+     
+      ldpp_dout(dpp, 10) << __func__ << "(): e->key=" << e->key << ", diff=" << diff << ", interval=" << interval << dendl; 
+
       // If the state is invalid, the blocks must be deleted from the cache rather than written to the backend.
       if (invalid) {
 	ldpp_dout(dpp, 10) << __func__ << "(): State is INVALID; deleting object." << dendl;
@@ -678,6 +684,10 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  }
 	}
       } else {
+	//upon invalid state(should write to backend), we need to start a transaction
+	//rgw::sal::D4NTransactionMng _scoped(objDir, dpp, end_transaction_rc);//causing transaction to abort
+	//TODO the transaction-id should be genearted per each cycle, it should get the connection from pool
+
 	rgw_user c_rgw_user = e->user; 
 	//writing data to the backend
 	//we need to create an atomic_writer
@@ -979,6 +989,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
         cond.wait_for(wait_lock, std::chrono::seconds(interval - diff), []{ return quit.load(); });
       }
       continue;
+	ldpp_dout(dpp, 0) << __func__ << " sleeping for " << interval - diff << " seconds" << dendl;
+      std::this_thread::sleep_for(std::chrono::seconds(interval - diff));
     }
   } //end-while true
 }

@@ -9,8 +9,14 @@
 #include <deque>
 #include <memory>
 #include <concepts>
+#include <set>
 
 namespace rgw { namespace d4n {
+
+// TTL for temporary transaction keys (seconds)
+// Temporary keys auto-expire after this duration to prevent orphaned keys
+// from consuming Redis memory in case of process crashes or failures
+constexpr int D4N_TRANSACTION_TEMP_KEY_TTL = 300;  // 5 minutes
 
 template<typename T>
   concept SeqContainer = requires(T& t, typename T::value_type v) {
@@ -146,6 +152,61 @@ struct CacheBlock {
   /* Blocks use the cacheObj's dirty and hostsList metadata to store their dirty flag values and locations in the block directory. */
 };
 
+class D4NTransaction {
+  //purpose: to provide a transactional interface per Redis operations, i.e. to allow multiple Redis operations to be executed atomically.
+  //this object instance is created per each request, and it is used to manage multiple Redis operations as a single transaction.
+  //this object is shared among all the directories objects (object, block, bucket)
+  //assumption: all the directories objects belong to the same s3-request context.
+public:
+
+    enum class redis_operation_type {
+	NONE,READ_OP,WRITE_OP
+    };
+
+    enum class CloneStatus {
+	SUCCESS = 0,           // Key cloned successfully
+	SOURCE_NOT_EXIST = -1, // Source key does not exist
+	DEST_ALREADY_EXIST = -2 // Destination key already exists
+    };
+
+    enum class TrxState {
+			NONE,
+			STARTED,
+			ENDED,
+			CANCELLED
+		} trxState{TrxState::NONE};
+
+    std::string m_trx_id;
+    void start_trx();
+    int create_clone_lua_script(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
+    int end_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
+    int get_clone_script(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,optional_yield y);
+    bool set_transaction_key(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,std::string &key,redis_operation_type op, optional_yield y);
+    std::string get_end_trx_script(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y);
+    std::string get_trx_id(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn, optional_yield y);
+    bool is_transaction_active() const { return trxState == TrxState::STARTED;}
+    void cancel_transaction(const DoutPrefixProvider* dpp);
+
+    // Debug function: Log transaction start time to Valkey
+    void log_transaction_start_time(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y);
+
+    void create_rw_temp_keys(std::string key);
+    std::string create_unique_temp_keys(std::string key);
+  
+    CloneStatus clone_key_for_transaction(std::string key_source, std::string key_destination, std::shared_ptr<connection> conn, optional_yield y);
+    void clear_temp_keys();
+    std::string m_evalsha_clone_key;
+    std::string m_evalsha_end_trx;
+
+    std::set<std::string> m_temp_read_keys;//unique temporary keys that are used in transactions(read operations)
+    std::set<std::string> m_temp_write_keys;//unique temporary keys for use in transactions(write operations)
+    std::set<std::string> m_temp_test_write_keys;// each key that is used for write, is clone for later test, to ensure that the key is not changed by other transactions (test write operation)
+    std::string m_original_key;//original key, used to restore the key from Redis
+    std::string m_temp_key_read;//temporary key for use in transactions
+    std::string m_temp_key_write;//temporary key for use in transactions
+    std::string m_temp_key_test_write;//temporary key for use in transactions
+};
+
 class Directory {
   public:
 	std::shared_ptr<RedisPool> redis_pool{nullptr}; // Redis connection pool
@@ -153,6 +214,11 @@ class Directory {
       	redis_pool = pool;
     }
     Directory() {}
+   
+    //m_d4n_trx is used to manage the transaction state and operations and it is shared among all the Directory objects.
+    D4NTransaction* m_d4n_trx{nullptr};//TODO: private
+    void set_d4n_trx(D4NTransaction* d4n_trx) {m_d4n_trx = d4n_trx;}
+    D4NTransaction* get_d4n_trx() const { return m_d4n_trx; }
 };
 
 class Pipeline {
@@ -173,7 +239,7 @@ class Pipeline {
 
 class BucketDirectory: public Directory {
   public:
-    BucketDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+    BucketDirectory(std::shared_ptr<connection> conn) : conn(conn) {}
     int zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, Pipeline* pipeline=nullptr);
     int zrem(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, optional_yield y);
     int zrange(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& start, const std::string& stop, uint64_t offset, uint64_t count, std::vector<std::string>& members, optional_yield y);
@@ -186,7 +252,10 @@ class BucketDirectory: public Directory {
 
 class ObjectDirectory: public Directory {
   public:
-    ObjectDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+    ObjectDirectory(std::shared_ptr<connection> conn) : conn(conn) {}
+
+    //get a connection
+    std::shared_ptr<connection> get_connection() { return conn; } 
 
     int exist_key(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y);
 
@@ -203,16 +272,16 @@ class ObjectDirectory: public Directory {
     int zrank(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, std::string& index, optional_yield y);
     //Return value is the incremented value, else return error
     int incr(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y);
+    std::string build_index(CacheObj* object);
 
   private:
     std::shared_ptr<connection> conn;
 
-    std::string build_index(CacheObj* object);
 };
 
 class BlockDirectory: public Directory {
   public:
-    BlockDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+    BlockDirectory(std::shared_ptr<connection> conn) : conn(conn) {}
     
     int exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y);
 
@@ -234,12 +303,175 @@ class BlockDirectory: public Directory {
     int zrevrange(const DoutPrefixProvider* dpp, CacheBlock* block, int start, int stop, std::vector<std::string>& members, optional_yield y);
     int zrem(const DoutPrefixProvider* dpp, CacheBlock* block, const std::string& member, optional_yield y);
 
+    std::shared_ptr<connection> get_connection() {return conn;}	
+    std::string build_index(CacheBlock* block);
+
   private:
     std::shared_ptr<connection> conn;
-    std::string build_index(CacheBlock* block);
 
     template<SeqContainer Container>
     int set_values(const DoutPrefixProvider* dpp, CacheBlock& block, Container& redisValues, optional_yield y);
 };
+
+  class RedisTransactionHandling {
+	//purpose: upon redis operation, transaction-id is allocated, clone keys are created for read/write operations.
+	//this object is created/destroyed per each redis operation.
+  public:
+      // Constructor for ObjectDirectory
+      RedisTransactionHandling(ObjectDirectory* obj_dir,
+                           const DoutPrefixProvider* dpp,
+                           std::shared_ptr<connection> conn,
+                           CacheObj* object,
+                           D4NTransaction::redis_operation_type op_type,
+                           optional_yield y)
+          : m_obj_dir(obj_dir), m_block_dir(nullptr), m_bucket_dir(nullptr), m_object(object), m_block(nullptr), m_bucket_key("")
+      {
+          initialize_transaction(dpp, conn, op_type, y);
+      }
+
+      // Constructor for BlockDirectory
+      RedisTransactionHandling(BlockDirectory* block_dir,
+                           const DoutPrefixProvider* dpp,
+                           std::shared_ptr<connection> conn,
+                           CacheBlock* block,
+                           D4NTransaction::redis_operation_type op_type,
+                           optional_yield y)
+          : m_obj_dir(nullptr), m_block_dir(block_dir), m_bucket_dir(nullptr), m_object(nullptr), m_block(block), m_bucket_key("")
+      {
+          initialize_transaction(dpp, conn, op_type, y);
+      }
+
+      // Constructor for BucketDirectory
+      RedisTransactionHandling(BucketDirectory* bucket_dir,
+                           const DoutPrefixProvider* dpp,
+                           std::shared_ptr<connection> conn,
+                           const std::string& bucket_id,
+                           D4NTransaction::redis_operation_type op_type,
+                           optional_yield y)
+          : m_obj_dir(nullptr), m_block_dir(nullptr), m_bucket_dir(bucket_dir), m_object(nullptr), m_block(nullptr), m_bucket_key(bucket_id)
+      {
+          initialize_transaction_for_bucket(dpp, conn, op_type, y);
+      }
+
+      std::string build_temp_key() const {
+	  //purpose: build the temp key, the key is unique per transaction (multiple redis operations). [ start --> end ]
+          if (m_obj_dir && m_object) {
+              return m_obj_dir->build_index(m_object);
+          } else if (m_block_dir && m_block) {
+              return m_block_dir->build_index(m_block);
+          } else if (m_bucket_dir && !m_bucket_key.empty()) {
+              return m_bucket_key;  // For bucket, the key IS the bucket_id
+          }
+          return "";
+      }
+
+      // transaction validity
+      bool is_valid() const { return m_is_valid; }
+
+      // Get the Redis key to use for operations (transaction key if valid, original key otherwise)
+      std::string get_redis_key() const {
+          if (m_is_valid && !m_temp_key.empty()) {
+              return m_temp_key;  // Use transaction key
+          }
+          // Fall back to original key
+          return build_temp_key();
+      }
+
+  private:
+      ObjectDirectory* m_obj_dir;
+      BlockDirectory* m_block_dir;
+      BucketDirectory* m_bucket_dir;
+      CacheObj* m_object;
+      CacheBlock* m_block;
+      std::string m_bucket_key;
+      bool m_is_valid = false;
+      std::string m_temp_key;
+
+      void initialize_transaction(const DoutPrefixProvider* dpp,
+                                std::shared_ptr<connection> conn,
+                                D4NTransaction::redis_operation_type op_type,
+                                optional_yield y)
+      {
+          D4NTransaction* d4n_trx = nullptr;
+
+          // Get the transaction object from the appropriate directory
+          if (m_obj_dir) {
+              d4n_trx = m_obj_dir->m_d4n_trx;
+          } else if (m_block_dir) {
+              d4n_trx = m_block_dir->m_d4n_trx;
+          }
+
+          if (!d4n_trx) {
+              m_is_valid = false;
+              return;
+          }
+
+          try {
+              // Get transaction ID(once per request)
+              d4n_trx->get_trx_id(dpp, conn, y);
+
+              // Build the key using the directory's build_index method
+              std::string key = build_temp_key();
+              if (key.empty()) {
+                  m_is_valid = false;
+                  return;
+              }
+
+              // clone the key for read/write operations
+              // Note: set_transaction_key modifies 'key' to the transaction key
+              m_is_valid = d4n_trx->set_transaction_key(dpp, conn, key, op_type, y);
+	      if (m_is_valid) {
+		  m_temp_key = key; // key is now the transaction key (modified by set_transaction_key)
+	      }
+
+          } catch (const std::exception& e) {
+              m_is_valid = false;
+          }
+      }
+
+      void initialize_transaction_for_bucket(const DoutPrefixProvider* dpp,
+                                            std::shared_ptr<connection> conn,
+                                            D4NTransaction::redis_operation_type op_type,
+                                            optional_yield y)
+      {
+          D4NTransaction* d4n_trx = nullptr;
+
+          // Get the transaction object from BucketDirectory
+          if (m_bucket_dir) {
+              d4n_trx = m_bucket_dir->m_d4n_trx;
+          }
+
+          if (!d4n_trx) {
+              m_is_valid = false;
+              return;
+          }
+
+          try {
+              // Get transaction ID (once per request)
+              d4n_trx->get_trx_id(dpp, conn, y);
+
+              // Use bucket_id as the key
+              std::string key = m_bucket_key;
+              if (key.empty()) {
+                  m_is_valid = false;
+                  return;
+              }
+
+              // Note: Create temp keys structure BEFORE set_transaction_key
+              // This creates m_temp_key_read, m_temp_key_write, and m_temp_key_test_write
+              d4n_trx->create_rw_temp_keys(key);
+
+              // Clone the key for read/write operations
+              // Note: set_transaction_key modifies 'key' to the transaction key
+              m_is_valid = d4n_trx->set_transaction_key(dpp, conn, key, op_type, y);
+              if (m_is_valid) {
+                  m_temp_key = key; // key is now the transaction key (modified by set_transaction_key)
+              }
+
+          } catch (const std::exception& e) {
+              m_is_valid = false;
+          }
+      }
+  };
 
 } } // namespace rgw::d4n

@@ -55,15 +55,13 @@ class D4NFilterDriver : public FilterDriver {
   private:
     std::shared_ptr<connection> conn;
     std::unique_ptr<rgw::cache::CacheDriver> cacheDriver;
-    std::unique_ptr<rgw::d4n::ObjectDirectory> objDir;
-    std::unique_ptr<rgw::d4n::BlockDirectory> blockDir;
-    std::unique_ptr<rgw::d4n::BucketDirectory> bucketDir;
     std::unique_ptr<rgw::d4n::PolicyDriver> policyDriver;
     boost::asio::io_context& io_context;
     optional_yield y;
+				
 
     // Redis connection pool
-    std::shared_ptr<rgw::d4n::RedisPool> redis_pool;
+    std::shared_ptr<rgw::d4n::RedisPool> m_redis_pool{nullptr};
 
   public:
     D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context, bool admin);
@@ -84,13 +82,13 @@ class D4NFilterDriver : public FilterDriver {
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
     rgw::cache::CacheDriver* get_cache_driver() { return cacheDriver.get(); }
-    rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir.get(); }
-    rgw::d4n::BlockDirectory* get_block_dir() { return blockDir.get(); }
-    rgw::d4n::BucketDirectory* get_bucket_dir() { return bucketDir.get(); }
     rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver.get(); }
     void save_y(optional_yield y) { this->y = y; }
     std::shared_ptr<connection> get_conn() { return conn; }
-    std::shared_ptr<rgw::d4n::RedisPool> get_redis_pool() { return redis_pool; }
+    std::shared_ptr<rgw::d4n::RedisPool> get_redis_pool() { return m_redis_pool; }
+    std::shared_ptr<connection> get_connection() { return conn; }
+    boost::asio::io_context& get_io_context() { return io_context; }
+
     void shutdown() override;
 };
 
@@ -112,12 +110,21 @@ class D4NFilterBucket : public FilterBucket {
       uint16_t flags;
     };
     D4NFilterDriver* filter;
+    int end_trx_rc{0}; // end transaction result code, 0 means success, non-zero means error
+
+    std::unique_ptr<rgw::d4n::ObjectDirectory> m_objDir{nullptr};
+    std::unique_ptr<rgw::d4n::BlockDirectory> m_blockDir{nullptr};
+    std::unique_ptr<rgw::d4n::BucketDirectory> m_bucketDir{nullptr};
+    std::unique_ptr<rgw::d4n::D4NTransaction> m_d4n_trx{nullptr}; // D4NTransaction is used to manage the transaction state for D4N objects
 
   public:
+    void d4n_init_transaction(const DoutPrefixProvider* dpp);//the first step of the transaction (launched by the D4NTransactionMng constructor)
+    void finalize_transaction(const DoutPrefixProvider* dpp, int& result_code);//the last step of the transaction (launched by the D4NTransactionMng destructor)
+									     
     D4NFilterBucket(std::unique_ptr<Bucket> _next, D4NFilterDriver* _filter) :
       FilterBucket(std::move(_next)),
-      filter(_filter) {}
-    virtual ~D4NFilterBucket() = default;
+      filter(_filter){d4n_init_transaction(nullptr);}
+    virtual ~D4NFilterBucket() {}//{finalize_transaction(nullptr, end_trx_rc);}
    
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
     virtual int list(const DoutPrefixProvider* dpp, ListParams& params, int max,
@@ -144,8 +151,16 @@ class D4NFilterObject : public FilterObject {
     bool exists_in_cache{false};
     bool load_from_store{false};
     bool attrs_read_from_cache{false};
+    int end_trx_rc{0}; // end transaction result code, 0 means success, non-zero means error
+    std::unique_ptr<rgw::d4n::ObjectDirectory> m_objDir;
+    std::unique_ptr<rgw::d4n::BlockDirectory> m_blockDir;
+    std::unique_ptr<rgw::d4n::BucketDirectory> m_bucketDir;
+    std::unique_ptr<rgw::d4n::D4NTransaction> m_d4n_trx; // D4NTransaction is used to manage the transaction state for D4N objects
 
   public:
+    void d4n_init_transaction(const DoutPrefixProvider* dpp);//the first step of the transaction (launched by the D4NTransactionMng constructor)
+    void finalize_transaction(const DoutPrefixProvider* dpp, int& result_code);//the last step of the transaction (launched by the D4NTransactionMng destructor)
+
     struct D4NFilterReadOp : FilterReadOp {
       public:
 	class D4NFilterGetCB: public RGWGetDataCB {
@@ -223,12 +238,12 @@ class D4NFilterObject : public FilterObject {
     };
 
     D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterDriver* _driver) : FilterObject(std::move(_next)),
-									      driver(_driver) {}
+									      driver(_driver) {d4n_init_transaction(nullptr);}
     D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket, D4NFilterDriver* _driver) : FilterObject(std::move(_next), _bucket),
-											       driver(_driver) {}
+											       driver(_driver) {d4n_init_transaction(nullptr);}
     D4NFilterObject(D4NFilterObject& _o, D4NFilterDriver* _driver) : FilterObject(_o),
-								    driver(_driver) {}
-    virtual ~D4NFilterObject() = default;
+								    driver(_driver) {d4n_init_transaction(nullptr);}
+    virtual ~D4NFilterObject() {}// {finalize_transaction(nullptr, end_trx_rc);};
 
     virtual int copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
@@ -297,6 +312,36 @@ class D4NFilterObject : public FilterObject {
     bool exists(void) override { if (exists_in_cache) { return true;} return next->exists(); };
     bool load_obj_from_store() { return load_from_store; }
     void set_load_obj_from_store(bool load_from_store) { this->load_from_store = load_from_store; }
+};
+
+class D4NTransactionMng {
+   //scope-guard object to manage the transaction lifecycle (RAII)
+    D4NFilterObject* filter_obj=nullptr;
+    d4n::ObjectDirectory* obj_dir=nullptr; 
+    const DoutPrefixProvider* dpp;//NOTE: this dpp can not be saved, it should be passed on stack
+    int& result_code;
+    bool dismissed = false;
+  public:
+
+    D4NTransactionMng(d4n::ObjectDirectory* o, const DoutPrefixProvider* d, int& rc):obj_dir(o), dpp(d), result_code(rc) {
+      if (obj_dir && (obj_dir->m_d4n_trx->is_transaction_active() == false)) {//initialize the transaction only if not already active
+	obj_dir->m_d4n_trx->clear_temp_keys();
+	obj_dir->m_d4n_trx->start_trx();
+      }
+    }
+
+    D4NTransactionMng(D4NFilterObject* o, const DoutPrefixProvider* d, int& rc)
+      : filter_obj(o), dpp(d), result_code(rc) {//NOTE the dpp can not be saved.
+        if (filter_obj) filter_obj->d4n_init_transaction(dpp);
+      }
+    void dismiss() { dismissed = true; }
+    //TODO howto add optional_yield y to the destructor?
+    ~D4NTransactionMng() {
+      //TODO is it possible for filter_obj to be null?
+      if (filter_obj) filter_obj->finalize_transaction(dpp, result_code);//called D4NFilterObject methods
+      else
+      if (obj_dir) obj_dir->m_d4n_trx->end_trx(dpp, obj_dir->get_connection(),null_yield);//called by the cleaning thread
+    }
 };
 
 class D4NFilterWriter : public FilterWriter {

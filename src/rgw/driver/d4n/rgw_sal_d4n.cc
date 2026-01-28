@@ -58,9 +58,7 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   using boost::redis::config;
 
   conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
-  objDir = std::make_unique<rgw::d4n::ObjectDirectory>(conn);
-  blockDir = std::make_unique<rgw::d4n::BlockDirectory>(conn);
-  bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(conn);
+
   policyDriver = std::make_unique<rgw::d4n::PolicyDriver>(conn,
 							  cacheDriver.get(),
 							  "lfuda",
@@ -86,16 +84,11 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
   //setting the connection pool size and other parameters
   uint64_t rgw_redis_connection_pool_size = dpp->get_cct()->_conf->rgw_redis_connection_pool_size;
-  std::shared_ptr<rgw::d4n::RedisPool>redis_pool = nullptr;
   if(rgw_redis_connection_pool_size>0){
-      redis_pool = std::make_shared<rgw::d4n::RedisPool>(&io_context, cfg, rgw_redis_connection_pool_size);
+      m_redis_pool = std::make_shared<rgw::d4n::RedisPool>(&io_context, cfg, rgw_redis_connection_pool_size);
       ldpp_dout(dpp, 10) << "redis connection pool created with " << rgw_redis_connection_pool_size << " connections "  << dendl;
   }
 
-  objDir->set_redis_pool(redis_pool);
-  blockDir->set_redis_pool(redis_pool);
-  bucketDir->set_redis_pool(redis_pool);
-  
   return 0;
 }
 
@@ -134,6 +127,61 @@ int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
   return next->create(dpp, params, y);
 }
 
+#ifndef dout_subsys
+#define dout_subsys ceph_subsys_rgw
+#endif
+void D4NFilterBucket::d4n_init_transaction(const DoutPrefixProvider* dpp)
+{
+  if(!m_d4n_trx) {
+	//create D4NTransaction object and pass the Directory* objects to it
+	m_objDir = std::make_unique<rgw::d4n::ObjectDirectory>(this->filter->get_connection());
+	m_blockDir = std::make_unique<rgw::d4n::BlockDirectory>(this->filter->get_connection());
+	m_bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(this->filter->get_connection());
+	m_d4n_trx = std::make_unique<rgw::d4n::D4NTransaction>();
+	m_objDir->set_d4n_trx(m_d4n_trx.get());
+	m_blockDir->set_d4n_trx(m_d4n_trx.get());
+	m_bucketDir->set_d4n_trx(m_d4n_trx.get());
+	m_objDir->set_redis_pool(this->filter->get_redis_pool());
+	m_blockDir->set_redis_pool(this->filter->get_redis_pool());
+	m_bucketDir->set_redis_pool(this->filter->get_redis_pool());
+
+	if(m_d4n_trx->is_transaction_active() == false) {
+		m_d4n_trx->clear_temp_keys();
+		//start transaction
+		m_d4n_trx->start_trx();
+	}
+  }
+}
+
+void D4NFilterBucket::finalize_transaction(const DoutPrefixProvider* dpp, int& result_code)
+{
+	//end transaction (what about the optional_yield?)
+	if (m_d4n_trx == nullptr) {
+		ldpp_dout(dpp, 0) << "D4NFilterBucket::finalize_transaction D4NTransaction is not initialized!" << dendl;
+		result_code = -EINVAL;
+		return;
+	}
+
+	//NOTE: upon end_trx failed , the rc should be set to result_code, so that the caller can decide whether to retry the transaction or not.
+	//get the connection from the pool
+	auto connection = this->filter->get_redis_pool()->acquire();
+	auto rc = m_d4n_trx->end_trx(dpp, connection, null_yield);
+	if (rc < 0) {
+		result_code = rc;
+		ldout(g_ceph_context, 0) << "D4NFilterBucket::finalize_transaction " << m_d4n_trx.get() << " had failed, returned rc: " << rc << dendl;
+	} else {
+		ldout(g_ceph_context, 0) << "D4NFilterBucket::finalize_transaction " << m_d4n_trx.get() << " had completed successfully " << dendl; 
+		result_code = 0;
+	}
+	this->filter->get_redis_pool()->release(connection);//TODO use RAII
+
+	//delete the Directory* objects. (if driver create Directory* objects, it should delete them)
+	m_objDir.reset();
+	m_blockDir.reset();
+	m_bucketDir.reset();
+	m_d4n_trx.reset();
+}
+  
 int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max,
                           ListResults& results, optional_yield y)
 {
@@ -147,8 +195,8 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
   }
 
   //Get objects from cache
-  auto bucketDir = this->filter->get_bucket_dir();
-  auto objDir = this->filter->get_obj_dir();
+  auto bucketDir = m_bucketDir.get();
+  auto objDir = m_objDir.get();
   std::vector<rgw_obj_key> objects;
   std::vector<rgw_bucket_list_entries> entries;
 
@@ -450,7 +498,7 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
       } while(num_objs <= max);
     } //end - else
 
-    rgw::d4n::BlockDirectory* blockDir = this->filter->get_block_dir();
+    rgw::d4n::BlockDirectory* blockDir = m_blockDir.get(); //this->filter->get_block_dir();
     int remainder_size = entries.size();
     size_t j = 0, start_j = 0;
     while (remainder_size > 0) {
@@ -627,6 +675,59 @@ std::unique_ptr<MultipartUpload> D4NFilterBucket::get_multipart_upload(
   return std::make_unique<D4NFilterMultipartUpload>(std::move(nmu), this, this->filter);
 }
 
+void D4NFilterObject::d4n_init_transaction(const DoutPrefixProvider* dpp)
+{
+  //check if m_d4n_trx is initialized
+  if(!m_d4n_trx) {
+  //create D4NTransaction object and pass the Directory* objects to it
+    m_objDir = std::make_unique<rgw::d4n::ObjectDirectory>(driver->get_connection());
+    m_blockDir = std::make_unique<rgw::d4n::BlockDirectory>(driver->get_connection());
+    m_bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(driver->get_connection());
+    m_d4n_trx = std::make_unique<rgw::d4n::D4NTransaction>();
+    m_objDir->set_d4n_trx(m_d4n_trx.get());
+    m_blockDir->set_d4n_trx(m_d4n_trx.get());
+    m_bucketDir->set_d4n_trx(m_d4n_trx.get());
+
+    //set redis pool
+    m_objDir->set_redis_pool(driver->get_redis_pool());
+    m_blockDir->set_redis_pool(driver->get_redis_pool());
+    m_bucketDir->set_redis_pool(driver->get_redis_pool());
+
+    if(m_d4n_trx->is_transaction_active() == false) {
+      m_d4n_trx->clear_temp_keys();
+      m_d4n_trx->start_trx();
+    }
+  }
+}
+
+void D4NFilterObject::finalize_transaction(const DoutPrefixProvider* dpp, int& result_code)
+{
+  //end transaction (what about the optional_yield?)
+  if (m_d4n_trx == nullptr) {
+		ldpp_dout(dpp, 0) << "D4NFilterObject::finalize_transaction D4NTransaction is not initialized!" << dendl;
+		result_code = -EINVAL;
+		return;
+  }
+
+  //get the connection from the pool
+  auto connection = driver->get_redis_pool()->acquire();
+  //NOTE: upon end_trx failed , the rc should be set to result_code, so that the caller can decide whether to retry the transaction or not.
+  auto rc = m_d4n_trx->end_trx(dpp, connection, null_yield);
+  if (rc < 0) {
+		result_code = rc;
+		ldout(g_ceph_context, 0) << "D4NFilterObject::finalize_transaction " << m_d4n_trx.get() << " had failed, returned rc: " << rc << dendl;
+  } else {
+		ldout(g_ceph_context, 0) << "D4NFilterObject::finalize_transaction " << m_d4n_trx.get() << " had completed successfully " << dendl; 
+		result_code = 0;
+  }
+  driver->get_redis_pool()->release(connection);//TODO RAII
+  
+  m_objDir.reset();
+  m_blockDir.reset();
+  m_bucketDir.reset();
+  m_d4n_trx.reset();
+}
+
 int D4NFilterObject::copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
                               req_info* info,
@@ -657,8 +758,13 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
-  bool write_to_cache = g_conf()->d4n_writecache_enabled;
-  bool dirty{false};
+  int end_transaction_rc = 0;
+
+  {  // Transaction scope
+    rgw::sal::D4NTransactionMng _scoped(this, dpp, end_transaction_rc);
+
+    bool write_to_cache = g_conf()->d4n_writecache_enabled;
+    bool dirty{false};
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(this->get_read_op());
   read_op->params.mod_ptr = mod_ptr;
   read_op->params.unmod_ptr = unmod_ptr;
@@ -812,6 +918,14 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
       }
     }
   }
+  }  // D4NTransactionMng destructor runs here, setting end_transaction_rc
+
+  //NOTE: upon exiting the transaction scope, if end_transaction_rc is set to non-zero value, it indicates a failure in committing the transaction.
+  //thus we should not return success to maintain consistency.
+  if (end_transaction_rc < 0) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Redis transaction failed (concurrent modification detected), status: " << end_transaction_rc << dendl;
+    return end_transaction_rc;
+  }
 
   return 0;
 }
@@ -844,60 +958,73 @@ int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yiel
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags)
 {
-  rgw::sal::Attrs attrs;
-  std::string head_oid_in_cache;
-  rgw::d4n::CacheBlock block;
+  int end_transaction_rc = 0;
   bool found_in_cache = false;
-  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y)) {
-    found_in_cache = true;
-    if (setattrs != nullptr) {
-      /* Ensure setattrs and delattrs do not overlap */
+
+  {  // Transaction scope
+    rgw::sal::D4NTransactionMng _scoped(this, dpp, end_transaction_rc);
+
+    rgw::sal::Attrs attrs;
+    std::string head_oid_in_cache;
+    rgw::d4n::CacheBlock block;
+    if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y)) {
+      found_in_cache = true;
+      if (setattrs != nullptr) {
+        /* Ensure setattrs and delattrs do not overlap */
+        if (delattrs != nullptr) {
+          for (const auto& attr : *delattrs) {
+            if (std::find(setattrs->begin(), setattrs->end(), attr) != setattrs->end()) {
+              delattrs->erase(std::find(delattrs->begin(), delattrs->end(), attr));
+            }
+          }
+        }
+        //if set_obj_attrs() can be called to update existing attrs, then update_attrs() need to be called
+        if (this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::INCR, y)) {
+          auto ret = driver->get_cache_driver()->set_attrs(dpp, head_oid_in_cache, *setattrs, y);
+          this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::DECR, y);
+          if (ret < 0) {
+            ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): CacheDriver set_attrs method failed with ret: " << ret << dendl;
+            return ret;
+          }
+        } else {
+          found_in_cache = false;
+        }
+      } //if setattrs != nullptr
+
       if (delattrs != nullptr) {
+        Attrs::iterator attr;
+        Attrs currentattrs = this->get_attrs();
+
+        /* Ensure all delAttrs exist */
         for (const auto& attr : *delattrs) {
-          if (std::find(setattrs->begin(), setattrs->end(), attr) != setattrs->end()) {
+          if (std::find(currentattrs.begin(), currentattrs.end(), attr) == currentattrs.end()) {
             delattrs->erase(std::find(delattrs->begin(), delattrs->end(), attr));
           }
         }
-      }
-      //if set_obj_attrs() can be called to update existing attrs, then update_attrs() need to be called
-      if (this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::INCR, y)) {
-        auto ret = driver->get_cache_driver()->set_attrs(dpp, head_oid_in_cache, *setattrs, y);
-        this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::DECR, y);
-        if (ret < 0) {
-          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): CacheDriver set_attrs method failed with ret: " << ret << dendl;
-          return ret;
+        if (this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::INCR, y)) {
+          auto ret = driver->get_cache_driver()->delete_attrs(dpp, head_oid_in_cache, *delattrs, y);
+          this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::DECR, y);
+          if (ret < 0) {
+            ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): CacheDriver delete_attrs method failed with ret: " << ret << dendl;
+            return ret;
+          }
+        } else {
+          found_in_cache = false;
         }
-      } else {
-        found_in_cache = false;
+      } //if delattrs != nullptr
+    } else {
+      if (block.deleteMarker) {
+        ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
+        return -ENOENT;
       }
-    } //if setattrs != nullptr
-
-    if (delattrs != nullptr) {
-      Attrs::iterator attr;
-      Attrs currentattrs = this->get_attrs();
-
-      /* Ensure all delAttrs exist */
-      for (const auto& attr : *delattrs) {
-        if (std::find(currentattrs.begin(), currentattrs.end(), attr) == currentattrs.end()) {
-          delattrs->erase(std::find(delattrs->begin(), delattrs->end(), attr));
-        }
-      }
-      if (this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::INCR, y)) {
-        auto ret = driver->get_cache_driver()->delete_attrs(dpp, head_oid_in_cache, *delattrs, y);
-        this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::DECR, y);
-        if (ret < 0) {
-          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): CacheDriver delete_attrs method failed with ret: " << ret << dendl;
-          return ret;
-        }
-      } else {
-        found_in_cache = false;
-      }
-    } //if delattrs != nullptr
-  } else {
-    if (block.deleteMarker) {
-      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
-      return -ENOENT;
     }
+  }  // D4NTransactionMng destructor runs here, setting end_transaction_rc
+
+  //NOTE: upon exiting the transaction scope, if end_transaction_rc is set to non-zero value, it indicates a failure in committing the transaction.
+  //thus we should not proceed with the next->set_obj_attrs call to maintain consistency.
+  if (end_transaction_rc < 0) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Redis transaction failed (concurrent modification detected), status: " << end_transaction_rc << dendl;
+    return end_transaction_rc;
   }
 
   if (!found_in_cache) {
@@ -1141,7 +1268,7 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
 {
   ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object name: " << this->get_name() << " bucket name: " << this->get_bucket()->get_name() << dendl;
   rgw::d4n::CacheBlock block; 
-  rgw::d4n::BlockDirectory* blockDir = this->driver->get_block_dir();
+  rgw::d4n::BlockDirectory* blockDir = m_blockDir.get();
   auto attrs = this->get_attrs();
   bufferlist bl_etag, bl_acl;
   auto etag_it = attrs.find(RGW_ATTR_ETAG);
@@ -1231,14 +1358,14 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
       auto mtime = this->get_mtime();
       auto score = ceph::real_clock::to_double(mtime);
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Score of object name: "<< this->get_name() << " version: " << object_version << " is: "  << score << ret << dendl;
-      rgw::d4n::ObjectDirectory* objDir = this->driver->get_obj_dir();
+      rgw::d4n::ObjectDirectory* objDir = m_objDir.get(); //this->driver->get_obj_dir();
       ret = objDir->zadd(dpp, &object, score, object_version, y, &p);
       if (ret < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to add version to ordered set with error: " << ret << dendl;
         return ret;
       }
       //add an entry to ordered set containing objects for bucket listing, set score to 0 always to lexicographically order the objects
-      rgw::d4n::BucketDirectory* bucketDir = this->driver->get_bucket_dir();
+      rgw::d4n::BucketDirectory* bucketDir = m_bucketDir.get(); //this->driver->get_bucket_dir();
       ret = bucketDir->zadd(dpp, this->get_bucket()->get_bucket_id(), 0, this->get_name(), y, &p);
       if (ret < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to add object to ordered set with error: " << ret << dendl;
@@ -1348,7 +1475,7 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
 
 int D4NFilterObject::set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty)
 {
-  rgw::d4n::BlockDirectory* blockDir = driver->get_block_dir();
+  rgw::d4n::BlockDirectory* blockDir = m_blockDir.get();
 
   //update data block entries in directory
   off_t lst = this->get_size();
@@ -1422,7 +1549,7 @@ int D4NFilterObject::delete_data_block_cache_entries(const DoutPrefixProvider* d
 
 bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y)
 {
-  rgw::d4n::BlockDirectory* blockDir = this->driver->get_block_dir();
+  rgw::d4n::BlockDirectory* blockDir = m_blockDir.get();
   std::string objName = this->get_oid();
   //object oid does not contain "null" in case the instance is "null", so explicitly populating that
   if (this->have_instance() && this->get_instance() == "null") {
@@ -1557,66 +1684,90 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
                                optional_yield y, const DoutPrefixProvider* dpp,  uint32_t flags)
 {
-  Attrs update;
-  update[(std::string)attr_name] = attr_val;
-  std::string head_oid_in_cache;
-  rgw::sal::Attrs attrs;
-  rgw::d4n::CacheBlock block;
-  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y)) {
-    if (auto ret = driver->get_cache_driver()->update_attrs(dpp, head_oid_in_cache, update, y); ret < 0) {
-      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): CacheDriver update_attrs method failed with ret: " << ret << dendl;
-      return ret;
-    }
-  } else {
-    if (block.deleteMarker) {
-      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
-      return -ENOENT;
-    }
+  int end_transaction_rc = 0;
 
-    auto ret = next->modify_obj_attrs(attr_name, attr_val, y, dpp, flags);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): modify_obj_attrs of backend store failed with ret: " << ret << dendl;
-      return ret;
+  {  // Transaction scope
+    rgw::sal::D4NTransactionMng _scoped(this, dpp, end_transaction_rc);
+
+    Attrs update;
+    update[(std::string)attr_name] = attr_val;
+    std::string head_oid_in_cache;
+    rgw::sal::Attrs attrs;
+    rgw::d4n::CacheBlock block;
+    if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y)) {
+      if (auto ret = driver->get_cache_driver()->update_attrs(dpp, head_oid_in_cache, update, y); ret < 0) {
+        ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): CacheDriver update_attrs method failed with ret: " << ret << dendl;
+        return ret;
+      }
+    } else {
+      if (block.deleteMarker) {
+        ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
+        return -ENOENT;
+      }
+
+      auto ret = next->modify_obj_attrs(attr_name, attr_val, y, dpp, flags);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): modify_obj_attrs of backend store failed with ret: " << ret << dendl;
+        return ret;
+      }
     }
+  }  // D4NTransactionMng destructor runs here, setting end_transaction_rc
+
+  //NOTE: upon exiting the transaction scope, if end_transaction_rc is set to non-zero value, it indicates a failure in committing the transaction.
+  if (end_transaction_rc < 0) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Redis transaction failed (concurrent modification detected), status: " << end_transaction_rc << dendl;
+    return end_transaction_rc;
   }
+
   return 0;
 }
 
 int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
                                optional_yield y)
 {
-  buffer::list bl;
-  std::string head_oid_in_cache;
-  rgw::sal::Attrs attrs;
-  Attrs delattr;
-  rgw::d4n::CacheBlock block;
+  int d4n_transaction_status = 0;
   bool found_in_cache = false;
-  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y)) {
-    found_in_cache = true;
-    delattr.insert({attr_name, bl});
-    Attrs currentattrs = this->get_attrs();
-    rgw::sal::Attrs::iterator attr = delattr.begin();
 
-    /* Ensure delAttr exists */
-    if (std::find_if(currentattrs.begin(), currentattrs.end(),
-        [&](const auto& pair) { return pair.first == attr->first; }) != currentattrs.end()) {
-      if (this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::INCR, y)) {
-        auto ret = driver->get_cache_driver()->delete_attrs(dpp, head_oid_in_cache, delattr, y);
-        this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::DECR, y);
-        if ( ret < 0) {
-          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): CacheDriver delete_attrs method failed with ret: " << ret << dendl;
-          return ret;
+  {  // Transaction scope
+    D4NTransactionMng d4n_trx(this, dpp, d4n_transaction_status);
+    buffer::list bl;
+    std::string head_oid_in_cache;
+    rgw::sal::Attrs attrs;
+    Attrs delattr;
+    rgw::d4n::CacheBlock block;
+
+    if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y)) {
+      found_in_cache = true;
+      delattr.insert({attr_name, bl});
+      Attrs currentattrs = this->get_attrs();
+      rgw::sal::Attrs::iterator attr = delattr.begin();
+
+      /* Ensure delAttr exists */
+      if (std::find_if(currentattrs.begin(), currentattrs.end(),
+          [&](const auto& pair) { return pair.first == attr->first; }) != currentattrs.end()) {
+        if (this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::INCR, y)) {
+          driver->get_cache_driver()->delete_attrs(dpp, head_oid_in_cache, delattr, y);
+          this->driver->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(dpp, head_oid_in_cache, rgw::d4n::RefCount::DECR, y);
+        } else {
+          found_in_cache = false;
         }
-      } else {
-        found_in_cache = false;
+      }
+    } else {
+      if (block.deleteMarker) {
+        ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
+        return -ENOENT;
       }
     }
-  } else {
-    if (block.deleteMarker) {
-      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
-      return -ENOENT;
-    }
+  }  // D4NTransactionMng destructor runs here, setting d4n_transaction_status
+
+
+  //NOTE: upon exiting the transaction scope, if d4n_transaction_status is set to non-zero value, it indicates a failure in committing the transaction.
+  //thus we should not proceed with the next->delete_obj_attrs call to maintain consistency.
+  if (d4n_transaction_status < 0) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Redis transaction failed with status: " << d4n_transaction_status << dendl;
+    return d4n_transaction_status;
   }
+
   if (!found_in_cache) {
     if (auto ret = next->delete_obj_attrs(dpp, attr_name, y); ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): delete_obj_attrs method of backend store failed with ret: " << ret << dendl;
@@ -1655,9 +1806,6 @@ void D4NFilterDriver::shutdown()
   boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
 
   cacheDriver.reset();
-  objDir.reset();
-  blockDir.reset();
-  bucketDir.reset();
   policyDriver.reset();
 
   next->shutdown();
@@ -1680,7 +1828,12 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
   //set a flag to show that incoming instance has no version specified
   bool is_latest_version = true;
   if (source->have_instance()) {
-    is_latest_version = false; 
+    is_latest_version = false;
+  }
+
+  // Cancel transaction for read-only operations to prevent orphaned temp keys
+  if (source->m_d4n_trx && source->m_d4n_trx->is_transaction_active()) {
+    source->m_d4n_trx->cancel_transaction(dpp);
   }
 
   int ret;
@@ -1893,7 +2046,7 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
           if (ret == 0) {
             source->driver->get_policy_driver()->get_cache_policy()->update(dpp, key, ofs, bl.length(), dest_version, true, rgw::d4n::RefCount::NOOP, y);
           }
-          if (ret = source->driver->get_block_dir()->set(dpp, &dest_block, y); ret < 0){
+          if (ret = source->m_blockDir->set(dpp, &dest_block, y); ret < 0){
             ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " BlockDirectory set failed with ret: " << ret << dendl;
           }
         } else {
@@ -1993,7 +2146,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       int ret;
       auto policy = source->driver->get_policy_driver()->get_cache_policy();
       auto cache_driver = source->driver->get_cache_driver();
-      auto block_dir = source->driver->get_block_dir();
+      auto block_dir = source->m_blockDir.get(); //source->driver->get_block_dir();
       if (policy->update_refcount_if_key_exists(dpp, oid_in_cache, rgw::d4n::RefCount::INCR, y) > 0) {
         ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): " << __LINE__ << ": READ FROM CACHE: oid_in_cache=" << oid_in_cache << dendl;
         // Read From Cache
@@ -2171,7 +2324,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     std::string dest_prefix;
 
     rgw::d4n::CacheBlock block, dest_block;
-    rgw::d4n::BlockDirectory* blockDir = source->driver->get_block_dir();
+    rgw::d4n::BlockDirectory* blockDir = source->m_blockDir.get(); //source->driver->get_block_dir();
     auto policy = filter->get_policy_driver()->get_cache_policy();
     auto cache_driver = filter->get_cache_driver();
     block.cacheObj.objName = source->get_key().get_oid();
@@ -2342,6 +2495,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 {
   // TODO: Send delete request to cache nodes with remote copies
 
+  int end_transaction_rc = 0;
   rgw::sal::Attrs attrs;
   std::string head_oid_in_cache;
   rgw::d4n::CacheBlock block;
@@ -2357,11 +2511,15 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     ret = next->delete_obj(dpp, y, flags);
     result = next->result;
     return ret;
-  } else {
+  }
+
+  {  // Transaction scope for cache operations
+    rgw::sal::D4NTransactionMng _scoped(source, dpp, end_transaction_rc);
+
     bool objDirty = block.cacheObj.dirty;
-    auto blockDir = source->driver->get_block_dir();
-    auto objDir = source->driver->get_obj_dir();
-    auto bucketDir = source->driver->get_bucket_dir();
+    auto blockDir = source->m_blockDir.get();
+    auto objDir = source->m_objDir.get();
+    auto bucketDir = source->m_bucketDir.get();
     std::string version = source->get_object_version();
     std::string objName = source->get_name();
     // special handling for name starting with '_'
@@ -2628,8 +2786,16 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
       result = next->result;
       return ret;
     }
-    return 0;
+  }  // D4NTransactionMng destructor runs here, setting end_transaction_rc
+
+  //NOTE: upon exiting the transaction scope, if end_transaction_rc is set to non-zero value, it indicates a failure in committing the transaction.
+  //thus we should not return success to maintain consistency.
+  if (end_transaction_rc < 0) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Redis transaction failed (concurrent modification detected), status: " << end_transaction_rc << dendl;
+    return end_transaction_rc;
   }
+
+  return 0;
 }
 
 int D4NFilterWriter::prepare(optional_yield y) 
@@ -2724,7 +2890,12 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
-  bool dirty = false;
+  int end_transaction_rc = 0;
+
+  {  // Transaction scope
+    rgw::sal::D4NTransactionMng _scoped(object, dpp, end_transaction_rc);
+
+    bool dirty = false;
   std::unordered_set<std::string> hostsList = {};
   std::string objEtag = etag;
   auto size = object->get_size();
@@ -2875,6 +3046,15 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): eviction failed for head_oid_in_cache, ret=" << ret << dendl;
     return ret;
   }
+  }  // D4NTransactionMng destructor runs here, setting end_transaction_rc
+
+  //NOTE: upon exiting the transaction scope, if end_transaction_rc is set to non-zero value, it indicates a failure in committing the transaction.
+  //thus we should not return success to maintain consistency.
+  if (end_transaction_rc < 0) {
+    ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): Redis transaction failed (concurrent modification detected), status: " << end_transaction_rc << dendl;
+    return end_transaction_rc;
+  }
+
   return 0;
 }
 
