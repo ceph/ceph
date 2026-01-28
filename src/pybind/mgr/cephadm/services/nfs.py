@@ -156,8 +156,6 @@ class NFSService(CephService):
                 "nodeid": nodeid,
                 "pool": POOL_NAME,
                 "namespace": spec.service_id,
-                "rgw_user": rgw_user,
-                "url": f'rados://{POOL_NAME}/{spec.service_id}/{spec.rados_config_name()}',
                 # fall back to default NFS port if not present in daemon_spec
                 "port": port,
                 "monitoring_addr": monitoring_ip,
@@ -167,7 +165,6 @@ class NFSService(CephService):
                 "nfs_idmap_conf": nfs_idmap_conf,
                 "enable_nlm": str(spec.enable_nlm).lower(),
                 "cluster_id": self.mgr._cluster_fsid,
-                "rados_config": True,  # cephadm always uses RADOS-based config for NFS
                 "tls_add": spec.ssl,
                 "tls_ciphers": spec.tls_ciphers,
                 "tls_min_version": spec.tls_min_version,
