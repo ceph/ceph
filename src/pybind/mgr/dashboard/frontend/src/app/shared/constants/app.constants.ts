@@ -383,3 +383,8 @@ export const SSL_CIPHERS = [
 
 export const USER = 'user';
 export const VERSION_PREFIX = 'ceph version';
+
+export const CEPHFS_MIRRORING_PAGE_HEADER = {
+  title: 'CephFS Mirroring',
+  description: 'Centralised view of all CephFS Mirroring relationships.'
+};
