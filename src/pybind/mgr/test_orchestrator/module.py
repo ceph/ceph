@@ -7,6 +7,8 @@ import functools
 import itertools
 from subprocess import check_output, CalledProcessError
 
+from .cli import TestOrchestratorCLICommand
+
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, IscsiServiceSpec
 
 try:
@@ -16,7 +18,7 @@ except ImportError:
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from mgr_module import CLICommand, HandleCommandResult
+from mgr_module import HandleCommandResult
 from mgr_module import MgrModule
 
 import orchestrator
@@ -24,6 +26,7 @@ from orchestrator import handle_orch_error, raise_if_exception
 
 
 class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
+    CLICommand = TestOrchestratorCLICommand
     """
     This is an orchestrator implementation used for internal testing. It's meant for
     development environments and integration testing.
@@ -33,7 +36,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     The implementation is similar to the Rook orchestrator, but simpler.
     """
 
-    @CLICommand('test_orchestrator load_data', perm='w')
+    @TestOrchestratorCLICommand('test_orchestrator load_data', perm='w')
     def _load_data(self, inbuf):
         """
         load dummy data into test orchestrator

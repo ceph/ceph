@@ -11,7 +11,9 @@ from collections import namedtuple
 from collections import OrderedDict
 from tempfile import NamedTemporaryFile
 
-from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
+from .cli import PrometheusCLICommand
+
+from mgr_module import MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult
 from mgr_util import get_default_addr, profile_method, build_url, test_port_allocation, PortAlreadyInUse
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from rbd import RBD
@@ -597,6 +599,7 @@ class MetricCollectionThread(threading.Thread):
 
 
 class Module(MgrModule, OrchestratorClientMixin):
+    CLICommand = PrometheusCLICommand
     MODULE_OPTIONS = [
         Option(
             'server_addr',
@@ -1932,7 +1935,7 @@ class Module(MgrModule, OrchestratorClientMixin):
 
         return ''.join(_metrics) + '\n'
 
-    @CLIReadCommand('prometheus file_sd_config')
+    @PrometheusCLICommand.Read('prometheus file_sd_config')
     def get_file_sd_config(self) -> Tuple[int, str, str]:
         '''
         Return file_sd compatible prometheus config for mgr cluster
@@ -2205,7 +2208,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.log.info('Stopping engine...')
         self.shutdown_event.set()
 
-    @CLIReadCommand('healthcheck history ls')
+    @PrometheusCLICommand.Read('healthcheck history ls')
     def _list_healthchecks(self, format: Format = Format.plain) -> HandleCommandResult:
         """List all the healthchecks being tracked
 
@@ -2230,7 +2233,7 @@ class Module(MgrModule, OrchestratorClientMixin):
 
         return HandleCommandResult(retval=0, stdout=out)
 
-    @CLIWriteCommand('healthcheck history clear')
+    @PrometheusCLICommand.Write('healthcheck history clear')
     def _clear_healthchecks(self) -> HandleCommandResult:
         """Clear the healthcheck history"""
         self.health_history.reset()

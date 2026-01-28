@@ -1,7 +1,8 @@
 from typing import no_type_check
 
-from mgr_module import Command, Option
+from mgr_module import Option
 
+from ..cli import DBCommand
 from . import PLUGIN_MANAGER as PM
 from . import interfaces as I  # noqa: E741,N812
 
@@ -12,10 +13,10 @@ class SimplePlugin(I.CanMgr, I.HasOptions, I.HasCommands):
         - Default Mixins/Interfaces: CanMgr, HasOptions & HasCommands
     - Options are defined by OPTIONS class variable, instead from get_options hook
     - Commands are created with by COMMANDS list of Commands() and handlers
-    (less compact than CLICommand, but allows using method instances)
+    (less compact than but allows using method instances)
     """
     Option = Option
-    Command = Command
+    Command = DBCommand
 
     @PM.add_hook
     def get_options(self):

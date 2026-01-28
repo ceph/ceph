@@ -67,13 +67,14 @@ import orchestrator
 from orchestrator.module import to_format, Format
 
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
-    CLICommandMeta, DaemonDescription, DaemonDescriptionStatus, handle_orch_error, \
+    DaemonDescription, DaemonDescriptionStatus, handle_orch_error, \
     service_to_daemon_types
 from orchestrator._interface import GenericSpec
 from orchestrator._interface import daemon_type_to_service
 
 from . import utils
 from . import ssh
+from .cli import CephadmCLICommand
 from .migrations import Migrations
 from .services.cephadmservice import MgrService, RgwService
 from .services.container import CustomContainerService
@@ -153,9 +154,8 @@ def host_exists(hostname_position: int = 1) -> Callable:
     return inner
 
 
-class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
-                          metaclass=CLICommandMeta):
-
+class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
+    CLICommand = CephadmCLICommand
     _STORE_HOST_PREFIX = "host"
 
     instance = None
@@ -1184,7 +1184,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 raise OrchestratorError('ssh connection %s@%s failed' % (self.ssh_user, host))
         self.log.info(f'Set ssh {what}')
 
-    @orchestrator._cli_write_command(
+    @CephadmCLICommand.Write(
         prefix='cephadm set-ssh-config')
     def _set_ssh_config(self, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
         """
@@ -1199,7 +1199,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._validate_and_set_ssh_val('ssh_config', inbuf, old)
         return 0, "", ""
 
-    @orchestrator._cli_write_command('cephadm clear-ssh-config')
+    @CephadmCLICommand.Write('cephadm clear-ssh-config')
     def _clear_ssh_config(self) -> Tuple[int, str, str]:
         """
         Clear the ssh_config file
@@ -1211,7 +1211,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.ssh._reconfig_ssh()
         return 0, "", ""
 
-    @orchestrator._cli_read_command('cephadm get-ssh-config')
+    @CephadmCLICommand.Read('cephadm get-ssh-config')
     def _get_ssh_config(self) -> HandleCommandResult:
         """
         Returns the ssh config as used by cephadm
@@ -1225,7 +1225,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return HandleCommandResult(stdout=ssh_config)
         return HandleCommandResult(stdout=DEFAULT_SSH_CONFIG)
 
-    @orchestrator._cli_write_command('cephadm generate-key')
+    @CephadmCLICommand.Write('cephadm generate-key')
     def _generate_key(self) -> Tuple[int, str, str]:
         """
         Generate a cluster SSH key (if not present)
@@ -1254,7 +1254,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.ssh._reconfig_ssh()
         return 0, '', ''
 
-    @orchestrator._cli_write_command(
+    @CephadmCLICommand.Write(
         'cephadm set-priv-key')
     def _set_priv_key(self, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
         """Set cluster SSH private key (use -i <private_key>)"""
@@ -1267,7 +1267,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.log.info('Set ssh private key')
         return 0, "", ""
 
-    @orchestrator._cli_write_command(
+    @CephadmCLICommand.Write(
         'cephadm set-pub-key')
     def _set_pub_key(self, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
         """Set cluster SSH public key (use -i <public_key>)"""
@@ -1279,7 +1279,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._validate_and_set_ssh_val('ssh_identity_pub', inbuf, old)
         return 0, "", ""
 
-    @orchestrator._cli_write_command(
+    @CephadmCLICommand.Write(
         'cephadm set-signed-cert')
     def _set_signed_cert(self, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
         """Set a signed cert if CA signed keys are being used (use -i <cert_filename>)"""
@@ -1291,7 +1291,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._validate_and_set_ssh_val('ssh_identity_cert', inbuf, old)
         return 0, "", ""
 
-    @orchestrator._cli_write_command(
+    @CephadmCLICommand.Write(
         'cephadm clear-key')
     def _clear_key(self) -> Tuple[int, str, str]:
         """Clear cluster SSH key"""
@@ -1302,7 +1302,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.log.info('Cleared cluster SSH key')
         return 0, '', ''
 
-    @orchestrator._cli_read_command(
+    @CephadmCLICommand.Read(
         'cephadm get-pub-key')
     def _get_pub_key(self) -> Tuple[int, str, str]:
         """Show SSH public key for connecting to cluster hosts"""
@@ -1311,7 +1311,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         else:
             return -errno.ENOENT, '', 'No cluster SSH key defined'
 
-    @orchestrator._cli_read_command(
+    @CephadmCLICommand.Read(
         'cephadm get-signed-cert')
     def _get_signed_cert(self) -> Tuple[int, str, str]:
         """Show SSH signed cert for connecting to cluster hosts using CA signed keys"""
@@ -1320,7 +1320,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         else:
             return -errno.ENOENT, '', 'No signed cert defined'
 
-    @orchestrator._cli_read_command(
+    @CephadmCLICommand.Read(
         'cephadm get-user')
     def _get_user(self) -> Tuple[int, str, str]:
         """
@@ -1331,7 +1331,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         else:
             return 0, self.ssh_user, ''
 
-    @orchestrator._cli_read_command(
+    @CephadmCLICommand.Read(
         'cephadm set-user')
     def set_ssh_user(self, user: str) -> Tuple[int, str, str]:
         """
@@ -1352,7 +1352,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.log.info(msg)
         return 0, msg, ''
 
-    @orchestrator._cli_read_command(
+    @CephadmCLICommand.Read(
         'cephadm registry-login')
     def registry_login(self, url: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
         """
@@ -1404,7 +1404,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.cache.distribute_new_registry_login_info()
         return 0, "registry login scheduled", ''
 
-    @orchestrator._cli_read_command('cephadm check-host')
+    @CephadmCLICommand.Read('cephadm check-host')
     def check_host(self, host: str, addr: Optional[str] = None) -> Tuple[int, str, str]:
         """Check whether we can access and manage a remote host"""
         try:
@@ -1432,7 +1432,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     self.event.set()
         return 0, '%s (%s) ok' % (host, addr), '\n'.join(err)
 
-    @orchestrator._cli_read_command(
+    @CephadmCLICommand.Read(
         'cephadm prepare-host')
     def _prepare_host(self, host: str, addr: Optional[str] = None) -> Tuple[int, str, str]:
         """Prepare a remote host for use with cephadm"""
@@ -1451,7 +1451,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     self.event.set()
         return 0, '%s (%s) ok' % (host, addr), '\n'.join(err)
 
-    @orchestrator._cli_write_command(
+    @CephadmCLICommand.Write(
         prefix='cephadm set-extra-ceph-conf')
     def _set_extra_ceph_conf(self, inbuf: Optional[str] = None) -> HandleCommandResult:
         """
@@ -1474,7 +1474,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._kick_serve_loop()
         return HandleCommandResult()
 
-    @orchestrator._cli_read_command(
+    @CephadmCLICommand.Read(
         'cephadm get-extra-ceph-conf')
     def _get_extra_ceph_conf(self) -> HandleCommandResult:
         """
@@ -1482,7 +1482,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         return HandleCommandResult(stdout=self.extra_ceph_conf().conf)
 
-    @orchestrator._cli_read_command('cephadm config-check ls')
+    @CephadmCLICommand.Read('cephadm config-check ls')
     def _config_checks_list(self, format: Format = Format.plain) -> HandleCommandResult:
         """List the available configuration checks and their current state"""
 
@@ -1522,13 +1522,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         return HandleCommandResult(stdout=table.get_string())
 
-    @orchestrator._cli_read_command('cephadm config-check status')
+    @CephadmCLICommand.Read('cephadm config-check status')
     def _config_check_status(self) -> HandleCommandResult:
         """Show whether the configuration checker feature is enabled/disabled"""
         status = self.config_checks_enabled
         return HandleCommandResult(stdout="Enabled" if status else "Disabled")
 
-    @orchestrator._cli_write_command('cephadm config-check enable')
+    @CephadmCLICommand.Write('cephadm config-check enable')
     def _config_check_enable(self, check_name: str) -> HandleCommandResult:
         """Enable a specific configuration check"""
         if not self._config_check_valid(check_name):
@@ -1542,7 +1542,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         return HandleCommandResult(stdout="ok")
 
-    @orchestrator._cli_write_command('cephadm config-check disable')
+    @CephadmCLICommand.Write('cephadm config-check disable')
     def _config_check_disable(self, check_name: str) -> HandleCommandResult:
         """Disable a specific configuration check"""
         if not self._config_check_valid(check_name):
@@ -1602,7 +1602,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return False
         return conf.last_modified > dt
 
-    @orchestrator._cli_write_command(
+    @CephadmCLICommand.Write(
         'cephadm osd activate'
     )
     def _osd_activate(self, host: List[str]) -> HandleCommandResult:
@@ -1621,7 +1621,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         return HandleCommandResult(stdout='\n'.join(run(host)))
 
-    @orchestrator._cli_read_command('cephadm systemd-unit ls')
+    @CephadmCLICommand.Read('cephadm systemd-unit ls')
     def _systemd_unit_ls(
         self,
         hostname: Optional[str] = None,
@@ -1631,7 +1631,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         daemons = self.systemd_unit_ls(hostname, daemon_type, daemon_id)
         return HandleCommandResult(stdout=json.dumps(daemons, indent=4))
 
-    @orchestrator._cli_read_command('cephadm systemd-unit ls')
+    @CephadmCLICommand.Read('cephadm systemd-unit ls')
     def systemd_unit_ls(
         self,
         hostname: Optional[str] = None,
@@ -1673,7 +1673,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             systemd_unit_dict[host][d_type][d.name()] = systemd_unit
         return HandleCommandResult(stdout=json.dumps(systemd_unit_dict, indent=4))
 
-    @orchestrator._cli_read_command('orch client-keyring ls')
+    @CephadmCLICommand.Read('orch client-keyring ls')
     def _client_keyring_ls(self, format: Format = Format.plain) -> HandleCommandResult:
         """
         List client keyrings under cephadm management
@@ -1698,7 +1698,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             output = table.get_string()
         return HandleCommandResult(stdout=output)
 
-    @orchestrator._cli_write_command('orch client-keyring set')
+    @CephadmCLICommand.Write('orch client-keyring set')
     def _client_keyring_set(
             self,
             entity: str,
@@ -1740,7 +1740,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._kick_serve_loop()
         return HandleCommandResult()
 
-    @orchestrator._cli_write_command('orch client-keyring rm')
+    @CephadmCLICommand.Write('orch client-keyring rm')
     def _client_keyring_rm(
             self,
             entity: str,

@@ -15,6 +15,8 @@ import time
 import logging
 import json
 
+from .cli import ProgressCLICommand
+
 
 ENCODING_VERSION = 2
 
@@ -415,6 +417,7 @@ class PgId(object):
 
 
 class Module(MgrModule):
+    CLICommand = ProgressCLICommand
     COMMANDS = [
         {"cmd": "progress",
          "desc": "Show progress of recovery operations",
