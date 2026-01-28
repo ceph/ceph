@@ -47,9 +47,12 @@ def rename_filesystem(mgr, fs_name, new_fs_name):
     return mgr.mon_command(command)
 
 def create_mds(mgr, fs_name, placement):
-    spec = ServiceSpec(service_type='mds',
+    try:
+        spec = ServiceSpec(service_type='mds',
                                     service_id=fs_name,
                                     placement=PlacementSpec.from_string(placement))
+    except Exception as e:
+        return -errno.EINVAL, "", str(e)
     try:
         completion = mgr.apply([spec], no_overwrite=True)
         orchestrator.raise_if_exception(completion)
