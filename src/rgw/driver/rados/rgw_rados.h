@@ -1435,9 +1435,10 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
 		    RGWBucketInfo& bucket_info, const rgw_obj& obj,
                     bufferlist& obj_tag, std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> >& log,
                     uint64_t *plast_ver, optional_yield y, bool null_verid,
-		    rgw_zone_set *zones_trace = nullptr,
-		    bool log_op = true,
-		    const bool force = false);
+		    rgw_zone_set *zones_trace,
+		    bool log_op,
+		    const bool force,
+		    bool& deleted_more);
   int update_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState *state,
 		 RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y,
 		 rgw_zone_set *zones_trace = nullptr, bool null_verid = false,
