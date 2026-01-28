@@ -116,18 +116,20 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     ];
   }
 
-  openModal(edit = false) {
+  openModal(edit = false, payload?: { serviceName?: string; serviceType?: string } | string) {
+    const serviceNameFromPayload = typeof payload === 'string' ? payload : payload?.serviceName;
+    const serviceTypeFromPayload = typeof payload === 'string' ? undefined : payload?.serviceType;
+
+    const targetServiceName = serviceNameFromPayload ?? this.selection.first()?.service_name;
+    const targetServiceType = serviceTypeFromPayload ?? this.selection.first()?.service_type;
+
     if (this.routedModal) {
       edit
         ? this.router.navigate([
             BASE_URL,
             {
               outlets: {
-                modal: [
-                  URLVerbs.EDIT,
-                  this.selection.first().service_type,
-                  this.selection.first().service_name
-                ]
+                modal: [URLVerbs.EDIT, targetServiceType, targetServiceName]
               }
             }
           ])
@@ -136,8 +138,8 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       let initialState = {};
       edit
         ? (initialState = {
-            serviceName: this.selection.first()?.service_name,
-            serviceType: this.selection?.first()?.service_type,
+            serviceName: targetServiceName,
+            serviceType: targetServiceType,
             hiddenServices: this.hiddenServices,
             editing: edit
           })
