@@ -1,5 +1,6 @@
 #include <charconv> // for std::to_chars()
 #include <string>
+#include <variant>
 #include <lua.hpp>
 #include "common/ceph_context.h"
 #include "common/debug.h"
@@ -265,6 +266,41 @@ void lua_state_guard::set_runtime_hook() {
 
   // Check runtime after each line or every 1000 VM instructions
   lua_sethook(state, runtime_hook, LUA_MASKLINE | LUA_MASKCOUNT, 1000);
+}
+
+// helper type for the visitor
+template<class... Ts>
+struct overloads : Ts... { using Ts::operator()...; };
+template<class... Ts> overloads(Ts...) -> overloads<Ts...>;
+
+int lua_execute(lua_State* L, const DoutPrefixProvider* dpp, const LuaCodeType& code) {
+  // execute the lua script or bytecode
+  return std::visit(overloads {
+        [L, dpp](const std::string& script) -> int {
+          if (luaL_dostring(L, script.c_str()) != LUA_OK) {
+            const std::string err(lua_tostring(L, -1));
+            ldpp_dout(dpp, 1) << "Lua ERROR: failed to execute script : " << err << dendl;
+            lua_pop(L, 1);
+            return -1;
+          }
+          return 0;
+        },
+        [L, dpp](const std::vector<char>& bytecode) -> int  {
+          if (luaL_loadbuffer(L, bytecode.data(), bytecode.size(), "bytecode_chunk") != LUA_OK) {
+            const std::string err(lua_tostring(L, -1));
+            ldpp_dout(dpp, 1) << "Lua ERROR: failed to load buffer for bytecode : " << err << dendl;
+            lua_pop(L, 1);
+            return -1;
+          }
+          if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+            const std::string err(lua_tostring(L, -1));
+            ldpp_dout(dpp, 1) << "Lua ERROR: failed to execute bytecode : " << err << dendl;
+            lua_pop(L, 1);
+            return -1;
+          }
+          return 0;
+      }
+    }, code);
 }
 
 } // namespace rgw::lua

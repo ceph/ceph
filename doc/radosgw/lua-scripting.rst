@@ -133,7 +133,7 @@ Context Free Functions
 Debug Log
 ~~~~~~~~~
 The ``RGWDebugLog()`` function accepts a string and prints it to the debug log with priority 20.
-Each log message is prefixed ``Lua INFO:``. This function has no return value.
+Each log message is prefixed with ``Lua INFO:``. This function has no return value.
 
 Request Fields
 -----------------
@@ -337,11 +337,13 @@ Tracing functions can be used only in the ``postrequest`` context.
 Background Context
 --------------------
 The ``background`` context may be used for purposes that include analytics, monitoring, caching data for other context executions.
-- Background script execution default interval is 5 seconds.
+
+- The default interval for background script execution is 5 seconds.
 
 Data Context
 --------------------
 Both ``getdata`` and ``putdata`` contexts have the following fields:
+
 - ``Data`` which is read-only and iterable (byte by byte). In case that an object is uploaded or retrieved in multiple chunks, the ``Data`` field will hold data of one chunk at a time.
 - ``Offset`` which is holding the offset of the chunk within the entire object.
 - The ``Request`` fields and the background ``RGW`` table are also available in these contexts.
@@ -350,19 +352,21 @@ Global RGW Table
 --------------------
 The ``RGW`` Lua table is accessible from all contexts and saves data written to it
 during execution so that it may be read and used later during other executions, from the same context of a different one.
+
 - Each RGW instance has its own private and ephemeral ``RGW`` Lua table that is lost when the daemon restarts. Note that ``background`` context scripts will run on every instance.
 - The maximum number of entries in the table is 100,000. Each entry has a string key a value with a combined length of no more than 1KB.
 A Lua script will abort with an error if the number of entries or entry size exceeds these limits.
-- The ``RGW`` Lua table uses string indices and can store values of type: string, integer, double and boolean
+- The ``RGW`` Lua table uses string indices and can store values of type ``string``, ``integer``, ``double`` and ``boolean``.
 
 Increment/Decrement Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Since entries in the ``RGW`` table could be accessed from multiple places at the same time we need a way
 to atomically increment and decrement numeric values in it. For that the following functions should be used:
+
 - ``RGW.increment(<key>, [value])`` would increment the value of ``key`` by ``value`` if value is provided or by 1 if not
 - ``RGW.decrement(<key>, [value])`` would decrement the value of ``key`` by ``value`` if value is provided or by 1 if not
-- if the value of ``key`` is not numeric, the execution of the script would fail
-- if we try to increment or decrement by non-numeric values, the execution of the script would fail
+- If the value of ``key`` is not numeric, the execution of the script will fail
+- If we try to increment or decrement with non-numeric values, the execution of the script will fail
 
 
 Lua Code Samples

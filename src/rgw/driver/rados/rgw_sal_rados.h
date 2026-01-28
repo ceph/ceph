@@ -1224,19 +1224,48 @@ class RadosLuaManager : public StoreLuaManager {
     std::ostream& gen_prefix(std::ostream& out) const override;
   };
 
+  class ScriptsWatcher : public librados::WatchCtx2, public DoutPrefixProvider {
+    RadosLuaManager* const parent;
+  public:
+    ScriptsWatcher(RadosLuaManager* _parent) :
+      parent(_parent) {}
+    ~ScriptsWatcher() override = default;
+    void handle_notify(uint64_t notify_id, uint64_t cookie,
+                   uint64_t notifier_id, bufferlist& bl) override;
+    void handle_error(uint64_t cookie, int err) override;
+
+    // DoutPrefixProvider iterface
+    CephContext* get_cct() const override;
+    unsigned get_subsys() const override;
+    std::ostream& gen_prefix(std::ostream& out) const override;
+  };
+
   RadosStore* const store;
   rgw_pool pool;
   librados::IoCtx& ioctx;
+  librados::IoCtx ioctx_scripts;
   PackagesWatcher packages_watcher;
+  ScriptsWatcher scripts_watcher;
   void ack_reload(const DoutPrefixProvider* dpp, uint64_t notify_id, uint64_t cookie, int reload_status);
   void handle_reload_notify(const DoutPrefixProvider* dpp, optional_yield y, uint64_t notify_id, uint64_t cookie);
+  void ack_script_update(const DoutPrefixProvider* dpp, uint64_t notify_id, uint64_t cookie, int reload_status);
+  void handle_script_update_notify(const DoutPrefixProvider* dpp, optional_yield y, uint64_t notify_id, uint64_t cookie);
+  int notify_script_update(const DoutPrefixProvider *dpp, const std::string& script_oid, optional_yield y);
+  uint64_t get_watch_handle_for_script(const std::string& script_oid);
+  std::string get_script_for_watch_handle(uint64_t handle);
+
   uint64_t watch_handle = 0;
+  std::map<std::string, uint64_t> script_watches;
+  std::map<uint64_t, std::string> reverse_script_watches;
 
 public:
   RadosLuaManager(RadosStore* _s, const std::string& _luarocks_path);
   ~RadosLuaManager() override = default;
 
+  // To be used by the radosgw-admin process
   int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  // To be used by the radosgw process
+  std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
   int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
   int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
   int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
@@ -1245,6 +1274,9 @@ public:
   int reload_packages(const DoutPrefixProvider* dpp, optional_yield y) override;
   int watch_reload(const DoutPrefixProvider* dpp);
   int unwatch_reload(const DoutPrefixProvider* dpp);
+  int watch_script(const DoutPrefixProvider* dpp, const std::string& script_oid);
+  int unwatch_script(const DoutPrefixProvider* dpp, const std::string& script_oid);
+
 };
 
 class RadosRole : public RGWRole {

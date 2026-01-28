@@ -56,6 +56,14 @@ int RGWTable::increment_by(lua_State* L) {
   return 0;
 }
 
+static int bytecode_writer (lua_State *L, const void* p, size_t sz, void* ud) {
+  std::vector<char>* buffer = static_cast<std::vector<char>*>(ud);
+  const char* bytes = static_cast<const char*>(p);
+  buffer->insert(buffer->end(), bytes, bytes + sz);
+  return 0;
+}
+
+
 Background::Background(
     CephContext* _cct,
     rgw::sal::LuaManager* _lua_manager,
@@ -201,6 +209,7 @@ void Background::run() {
         perfcounter->inc((failed ? l_rgw_lua_script_fail : l_rgw_lua_script_ok), 1);
       }
     }
+    process_scripts();
     std::unique_lock cond_lock(cond_mutex);
     cond.wait_for(cond_lock, std::chrono::seconds(execute_interval), [this]{return stopped;}); 
   }
@@ -216,6 +225,91 @@ void Background::create_background_metatable(lua_State* L) {
 
 void Background::set_manager(rgw::sal::LuaManager* _lua_manager) {
   lua_manager = _lua_manager;
+}
+
+void Background::process_script_add(std::string script_oid) {
+  std::string* script_ptr = new std::string(std::move(script_oid));
+  if (!processing_q.push(script_ptr)) {
+    delete script_ptr;
+  }
+}
+
+void Background::process_scripts() {
+  std::set<std::string> removed;
+  std::set<std::string> updated_scripts;
+
+  const auto count = processing_q.consume_all([&](std::string* s) {
+             std::unique_ptr<std::string> sptr(s);
+             updated_scripts.insert(*sptr);
+          });
+
+  if (updated_scripts.empty()) {
+    return;
+  }
+  ldpp_dout(&dp, 20) << "INFO: Num scripts to process: " << count << dendl;
+  //updating = true;
+  std::unique_ptr<lua_state_guard> lguard = initialize_lguard_state();
+  if (!lguard) {
+    return;
+  }
+  std::string script;
+  for (const auto& key: updated_scripts) {
+    int r = lua_manager->get_script(&dp, null_yield, key, script);
+    if (r < 0 && r != -ENOENT) {
+      ldpp_dout(&dp, 10) << "ERROR: Failed to get script : " << key
+                         << ". r = " << r << dendl;
+      // Clear the cache
+      removed.insert(key);
+      std::unique_lock<std::shared_mutex> lock(updating_mutex);
+      lua_bytecode_cache.erase(key);
+      continue;
+    }
+    if (r == -ENOENT) {
+      removed.insert(key);
+      std::unique_lock<std::shared_mutex> lock(updating_mutex);
+      lua_bytecode_cache.erase(key);
+      continue;
+    }
+    ldpp_dout(&dp, 20) << "INFO: processing script: " << key << dendl;
+    auto L = lguard->get();
+    auto buffer = std::make_unique<std::vector<char>>();
+    try {
+      if (luaL_loadstring(L, script.c_str()) == LUA_OK) {
+        lua_dump(L, bytecode_writer, buffer.get(), 0);
+        {
+          std::unique_lock<std::shared_mutex> lock(updating_mutex);
+          lua_bytecode_cache.insert_or_assign(key, std::move(buffer));
+        }
+        lua_pop(L, 1); 
+        removed.insert(key);
+      } else {
+        const std::string err(lua_tostring(L, -1));
+        ldpp_dout(&dp, 1) << "Lua ERROR: failed to compile script : " << key
+                          << ", error : " << err << dendl;
+      }
+    } catch (const std::runtime_error& e) {
+      ldpp_dout(&dp, 1) << "Lua ERROR: failed to compile script : " << key
+                        << ", error : " << e.what() << dendl;
+    }
+  }
+  
+  //updating = false;
+  for (const auto& key: removed) {
+    updated_scripts.erase(key);
+  }
+}
+
+int Background::get_script_bytecode(std::string script, std::vector<char>& lua_bytecode) {
+  lua_bytecode.clear();
+  std::shared_lock<std::shared_mutex> lock(updating_mutex);
+  auto itr = lua_bytecode_cache.find(script);
+  if(itr != lua_bytecode_cache.end()) {
+    lua_bytecode = *((itr->second).get());
+    return 0;
+  }
+
+  ldpp_dout(&dp, 20) << "INFO: lua script bytecode not found : " << script << dendl;
+  return -ENOENT;
 }
 
 } //namespace rgw::lua

@@ -21,6 +21,6 @@ int execute(
     OpsLogSink* olog,
     req_state *s, 
     RGWOp* op,
-    const std::string& script);
+    const rgw::lua::LuaCodeType& code);
 } // namespace rgw::lua::request
 
