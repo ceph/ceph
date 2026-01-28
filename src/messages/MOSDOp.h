@@ -25,6 +25,7 @@
 #include "include/ceph_features.h"
 #include "include/ceph_fs.h" // for CEPH_MSG_OSD_OP
 #include "common/hobject.h"
+#include "blk/BlockDevice.h"
 
 /*
  * OSD op
@@ -64,7 +65,7 @@ public:
 private:
   snapid_t snap_seq;
   std::vector<snapid_t> snaps;
-
+  int32_t write_hint = WRITE_LIFE_NOT_SET;
   uint64_t features;
   bool bdata_encode;
   osd_reqid_t reqid; // reqid explicitly set by sender
@@ -167,6 +168,11 @@ public:
   int get_retry_attempt() const {
     return retry_attempt;
   }
+  
+  int get_write_hint() const {
+    return write_hint;
+  }
+  
   uint64_t get_features() const {
     if (features)
       return features;
@@ -187,7 +193,7 @@ public:
 	 int _flags, uint64_t feat)
     : MOSDFastDispatchOp(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
-      osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
+      osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1), write_hint(WRITE_LIFE_NOT_SET),
       hobj(ho),
       pgid(_pgid),
       partial_decode_needed(false),
@@ -397,6 +403,8 @@ struct ceph_osd_request_head {
       encode(snaps, payload);
 
       encode(retry_attempt, payload);
+
+	  encode(write_hint, payload);
       encode(features, payload);
     } else {
       // latest v9 opentelemetry trace
@@ -427,6 +435,8 @@ struct ceph_osd_request_head {
       encode(snaps, payload);
 
       encode(retry_attempt, payload);
+
+	  encode(write_hint, payload);
       encode(features, payload);
     }
   }
@@ -604,7 +614,7 @@ struct ceph_osd_request_head {
     decode(snaps, p);
 
     decode(retry_attempt, p);
-
+	decode(write_hint, p);
     decode(features, p);
 
     hobj.pool = pgid.pgid.pool();

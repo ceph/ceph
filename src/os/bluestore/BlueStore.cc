@@ -15935,9 +15935,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         uint64_t off = op->off;
         uint64_t len = op->len;
 	uint32_t fadvise_flags = i.get_fadvise_flags();
+	int write_hint = i.get_write_hint();
         bufferlist bl;
         i.decode_bl(bl);
-	r = _write(txc, c, o, off, len, bl, fadvise_flags);
+	r = _write(txc, c, o, off, len, bl, fadvise_flags, write_hint);
       }
       break;
 
@@ -16241,7 +16242,8 @@ void BlueStore::_do_write_small(
     OnodeRef& o,
     uint64_t offset, uint64_t length,
     bufferlist::iterator& blp,
-    WriteContext *wctx)
+    WriteContext *wctx, 
+    int write_hint)
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
@@ -16369,7 +16371,7 @@ void BlueStore::_do_write_small(
                   b_off, bl,
 		[&](uint64_t offset, bufferlist& t) {
                     bdev->aio_write(offset, t,
-				  &txc->ioc, wctx->buffered);
+				  &txc->ioc, wctx->buffered, write_hint); 
                   });
           }
           }
@@ -16963,7 +16965,8 @@ int BlueStore::_do_alloc_write(
   TransContext *txc,
   CollectionRef coll,
   OnodeRef& o,
-  WriteContext *wctx)
+  WriteContext *wctx,
+  int write_hint) 
 {
   dout(20) << __func__ << " txc " << txc
 	   << " " << wctx->writes.size() << " blobs"
@@ -17240,7 +17243,7 @@ int BlueStore::_do_alloc_write(
 	wi.b->get_blob().map_bl(
 	  b_off, *l,
 	  [&](uint64_t offset, bufferlist& t) {
-	    bdev->aio_write(offset, t, &txc->ioc, false);
+	    bdev->aio_write(offset, t, &txc->ioc, false, write_hint); 
 	  });
 	logger->inc(l_bluestore_write_new);
       }
@@ -17324,7 +17327,8 @@ void BlueStore::_do_write_data(
   uint64_t offset,
   uint64_t length,
   bufferlist& bl,
-  WriteContext *wctx)
+  WriteContext *wctx,
+  int write_hint) 
 {
   uint64_t end = offset + length;
   bufferlist::iterator p = bl.begin();
@@ -17332,7 +17336,7 @@ void BlueStore::_do_write_data(
   if (offset / min_alloc_size == (end - 1) / min_alloc_size &&
       (length != min_alloc_size)) {
     // we fall within the same block
-    _do_write_small(txc, c, o, offset, length, p, wctx);
+    _do_write_small(txc, c, o, offset, length, p, wctx, write_hint); 
   } else {
     uint64_t head_offset, head_length;
     uint64_t middle_offset, middle_length;
@@ -17348,7 +17352,7 @@ void BlueStore::_do_write_data(
     middle_length = length - head_length - tail_length;
 
     if (head_length) {
-      _do_write_small(txc, c, o, head_offset, head_length, p, wctx);
+      _do_write_small(txc, c, o, head_offset, head_length, p, wctx, write_hint); 
     }
     uint32_t segment_size = o->onode.segment_size;
     if (segment_size) {
@@ -17366,7 +17370,7 @@ void BlueStore::_do_write_data(
     }
 
     if (tail_length) {
-      _do_write_small(txc, c, o, tail_offset, tail_length, p, wctx);
+      _do_write_small(txc, c, o, tail_offset, tail_length, p, wctx, write_hint); 
     }
   }
 }
@@ -17527,7 +17531,8 @@ int BlueStore::_do_write(
   uint64_t offset,
   uint64_t length,
   bufferlist& bl,
-  uint32_t fadvise_flags)
+  uint32_t fadvise_flags,
+  int write_hint) 
 {
   int r = 0;
 
@@ -17559,8 +17564,8 @@ int BlueStore::_do_write(
   WriteContext wctx;
   _choose_write_options(c, o, fadvise_flags, &wctx);
   o->extent_map.fault_range(db, offset, length);
-  _do_write_data(txc, c, o, offset, length, bl, &wctx);
-  r = _do_alloc_write(txc, c, o, &wctx);
+  _do_write_data(txc, c, o, offset, length, bl, &wctx, write_hint); 
+  r = _do_alloc_write(txc, c, o, &wctx, write_hint); 
   if (r < 0) {
     derr << __func__ << " _do_alloc_write failed with " << cpp_strerror(r)
 	 << dendl;
@@ -17760,7 +17765,8 @@ int BlueStore::_write(TransContext *txc,
 		      OnodeRef& o,
 		      uint64_t offset, size_t length,
 		      bufferlist& bl,
-		      uint32_t fadvise_flags)
+		      uint32_t fadvise_flags,
+		      int write_hint) 
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
@@ -17774,7 +17780,7 @@ int BlueStore::_write(TransContext *txc,
     if (use_write_v2) {
       r = _do_write_v2(txc, c, o, offset, length, bl, fadvise_flags);
     } else {
-      r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+      r = _do_write(txc, c, o, offset, length, bl, fadvise_flags, write_hint); 
     }
     txc->write_onode(o);
   }

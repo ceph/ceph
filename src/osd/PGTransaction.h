@@ -155,6 +155,7 @@ public:
       struct Write {
 	ceph::buffer::list buffer;
 	uint32_t fadvise_flags;
+	int write_hint;
       };
       struct Zero {
 	uint64_t len;
@@ -181,7 +182,7 @@ public:
 	  [&](const BufferUpdate::Write &w) -> BufferUpdateType {
 	    ceph::buffer::list bl;
 	    bl.substr_of(w.buffer, offset, len);
-	    return BufferUpdate::Write{bl, w.fadvise_flags};
+	    return BufferUpdate::Write{bl, w.fadvise_flags, w.write_hint};
 	  },
 	  [&](const BufferUpdate::Zero &) -> BufferUpdateType {
 	    return BufferUpdate::Zero{len};
@@ -211,7 +212,7 @@ public:
 	  left,
 	  [&](const BufferUpdate::Write &w) -> bool {
 	    auto r = std::get_if<BufferUpdate::Write>(&right);
-	    return r != nullptr && (w.fadvise_flags == r->fadvise_flags);
+	    return r != nullptr && (w.fadvise_flags == r->fadvise_flags) && (w.write_hint == r->write_hint);
 	  },
 	  [&](const BufferUpdate::Zero &) -> bool {
 	    return std::holds_alternative<BufferUpdate::Zero>(right);
@@ -230,7 +231,7 @@ public:
 	    ceph_assert(r && w.fadvise_flags == r->fadvise_flags);
 	    ceph::buffer::list bl = w.buffer;
 	    bl.append(r->buffer);
-	    return BufferUpdate::Write{bl, w.fadvise_flags};
+	    return BufferUpdate::Write{bl, w.fadvise_flags, w.write_hint};
 	  },
 	  [&](const BufferUpdate::Zero &z) -> BufferUpdateType {
 	    auto r = std::get_if<BufferUpdate::Zero>(&right);
@@ -408,7 +409,8 @@ public:
     uint64_t off,                  ///< [in] off at which to write
     uint64_t len,                  ///< [in] len to write from bl
     ceph::buffer::list &bl,                ///< [in] bl to write will be claimed to len
-    uint32_t fadvise_flags = 0     ///< [in] fadvise hint
+    uint32_t fadvise_flags = 0,     ///< [in] fadvise hint
+	int write_hint = WRITE_LIFE_NOT_SET			///< [in] write hint
     ) {
     auto &op = get_object_op_for_modify(hoid);
     ceph_assert(!op.updated_snaps);
@@ -417,7 +419,7 @@ public:
     op.buffer_updates.insert(
       off,
       len,
-      ObjectOperation::BufferUpdate::Write{bl, fadvise_flags});
+      ObjectOperation::BufferUpdate::Write{bl, fadvise_flags, write_hint}); 
   }
   void clone_range(
     const hobject_t &from,         ///< [in] from

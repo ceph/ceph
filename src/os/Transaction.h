@@ -10,6 +10,7 @@
 #include "include/buffer.h"
 
 #include "osd/osd_types.h"
+#include "blk/BlockDevice.h"
 
 #define OPS_PER_PTR 32
 
@@ -183,27 +184,33 @@ public:
     ceph_le32 unused2;
     ceph_le32 unused3;
     ceph_le32 fadvise_flags;
+	int write_hint;
 
     TransactionData() noexcept :
       ops(0),
       unused1(0),
       unused2(0),
       unused3(0),
-      fadvise_flags(0) { }
+      fadvise_flags(0),
+      write_hint(WRITE_LIFE_NOT_SET) { }
 
     // override default move operations to reset default values
     TransactionData(TransactionData&& other) noexcept :
       ops(other.ops),
-      fadvise_flags(other.fadvise_flags) {
-      unused1 = unused2 = unused3 = 0;
+      fadvise_flags(other.fadvise_flags) ,
+      write_hint(other.write_hint) {
+	  unused1 = unused2 = unused3 = 0;
       other.ops = 0;
       other.fadvise_flags = 0;
+	  other.write_hint = WRITE_LIFE_NOT_SET;
     }
     TransactionData& operator=(TransactionData&& other) noexcept {
       ops = other.ops;
       fadvise_flags = other.fadvise_flags;
+	  write_hint = other.write_hint;
       other.ops = 0;
       other.fadvise_flags = 0;
+	  other.write_hint = WRITE_LIFE_NOT_SET;
       return *this;
     }
 
@@ -391,6 +398,11 @@ public:
     data.fadvise_flags = data.fadvise_flags | flag;
   }
   uint32_t get_fadvise_flags() { return data.fadvise_flags; }
+  
+  void set_write_hint(int write_hint) {
+    data.write_hint= write_hint;
+  }
+  int get_write_hint() { return data.write_hint; }
 
   void swap(Transaction& other) noexcept {
     std::swap(data, other.data);
@@ -529,6 +541,7 @@ public:
     ceph_assert(data_features == other.data_features);
     data.ops = data.ops + other.data.ops;
     data.fadvise_flags = data.fadvise_flags | other.data.fadvise_flags;
+	data.write_hint = other.data.write_hint;
     on_applied.splice(on_applied.end(), other.on_applied);
     on_commit.splice(on_commit.end(), other.on_commit);
     on_applied_sync.splice(on_applied_sync.end(), other.on_applied_sync);
@@ -772,6 +785,10 @@ public:
     uint32_t get_fadvise_flags() const {
 	return t->get_fadvise_flags();
     }
+	
+    int get_write_hint() const {
+	return t->get_write_hint();
+    }
 
     const std::vector<ghobject_t> &get_objects() const {
       return objects;
@@ -868,7 +885,7 @@ public:
    * Note that a 0-length write does not affect the size of the object.
    */
   void write(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len,
-	       const ceph::buffer::list& write_data, uint32_t flags = 0) {
+	       const ceph::buffer::list& write_data, uint32_t flags = 0, int write_hint = WRITE_LIFE_NOT_SET) {
     using ceph::encode;
     Op* _op = _get_next_op();
     uint64_t alignstart = (0 - off) & ~CEPH_PAGE_MASK;
@@ -879,6 +896,7 @@ public:
     _op->len = len;
     ceph_assert(len == write_data.length());
     data.fadvise_flags = data.fadvise_flags | flags;
+	data.write_hint = write_hint;
     data.ops = data.ops + 1;
     if (!is_format_aligned()) {
       encode(write_data, data_misaligned_bl);
