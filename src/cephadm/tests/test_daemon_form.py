@@ -72,6 +72,9 @@ def test_can_create_all_daemon_forms(monkeypatch):
     }
     _os_path_isdir = mock.MagicMock(return_value=True)
     monkeypatch.setattr('os.path.isdir', _os_path_isdir)
+    monkeypatch.setattr('cephadmlib.daemons.ceph.extract_uid_gid',
+                        lambda ctx: (167, 167))
+    monkeypatch.setattr('os.chown', lambda *args, **kwargs: None)
     dtypes = _cephadm.get_supported_daemons()
     for daemon_type in dtypes:
         if daemon_type == 'agent':
