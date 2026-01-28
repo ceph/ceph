@@ -104,6 +104,14 @@ Global Options
 
    Use with cp to specify the namespace of the new object.
 
+.. option:: -f format, --format format
+
+    Specify the structured format for output data. Requires ``--output``.
+    Format can be *plain*, *json* or *json-pretty*.
+
+.. option:: -o filename, --output filename
+
+    Specify the file path to which structured output should be written.
 
 Bench options
 =============
