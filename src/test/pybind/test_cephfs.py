@@ -171,6 +171,141 @@ def test_xattr(testdir):
     assert_equal(9, ret_val)
     assert_equal("user.big\x00", ret_buff.decode('utf-8'))
 
+def test_create_and_rm_2000_subdir_levels_close(testdir):
+    LEVELS = 2000
+
+    for i in range(1, LEVELS + 1):
+        dirname = f'dir{i}'
+        cephfs.mkdir(dirname, 0o755)
+        cephfs.chdir(dirname)
+    cephfs.chdir('/')
+
+    dirpath = 'dir1/'
+    i = 1
+    stack = collections.deque([dirpath,])
+    while stack:
+        dirpath = stack[-1]
+        try:
+            cephfs.rmdir(dirpath)
+            stack.pop()
+        except libcephfs.ObjectNotEmpty:
+            i += 1
+            dirpath += f'dir{i}/'
+            stack.append(dirpath)
+            continue
+
+def test_create_and_rm_2000_subdir_levels_close_v2(testdir):
+    def _get_subdir_path(dirpath):
+        dh = cephfs.opendir(dirpath)
+        de = cephfs.readdir(dh)
+
+        while de:
+            if de.d_name not in (b'.', b'..'):
+                break
+            de = cephfs.readdir(dh)
+
+        if not de:
+            raise RuntimeError('unexpectedly "de" is None')
+
+        return os.path.join(dirpath, de.d_name)
+
+    LEVELS = 2000
+
+    for i in range(1, LEVELS + 1):
+        dirname = f'dir{i}'
+        cephfs.mkdir(dirname, 0o755)
+        cephfs.chdir(dirname)
+    cephfs.chdir('/')
+
+    stack = collections.deque([b'dir1/',])
+    while stack:
+        dirpath = stack[-1]
+
+        try:
+            cephfs.rmdir(dirpath)
+            stack.pop()
+        except libcephfs.ObjectNotEmpty:
+            stack.append(_get_subdir_path(dirpath))
+            continue
+
+def test_create_and_rm_2000_subdir_levels_close_v3(testdir):
+    '''
+    rmdir() perhaps is the one that is probably consuming most of the time in
+    collecting and releasing caps. in v3 instead we check if dir is empty using
+    readdir() and then remove dir if it is empty; else we add to the stack.
+    '''
+    def _rm_or_enstack_dir(dirpath, stack):
+        dir_is_empty = True
+        dh = cephfs.opendir(dirpath)
+
+        de = cephfs.readdir(dh)
+        while de:
+            if de.d_name not in (b'.', b'..'):
+                dir_is_empty = False
+                break
+            de = cephfs.readdir(dh)
+
+        if dir_is_empty:
+            cephfs.rmdir(dirpath)
+            stack.pop()
+        else:
+            if not de:
+                raise RuntimeError('unexpectedly "de" is None')
+            stack.append(os.path.join(dirpath, de.d_name))
+
+    LEVELS = 2000
+
+    for i in range(1, LEVELS + 1):
+        dirname = f'dir{i}'
+        cephfs.mkdir(dirname, 0o755)
+        cephfs.chdir(dirname)
+    cephfs.chdir('/')
+
+    stack = collections.deque([b'dir1/',])
+    while stack:
+        dirpath = stack[-1]
+        _rm_or_enstack_dir(dirpath, stack)
+
+def test_create_and_rm_2000_subdir_levels_close_v4(testdir):
+    '''
+    instead of passing long path to rmdir(), in v4, we chdir() to dir we are
+    reading and pass relative paths instead of absolute paths to rmdir()..
+    '''
+    def _rm_or_enstack_dir(dirpath, stack):
+        dir_is_empty = True
+        dh = cephfs.opendir(b'.')
+
+        de = cephfs.readdir(dh)
+        while de:
+            if de.d_name not in (b'.', b'..'):
+                dir_is_empty = False
+                break
+            de = cephfs.readdir(dh)
+
+        if dir_is_empty:
+            cephfs.chdir(b'..')
+            cephfs.rmdir(dirpath)
+            assert stack.pop() == dirpath
+        else:
+            if not de:
+                raise RuntimeError('unexpectedly "de" is None')
+            cephfs.chdir(de.d_name)
+            stack.append(de.d_name)
+
+    LEVELS = 2000
+
+    for i in range(1, LEVELS + 1):
+        dirname = f'dir{i}'
+        cephfs.mkdir(dirname, 0o755)
+        cephfs.chdir(dirname)
+    cephfs.chdir('/')
+
+    stack = collections.deque([b'dir1/',])
+    cephfs.chdir(b'dir1/')
+    while stack:
+        dirpath = stack[-1]
+        _rm_or_enstack_dir(dirpath, stack)
+
 def test_ceph_mirror_xattr(testdir):
     def gen_mirror_xattr():
         cluster_id = str(uuid.uuid4())
