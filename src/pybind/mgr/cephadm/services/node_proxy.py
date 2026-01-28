@@ -36,16 +36,17 @@ class NodeProxy(CephService):
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
+                         spec: ServiceSpec,
                          daemon_type: Optional[str] = None) -> List[str]:
         root_cert = ''
         server_port = ''
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         try:
             server_port = str(mgr.http_server.agent.server_port)
             root_cert = mgr.cert_mgr.get_root_ca()
         except Exception:
             pass
-        return sorted([mgr.get_mgr_ip(), server_port, root_cert])
+        return sorted(parent_deps + [mgr.get_mgr_ip(), server_port, root_cert])
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         # node-proxy is re-using the agent endpoint and therefore
@@ -70,7 +71,8 @@ class NodeProxy(CephService):
         }
         config = {'node-proxy.json': json.dumps(cfg)}
 
-        return config, self.get_dependencies(self.mgr)
+        spec = self.mgr.spec_store[daemon_spec.service_name].spec
+        return config, self.get_dependencies(self.mgr, spec)
 
     def handle_hw_monitoring_setting(self) -> bool:
         # function to apply or remove node-proxy service spec depending

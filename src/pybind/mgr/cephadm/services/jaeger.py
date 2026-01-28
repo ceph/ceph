@@ -25,16 +25,17 @@ class JaegerAgentService(CephadmService):
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
+                         spec: ServiceSpec,
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []  # type: List[str]
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         for dd in mgr.cache.get_daemons_by_type(JaegerCollectorService.TYPE):
             # scrape jaeger-collector nodes
             assert dd.hostname is not None
             port = dd.ports[0] if dd.ports else JaegerCollectorService.DEFAULT_SERVICE_PORT
             url = build_url(host=dd.hostname, port=port).lstrip('/')
             deps.append(url)
-        return sorted(deps)
+        return sorted(parent_deps + deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -46,7 +47,8 @@ class JaegerAgentService(CephadmService):
             url = build_url(host=dd.hostname, port=port).lstrip('/')
             collectors.append(url)
         daemon_spec.final_config = {'collector_nodes': ",".join(collectors)}
-        daemon_spec.deps = self.get_dependencies(self.mgr)
+        spec = self.mgr.spec_store[daemon_spec.service_name].spec
+        daemon_spec.deps = self.get_dependencies(self.mgr, spec)
         return daemon_spec
 
 
