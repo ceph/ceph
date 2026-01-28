@@ -293,39 +293,58 @@ The following list details potential causes of hung operations:
 Otherwise, you have probably discovered a new bug and should report it to
 the developers!
 
-.. _ceph_fuse_debugging:
+.. BEGIN COMMENTED-OUT CEPH-FUSE SECTION - 2025 Sep 02
 
-ceph-fuse debugging
-===================
+   The following section, down to the text reading "END COMMENTED-OUT CEPH-FUSE
+   SECTION", discusses a feature ("dump_ops_in_flight") that is, as of the
+   Tentacle release, not yet a part of the Ceph ecosystem. At some future time,
+   this feature is expected to be added to Ceph. At that time, this section
+   should be uncommented and updated so that it accurately describes the
+   behavior of "dump_ops_in_flight".
 
-ceph-fuse is an alternative to the CephFS kernel driver that mounts CephFS file
-systems in user space. ceph-fuse supports ``dump_ops_in_flight``. Use the following command to dump in-flight ceph-fuse operations for examination:  
+   See https://github.com/ceph/ceph/pull/65129/files#r2312866526
+
+   See https://tracker.ceph.com/issues/72793
+
+..  .. _ceph_fuse_debugging:
+  
+  ceph-fuse debugging
+  ===================
+
+..  
+  ceph-fuse is an alternative to the CephFS kernel driver that mounts CephFS file
+  systems in user space. ceph-fuse supports ``dump_ops_in_flight``. Use the following command to dump in-flight ceph-fuse operations for examination:  
+  
+  ..
+    .. prompt:: bash #
+  
+    the command goes here - 10 Aug 2025
+  
+  See the :ref:`Mount CephFS using FUSE<cephfs_mount_using_fuse>` documentation.
+
+  END COMMENTED-OUT CEPH-FUSE SECTION - 2025 Sep 02
+
+.. 
+  Debug output
+  ------------
+
 
 ..
+  To get more debugging information from ceph-fuse, list current operations in
+  the foreground while logging to the console (``-d``), enabling client debug
+  (``--debug-client=20``), and enabling prints for each message sent
+  (``--debug-ms=1``).
+  
   .. prompt:: bash #
-
-  the command goes here - 10 Aug 2025
-
-See the :ref:`Mount CephFS using FUSE<cephfs_mount_using_fuse>` documentation.
-
-Debug output
-------------
-
-To get more debugging information from ceph-fuse, list current operations in
-the foreground while logging to the console (``-d``), enabling client debug
-(``--debug-client=20``), and enabling prints for each message sent
-(``--debug-ms=1``).
-
-.. prompt:: bash #
-
-   ceph daemon -d mds.<name> dump_ops_in_flight --debug-client=20 --debug-ms=1
-
-If you suspect a potential monitor issue, enable monitor debugging as well
-(``--debug-monc=20``) by running a command of the following form:
-
-.. prompt:: bash #
-
-   ceph daemon -d mds.<name> dump_ops_in_flight --debug-client=20 --debug-ms=1 --debug-monc=20
+  
+     ceph daemon -d mds.<name> dump_ops_in_flight --debug-client=20 --debug-ms=1
+  
+  If you suspect a potential monitor issue, enable monitor debugging as well
+  (``--debug-monc=20``) by running a command of the following form:
+  
+  .. prompt:: bash #
+  
+     ceph daemon -d mds.<name> dump_ops_in_flight --debug-client=20 --debug-ms=1 --debug-monc=20
 
 .. _kernel_mount_debugging:
 
