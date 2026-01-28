@@ -742,7 +742,8 @@ seastar::future<> OSD::_add_me_to_crush()
          auto total = st.total;
 	 return seastar::make_ready_future<double>(
            std::max(.00001,
-		    double(total) / double(1ull << 40))); // TB
+		    osdmap->get_osd_crush_scaling_factor() *
+                    double(total) / double(1ull << 40))); // TiB
        });
     }
   };
