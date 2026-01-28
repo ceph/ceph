@@ -59,6 +59,8 @@ Synopsis
 
 | **ceph** **tell** *<name (type.id)> <command> [options...]*
 
+| **ceph** **tell** *<pgid> <command> [options...]*
+
 | **ceph** **version**
 
 Description
@@ -1562,6 +1564,32 @@ Subcommand ``stat`` shows placement group status.
 Usage::
 
 	ceph pg stat
+
+A second format for PG-directed commands is the following:
+
+Using the ``tell`` command with a PG identifier. This sends a command to the OSD
+that is currently acting as the primary for the specified PG.
+
+Subcommand ``scrub`` starts a scrub of <pgid>, similar
+to ``ceph pg scrub <pgid>``.
+
+Usage::
+
+	ceph tell <pgid> scrub
+
+Subcommand ``deep-scrub`` starts a deep-scrub of <pgid>, similar
+to ``ceph pg deep-scrub <pgid>``.
+
+Usage::
+
+	ceph tell <pgid> deep-scrub
+
+Subcommand ``scrub-abort`` aborts any ongoing scrub of <pgid>, and removes
+any previous scrub or deep scrub operator request for the PG.
+
+Usage::
+
+	ceph tell <pgid> scrub-abort
 
 
 quorum

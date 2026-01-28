@@ -216,6 +216,7 @@ enum class delay_cause_t {
   aborted,	    ///< scrub was aborted w/ unspecified reason
   interval,	    ///< the interval had ended mid-scrub
   scrub_params,     ///< the specific scrub type is not allowed
+  operator_abort    ///< operator-requested abort
 };
 }  // namespace Scrub
 
@@ -239,6 +240,7 @@ struct formatter<Scrub::delay_cause_t> : ::fmt::formatter<std::string_view> {
       case aborted:             desc = "aborted"; break;
       case interval:            desc = "interval"; break;
       case scrub_params:        desc = "scrub-mode"; break;
+      case operator_abort:      desc = "operator-abort"; break;
       // better to not have a default case, so that the compiler will warn
     }
     return ::fmt::formatter<string_view>::format(desc, ctx);
@@ -455,6 +457,10 @@ struct ScrubPgIF {
   virtual void on_operator_forced_scrub(
     ceph::Formatter* f,
     scrub_level_t scrub_level) = 0;
+
+  /// abort an ongoing scrub, and cancel any pending operator scrub request
+  virtual void on_operator_abort_scrub(
+    ceph::Formatter* f) = 0;
 
   virtual void dump_scrubber(ceph::Formatter* f) const = 0;
 
