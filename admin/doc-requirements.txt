@@ -3,9 +3,9 @@ Sphinx < 7
 sphinx-ditaa@git+https://github.com/ceph/sphinx-ditaa.git@py3
 funcparserlib@git+https://github.com/vlasovskikh/funcparserlib.git
 breathe >= 4.20.0,!=4.33
-cryptography
+cryptography==45.0.4
 Jinja2
-pyyaml >= 5.1.2
+pyyaml == 6.0.2
 Cython
 pcpp
 prettytable
