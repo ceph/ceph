@@ -9114,7 +9114,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     } else if (var == "fingerprint_algorithm") {
       if (!unset) {
         auto alg = pg_pool_t::get_fingerprint_from_str(val);
-        if (!alg) {
+        if (alg == (pg_pool_t::fingerprint_t)-1) {
           ss << "unrecognized fingerprint_algorithm '" << val << "'";
 	  return -EINVAL;
         }
@@ -9196,7 +9196,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     } else if (var == "dedup_chunk_algorithm") {
       if (!unset) {
         auto alg = pg_pool_t::get_dedup_chunk_algorithm_from_str(val);
-        if (!alg) {
+        if (alg == (pg_pool_t::dedup_chunk_algo_t)-1) {
           ss << "unrecognized fingerprint_algorithm '" << val << "'";
 	  return -EINVAL;
         }
