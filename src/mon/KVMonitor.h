@@ -6,6 +6,8 @@
 #include <optional>
 
 #include "mon/PaxosService.h"
+#include "include/encoding.h"
+#include "include/ceph_features.h"  // For CEPH_FEATURE definitions
 
 class MonSession;
 
@@ -13,8 +15,35 @@ extern const std::string KV_PREFIX;
 
 class KVMonitor : public PaxosService
 {
+public:
+  struct RangeDeleteOp {
+    std::string prefix;
+    std::string start;
+    std::string end;
+    RangeDeleteOp() = default;
+    RangeDeleteOp(const std::string& p, const std::string& s, const std::string& e) : prefix(p), start(s), end(e) {}
+
+    void encode(ceph::buffer::list &bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(prefix, bl);
+      encode(start, bl);
+      encode(end, bl);
+      ENCODE_FINISH(bl);
+    }
+    void decode(ceph::buffer::list::const_iterator &bl) {
+      DECODE_START(1, bl);
+      decode(prefix, bl);
+      decode(start, bl);
+      decode(end, bl);
+      DECODE_FINISH(bl);
+    }
+  };
+
+
+private:
   version_t version = 0;
   std::map<std::string,std::optional<ceph::buffer::list>> pending;
+  std::vector<RangeDeleteOp> pending_range_deletes;
 
   bool _have_prefix(const std::string &prefix);
 
@@ -27,7 +56,7 @@ public:
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
-  
+
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
 
@@ -66,4 +95,10 @@ public:
   void enqueue_rm(const std::string& key) {
     pending[key].reset();
   }
+
+protected:
+  // Helper methods for range operations
+  int _validate_range_params(const std::string& prefix, const std::string& start, const std::string& end, std::ostream& ss) const;
 };
+
+WRITE_CLASS_ENCODER(KVMonitor::RangeDeleteOp)
