@@ -56,5 +56,6 @@ class TestActivate(object):
         with pytest.raises(SystemExit):
             lvm.activate.Activate(argv=['--help']).main()
         stdout, stderr = capsys.readouterr()
-        assert 'optional arguments' in stdout
+        # argparse header changed from "optional arguments" to "options" in newer Python
+        assert ('optional arguments' in stdout) or ('options' in stdout)
         assert 'positional arguments' in stdout

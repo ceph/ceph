@@ -6,6 +6,7 @@ from ceph_volume import terminal, decorators, conf, process
 from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
+from ceph_volume.util import nvme as nvme_utils
 from ceph_volume.util.device import Device
 from ceph_volume.devices.lvm.common import rollback_osd
 from ceph_volume.devices.raw.list import direct_report
@@ -98,6 +99,9 @@ class Raw(BaseObjectStore):
         self.osd_id = prepare_utils.create_id(
             self.osd_fsid, json.dumps(self.secrets), self.osd_id)
 
+        if self.precondition_block_device():
+            self.disable_bluestore_discard = True
+
         if self.encrypted:
             self.prepare_dmcrypt()
 
@@ -105,6 +109,16 @@ class Raw(BaseObjectStore):
 
         # prepare the osd filesystem
         self.osd_mkfs()
+
+    def precondition_block_device(self) -> bool:
+        """
+        Run a fast NVMe format on the main block device when applicable.
+
+        Returns True if the block device was formatted, False otherwise.
+        """
+        if not self.block_device_path:
+            return False
+        return nvme_utils.preformat_namespace(self.block_device_path)
 
     def _activate(self, osd_id: str, osd_fsid: str) -> None:
         # mount on tmpfs the osd directory

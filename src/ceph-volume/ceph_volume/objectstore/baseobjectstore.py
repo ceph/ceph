@@ -3,10 +3,12 @@ import os
 import errno
 import time
 import tempfile
+from contextlib import nullcontext
 from ceph_volume import conf, terminal, process
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import system, disk
 from ceph_volume.util import encryption as encryption_utils
+from ceph_volume.util.cephconf import MkfsCephConfOverride
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -50,6 +52,7 @@ class BaseObjectStore:
                 self.cephx_lockbox_secret = prepare_utils.create_key()
                 self.secrets['cephx_lockbox_secret'] = \
                     self.cephx_lockbox_secret
+        self.disable_bluestore_discard: bool = False
 
     def get_ptuuid(self, argument: str) -> str:
         uuid = disk.get_partuuid(argument)
@@ -162,6 +165,20 @@ class BaseObjectStore:
         self.osd_mkfs_cmd.extend(self.supplementary_command)
         return self.osd_mkfs_cmd
 
+    def _mkfs_context(self):
+        """
+        Context for `ceph-osd --mkfs`.
+
+        When we want to skip the mkfs-time discard step, we pass a small
+        temporary ceph.conf to the mkfs process (scoped to this one call).
+        """
+        if not (self.disable_bluestore_discard and self.objectstore == 'bluestore'):
+            return nullcontext(None)
+
+        base_conf = conf.path or f'/etc/ceph/{conf.cluster}.conf'
+        snippet = "\n[osd]\nbluestore_discard_on_mkfs = false\n"
+        return MkfsCephConfOverride(base_conf_path=base_conf, extra_conf=snippet)
+
     def osd_mkfs(self) -> None:
         self.osd_path = self.get_osd_path()
         self.monmap = os.path.join(self.osd_path, 'activate.monmap')
@@ -174,23 +191,29 @@ class BaseObjectStore:
         See KernelDevice.cc and _lock() to understand how ceph-osd acquires the lock.
         Because this is really transient, we retry up to 5 times and wait for 1 sec in-between
         """
-        for retry in range(5):
-            _, _, returncode = process.call(cmd,
-                                            stdin=self.cephx_secret,
-                                            terminal_verbose=True,
-                                            show_command=True)
-            if returncode == 0:
-                break
-            else:
-                if returncode == errno.EWOULDBLOCK:
-                    time.sleep(1)
-                    logger.info('disk is held by another process, '
-                                'trying to mkfs again... (%s/5 attempt)' %
-                                retry)
-                    continue
+        # When we disable mkfs-time discard, we do it by writing a tiny temporary
+        # ceph.conf snippet and pointing only this mkfs process at it via
+        # CEPH_CONF. That only works if we pass the env from the context manager
+        # into process.call(), so `ceph-osd --mkfs` can see it.
+        with self._mkfs_context() as mkfs_env:
+            for retry in range(5):
+                _, _, returncode = process.call(cmd,
+                                                stdin=self.cephx_secret,
+                                                terminal_verbose=True,
+                                                show_command=True,
+                                                env=mkfs_env)
+                if returncode == 0:
+                    break
                 else:
-                    raise RuntimeError('Command failed with exit code %s: %s' %
-                                       (returncode, ' '.join(cmd)))
+                    if returncode == errno.EWOULDBLOCK:
+                        time.sleep(1)
+                        logger.info('disk is held by another process, '
+                                    'trying to mkfs again... (%s/5 attempt)' %
+                                    retry)
+                        continue
+                    else:
+                        raise RuntimeError('Command failed with exit code %s: %s' %
+                                           (returncode, ' '.join(cmd)))
 
         mapping: Dict[str, Any] = {'raw': ['data', 'block_db', 'block_wal'],
                                    'lvm': ['ceph.block_device', 'ceph.db_device', 'ceph.wal_device']}

@@ -1,3 +1,6 @@
+* ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
+  skips the slower BlueStore discard phase,reducing mkfs time on
+  very large namespaces.
 * RGW: Bucket Logging suppports creating log buckets in EC pools.
   Implicit logging object commits are now performed asynchronously.
 * RGW: OpenSSL engine support is deprecated in favor of provider support.
