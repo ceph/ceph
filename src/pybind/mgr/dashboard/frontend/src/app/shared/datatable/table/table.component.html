@@ -179,6 +179,7 @@
             [expandable]="model.isRowExpandable(i)"
             [expanded]="model.isRowExpanded(i)"
             [showSelectionColumn]="showSelectionColumn"
+            [enableSingleSelect]="enableSingleSelect"
             [skeleton]="loadingIndicator"
             (selectRow)="onSelect(i)"
             (deselectRow)="onDeselect(i)"
@@ -320,7 +321,7 @@
 
 <ng-template #checkIconTpl
              let-value="data.value">
-@if (value | boolean) {
+  @if (value | boolean) {
   <cd-icon type="check"></cd-icon>
 }
 </ng-template>
