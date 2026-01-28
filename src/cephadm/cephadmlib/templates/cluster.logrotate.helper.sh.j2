@@ -1,0 +1,13 @@
+#!/bin/bash
+# created by cephadm
+set -euo pipefail
+
+mapfile -t containers < <({{ container_runtime|shellquote }} ps --filter "label=ceph=True" --format "{{ ('{' * 2) }}.Names{{ ('}' * 2) }}" | grep -E "^ceph-{{ fsid }}" || true)
+
+if [ "${containers[*]:-}" = "" ]; then
+    exit 0
+fi
+
+{{ container_runtime|shellquote }} kill --signal SIGHUP "${containers[@]}" || true
+exit 0
+
