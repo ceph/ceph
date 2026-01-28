@@ -12173,10 +12173,28 @@ int BlueStore::get_devices(set<string> *ls)
   return 0;
 }
 
-void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
+int BlueStore::statfs(struct store_statfs_t *buf,
+		      osd_alert_list_t* alerts)
 {
+  if (alerts) {
+    alerts->clear();
+    _log_alerts(*alerts);
+  }
   buf->reset();
 
+  uint64_t bfree = alloc->get_free();
+  bool ebd_stats = false;
+
+  int rc = bdev->get_ebd_statfs(*buf);
+  if (rc == 0) {
+    // we are limited by both the size of the virtual device and the
+    // underlying physical device.
+    buf->available = std::min(bfree, buf->available);
+    ebd_stats = true;
+  } else {
+    buf->total = bdev->get_size();
+    buf->available = bfree;
+  }
   auto prefix = per_pool_omap == OMAP_BULK ?
     PREFIX_OMAP :
     per_pool_omap == OMAP_PER_POOL ?
@@ -12184,9 +12202,6 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
       PREFIX_PERPG_OMAP;
   buf->omap_allocated =
     db->estimate_prefix_size(prefix, string());
-
-  uint64_t bfree = alloc->get_free();
-
   if (bluefs) {
     buf->internally_reserved = 0;
     // include dedicated db, too, if that isn't the shared device.
@@ -12198,34 +12213,10 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
       bluefs->get_used()
       - buf->omap_allocated;
   }
-
-  ExtBlkDevState ebd_state;
-  int rc = bdev->get_ebd_state(ebd_state);
-  if (rc == 0) {
-    buf->total += ebd_state.get_physical_total();
-
-    // we are limited by both the size of the virtual device and the
-    // underlying physical device.
-    bfree = std::min(bfree, ebd_state.get_physical_avail());
-
-    buf->allocated = ebd_state.get_physical_total() - ebd_state.get_physical_avail();;
-  } else {
-    buf->total += bdev->get_size();
-  }
-  buf->available = bfree;
-}
-
-int BlueStore::statfs(struct store_statfs_t *buf,
-		      osd_alert_list_t* alerts)
-{
-  if (alerts) {
-    alerts->clear();
-    _log_alerts(*alerts);
-  }
-  _get_statfs_overall(buf);
   {
     std::lock_guard l(vstatfs_lock);
-    buf->allocated = vstatfs.allocated();
+    // for EBD devices we use RAW utilization rather than logical allocations
+    buf->allocated = ebd_stats ? buf->get_used_raw() : vstatfs.allocated();
     buf->data_stored = vstatfs.stored();
     buf->data_compressed = vstatfs.compressed();
     buf->data_compressed_original = vstatfs.compressed_original();
