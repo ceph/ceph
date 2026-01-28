@@ -497,7 +497,8 @@ function test_run_mon() {
     run_osd $dir 2 || return 1
     create_rbd_pool || return 1
     ceph osd dump | grep "pool 1 'rbd'" || return 1
-    local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
+    local mona=$(get_asok_path mon.a)
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $mona \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"3"}' || return 1
 
@@ -507,14 +508,14 @@ function test_run_mon() {
     kill_daemons $dir || return 1
 
     run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
-    local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $mona \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"1"}' || return 1
     kill_daemons $dir || return 1
 
     CEPH_ARGS="$CEPH_ARGS --osd_pool_default_size=2" \
         run_mon $dir a || return 1
-    local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $mona \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"2"}' || return 1
     kill_daemons $dir || return 1
@@ -905,7 +906,8 @@ function test_activate_osd_after_mark_down() {
     run_mgr $dir x || return 1
 
     run_osd $dir 0 || return 1
-    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    local osd0=$(get_asok_path osd.0)
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         config get osd_max_backfills)
     echo "$backfills" | grep --quiet 'osd_max_backfills' || return 1
 
@@ -914,7 +916,7 @@ function test_activate_osd_after_mark_down() {
     wait_for_osd down 0 || return 1
 
     activate_osd $dir 0 --osd-max-backfills 20 || return 1
-    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $osd0 \
         config get osd_max_backfills)
     test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
 
@@ -929,13 +931,14 @@ function test_activate_osd_skip_benchmark() {
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
 
+    local osd0=$(get_asok_path osd.0)
     # Skip the osd benchmark during first osd bring-up.
     run_osd $dir 0 --osd-op-queue=mclock_scheduler \
         --osd-mclock-skip-benchmark=true || return 1
     local max_iops_hdd_def=$(CEPH_ARGS='' ceph --format=json daemon \
-        $(get_asok_path osd.0) config get osd_mclock_max_capacity_iops_hdd)
+        $osd0 config get osd_mclock_max_capacity_iops_hdd)
     local max_iops_ssd_def=$(CEPH_ARGS='' ceph --format=json daemon \
-        $(get_asok_path osd.0) config get osd_mclock_max_capacity_iops_ssd)
+        $osd0 config get osd_mclock_max_capacity_iops_ssd)
 
     kill_daemons $dir TERM osd || return 1
     ceph osd down 0 || return 1
@@ -946,9 +949,9 @@ function test_activate_osd_skip_benchmark() {
     activate_osd $dir 0 --osd-op-queue=mclock_scheduler \
         --osd-mclock-skip-benchmark=true || return 1
     local max_iops_hdd_after_boot=$(CEPH_ARGS='' ceph --format=json daemon \
-        $(get_asok_path osd.0) config get osd_mclock_max_capacity_iops_hdd)
+        $osd0 config get osd_mclock_max_capacity_iops_hdd)
     local max_iops_ssd_after_boot=$(CEPH_ARGS='' ceph --format=json daemon \
-        $(get_asok_path osd.0) config get osd_mclock_max_capacity_iops_ssd)
+        $osd0 config get osd_mclock_max_capacity_iops_ssd)
 
     test "$max_iops_hdd_def" = "$max_iops_hdd_after_boot" || return 1
     test "$max_iops_ssd_def" = "$max_iops_ssd_after_boot" || return 1
@@ -1117,8 +1120,9 @@ function get_config() {
     local id=$2
     local config=$3
 
+    local daemon_asok=$(get_asok_path $daemon.$id)
     CEPH_ARGS='' \
-        ceph --format json daemon $(get_asok_path $daemon.$id) \
+        ceph --format json daemon $daemon_asok \
         config get $config 2> /dev/null | \
         jq -r ".$config"
 }
@@ -1154,7 +1158,8 @@ function set_config() {
     local config=$3
     local value=$4
 
-    test $(env CEPH_ARGS='' ceph --format json daemon $(get_asok_path $daemon.$id) \
+    local daemon_asok=$(get_asok_path $daemon.$id)
+    test $(env CEPH_ARGS='' ceph --format json daemon $daemon_asok \
                config set $config $value 2> /dev/null | \
            jq 'has("success")') == true
 }
@@ -2498,7 +2503,8 @@ function inject_eio() {
     type=$(cat $dir/$osd_id/type)
     set_config osd $osd_id ${type}_debug_inject_read_err true || return 1
     local loop=0
-    while ( CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.$osd_id) \
+    local $osd_asok=$(get_asok_path osd.$osd_id)
+    while ( CEPH_ARGS='' ceph --admin-daemon $osd_asok \
              inject${which}err $poolname $objname $shard_id | grep -q Invalid ); do
         loop=$(expr $loop + 1)
         if [ $loop = "10" ]; then
