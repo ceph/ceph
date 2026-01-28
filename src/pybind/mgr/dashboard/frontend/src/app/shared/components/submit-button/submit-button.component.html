@@ -1,10 +1,10 @@
 <button [type]="type"
         class="tc_submitButton"
-        [ngClass]="{'w-100': modalForm}"
+        [ngClass]="{'submit-button-modal': modalForm}"
         [disabled]="loading || disabled"
         (click)="submit($event)"
         [attr.aria-label]="ariaLabel"
-        size="lg"
+        [size]="size"
         [cdsButton]="buttonType"
         modal-primary-focus>
   <ng-content></ng-content>
