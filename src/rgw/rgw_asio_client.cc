@@ -91,9 +91,9 @@ int ClientIO::init_env(CephContext *cct)
   if (is_ssl) {
     env.set("SERVER_PORT_SECURE", port_buf);
   }
-  env.set("REMOTE_ADDR", remote_endpoint.address().to_string());
+  int ret = env.set_remote_addr(remote_endpoint.address().to_string());
   // TODO: set REMOTE_USER if authenticated
-  return 0;
+  return ret;
 }
 
 size_t ClientIO::complete_request()
