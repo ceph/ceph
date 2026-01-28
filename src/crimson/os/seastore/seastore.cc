@@ -1493,11 +1493,22 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 
       ctx.reset_preserve_handle(*transaction_manager);
       std::vector<OnodeRef> onodes(ctx.iter.objects.size());
+
+      // Get the total number of operations from the transaction
+      const size_t total_ops = ctx.ext_transaction.get_num_ops();
+      size_t current_op = 0;
+
       while (ctx.iter.have_op()) {
+        current_op++;
+
+        DEBUGT("processing op {} of {} for cid={}",
+               t, current_op, total_ops, ctx.ch->get_cid());
 	co_await _do_transaction_step(
 	  ctx, ctx.ch, onodes, ctx.iter);
       }
 
+      DEBUGT("completed all {} ops for cid={}",
+             t, total_ops, ctx.ch->get_cid());
       co_await transaction_manager->submit_transaction(*ctx.transaction);
     })
   ).handle_error(
