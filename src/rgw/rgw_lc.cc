@@ -199,6 +199,7 @@ void *RGWLC::LCWorker::entry() {
     std::unique_ptr<rgw::sal::Bucket> all_buckets; // empty restriction
     utime_t start = ceph_clock_now();
     if (should_work(start)) {
+      lc_start_time = time(nullptr);
       ldpp_dout(dpp, 2) << "life cycle: start worker=" << ix << dendl;
       int r = lc->process(this, all_buckets, false /* once */);
       if (r < 0) {
@@ -1953,14 +1954,19 @@ int RGWLC::process(LCWorker* worker,
   return 0;
 }
 
-bool RGWLC::expired_session(time_t started)
-{
+bool RGWLC::expired_session(time_t started, time_t lc_start_time) {
   if (! cct->_conf->rgwlc_auto_session_clear) {
     return false;
   }
-
-  time_t interval = (cct->_conf->rgw_lc_debug_interval > 0)
-    ? cct->_conf->rgw_lc_debug_interval : secs_in_a_day;
+  // lc_start_time is greater than last time when bucket was updated, then
+  // session is confirmed expired
+  if (cct->_conf->rgw_lc_debug_interval <= 0) {
+    if (lc_start_time > started) {
+      return true;
+    }
+    return false;
+  }
+  time_t interval = cct->_conf->rgw_lc_debug_interval;
 
   auto now = time(nullptr);
 
@@ -2029,8 +2035,8 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
                           bucket_entry_marker, entry);
   if (ret >= 0) {
     if (entry.status == lc_processing) {
-      if (expired_session(entry.start_time)) {
-	ldpp_dout(this, 5) << "RGWLC::process_bucket(): STALE lc session found for: " << entry
+      if (expired_session(entry.start_time, worker->lc_start_time)) {
+        ldpp_dout(this, 5) << "RGWLC::process_bucket(): STALE lc session found for: " << entry
 			   << " index: " << index << " worker ix: " << worker->ix
 			   << " (clearing)"
 			   << dendl;
@@ -2224,7 +2230,9 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     return false;
   };
 
-  SimpleBackoff shard_lock(5 /* max retries */, 50ms);
+  // retrying longer, so that you wait for at least for |max_lock_secs| which
+  // has a default value of 90 seconds.
+  SimpleBackoff shard_lock(50 /* max retries */, 50ms);
   if (! shard_lock.wait_backoff(lock_lambda)) {
     ldpp_dout(this, 0) << "RGWLC::process(): failed to acquire lock on "
 		       << lc_shard << " after " << shard_lock.get_retries()
@@ -2240,7 +2248,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to get obj head "
           << lc_shard << ", ret=" << ret << dendl;
-      goto exit;
+      break;
     }
 
     /* if there is nothing at head, try to reinitialize head.marker with the
@@ -2260,7 +2268,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       if (ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::process() sal_lc->list_entries(lc_shard, head.marker, 1, "
 			   << "entries) returned error ret==" << ret << dendl;
-	goto exit;
+        break;
       }
       if (entries.size() > 0) {
 	entry = std::move(entries.front());
@@ -2283,20 +2291,20 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
         tmp_entry.bucket = head.marker;
 
         if (update_head(lc_shard, head, tmp_entry, now, worker->ix) != 0) {
-          goto exit;
+          break;
         }
         continue;
       }
       if (ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::process() sal_lc->get_entry(lc_shard, head.marker, entry) "
 			   << "returned error ret==" << ret << dendl;
-	goto exit;
+        break;
       }
     }
 
     if (!entry.bucket.empty()) {
       if (entry.status == lc_processing) {
-        if (expired_session(entry.start_time)) {
+        if (expired_session(entry.start_time, worker->lc_start_time)) {
           ldpp_dout(this, 5)
               << "RGWLC::process(): STALE lc session found for: " << entry
               << " index: " << index << " worker ix: " << worker->ix
@@ -2307,8 +2315,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
               << " index: " << index << " worker ix: " << worker->ix << dendl;
 	  /* skip to next entry */
 	  if (update_head(lc_shard, head, entry, now, worker->ix) != 0) {
-	     goto exit;
-	  }
+            break;
+          }
           continue;
         }
       } else {
@@ -2319,17 +2327,17 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 			     << dendl;
 	  /* skip to next entry */
 	      if (update_head(lc_shard, head, entry, now, worker->ix) != 0) {
-	        goto exit;
-	      }
-	  continue;
-	}
+            break;
+          }
+          continue;
+        }
       }
     } else {
       ldpp_dout(this, 5) << "RGWLC::process() entry.bucket.empty() == true at START 1"
 			 << " (this is possible mainly before any lc policy has been stored"
 			 << " or after removal of an lc_shard object)"
                          << dendl;
-      goto exit;
+      break;
     }
 
     /* When there are no more entries to process, entry will be
@@ -2347,12 +2355,12 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to set obj entry "
 	      << lc_shard << entry.bucket << entry.status << dendl;
-      goto exit;
+      break;
     }
 
     /* advance head for next waiter, then process */
     if (advance_head(lc_shard, head, entry, now) < 0) {
-      goto exit;
+      break;
     }
 
     ldpp_dout(this, 5) << "RGWLC::process(): START entry 2: " << entry
@@ -2398,16 +2406,15 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
                            << lc_shard << " entry=" << entry
                            << dendl;
         /* fatal, locked */
-        goto exit;
+        break;
       }
     }
 
-    if (check_if_shard_done(lc_shard, head, worker->ix) != 0 ) {
-      goto exit;
+    if (check_if_shard_done(lc_shard, head, worker->ix) != 0) {
+      break;
     }
   } while(1 && !once && !going_down());
 
-exit:
   lock->unlock(this, null_yield);
   return 0;
 }
