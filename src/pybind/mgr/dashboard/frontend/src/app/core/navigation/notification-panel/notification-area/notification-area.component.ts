@@ -43,6 +43,7 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.last_task = localStorage.getItem('last_task') || '';
     this.subs.add(
       this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
         const today: Date = new Date();
@@ -110,10 +111,8 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
     event.preventDefault();
 
     // Get the notification index from the service's data
-    const notifications = this.notificationService['dataSource'].getValue();
-    const index = notifications.findIndex(
-      (n) => n.timestamp === notification.timestamp && n.title === notification.title
-    );
+    const notifications = this.notificationService.getNotificationsSnapshot();
+    const index = notifications.findIndex((n) => n.id === notification.id);
 
     if (index > -1) {
       // Remove the notification through the service
