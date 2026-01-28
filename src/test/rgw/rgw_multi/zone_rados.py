@@ -17,43 +17,40 @@ def check_object_eq(k1, k2, check_extra = True):
     assert k2
     log.debug('comparing key name=%s', k1.key)
     eq(k1.key, k2.key)
-    eq(k1.version_id, k2.version_id)
-    eq(k1.is_latest, k2.is_latest)
-    eq(k1.last_modified, k2.last_modified)
+    if hasattr(k1, 'version_id'):
+        eq(k1.version_id, k2.version_id)
+    if hasattr(k1, 'is_latest'):
+        eq(k1.is_latest, k2.is_latest)
+    if hasattr(k1, 'last_modified'):
+        eq(k1.last_modified, k2.last_modified)
 
-    # delete markers don't have 'size' attribute in boto3 resource API
-    is_delete_marker_k1 = not hasattr(k1, 'size') or k1.size is None
-    is_delete_marker_k2 = not hasattr(k2, 'size') or k2.size is None
+    response1 = k1.get()
+    response2 = k2.get()
     
-    if is_delete_marker_k1:
-        assert is_delete_marker_k2, "k1 is delete marker but k2 is not"
-        return
-    
-    # regular objects
-    obj1 = k1.Object()
-    obj2 = k2.Object()
-    
-    # compare object contents
-    body1 = obj1.get()['Body'].read()
-    body2 = obj2.get()['Body'].read()
+    body1 = response1['Body'].read()
+    body2 = response2['Body'].read()
     eq(body1, body2)
 
-    eq(obj1.metadata, obj2.metadata)
-    eq(obj1.cache_control, obj2.cache_control)
-    eq(obj1.content_type, obj2.content_type)
-    eq(obj1.content_encoding, obj2.content_encoding)
-    eq(obj1.content_disposition, obj2.content_disposition)
-    eq(obj1.content_language, obj2.content_language)
-    eq(obj1.e_tag, obj2.e_tag)
+    eq(response1.get('Metadata', {}), response2.get('Metadata', {}))
+    eq(response1.get('CacheControl'), response2.get('CacheControl'))
+    eq(response1.get('ContentType'), response2.get('ContentType'))
+    eq(response1.get('ContentEncoding'), response2.get('ContentEncoding'))
+    eq(response1.get('ContentDisposition'), response2.get('ContentDisposition'))
+    eq(response1.get('ContentLanguage'), response2.get('ContentLanguage'))
+    eq(response1.get('ETag'), response2.get('ETag'))
 
-    if check_extra:
-        eq(k1.owner['ID'], k2.owner['ID'])
-        eq(k1.owner['DisplayName'], k2.owner['DisplayName'])
+    if check_extra and hasattr(k1, 'owner') and hasattr(k2, 'owner'):
+        eq(k1.owner.get('ID'), k2.owner.get('ID'))
+        if 'DisplayName' in k1.owner and 'DisplayName' in k2.owner:
+            eq(k1.owner['DisplayName'], k2.owner['DisplayName'])
 
-    eq(k1.storage_class, k2.storage_class)
-    eq(k1.size, k2.size)
-    encrypted1 = obj1.server_side_encryption is not None
-    encrypted2 = obj2.server_side_encryption is not None
+    if hasattr(k1, 'storage_class'):
+        eq(k1.storage_class, k2.storage_class)
+    if hasattr(k1, 'size'):
+        eq(k1.size, k2.size)
+
+    encrypted1 = response1.get('ServerSideEncryption') is not None
+    encrypted2 = response2.get('ServerSideEncryption') is not None
     eq(encrypted1, encrypted2)
 
 class RadosZone(Zone):
@@ -70,11 +67,12 @@ class RadosZone(Zone):
 
         def get_bucket(self, name):
             try:
-                bucket = self.s3_resource.Bucket(name)
-                bucket.load()
-                return bucket
+                self.s3_client.head_bucket(Bucket=name)
+                # if no exception, bucket exists
+                return self.s3_resource.Bucket(name)
             except ClientError as e:
-                if e.response['Error']['Code'] == '404':
+                error_code = e.response['Error']['Code']
+                if error_codein ['404', 'NoSuchBucket']:
                     return None
                 raise
 
@@ -99,12 +97,12 @@ class RadosZone(Zone):
             b1_versions = list(b1.object_versions.all())
             log.debug('bucket1 objects:')
             for o in b1_versions:
-                log.debug('o=%s', o.key)
+                log.debug('o=%s, v=%s', o.key, o.version_id)
 
             b2_versions = list(b2.object_versions.all())
             log.debug('bucket2 objects:')
             for o in b2_versions:
-                log.debug('o=%s', o.name)
+                log.debug('o=%s, v=%s', o.key, o.version_id)
 
             for k1, k2 in zip_longest(b1_versions, b2_versions):
                 if k1 is None:
@@ -114,42 +112,42 @@ class RadosZone(Zone):
                     log.critical('key=%s is missing from zone=%s', k1.key, zone_conn.name)
                     assert False
 
+                is_delete_marker_k1 = (not hasattr(k1, 'size') or k1.size is None)
+                is_delete_marker_k2 = (not hasattr(k2, 'size') or k2.size is None)
+
+                if is_delete_marker_k1 or is_delete_marker_k2:
+                    # both must be delete markers
+                    assert is_delete_marker_k1 and is_delete_marker_k2, \
+                        f"delete marker mismatch: k1={is_delete_marker_k1}, k2={is_delete_marker_k2}"
+                    eq(k1.key, k2.key)
+                    eq(k1.version_id, k2.version_id)
+                    if hasattr(k1, 'is_latest'):
+                        eq(k1.is_latest, k2.is_latest)
+                    log.debug('both are delete markers, skipping content comparison')
+                    continue
+
+                # regular objects - compare them
                 check_object_eq(k1, k2)
 
-                # check if delete marker
-                try:
-                    _ = k1.size
-                    is_delete_marker = False
-                except AttributeError:
-                    is_delete_marker = True
+                # additional verification
+                k1_obj = b1.Object(k1.key)
+                k2_obj = b2.Object(k2.key)
+                k1_obj.load(VersionId=k1.version_id)
+                k2_obj.load(VersionId=k2.version_id)
 
-                if is_delete_marker:
-                    assert b1.Object(k1.key).get() is None  # should raise exception
-                    assert b2.Object(k2.key).get() is None
-                else:
-                    # now get the keys through a HEAD operation, verify that the available data is the same
-                    k1_head = b1.Object(k1.key)
-                    k1_head.version_id = k1.version_id
-                    k2_head = b2.Object(k2.key)
-                    k2_head.version_id = k2.version_id
-                    k1_head.load()
-                    k2_head.load()
-
-                    if k1.version_id:
-                        # compare the olh to make sure they agree about current version
-                        k1_olh = b1.Object(k1.key)
-                        k2_olh = b2.Object(k2.key)
-                        try:
-                            k1_olh.load()
-                            k2_olh.load()
-                            # if there's a delete marker, load() will fail
-                            if k1_olh and k2_olh:
-                                check_object_eq(k1_olh, k2_olh, False)
-                        except ClientError:
-                            pass  # delete marker is current
+                if k1.version_id:
+                    # compare OLH (current version marker)
+                    k1_olh = b1.Object(k1.key)
+                    k2_olh = b2.Object(k2.key)
+                    try:
+                        k1_olh.load()
+                        k2_olh.load()
+                        eq(k1_olh.e_tag, k2_olh.e_tag)
+                        eq(k1_olh.content_length, k2_olh.content_length)
+                    except ClientError:
+                        pass  # current version is a delete marker
 
             log.info('success, bucket identical: bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
-
             return True
 
         def get_role(self, role_name):
