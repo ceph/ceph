@@ -87,4 +87,38 @@ parallel_for_each(Iterator first, Iterator last, Func&& func) noexcept {
   return seastar::make_ready_future<>();
 }
 
+// ErrorHelper -- facilitate transformation of `std::error_code` (and
+// similar) into an immediately failed errorated `future` with extra
+// checking to ensure we the carried error is within AllowedErrors.
+template <class>
+struct ErrorHelper;
+template <class... AllowedErrors>
+struct ErrorHelper<crimson::errorator<AllowedErrors...>>
+{
+  // wrapped error to raw errror
+  template <class ErrorT, ErrorT ErrorV>
+  static auto to_error(const unthrowable_wrapper<ErrorT, ErrorV>&)
+  {
+    return std::decay_t<ErrorT>(ErrorV);
+  }
+
+  // raw_error to failed future carrying this error OR assert
+  template <class FutureValueT,
+            class UnexpectedErrorT>
+  static auto from_error(UnexpectedErrorT raw_ec)
+  {
+    std::exception_ptr ep;
+    (... || [&] mutable {
+      if (const auto& err = AllowedErrors::make(); to_error(err) == raw_ec) {
+        ep = AllowedErrors::exception_ptr();
+        return true; // done
+      }
+      return false; //  continue
+    }());
+    ceph_assert_always(ep);
+    return errorator<AllowedErrors...>\
+      ::template make_exception_future2<FutureValueT>(std::move(ep));
+  }
+};
+
 } // namespace crimson
