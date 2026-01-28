@@ -17,7 +17,10 @@ import {
   ToggletipModule,
   IconModule,
   TagModule,
-  SelectModule
+  SelectModule,
+  LayoutModule,
+  NumberModule,
+  FileUploaderModule
 } from 'carbon-components-angular';
 
 import {
@@ -82,6 +85,7 @@ import { MultiClusterFormComponent } from './multi-cluster/multi-cluster-form/mu
 import { MultiClusterListComponent } from './multi-cluster/multi-cluster-list/multi-cluster-list.component';
 import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
 import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-details/multi-cluster-details.component';
+import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
 
 @NgModule({
   imports: [
@@ -116,7 +120,11 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     ToggletipModule,
     IconModule,
     TagModule,
-    SelectModule
+    TextLabelListComponent,
+    SelectModule,
+    LayoutModule,
+    NumberModule,
+    FileUploaderModule
   ],
   declarations: [
     MonitorComponent,

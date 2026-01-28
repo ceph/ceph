@@ -18,6 +18,7 @@ describe('Host Page', () => {
   it('should create rgw services', () => {
     services.navigateTo('create');
     services.addService('rgw', false, 4);
+    services.navigateTo('index');
     services.checkExist('rgw.foo', true);
   });
 
