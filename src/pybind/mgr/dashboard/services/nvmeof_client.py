@@ -33,7 +33,7 @@ else:
     class NVMeoFClient(object):
         pb2 = pb2
 
-        def __init__(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+        def __init__(self, gw_group: Optional[str] = None, server_address: Optional[str] = None):
             logger.info("Initiating nvmeof gateway connection...")
             try:
                 if not gw_group:
@@ -50,14 +50,14 @@ else:
 
             # While creating listener need to direct request to the gateway
             # address where listener is supposed to be added.
-            if traddr:
+            if server_address:
                 gateways_info = NvmeofGatewaysConfig.get_gateways_config()
                 matched_gateway = next(
                     (
                         gateway
                         for gateways in gateways_info['gateways'].values()
                         for gateway in gateways
-                        if traddr in gateway['service_url']
+                        if server_address in gateway['service_url']
                     ),
                     None
                 )
