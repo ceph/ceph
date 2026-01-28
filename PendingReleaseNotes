@@ -26,6 +26,9 @@
   scan_extents, scan_inodes, and other state-changing operations.
   Related Tracker: https://tracker.ceph.com/issues/63191
 
+* common: Optional annotation provisioning has been added for "ceph config set" command.
+  Annotations attached to options are accessible through "ceph config dump/get" commands.
+
 >=20.0.0
 
 * RADOS: The lead Monitor and stretch mode status are now displayed by `ceph status`.

@@ -1396,7 +1396,8 @@ COMMAND("config set"
 	" name=who,type=CephString"
 	" name=name,type=CephString"
 	" name=value,type=CephString"
-	" name=force,type=CephBool,req=false",
+	" name=force,type=CephBool,req=false"
+	" name=annotation,type=CephString,req=false",
 	"Set a configuration option for one or more entities",
 	"config", "rw")
 COMMAND("config rm"
