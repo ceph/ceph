@@ -138,18 +138,58 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     return ret;
   }
 
+  if (op.reset) {
+    for (auto &new_entry: op.entries) {
+      std::optional<std::string> storage_class = new_entry.storage_class;
+      string key;
+      get_key_by_bucket_name(new_entry.bucket.name, &key);
+      cls_user_bucket_entry old_entry;
+      if (storage_class) {
+        key += "-" + *storage_class;
+      }
+      ret = get_existing_bucket_entry(hctx, key, old_entry);
+      if (ret == -ENOENT) {
+        continue;
+      }
+      old_entry.size = 0;
+      old_entry.size_rounded = 0;
+      old_entry.count = 0;
+      ret = write_entry(hctx, key, old_entry);
+      if (ret < 0)
+        return ret;
+
+    }
+    header.stats.total_entries = 0;
+    header.stats.total_bytes = 0;
+    header.stats.total_bytes_rounded = 0;
+    for(auto &idx: header.storage_class_stats){
+      header.storage_class_stats[idx.first].total_entries = 0;
+      header.storage_class_stats[idx.first].total_bytes = 0;
+      header.storage_class_stats[idx.first].total_bytes_rounded = 0;
+    }
+    bufferlist bl;
+    encode(header, bl);
+    ret = cls_cxx_map_write_header(hctx, &bl);
+    if (ret < 0)
+      return ret;
+    return 0;
+  }
+
   for (auto iter = op.entries.begin(); iter != op.entries.end(); ++iter) {
     cls_user_bucket_entry& update_entry = *iter;
-
+    std::optional<std::string> storage_class = update_entry.storage_class;
     string key;
 
     get_key_by_bucket_name(update_entry.bucket.name, &key);
-
+    string old_key = key;
     cls_user_bucket_entry entry;
+    if (storage_class) {
+      key += "-" + *storage_class;
+    }
     ret = get_existing_bucket_entry(hctx, key, entry);
 
     if (ret == -ENOENT) {
-     if (!op.add)
+     if (!op.add && !storage_class)
       continue; /* racing bucket removal */
 
      entry = update_entry;
@@ -160,13 +200,43 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
       entry.bucket.bucket_id = update_entry.bucket.bucket_id;
       // creation date may have changed (ie delete/recreate bucket)
       entry.creation_time = update_entry.creation_time;
+      // updating bucket id for storage classes entries
+      for (auto& idx: header.storage_class_stats) {
+        cls_user_bucket_entry storage_class_entry;
+        string storage_class_key = old_key + "-" + idx.first;
+        int s_ret = get_existing_bucket_entry(hctx, storage_class_key, storage_class_entry);
+        if (s_ret < 0) {
+          CLS_LOG(0, "WARNING: cannot update bucket id for bucket %s and storage class %s. ret: %d.",
+                  old_key.c_str(), idx.first.c_str(), s_ret);
+          continue;
+        }
+        storage_class_entry.bucket.bucket_id = update_entry.bucket.bucket_id;
+        storage_class_entry.creation_time = update_entry.creation_time;
+        s_ret = write_entry(hctx, storage_class_key, storage_class_entry);
+        if (s_ret < 0) {
+          CLS_LOG(0, "WARNING: cannot update bucket id for bucket %s and storage class %s. ret: %d.",
+                  old_key.c_str(), idx.first.c_str(), s_ret);
+        }
+      }
     }
 
     if (ret < 0) {
       CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
       return ret;
     } else if (ret >= 0 && entry.user_stats_sync) {
-      dec_header_stats(&header.stats, entry);
+      if (storage_class){
+        if ((header.storage_class_stats[*storage_class].total_entries - entry.count) > header.storage_class_stats[*storage_class].total_entries) { // unsigned long overflow
+          header.storage_class_stats[*storage_class].total_entries = 0;
+          header.storage_class_stats[*storage_class].total_bytes = 0;
+          header.storage_class_stats[*storage_class].total_bytes_rounded = 0;
+        } else {
+          header.storage_class_stats[*storage_class].total_entries -= entry.count;
+          header.storage_class_stats[*storage_class].total_bytes -= entry.size;
+          header.storage_class_stats[*storage_class].total_bytes_rounded -= entry.size_rounded;
+        }
+      } else {
+        dec_header_stats(&header.stats, entry);
+      }
     }
 
     CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
@@ -184,7 +254,13 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     if (ret < 0)
       return ret;
 
-    add_header_stats(&header.stats, entry);
+    if (storage_class){
+      header.storage_class_stats[*storage_class].total_entries += entry.count;
+      header.storage_class_stats[*storage_class].total_bytes += entry.size;
+      header.storage_class_stats[*storage_class].total_bytes_rounded += entry.size_rounded;
+    } else {
+      add_header_stats(&header.stats, entry);
+    }
   }
 
   bufferlist bl;
@@ -268,7 +344,11 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     CLS_LOG(0, "ERROR: get existing bucket entry, key=%s ret=%d", key.c_str(), ret);
     return ret;
   }
-
+  for(auto it = header.storage_class_stats.begin(); it != header.storage_class_stats.end(); ++it){
+    auto new_key = key + "-" + it->first;
+    CLS_LOG(20, "removing entry at %s", new_key.c_str());
+    remove_entry(hctx, new_key);
+  }
   CLS_LOG(20, "removing entry at %s", key.c_str());
 
   ret = remove_entry(hctx, key);

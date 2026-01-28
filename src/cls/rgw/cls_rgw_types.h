@@ -505,7 +505,7 @@ struct rgw_cls_bi_entry {
   void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
   static std::list<rgw_cls_bi_entry> generate_test_instances();
   bool get_info(cls_rgw_obj_key *key, RGWObjCategory *category,
-		rgw_bucket_category_stats *accounted_stats) const;
+		rgw_bucket_category_stats *accounted_stats, std::string *storage_class) const;
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
@@ -842,12 +842,13 @@ struct rgw_bucket_dir_header {
   cls_rgw_bucket_instance_entry new_instance;
   bool syncstopped;
   uint32_t reshardlog_entries;
+  std::unordered_map<std::string, rgw_bucket_category_stats> storage_class_stats;
 
   rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0), syncstopped(false),
                             reshardlog_entries(0) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(8, 2, bl);
+    ENCODE_START(9, 2, bl);
     encode(stats, bl);
     encode(tag_timeout, bl);
     encode(ver, bl);
@@ -856,10 +857,11 @@ struct rgw_bucket_dir_header {
     encode(new_instance, bl);
     encode(syncstopped,bl);
     encode(reshardlog_entries, bl);
+    encode(storage_class_stats, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(9, 2, 2, bl);
     decode(stats, bl);
     if (struct_v > 2) {
       decode(tag_timeout, bl);
@@ -888,6 +890,10 @@ struct rgw_bucket_dir_header {
     } else {
       reshardlog_entries = 0;
     }
+    if (struct_v >= 9) {
+      decode(storage_class_stats, bl);
+    }
+
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -966,25 +972,32 @@ struct rgw_usage_data {
   uint64_t bytes_received;
   uint64_t ops;
   uint64_t successful_ops;
+  std::optional<std::string> storage_class;
 
-  rgw_usage_data() : bytes_sent(0), bytes_received(0), ops(0), successful_ops(0) {}
-  rgw_usage_data(uint64_t sent, uint64_t received) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0) {}
+  rgw_usage_data() : bytes_sent(0), bytes_received(0), ops(0), successful_ops(0), storage_class({}) {}
+  rgw_usage_data(uint64_t sent, uint64_t received) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0), storage_class({}) {}
+  rgw_usage_data(uint64_t sent, uint64_t received, std::string stg_cls) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0), storage_class(stg_cls) {}
 
-  void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+
+    void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(2, 1, bl);
     encode(bytes_sent, bl);
     encode(bytes_received, bl);
     encode(ops, bl);
     encode(successful_ops, bl);
+    encode(storage_class, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(bytes_sent, bl);
     decode(bytes_received, bl);
     decode(ops, bl);
     decode(successful_ops, bl);
+    if (struct_v >= 2) {
+      decode(storage_class, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -993,6 +1006,9 @@ struct rgw_usage_data {
     bytes_received += usage.bytes_received;
     ops += usage.ops;
     successful_ops += usage.successful_ops;
+    if (!storage_class && usage.storage_class){
+      storage_class = { *usage.storage_class };
+    }
   }
   void dump(ceph::Formatter *f) const;
   static std::list<rgw_usage_data> generate_test_instances();
@@ -1008,13 +1024,14 @@ struct rgw_usage_log_entry {
   rgw_usage_data total_usage; /* this one is kept for backwards compatibility */
   std::map<std::string, rgw_usage_data> usage_map;
   rgw_s3select_usage_data s3select_usage;
+  std::unordered_map<std::string, std::map<std::string, rgw_usage_data>> usage_by_storage_class_map;
 
   rgw_usage_log_entry() : epoch(0) {}
   rgw_usage_log_entry(std::string& o, std::string& b) : owner(o), bucket(b), epoch(0) {}
   rgw_usage_log_entry(std::string& o, std::string& p, std::string& b) : owner(o), payer(p), bucket(b), epoch(0) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     encode(owner.to_str(), bl);
     encode(bucket, bl);
     encode(epoch, bl);
@@ -1025,12 +1042,14 @@ struct rgw_usage_log_entry {
     encode(usage_map, bl);
     encode(payer.to_str(), bl);
     encode(s3select_usage, bl);
+    encode(total_usage.storage_class, bl);
+    encode(usage_by_storage_class_map, bl);
     ENCODE_FINISH(bl);
   }
 
 
    void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(4, bl);
+    DECODE_START(5, bl);
     std::string s;
     decode(s, bl);
     owner.from_str(s);
@@ -1053,6 +1072,12 @@ struct rgw_usage_log_entry {
     if (struct_v >= 4) {
       decode(s3select_usage, bl);
     }
+    if (struct_v < 5) {
+      usage_by_storage_class_map[""] = usage_map;
+    } else {
+      decode(total_usage.storage_class, bl);
+      decode(usage_by_storage_class_map, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -1065,11 +1090,15 @@ struct rgw_usage_log_entry {
       payer = e.payer;
     }
 
-    for (auto iter = e.usage_map.begin(); iter != e.usage_map.end(); ++iter) {
-      if (!categories || !categories->size() || categories->count(iter->first)) {
-        add_usage(iter->first, iter->second);
+    for (auto iter = e.usage_by_storage_class_map.begin(); iter != e.usage_by_storage_class_map.end(); ++iter) {
+      for (auto iter2 = iter->second.begin(); iter2 != iter->second.end(); ++iter2) {
+        if (!categories || !categories->size() || categories->count(iter2->first)) {
+          add_usage(iter->first, iter2->first, iter2->second);
+          add_usage(iter2->first, iter2->second);
+        }
       }
     }
+
 
     if (!categories || !categories->size() || categories->count("s3select")) {
       s3select_usage.aggregate(e.s3select_usage);
@@ -1088,6 +1117,11 @@ struct rgw_usage_log_entry {
 
   void add_usage(const std::string& category, const rgw_usage_data& data) {
     usage_map[category].aggregate(data);
+    total_usage.aggregate(data);
+  }
+
+  void add_usage(const std::string &storage_class, const std::string &category, const rgw_usage_data &data) {
+    usage_by_storage_class_map[storage_class][category].aggregate(data);
     total_usage.aggregate(data);
   }
 

@@ -104,11 +104,12 @@ struct cls_user_bucket_entry {
   ceph::real_time creation_time;
   uint64_t count;
   bool user_stats_sync;
+  std::optional<std::string> storage_class;
 
-  cls_user_bucket_entry() : size(0), size_rounded(0), count(0), user_stats_sync(false) {}
+  cls_user_bucket_entry() : size(0), size_rounded(0), count(0), user_stats_sync(false), storage_class({}) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(9, 5, bl);
+    ENCODE_START(10, 5, bl);
     uint64_t s = size;
     __u32 mt = ceph::real_clock::to_time_t(creation_time);
     std::string empty_str;  // originally had the bucket name here, but we encode bucket later
@@ -122,10 +123,11 @@ struct cls_user_bucket_entry {
     encode(user_stats_sync, bl);
     encode(creation_time, bl);
     //::encode(placement_rule, bl); removed in v9
+    encode(storage_class, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(9, 5, 5, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(10, 5, 5, bl);
     __u32 mt;
     uint64_t s;
     std::string empty_str;  // backward compatibility
@@ -150,6 +152,9 @@ struct cls_user_bucket_entry {
     if (struct_v == 8) { // added in v8, removed in v9
       std::string placement_rule;
       decode(placement_rule, bl);
+    }
+    if (struct_v >= 10) {
+      decode(storage_class, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -193,21 +198,25 @@ WRITE_CLASS_ENCODER(cls_user_stats)
  */
 struct cls_user_header {
   cls_user_stats stats;
+  std::unordered_map<std::string, cls_user_stats> storage_class_stats;
   ceph::real_time last_stats_sync;     /* last time a full stats sync completed */
   ceph::real_time last_stats_update;   /* last time a stats update was done */
 
   void encode(ceph::buffer::list& bl) const {
-     ENCODE_START(1, 1, bl);
+     ENCODE_START(2, 1, bl);
     encode(stats, bl);
     encode(last_stats_sync, bl);
     encode(last_stats_update, bl);
+    encode(storage_class_stats, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(stats, bl);
     decode(last_stats_sync, bl);
     decode(last_stats_update, bl);
+    if (struct_v >= 2)
+      decode(storage_class_stats, bl);
     DECODE_FINISH(bl);
   }
 
