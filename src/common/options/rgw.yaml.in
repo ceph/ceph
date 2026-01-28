@@ -2705,6 +2705,36 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_inject_delay_sec
+  type: float
+  level: dev
+  desc: delay duration in seconds for test injection points
+  long_desc: Intended for integration and stress testing. When set to a positive
+    value, this option introduces an artificial delay at specific code paths to
+    help deterministically reproduce timing-sensitive scenarios. It is used in
+    conjunction with `rgw_inject_delay_pattern` to control which delay points
+    are activated.
+  default: 0
+  services:
+  - rgw
+  see_also:
+  - rgw_inject_delay_pattern
+  with_legacy: true
+- name: rgw_inject_delay_pattern
+  type: str
+  level: dev
+  desc: select which delay injection points are activated
+  long_desc: Used together with `rgw_inject_delay_sec` to target specific delay
+    injection points within the RGW code. The pattern should match a string
+    associated with one or more delay locations (e.g., "delay_bucket_full_sync_loop")
+    to activate them during testing.
+  services:
+  - rgw
+  flags:
+  - runtime
+  see_also:
+  - rgw_inject_delay_sec
+  with_legacy: true
 - name: rgw_sync_trace_history_size
   type: size
   level: advanced
