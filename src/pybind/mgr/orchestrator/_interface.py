@@ -727,7 +727,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_daemons(self, names: List[str]) -> OrchResult[List[str]]:
+    def remove_daemons(self, names: List[str], force_delete_data: bool = False) -> OrchResult[List[str]]:
         """
         Remove specific daemon(s).
 
@@ -735,7 +735,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_service(self, service_name: str, force: bool = False) -> OrchResult[str]:
+    def remove_service(self, service_name: str, force: bool = False, force_delete_data: bool = False) -> OrchResult[str]:
         """
         Remove a service (a collection of daemons).
 
