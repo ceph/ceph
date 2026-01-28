@@ -94,8 +94,21 @@ class AppMain {
   SiteConfig site;
   const DoutPrefixProvider* dpp;
   RGWProcessEnv env;
-  void need_context_pool();
-  std::optional<ceph::async::io_context_pool> context_pool;
+
+  class IOContextPoolHolder {
+  private:
+    std::optional<ceph::async::io_context_pool> pool_;
+    const DoutPrefixProvider* dpp_;
+
+  public:
+    explicit IOContextPoolHolder(const DoutPrefixProvider* dpp) : dpp_(dpp) {};
+    IOContextPoolHolder(const IOContextPoolHolder&) = delete;
+    IOContextPoolHolder& operator=(const IOContextPoolHolder&) = delete;
+
+    ceph::async::io_context_pool& get();
+  };
+
+  IOContextPoolHolder context_pool_holder;
 public:
   AppMain(const DoutPrefixProvider* dpp);
   ~AppMain();
