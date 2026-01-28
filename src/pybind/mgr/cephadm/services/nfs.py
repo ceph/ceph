@@ -427,9 +427,26 @@ class NFSService(CephService):
 
         # check if monitor needs to be bind on specific ip
         monitoring_addr = spec.monitoring_ip_addrs.get(host) if spec.monitoring_ip_addrs else None
-        if monitoring_addr and monitoring_addr not in self.mgr.cache.get_host_network_ips(host):
-            logger.debug(f"Monitoring IP {monitoring_addr} is not configured on host {host}.")
-            monitoring_addr = None
+
+        if monitoring_addr:
+            try:
+                ip = ipaddress.ip_address(monitoring_addr)
+
+                # Fetch host IPs once and normalize to strings
+                host_ips = set(self.mgr.cache.get_host_network_ips(host))
+
+                # Allow loopback addresses without requiring them on an interface
+                if not ip.is_loopback and str(ip) not in host_ips:
+                    logger.debug(
+                        f"Monitoring IP {monitoring_addr} is not configured on host {host}."
+                    )
+                    monitoring_addr = None
+
+            except ValueError:
+                logger.warning(
+                    f"Invalid monitoring IP address {monitoring_addr} for host {host}."
+                )
+                monitoring_addr = None
         if not monitoring_addr and spec.monitoring_networks:
             monitoring_addr = self.mgr.get_first_matching_network_ip(host, spec, spec.monitoring_networks)
             if not monitoring_addr:
