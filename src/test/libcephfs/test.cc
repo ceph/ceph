@@ -4611,3 +4611,26 @@ TEST(LibCephFS, ConcurrentWriteAndFsync) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, BuffersOverLimit) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+
+  char test_file[1024];
+  sprintf(test_file, "test_buffers_over_limit_%d", getpid());
+  int fd = ceph_open(cmount, test_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_LT(0, fd);
+
+  const size_t BUFSIZE = static_cast<size_t>(3) * 1024 * 1024 * 1024;
+  auto out_buf = std::make_unique<char[]>(BUFSIZE);
+  memset(out_buf.get(), 'a', BUFSIZE);
+  auto in_buf = std::make_unique<char[]>(BUFSIZE);
+  ASSERT_EQ(ceph_write(cmount, fd, out_buf.get(), BUFSIZE, 0), INT_MAX);
+  ASSERT_EQ(ceph_read(cmount, fd, in_buf.get(), BUFSIZE, 0), INT_MAX);
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+
+  ceph_shutdown(cmount);
+}
