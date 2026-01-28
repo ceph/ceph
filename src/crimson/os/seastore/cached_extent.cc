@@ -9,12 +9,16 @@
 #include "crimson/os/seastore/btree/fixed_kv_node.h"
 #include "crimson/os/seastore/lba_mapping.h"
 #include "crimson/os/seastore/logical_child_node.h"
+#include "crimson/os/seastore/lba/lba_btree_node.h"
+#include "crimson/os/seastore/backref/backref_tree_node.h"
 
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_seastore_tm);
   }
 }
+
+SET_SUBSYS(seastore_cache);
 
 namespace crimson::os::seastore {
 
@@ -341,6 +345,153 @@ ceph::bufferptr BufferSpace::to_full_ptr(extent_len_t length)
   assert(ptr.length() == length);
   buffer_map.clear();
   return ptr;
+}
+
+void ExtentCommitter::sync_version() {
+  assert(extent.prior_instance);
+  auto &prior = *extent.prior_instance;
+  for (auto &mext : prior.mutation_pending_extents) {
+    auto &mextent = static_cast<CachedExtent&>(mext);
+    mextent.version = extent.version + 1;
+  }
+}
+
+void ExtentCommitter::sync_dirty_from() {
+  assert(extent.prior_instance);
+  auto &prior = *extent.prior_instance;
+  for (auto &mext : prior.mutation_pending_extents) {
+    auto &mextent = static_cast<CachedExtent&>(mext);
+    assert(mextent.dirty_from < extent.dirty_from ||
+      mextent.dirty_from == JOURNAL_SEQ_NULL);
+    mextent.dirty_from = extent.dirty_from;
+  }
+}
+
+void ExtentCommitter::sync_checksum() {
+  assert(extent.prior_instance);
+  auto &prior = *extent.prior_instance;
+  for (auto &mext : prior.mutation_pending_extents) {
+    auto &mextent = static_cast<CachedExtent&>(mext);
+    mextent.set_last_committed_crc(extent.last_committed_crc);
+  }
+}
+
+void ExtentCommitter::commit_data() {
+  assert(extent.prior_instance);
+  // extent and its prior are sharing the same bptr content
+  auto &prior = *extent.prior_instance;
+  prior.set_bptr(extent.get_bptr());
+  prior.on_data_commit();
+  _share_prior_data_to_mutations();
+  _share_prior_data_to_pending_versions();
+}
+
+void ExtentCommitter::commit_state() {
+  LOG_PREFIX(CachedExtent::commit_state_to_prior);
+  assert(extent.prior_instance);
+  SUBTRACET(seastore_cache, "{} prior={}",
+    t, extent, *extent.prior_instance);
+  auto &prior = *extent.prior_instance;
+  prior.pending_for_transaction = extent.pending_for_transaction;
+  prior.modify_time = extent.modify_time;
+  prior.last_committed_crc = extent.last_committed_crc;
+  prior.dirty_from = extent.dirty_from;
+  prior.length = extent.length;
+  prior.loaded_length = extent.loaded_length;
+  prior.buffer_space = std::move(extent.buffer_space);
+  // XXX: We can go ahead and change the prior's version because
+  // transactions don't hold a local view of the version field,
+  // unlike FixedKVLeafNode::modifications
+  prior.version = extent.version;
+  prior.user_hint = extent.user_hint;
+  prior.rewrite_generation = extent.rewrite_generation;
+  prior.state = extent.state;
+  extent.on_state_commit();
+}
+
+void ExtentCommitter::commit_and_share_paddr() {
+  auto &prior = *extent.prior_instance;
+  auto old_paddr = prior.get_prior_paddr_and_reset();
+  if (prior.get_paddr() == extent.get_paddr()) {
+    return;
+  }
+  if (prior.read_transactions.empty()) {
+    prior.set_paddr(extent.get_paddr());
+    return;
+  }
+  for (auto &item : prior.read_transactions) {
+    auto [removed, retired] = item.t->pre_stable_extent_paddr_mod(item);
+    if (prior.get_paddr() != extent.get_paddr()) {
+      prior.set_paddr(extent.get_paddr());
+    }
+    item.t->post_stable_extent_paddr_mod(item, retired);
+    item.t->maybe_update_pending_paddr(old_paddr, extent.get_paddr());
+  }
+}
+
+void ExtentCommitter::_share_prior_data_to_mutations() {
+  LOG_PREFIX(ExtentCommitter::_share_prior_data_to_mutations);
+  ceph_assert(is_lba_backref_node(extent.get_type()));
+  auto &prior = *extent.prior_instance;
+  for (auto &mext : prior.mutation_pending_extents) {
+    auto &mextent = static_cast<CachedExtent&>(mext);
+    TRACE("{} -> {}", extent, mextent);
+    extent.get_bptr().copy_out(
+      0, extent.get_length(), mextent.get_bptr().c_str());
+    mextent.on_data_commit();
+    mextent.reapply_delta();
+  }
+}
+
+void ExtentCommitter::_share_prior_data_to_pending_versions()
+{
+  ceph_assert(is_lba_backref_node(extent.get_type()));
+  auto &prior = *extent.prior_instance;
+  switch (extent.get_type()) {
+  case extent_types_t::LADDR_LEAF:
+    static_cast<lba::LBALeafNode&>(
+      prior).merge_content_to_pending_versions(t);
+    break;
+  case extent_types_t::LADDR_INTERNAL:
+    static_cast<lba::LBAInternalNode&>(prior
+      ).merge_content_to_pending_versions(t);
+    break;
+  case extent_types_t::BACKREF_INTERNAL:
+    static_cast<backref::BackrefInternalNode&>(prior
+      ).merge_content_to_pending_versions(t);
+    break;
+  default:
+    break;
+  }
+}
+
+void CachedExtent::new_committer(Transaction &t) {
+  ceph_assert(is_rewrite_transaction(t.get_src()));
+  ceph_assert(!committer);
+  committer = new ExtentCommitter(*this, t);
+  assert(prior_instance);
+  assert(!prior_instance->committer);
+  prior_instance->committer = committer;
+}
+
+void ExtentCommitter::block_trans(Transaction &t) {
+  LOG_PREFIX(ExtentCommitter::block_trans);
+  auto &prior = *extent.prior_instance;
+  for (auto &item : prior.read_transactions) {
+    TRACET("blocking trans {} for rewriting {}",
+      t, item.t->get_trans_id(), *item.ref);
+    item.t->need_wait_rewrite = true;
+  }
+}
+
+void ExtentCommitter::unblock_trans(Transaction &t) {
+  LOG_PREFIX(ExtentCommitter::unblock_trans);
+  auto &prior = *extent.prior_instance;
+  for (auto &item : prior.read_transactions) {
+    TRACET("unblocking trans {} for rewriting {}",
+      t, item.t->get_trans_id(), *item.ref);
+    item.t->need_wait_rewrite = false;
+  }
 }
 
 }

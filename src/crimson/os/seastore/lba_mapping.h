@@ -8,6 +8,14 @@
 #include "crimson/os/seastore/lba/lba_btree_node.h"
 #include "crimson/os/seastore/logical_child_node.h"
 
+class transaction_manager_test_t;
+class btree_lba_manager_test;
+class tm_single_device_intergrity_check_test_t;
+class tm_single_device_test_t;
+class tm_multi_device_test_t;
+class tm_multi_tier_device_test_t;
+class tm_random_block_device_test_t;
+
 namespace crimson::os::seastore {
 
 namespace lba {
@@ -15,6 +23,8 @@ class BtreeLBAManager;
 }
 
 class LBAMapping {
+  using LBACursorRef = lba::LBACursorRef;
+  using LBACursor = lba::LBACursor;
   LBAMapping(LBACursorRef direct, LBACursorRef indirect)
     : direct_cursor(std::move(direct)),
       indirect_cursor(std::move(indirect))
@@ -23,8 +33,8 @@ class LBAMapping {
     assert(!indirect_cursor || indirect_cursor->is_indirect());
     // if the mapping is indirect, it mustn't be at the end
     if (is_indirect() && is_linked_direct()) {
-      assert((bool)direct_cursor->val
-	    && direct_cursor->key != L_ADDR_NULL);
+      assert(!direct_cursor->is_end()
+	    && direct_cursor->get_laddr() != L_ADDR_NULL);
     }
   }
 
@@ -70,13 +80,9 @@ public:
   }
 
   bool is_end() const {
-    bool end = !is_indirect() && !direct_cursor->val;
     // if the mapping is at the end, it can't be indirect and
     // the physical cursor must be L_ADDR_NULL
-    assert(end
-      ? (!indirect_cursor && direct_cursor->key == L_ADDR_NULL)
-      : true);
-    return end;
+    return !is_indirect() && direct_cursor->is_end();
   }
 
   bool is_indirect() const {
@@ -126,12 +132,6 @@ public:
     return direct_cursor->get_length();
   }
 
-  paddr_t get_val() const {
-    assert(is_linked_direct());
-    assert(!direct_cursor->is_end());
-    return direct_cursor->get_paddr();
-  }
-
   checksum_t get_checksum() const {
     assert(is_linked_direct());
     assert(!direct_cursor->is_end());
@@ -141,10 +141,8 @@ public:
   laddr_t get_key() const {
     assert(!is_null());
     if (is_indirect()) {
-      assert(!indirect_cursor->is_end());
       return indirect_cursor->get_laddr();
     }
-    assert(!direct_cursor->is_end());
     return direct_cursor->get_laddr();
   }
 
@@ -197,7 +195,20 @@ public:
 private:
   friend lba::BtreeLBAManager;
   friend class TransactionManager;
+  friend class ::transaction_manager_test_t;
+  friend class ::btree_lba_manager_test;
+  friend class ::tm_single_device_intergrity_check_test_t;
+  friend class ::tm_single_device_test_t;
+  friend class ::tm_multi_device_test_t;
+  friend class ::tm_multi_tier_device_test_t;
+  friend class ::tm_random_block_device_test_t;
   friend std::ostream &operator<<(std::ostream&, const LBAMapping&);
+
+  paddr_t get_val() const {
+    assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
+    return direct_cursor->get_paddr();
+  }
 
   LBACursor& get_effective_cursor() {
     if (is_indirect()) {

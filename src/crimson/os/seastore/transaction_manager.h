@@ -637,11 +637,11 @@ public:
     bool updateref)
   {
     LOG_PREFIX(TransactionManager::clone_range);
+    co_await pos.co_refresh();
+    mapping = co_await mapping.refresh();
     SUBDEBUGT(seastore_tm,
       "src_base={}, dst_base={}, {}~{}, mapping={}, pos={}, updateref={}",
       t, src_base, dst_base, offset, len, mapping, pos, updateref);
-    co_await pos.co_refresh();
-    mapping = co_await mapping.refresh();
     auto left = len;
     bool shared_direct = false;
     auto cloned_to = offset;
@@ -1118,9 +1118,9 @@ public:
     remove_mappings_param_t params)
   {
     LOG_PREFIX(TransactionManager::remove_mappings_in_range);
-    SUBDEBUGT(seastore_tm, "{}~{}, first_mapping: {}",
-      t, start, unaligned_len, first_mapping);
     auto mapping = co_await first_mapping.refresh();
+    SUBDEBUGT(seastore_tm, "{}~{}, first_mapping: {}",
+      t, start, unaligned_len, mapping);
     while (!mapping.is_end()) {
       assert(mapping.get_key() >= start);
       auto mapping_end = (mapping.get_key() + mapping.get_length()

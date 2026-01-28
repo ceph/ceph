@@ -502,10 +502,10 @@ private:
     } else {
       assert(result.is_alive_mapping());
       auto &c = result.get_cursor();
-      assert(c.val);
+      assert(!c.is_end());
       ceph_assert(!c.is_indirect());
-      return {c.get_laddr(), c.val->refcount, 
-	c.val->pladdr, c.val->len,
+      return {c.get_laddr(), c.get_refcount(), 
+	c.get_pladdr(), c.get_length(),
 	LBAMapping::create_direct(result.take_cursor())};
     }
   }

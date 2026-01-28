@@ -167,6 +167,40 @@ public:
 };
 using BackrefLeafNodeRef = BackrefLeafNode::Ref;
 
+struct BackrefCursor :
+  BtreeCursor<paddr_t, backref::backref_map_val_t, BackrefLeafNode>
+{
+  using Base = BtreeCursor<paddr_t,
+			   backref::backref_map_val_t,
+			   BackrefLeafNode>;
+  using Base::BtreeCursor;
+  paddr_t get_paddr() const {
+    assert(key.is_absolute());
+    return key;
+  }
+  laddr_t get_laddr() const {
+    assert(is_viewable());
+    assert(!is_end());
+    return iter.get_val().laddr;
+  }
+  extent_types_t get_type() const {
+    assert(!is_end());
+    return iter.get_val().type;
+  }
+
+  BackrefCursor* renew_cursor(Transaction &t) {
+    auto c = op_context_t{ctx.cache, t};
+    t.maybe_add_to_read_set(parent);
+    return new BackrefCursor(
+      c,
+      std::move(parent),
+      modifications,
+      std::move(iter));
+  }
+
+};
+using BackrefCursorRef = boost::intrusive_ptr<BackrefCursor>;
+
 } // namespace crimson::os::seastore::backref
 
 #if FMT_VERSION >= 90000
@@ -174,4 +208,5 @@ template <> struct fmt::formatter<crimson::os::seastore::backref::backref_map_va
 template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefInternalNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefLeafNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::backref::backref_node_meta_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefCursor> : fmt::ostream_formatter {};
 #endif
