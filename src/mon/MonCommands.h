@@ -483,6 +483,11 @@ COMMAND("fs swap "
 	"name=swap_fscids,type=CephChoices,strings=yes|no,req=true "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"swap ceph file system names", "mds", "rw")
+COMMAND("fs snapdiff "
+        "name=snap1_path,type=CephString "
+        "name=snap2_path,type=CephString ",
+        "list directories and files showing differences between two snapshots",
+        "fs", "r")
 
 /*
  * Monmap commands
