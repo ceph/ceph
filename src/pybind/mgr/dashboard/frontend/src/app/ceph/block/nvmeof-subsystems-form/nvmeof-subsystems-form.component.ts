@@ -54,6 +54,16 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   ];
   title: string = $localize`Create Subsystem`;
   description: string = $localize`Subsytems define how hosts connect to NVMe namespaces and ensure secure access to storage.`;
+  INVALID_TEXTS = {
+    required: 'This field is required',
+    nqnPattern:
+      'Expected NQN format is nqn.$year-$month.$reverseDomainName:$utf8-string" or nqn.2014-08.org.nvmexpress:uuid:$UUID-string',
+    unique: 'This NQN is already in use',
+    maxLength: 'An NQN may not be more than 223 bytes in length.',
+    // Max namespaces
+    min: 'The value must be at least 1',
+    pattern: 'The value must be a positive integer.'
+  };
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -75,7 +85,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   NQN_REGEX_UUID = /^nqn\.2014-08\.org\.nvmexpress:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
   customNQNValidator = CdValidators.custom(
-    'pattern',
+    'nqnPattern',
     (nqnInput: string) =>
       !!nqnInput && !(this.NQN_REGEX.test(nqnInput) || this.NQN_REGEX_UUID.test(nqnInput))
   );
@@ -102,7 +112,6 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
         validators: [
           this.customNQNValidator,
           Validators.required,
-          this.customNQNValidator,
           CdValidators.custom(
             'maxLength',
             (nqnInput: string) => new TextEncoder().encode(nqnInput).length > 223
@@ -118,7 +127,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
           )
         ]
       }),
-      max_namespaces: new UntypedFormControl(this.defaultMaxNamespace, {
+      maxNamespaces: new UntypedFormControl(this.defaultMaxNamespace, {
         validators: [CdValidators.number(false), Validators.min(1)]
       })
     });
@@ -127,7 +136,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   onSubmit() {
     const component = this;
     const nqn: string = this.subsystemForm.getValue('nqn');
-    const max_namespaces: number = Number(this.subsystemForm.getValue('max_namespaces'));
+    const max_namespaces: number = Number(this.subsystemForm.getValue('maxNamespaces'));
     let taskUrl = `nvmeof/subsystem/${URLVerbs.CREATE}`;
 
     const request = {

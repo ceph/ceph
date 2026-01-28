@@ -5,60 +5,76 @@
  (submitRequested)="onSubmit()"
  >
   <cd-tearsheet-step>
-    <form name="subsystemForm"
-          #formDir="ngForm"
-          [formGroup]="subsystemForm"
+    <form [formGroup]="subsystemForm"
           novalidate>
-      <!-- NQN -->
-      <div class="form-group row">
-        <label class="cd-col-form-label"
-               for="nqn">
-          <span class="required"
-                i18n>NQN</span>
-        </label>
-        <div class="cd-col-form-input">
-          <input name="nqn"
-                 class="form-control"
-                 type="text"
-                 formControlName="nqn">
-            <cd-help-text>
-              A unique and permanent name for the lifetime of the subsystem.
-            </cd-help-text>
-          <span class="invalid-feedback"
-                *ngIf="subsystemForm.showError('nqn', formDir, 'required')"
-                i18n>This field is required.</span>
-          <span class="invalid-feedback"
-                *ngIf="subsystemForm.showError('nqn', formDir, 'unique')"
-                i18n>This NQN is already in use.</span>
-          <span class="invalid-feedback"
-                *ngIf="subsystemForm.showError('nqn', formDir, 'pattern')"
-                i18n>Expected NQN format<br/>&lt;<code>nqn.$year-$month.$reverseDomainName:$utf8-string</code>".&gt; or <br/>&lt;<code>nqn.2014-08.org.nvmexpress:uuid:$UUID-string</code>".&gt;</span>
-          <span class="invalid-feedback"
-                *ngIf="subsystemForm.showError('nqn', formDir, 'maxLength')"
-                i18n>An NQN may not be more than 223 bytes in length.</span>
-        </div>
-      </div>
-      <!-- Maximum Namespaces -->
-      <div class="form-group row">
-        <label class="cd-col-form-label"
-               for="max_namespaces">
-          <span i18n>Maximum Namespaces</span>
-        </label>
-        <div class="cd-col-form-input">
-          <input id="max_namespaces"
-                 class="form-control"
-                 type="text"
-                 name="max_namespaces"
-                 formControlName="max_namespaces">
-          <cd-help-text i18n>The maximum namespaces per subsystem. Default is {{defaultMaxNamespace}}</cd-help-text>
-          <span class="invalid-feedback"
-                *ngIf="subsystemForm.showError('max_namespaces', formDir, 'min')"
-                i18n>The value must be at least 1.</span>
-          <span class="invalid-feedback"
-                *ngIf="subsystemForm.showError('max_namespaces', formDir, 'pattern')"
-                i18n>The value must be a positive integer.</span>
+      <div cdsGrid
+           [useCssGrid]="true"
+           [narrow]="true"
+           [fullWidth]="true">
+        <div cdsCol
+             [columnNumbers]="{sm: 4, md: 8}">
+          <div cdsRow
+               class="form-heading">
+            <h3 class="cds--type-heading-03"
+                i18n>Subsystem details</h3>
+            <p
+              class="cds--type-label-02"
+              i18n>Enter identifying and network details for this subsystem.</p>
+          </div>
+          <div cdsRow
+               class="form-item">
+            <cds-text-label
+              i18n
+              [invalid]="nqnRef.isInvalid"
+              [invalidText]="nqnInvalidTemplate"
+              helperText="A unique identifier for the subsystem"
+              i18n-helperText>
+              Subsystem NQN (NVMe Qualified Name)
+              <input cdsText
+                     cdValidate
+                     #nqnRef="cdValidate"
+                     type="text"
+                     formControlName="nqn"
+                     [invalid]="nqnRef.isInvalid">
+            </cds-text-label>
+          </div>
+          <div cdsRow
+               class="form-item">
+            <cds-text-label
+              i18n
+              [invalid]="maxNs.isInvalid"
+              [invalidText]="maxNamespacesInvalidTemplate"
+              helperText="The maximum namespaces per subsystem. Default is {{defaultMaxNamespace}}"
+              i18n-helperText>
+              Maximum Namespaces
+              <input cdsText
+                     cdValidate
+                     #maxNs="cdValidate"
+                     type="text"
+                     formControlName="maxNamespaces"
+                     [invalid]="maxNs.isInvalid">
+            </cds-text-label>
+          </div>
         </div>
       </div>
     </form>
   </cd-tearsheet-step>
 </cd-tearsheet>
+
+
+<ng-template #validationErrors
+             let-control="control">
+@if (control.errors) {
+@for (err of control.errors | keyvalue; track err.key) {
+<span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
+}
+}
+</ng-template>
+
+<ng-template #nqnInvalidTemplate>
+  <ng-container *ngTemplateOutlet="validationErrors; context: { control: subsystemForm.get('nqn') }"></ng-container>
+</ng-template>
+
+<ng-template #maxNamespacesInvalidTemplate>
+  <ng-container *ngTemplateOutlet="validationErrors; context: { control: subsystemForm.get('maxNamespaces') }"></ng-container>
+</ng-template>
