@@ -22,19 +22,21 @@
 
   <span
   *ngIf="row.active; else inactiveStatusTpl">
-    <i
-      [ngClass]="[icons.success, icons.large]"
+    <cd-icon
+      type="success"
+      [size]="iconSize.size24"
       ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} is active"
       class="text-success"
-    ></i>
+    ></cd-icon>
   </span>
 
   <ng-template #inactiveStatusTpl>
-    <i
-      [ngClass]="[icons.warning, icons.large]"
+    <cd-icon
+      type="warning"
+      [size]="iconSize.size24"
       class="text-warning"
       ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} has been deactivated"
-    ></i>
+    ></cd-icon>
   </ng-template>
 
   <ng-template #fullpathForSelectionTpl>

@@ -10,7 +10,7 @@ import { ConfirmationModalComponent } from '~/app/shared/components/confirmation
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize, Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -80,7 +80,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   retries: number;
   tableStatus = new TableStatus('ghost');
   selection = new CdTableSelection();
-  icons = Icons;
+  icons = Icons; // Keep for FontAwesome spinner icons
+  iconSize = IconSize;
   count = 0;
   private tableContext: CdTableFetchDataContext = null;
   errorMessage: string;

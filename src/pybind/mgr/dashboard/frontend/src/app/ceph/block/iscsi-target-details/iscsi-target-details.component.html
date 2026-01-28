@@ -9,6 +9,7 @@
     <ng-template #treeNodeTemplate
                  let-node>
                  {{node?.data?.cdIcon}}
+    <!-- TODO: update to cd-icon -->
     <svg [cdsIcon]="node?.data?.cdIcon"
          [size]="icons.size16"
          ></svg>

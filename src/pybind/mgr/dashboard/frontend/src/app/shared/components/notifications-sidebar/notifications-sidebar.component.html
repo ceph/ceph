@@ -5,9 +5,7 @@
       <div class="row no-gutters">
         <div class="col-md-2 text-center">
           <span class="text-info">
-            <svg [cdsIcon]="icons.circle"
-                 [size]="icons.size16"
-                 ></svg>
+            <cd-icon type="circle"></cd-icon>
           </span>
         </div>
         <div class="col-md-9">
@@ -43,9 +41,7 @@
     <button type="button"
             class="btn btn-light btn-block"
             (click)="removeAll(); $event.stopPropagation()">
-      <svg [cdsIcon]="icons.trash"
-           [size]="icons.size16"
-           ></svg>
+      <cd-icon type="trash"></cd-icon>
       &nbsp;
       <ng-container i18n>Clear notifications</ng-container>
     </button>
@@ -68,27 +64,21 @@
                       title="Remove notification"
                       i18n-title
                       (click)="remove(i); $event.stopPropagation()">
-                <svg [cdsIcon]="icons.trash"
-                     [size]="icons.size16"
-                     ></svg>
+                <cd-icon type="trash"></cd-icon>
               </button>
               <button *ngIf="notification.application === 'Prometheus' && notification.type !== 2 && !notification.alertSilenced"
                       class="btn btn-link float-end text-muted mute m-0 p-0"
                       title="Silence Alert"
                       i18n-title
                       (click)="silence(notification)">
-                <svg [cdsIcon]="icons.mute"
-                     [size]="icons.size16"
-                     ></svg>
+                <cd-icon type="mute"></cd-icon>
               </button>
               <button *ngIf="notification.application === 'Prometheus' && notification.type !== 2 && notification.alertSilenced"
                       class="btn btn-link float-end text-muted mute m-0 p-0"
                       title="Expire Silence"
                       i18n-title
                       (click)="expire(notification)">
-                <svg [cdsIcon]="icons.bell"
-                     [size]="icons.size16"
-                     ></svg>
+                <cd-icon type="bell"></cd-icon>
               </button>
 
 

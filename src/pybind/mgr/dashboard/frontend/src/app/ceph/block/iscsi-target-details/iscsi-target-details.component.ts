@@ -5,7 +5,7 @@ import _ from 'lodash';
 import { USER } from '~/app/shared/constants/app.constants';
 
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize, Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { BooleanTextPipe } from '~/app/shared/pipes/boolean-text.pipe';
 import { IscsiBackstorePipe } from '~/app/shared/pipes/iscsi-backstore.pipe';
@@ -39,7 +39,8 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
 
   @ViewChild('treeNodeTemplate', { static: true }) labelTpl: TemplateRef<any>;
 
-  icons = Icons;
+  icons = Icons; // Keep for dynamic icons
+  iconSize = IconSize;
   columns: CdTableColumn[];
   data: any;
   metadata: any = {};

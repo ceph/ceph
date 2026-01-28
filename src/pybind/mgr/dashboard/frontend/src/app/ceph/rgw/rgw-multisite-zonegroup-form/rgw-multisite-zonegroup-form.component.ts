@@ -15,7 +15,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwRealm, RgwZone, RgwZonegroup } from '../models/rgw-multisite';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize } from '~/app/shared/enum/icons.enum';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 
 @Component({
@@ -26,7 +26,7 @@ import { SelectOption } from '~/app/shared/components/select/select-option.model
 })
 export class RgwMultisiteZonegroupFormComponent implements OnInit {
   action: string;
-  icons = Icons;
+  iconSize = IconSize;
   multisiteZonegroupForm: CdFormGroup;
   editing = false;
   resource: string;

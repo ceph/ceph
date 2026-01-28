@@ -17,7 +17,7 @@ import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, TimerServiceInterval } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -66,6 +66,7 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
   };
 
   icons = Icons;
+  iconSize = IconSize;
   permissions: Permissions;
   selection = new CdTableSelection();
   createTableActions: CdTableAction[];

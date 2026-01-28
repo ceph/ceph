@@ -10,7 +10,7 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -48,6 +48,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
   tableActions: CdTableAction[];
   targets: any[] = [];
   icons = Icons;
+  iconSize = IconSize;
 
   builders = {
     'iscsi/target/create': (metadata: object) => {

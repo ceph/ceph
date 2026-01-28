@@ -13,7 +13,7 @@ import { FormModalComponent } from '~/app/shared/components/form-modal/form-moda
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize, Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CdFormModalFieldConfig } from '~/app/shared/models/cd-form-modal-field-config';
@@ -70,7 +70,8 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   private requestedPaths: string[];
   private loadingTimeout: any;
 
-  icons = Icons;
+  icons = Icons; // Keep for FontAwesome spinner icons
+  iconSize = IconSize;
   loadingIndicator = false;
   loading: Record<string, boolean> = {};
   permission: Permission;

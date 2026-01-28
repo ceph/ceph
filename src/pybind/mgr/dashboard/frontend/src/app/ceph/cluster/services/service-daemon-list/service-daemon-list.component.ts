@@ -23,7 +23,7 @@ import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -75,6 +75,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   errorThreshold = 0.9;
 
   icons = Icons;
+  iconSize = IconSize;
 
   daemons: Daemon[] = [];
   services: Array<CephServiceSpec> = [];

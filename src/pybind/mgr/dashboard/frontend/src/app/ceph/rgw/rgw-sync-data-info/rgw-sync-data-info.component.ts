@@ -1,5 +1,5 @@
 import { Component, Input } from '@angular/core';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-rgw-sync-data-info',
@@ -8,7 +8,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
   standalone: false
 })
 export class RgwSyncDataInfoComponent {
-  icons = Icons;
+  iconSize = IconSize;
   align = 'top';
   @Input()
   zone: any = {};

@@ -9,7 +9,7 @@ import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -74,6 +74,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   isLoadingServices = false;
   selection: CdTableSelection = new CdTableSelection();
   icons = Icons;
+  iconSize = IconSize;
   serviceUrls = { grafana: '', prometheus: '', alertmanager: '' };
   isMgmtGateway: boolean = false;
 

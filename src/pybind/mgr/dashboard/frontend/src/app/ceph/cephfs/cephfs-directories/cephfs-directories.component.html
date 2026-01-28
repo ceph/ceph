@@ -6,8 +6,9 @@
                 [class.disabled]="loadingIndicator"
                 class="btn btn-light pull-right"
                 (click)="refreshAllDirectories()">
-          <i [ngClass]="[icons.large, icons.refresh]"
-             [class.fa-spin]="loadingIndicator"></i>
+          <cd-icon type="refresh"
+                   [size]="iconSize.size24"
+                   [class.fa-spin]="loadingIndicator"></cd-icon>
         </button>
       </div>
       <div class="card-body card-tree">
@@ -15,6 +16,7 @@
                        (select)="selectNode($event)">
         </cds-tree-view>
         <div *ngIf="loadingIndicator">
+            <!-- TODO: update to loading component-->
           <i [ngClass]="[icons.spinner, icons.spin]"></i>
         </div>
       </div>

@@ -15,7 +15,7 @@ import { Subscription } from 'rxjs';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import {
   AlertmanagerSilence,
@@ -50,6 +50,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
 
   icons = Icons;
+  iconSize = IconSize;
 
   // Tasks
   last_task = '';

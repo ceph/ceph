@@ -19,7 +19,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permissions } from '~/app/shared/models/permissions';
 import { SnapshotSchedule } from '~/app/shared/models/snapshot-schedule';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -63,6 +63,7 @@ export class CephfsSnapshotscheduleListComponent
   errorMessage: string = '';
   selectedName: string = '';
   icons = Icons;
+  iconSize = IconSize;
   tableActions!: CdTableAction[];
 
   MODULE_NAME = 'snap_schedule';

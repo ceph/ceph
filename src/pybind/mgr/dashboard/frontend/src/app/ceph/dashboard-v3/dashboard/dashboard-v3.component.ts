@@ -10,7 +10,7 @@ import {
   CapacityCardQueries,
   UtilizationCardQueries
 } from '~/app/shared/enum/dashboard-promqls.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize, ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import {
   CapacityCardDetails,
   DashboardDetails,
@@ -50,7 +50,7 @@ import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 export class DashboardV3Component extends PrometheusListHelper implements OnInit, OnDestroy {
   telemetryURL = 'https://telemetry-public.ceph.com/';
   origin = window.location.origin;
-  icons = Icons;
+  iconSize = IconSize;
 
   permissions: Permissions;
 
@@ -169,6 +169,17 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
 
   toggleAlertsWindow(type: AlertClass) {
     this.alertType === type ? (this.alertType = null) : (this.alertType = type);
+  }
+
+  getHealthIconType(status: string): keyof typeof ICON_TYPE {
+    if (status === 'HEALTH_ERR') {
+      return 'danger';
+    } else if (status === 'HEALTH_WARN') {
+      return 'warning';
+    } else if (status === 'HEALTH_OK') {
+      return 'success';
+    }
+    return 'warning'; // default
   }
 
   getDetailsCardData() {

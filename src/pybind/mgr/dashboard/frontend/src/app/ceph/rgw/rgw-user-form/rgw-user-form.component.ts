@@ -7,7 +7,7 @@ import { concat as observableConcat, forkJoin as observableForkJoin, Observable 
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs, USER } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -42,7 +42,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   userForm: CdFormGroup;
   editing = false;
   submitObservables: Observable<Object>[] = [];
-  icons = Icons;
+  iconSize = IconSize;
   subusers: RgwUserSubuser[] = [];
   s3Keys: RgwUserS3Key[] = [];
   swiftKeys: RgwUserSwiftKey[] = [];
