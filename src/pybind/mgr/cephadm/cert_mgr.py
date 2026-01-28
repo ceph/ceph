@@ -159,7 +159,10 @@ class CertMgr:
 
     CEPHADM_ROOT_CA_CERT = 'cephadm_root_ca_cert'
     CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
-    CEPHADM_CERTMGR_HEALTH_ERR = 'CEPHADM_CERT_ERROR'
+
+    CEPHADM_CERT_ERROR = 'CEPHADM_CERT_ERROR'
+    CEPHADM_CERT_WARNING = 'CEPHADM_CERT_WARNING'
+
     CEPHADM_SIGNED = 'cephadm-signed'
     LABEL_SEPARATOR = "__lbl__"
 
@@ -315,7 +318,12 @@ class CertMgr:
         custom_san_list: Optional[List[str]] = None,
         duration_in_days: Optional[int] = None,
     ) -> TLSCredentials:
-        cert, key = self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list, duration_in_days=duration_in_days)
+        cert, key = self.ssl_certs.generate_cert(
+            host_fqdn,
+            node_ip,
+            custom_san_list=custom_san_list,
+            duration_in_days=duration_in_days
+        )
         ca_cert = self.mgr.cert_mgr.get_root_ca()
         return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
 
@@ -343,13 +351,16 @@ class CertMgr:
         ca_cert = self.mgr.cert_mgr.get_root_ca()
         return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
 
-    def save_cert(self, cert_name: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False, editable: bool = False) -> None:
+    def save_cert(self, cert_name: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None,
+                  user_made: bool = False, editable: bool = False) -> None:
         self.cert_store.save_tlsobject(cert_name, cert, service_name, host, user_made, editable)
 
-    def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False, editable: bool = False) -> None:
+    def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None,
+                 user_made: bool = False, editable: bool = False) -> None:
         self.key_store.save_tlsobject(key_name, key, service_name, host, user_made, editable)
 
-    def save_self_signed_cert_key_pair(self, service_name: str, tls_creds: TLSCredentials, host: str, label: Optional[str] = None) -> None:
+    def save_self_signed_cert_key_pair(self, service_name: str, tls_creds: TLSCredentials, host: str,
+                                       label: Optional[str] = None) -> None:
         ss_cert_name = self.self_signed_cert(service_name, label)
         ss_key_name = self.self_signed_key(service_name, label)
         self.cert_store.save_tlsobject(ss_cert_name, tls_creds.cert, host=host, user_made=False)
@@ -522,19 +533,20 @@ class CertMgr:
             if (cert_info.cert_name, cert_info.target) not in previously_reported_issues:
                 self.certificates_health_report.append(cert_info)
 
+        # No issues => clear both possible health checks
         if not self.certificates_health_report:
-            self.mgr.remove_health_warning(CertMgr.CEPHADM_CERTMGR_HEALTH_ERR)
+            self.mgr.remove_health_warning(self.CEPHADM_CERT_ERROR)
+            self.mgr.remove_health_warning(self.CEPHADM_CERT_WARNING)
             return
 
-        detailed_error_msgs = []
+        detailed_msgs: List[str] = []
         invalid_count = 0
         expired_count = 0
         expiring_count = 0
         for cert_info in self.certificates_health_report:
-            cert_status = cert_info.get_status_description()
-            detailed_error_msgs.append(cert_status)
+            detailed_msgs.append(cert_info.get_status_description())
             if not cert_info.is_valid:
-                if 'expired' in cert_info.error_info:
+                if 'expired' in cert_info.error_info.lower():
                     expired_count += 1
                 else:
                     invalid_count += 1
@@ -549,14 +561,23 @@ class CertMgr:
         ]
         issues_description = ', '.join(filter(None, issues))  # collect only non-empty issues
         total_issues = invalid_count + expired_count + expiring_count
-        short_error_msg = (f'Detected {total_issues} cephadm certificate(s) issues: {issues_description}')
+        short_msg = f'Detected {total_issues} cephadm certificate(s) issues: {issues_description}'
 
-        if invalid_count > 0 or expired_count > 0:
-            logger.error(short_error_msg)
-            self.mgr.set_health_error(CertMgr.CEPHADM_CERTMGR_HEALTH_ERR, short_error_msg, total_issues, detailed_error_msgs)
+        # Severity decision:
+        # - Any INVALID/EXPIRED -> ERROR (CEPHADM_CERT_ERROR)
+        # - Otherwise -> WARNING (CEPHADM_CERT_WARNING)
+        has_error = (invalid_count > 0 or expired_count > 0)
+
+        if has_error:
+            logger.error(short_msg)
+            # Ensure warning check is cleared when escalating to error
+            self.mgr.remove_health_warning(self.CEPHADM_CERT_WARNING)
+            self.mgr.set_health_error(self.CEPHADM_CERT_ERROR, short_msg, total_issues, detailed_msgs)
         else:
-            logger.warning(short_error_msg)
-            self.mgr.set_health_warning(CertMgr.CEPHADM_CERTMGR_HEALTH_ERR, short_error_msg, total_issues, detailed_error_msgs)
+            logger.warning(short_msg)
+            # Ensure error check is cleared when de-escalating to warning
+            self.mgr.remove_health_warning(self.CEPHADM_CERT_ERROR)
+            self.mgr.set_health_warning(self.CEPHADM_CERT_WARNING, short_msg, total_issues, detailed_msgs)
 
     def check_certificate_state(self, cert_name: str, target: str, cert: str, key: Optional[str] = None) -> CertInfo:
         """
@@ -590,9 +611,14 @@ class CertMgr:
         def get_key(cert_name: str, key_name: str, target: Optional[str]) -> Optional[PrivKey]:
             try:
                 tlsobj_target = self.cert_store.determine_tlsobject_target(cert_name, target)
-                key = cast(PrivKey, self.key_store.get_tlsobject(key_name,
-                                                                 service_name=tlsobj_target.service,
-                                                                 host=tlsobj_target.host))
+                key = cast(
+                    PrivKey,
+                    self.key_store.get_tlsobject(
+                        key_name,
+                        service_name=tlsobj_target.service,
+                        host=tlsobj_target.host
+                    )
+                )
                 return key
             except TLSObjectException:
                 return None
@@ -611,7 +637,6 @@ class CertMgr:
             if key_obj:
                 # certificate has a key, let's check the cert/key pair
                 cert_info = self._check_certificate_state(cert_name, target, cert_obj, key_obj)
-
             elif any(key_name in ks for ks in self.known_keys.values()) or self.is_cephadm_signed_object(key_name):
                 # certificate is supposed to have a key but it's missing
                 logger.error(f"Key '{key_name}' is missing for certificate '{cert_name}'.")
@@ -677,13 +702,22 @@ class CertMgr:
             else:
                 return False
 
+        def log_issue(cert_info: CertInfo) -> None:
+            msg = cert_info.get_status_description()
+            if cert_info.status in (CertStatus.INVALID, CertStatus.EXPIRED):
+                logger.error(msg)
+            elif cert_info.status == CertStatus.EXPIRING:
+                logger.warning(msg)
+            else:
+                logger.info(msg)
+
         # Process all problematic certificates and try to fix them in case automated certs renewal
         # is enabled. Successfully fixed ones are collected to trigger a service reconfiguration.
-        certs_with_issues = []
+        certs_with_issues: List[CertInfo] = []
         services_to_reconfig = set()
         for cert_info, cert_obj in self.get_problematic_certificates():
 
-            logger.warning(cert_info.get_status_description())
+            log_issue(cert_info)
 
             if requires_user_intervention(cert_info, cert_obj):
                 certs_with_issues.append(cert_info)
