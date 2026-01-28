@@ -10,16 +10,13 @@ import time
 import os
 import io
 import string
-# XXX this should be converted to use boto3
-import boto
-from botocore.exceptions import ClientError
+from botocore.config import Config
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from random import randint
 import hashlib
 # XXX this should be converted to use pytest
 from nose.plugins.attrib import attr
 import boto3
-from boto.s3.connection import S3Connection
 import datetime
 from cloudevents.http import from_http
 from dateutil import parser
@@ -45,7 +42,6 @@ from .api import PSTopicS3, \
 
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal, assert_in, assert_not_in, assert_true
-import boto.s3.tagging
 
 # configure logging for the tests module
 class LogWrapper:
@@ -566,10 +562,17 @@ def connection(no_retries=False):
     port_no = get_config_port()
     vstart_access_key = get_access_key()
     vstart_secret_key = get_secret_key()
-    conn = S3Connection(aws_access_key_id=vstart_access_key,
-                        aws_secret_access_key=vstart_secret_key,
-                        is_secure=False, port=port_no, host=hostname,
-                        calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    conn = boto3.client(
+        service_name='s3',
+        aws_access_key_id=vstart_access_key,
+        aws_secret_access_key=vstart_secret_key,
+        endpoint_url=f"http://{hostname}:{port_no}",
+        config=Config(
+            s3={
+                'addressing_style': 'path'
+            }
+        ),
+    )
     if no_retries:
         conn.num_retries = 0
     return conn
@@ -581,10 +584,17 @@ def connection2():
     vstart_access_key = get_access_key()
     vstart_secret_key = get_secret_key()
 
-    conn = S3Connection(aws_access_key_id=vstart_access_key,
-                  aws_secret_access_key=vstart_secret_key,
-                      is_secure=False, port=port_no, host=hostname,
-                      calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    conn = boto3.client(
+        service_name='s3',
+        aws_access_key_id=vstart_access_key,
+        aws_secret_access_key=vstart_secret_key,
+        endpoint_url=f"http://{hostname}:{port_no}",
+        config=Config(
+            s3={
+                'addressing_style': 'path'
+            }
+        ),
+    )
 
     return conn
 
@@ -605,10 +615,17 @@ def another_user(user=None, tenant=None, account=None):
     _, rc = admin(cmd, get_config_cluster())
     assert_equal(rc, 0)
 
-    conn = S3Connection(aws_access_key_id=access_key,
-                  aws_secret_access_key=secret_key,
-                      is_secure=False, port=get_config_port(), host=get_config_host(),
-                      calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    conn = boto3.client(
+        service_name='s3',
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        endpoint_url=f"http://{get_config_host()}:{get_config_port()}",
+        config=Config(
+            s3={
+                'addressing_style': 'path'
+            }
+        ),
+    )
     return conn, arn
 
 
@@ -730,10 +747,17 @@ def connect_random_user(tenant=''):
     else:
         _, rc = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
     assert_equal(rc, 0)
-    conn = S3Connection(aws_access_key_id=access_key,
-                        aws_secret_access_key=secret_key,
-                        is_secure=False, port=get_config_port(), host=get_config_host(),
-                        calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    conn = boto3.client(
+        service_name='s3',
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        endpoint_url=f"http://{get_config_host()}:{get_config_port()}",
+        config=Config(
+            s3={
+                'addressing_style': 'path'
+            }
+        ),
+    )
     return conn
 
 ##############
