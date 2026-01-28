@@ -68,7 +68,7 @@ def fetch_meta(ctx: CephadmContext) -> Dict[str, Any]:
     return {}
 
 
-def fetch_configs(ctx: CephadmContext) -> Dict[str, str]:
+def fetch_configs(ctx: CephadmContext) -> Dict[str, Any]:
     """Return a dict containing arbitrary configuration parameters.
     This function filters out the key 'custom_config_files' which
     must not be part of a deployment's configuration key-value pairs.

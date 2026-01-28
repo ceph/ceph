@@ -1479,6 +1479,7 @@ class RGWSpec(ServiceSpec):
                  wildcard_enabled: Optional[bool] = False,
                  rgw_exit_timeout_secs: int = 120,
                  qat: Optional[Dict[str, str]] = None,
+                 d3n_cache: Optional[Dict[str, Any]] = None,
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1547,6 +1548,7 @@ class RGWSpec(ServiceSpec):
         self.rgw_exit_timeout_secs = rgw_exit_timeout_secs
 
         self.qat = qat or {}
+        self.d3n_cache = d3n_cache or {}
 
     def get_port_start(self) -> List[int]:
         ports = self.get_port()
@@ -1630,6 +1632,44 @@ class RGWSpec(ServiceSpec):
                 raise SpecValidationError(
                     f"Invalid compression mode {compression}. Only 'sw' and 'hw' are allowed"
                     )
+
+        if self.d3n_cache:
+            if not isinstance(self.d3n_cache, dict):
+                raise SpecValidationError("d3n_cache must be a mapping")
+
+            filesystem = self.d3n_cache.get('filesystem', 'xfs')
+            size = self.d3n_cache.get('size')
+            devices = self.d3n_cache.get('devices')
+
+            if not size:
+                raise SpecValidationError('"d3n_cache.size" is required')
+
+            if filesystem not in ('xfs', 'ext4'):
+                raise SpecValidationError(
+                    f'Invalid filesystem "{filesystem}" in d3n_cache (supported: xfs, ext4)'
+                )
+
+            if not devices or not isinstance(devices, dict):
+                raise SpecValidationError(
+                    '"d3n_cache.devices" must be a mapping of host -> list of devices'
+                )
+
+            for host, devs in devices.items():
+                if not isinstance(host, str) or not host:
+                    raise SpecValidationError(
+                        'Invalid host key in d3n_cache.devices (must be non-empty string)'
+                    )
+
+                if not isinstance(devs, list) or not devs:
+                    raise SpecValidationError(
+                        f'"d3n_cache.devices[{host}]" must be a non-empty list of device paths'
+                    )
+
+                for dev in devs:
+                    if not isinstance(dev, str) or not dev.startswith('/dev/'):
+                        raise SpecValidationError(
+                            f'Invalid device path "{dev}" in d3n_cache.devices[{host}]'
+                        )
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)

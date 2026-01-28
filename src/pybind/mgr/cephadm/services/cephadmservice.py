@@ -1,7 +1,8 @@
 import errno
+import re
+import os
 import json
 import logging
-import re
 import socket
 import time
 from abc import ABCMeta, abstractmethod
@@ -44,6 +45,8 @@ logger = logging.getLogger(__name__)
 
 ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 AuthEntity = NewType('AuthEntity', str)
+
+_SIZE_RE = re.compile(r'^\s*(\d+)\s*([KMGTP]?)\s*([iI]?[bB])?\s*$')
 
 
 def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEntity:
@@ -1317,6 +1320,243 @@ class RgwService(CephService):
         self.mgr.spec_store.save(spec)
         self.mgr.trigger_connect_dashboard_rgw()
 
+    def _size_to_bytes(self, v: str) -> int:
+        if isinstance(v, int):
+            return v
+        if isinstance(v, str):
+            m = _SIZE_RE.match(v)
+            if not m:
+                raise OrchestratorError(f'invalid size "{v}" (examples: 10737418240, 10G, 512M)')
+            num = int(m.group(1))
+            unit = (m.group(2) or '').upper()
+            mult = {
+                '': 1,
+                'K': 1024,
+                'M': 1024**2,
+                'G': 1024**3,
+                'T': 1024**4,
+                'P': 1024**5,
+            }[unit]
+            return num * mult
+        raise OrchestratorError(f'invalid size type {type(v)} (expected int or str)')
+
+    def _d3n_parse_dev_from_path(self, p: str) -> Optional[str]:
+        # expected: /mnt/ceph-d3n/<fsid>/<dev>/rgw_datacache/...
+
+        if not p:
+            return None
+        logger.info(f"p: {p}")
+        parts = [x for x in p.split('/') if x]
+        try:
+            i = parts.index('ceph-d3n')
+        except ValueError:
+            return None
+        if len(parts) < i + 3:
+            return None
+        dev = parts[i + 2]
+        return f'/dev/{dev}' if dev else None
+
+    def _d3n_fail_if_devs_used_by_other_rgw_service(self, host: str, devs: List[str], service_name: str) -> None:
+        wanted = set(devs)
+
+        # check rgw daemons on this host
+        rgw_daemons = self.mgr.cache.get_daemons_by_type('rgw', host=host)
+
+        for dd in rgw_daemons:
+            # skip daemons that belong to the same service
+            try:
+                other_service = dd.service_name()
+
+            except Exception:
+                continue
+            if other_service == service_name:
+                continue
+
+            who = utils.name_to_config_section(dd.name())
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config get',
+                'who': who,
+                'name': 'rgw_d3n_l1_datacache_persistent_path',
+            })
+            if ret != 0:
+                continue
+
+            p = (out or '').strip()
+            if not p:
+                continue
+
+            used_dev = self._d3n_parse_dev_from_path(p)
+            if used_dev and used_dev in wanted:
+                raise OrchestratorError(
+                    f'D3N device conflict on host "{host}": device "{used_dev}" is already used by RGW service "{other_service}" '
+                    f'(daemon {dd.name()}). Refuse to reuse across services.'
+                )
+
+    def _d3n_get_host_devs(self, d3n: Dict[str, Any], host: str) -> Tuple[str, int, list[str]]:
+        fs_type = d3n.get('filesystem', 'xfs')
+        size_raw = d3n.get('size')
+        devices_map = d3n.get('devices')
+
+        if size_raw is None:
+            raise OrchestratorError('"d3n_cache.size" is required')
+        if fs_type not in ('xfs', 'ext4'):
+            raise OrchestratorError(f'Invalid filesystem "{fs_type}" (supported: xfs, ext4)')
+        if not isinstance(devices_map, dict):
+            raise OrchestratorError('"d3n_cache.devices" must be a mapping of host -> [devices]')
+
+        devs = devices_map.get(host)
+        if not isinstance(devs, list) or not devs:
+            raise OrchestratorError("no devices found")
+        devs = sorted(devs)
+
+        for d in devs:
+            if not isinstance(d, str) or not d.startswith('/dev/'):
+                raise OrchestratorError(f'invalid device path "{d}" in d3n_cache.devices for host "{host}"')
+
+        size_bytes = self._size_to_bytes(size_raw)
+        return fs_type, size_bytes, devs
+
+    def _d3n_gc_and_prune_alloc(
+            self,
+            alloc: Dict[str, str],
+            devs: list[str],
+            daemon_details: list[DaemonDescription],
+            current_daemon_id: str,
+            key: tuple[str, str],
+    ) -> None:
+
+        invalid = [did for did, dev in alloc.items() if dev not in devs]
+        for did in invalid:
+            del alloc[did]
+        logger.debug(f"[D3N][alloc] prune-invalid: removed={invalid} devs={devs} alloc_now={alloc}")
+        if not daemon_details:
+            if alloc:
+                logger.info(f"[D3N][alloc] clear-stale: key={key} alloc_was={alloc}")
+                alloc.clear()
+            return
+
+        live_daemon_ids: set[str] = set()
+        for dd in daemon_details:
+            if dd.daemon_id:
+                live_daemon_ids.add(dd.daemon_id)
+
+        if current_daemon_id:
+            live_daemon_ids.add(current_daemon_id)
+
+        stale = [did for did in list(alloc.keys()) if did not in live_daemon_ids]
+        for did in stale:
+            del alloc[did]
+        logger.debug(
+            f"gc: key={key} live={sorted(live_daemon_ids)} "
+            f"removed={stale} alloc_now={alloc}"
+        )
+
+    def _d3n_get_allocator(self) -> Dict[Tuple[str, str], Dict[str, str]]:
+        alloc_all = getattr(self.mgr, "_d3n_device_alloc", None)
+        if alloc_all is None:
+            alloc_all = {}
+            setattr(self.mgr, "_d3n_device_alloc", alloc_all)
+
+        assert isinstance(alloc_all, dict)
+        return alloc_all
+
+    def _d3n_choose_device_for_daemon(
+            self,
+            service_name: str,
+            host: str,
+            devs: list[str],
+            daemon_id: str,
+            daemon_details: list[DaemonDescription],
+    ) -> str:
+        alloc_all = self._d3n_get_allocator()
+        key = (service_name, host)
+        alloc = alloc_all.setdefault(key, {})
+        assert isinstance(alloc, dict)
+        reason = "unknown"
+
+        self._d3n_gc_and_prune_alloc(alloc, devs, daemon_details, daemon_id, key)
+
+        logger.info(
+            f"[D3N][alloc] pre-choose key={key} daemon={daemon_id} "
+            f"daemon_details={len(daemon_details)} devs={devs} alloc={alloc}"
+        )
+
+        if daemon_id in alloc:
+            logger.info(f"[D3N][alloc] reuse existing mapping daemon={daemon_id} dev={alloc[daemon_id]}")
+            return alloc[daemon_id]
+
+        used = set(alloc.values())
+        free = [d for d in devs if d not in used]
+        if free:
+            chosen = free[0]  # 1:1 mapping whenever possible
+        else:
+            chosen = devs[len(alloc) % len(devs)]  # share the device when unavoidable
+            reason = "round-robin/share"
+        alloc[daemon_id] = chosen
+        logger.info(f"[D3N][alloc] chosen={chosen} reason={reason} alloc_now={alloc}")
+        return chosen
+
+    def _compute_d3n_cache_for_daemon(
+        self,
+        daemon_spec: CephadmDaemonDeploySpec,
+        spec: RGWSpec,
+    ) -> Optional[Dict[str, Any]]:
+
+        d3n = getattr(spec, 'd3n_cache', None)
+        if not d3n:
+            return None
+        if not isinstance(d3n, dict):
+            raise OrchestratorError('d3n_cache must be a mapping')
+
+        host = daemon_spec.host
+        if not host:
+            raise OrchestratorError("missing host in daemon_spec")
+
+        service_name = daemon_spec.service_name
+        daemon_details = self.mgr.cache.get_daemons_by_service(service_name)
+
+        fs_type, size_bytes, devs = self._d3n_get_host_devs(d3n, host)
+
+        self._d3n_fail_if_devs_used_by_other_rgw_service(host, devs, daemon_spec.service_name)
+
+        device = self._d3n_choose_device_for_daemon(
+            service_name=service_name,
+            host=host,
+            devs=devs,
+            daemon_id=daemon_spec.daemon_id,
+            daemon_details=daemon_details,
+        )
+
+        logger.info(
+            f"[D3N][alloc] service={service_name} host={host} daemon={daemon_spec.daemon_id} "
+            f"chosen={device} used=? devs={devs}"
+
+        )
+
+        if daemon_spec.daemon_id:
+            # warn if sharing is unavoidable
+            alloc_all = getattr(self.mgr, "_d3n_device_alloc", {})
+            alloc = alloc_all.get((service_name, host), {}) if isinstance(alloc_all, dict) else {}
+            if isinstance(alloc, dict) and len(alloc) > len(devs):
+                logger.warning(
+                    f'D3N cache sub-optimal on host "{host}" for service "{service_name}": '
+                    f'{len(alloc)} RGW daemons but only {len(devs)} devices; devices will be shared.'
+                )
+
+        fsid = self.mgr._cluster_fsid
+        device_key = os.path.basename(device)
+        mountpoint = f'/mnt/ceph-d3n/{fsid}/{device_key}'
+        daemon_entity = f'client.rgw.{daemon_spec.daemon_id}'
+        cache_path = os.path.join(mountpoint, 'rgw_datacache', daemon_entity)
+
+        return {
+            'device': device,
+            'filesystem': fs_type,
+            'size_bytes': size_bytes,
+            'mountpoint': mountpoint,
+            'cache_path': cache_path,
+        }
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         self.register_for_certificates(daemon_spec)
@@ -1477,6 +1717,31 @@ class RgwService(CephService):
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
+        d3n_cache = daemon_spec.final_config.get('d3n_cache')
+
+        if d3n_cache:
+            cache_path = d3n_cache.get('cache_path')
+            size = d3n_cache.get('size_bytes')
+
+            self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': daemon_name,
+                'name': 'rgw_d3n_l1_local_datacache_enabled',
+                'value': 'true',
+            })
+            self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': daemon_name,
+                'name': 'rgw_d3n_l1_datacache_persistent_path',
+                'value': cache_path,
+            })
+            self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': daemon_name,
+                'name': 'rgw_d3n_l1_datacache_size',
+                'value': str(size),
+            })
+
         return daemon_spec
 
     def get_keyring(self, rgw_id: str) -> str:
@@ -1510,11 +1775,28 @@ class RgwService(CephService):
             'who': utils.name_to_config_section(daemon.name()),
             'name': 'rgw_frontends',
         })
+
+        self.mgr.check_mon_command({
+            'prefix': 'config rm',
+            'who': utils.name_to_config_section(daemon.name()),
+            'name': 'rgw_d3n_l1_local_datacache_enabled',
+        })
+        self.mgr.check_mon_command({
+            'prefix': 'config rm',
+            'who': utils.name_to_config_section(daemon.name()),
+            'name': 'rgw_d3n_l1_datacache_persistent_path',
+        })
+        self.mgr.check_mon_command({
+            'prefix': 'config rm',
+            'who': utils.name_to_config_section(daemon.name()),
+            'name': 'rgw_d3n_l1_datacache_size',
+        })
         self.mgr.check_mon_command({
             'prefix': 'config rm',
             'who': utils.name_to_config_section(daemon.name()),
             'name': 'qat_compressor_enabled'
         })
+
         self.mgr.check_mon_command({
             'prefix': 'config-key rm',
             'key': f'rgw/cert/{daemon.name()}',
@@ -1567,6 +1849,10 @@ class RgwService(CephService):
 
         if svc_spec.qat:
             config['qat'] = svc_spec.qat
+
+        d3n_cache = self._compute_d3n_cache_for_daemon(daemon_spec, svc_spec)
+        if d3n_cache:
+            config['d3n_cache'] = d3n_cache
 
         rgw_deps = parent_deps + self.get_dependencies(self.mgr, svc_spec)
         return config, rgw_deps
