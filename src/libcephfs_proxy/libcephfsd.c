@@ -21,6 +21,7 @@
 typedef struct _proxy_server {
 	proxy_link_t link;
 	proxy_manager_t *manager;
+	proxy_settings_t *settings;
 } proxy_server_t;
 
 typedef struct _proxy_client {
@@ -28,6 +29,7 @@ typedef struct _proxy_client {
 	proxy_link_negotiate_t neg;
 	proxy_async_t async;
 	proxy_link_t *link;
+	proxy_settings_t *settings;
 	proxy_random_t random;
 	void *buffer;
 	uint32_t buffer_size;
@@ -37,7 +39,7 @@ typedef struct _proxy_client {
 typedef struct _proxy {
 	proxy_manager_t manager;
 	proxy_log_handler_t log_handler;
-	const char *socket_path;
+	proxy_settings_t settings;
 } proxy_t;
 
 typedef int32_t (*proxy_handler_t)(proxy_client_t *, proxy_req_t *,
@@ -182,7 +184,7 @@ static int32_t libcephfsd_create(proxy_client_t *client, proxy_req_t *req,
 
 	id = CEPH_STR_GET(req->create, id, data);
 
-	err = proxy_mount_create(&mount, id);
+	err = proxy_mount_create(&mount, client->settings, id);
 	TRACE("ceph_create(%p, '%s') -> %d", mount, id, err);
 
 	if (err >= 0) {
@@ -1973,7 +1975,8 @@ static void destroy_connection(proxy_worker_t *worker)
 	proxy_free(client);
 }
 
-static int32_t accept_connection(proxy_link_t *link, int32_t sd)
+static int32_t accept_connection(proxy_link_t *link, proxy_settings_t *settings,
+				 int32_t sd)
 {
 	proxy_server_t *server;
 	proxy_client_t *client;
@@ -1986,6 +1989,8 @@ static int32_t accept_connection(proxy_link_t *link, int32_t sd)
 		err = -ENOMEM;
 		goto failed_close;
 	}
+
+	client->settings = settings;
 
 	client->buffer_size = 65536;
 	client->buffer = proxy_malloc(client->buffer_size);
@@ -2032,14 +2037,48 @@ static bool check_stop(proxy_link_t *link)
 static int32_t server_start(proxy_manager_t *manager)
 {
 	proxy_server_t server;
+	struct stat st;
 	proxy_t *proxy;
+	const char *path;
+	char *wd;
+	int32_t err;
 
 	proxy = container_of(manager, proxy_t, manager);
 
 	server.manager = manager;
+	server.settings = &proxy->settings;
 
-	return proxy_link_server(&server.link, proxy->socket_path,
-				 accept_connection, check_stop);
+	path = proxy->settings.work_dir;
+	wd = realpath(path, NULL);
+	if (wd == NULL) {
+		return proxy_log(LOG_ERR, errno,
+				 "Failed to resolve the working directory");
+	}
+
+	if (stat(wd, &st) < 0) {
+		err = proxy_log(LOG_ERR, errno,
+				"Failed to check the working directory");
+		goto done;
+	}
+
+	if (!S_ISDIR(st.st_mode)) {
+		err = proxy_log(LOG_ERR, EINVAL,
+				"The provided path for the working directory "
+				"is not a directory");
+		goto done;
+	}
+
+	proxy->settings.work_dir = wd;
+
+	err = proxy_link_server(&server.link, &proxy->settings,
+				accept_connection, check_stop);
+
+	proxy->settings.work_dir = path;
+
+done:
+	free(wd);
+
+	return err;
 }
 
 static void log_format(struct iovec *iov, char *buffer, size_t size,
@@ -2093,9 +2132,13 @@ static void log_print(proxy_log_handler_t *handler, int32_t level, int32_t err,
 }
 
 static struct option main_opts[] = {
-	{"socket", required_argument, NULL, 's'},
+	{"socket",              required_argument, NULL, 's'},
+	{"work-dir",            required_argument, NULL, 'w'},
+	{"disable-safe-config", no_argument,       NULL, 'u'},
 	{}
 };
+
+static const char short_opts[] = ":s:w:u";
 
 int32_t main(int32_t argc, char *argv[])
 {
@@ -2111,16 +2154,22 @@ int32_t main(int32_t argc, char *argv[])
 
 	proxy_log_register(&proxy.log_handler, log_print);
 
-	proxy.socket_path = PROXY_SOCKET;
+	proxy.settings.socket_path = PROXY_SOCKET;
+	proxy.settings.work_dir = ".";
+	proxy.settings.disable_copy = false;
 
 	env = getenv(PROXY_SOCKET_ENV);
 	if (env != NULL) {
-		proxy.socket_path = env;
+		proxy.settings.socket_path = env;
 	}
 
-	while ((val = getopt_long(argc, argv, ":s:", main_opts, NULL)) >= 0) {
+	while ((val = getopt_long(argc, argv, short_opts, main_opts, NULL)) >= 0) {
 		if (val == 's') {
-			proxy.socket_path = optarg;
+			proxy.settings.socket_path = optarg;
+		} else if (val == 'w') {
+			proxy.settings.work_dir = optarg;
+		} else if (val == 'u') {
+			proxy.settings.disable_copy = true;
 		} else if (val == ':') {
 			proxy_log(LOG_ERR, ENODATA,
 				  "Argument missing for '%s'\n", optopt);
