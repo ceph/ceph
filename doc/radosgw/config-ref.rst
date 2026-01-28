@@ -218,8 +218,6 @@ Keystone Settings
 .. confval:: rgw_keystone_url
 .. confval:: rgw_keystone_admin_domain
 .. confval:: rgw_keystone_admin_project
-.. confval:: rgw_keystone_admin_token
-.. confval:: rgw_keystone_admin_token_path
 .. confval:: rgw_keystone_admin_tenant
 .. confval:: rgw_keystone_admin_user
 .. confval:: rgw_keystone_admin_password
