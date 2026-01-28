@@ -359,7 +359,7 @@ using LBAManagerRef = std::unique_ptr<LBAManager>;
 
 class Cache;
 namespace lba {
-LBAManagerRef create_lba_manager(Cache &cache);
+LBAManagerRef create_lba_manager(Cache &cache, store_index_t store_index);
 }
 
 }
