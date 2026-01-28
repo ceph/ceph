@@ -85,6 +85,7 @@ int RGWObjFilter::execute(bufferlist& bl, off_t offset, const char* op_name) con
     open_standard_libs(L);
 
     create_debug_action(L, s->cct);  
+    create_debug_action_f(L, s->cct);
 
     // create the "Data" table
     static const char* data_metatable_name = "Data";

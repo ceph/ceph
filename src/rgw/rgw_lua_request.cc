@@ -805,6 +805,7 @@ int execute(
     set_package_path(L, s->penv.lua.manager->luarocks_path());
 
     create_debug_action(L, s->cct);  
+    create_debug_action_f(L, s->cct);
   
     create_top_metatable(L, s, const_cast<char*>(op_name));  
 
