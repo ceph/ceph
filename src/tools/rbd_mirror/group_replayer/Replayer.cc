@@ -552,7 +552,8 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
     schedule_load_group_snapshots();
     return;
   }
-
+  auto unlink_snap = m_remote_group_snaps.end();
+  bool has_newer_snap = false;
   for (auto remote_snap = m_remote_group_snaps.begin();
        remote_snap != m_remote_group_snaps.end(); ) {
     auto remote_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
@@ -568,8 +569,40 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
                << m_remote_mirror_peer_uuid << ")" << dendl;
       remote_snap = m_remote_group_snaps.erase(remote_snap);
     } else {
+      if (unlink_snap != m_remote_group_snaps.end()) {
+        // check if snapshot to be removed is synced to local
+        auto itr = std::find_if(
+          m_local_group_snaps.begin(), m_local_group_snaps.end(),
+          [remote_snap](const cls::rbd::GroupSnapshot &s) {
+          return s.id == remote_snap->id;
+        });
+        if (itr == m_local_group_snaps.end()) {
+          dout(10) << "Local mirror group snapshot not found for remote_snap_id: " << remote_snap->id << dendl;
+          ++remote_snap;
+          continue;
+        }
+        auto next_local_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+          &itr->snapshot_namespace);
+        if (!is_mirror_group_snapshot_complete(itr->state,
+                                              next_local_snap_ns->complete)) {
+          dout(10) << "Next local mirror snapshot is incomplete, waiting: "
+                  << itr->id << dendl;
+          break;
+        }
+        has_newer_snap = true;
+        break;
+      }
+      if (remote_snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED) {
+        unlink_snap = remote_snap;
+      }
       ++remote_snap;
     }
+  }
+  if (has_newer_snap) {
+    mirror_group_snapshot_unlink_peer(unlink_snap->id);
+    locker.unlock();
+    schedule_load_group_snapshots();
+    return;
   }
   is_resync_requested();
 }

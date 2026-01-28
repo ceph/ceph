@@ -986,6 +986,125 @@ mirror_image_snapshot()
     rbd --cluster "${cluster}" mirror image snapshot "${pool}/${image}"
 }
 
+# get the uuid of the remote cluster from the ${cluster}'s pool info'
+# FIXME: works only for single peer, return uuid of first peer from list
+get_peer_uuid()
+{
+    local cluster=$1
+    local pool=$2
+    local -n _uuid=$3
+
+    run_cmd "rbd --cluster ${cluster} mirror pool info --pool ${pool} --format xml --pretty-format"
+    _uuid=$(xmlstarlet sel -t -v "//peers/peer/uuid[1]" < "$CMD_STDOUT" )
+    if [[ -z "${_uuid}" ]]; then
+        fail "failed to get uuid of pool ${pool}"
+	return 1
+    fi
+}
+
+# wait until a newest/last complete snapshot id is found by snapshot type
+# snap_type values: "demoted", "primary", "non-primary"
+wait_to_get_newest_complete_mirror_group_snapshot_id_by_snap_type()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap_type=$3
+    local -n _new_snap_id=$4
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        get_newest_complete_mirror_group_snapshot_id_by_snap_type "${cluster}" "${group_spec}" "${snap_type}" _new_snap_id
+        if [ -n "${_new_snap_id}" ]; then
+            return 0
+        fi
+    done
+
+    fail "wait for newest complete mirror group snapshot id failed on ${cluster}"
+    return 1
+}
+
+# get newest/last complete snapshot id by snapshot type
+# snap_type values: "demoted", "primary", "non-primary"
+# "demoted" can be primary or non-primary depending on which cluster it is run against
+get_newest_complete_mirror_group_snapshot_id_by_snap_type()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap_type=$3
+    local -n _snap_id=$4
+
+    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format"
+    _snap_id=$(xmlstarlet sel -t -v "(//group_snaps/group_snap[last()][namespace/complete='true' and namespace/state='${snap_type}']/id)" "$CMD_STDOUT" )
+
+    if [[ -z "${_snap_id}" ]]; then
+        fail "last group snap is not ${snap_type}+complete"
+	return 1
+    fi
+    return 0
+}
+
+# get the list of peer UUIDs for a specific group snapshot
+get_group_snap_peers()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap_id=$3
+    local -n _peers=$4
+
+    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format"
+    _peers=$(xmlstarlet sel -t -v "//group_snap[id='${snap_id}']/namespace/mirror_peer_uuids/peer_uuid" "$CMD_STDOUT")
+}
+
+test_peer_uuid_in_group_snap_peers()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap_id=$3
+    local peer_uuid=$4
+
+    local peers
+    get_group_snap_peers "${cluster}" "${group_spec}" "${snap_id}" peers
+    test -n "${peer_uuid}" || { fail "peer_uuid is empty"; return 1; }
+    echo "${peers}" | grep -qF "${peer_uuid}" || { fail; return 1; }
+}
+
+wait_for_peer_uuid_in_group_snap_peers()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap_id=$3
+    local peer_uuid=$4
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        test_peer_uuid_in_group_snap_peers "${cluster}" "${group_spec}" "${snap_id}" "${peer_uuid}" && return 0
+    done
+
+    fail "wait for peer_uuid ${peer_uuid} in group snap peers failed on ${cluster}"
+    return 1
+}
+
+wait_for_peer_uuid_not_in_group_snap_peers()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap_id=$3
+    local peer_uuid=$4
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        if ! test_peer_uuid_in_group_snap_peers "${cluster}" "${group_spec}" "${snap_id}" "${peer_uuid}"; then
+            return 0
+        fi
+    done
+
+    fail "failed to wait to unlink peer_uuid ${peer_uuid} from group snap ${snap_id} on ${cluster}"
+    return 1
+}
+
 # get the primary_snap_id for the most recent complete snap on the secondary cluster
 get_primary_snap_id_for_newest_mirror_snapshot_on_secondary()
 {
