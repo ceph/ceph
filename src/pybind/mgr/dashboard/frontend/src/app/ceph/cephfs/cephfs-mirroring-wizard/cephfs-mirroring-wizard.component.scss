@@ -1,0 +1,39 @@
+@use '@carbon/layout';
+
+.mirroring-bg {
+  background-color: var(--cds-ui-02);
+  min-height: 100vh;
+}
+
+.mirroring-list-item {
+  margin-bottom: layout.$spacing-03;
+  margin-top: layout.$spacing-03;
+}
+
+.mirroring-list {
+  margin-top: layout.$spacing-03;
+}
+
+.alert-title {
+  display: block;
+  margin-bottom: layout.$spacing-02;
+}
+
+.alert-description {
+  margin: 0 0 layout.$spacing-03 0;
+}
+
+.alert-subtitle {
+  display: block;
+  margin-bottom: layout.$spacing-01;
+}
+
+.alert-list {
+  list-style-type: disc;
+  padding-left: layout.$spacing-04;
+  margin: 0;
+}
+
+.tile-margin {
+  margin-right: 14px;
+}

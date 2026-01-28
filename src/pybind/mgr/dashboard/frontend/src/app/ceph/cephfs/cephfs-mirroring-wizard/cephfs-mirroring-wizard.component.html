@@ -1,0 +1,101 @@
+<cd-tearsheet [steps]="stepTitles"
+              [title]="title"
+              [description]="description"
+              (submitRequested)="onSubmit()"
+              (closeRequested)="onCancel()">
+  <cd-tearsheet-step>
+    <form [formGroup]="form">
+      <div>
+        <h5 i18n>Choose mirror peer role</h5>
+        <p i18n>Select how the cluster will participate in the CephFS mirroring relationship.</p>
+      </div>
+
+      <div cdsStack="horizontal">
+        <div class="tile-margin">
+          <cds-tile>
+            <cds-radio-group formControlName="clusterRole1">
+              <cds-radio [value]="'source'"
+                         [checked]="sourceChecked"
+                         (click)="onRoleChange()">
+                <div>
+                  <h6 i18n>Configure Local Peer</h6>
+                  <div i18n>
+                    This cluster will act as the initiating peer and send snapshots to a remote
+                    peer.
+                  </div>
+                  <ul class="mirroring-list">
+                    @for (item of sourceList; track $index) {
+                    <li class="mirroring-list-item">→ {{ item }}</li>
+                    }
+                  </ul>
+                </div>
+              </cds-radio>
+            </cds-radio-group>
+          </cds-tile>
+        </div>
+        <cds-tile>
+          <cds-radio-group formControlName="clusterRole2">
+            <cds-radio [value]="'target'"
+                       [checked]="targetChecked"
+                       (click)="onRole2Change()">
+              <div>
+                <h6 i18n>Configure Remote Peer</h6>
+                <div i18n>
+                  A remote cluster will act as the receiving peer and store replicated snapshots.
+                </div>
+                <ul cdsGap="sm"
+                    class="mirroring-list">
+                  @for (item of targetList; track $index) {
+                  <li class="mirroring-list-item">→ {{ item }}</li>
+                  }
+                </ul>
+              </div>
+            </cds-radio>
+          </cds-radio-group>
+        </cds-tile>
+      </div>
+
+      <ng-container *ngIf="sourceChecked === false && targetChecked === true">
+        <cd-alert-panel type="info"
+                        spacingClass="mb-3 mt-3"
+                        class="align-items-center">
+          <div>
+            <strong class="alert-title"
+                    i18n>About Remote Peer Setup</strong>
+            <p class="alert-description"
+               i18n>
+              As a remote peer, this cluster prepares to receive mirrored data from an initiating
+              cluster. The setup includes environment validation, enabling filesystem mirroring,
+              creating required Ceph users, and generating a bootstrap token.
+            </p>
+            <strong class="alert-subtitle"
+                    i18n>What happens next:</strong>
+            <ul class="alert-list">
+              <li i18n>Environment validation</li>
+              <li i18n>Ceph user creation</li>
+              <li i18n>Filesystem mirroring activation</li>
+              <li i18n>Bootstrap token generation</li>
+            </ul>
+          </div>
+        </cd-alert-panel>
+      </ng-container>
+    </form>
+  </cd-tearsheet-step>
+
+  <!-- Step 1 -->
+  <cd-tearsheet-step>
+    <div>Test 1</div>
+  </cd-tearsheet-step>
+
+  <!-- Step 2 -->
+  <cd-tearsheet-step>
+    <div>Test 2</div>
+  </cd-tearsheet-step>
+
+  <!-- Step 3 -->
+  <cd-tearsheet-step>
+    <div>
+      <p>Test3</p>
+    </div>
+  </cd-tearsheet-step>
+</cd-tearsheet>
