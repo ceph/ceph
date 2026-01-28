@@ -311,6 +311,7 @@ typedef struct {
 typedef enum {
   RBD_LOCK_MODE_EXCLUSIVE = 0,
   RBD_LOCK_MODE_SHARED = 1,
+  RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT = 2
 } rbd_lock_mode_t;
 
 CEPH_RBD_API void rbd_version(int *major, int *minor, int *extra);
