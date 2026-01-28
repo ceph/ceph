@@ -77,9 +77,19 @@ public:
     uint64_t rbm_addr = convert_paddr_to_abs_addr(addr);
     return read(rbm_addr, out);
   }
+  read_ertr::future<> readv(
+    paddr_t addr,
+    std::vector<bufferptr> ptrs) final {
+    uint64_t rbm_addr = convert_paddr_to_abs_addr(addr);
+    return _readv(rbm_addr, std::move(ptrs));
+  }
 protected:
   rbm_superblock_t super;
   rbm_shard_info_t shard_info;
+  virtual read_ertr::future<> _readv(
+    uint64_t offset,
+    std::vector<bufferptr> ptrs) = 0;
+
 public:
   RBMDevice() {}
   virtual ~RBMDevice() = default;
@@ -230,6 +240,9 @@ public:
   read_ertr::future<> read(
     uint64_t offset,
     bufferptr &bptr) override;
+  read_ertr::future<> _readv(
+    uint64_t offset,
+    std::vector<bufferptr> ptrs) override;
 
   close_ertr::future<> close() override;
 
