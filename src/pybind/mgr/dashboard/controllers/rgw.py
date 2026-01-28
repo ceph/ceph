@@ -89,8 +89,8 @@ class Rgw(BaseController):
                 msg = 'Failed to connect to the Object Gateway\'s Admin Ops API.'
                 raise RequestException(msg)
             # Ensure the system flag is set for the API user ID.
-            if not instance.is_system_user():  # pragma: no cover - no complexity there
-                msg = 'The system flag is not set for user "{}".'.format(
+            if not instance.is_admin_user():  # pragma: no cover - no complexity there
+                msg = 'The admin flag is not set for user "{}".'.format(
                     instance.userid)
                 raise RequestException(msg)
             status['available'] = True
