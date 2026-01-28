@@ -2,6 +2,7 @@
 
 #include <boost/asio/io_context.hpp>
 #include <iostream>
+#include <random>
 #include <vector>
 
 #include "common/Formatter.h"
@@ -298,7 +299,7 @@ ceph::io_sequence::tester::SelectSeqRange::select() {
 }
 
 ceph::io_sequence::tester::SelectErasureTechnique::SelectErasureTechnique(
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     std::string_view plugin,
     bool first_use)
@@ -336,7 +337,7 @@ ceph::io_sequence::tester::SelectErasureTechnique::generate_selections() {
 }
 
 ceph::io_sequence::tester::lrc::SelectMappingAndLayers::SelectMappingAndLayers(
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     bool first_use)
     : rng_seed(rng()),
@@ -363,7 +364,7 @@ ceph::io_sequence::tester::lrc::SelectMappingAndLayers::select() {
 }
 
 ceph::io_sequence::tester::SelectErasureKM::SelectErasureKM(
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     std::string_view plugin,
     const std::optional<std::string>& technique,
@@ -413,7 +414,7 @@ ceph::io_sequence::tester::SelectErasureKM::generate_selections() {
 }
 
 ceph::io_sequence::tester::jerasure::SelectErasureW::SelectErasureW(
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     std::string_view plugin,
     const std::optional<std::string_view>& technique,
@@ -454,7 +455,7 @@ ceph::io_sequence::tester::jerasure::SelectErasureW::generate_selections() {
 }
 
 ceph::io_sequence::tester::shec::SelectErasureC::SelectErasureC(
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     std::string_view plugin,
     const std::optional<std::pair<int, int>>& km,
@@ -481,7 +482,7 @@ ceph::io_sequence::tester::shec::SelectErasureC::generate_selections() {
 }
 
 ceph::io_sequence::tester::jerasure::SelectErasurePacketSize::
-    SelectErasurePacketSize(ceph::util::random_number_generator<int>& rng,
+    SelectErasurePacketSize(std::mt19937_64& rng,
                             po::variables_map& vm,
                             std::string_view plugin,
                             const std::optional<std::string_view>& technique,
@@ -529,7 +530,7 @@ const std::vector<uint64_t> ceph::io_sequence::tester::jerasure::
 }
 
 ceph::io_sequence::tester::SelectErasureChunkSize::SelectErasureChunkSize(
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     ErasureCodeInterfaceRef ec_impl,
     bool first_use)
@@ -546,22 +547,30 @@ ceph::io_sequence::tester::SelectErasureChunkSize::generate_selections() {
 
   std::vector<uint64_t> choices = {};
 
+  auto generate_random_int = [this](uint64_t range) -> uint64_t {
+    uint64_t rand_value = rng();
+    return rand_value % range;;
+  };
+
   if (4096 % minimum_chunksize == 0) {
     choices.push_back(4096);
   } else {
-    choices.push_back(minimum_chunksize * (rng(4) + 1));
+    uint64_t r = generate_random_int(4); // [0–3]
+    choices.push_back(minimum_chunksize * (r + 1));
   }
 
   if ((64 * 1024) % minimum_chunksize == 0) {
     choices.push_back(64 * 1024);
   } else {
-    choices.push_back(minimum_chunksize * (rng(64) + 1));
+    uint64_t r = generate_random_int(64); // [0–63]
+    choices.push_back(minimum_chunksize * (r + 1));
   }
 
   if ((256 * 1024) % minimum_chunksize == 0) {
     choices.push_back(256 * 1024);
   } else {
-    choices.push_back(minimum_chunksize * (rng(256) + 1));
+    uint64_t r = generate_random_int(256); // [0–255]
+    choices.push_back(minimum_chunksize * (r + 1));
   }
 
   return choices;
@@ -569,7 +578,7 @@ ceph::io_sequence::tester::SelectErasureChunkSize::generate_selections() {
 
 ceph::io_sequence::tester::SelectErasureProfile::SelectErasureProfile(
     boost::intrusive_ptr<CephContext> cct,
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     librados::Rados& rados,
     bool dry_run,
@@ -792,7 +801,7 @@ ceph::io_sequence::tester::SelectErasureProfile::selectExistingProfile(
 
 ceph::io_sequence::tester::SelectErasurePool::SelectErasurePool(
     boost::intrusive_ptr<CephContext> cct,
-    ceph::util::random_number_generator<int>& rng,
+    std::mt19937_64& rng,
     po::variables_map& vm,
     librados::Rados& rados,
     bool dry_run,
@@ -1021,14 +1030,15 @@ ceph::io_sequence::tester::TestObject::TestObject(
     const std::string primary_oid, const std::string secondary_oid, librados::Rados& rados,
     boost::asio::io_context& asio, SelectBlockSize& sbs, SelectErasurePool& spo,
     SelectObjectSize& sos, SelectNumThreads& snt, SelectSeqRange& ssr,
-    ceph::util::random_number_generator<int>& rng, ceph::mutex& lock,
+    std::mt19937_64& rng, ceph::mutex& lock,
     ceph::condition_variable& cond, bool dryrun, bool verbose,
     std::optional<int> seqseed, bool testrecovery, bool checkconsistency)
     : rng(rng), verbose(verbose), seqseed(seqseed),
       testrecovery(testrecovery), checkconsistency(checkconsistency) {
   if (dryrun) {
+    int model_seed = rng();
     exerciser_model = std::make_unique<ceph::io_exerciser::ObjectModel>(
-        primary_oid, secondary_oid, sbs.select(), rng());
+        primary_oid, secondary_oid, sbs.select(), model_seed);
   } else {
     const std::string pool = spo.select();
     if (!dryrun) {
@@ -1046,9 +1056,9 @@ ceph::io_sequence::tester::TestObject::TestObject(
 
     bufferlist outbl;
     auto formatter = std::make_unique<JSONFormatter>(false);
-
+    int model_seed = rng();
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(
-        rados, asio, pool, primary_oid, secondary_oid, sbs.select(), rng(),
+        rados, asio, pool, primary_oid, secondary_oid, sbs.select(), model_seed,
         threads, lock, cond, spo.is_replicated_pool(),
         spo.get_allow_pool_ec_optimizations());
     dout(0) << "= " << primary_oid << " pool=" << pool << " threads=" << threads
@@ -1130,7 +1140,7 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
     librados::Rados& rados)
     : rados(rados),
       seed(vm.contains("seed") ? vm["seed"].as<int>() : time(nullptr)),
-      rng(ceph::util::random_number_generator<int>(seed)),
+      rng(seed),
       sbs{rng, vm, "blocksize", true},
       sos{rng, vm, "objectsize", true},
       spo{cct,
@@ -1308,13 +1318,15 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
   std::unique_ptr<ceph::io_exerciser::Model> model;
 
   if (dryrun) {
+    int model_seed = rng();
     model = std::make_unique<ceph::io_exerciser::ObjectModel>(
-        primary_object_name, secondary_object_name, sbs.select(), rng());
+        primary_object_name, secondary_object_name, sbs.select(), model_seed);
   } else {
     const std::string pool = spo.select();
-
+    dout(0) << "Pool name: " << pool << dendl;
+    int model_seed = rng();
     model = std::make_unique<ceph::io_exerciser::RadosIo>(
-        rados, asio, pool, primary_object_name, secondary_object_name, sbs.select(), rng(),
+        rados, asio, pool, primary_object_name, secondary_object_name, sbs.select(), model_seed,
         1,  // 1 thread
         lock, cond, spo.is_replicated_pool(),
         spo.get_allow_pool_ec_optimizations());
