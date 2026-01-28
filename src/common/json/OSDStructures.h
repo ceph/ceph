@@ -163,6 +163,8 @@ struct InjectECErrorRequest {
       case io_exerciser::InjectOpType::ReadEIO:
         [[fallthrough]];
       case io_exerciser::InjectOpType::ReadMissingShard:
+        [[fallthrough]];
+      case io_exerciser::InjectOpType::ReadDelayed:
         ::encode_json("prefix", "injectecreaderr", f);
         break;
       case io_exerciser::InjectOpType::WriteFailAndRollback:
@@ -202,6 +204,8 @@ struct InjectECClearErrorRequest {
       case io_exerciser::InjectOpType::ReadEIO:
         [[fallthrough]];
       case io_exerciser::InjectOpType::ReadMissingShard:
+        [[fallthrough]];
+      case io_exerciser::InjectOpType::ReadDelayed:
         ::encode_json("prefix", "injectecclearreaderr", f);
         break;
       case io_exerciser::InjectOpType::WriteFailAndRollback:

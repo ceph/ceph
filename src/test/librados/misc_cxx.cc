@@ -22,6 +22,7 @@
 #include "global/global_context.h"
 #include "test/librados/testcase_cxx.h"
 #include "test/librados/test_cxx.h"
+#include "erasure-code/consistency/RadosCommands.h"
 
 #include "crimson_utils.h"
 
@@ -36,11 +37,11 @@ TEST(LibRadosMiscVersion, VersionPP) {
   Rados::version(&major, &minor, &extra);
 }
 
-TEST_F(LibRadosMiscPP, WaitOSDMapPP) {
+TEST_P(LibRadosMiscPP, WaitOSDMapPP) {
   ASSERT_EQ(0, cluster.wait_for_latest_osdmap());
 }
 
-TEST_F(LibRadosMiscPP, LongNamePP) {
+TEST_P(LibRadosMiscPP, LongNamePP) {
   bufferlist bl;
   bl.append("content");
   int maxlen = g_conf()->osd_max_object_name_len;
@@ -51,7 +52,7 @@ TEST_F(LibRadosMiscPP, LongNamePP) {
   ASSERT_EQ(-ENAMETOOLONG, ioctx.write(string(maxlen*2, 'a').c_str(), bl, bl.length(), 0));
 }
 
-TEST_F(LibRadosMiscPP, LongLocatorPP) {
+TEST_P(LibRadosMiscPP, LongLocatorPP) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append("content");
@@ -93,7 +94,7 @@ TEST_F(LibRadosMiscPP, LongLocatorPP) {
       bl, bl.length(), 0));
 }
 
-TEST_F(LibRadosMiscPP, LongNSpacePP) {
+TEST_P(LibRadosMiscPP, LongNSpacePP) {
   bufferlist bl;
   bl.append("content");
   int maxlen = g_conf()->osd_max_object_namespace_len;
@@ -134,7 +135,7 @@ TEST_F(LibRadosMiscPP, LongNSpacePP) {
       bl, bl.length(), 0));
 }
 
-TEST_F(LibRadosMiscPP, LongAttrNamePP) {
+TEST_P(LibRadosMiscPP, LongAttrNamePP) {
   bufferlist bl;
   bl.append("content");
   int maxlen = g_conf()->osd_max_attr_name_len;
@@ -145,7 +146,7 @@ TEST_F(LibRadosMiscPP, LongAttrNamePP) {
   ASSERT_EQ(-ENAMETOOLONG, ioctx.setxattr("bigattrobj", string(maxlen*2, 'a').c_str(), bl));
 }
 
-TEST_F(LibRadosMiscPP, ExecPP) {
+TEST_P(LibRadosMiscPP, ExecPP) {
   bufferlist bl;
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, 0));
   bufferlist bl2, out;
@@ -164,7 +165,7 @@ void set_completion_complete(rados_completion_t cb, void *arg)
   *my_aio_complete = true;
 }
 
-TEST_F(LibRadosMiscPP, BadFlagsPP) {
+TEST_P(LibRadosMiscPP, BadFlagsPP) {
   unsigned badflags = CEPH_OSD_FLAG_PARALLELEXEC;
   {
     bufferlist bl;
@@ -176,7 +177,7 @@ TEST_F(LibRadosMiscPP, BadFlagsPP) {
   }
 }
 
-TEST_F(LibRadosMiscPP, Operate1PP) {
+TEST_P(LibRadosMiscPP, Operate1PP) {
   ObjectWriteOperation o;
   {
     bufferlist bl;
@@ -216,7 +217,7 @@ TEST_F(LibRadosMiscPP, Operate1PP) {
   ASSERT_EQ(-ECANCELED, ioctx.operate("foo", &o3));
 }
 
-TEST_F(LibRadosMiscPP, Operate2PP) {
+TEST_P(LibRadosMiscPP, Operate2PP) {
   ObjectWriteOperation o;
   {
     bufferlist bl;
@@ -237,7 +238,7 @@ TEST_F(LibRadosMiscPP, Operate2PP) {
   ASSERT_EQ(0U, size);
 }
 
-TEST_F(LibRadosMiscPP, BigObjectPP) {
+TEST_P(LibRadosMiscPP, BigObjectPP) {
   bufferlist bl;
   bl.append("abcdefg");
   ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
@@ -269,7 +270,7 @@ TEST_F(LibRadosMiscPP, BigObjectPP) {
 #endif
 }
 
-TEST_F(LibRadosMiscPP, AioOperatePP) {
+TEST_P(LibRadosMiscPP, AioOperatePP) {
   bool my_aio_complete = false;
   AioCompletion *my_completion = cluster.aio_create_completion(
 	  (void*)&my_aio_complete, set_completion_complete);
@@ -303,7 +304,7 @@ TEST_F(LibRadosMiscPP, AioOperatePP) {
   ASSERT_EQ(1024U, size);
 }
 
-TEST_F(LibRadosMiscPP, AssertExistsPP) {
+TEST_P(LibRadosMiscPP, AssertExistsPP) {
   char buf[64];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -318,7 +319,7 @@ TEST_F(LibRadosMiscPP, AssertExistsPP) {
   ASSERT_EQ(-EEXIST, ioctx.create("asdffoo", true));
 }
 
-TEST_F(LibRadosMiscPP, AssertVersionPP) {
+TEST_P(LibRadosMiscPP, AssertVersionPP) {
   char buf[64];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -346,7 +347,7 @@ TEST_F(LibRadosMiscPP, AssertVersionPP) {
   ASSERT_EQ(0, ioctx.operate("asdfbar", &op3));
 }
 
-TEST_F(LibRadosMiscPP, BigAttrPP) {
+TEST_P(LibRadosMiscPP, BigAttrPP) {
   char buf[64];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -385,7 +386,7 @@ TEST_F(LibRadosMiscPP, BigAttrPP) {
   }
 }
 
-TEST_F(LibRadosMiscPP, CopyPP) {
+TEST_P(LibRadosMiscPP, CopyPP) {
   SKIP_IF_CRIMSON();
   bufferlist bl, x;
   bl.append("hi there");
@@ -477,23 +478,27 @@ public:
 protected:
   static void SetUpTestCase() {
     SKIP_IF_CRIMSON();
-    pool_name = get_temp_pool_name();
-    ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
+    pool_name_default = get_temp_pool_name();
+    pool_name_fast = get_temp_pool_name();
+    pool_name_fast_split = get_temp_pool_name();
     src_pool_name = get_temp_pool_name();
+    ASSERT_EQ("", connect_cluster_pp(s_cluster));
     ASSERT_EQ(0, s_cluster.pool_create(src_pool_name.c_str()));
 
-    librados::IoCtx ioctx;
-    ASSERT_EQ(0, s_cluster.ioctx_create(pool_name.c_str(), ioctx));
-    ioctx.application_enable("rados", true);
-
-    librados::IoCtx src_ioctx;
-    ASSERT_EQ(0, s_cluster.ioctx_create(src_pool_name.c_str(), src_ioctx));
-    src_ioctx.application_enable("rados", true);
+    for (const std::string& pool_name : {pool_name_default, pool_name_fast, pool_name_fast_split, src_pool_name}) {
+      ASSERT_EQ("", create_ec_pool_pp(pool_name_default, s_cluster, false));
+      librados::IoCtx ioctx;
+      ASSERT_EQ(0, s_cluster.ioctx_create(pool_name.c_str(), ioctx));
+      ioctx.application_enable("rados", true);
+    }
+    ASSERT_EQ("", set_split_ops_pp(pool_name_fast_split, s_cluster, true));
   }
   static void TearDownTestCase() {
     SKIP_IF_CRIMSON();
-    ASSERT_EQ(0, s_cluster.pool_delete(src_pool_name.c_str()));
-    ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
+    for (const std::string& pool_name : {pool_name_default, pool_name_fast, pool_name_fast_split, src_pool_name}) {
+      ASSERT_EQ(0, destroy_pool_pp(pool_name, s_cluster));
+    }
+    s_cluster.shutdown();
   }
   static std::string src_pool_name;
 
@@ -521,7 +526,7 @@ protected:
 std::string LibRadosTwoPoolsECPP::src_pool_name;
 
 //copy_from between ecpool and no-ecpool.
-TEST_F(LibRadosTwoPoolsECPP, CopyFrom) {
+TEST_P(LibRadosTwoPoolsECPP, CopyFrom) {
   SKIP_IF_CRIMSON();
   bufferlist z;
   z.append_zero(4194304*2);
@@ -548,7 +553,7 @@ TEST_F(LibRadosTwoPoolsECPP, CopyFrom) {
   }
 }
 
-TEST_F(LibRadosMiscPP, CopyScrubPP) {
+TEST_P(LibRadosMiscPP, CopyScrubPP) {
   SKIP_IF_CRIMSON();
   bufferlist bl, x;
   for (int i=0; i<100; ++i)
@@ -641,7 +646,7 @@ TEST_F(LibRadosMiscPP, CopyScrubPP) {
   }
 }
 
-TEST_F(LibRadosMiscPP, WriteSamePP) {
+TEST_P(LibRadosMiscPP, WriteSamePP) {
   bufferlist bl;
   char buf[128];
   bufferlist fl;
@@ -682,7 +687,7 @@ TEST_F(LibRadosMiscPP, WriteSamePP) {
 }
 
 template <typename T>
-class LibRadosChecksum : public LibRadosMiscPP {
+class LibRadosChecksum : public RadosTestPPNS {
 public:
   typedef typename T::alg_t alg_t;
   typedef typename T::value_t value_t;
@@ -692,11 +697,11 @@ public:
 
   bufferlist content_bl;
 
-  using LibRadosMiscPP::SetUpTestCase;
-  using LibRadosMiscPP::TearDownTestCase;
+  using RadosTestPPNS::SetUpTestCase;
+  using RadosTestPPNS::TearDownTestCase;
 
   void SetUp() override {
-    LibRadosMiscPP::SetUp();
+    RadosTestPPNS::SetUp();
 
     std::string content(4096, '\0');
     for (size_t i = 0; i < content.length(); ++i) {
@@ -808,7 +813,7 @@ TYPED_TEST(LibRadosChecksum, Chunked) {
   }
 }
 
-TEST_F(LibRadosMiscPP, CmpExtPP) {
+TEST_P(LibRadosMiscPP, CmpExtPP) {
   bufferlist cmp_bl, bad_cmp_bl, write_bl;
   char stored_str[] = "1234567891";
   char mismatch_str[] = "1234577777";
@@ -822,7 +827,7 @@ TEST_F(LibRadosMiscPP, CmpExtPP) {
   ASSERT_EQ(-MAX_ERRNO - 5, ioctx.cmpext("cmpextpp", 0, bad_cmp_bl));
 }
 
-TEST_F(LibRadosMiscPP, Applications) {
+TEST_P(LibRadosMiscPP, Applications) {
   bufferlist outbl;
   string outs;
   ASSERT_EQ(0, cluster.mon_command("{\"prefix\": \"osd dump\"}",
@@ -869,7 +874,7 @@ TEST_F(LibRadosMiscPP, Applications) {
   ASSERT_EQ(expected_meta, meta);
 }
 
-TEST_F(LibRadosMiscECPP, CompareExtentRange) {
+TEST_P(LibRadosMiscECPP, CompareExtentRange) {
   SKIP_IF_CRIMSON();
   bufferlist bl1;
   bl1.append("ceph");
@@ -891,14 +896,14 @@ TEST_F(LibRadosMiscECPP, CompareExtentRange) {
   ASSERT_EQ(0, ioctx.operate("foo", &read2, nullptr));
 }
 
-TEST_F(LibRadosMiscPP, MinCompatOSD) {
+TEST_P(LibRadosMiscPP, MinCompatOSD) {
   int8_t require_osd_release;
   ASSERT_EQ(0, cluster.get_min_compatible_osd(&require_osd_release));
   ASSERT_LE(-1, require_osd_release);
   ASSERT_GT(CEPH_RELEASE_MAX, require_osd_release);
 }
 
-TEST_F(LibRadosMiscPP, MinCompatClient) {
+TEST_P(LibRadosMiscPP, MinCompatClient) {
   int8_t min_compat_client;
   int8_t require_min_compat_client;
   ASSERT_EQ(0, cluster.get_min_compatible_client(&min_compat_client,
@@ -910,7 +915,7 @@ TEST_F(LibRadosMiscPP, MinCompatClient) {
   ASSERT_GT(CEPH_RELEASE_MAX, require_min_compat_client);
 }
 
-TEST_F(LibRadosMiscPP, Conf) {
+TEST_P(LibRadosMiscPP, Conf) {
   const char* const option = "bluestore_throttle_bytes";
   size_t new_size = 1 << 20;
   std::string original;
@@ -924,3 +929,132 @@ TEST_F(LibRadosMiscPP, Conf) {
   ASSERT_EQ(0, cluster.conf_get(option, actual));
   ASSERT_EQ(expected, actual);
 }
+
+TEST_P(LibRadosMiscPP, NoVer) {
+  bufferlist bl;
+  bl.append("ceph");
+  ObjectWriteOperation write, write2;
+  ObjectReadOperation read, read2;
+
+  write.write_full(bl);
+  ASSERT_EQ(0, ioctx.operate("foo", &write));
+  uint64_t version = ioctx.get_last_version();
+
+  ioctx.set_no_version_on_read(true);
+  bl.append("moreceph");
+  write2.write_full(bl);
+  ASSERT_EQ(0, ioctx.operate("foo", &write2));
+
+  // Write versioning should still work.
+  ASSERT_EQ(++version, ioctx.get_last_version());
+
+  // Asserting the version should still work.
+  read.assert_version(version);
+  read.read(0, bl.length(), NULL, NULL);
+  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+
+  // However, version read should be invalid.
+  ASSERT_EQ(std::numeric_limits<version_t>::max(), ioctx.get_last_version());
+
+  // Re-enable versioning and check we can re-establish the version on a read.
+  ioctx.set_no_version_on_read(false);
+  read2.read(0, bl.length(), NULL, NULL);
+  ASSERT_EQ(0, ioctx.operate("foo", &read2, &bl));
+  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
+
+  // last version should now have been corrected.
+  ASSERT_EQ(version, ioctx.get_last_version());
+}
+TEST_P(LibRadosMiscECPP, InjectECWriteError) {
+  SKIP_IF_CRIMSON();
+  
+  // Prevent backfill from making progress
+  std::string no_backfill_cmd = "{\"prefix\": \"osd set\",\"key\":\"nobackfill\"}";
+  ASSERT_EQ(0, s_cluster.mon_command(std::move(no_backfill_cmd), {}, nullptr, nullptr));
+  std::cout << "Set nobackfill flag" << std::endl;
+  
+  // Enable EC overwrites
+  set_allow_ec_overwrites();
+
+  // Step 1: Perform a write_full
+  bufferlist bl;
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bl.append(buf, sizeof(buf));
+
+  std::string objname = "write_error_test_obj";
+  ASSERT_EQ(0, ioctx.write_full(objname, bl));
+
+  // Step 2: Wait for acting set to stabilize
+  wait_for_stable_acting_set(objname);
+
+  // Step 3: Get the OSD for shard 2
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+
+  shard_id_t shard_0(0), shard_1(1), shard_2(2);
+  int primary_osd = ec_commands.get_shard_osd(pool_name, objname, shard_0, nspace);
+  int shard_1_osd = ec_commands.get_shard_osd(pool_name, objname, shard_1, nspace);
+  int shard_2_osd = ec_commands.get_shard_osd(pool_name, objname, shard_2, nspace);
+
+  std::cout << "Object: " << objname << std::endl;
+  std::cout << "OSD " << primary_osd << " is primary" << std::endl;
+  std::cout << "Shard " << shard_1 << " is on OSD " << shard_1_osd << std::endl;
+  std::cout << "Shard " << shard_2 << " is on OSD " << shard_2_osd << std::endl;
+
+  // Step 3: Inject error type 1 (discard sub write) on shard 2
+  inject_ec_write_error(objname, 1, shard_2);
+  std::cout << "Successfully injected write error type 1 on shard " << shard_2 << std::endl;
+  
+  // Step 4: Inject error type 4 (set pg_committed_to to eversion_t()) on all OSDs
+  inject_ec_write_error_all_osds(objname, 4);
+  std::cout << "Successfully injected write error type 4 on all OSDs" << std::endl;
+
+  // Ensure cleanup happens even if test fails
+  auto cleanup_guard = make_scope_guard([this, &objname, &shard_1_osd, &shard_2] {
+    std::cout << "Running cleanup..." << std::endl;
+
+    // Clear error injections
+    clear_ec_write_error(objname, 1, shard_2);
+    clear_ec_write_error_all_osds(objname, 4);
+    std::cout << "Cleared error injections" << std::endl;
+
+    // Mark OSD back in
+    std::string in_cmd = "{\"prefix\": \"osd in\", \"ids\": [\"" +
+                         std::to_string(shard_1_osd) + "\"]}";
+    s_cluster.mon_command(std::move(in_cmd), {}, nullptr, nullptr);
+    std::cout << "Marked OSD " << shard_1_osd << " back in" << std::endl;
+
+    // Unset nobackfill flag
+    std::string unset_nobackfill_cmd = "{\"prefix\": \"osd unset\",\"key\":\"nobackfill\"}";
+    s_cluster.mon_command(std::move(unset_nobackfill_cmd), {}, nullptr, nullptr);
+    std::cout << "Unset nobackfill flag" << std::endl;
+  });
+
+  // Perform a second write using aio
+  auto my_completion = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ASSERT_TRUE(my_completion);
+  bufferlist bl2;
+  char buf2[128];
+  memset(buf2, 0xdd, sizeof(buf2));
+  bl2.append(buf2, sizeof(buf2));
+  ASSERT_EQ(0, ioctx.aio_write(objname, my_completion.get(), bl2, sizeof(buf2), 0));
+
+  sleep(1);
+  ASSERT_FALSE(my_completion->is_complete());
+
+
+  // Step 5: Mark OSD on shard 1 as out
+  std::string out_cmd = "{\"prefix\": \"osd out\", \"ids\": [\"" +
+                        std::to_string(shard_1_osd) + "\"]}";
+  ASSERT_EQ(0, s_cluster.mon_command(std::move(out_cmd), {}, nullptr, nullptr));
+  std::cout << "Marked OSD " << shard_1_osd << " (shard " << shard_1.id << ") as out" << std::endl;
+
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+}
+
+INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosMiscPP);
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosMiscECPP);

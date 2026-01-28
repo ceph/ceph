@@ -41,8 +41,9 @@ enum class InjectOpType {
   None,
   ReadEIO,
   ReadMissingShard,
+  ReadDelayed,
   WriteFailAndRollback,
-  WriteOSDAbort
+  WriteOSDAbort,
 };
 }  // namespace io_exerciser
 }  // namespace ceph

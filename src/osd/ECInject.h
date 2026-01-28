@@ -30,10 +30,12 @@ namespace ECInject {
   std::string clear_parity_read(const hobject_t& o);
   bool test_read_error0(const ghobject_t& o);
   bool test_read_error1(const ghobject_t& o);
+  bool test_read_error2(const ghobject_t& o);
   bool test_write_error0(const hobject_t& o,const osd_reqid_t& reqid);
   bool test_write_error1(const ghobject_t& o);
   bool test_write_error2(const hobject_t& o);
   bool test_write_error3(const hobject_t& o);
+  bool test_write_error4(const hobject_t& o);
   bool test_parity_read(const hobject_t& o);
 
 } // ECInject

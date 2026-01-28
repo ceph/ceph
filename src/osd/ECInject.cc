@@ -24,10 +24,12 @@ namespace ECInject {
     ceph::make_recursive_mutex("ECCommon::lock");
   static std::map<ghobject_t,std::pair<int64_t,int64_t>> read_failures0;
   static std::map<ghobject_t,std::pair<int64_t,int64_t>> read_failures1;
+  static std::map<ghobject_t,std::pair<int64_t,int64_t>> read_failures2;
   static std::map<ghobject_t,std::pair<int64_t,int64_t>> write_failures0;
   static std::map<ghobject_t,std::pair<int64_t,int64_t>> write_failures1;
   static std::map<ghobject_t,std::pair<int64_t,int64_t>> write_failures2;
   static std::map<ghobject_t,std::pair<int64_t,int64_t>> write_failures3;
+  static std::map<ghobject_t,std::pair<int64_t,int64_t>> write_failures4;
   static std::map<ghobject_t,shard_id_t> write_failures0_shard;
   static std::set<osd_reqid_t> write_failures0_reqid;
   static std::set<hobject_t> parity_reads;
@@ -64,6 +66,10 @@ namespace ECInject {
     case 1:
       read_failures1[os] = std::pair(when, duration);
       return "ok - read pretends shard is missing";
+    case 2:
+      os.set_shard(shard_id_t{0});
+      read_failures2[os] = std::pair(when, duration);
+      return fmt::format("ok - read stashed for {} IOs for object {} of generation {}", duration, os, os.generation);
     default:
       break;
     }
@@ -125,6 +131,10 @@ namespace ECInject {
       failures = &write_failures3;
       result = "ok - write abort OSDs";
       break;
+    case 4:
+      failures = &write_failures4;
+      result = "ok - Never committing log";
+      break;
     default:
       return "unrecognized error inject type";
     }
@@ -164,6 +174,7 @@ namespace ECInject {
   std::string clear_read_error(const ghobject_t& o,
 				         const int64_t type) {
     std::lock_guard<ceph::recursive_mutex> l(lock);
+    int cleared_errors = 0;
     std::map<ghobject_t,std::pair<int64_t,int64_t>> *failures;
     ghobject_t os = o;
     int64_t remaining = 0;
@@ -174,6 +185,10 @@ namespace ECInject {
     case 1:
       failures = &read_failures1;
       break;
+    case 2:
+        os.set_shard(shard_id_t{0});
+        failures = &read_failures2;
+        break;
     default:
       return "unrecognized error inject type";
     }
@@ -184,13 +199,14 @@ namespace ECInject {
     if (it != failures->end()) {
       remaining = it->second.second;
       failures->erase(it);
+      cleared_errors++;
     }
     if (remaining == 0) {
-      return "no outstanding error injects";
+      return fmt::format("no outstanding error injects. Cleared {} errors.", cleared_errors);
     } else if (remaining == 1) {
-      return "ok - 1 inject cleared";
+      return fmt::format("ok - 1 inject cleared. Cleared {} errors.", cleared_errors);
     }
-    return "ok - " + std::to_string(remaining) + " injects cleared";
+    return fmt::format("ok - {} injects cleared. Cleared {} errors.", std::to_string(remaining), cleared_errors);
   }
 
   /**
@@ -220,6 +236,9 @@ namespace ECInject {
     case 3:
       failures = &write_failures3;
       break;
+    case 4:
+      failures = &write_failures4;
+      break;
     default:
       return "unrecognized error inject type";
     }
@@ -238,11 +257,11 @@ namespace ECInject {
       }
     }
     if (remaining == 0) {
-      return "no outstanding error injects";
+      return "no outstanding error injects on object " + fmt::format("{}", o);
     } else if (remaining == 1) {
-      return "ok - 1 inject cleared";
+      return "ok - 1 inject cleared on objcet " + fmt::format("{}", o);
     }
-    return "ok - " + std::to_string(remaining) + " injects cleared";
+    return "ok - " + std::to_string(remaining) + " injects cleared on object "  + fmt::format("{}", o);
   }
 
   /**
@@ -267,6 +286,7 @@ namespace ECInject {
     if (it == failures->end()) {
       ghobject_t os = o;
       os.hobj.oid.name = "*";
+      os.hobj.nspace = "";
       os.hobj.set_hash(0);
       it = failures->find(os);
     }
@@ -292,6 +312,10 @@ namespace ECInject {
   bool test_read_error1(const ghobject_t& o)
   {
     return test_error(o, &read_failures1);
+  }
+
+  bool test_read_error2(const ghobject_t& o) {
+    return test_error(o, &read_failures2);
   }
 
   bool test_write_error0(const hobject_t& o,
@@ -347,6 +371,12 @@ namespace ECInject {
     return test_error(
       ghobject_t(o, ghobject_t::NO_GEN, shard_id_t::NO_SHARD),
       &write_failures3);
+  }
+
+  bool test_write_error4(const hobject_t& o) {
+    return test_error(
+      ghobject_t(o, ghobject_t::NO_GEN, shard_id_t::NO_SHARD),
+      &write_failures4);
   }
 
   /**

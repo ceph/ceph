@@ -2035,6 +2035,8 @@ protected:
   std::map<int,utime_t> failure_queue;
   std::map<int,std::pair<utime_t,entity_addrvec_t> > failure_pending;
 
+  std::map<Message*, OpRequestRef> stashed_messages;
+
   void requeue_failures();
   void send_failures();
   void send_still_alive(epoch_t epoch, int osd, const entity_addrvec_t &addrs);
@@ -2142,6 +2144,7 @@ private:
     }
   }
   void ms_fast_dispatch(Message *m) override;
+  void ms_fast_dispatch_send(bool legacy, spg_t& spg, Message *m, OpRequestRef op);
   bool ms_dispatch(Message *m) override;
   void ms_handle_connect(Connection *con) override;
   void ms_handle_fast_connect(Connection *con) override;
@@ -2167,6 +2170,8 @@ private:
       MonClient *mc, const std::string &dev, const std::string &jdev,
       ceph::async::io_context_pool& poolctx);
   ~OSD() override;
+
+  void send_stashed_messages();
 
   // static bits
   static int mkfs(CephContext *cct,

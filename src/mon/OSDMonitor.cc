@@ -8455,25 +8455,42 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
 }
 
 void OSDMonitor::enable_pool_ec_direct_reads(pg_pool_t &p) {
-  if (p.is_erasure()) {
-    ErasureCodeInterfaceRef erasure_code;
-    stringstream tmp;
-    int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+  if (!p.is_erasure()) {
+     return;
+  }
+  ErasureCodeInterfaceRef erasure_code;
+  stringstream tmp;
+  int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
 
-    // Once this feature is finished, we will replace this with upgrade code.
-    // The upgrade code will enable the split read flag once all OSDs are at
-    // Umbrella. For now, if the plugin does not support direct reads, we just
-    // disable it.  All plugins and techniques should be capable of supporting
-    // direct reads, but we put in place this capability to reduce the test
-    // matrix for less important plugins/techniques.
-    //
-    // To enable direct reads in development, set the osd_pool_default_flags to
-    // 1<<20 = 0x100000 = 1048576
-    if (err != 0 || !p.allows_ecoptimizations() ||
-          (erasure_code->get_supported_optimizations() &
-            ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) == 0) {
-      p.flags &= ~pg_pool_t::FLAG_CLIENT_SPLIT_READS;
+  // Once this feature is finished, we will replace this with upgrade code.
+  // The upgrade code will enable the split read flag once all OSDs are at
+  // Umbrella. For now, if the plugin does not support direct reads, we just
+  // disable it.  All plugins and techniques should be capable of supporting
+  // direct reads, but we put in place this capability to reduce the test
+  // matrix for less important plugins/techniques.
+  //
+  // To enable direct reads in development, set the osd_pool_default_flags to
+  // 1<<20 = 0x100000 = 1048576
+  if (err != 0 || !p.allows_ecoptimizations() ||
+        (erasure_code->get_supported_optimizations() &
+          ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) == 0) {
+    p.flags &= ~pg_pool_t::FLAG_CLIENT_SPLIT_READS;
+    return;
+  }
+
+  auto mapping = erasure_code->get_chunk_mapping();
+
+  // Plugins are permitted to provide an incomplete mapping, which makes for
+  // an inconvenient interface. Here make it either fully populated or not
+  // populated at all.
+  if (mapping.size() > 0) {
+    int shard_count = erasure_code->get_chunk_count();
+    int old_count = mapping.size();
+    mapping.resize(shard_count);
+    for (int s = old_count; s < shard_count; ++s) {
+      mapping[s] = shard_id_t(s);
     }
+    p.set_shard_mapping(std::move(mapping));
   }
 }
 
@@ -8967,6 +8984,23 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
           pending_inc.new_pg_temp[pg_temp->first] = mempool::osdmap::vector<int>(new_pg_temp.begin(), new_pg_temp.end());
         }
       }
+    }
+  } else if (var == "set_pool_flags" || var == "unset_pool_flags") {
+    bool force;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", force);
+    if (!force) {
+      ss << "This is a development tool and should not be used in production.";
+      return -EINVAL;
+    }
+    if (!interr.empty()) {
+      ss << "expecting integer value";
+      return -EINVAL;
+    }
+    bool enable = (var == "set_pool_flags");
+    if (enable) {
+      p.set_flag(n);
+    } else {
+      p.unset_flag(n);
     }
   } else if (var == "target_max_objects") {
     if (interr.length()) {
