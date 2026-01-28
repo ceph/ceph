@@ -377,6 +377,10 @@ add_executable(unittest_hobject test_hobject.cc
 target_link_libraries(unittest_hobject global ceph-common)
 add_ceph_unittest(unittest_hobject)
 
+add_executable(unittest_async_call_once test_async_call_once.cc)
+add_ceph_unittest(unittest_async_call_once)
+target_link_libraries(unittest_async_call_once ceph-common Boost::system Boost::context)
+
 add_executable(unittest_async_completion test_async_completion.cc)
 add_ceph_unittest(unittest_async_completion)
 target_link_libraries(unittest_async_completion ceph-common Boost::headers)
