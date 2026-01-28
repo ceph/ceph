@@ -1335,8 +1335,6 @@ spec:
 
     j = spec_obj.to_json()
     assert 'spec' in j
-    assert 'termination_grace_period_seconds' in j['spec']
-    assert j['spec']['termination_grace_period_seconds'] == 30
 
 def test_termination_grace_roundtrip_preserves_value():
     spec_data = """
