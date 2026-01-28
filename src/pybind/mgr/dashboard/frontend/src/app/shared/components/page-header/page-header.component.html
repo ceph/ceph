@@ -1,0 +1,19 @@
+<header data-testid="page-header">
+  <div cdsGrid
+       [fullWidth]="true"
+       [narrow]="true">
+    <div cdsRow>
+      <div cdsCol
+           [columnNumbers]="{ sm: 16, md: 16, lg: 16 }">
+        <cds-tile class="border-top padding-inline-0">
+          <p class="cds--type-heading-04"
+             i18n>{{ title }}</p>
+          @if(description) {
+          <p class="cds--type-body-01"
+             i18n>{{ description }}</p>
+          }
+        </cds-tile>
+      </div>
+    </div>
+  </div>
+</header>

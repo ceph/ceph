@@ -1,3 +1,8 @@
+<cd-page-header
+  title="CephFS Mirroring"
+  description="Centralised view of all CephFS Mirroring relationships.">
+</cd-page-header>
+
 <ng-container *ngIf="daemonStatus$ | async as daemonStatus">
   <cd-table
     [data]="daemonStatus"
