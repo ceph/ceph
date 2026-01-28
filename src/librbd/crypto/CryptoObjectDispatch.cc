@@ -25,7 +25,8 @@ namespace crypto {
 
 using librbd::util::create_context_callback;
 using librbd::util::data_object_name;
-
+// TODO: Make Striper aware of ciphertext expansion? 
+        // i.e. that we write more than 4096 bytes?
 template <typename I>
 uint64_t get_file_offset(I* image_ctx, uint64_t object_no,
                          uint64_t object_off) {
@@ -88,8 +89,9 @@ struct C_AlignedObjectReadRequest : public Context {
       if (r >= 0) {
         r = 0;
         for (auto& extent: *extents) {
+          auto off = crypto->map_physical_logical(extent.offset, 0).first;
           auto crypto_ret = crypto->decrypt_aligned_extent(
-              extent, get_file_offset(image_ctx, object_no, extent.offset));
+              extent, get_file_offset(image_ctx, object_no, off));
           if (crypto_ret != 0) {
             ceph_assert(crypto_ret < 0);
             r = crypto_ret;
@@ -125,7 +127,14 @@ struct C_UnalignedObjectReadRequest : public Context {
             uint64_t* version, int* object_dispatch_flags,
             Context* on_dispatched) : cct(image_ctx->cct), extents(extents),
                                       on_finish(on_dispatched) {
+    if (crypto->get_meta_size() != 0) {
+      crypto->align_extents_physical(*extents, &aligned_extents);
+    } else {
       crypto->align_extents(*extents, &aligned_extents);
+    }
+    
+    ldout(cct, 20) << data_object_name(image_ctx, object_no) << " aligned extends "
+                 << aligned_extents << dendl;
 
       // send the aligned read back to get decrypted
       req = io::ObjectDispatchSpec::create_read(
@@ -466,7 +475,10 @@ bool CryptoObjectDispatch<I>::read(
   ceph_assert(m_crypto != nullptr);
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
-  if (m_crypto->is_aligned(*extents)) {
+  bool is_request_aligned = (m_crypto->get_meta_size() != 0) 
+                          ? m_crypto->is_physical_aligned(*extents) 
+                          : m_crypto->is_aligned(*extents);
+  if (is_request_aligned) {
     auto req = new C_AlignedObjectReadRequest<I>(
             m_image_ctx, m_crypto, object_no, extents, io_context,
             op_flags, read_flags, parent_trace, version, object_dispatch_flags,
@@ -500,7 +512,32 @@ bool CryptoObjectDispatch<I>::write(
                  << object_off << "~" << data.length() << dendl;
   ceph_assert(m_crypto != nullptr);
 
-  if (m_crypto->is_aligned(object_off, data.length())) {
+  const bool has_meta = (m_crypto->get_meta_size() != 0);
+
+  if (has_meta &&
+      (m_crypto->is_aligned(object_off, data.length()))) {
+    auto align = m_crypto->map_logical_physical(object_off, data.length());
+
+    auto r = m_crypto->encrypt(
+        &data, get_file_offset(m_image_ctx, object_no, object_off));
+    ceph_assert(data.length() == align.second);
+    ceph_assert(r == 0);
+
+    // re-call this layer to change the offset and length of the write operation
+    *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
+    auto write_req = io::ObjectDispatchSpec::create_write(
+        m_image_ctx,
+        io::util::get_previous_layer(io::OBJECT_DISPATCH_LAYER_CRYPTO),
+        object_no, align.first, std::move(data), io_context, op_flags,
+        write_flags, assert_version, journal_tid == nullptr ? 0 : *journal_tid,
+        parent_trace, on_dispatched);
+    write_req->send();
+
+  } else if (has_meta &&
+             m_crypto->is_physical_aligned(object_off, data.length())) {
+    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+    on_dispatched->complete(0);
+  } else if (m_crypto->is_aligned(object_off, data.length())) {
     auto r = m_crypto->encrypt(
         &data, get_file_offset(m_image_ctx, object_no, object_off));
     *dispatch_result = r == 0 ? io::DISPATCH_RESULT_CONTINUE

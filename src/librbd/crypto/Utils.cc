@@ -38,7 +38,7 @@ void set_crypto(I *image_ctx,
 
 int build_crypto(
         CephContext* cct, const unsigned char* key, uint32_t key_length,
-        uint64_t block_size, uint64_t data_offset,
+        uint64_t block_size, uint64_t data_offset, uint32_t meta_size,
         std::unique_ptr<CryptoInterface>* result_crypto) {
   const char* cipher_suite;
   switch (key_length) {
@@ -46,14 +46,20 @@ int build_crypto(
       cipher_suite = "aes-128-xts";
       break;
     case 64:
-      cipher_suite = "aes-256-xts";
+    // TODO: Change setup
+      cipher_suite = "AES-256-SIV";
+      //cipher_suite = "aes-256-xts";
       break;
     default:
       lderr(cct) << "unsupported key length: " << key_length << dendl;
       return -ENOTSUP;
   }
-
-  auto data_cryptor = new openssl::DataCryptor(cct);
+  openssl::DataCryptor* data_cryptor; 
+  if (crypto::is_aead(cipher_suite)) {
+    data_cryptor = new openssl::AEADDataCryptor(cct);
+  } else { 
+    data_cryptor = new openssl::DataCryptor(cct);
+  }
   int r = data_cryptor->init(cipher_suite, key, key_length);
   if (r != 0) {
     lderr(cct) << "error initializing data cryptor: " << cpp_strerror(r)
@@ -63,7 +69,7 @@ int build_crypto(
   }
 
   result_crypto->reset(BlockCrypto<EVP_CIPHER_CTX>::create(
-          cct, data_cryptor, block_size, data_offset));
+          cct, data_cryptor, block_size, data_offset, meta_size));
   return 0;
 }
 
