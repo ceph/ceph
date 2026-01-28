@@ -50,7 +50,7 @@ function install_one() {
         ubuntu|debian|devuan|softiron)
             sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
             ;;
-        centos|fedora|rhel)
+        centos|fedora|rhel|rocky)
             sudo yum install -y "$@"
             ;;
         opensuse*|suse|sles)
