@@ -3363,6 +3363,10 @@ Then run the following:
                 'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
+    def list_default_images(self) -> Dict:
+        return DefaultImages.as_dict()
+
+    @handle_orch_error
     def get_security_config(self) -> Dict[str, bool]:
         security_enabled, mgmt_gw_enabled, _ = self._get_security_config()
         return {'security_enabled': security_enabled,

@@ -903,6 +903,10 @@ class Orchestrator(object):
         """get security config"""
         raise NotImplementedError()
 
+    def list_default_images(self) -> OrchResult[Dict[str, str]]:
+        """get cephadm default images"""
+        raise NotImplementedError()
+
     def set_alertmanager_access_info(self, user: str, password: str) -> OrchResult[str]:
         """set alertmanager access information"""
         raise NotImplementedError()
