@@ -457,6 +457,14 @@ inline namespace v14_2_0 {
     void omap_rm_keys(const std::set<std::string> &to_rm);
 
     /**
+     * Clears keys between start and end strings
+     *
+     * @param start [in] start of key range to remove
+     * @param end [in] end of key range to remove
+     */
+    void omap_rm_range(const std::string &start, const std::string &end);
+
+    /**
      * Copy an object
      *
      * Copies an object from another location.  The operation is atomic in that
@@ -938,6 +946,9 @@ inline namespace v14_2_0 {
     int omap_clear(const std::string& oid);
     int omap_rm_keys(const std::string& oid,
                      const std::set<std::string>& keys);
+    int omap_rm_range(const std::string& oid,
+                     const std::string &start,
+                     const std::string &end);
 
     void snap_set_read(snap_t seq);
     int selfmanaged_snap_set_write_ctx(snap_t seq, std::vector<snap_t>& snaps);
