@@ -5,10 +5,26 @@ options:
 - name: cephfs_mirror_max_concurrent_directory_syncs
   type: uint
   level: advanced
-  desc: maximum number of concurrent snapshot synchronization threads
-  long_desc: maximum number of directory snapshots that can be synchronized concurrently
-    by cephfs-mirror daemon. Controls the number of synchronization threads.
+  desc: maximum number of concurrent snapshot synchronization crawler threads
+  long_desc: maximum number of directory snapshots that can be crawled concurrently
+    by cephfs-mirror daemon. Controls the number of synchronization crawler threads.
+    Note that the crawler threads also does entry operations like directory creations,
+    file deletes and snapshot deletes/renames.
   default: 3
+  services:
+  - cephfs-mirror
+  min: 1
+- name: cephfs_mirror_max_concurrent_data_sync_threads
+  type: uint
+  level: advanced
+  desc: maximum number of concurrent snapshot data synchronization threads
+  long_desc: maximum number of directory snapshots that can be synchronized concurrently
+    by cephfs-mirror daemon. Controls the number of data synchronization threads. This is
+    the pool of threads that sync the files concurrently, queued by the crawler thread for
+    each snapshot. Note that the pool of threads pick up one snapshot at a time eventhough
+    the configured cephfs_mirror_max_concurrent_directory_syncs number of crawler threads
+    could concurrently crawl and sync entry operations.
+  default: 5
   services:
   - cephfs-mirror
   min: 1
