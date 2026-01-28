@@ -1624,9 +1624,13 @@ void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *s
       ldout(cct, 10) << "check_op_pool_dne tid " << op->tid
 		     << " concluding pool " << op->target.base_pgid.pool()
 		     << " dne" << dendl;
+      // If FORCE_OSD is set, the forced OSD doesn't exist in the current map.
+      // This may be transient (OSD temporarily down) or permanent (OSD removed).
+      // Return -EAGAIN instead of -ENOENT to allow caller to retry.
+      int rc = (op->target.flags & CEPH_OSD_FLAG_FORCE_OSD) ? -EAGAIN : -ENOENT;
       if (op->has_completion()) {
-	num_in_flight--;
-	op->complete(make_error_code(osdc_errc::pool_dne), -ENOENT, service.get_executor());
+ num_in_flight--;
+ op->complete(make_error_code(osdc_errc::pool_dne), rc, service.get_executor());
       }
 
       OSDSession *s = op->session;
@@ -3188,13 +3192,39 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->pg_num_pending = pg_num_pending;
     spg_t spgid(actual_pgid);
     if (t->flags & CEPH_OSD_FLAG_FORCE_OSD) {
-      // In some redrive scenarios, the acting set can change. Fail the IO
-      // and retry.
-      if (!osdmap->exists(t->osd)) {
-        t->osd = -1;
-        return RECALC_OP_TARGET_POOL_DNE;
+      // In some redrive scenarios, the acting set can change. If the forced
+      // OSD doesn't exist in the acting set (e.g., it disappeared from the
+      // upmap), we need to handle it appropriately.
+      bool osd_in_acting = false;
+      for (auto acting_osd : t->acting) {
+        if (acting_osd == t->osd) {
+          osd_in_acting = true;
+          break;
+        }
       }
-    } else if (pi->is_erasure()) {
+      if (!osd_in_acting) {
+        // If FAIL_ON_EAGAIN is set, we must not failover - the caller expects
+        // -EAGAIN to be returned. Otherwise, clear the direct read flags and
+        // redrive to the primary OSD (similar to what happens when we get -EAGAIN).
+        if (t->flags & CEPH_OSD_FLAG_FAIL_ON_EAGAIN) {
+          ldout(cct, 10) << __func__ << " forced osd." << t->osd
+                         << " not in acting set " << t->acting
+                         << ", FAIL_ON_EAGAIN set, returning POOL_DNE to trigger -EAGAIN"
+                         << dendl;
+          t->osd = -1;
+          return RECALC_OP_TARGET_POOL_DNE;
+        } else {
+          ldout(cct, 10) << __func__ << " forced osd." << t->osd
+                         << " not in acting set " << t->acting
+                         << ", clearing direct read flags and redriving to primary"
+                         << dendl;
+          // Clear all direct read flags (EC_DIRECT_READ, BALANCE_READS, LOCALIZE_READS)
+          t->flags &= ~CEPH_OSD_FLAGS_DIRECT_READ;
+          t->flags &= ~CEPH_OSD_FLAG_FORCE_OSD;
+        }
+      }
+    }
+    if (pi->is_erasure()) {
       // Optimized EC pools need to be careful when calculating the shard
       // because an OSD may have multiple shards and the primary shard
       // might not be the first one in the acting set. The lookup
