@@ -60,6 +60,7 @@ public:
   bool need_skip_promote() const;
   bool allows_returnvec() const;
   bool ec_direct_read() const;
+  bool ec_sync_read() const;
 
   void set_read();
   void set_write();
@@ -74,6 +75,7 @@ public:
   void set_returnvec();
   void set_read_data();
   void set_ec_direct_read();
+  void set_ec_sync_read();
 
   int set_from_op(
     const MOSDOp *m,

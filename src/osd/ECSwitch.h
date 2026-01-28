@@ -259,12 +259,26 @@ public:
   }
 
   int objects_read_sync(const hobject_t &hoid, uint64_t off, uint64_t len,
-                        uint32_t op_flags, ceph::buffer::list *bl) override
+                        uint32_t op_flags, ceph::buffer::list *bl, uint64_t object_size,
+                        std::optional<CoroHandles> coro) override
+  {
+    // Sync reads are only supported in FastEC, and from a coroutine
+    ceph_assert(is_optimized());
+    ceph_assert(coro.has_value());
+
+    ec_align_t align{off, len, op_flags};
+    std::list<std::pair<ec_align_t, std::pair<bufferlist*, Context*>>> to_read;
+    to_read.push_back({ align, { bl, nullptr } });
+    return optimized.objects_read_sync(hoid, object_size, to_read, *coro);
+  }
+
+  int objects_read_local(const hobject_t &hoid, uint64_t off, uint64_t len,
+                      uint32_t op_flags, ceph::buffer::list *bl) override
   {
     if (is_optimized()) {
-      return optimized.objects_read_sync(hoid, off, len, op_flags, bl);
+      return optimized.objects_read_local(hoid, off, len, op_flags, bl);
     }
-    return legacy.objects_read_sync(hoid, off, len, op_flags, bl);
+    return legacy.objects_read_local(hoid, off, len, op_flags, bl);
   }
 
   int objects_readv_sync(const hobject_t &hoid,

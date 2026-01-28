@@ -1995,24 +1995,24 @@ void PrimaryLogPG::do_request(
   }
 }
 
-/** do_op - do an op
- * pg lock will be held (if multithreaded)
- * osd_lock NOT held.
- */
-void PrimaryLogPG::do_op(OpRequestRef& op)
+bool PrimaryLogPG::should_use_coroutine(MOSDOp* m)
 {
-  FUNCTRACE(cct);
-  // NOTE: take a non-const pointer here; we must be careful not to
-  // change anything that will break other reads on m (operator<<).
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
-  ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
-  if (m->finish_decode()) {
-    op->reset_desc();   // for TrackedOp
-    m->clear_payload();
+  if (!pool.info.allows_ecoptimizations()) {
+    return false;
   }
 
-  dout(20) << __func__ << ": op " << *m << dendl;
+  for (const auto& osd_op : m->ops) {
+    if (osd_op.op.op == CEPH_OSD_OP_CALL) {
+      return true;
+    }
+  }
 
+  return false;
+}
+
+void PrimaryLogPG::do_op_impl(OpRequestRef op)
+{
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
   const hobject_t head = m->get_hobj().get_head();
 
   if (!info.pgid.pgid.contains(
@@ -2577,6 +2577,70 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // force recovery of the oldest missing object if too many logs
   maybe_force_recovery();
+}
+
+/** do_op - do an op
+ * pg lock will be held (if multithreaded)
+ * osd_lock NOT held.
+ */
+void PrimaryLogPG::do_op(OpRequestRef& op)
+{
+  FUNCTRACE(cct);
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
+  ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
+  if (m->finish_decode()) {
+    op->reset_desc();
+    m->clear_payload();
+  }
+
+  if (coro_op_in_flight) {
+    dout(20) << __func__ << ": coroutine op in flight, queuing " << op << dendl;
+    waiting_for_coro_op.push_back(op);
+    return;
+  }
+
+  dout(20) << __func__ << ": op " << *m << dendl;
+
+  if (should_use_coroutine(m)) {
+    dout(20) << __func__ << ": spawning a coroutine for EC optimized CALL op" << dendl;
+    coro_op_in_flight = true;
+    active_coro_op = op;
+    OpRequest* op_raw = op.get();
+
+    // Spawn a coroutine to handle the message
+    auto resumer = std::make_unique<resume_token_t>(
+      [this, op_raw](yield_token_t& yield) {
+        op_raw->coro_handles.emplace(CoroHandles{ yield, *coro_resumer });
+        {
+          const OpRequestRef op_ref(op_raw);
+          do_op_impl(op_ref);
+        }
+
+        // Cleanup
+        coro_resumer = nullptr;
+        on_coroutine_complete();
+      });
+
+    coro_resumer = std::move(resumer);
+
+    // Startup the coroutine
+    (*coro_resumer)();
+  } else {
+    // Handle the message directly in the current thread
+    do_op_impl(op);
+  }
+}
+
+void PrimaryLogPG::on_coroutine_complete()
+{
+  ceph_assert(coro_op_in_flight);
+  coro_op_in_flight = false;
+  active_coro_op = nullptr;
+
+  if (!waiting_for_coro_op.empty()) {
+    dout(20) << __func__ << ": requeuing " << waiting_for_coro_op.size() << " ops" << dendl;
+    requeue_ops(waiting_for_coro_op);
+  }
 }
 
 PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
@@ -5906,10 +5970,14 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       maybe_crc = oi.data_digest;
 
     if (ctx->op->ec_direct_read()) {
-      result = pgbackend->objects_read_sync(
+      result = pgbackend->objects_read_local(
         soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
-
-        dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
+      dout(20) << " EC local read for " << soid << " result=" << result << dendl;
+    } else if (ctx->op->ec_sync_read()) {
+      result = pgbackend->objects_read_sync(
+        soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata,
+        oi.size, ctx->op->coro_handles);
+      dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
     } else {
     ctx->pending_async_reads.push_back(
       make_pair(
@@ -5925,7 +5993,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     }
   } else {
     int r = pgbackend->objects_read_sync(
-      soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+      soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata,
+      oi.size, ctx->op->coro_handles);
     // whole object?  can we verify the checksum?
     if (r >= 0 && op.extent.offset == 0 &&
         (uint64_t)r == oi.size && oi.is_data_digest()) {
@@ -6158,9 +6227,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_SYNC_READ:
-      if (pool.info.is_erasure()) {
+      if (pool.info.is_erasure() && !pool.info.allows_ecoptimizations()) {
 	result = -EOPNOTSUPP;
 	break;
+      } else if (pool.info.is_erasure() && pool.info.allows_ecoptimizations()) {
+        ctx->op->set_ec_sync_read();
       }
       // fall through
     case CEPH_OSD_OP_READ:
@@ -9409,8 +9480,9 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
 
 	dout(10) << __func__ << ": async_read noted for " << soid << dendl;
       } else {
-	result = pgbackend->objects_read_sync(
-	  oi.soid, cursor.data_offset, max_read, osd_op.op.flags, &bl);
+ result = pgbackend->objects_read_sync(
+   oi.soid, cursor.data_offset, max_read, osd_op.op.flags, &bl,
+   oi.size, ctx->op->coro_handles);
 	if (result < 0)
 	  return result;
       }
@@ -10720,7 +10792,7 @@ int PrimaryLogPG::do_cdc(const object_info_t& oi,
    * As s result, we leave this as a future work.
    */
   int r = pgbackend->objects_read_sync(
-      oi.soid, 0, oi.size, 0, &bl);
+      oi.soid, 0, oi.size, 0, &bl, oi.size, std::nullopt);
   if (r < 0) {
     dout(0) << __func__ << " read fail " << oi.soid
             << " len: " << oi.size << " r: " << r << dendl;
@@ -13157,6 +13229,12 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
 {
   dout(10) << __func__ << dendl;
 
+  if (coro_resumer != nullptr) {
+    dout(20) << __func__ << ": Stopping active coroutine" << dendl;
+    coro_resumer = nullptr;
+    coro_op_in_flight = false;
+  }
+
   if (hit_set && hit_set->insert_count() == 0) {
     dout(20) << " discarding empty hit_set" << dendl;
     hit_set_clear();
@@ -13173,6 +13251,11 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   requeue_ops(waiting_for_flush);
   requeue_ops(waiting_for_active);
   requeue_ops(waiting_for_readable);
+  requeue_ops(waiting_for_coro_op);
+  if (active_coro_op) {
+    requeue_op(active_coro_op);
+    active_coro_op = nullptr;
+  }
 
   vector<ceph_tid_t> tids;
   cancel_copy_ops(is_primary(), &tids);
