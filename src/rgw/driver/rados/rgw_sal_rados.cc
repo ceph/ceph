@@ -40,6 +40,7 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_bucket.h"
 #include "rgw_bucket_logging.h"
+#include "rgw_crypt.h"
 #include "rgw_bl_rados.h"
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
@@ -4342,6 +4343,15 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   auto etags_iter = part_etags.begin();
   rgw::sal::Attrs& attrs = target_obj->get_attrs();
 
+  // Check if this is AEAD encryption to track plaintext size
+  bool is_aead = false;
+  uint64_t plaintext_ofs = 0;
+  auto mode_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
+  if (mode_iter != attrs.end()) {
+    std::string crypt_mode = mode_iter->second.to_str();
+    is_aead = is_aead_mode(crypt_mode);
+  }
+
   do {
     ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated, y);
     if (ret == -ENOENT) {
@@ -4457,6 +4467,16 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
       ofs += obj_part.size;
       accounted_size += obj_part.accounted_size;
+
+      // Track plaintext size for AEAD encryption
+      if (is_aead) {
+        if (part_compressed) {
+          // For compressed parts, use the uncompressed size directly
+          plaintext_ofs += obj_part.accounted_size;
+        } else {
+          plaintext_ofs += aead_encrypted_to_plaintext_size(obj_part.size);
+        }
+      }
     }
   } while (truncated);
   hash.Final((unsigned char *)final_etag);
@@ -4493,6 +4513,26 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
     bufferlist tmp;
     encode(cs_info, tmp);
     attrs[RGW_ATTR_COMPRESSION] = tmp;
+  }
+
+  // For AEAD encryption: store total plaintext size (calculated during loop)
+  if (is_aead) {
+    bufferlist bl;
+    bl.append(std::to_string(plaintext_ofs));
+    attrs[RGW_ATTR_CRYPT_ORIGINAL_SIZE] = std::move(bl);
+
+    // Store actual S3 part numbers for correct IV/key derivation during decrypt
+    std::vector<uint32_t> part_nums;
+    part_nums.reserve(part_etags.size());
+    for (const auto& part : part_etags) {
+      part_nums.push_back(static_cast<uint32_t>(part.first));
+    }
+    bufferlist part_nums_bl;
+    using ceph::encode;
+    encode(part_nums, part_nums_bl);
+    attrs[RGW_ATTR_CRYPT_PART_NUMS] = std::move(part_nums_bl);
+    ldpp_dout(dpp, 20) << "Stored CRYPT_PART_NUMS with " << part_nums.size()
+                       << " parts" << dendl;
   }
 
   target_obj->set_atomic(true);
