@@ -132,7 +132,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
                                 port: Optional[int] = None,
-                                inbuf: Optional[str] = None) -> None:
+                                inbuf: Optional[str] = None,
+                                ingress_placement: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
         ssl_cert = ssl_key = ssl_ca_cert = tls_min_version = tls_ciphers = None
         ssl = tls_ktls = tls_debug = False
@@ -157,7 +158,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            tls_ktls=tls_ktls,
                                            tls_debug=tls_debug,
                                            tls_min_version=tls_min_version,
-                                           tls_ciphers=tls_ciphers)
+                                           tls_ciphers=tls_ciphers,
+                                           ingress_placement=ingress_placement)
 
     @CLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()
