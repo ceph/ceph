@@ -65,6 +65,11 @@ void SnapInfo::dump(Formatter *f) const
   f->close_section();
 }
 
+void SnapInfo::update_metadata(map<string, string>& new_metadata) {
+  new_metadata.merge(metadata);
+  metadata = new_metadata;
+}
+
 std::list<SnapInfo> SnapInfo::generate_test_instances()
 {
   std::list<SnapInfo> ls;

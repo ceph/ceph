@@ -862,6 +862,18 @@ int ceph_mksnap(struct ceph_mount_info *cmount, const char *path, const char *na
 int ceph_rmsnap(struct ceph_mount_info *cmount, const char *path, const char *name);
 
 /**
+ * Update metadata of a snapshot.
+ *
+ * @param cmount the ceph mount handle to use for making the directory.
+ * @param path the path of the snapshot.  This must be either an
+ *        absolute path or a relative path off of the current working directory.
+ * @param snap_metadata array of snap metadata structs
+ * @param nr_snap_metadata number of snap metadata struct entries
+ */
+int ceph_snap_metadata_update(struct ceph_mount_info* cmount, const char* path,
+  struct snap_metadata* snap_metadata, size_t nr_snap_metadata);
+
+/**
  * Create multiple directories at once.
  *
  * @param cmount the ceph mount handle to use for making the directories.

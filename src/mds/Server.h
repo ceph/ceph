@@ -111,6 +111,7 @@ enum {
   l_mdss_req_snapdiff_latency,
   l_mdss_req_rmdir_latency,
   l_mdss_req_rmsnap_latency,
+  l_mdss_req_snap_metadata_update_latency,
   l_mdss_req_rmxattr_latency,
   l_mdss_req_setattr_latency,
   l_mdss_req_setdirlayout_latency,
@@ -351,6 +352,7 @@ public:
   void handle_client_file_blockdiff(const MDRequestRef& mdr);
   void handle_file_blockdiff_finish(const MDRequestRef& mdr, CInode *in, const BlockDiff &block_diff,
 				    int r);
+  void handle_client_snap_metadata_update(const MDRequestRef& mdr);
 
   // helpers
   bool _rename_prepare_witness(const MDRequestRef& mdr, mds_rank_t who, std::set<mds_rank_t> &witnesse,

@@ -633,6 +633,9 @@ public:
   int mksnap(const char *path, const char *name, const UserPerm& perm,
              mode_t mode=0, const std::map<std::string, std::string> &metadata={});
   int rmsnap(const char *path, const char *name, const UserPerm& perm, bool check_perms=false);
+  int snap_metadata_update(const char* path,
+                           const std::map<std::string, std::string>& new_metadata,
+                           const UserPerm &perms);
 
   // cephx mds auth caps checking
   int mds_check_access(std::string& path, const UserPerm& perms, int mask);
