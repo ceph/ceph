@@ -88,6 +88,8 @@ if(WITH_CCACHE)
   endif()
 endif(WITH_CCACHE)
 
+add_compile_definitions(CEPH_VENDOR_RELEASE="${CEPH_VENDOR_RELEASE}")
+
 option(WITH_SCCACHE "Build with sccache.")
 if(WITH_SCCACHE)
   find_program(SCCACHE_EXECUTABLE sccache
@@ -869,4 +871,5 @@ add_tags(ctags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
   EXCLUDES "*.js" "*.css" ".tox" "python-common/build")
 add_custom_target(tags DEPENDS ctags)
+
 
