@@ -20,6 +20,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { forkJoin, of, Subject } from 'rxjs';
 import { catchError, map, switchMap, takeUntil } from 'rxjs/operators';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 const BASE_URL = 'block/nvmeof/subsystems';
 const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
@@ -36,6 +37,9 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
 
   @ViewChild('encryptionTpl', { static: true })
   encryptionTpl: TemplateRef<any>;
+
+  @ViewChild('deleteTpl', { static: true })
+  deleteTpl: TemplateRef<any>;
 
   subsystems: (NvmeofSubsystem & { gw_group?: string; initiator_count?: number })[] = [];
   subsystemsColumns: any;
@@ -56,9 +60,9 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
     private router: Router,
+    private route: ActivatedRoute,
     private modalService: ModalCdsService,
     private taskWrapper: TaskWrapperService,
-    private route: ActivatedRoute,
     private notificationService: NotificationService
   ) {
     super();
@@ -100,6 +104,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
         cellTemplate: this.encryptionTpl
       }
     ];
+
     this.tableActions = [
       {
         name: this.actionLabels.CREATE,
@@ -160,9 +165,14 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
   deleteSubsystemModal() {
     const subsystem = this.selection.first();
     this.modalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: 'Subsystem',
+      itemDescription: $localize`Subsystem`,
+      impact: DeletionImpact.high,
+      bodyTemplate: this.deleteTpl,
       itemNames: [subsystem.nqn],
       actionDescription: 'delete',
+      bodyContext: {
+        deletionMessage: $localize`Deleting <strong>${subsystem.nqn}</strong> will remove all associated configurations and resources. Dependent services may stop working. This action cannot be undone.`
+      },
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
           task: new FinishedTask('nvmeof/subsystem/delete', { nqn: subsystem.nqn }),
@@ -171,7 +181,6 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     });
   }
 
-  // Gateway groups
   onGroupSelection(selected: GroupsComboboxItem) {
     selected.selected = true;
     this.group = selected.content;
