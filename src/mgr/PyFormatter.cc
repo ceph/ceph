@@ -64,7 +64,14 @@ void PyFormatter::dump_float(std::string_view name, double d)
 
 void PyFormatter::dump_string(std::string_view name, std::string_view s)
 {
-  dump_pyobject(name, PyUnicode_FromString(s.data()));
+  PyObject *p = PyUnicode_FromStringAndSize(s.data(), s.size());
+  if (!p) {
+    PyErr_Clear();
+    p = PyUnicode_DecodeLatin1(s.data(), s.size(), nullptr);
+    ceph_assert(p);
+  }
+
+  dump_pyobject(name, p);
 }
 
 void PyFormatter::dump_bool(std::string_view name, bool b)
@@ -105,6 +112,9 @@ void PyFormatter::dump_format_va(std::string_view name, const char *ns, bool quo
  */
 void PyFormatter::dump_pyobject(std::string_view name, PyObject *p)
 {
+  if (!p) {
+    ceph_abort_msg("PyFormatter::dump_pyobject received null PyObject");
+  }
   if (PyList_Check(cursor)) {
     PyList_Append(cursor, p);
     Py_DECREF(p);
