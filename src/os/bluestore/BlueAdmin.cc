@@ -48,6 +48,16 @@ BlueStore::SocketHook::SocketHook(BlueStore& store)
       "name=collection,type=CephString,req=false",
       this,
       "print compression stats, per collection");
+    r = admin_socket->register_command(
+      "bluestore runtime frag score "
+      "name=collection,type=CephString,req=false",
+      this,
+      "print runtime fragmentation score, per collection");
+    r = admin_socket->register_command(
+      "bluestore clear runtime frag "
+      "name=collection,type=CephString,req=false",
+      this,
+      "clear runtime fragmentation score, per collection");
     ceph_assert(r == 0);
   }
 }
@@ -172,6 +182,53 @@ int BlueStore::SocketHook::call(
           c->estimator->dump(f);
         }
         f->close_section();
+        f->close_section();
+      }
+    }
+    f->close_section();
+    return 0;
+  } else if (command == "bluestore runtime frag score") {
+    std::vector<CollectionRef> copied;
+    {
+      std::shared_lock l(store.coll_lock);
+      copied.reserve(store.coll_map.size());
+      for (const auto& c : store.coll_map) {
+        copied.push_back(c.second);
+      }
+    }
+    std::string coll;
+    cmd_getval(cmdmap, "collection", coll);
+    f->open_array_section("runtime_frag_score");
+    for (const auto& c : copied) {
+      std::shared_lock l(c->lock);
+      if (coll.empty() || coll == c->get_cid().c_str()) {
+        f->open_object_section("collection");
+        f->dump_string("cid", c->get_cid().c_str());
+        f->dump_unsigned("runtime_frag_score",
+          c->runtime_frag_score.load(std::memory_order_relaxed));
+        f->close_section();
+      }
+    }
+    f->close_section();
+    return 0;
+  } else if (command == "bluestore clear runtime frag") {
+    std::vector<CollectionRef> copied;
+    {
+      std::shared_lock l(store.coll_lock);
+      copied.reserve(store.coll_map.size());
+      for (const auto& c : store.coll_map) {
+        copied.push_back(c.second);
+      }
+    }
+    std::string coll;
+    cmd_getval(cmdmap, "collection", coll);
+    f->open_array_section("cleared_runtime_frag_score");
+    for (const auto& c : copied) {
+      std::shared_lock l(c->lock);
+      if (coll.empty() || coll == c->get_cid().c_str()) {
+        c->runtime_frag_score.store(0, std::memory_order_relaxed);
+        f->open_object_section("collection");
+        f->dump_string("cid", c->get_cid().c_str());
         f->close_section();
       }
     }
