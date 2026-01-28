@@ -6,7 +6,6 @@ overrides:
         debug ms: "0/0"
         debug paxos: "0/0"
       osd:
-        debug filestore: "0/0"
         debug journal: "0/0"
         debug ms: "0/0"
         debug osd: "0/0"
@@ -40,7 +39,6 @@ overrides:
         debug osd: "0/0"
         debug optracker: "0/0"
         debug objclass: "0/0"
-        debug filestore: "0/0"
         debug journal: "0/0"
         debug ms: "0/0"
         debug mon: "0/0"

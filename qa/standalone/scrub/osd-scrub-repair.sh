@@ -20,7 +20,6 @@ source $CEPH_ROOT/qa/standalone/scrub/scrub-helpers.sh
 
 if [ `uname` = FreeBSD ]; then
     # erasure coding overwrites are only tested on Bluestore
-    # erasure coding on filestore is unsafe
     # http://docs.ceph.com/en/latest/rados/operations/erasure-code/#erasure-coding-with-overwrites
     use_ec_overwrite=false
 else
