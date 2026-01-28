@@ -108,6 +108,20 @@
         </cds-checkbox>
       </div>
       <div class="form-item">
+        <cds-checkbox
+          id="archive_zone"
+          formControlName="archive_zone"
+          cdOptionalField="Archive"
+          i18n
+          >Archive
+          <cd-help-text>
+            <span
+              >Enable archival storage to keep all object versions and protect data from deletion or corruption.</span
+            >
+          </cd-help-text>
+        </cds-checkbox>
+      </div>
+      <div class="form-item">
         <cds-text-label
           i18n
           [invalid]="

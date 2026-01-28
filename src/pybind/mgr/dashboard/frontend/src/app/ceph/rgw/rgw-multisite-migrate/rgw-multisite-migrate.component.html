@@ -90,6 +90,19 @@
         </div>
       </div>
       <div class="form-group row">
+        <div class="cd-col-form-offset">
+          <input type="checkbox"
+                 formControlName="archive_zone"
+                 id="archive_zone">
+          <label for="archive_zone"
+                 class="custom-control-label cds-ml-3"
+                 i18n>Archive</label>
+          <cd-help-text>
+            <span i18n>Enable archival storage to keep all object versions and protect data from deletion or corruption.</span>
+          </cd-help-text>
+        </div>
+      </div>
+      <div class="form-group row">
         <label class="cd-col-form-label required"
                for="zone_endpoints"
                i18n>Zone Endpoints
