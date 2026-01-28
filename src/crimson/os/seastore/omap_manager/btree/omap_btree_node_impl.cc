@@ -255,8 +255,12 @@ OMapInnerNode::iterate(
           if (child_ret == ObjectStore::omap_iter_ret_t::STOP) {
             return iterate_iertr::make_ready_future<seastar::stop_iteration>(
                    seastar::stop_iteration::yes);
+          } else if (child_ret == ObjectStore::omap_iter_ret_t::NEXT) {
+            ++iter;
+          } else {
+            // assume child_ret == ObjectStore::omap_iter_ret_t::PREV
+            --iter;
           }
-          ++iter;
           return iterate_iertr::make_ready_future<seastar::stop_iteration>(
                  seastar::stop_iteration::no);
         });

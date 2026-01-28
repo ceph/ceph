@@ -6544,6 +6544,9 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_omap_lower_bound_lat, "omap_lower_bound_lat",
     "Average omap iterator lower_bound call latency",
     "olbl", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_omap_seek_last_lat, "omap_seek_last_lat",
+    "Average omap iterator seek_last call latency",
+    "olbl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_omap_next_lat, "omap_next_lat",
     "Average omap iterator next call latency",
     "onxl", PerfCountersBuilder::PRIO_USEFUL);
@@ -13952,11 +13955,19 @@ int BlueStore::omap_iterate(
         l_bluestore_omap_lower_bound_lat,
         ceph::mono_clock::now() - start,
         c->store->cct->_conf->bluestore_log_omap_iterator_age);
-    } else {
+    } else if (start_from.seek_type == omap_iter_seek_t::UPPER_BOUND) {
       it->upper_bound(seek_key);
       c->store->log_latency(
         __func__,
         l_bluestore_omap_upper_bound_lat,
+        ceph::mono_clock::now() - start,
+        c->store->cct->_conf->bluestore_log_omap_iterator_age);
+    } else {
+      // start_from.seek_type == omap_iter_seek_t::END
+      it->seek_to_last();
+      c->store->log_latency(
+        __func__,
+        l_bluestore_omap_seek_last_lat,
         ceph::mono_clock::now() - start,
         c->store->cct->_conf->bluestore_log_omap_iterator_age);
     }
@@ -13978,6 +13989,9 @@ int BlueStore::omap_iterate(
     } else if (ret == omap_iter_ret_t::NEXT) {
       ceph::time_guard<ceph::mono_clock> measure_next{next_lat_acc};
       it->next();
+    } else if (ret == omap_iter_ret_t::PREV) {
+      ceph::time_guard<ceph::mono_clock> measure_next{next_lat_acc};
+      it->prev();
     } else {
       ceph_abort();
     }

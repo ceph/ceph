@@ -213,6 +213,7 @@ enum {
   //****************************************
   l_bluestore_omap_upper_bound_lat,
   l_bluestore_omap_lower_bound_lat,
+  l_bluestore_omap_seek_last_lat,
   l_bluestore_omap_next_lat,
   l_bluestore_omap_get_keys_lat,
   l_bluestore_omap_get_values_lat,

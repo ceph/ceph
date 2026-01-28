@@ -293,7 +293,9 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* omap */							    \
 	f(OMAPGETKEYS,	__CEPH_OSD_OP(RD, DATA, 17),	"omap-get-keys")    \
+	f(OMAPGETKEYSREV, __CEPH_OSD_OP(RD, DATA, 46),	"omap-get-keys-rev") \
 	f(OMAPGETVALS,	__CEPH_OSD_OP(RD, DATA, 18),	"omap-get-vals")    \
+	f(OMAPGETVALSREV, __CEPH_OSD_OP(RD, DATA, 47),	"omap-get-vals-rev") \
 	f(OMAPGETHEADER, __CEPH_OSD_OP(RD, DATA, 19),	"omap-get-header")  \
 	f(OMAPGETVALSBYKEYS, __CEPH_OSD_OP(RD, DATA, 20), "omap-get-vals-by-keys") \
 	f(OMAPSETVALS,	__CEPH_OSD_OP(WR, DATA, 21),	"omap-set-vals")    \

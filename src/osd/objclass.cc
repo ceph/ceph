@@ -371,9 +371,12 @@ int cls_cxx_map_get_all_vals(cls_method_context_t hctx, map<string, bufferlist>*
   return vals->size();
 }
 
-int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
-			 uint64_t max_to_get, set<string> *keys,
-                         bool *more)
+static int cls_cxx_map_get_keys_common(cls_method_context_t hctx,
+                                       int osd_op,
+                                       const string &start_obj,
+                                       uint64_t max_to_get,
+                                       set<string> *keys,
+                                       bool *more)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -383,11 +386,12 @@ int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
   encode(start_obj, op.indata);
   encode(max_to_get, op.indata);
 
-  op.op.op = CEPH_OSD_OP_OMAPGETKEYS;
+  op.op.op = osd_op;
 
   ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   auto iter = op.outdata.cbegin();
   try {
@@ -397,11 +401,33 @@ int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
     return -EIO;
   }
   return keys->size();
+} // cls_cxx_map_get_keys_common
+
+int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
+			 uint64_t max_to_get, set<string> *keys,
+                         bool *more)
+{
+  return cls_cxx_map_get_keys_common(hctx, CEPH_OSD_OP_OMAPGETKEYS, start_obj,
+                                     max_to_get, keys, more);
 }
 
-int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
-			 const string &filter_prefix, uint64_t max_to_get,
-			 map<string, bufferlist> *vals, bool *more)
+int cls_cxx_map_get_keys_rev(cls_method_context_t hctx,
+                             const string &start_obj,
+                             uint64_t max_to_get,
+                             set<string> *keys,
+                             bool *more)
+{
+  return cls_cxx_map_get_keys_common(hctx, CEPH_OSD_OP_OMAPGETKEYSREV,
+                                     start_obj, max_to_get, keys, more);
+}
+
+static int cls_cxx_map_get_vals_common(cls_method_context_t hctx,
+                                       int osd_op,
+                                       const string &start_obj,
+                                       const string &filter_prefix,
+                                       uint64_t max_to_get,
+                                       map<string, bufferlist> *vals,
+                                       bool *more)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
@@ -412,7 +438,7 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
   encode(max_to_get, op.indata);
   encode(filter_prefix, op.indata);
 
-  op.op.op = CEPH_OSD_OP_OMAPGETVALS;
+  op.op.op = osd_op;
   
   ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
   if (ret < 0)
@@ -426,6 +452,26 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
     return -EIO;
   }
   return vals->size();
+}
+
+int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
+			 const string &filter_prefix, uint64_t max_to_get,
+			 map<string, bufferlist> *vals, bool *more)
+{
+  return cls_cxx_map_get_vals_common(hctx,
+                                     CEPH_OSD_OP_OMAPGETVALS,
+                                     start_obj, filter_prefix, max_to_get,
+                                     vals, more);
+}
+
+int cls_cxx_map_get_vals_rev(cls_method_context_t hctx, const string &start_obj,
+                             const string &filter_prefix, uint64_t max_to_get,
+                             map<string, bufferlist> *vals, bool *more)
+{
+  return cls_cxx_map_get_vals_common(hctx,
+                                     CEPH_OSD_OP_OMAPGETVALSREV,
+                                     start_obj, filter_prefix, max_to_get,
+                                     vals, more);
 }
 
 int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
