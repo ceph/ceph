@@ -356,6 +356,7 @@ spec:
   wal_devices:
     model: NVME-QQQQ-987
   termination_grace_period_seconds: 30
+  osd_type: classic
 ---
 service_type: alertmanager
 service_name: alertmanager
