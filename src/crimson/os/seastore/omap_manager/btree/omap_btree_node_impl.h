@@ -114,7 +114,8 @@ struct OMapInnerNode
   void do_on_replace_prior() final {
     this->parent_node_t::on_replace_prior();
     if (!this->is_btree_root()) {
-      auto &prior = *get_prior_instance()->template cast<OMapInnerNode>();
+      [[maybe_unused]] auto &prior =
+        *get_prior_instance()->template cast<OMapInnerNode>();
       assert(prior.base_child_t::has_parent_tracker());
       this->child_node_t::on_replace_prior();
     }
@@ -366,7 +367,8 @@ struct OMapLeafNode
   void do_on_replace_prior() final {
     ceph_assert(!this->is_rewrite());
     if (!this->is_btree_root()) {
-      auto &prior = *get_prior_instance()->template cast<OMapLeafNode>();
+      [[maybe_unused]] auto &prior =
+        *get_prior_instance()->template cast<OMapLeafNode>();
       assert(prior.base_child_t::has_parent_tracker());
       this->child_node_t::on_replace_prior();
     }
