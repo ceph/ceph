@@ -6,6 +6,7 @@
 
 #include "include/types.h"
 #include "common/hobject.h"
+#include "include/rados/cls_traits.h"
 
 struct cls_refcount_get_op {
   std::string tag;
@@ -151,4 +152,15 @@ struct obj_refcount {
 };
 WRITE_CLASS_ENCODER(obj_refcount)
 
+namespace cls::refcount {
+struct ClassId {
+  static constexpr auto name = "refcount";
+};
+namespace method {
+constexpr auto get = ClsMethod<RdWrTag, ClassId>("get");
+constexpr auto put = ClsMethod<RdWrTag, ClassId>("put");
+constexpr auto set = ClsMethod<RdWrTag, ClassId>("set");
+constexpr auto read = ClsMethod<RdTag, ClassId>("read");
+}
+}
 #endif
