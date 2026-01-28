@@ -7,10 +7,10 @@
  * \file
  * \brief Defines the interface for the snap-mapper used by the scrubber.
  */
+#include <expected>
 #include <set>
 
 #include "common/scrub_types.h"
-#include "include/expected.hpp"
 
 namespace Scrub {
 /*
@@ -36,7 +36,7 @@ struct SnapMapReaderI {
    *  \returns a set of snaps, or an error code
    *  \attn: only OBJ_ DB entries are consulted
    */
-  virtual tl::expected<std::set<snapid_t>, result_t> get_snaps(
+  virtual std::expected<std::set<snapid_t>, result_t> get_snaps(
     const hobject_t& hoid) const = 0;
 
   /**
@@ -46,7 +46,7 @@ struct SnapMapReaderI {
    *  A mismatch between both sets of entries will result in an error.
    *  \returns a set of snaps, or an error code.
    */
-  virtual tl::expected<std::set<snapid_t>, result_t>
+  virtual std::expected<std::set<snapid_t>, result_t>
   get_snaps_check_consistency(const hobject_t& hoid) const = 0;
 
   virtual ~SnapMapReaderI() = default;
