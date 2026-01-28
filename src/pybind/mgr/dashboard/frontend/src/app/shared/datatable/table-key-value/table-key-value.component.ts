@@ -6,7 +6,8 @@ import {
   OnInit,
   Output,
   TemplateRef,
-  ViewChild
+  ViewChild,
+  ViewEncapsulation
 } from '@angular/core';
 
 import _ from 'lodash';
@@ -32,7 +33,8 @@ interface KeyValueItem {
 @Component({
   selector: 'cd-table-key-value',
   templateUrl: './table-key-value.component.html',
-  styleUrls: ['./table-key-value.component.scss']
+  styleUrls: ['./table-key-value.component.scss'],
+  encapsulation: ViewEncapsulation.None
 })
 export class TableKeyValueComponent implements OnInit, OnChanges {
   @ViewChild(TableComponent, { static: true })
