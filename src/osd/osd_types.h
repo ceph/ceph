@@ -145,6 +145,8 @@ typedef interval_set<
 using shard_id_set = bitset_set<128, shard_id_t>;
 WRITE_CLASS_DENC(shard_id_set)
 
+enum class OmapUpdateType : uint8_t {Remove, Insert, RemoveRange};
+
 /**
  * osd request identifier
  *
@@ -1325,6 +1327,7 @@ struct pg_pool_t {
     FLAG_CRIMSON = 1<<18,
     FLAG_EC_OPTIMIZATIONS = 1<<19, // enable optimizations, once enabled, cannot be disabled
     FLAG_CLIENT_SPLIT_READS = 1<<20, // Optimized EC is permitted to do direct reads.
+    FLAG_OMAP = 1<<21, // Optimized EC is permitted to perform OMAP operations
   };
 
   static const char *get_flag_name(uint64_t f) {
@@ -1349,6 +1352,7 @@ struct pg_pool_t {
     case FLAG_BULK: return "bulk";
     case FLAG_CRIMSON: return "crimson";
     case FLAG_EC_OPTIMIZATIONS: return "ec_optimizations";
+    case FLAG_OMAP: return "supports_omap";
     default: return "???";
     }
   }
@@ -1407,6 +1411,8 @@ struct pg_pool_t {
       return FLAG_CRIMSON;
     if (name == "ec_optimizations")
       return FLAG_EC_OPTIMIZATIONS;
+    if (name == "supports_omap")
+      return FLAG_OMAP;
     return 0;
   }
 
@@ -1809,7 +1815,7 @@ public:
   bool is_erasure() const { return get_type() == TYPE_ERASURE; }
 
   bool supports_omap() const {
-    return !(get_type() == TYPE_ERASURE);
+    return has_flag(FLAG_OMAP) || is_replicated();
   }
 
   bool requires_aligned_append() const {
@@ -4077,6 +4083,8 @@ public:
   public:
     virtual void append(uint64_t old_offset) {}
     virtual void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &attrs) {}
+    virtual void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
+      std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) {}
     virtual void rmobject(version_t old_version) {}
     /**
      * Used to support the unfound_lost_delete log event: if the stashed
@@ -4105,7 +4113,8 @@ public:
     CREATE = 4,
     UPDATE_SNAPS = 5,
     TRY_DELETE = 6,
-    ROLLBACK_EXTENTS = 7
+    ROLLBACK_EXTENTS = 7,
+    EC_OMAP = 8
   };
   ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {
     bl.reassign_to_mempool(mempool::mempool_osd_pglog);
@@ -4155,6 +4164,18 @@ public:
     ENCODE_START(1, 1, bl);
     append_id(SETATTRS);
     encode(old_attrs, bl);
+    ENCODE_FINISH(bl);
+  }
+  void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
+    std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) {
+    if(!can_local_rollback) {
+      return;
+    }
+    ENCODE_START(1, 1, bl);
+    append_id(EC_OMAP);
+    encode(clear_omap, bl);
+    encode(omap_header, bl);
+    encode(omap_updates, bl);
     ENCODE_FINISH(bl);
   }
   bool rmobject(version_t deletion_version) {
@@ -6433,13 +6454,14 @@ struct ObjectRecoveryInfo {
   hobject_t soid;
   eversion_t version;
   uint64_t size;
+  uint64_t num_omap_keys;
   object_info_t oi;
   SnapSet ss;   // only populated if soid is_snap()
   interval_set<uint64_t> copy_subset;
   std::map<hobject_t, interval_set<uint64_t>> clone_subset;
   bool object_exist;
 
-  ObjectRecoveryInfo() : size(0), object_exist(true) { }
+  ObjectRecoveryInfo() : size(0), num_omap_keys(0), object_exist(true) { }
 
   static std::list<ObjectRecoveryInfo> generate_test_instances();
   void encode(ceph::buffer::list &bl, uint64_t features) const;

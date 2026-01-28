@@ -81,7 +81,8 @@ int destroy_ec_profile_and_rule_pp(Rados &cluster,
   return destroy_rule_pp(cluster, rule, oss);
 }
 
-std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
+std::string create_one_ec_pool_pp(const std::string &pool_name,
+  Rados &cluster, bool optimised_ec)
 {
   std::string err = connect_cluster_pp(cluster);
   if (err.length())
@@ -111,6 +112,20 @@ std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
     cluster.shutdown();
     oss << "mon_command osd pool create pool:" << pool_name << " pool_type:erasure failed with error " << ret;
     return oss.str();
+  }
+
+  if (optimised_ec) {
+    bufferlist inbl;
+    ret = cluster.mon_command(
+      "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+      "\", \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}",
+      std::move(inbl), nullptr, nullptr);
+    if (ret) {
+      destroy_one_ec_pool_pp(pool_name, cluster);
+      destroy_ec_profile_pp(cluster, pool_name, oss);
+      oss << "rados_mon_command osd pool set failed with error " << ret;
+      return oss.str();
+    }
   }
 
   cluster.wait_for_latest_osdmap();
