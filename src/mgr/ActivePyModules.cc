@@ -1152,7 +1152,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
     for (auto &[key, state] : daemons) {
       std::lock_guard l(state->lock);
       with_gil(no_gil, [&, key = ceph::to_string(key), state = state] {
-	std::string_view key_name, prev_key_name;
+	std::string key_name, prev_key_name;
 	perf_counter_label_pairs prev_key_labels;
 	Formatter::ObjectSection counter_section(
 	    f, key.c_str());  // Main Object Section
@@ -1182,14 +1182,12 @@ PyObject* ActivePyModules::get_perf_schema_python(
 
 	  // Extract the key names from the counter path, these key names form
 	  // the main object section for their counters
-	  string key_name_without_counter;
 	  if (key_labels.empty()) {
 	    size_t pos = counter_name_with_labels.rfind('.');
-	    key_name_without_counter = counter_name_with_labels.substr(0, pos);
-	    key_name = key_name_without_counter;  // key_name, osd
+	    key_name = counter_name_with_labels.substr(0, pos);  // key_name, osd
 	  } else {
 	    // key_name, osd_scrub_sh_repl
-	    key_name = ceph::perf_counters::key_name(counter_name_with_labels);
+	    key_name = std::string(ceph::perf_counters::key_name(counter_name_with_labels));
 	  }
 
 	  /*
