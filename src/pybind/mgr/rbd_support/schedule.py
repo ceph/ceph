@@ -1,11 +1,12 @@
-import datetime
+import hashlib
 import json
 import rados
 import rbd
 import re
 
-from dateutil.parser import parse
-from typing import cast, Any, Callable, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
+from datetime import date, datetime, timezone, timedelta
+from dateutil.parser import parse, isoparse
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from .common import get_rbd_pools
 if TYPE_CHECKING:
@@ -269,36 +270,45 @@ class Interval:
 
 class StartTime:
 
-    def __init__(self,
-                 hour: int,
-                 minute: int,
-                 tzinfo: Optional[datetime.tzinfo]) -> None:
-        self.time = datetime.time(hour, minute, tzinfo=tzinfo)
-        self.minutes = self.time.hour * 60 + self.time.minute
-        if self.time.tzinfo:
-            utcoffset = cast(datetime.timedelta, self.time.utcoffset())
-            self.minutes += int(utcoffset.seconds / 60)
+    def __init__(self, dt: datetime) -> None:
+        self.dt = self._to_utc(dt)
 
-    def __eq__(self, start_time: Any) -> bool:
-        return self.minutes == start_time.minutes
+    @staticmethod
+    def _to_utc(dt: datetime) -> datetime:
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc, second=0, microsecond=0)
+        return dt.astimezone(timezone.utc).replace(second=0, microsecond=0)
+
+    def __eq__(self, other: Any) -> bool:
+        return self.dt == other.dt
 
     def __hash__(self) -> int:
-        return hash(self.minutes)
+        return hash(self.dt)
 
     def to_string(self) -> str:
-        return self.time.isoformat()
+        return self.dt.strftime("%Y-%m-%d %H:%M:00")
 
     @classmethod
-    def from_string(cls, start_time: Optional[str]) -> Optional['StartTime']:
+    def from_string(cls,
+                    start_time: Optional[str],
+                    allow_legacy: bool = False) -> Optional['StartTime']:
         if not start_time:
             return None
 
         try:
-            t = parse(start_time).timetz()
+            dt = isoparse(start_time)
         except ValueError as e:
-            raise ValueError("Invalid start time {}: {}".format(start_time, e))
+            if not allow_legacy:
+                raise ValueError("Invalid start time {}: {}".format(start_time, e))
 
-        return StartTime(t.hour, t.minute, tzinfo=t.tzinfo)
+            try:
+                t = parse(start_time).timetz()
+            except ValueError as e:
+                raise ValueError("Invalid start time {}: {}".format(start_time, e))
+
+            dt = datetime.combine(date(1970, 1, 1), t)
+
+        return cls(dt)
 
 
 class Schedule:
@@ -320,33 +330,49 @@ class Schedule:
                start_time: Optional[StartTime] = None) -> None:
         self.items.discard((interval, start_time))
 
-    def next_run(self, now: datetime.datetime) -> str:
+    @staticmethod
+    def _compute_phase_offset_minutes(entity_id: str, period_minutes: int) -> int:
+        key = entity_id + "|" + str(period_minutes)
+        h = hashlib.md5(key.encode("utf-8")).hexdigest()
+        val = int(h, 16)
+        return (val % period_minutes)
+
+    def next_run(self, now: datetime, entity_id: str) -> datetime:
         schedule_time = None
-        for interval, opt_start in self.items:
-            period = datetime.timedelta(minutes=interval.minutes)
-            start_time = datetime.datetime(1970, 1, 1)
-            if opt_start:
-                start = cast(StartTime, opt_start)
-                start_time += datetime.timedelta(minutes=start.minutes)
-            time = start_time + \
-                (int((now - start_time) / period) + 1) * period
-            if schedule_time is None or time < schedule_time:
-                schedule_time = time
+
+        for interval, start_time in self.items:
+            period = timedelta(minutes=interval.minutes)
+            if start_time:
+                anchor_time = start_time.dt
+            else:
+                phase_offset_minutes = self._compute_phase_offset_minutes(entity_id, interval.minutes)
+                anchor_time = (
+                    datetime(1970, 1, 1, tzinfo=timezone.utc)
+                    + timedelta(minutes=phase_offset_minutes)
+                )
+
+            if anchor_time > now:
+                candidate_time = anchor_time
+            else:
+                q, r = divmod(now - anchor_time, period)
+                candidate_time = anchor_time + (q + bool(r)) * period
+
+            if schedule_time is None or candidate_time < schedule_time:
+                schedule_time = candidate_time
+
         if schedule_time is None:
             raise ValueError('no items is added')
-        return datetime.datetime.strftime(schedule_time, "%Y-%m-%d %H:%M:00")
+
+        return schedule_time
 
     def to_list(self) -> List[Dict[str, Optional[str]]]:
-        def item_to_dict(interval: Interval,
-                         start_time: Optional[StartTime]) -> Dict[str, Optional[str]]:
-            if start_time:
-                schedule_start_time: Optional[str] = start_time.to_string()
-            else:
-                schedule_start_time = None
-            return {SCHEDULE_INTERVAL: interval.to_string(),
-                    SCHEDULE_START_TIME: schedule_start_time}
-        return [item_to_dict(interval, start_time)
-                for interval, start_time in self.items]
+        return [
+            {
+                SCHEDULE_INTERVAL: interval.to_string(),
+                SCHEDULE_START_TIME: start_time.to_string() if start_time else None
+            }
+            for interval, start_time in self.items
+        ]
 
     def to_json(self) -> str:
         return json.dumps(self.to_list(), indent=4, sort_keys=True)
@@ -358,8 +384,13 @@ class Schedule:
             schedule = Schedule(name)
             for item in items:
                 interval = Interval.from_string(item[SCHEDULE_INTERVAL])
-                start_time = item[SCHEDULE_START_TIME] and \
-                    StartTime.from_string(item[SCHEDULE_START_TIME]) or None
+                # Allow loading 'start_time' values in legacy format for backwards compatibility
+                start_time_str = item.get(SCHEDULE_START_TIME)
+                start_time = (
+                    StartTime.from_string(start_time_str, allow_legacy=True)
+                    if start_time_str
+                    else None
+                )
                 schedule.add(interval, start_time)
             return schedule
         except json.JSONDecodeError as e:

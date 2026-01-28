@@ -1,10 +1,11 @@
 import errno
 import json
 import rados
+import random
 import rbd
 import traceback
 
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import Condition, Lock, Thread
 from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Union
 
@@ -338,7 +339,7 @@ class MirrorSnapshotScheduleHandler:
         self.condition = Condition(self.lock)
         self.module = module
         self.log = module.log
-        self.last_refresh_images = datetime(1970, 1, 1)
+        self.last_refresh_images = datetime(1970, 1, 1, tzinfo=timezone.utc)
         self.create_snapshot_requests = CreateSnapshotRequests(self)
 
         self.stop_thread = False
@@ -370,7 +371,7 @@ class MirrorSnapshotScheduleHandler:
                 pool_id, namespace, image_id = image_spec
                 self.create_snapshot_requests.add(pool_id, namespace, image_id)
                 with self.lock:
-                    self.enqueue(datetime.now(), pool_id, namespace, image_id)
+                    self.enqueue(datetime.now(timezone.utc), pool_id, namespace, image_id)
 
         except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
             self.log.exception("MirrorSnapshotScheduleHandler: client blocklisted")
@@ -381,7 +382,7 @@ class MirrorSnapshotScheduleHandler:
 
     def init_schedule_queue(self) -> None:
         # schedule_time => image_spec
-        self.queue: Dict[str, List[ImageSpec]] = {}
+        self.queue: Dict[datetime, List[ImageSpec]] = {}
         # pool_id => {namespace => image_id}
         self.images: Dict[str, Dict[str, Dict[str, str]]] = {}
         self.schedules = Schedules(self)
@@ -393,7 +394,7 @@ class MirrorSnapshotScheduleHandler:
         self.schedules.load(namespace_validator, image_validator)
 
     def refresh_images(self) -> float:
-        elapsed = (datetime.now() - self.last_refresh_images).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - self.last_refresh_images).total_seconds()
         if elapsed < self.REFRESH_DELAY_SECONDS:
             return self.REFRESH_DELAY_SECONDS - elapsed
 
@@ -405,7 +406,7 @@ class MirrorSnapshotScheduleHandler:
                 self.log.debug("MirrorSnapshotScheduleHandler: no schedules")
                 self.images = {}
                 self.queue = {}
-                self.last_refresh_images = datetime.now()
+                self.last_refresh_images = datetime.now(timezone.utc)
                 return self.REFRESH_DELAY_SECONDS
 
         images: Dict[str, Dict[str, Dict[str, str]]] = {}
@@ -421,7 +422,7 @@ class MirrorSnapshotScheduleHandler:
             self.refresh_queue(images)
             self.images = images
 
-        self.last_refresh_images = datetime.now()
+        self.last_refresh_images = datetime.now(timezone.utc)
         return self.REFRESH_DELAY_SECONDS
 
     def load_pool_images(self,
@@ -473,13 +474,11 @@ class MirrorSnapshotScheduleHandler:
                     pool_name, e))
 
     def rebuild_queue(self) -> None:
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         # don't remove from queue "due" images
-        now_string = datetime.strftime(now, "%Y-%m-%d %H:%M:00")
-
         for schedule_time in list(self.queue):
-            if schedule_time > now_string:
+            if schedule_time > now:
                 del self.queue[schedule_time]
 
         if not self.schedules:
@@ -494,7 +493,7 @@ class MirrorSnapshotScheduleHandler:
 
     def refresh_queue(self,
                       current_images: Dict[str, Dict[str, Dict[str, str]]]) -> None:
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         for pool_id in self.images:
             for namespace in self.images[pool_id]:
@@ -522,7 +521,7 @@ class MirrorSnapshotScheduleHandler:
                     pool_id, namespace, image_id))
             return
 
-        schedule_time = schedule.next_run(now)
+        schedule_time = schedule.next_run(now, image_id)
         if schedule_time not in self.queue:
             self.queue[schedule_time] = []
         self.log.debug(
@@ -536,16 +535,15 @@ class MirrorSnapshotScheduleHandler:
         if not self.queue:
             return None, 1000.0
 
-        now = datetime.now()
-        schedule_time = sorted(self.queue)[0]
+        now = datetime.now(timezone.utc)
+        schedule_time = min(self.queue)
 
-        if datetime.strftime(now, "%Y-%m-%d %H:%M:%S") < schedule_time:
-            wait_time = (datetime.strptime(schedule_time,
-                                           "%Y-%m-%d %H:%M:%S") - now)
-            return None, wait_time.total_seconds()
+        if now < schedule_time:
+            return None, (schedule_time - now).total_seconds()
 
         images = self.queue[schedule_time]
-        image = images.pop(0)
+        rng = random.Random(schedule_time.timestamp())
+        image = images.pop(rng.randrange(len(images)))
         if not images:
             del self.queue[schedule_time]
         return image, 0.0
@@ -616,7 +614,7 @@ class MirrorSnapshotScheduleHandler:
                         continue
                     image_name = self.images[pool_id][namespace][image_id]
                     scheduled_images.append({
-                        'schedule_time': schedule_time,
+                        'schedule_time': schedule_time.strftime("%Y-%m-%d %H:%M:00"),
                         'image': image_name
                     })
         return 0, json.dumps({'scheduled_images': scheduled_images},
