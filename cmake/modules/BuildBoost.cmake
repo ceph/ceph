@@ -145,7 +145,10 @@ function(do_build_boost root_dir version)
     list(APPEND b2 valgrind=on)
   endif()
   if(WITH_ASAN)
-    list(APPEND b2 context-impl=ucontext)
+    if (Boost_VERSION VERSION_LESS 1.87 OR
+        Boost_VERSION VERSION_GREATER_EQUAL 1.90)
+      list(APPEND b2 context-impl=ucontext)
+    endif()
   endif()
   set(build_command
     ${b2} headers stage
