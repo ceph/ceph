@@ -120,7 +120,7 @@ public:
       sstream << "https://localhost";
       break;
     default:
-      ceph_assert(false);
+      ceph_abort();
       break;
     }
 

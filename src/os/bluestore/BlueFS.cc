@@ -523,7 +523,7 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
       dev_name = "slow";
       break;
     default:
-      ceph_assert(false);
+      ceph_abort();
   }
   dout(10) << __func__ << " bdev " << id << " path " << path << " "
            << dendl;
@@ -658,7 +658,7 @@ uint64_t BlueFS::_get_minimal_reserved(unsigned id) const
       reserved = 0;
       break;
     default:
-      ceph_assert(false);
+      ceph_abort();
   }
   return reserved;
 }
@@ -1245,7 +1245,7 @@ int BlueFS::prepare_new_device(int id, const bluefs_layout_t& layout)
       REMOVE_WAL,
       layout);
   } else {
-    ceph_assert(false);
+    ceph_abort();
   }
   return 0;
 }

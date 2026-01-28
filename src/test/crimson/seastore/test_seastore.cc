@@ -617,7 +617,7 @@ struct seastore_test_t :
       case type_t::NORMAL:
 	return make_oid(index);
       default:
-	assert(0 == "impossible");
+        ceph_abort_msg("unhandled oid type");
 	return ghobject_t();
       }
     }

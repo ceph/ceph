@@ -263,7 +263,7 @@ namespace crimson {
 	    } // for
 	    ops_count += i.args.req_params.count;
 	  } else {
-	    assert(false);
+            ceph_abort();
 	  }
 	} // for loop
 

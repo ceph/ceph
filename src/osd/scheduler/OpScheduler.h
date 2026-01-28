@@ -59,7 +59,7 @@ public:
   virtual op_queue_type_t get_type() const = 0;
 
   virtual double get_cost_per_io() const {
-    ceph_assert(0 == "impossible for wpq");
+    ceph_abort_msg("impossible for wpq");
     return 0.0;
   }
 

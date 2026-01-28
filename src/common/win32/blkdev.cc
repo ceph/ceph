@@ -37,7 +37,7 @@ int BlkDev::get_devid(dev_t *id) const
 }
 
 const char *BlkDev::sysfsdir() const {
-  assert(false);  // Should never be called on Windows
+  ceph_abort(); // Should never be called on Windows
   return "";
 }
 

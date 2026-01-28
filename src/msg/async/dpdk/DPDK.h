@@ -819,7 +819,7 @@ class DPDKDevice {
     /* now initialise the port we will use */
     int ret = init_port_start();
     if (ret != 0) {
-      ceph_assert(false && "Cannot initialise port\n");
+      ceph_abort_msg("cannot initialise port");
     }
     std::string name(std::string("port") + std::to_string(port_idx));
     PerfCountersBuilder plb(cct, name, l_dpdk_dev_first, l_dpdk_dev_last);

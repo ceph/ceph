@@ -12411,7 +12411,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       else if (prefix.find("noout") != string::npos)
         flags = CEPH_OSD_NOOUT;
       else
-        ceph_assert(0 == "Unreachable!");
+        ceph_abort_msgf("unhandled OSD flag command: %s", prefix.c_str());
     }
     if (flags == 0) {
       ss << "must specify flag(s) {noup,nodwon,noin,noout} to set/unset";
@@ -12598,7 +12598,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       osd = -1;
     }
     else {
-      ceph_assert(0 == "Unreachable!");
+      ceph_abort_msgf("unhandled primary-temp command: %s", prefix.c_str());
     }
 
     if (osdmap.require_min_compat_client != ceph_release_t::unknown &&
