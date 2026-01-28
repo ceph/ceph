@@ -118,28 +118,6 @@ int RGWBackoffControlCR::operate(const DoutPrefixProvider *dpp) {
   return 0;
 }
 
-void rgw_mdlog_info::decode_json(JSONObj *obj) {
-  JSONDecoder::decode_json("num_objects", num_shards, obj);
-  JSONDecoder::decode_json("period", period, obj);
-  JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
-}
-
-void rgw_mdlog_entry::decode_json(JSONObj *obj) {
-  JSONDecoder::decode_json("id", id, obj);
-  JSONDecoder::decode_json("section", section, obj);
-  JSONDecoder::decode_json("name", name, obj);
-  utime_t ut;
-  JSONDecoder::decode_json("timestamp", ut, obj);
-  timestamp = ut.to_real_time();
-  JSONDecoder::decode_json("data", log_data, obj);
-}
-
-void rgw_mdlog_shard_data::decode_json(JSONObj *obj) {
-  JSONDecoder::decode_json("marker", marker, obj);
-  JSONDecoder::decode_json("truncated", truncated, obj);
-  JSONDecoder::decode_json("entries", entries, obj);
-};
-
 int RGWShardCollectCR::operate(const DoutPrefixProvider *dpp) {
   reenter(this) {
     while (spawn_next()) {
@@ -1452,6 +1430,21 @@ public:
   int state_store_mdlog_entries_complete();
 };
 
+bool convert(const cls::log::entry& from, rgw_mdlog_entry& to)
+{
+  to.id = from.id;
+  to.section = from.section;
+  to.name = from.name;
+  to.timestamp = from.timestamp;
+  try {
+    auto iter = from.data.cbegin();
+    decode(to.log_data, iter);
+  } catch (const buffer::error&) {
+    return false;
+  }
+  return true;
+}
+
 class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
   const rgw_pool& pool;
@@ -1895,7 +1888,7 @@ public:
               ldpp_dout(sync_env->dpp, 10) << "found key at period_marker=" << period_marker << dendl;
               // sync this entry, then return control to RGWMetaSyncCR
             }
-            if (!mdlog_entry.convert_from(*log_iter)) {
+            if (!convert(*log_iter, mdlog_entry)) {
               tn->log(0, SSTR("ERROR: failed to convert mdlog entry, shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << " ... skipping entry"));
               continue;
             }

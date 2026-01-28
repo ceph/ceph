@@ -67,6 +67,7 @@ set(librgw_common_srcs
   rgw_lc.cc
   rgw_lc_s3.cc
   rgw_restore.cc
+  rgw_mdlog_types.cc
   rgw_metadata.cc
   rgw_multi.cc
   rgw_multi_del.cc
@@ -76,6 +77,7 @@ set(librgw_common_srcs
   rgw_period.cc
   rgw_realm.cc
   rgw_sync.cc
+  sync/metadata.cc
   rgw_sync_policy.cc
   rgw_notify_event_type.cc
   rgw_period_history.cc
