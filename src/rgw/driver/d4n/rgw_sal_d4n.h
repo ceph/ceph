@@ -22,19 +22,24 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_ssd_driver.h"
 #include "rgw_redis_driver.h"
+#include "rgw_rest_conn.h"
 
 #include "driver/d4n/d4n_directory.h"
 #include "driver/d4n/d4n_policy.h"
+#include "driver/d4n/d4n_remote_cache_manager.h"
 
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
+#include <boost/asio/thread_pool.hpp>
 
 #include <fmt/core.h>
 
 namespace rgw::d4n {
   class PolicyDriver;
+  class RemoteCachePut;
+  class RemoteCachePutBatch;
 }
 
 namespace rgw { namespace sal {
@@ -51,6 +56,123 @@ inline std::string get_key_in_cache(const std::string& prefix, const std::string
 
 using boost::redis::connection;
 
+class RGWRemoteD4NGetCB : public RGWHTTPStreamRWRequest::ReceiveCB {
+public:
+  bufferlist *in_bl;                                  
+  RGWRemoteD4NGetCB(bufferlist* _bl): in_bl(_bl) {}
+  int handle_data(bufferlist& bl, bool *pause) override {
+    this->in_bl->append(bl);
+    return 0;
+  }
+};
+
+class CoroutinePool {
+public:
+  using Task = std::function<void(boost::asio::yield_context)>;
+
+  CoroutinePool(boost::asio::any_io_executor executor, size_t pool_size)
+      : executor(executor),
+        pool_size(pool_size),
+        strand(boost::asio::make_strand(executor)),
+        running(false)
+  {}
+
+  void start(const DoutPrefixProvider *dpp) {
+    running = true;
+    for (size_t i = 0; i < pool_size; ++i) {
+      spawn_worker(dpp, i);
+    }
+  }
+
+  void stop() {
+    running = false;
+    cv.notify_all();
+  }
+
+  void submit(Task task) {
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        task_queue.push(std::move(task));
+        queued_tasks++;
+    }
+    cv.notify_one();
+  }
+
+  struct Stats {
+    size_t pool_size;
+    size_t queue_size;
+    int active_workers;
+    int idle_workers;
+    int queued_tasks;
+  };
+
+  Stats get_stats() const {
+    std::lock_guard<std::mutex> lock(queue_mutex);
+    return Stats{
+      pool_size,
+      task_queue.size(),
+      active_workers,
+      static_cast<int>(pool_size) - active_workers,
+      queued_tasks
+    };
+  }
+
+private:
+  void spawn_worker(const DoutPrefixProvider *dpp, size_t worker_id) {
+    boost::asio::spawn(
+      executor,
+      [this, dpp, worker_id](boost::asio::yield_context yield) {
+        worker_loop(dpp, worker_id, yield);
+      },
+      boost::asio::detached);
+  }
+
+  void worker_loop(const DoutPrefixProvider *dpp, size_t worker_id, boost::asio::yield_context yield) {
+    while (running) {
+      Task task;
+      {
+        std::unique_lock<std::mutex> lock(queue_mutex);
+
+        cv.wait(lock, [&] {
+          return !running || !task_queue.empty();
+        });
+
+        if (!running && task_queue.empty()) {
+          return;
+        }
+
+        task = std::move(task_queue.front());
+        task_queue.pop();
+        queued_tasks--;
+      }
+
+      auto task_start = std::chrono::steady_clock::now();
+      active_workers++;
+      try {
+        task(yield);
+      } catch (const std::exception& e) {
+        ldpp_dout(dpp, 0) << "ERROR: CoroutinePool Worker: " << worker_id
+                           << " caught exception: " << e.what() << dendl;
+      }
+      auto task_duration = std::chrono::steady_clock::now() - task_start;
+      active_workers--;
+      ldpp_dout(dpp, 20) << "Worker " << worker_id << " task took "
+          << std::chrono::duration_cast<std::chrono::milliseconds>(task_duration).count()
+          << "ms" << dendl;
+    }
+  }
+
+  boost::asio::any_io_executor executor;
+  size_t pool_size;
+  boost::asio::strand<boost::asio::any_io_executor> strand;
+  std::queue<Task> task_queue;
+  mutable std::mutex queue_mutex;
+  std::condition_variable cv;
+  std::atomic<bool> running;
+  std::atomic<int> active_workers{0};
+  std::atomic<int> queued_tasks{0};
+};
+
 class D4NFilterDriver : public FilterDriver {
   private:
     std::shared_ptr<connection> conn;
@@ -61,11 +183,38 @@ class D4NFilterDriver : public FilterDriver {
     std::unique_ptr<rgw::d4n::PolicyDriver> policyDriver;
     boost::asio::io_context& io_context;
     optional_yield y;
+    std::unique_ptr<boost::asio::thread_pool> d4n_thread_pool;
+    std::unique_ptr<CoroutinePool> d4n_coroutine_pool;
 
     // Redis connection pool
     std::shared_ptr<rgw::d4n::RedisPool> redis_pool;
 
   public:
+    void initialize_pool(const DoutPrefixProvider *dpp,
+                        boost::asio::any_io_executor executor,
+                               size_t pool_size = 32) {
+      if (!d4n_coroutine_pool) {
+        d4n_coroutine_pool = std::make_unique<CoroutinePool>(executor, pool_size);
+        d4n_coroutine_pool->start(dpp);
+      }
+    }
+    void shutdown_pool() {
+      if (d4n_coroutine_pool) {
+        d4n_coroutine_pool->stop();
+        d4n_coroutine_pool.reset();
+      }
+    }
+    CoroutinePool::Stats get_pool_stats() {
+      if (d4n_coroutine_pool) {
+        return d4n_coroutine_pool->get_stats();
+      }
+      return CoroutinePool::Stats{0, 0, 0, 0, 0};
+    }
+
+    CoroutinePool* get_pool() {
+      return d4n_coroutine_pool.get();
+    }
+
     D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context, bool admin);
     virtual ~D4NFilterDriver();
 
@@ -91,7 +240,11 @@ class D4NFilterDriver : public FilterDriver {
     void save_y(optional_yield y) { this->y = y; }
     std::shared_ptr<connection> get_conn() { return conn; }
     std::shared_ptr<rgw::d4n::RedisPool> get_redis_pool() { return redis_pool; }
+    boost::asio::io_context& get_io_context() { return io_context; }
     void shutdown() override;
+    auto get_d4n_executor() {
+      return d4n_thread_pool->get_executor();
+    }
 };
 
 class D4NFilterUser : public FilterUser {
@@ -112,6 +265,7 @@ class D4NFilterBucket : public FilterBucket {
       uint16_t flags;
     };
     D4NFilterDriver* filter;
+    bool cache_request{false};
 
   public:
     D4NFilterBucket(std::unique_ptr<Bucket> _next, D4NFilterDriver* _filter) :
@@ -129,6 +283,7 @@ class D4NFilterBucket : public FilterBucket {
 				const std::string& oid,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
+    void set_cache_request() { cache_request = true; }
 };
 
 class D4NFilterObject : public FilterObject {
@@ -136,6 +291,7 @@ class D4NFilterObject : public FilterObject {
     D4NFilterDriver* driver;
     std::string version;
     std::string prefix;
+    Attrs attrs_d4n;
     rgw_obj obj;
     rgw::sal::Object* dest_object{nullptr}; //for copy-object
     rgw::sal::Bucket* dest_bucket{nullptr}; //for copy-object
@@ -144,6 +300,11 @@ class D4NFilterObject : public FilterObject {
     bool exists_in_cache{false};
     bool load_from_store{false};
     bool attrs_read_from_cache{false};
+    bool cache_request{false};
+    bool remote_cache_request{false}; //sent by another rgw
+    uint64_t blk_offset;
+    uint64_t blk_len;
+    uint64_t obj_size; //sent by remote rgw
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
@@ -193,6 +354,9 @@ class D4NFilterObject : public FilterObject {
 	}
 	virtual ~D4NFilterReadOp() = default;
 
+  int getRemote(const DoutPrefixProvider* dpp, long long start, long long end, std::string key, std::string remoteCacheAddress, bufferlist *bl, optional_yield y);
+  int remoteFlush(const DoutPrefixProvider* dpp, bufferlist bl, uint64_t ofs, uint64_t len, uint64_t read_ofs, std::string creationTime, optional_yield y);
+
 	virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
 	virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
 			     RGWGetDataCB* cb, optional_yield y) override;
@@ -206,7 +370,12 @@ class D4NFilterObject : public FilterObject {
 	uint64_t offset = 0; // next offset to write to client
         rgw::AioResultList completed; // completed read results, sorted by offset
 	std::unordered_map<uint64_t, std::pair<uint64_t,uint64_t>> blocks_info;
+  std::map<off_t, std::tuple<off_t, bool, bufferlist>> read_data;
+  bool last_part_done = false;
+  uint64_t last_adjusted_ofs = -1;
+  bool first_block = true; //is it first_block
 
+  void set_first_block(bool val) {first_block = val;}
 	int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results, optional_yield y);
 	void cancel();
 	int drain(const DoutPrefixProvider* dpp, optional_yield y);
@@ -281,10 +450,13 @@ class D4NFilterObject : public FilterObject {
 
     void set_prefix(const std::string& prefix) { this->prefix = prefix; }
     const std::string get_prefix() { return this->prefix; }
+    void set_object_attrs(Attrs attrs) { this->attrs_d4n = attrs; }
+    Attrs get_object_attrs() { return this->attrs_d4n; }
     int get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
     void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool dirty = false);
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, rgw::sal::Attrs& attrs);
-    int set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::vector<std::string>* exec_responses, optional_yield y, bool is_latest_version = true, bool dirty = false);
+    int set_head_obj_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, bool is_latest_version = true, bool dirty = false);
+    int update_head_block_hostslist(const DoutPrefixProvider* dpp, optional_yield y);
     int set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
     int delete_data_block_cache_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
     bool check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y);
@@ -297,6 +469,30 @@ class D4NFilterObject : public FilterObject {
     bool exists(void) override { if (exists_in_cache) { return true;} return next->exists(); };
     bool load_obj_from_store() { return load_from_store; }
     void set_load_obj_from_store(bool load_from_store) { this->load_from_store = load_from_store; }
+    void set_cache_request() { cache_request = true; }
+    bool is_cache_request() { return cache_request; }
+    //the following are helper methods to get/set from/to cache
+    bool is_remote_cache_request() { return remote_cache_request; }
+    void set_remote_cache_request() { remote_cache_request = true; }
+    void set_block_offset(uint64_t offset) { blk_offset = offset; }
+    void set_block_len(uint64_t len) { blk_len = len; }
+    uint64_t get_remote_block_offset() { return blk_offset; }
+    uint64_t get_remote_block_len() { return blk_len; }
+    void set_remote_obj_size(uint64_t size) { obj_size = size; }
+    uint64_t get_remote_obj_size() { return obj_size; }
+    bool is_remote_head_block_request() { return (remote_cache_request && (blk_offset == 0) && (blk_len == 0)); }
+};
+
+class D4NFilterDPP : public DoutPrefixProvider {
+  CephContext* cct;
+public:
+  explicit D4NFilterDPP(CephContext* c) : cct(c) {}
+  CephContext* get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return ceph_subsys_rgw; }
+  std::ostream& gen_prefix(std::ostream& out) const override {
+    out << "write_to_remote_cache: ";
+    return out;
+  }
 };
 
 class D4NFilterWriter : public FilterWriter {
@@ -309,6 +505,9 @@ class D4NFilterWriter : public FilterWriter {
     bool d4n_writecache;
     std::string version;
     std::string prev_oid_in_cache;
+    std::vector<std::unique_ptr<rgw::d4n::RemoteCachePut>> requests;
+
+    static void write_to_remote_cache(const DoutPrefixProvider* dpp_o, const std::string& prefix, uint64_t size, const rgw_user& user, const std::string& remote_addr, const std::string& bucket_name, const std::string& oid, const std::string& version, D4NFilterDriver* driver, optional_yield y);
 
   public:
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
@@ -335,6 +534,18 @@ class D4NFilterWriter : public FilterWriter {
 			 uint32_t flags) override;
    bool is_atomic() { return atomic; };
    const DoutPrefixProvider* get_dpp() { return this->dpp; } 
+   void set_cache_request() { object->set_cache_request(); }
+   void set_remote_cache_request() { object->set_remote_cache_request(); }
+};
+
+class D4NGetObjectCB : public RGWHTTPStreamRWRequest::ReceiveCB {
+public:                                                     
+  bufferlist *in_bl;
+  D4NGetObjectCB(bufferlist* _bl): in_bl(_bl) {}
+  int handle_data(bufferlist& bl, bool *pause) override {
+    this->in_bl->append(bl);
+    return 0;
+  }
 };
 
 class D4NFilterMultipartUpload : public FilterMultipartUpload {
