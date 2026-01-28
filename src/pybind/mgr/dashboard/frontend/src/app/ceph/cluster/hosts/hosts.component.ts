@@ -318,11 +318,14 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   }
 
   editAction() {
-    this.hostService.getLabels().subscribe((resp: string[]) => {
-      const host = this.selection.first();
-      const labels = new Set(resp.concat(this.hostService.predefinedLabels));
+    const host = this.selection.first();
+    this.hostService.getLabels().subscribe((resp) => {
+      const hostLabels: string[] = Array.isArray(host['labels'])
+        ? [...(host['labels'] as string[])]
+        : [];
+      const labels = new Set(resp.concat(this.hostService.predefinedLabels).concat(hostLabels));
       const allLabels = Array.from(labels).map((label) => {
-        return { content: label, selected: host['labels'].includes(label) };
+        return { content: label, selected: hostLabels.includes(label) };
       });
       this.cdsModalService.show(FormModalComponent, {
         titleText: $localize`Edit Host: ${host.hostname}`,
@@ -330,7 +333,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
           {
             type: 'select-badges',
             name: 'labels',
-            value: host['labels'],
+            value: hostLabels,
             label: $localize`Labels`,
             typeConfig: {
               customBadges: true,
@@ -346,6 +349,11 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         submitButtonText: $localize`Edit Host`,
         onSubmit: (values: any) => {
           this.hostService.update(host['hostname'], true, values.labels).subscribe(() => {
+            const selectedHost = this.selection.first();
+            if (selectedHost && selectedHost['hostname'] === host.hostname) {
+              host['labels'] = values.labels;
+              Object.assign(selectedHost, host);
+            }
             this.notificationService.show(
               NotificationType.success,
               $localize`Updated Host "${host.hostname}"`
