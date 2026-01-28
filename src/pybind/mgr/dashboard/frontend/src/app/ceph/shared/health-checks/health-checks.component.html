@@ -7,6 +7,6 @@
   <li *ngFor="let check of healthData |  keyvalue">
     <span [ngStyle]="check.value.severity | healthColor"
           [class.health-warn-description]="check.value.severity === 'HEALTH_WARN'">
-    {{ check.key }}</span>: {{ check.value.summary.message }} <br>
+    {{ check?.key }}</span>: {{ check?.value?.summary?.message }} <br>
   </li>
 </ul>

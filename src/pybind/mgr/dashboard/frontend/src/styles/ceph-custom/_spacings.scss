@@ -1,0 +1,33 @@
+@use '@carbon/layout';
+
+.cds-p-0 {
+  padding: 0;
+}
+
+.cds-pt-3 {
+  padding-top: layout.$spacing-03;
+}
+
+.cds-ml-3 {
+  margin-left: layout.$spacing-03;
+}
+
+.cds-mr-3 {
+  margin-right: layout.$spacing-03;
+}
+
+.cds-mb-2 {
+  margin-bottom: layout.$spacing-02;
+}
+
+.cds-mb-3 {
+  margin-bottom: layout.$spacing-03;
+}
+
+.cds-mb-5 {
+  margin-bottom: layout.$spacing-05;
+}
+
+.cds-mt-5 {
+  margin-top: layout.$spacing-05;
+}

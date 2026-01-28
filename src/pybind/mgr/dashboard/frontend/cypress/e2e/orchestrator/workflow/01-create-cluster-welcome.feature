@@ -23,4 +23,4 @@ Feature: Cluster expansion welcome screen
         And I should see a button to "Skip"
         When I click on "Skip" button
         And I confirm to "Continue" on carbon modal
-        Then I should be on the "dashboard" page
+        Then I should be on the "overview" page
