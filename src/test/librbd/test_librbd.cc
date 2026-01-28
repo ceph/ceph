@@ -13410,6 +13410,14 @@ TEST_F(TestLibRBD, ConcurrentOperations)
 
     ASSERT_TRUE(watcher.wait_for_quiesce(1));
 
+    image2.quiesce_complete(handle, 0);
+    create_snap1.join();
+
+    ASSERT_EQ(0, close1_comp->wait_for_complete());
+    ASSERT_EQ(1, close1_comp->is_complete());
+    ASSERT_EQ(0, close1_comp->get_return_value());
+    close1_comp->release();
+
     std::thread create_snap2([&image2]() {
       int r = image2.snap_create("snap2");
       ceph_assert(r == 0);
@@ -13420,19 +13428,11 @@ TEST_F(TestLibRBD, ConcurrentOperations)
       ceph_assert(r == 0);
     });
 
-    image2.quiesce_complete(handle, 0);
-    create_snap1.join();
-
     ASSERT_TRUE(watcher.wait_for_quiesce(2));
     image2.quiesce_complete(handle, 0);
 
     ASSERT_TRUE(watcher.wait_for_quiesce(3));
     image2.quiesce_complete(handle, 0);
-
-    ASSERT_EQ(0, close1_comp->wait_for_complete());
-    ASSERT_EQ(1, close1_comp->is_complete());
-    ASSERT_EQ(0, close1_comp->get_return_value());
-    close1_comp->release();
 
     create_snap2.join();
     create_snap3.join();
