@@ -378,6 +378,18 @@ status:
     }
   }
 
+When the mirror daemon fails, ``fs mirror status`` displays::
+
+  {
+    "state": "failed"
+  }
+
+When the mirror daemon is blocklisted, ``fs mirror status`` displays::
+
+  {
+    "state": "blocklisted"
+  }
+
 The ``Peers`` section in the command output above shows the peer information
 such as unique peer-id (UUID) and specification. The peer-id is required to
 remove an existing peer as mentioned in the `Mirror Module and Interface`
