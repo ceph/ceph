@@ -17,9 +17,12 @@ def check_object_eq(k1, k2, check_extra = True):
     assert k2
     log.debug('comparing key name=%s', k1.key)
     eq(k1.key, k2.key)
-    eq(k1.version_id, k2.version_id)
-    eq(k1.is_latest, k2.is_latest)
-    eq(k1.last_modified, k2.last_modified)
+    if hasattr(k1, 'version_id'):
+        eq(k1.version_id, k2.version_id)
+    if hasattr(k1, 'is_latest'):
+        eq(k1.is_latest, k2.is_latest)
+    if hasattr(k1, 'last_modified'):
+        eq(k1.last_modified, k2.last_modified)
 
     # delete markers don't have 'size' attribute in boto3 resource API
     is_delete_marker_k1 = not hasattr(k1, 'size') or k1.size is None
@@ -30,8 +33,8 @@ def check_object_eq(k1, k2, check_extra = True):
         return
     
     # regular objects
-    obj1 = k1.Object()
-    obj2 = k2.Object()
+    obj1 = k1.Object() if hasattr(k1, 'Object') else k1
+    obj2 = k2.Object() if hasattr(k2, 'Object') else k2
     
     # compare object contents
     body1 = obj1.get()['Body'].read()
@@ -46,12 +49,15 @@ def check_object_eq(k1, k2, check_extra = True):
     eq(obj1.content_language, obj2.content_language)
     eq(obj1.e_tag, obj2.e_tag)
 
-    if check_extra:
-        eq(k1.owner['ID'], k2.owner['ID'])
-        eq(k1.owner['DisplayName'], k2.owner['DisplayName'])
+    if check_extra and hasattr(k1, 'owner') and hasattr(k2, 'owner'):
+        eq(k1.owner.get('ID'), k2.owner.get('ID'))
+        if 'DisplayName' in k1.owner and 'DisplayName' in k2.owner:
+            eq(k1.owner['DisplayName'], k2.owner['DisplayName'])
 
-    eq(k1.storage_class, k2.storage_class)
-    eq(k1.size, k2.size)
+    if hasattr(k1, 'storage_class'):
+        eq(k1.storage_class, k2.storage_class)
+    if hasattr(k1, 'size'):
+        eq(k1.size, k2.size)
     encrypted1 = obj1.server_side_encryption is not None
     encrypted2 = obj2.server_side_encryption is not None
     eq(encrypted1, encrypted2)
@@ -70,11 +76,12 @@ class RadosZone(Zone):
 
         def get_bucket(self, name):
             try:
-                bucket = self.s3_resource.Bucket(name)
-                bucket.load()
-                return bucket
+                self.s3_client.head_bucket(Bucket=name)
+                # if no exception, bucket exists
+                return self.s3_resource.Bucket(name)
             except ClientError as e:
-                if e.response['Error']['Code'] == '404':
+                error_code = e.response['Error']['Code']
+                if error_codein ['404', 'NoSuchBucket']:
                     return None
                 raise
 
@@ -104,7 +111,7 @@ class RadosZone(Zone):
             b2_versions = list(b2.object_versions.all())
             log.debug('bucket2 objects:')
             for o in b2_versions:
-                log.debug('o=%s', o.name)
+                log.debug('o=%s', o.key)
 
             for k1, k2 in zip_longest(b1_versions, b2_versions):
                 if k1 is None:
@@ -129,9 +136,9 @@ class RadosZone(Zone):
                 else:
                     # now get the keys through a HEAD operation, verify that the available data is the same
                     k1_head = b1.Object(k1.key)
-                    k1_head.version_id = k1.version_id
                     k2_head = b2.Object(k2.key)
-                    k2_head.version_id = k2.version_id
+                    k1_head.load(VersionId=k1.version_id)
+                    k2_head.load(VersionId=k2.version_id)
                     k1_head.load()
                     k2_head.load()
 
