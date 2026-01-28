@@ -25,6 +25,7 @@
 #include "include/stringify.h"
 
 #include "mon/Monitor.h"
+#include "mon/MonMap.h"
 #include "mon/HealthMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "osd/OSDMap.h"
