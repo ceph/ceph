@@ -38,7 +38,7 @@ StoreTool::list_objects(const coll_t& cid, ghobject_t next)
     shard_id,
     [this, cid, next]() -> seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -46,7 +46,7 @@ StoreTool::list_objects(const coll_t& cid, ghobject_t next)
       fmt::println(std::cerr, "Failed to open collection: collection does not exist");
       co_return std::make_tuple(std::vector<ghobject_t>(), ghobject_t::get_max());
     }
-    co_return co_await store->get_sharded_store().list_objects(
+    co_return co_await store->get_sharded_store()->list_objects(
       coll, next, ghobject_t::get_max(), 100);
   });
 }
@@ -62,7 +62,7 @@ StoreTool::omap_iterate(
     shard_id,
     [this, cid, oid, start, callback]() -> seastar::future<>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -77,7 +77,7 @@ StoreTool::omap_iterate(
         start.value(),
         ObjectStore::omap_iter_seek_t::UPPER_BOUND};
     }
-    co_await store->get_sharded_store().omap_iterate(coll, oid, start_from, callback
+    co_await store->get_sharded_store()->omap_iterate(coll, oid, start_from, callback
     ).safe_then([] (auto ret) {
       ceph_assert (ret == ObjectStore::omap_iter_ret_t::NEXT);
     }).handle_error(
@@ -95,7 +95,7 @@ seastar::future<std::string> StoreTool::get_omap(
     shard_id,
     [this, cid, oid, key]() -> seastar::future<std::string>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -106,7 +106,7 @@ seastar::future<std::string> StoreTool::get_omap(
 
     std::set<std::string> to_get;
     to_get.insert(key);
-    auto&& vals = co_await store->get_sharded_store().omap_get_values(
+    auto&& vals = co_await store->get_sharded_store()->omap_get_values(
       coll, oid, to_get).handle_error(
       crimson::os::FuturizedStore::Shard::read_errorator::assert_all{}
     );
@@ -129,7 +129,7 @@ seastar::future<bool> StoreTool::set_omap(
     [this, cid, oid, key, value]() mutable 
       -> seastar::future<bool>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -143,7 +143,7 @@ seastar::future<bool> StoreTool::set_omap(
     bl.append(value.c_str(), value.length());
     omap_values[key] = std::move(bl);
     txn.omap_setkeys(cid, oid, omap_values);
-    co_await store->get_sharded_store().do_transaction(coll, std::move(txn));
+    co_await store->get_sharded_store()->do_transaction(coll, std::move(txn));
     co_return true;
   });
 }
@@ -157,7 +157,7 @@ seastar::future<bool> StoreTool::remove_omap(
     shard_id,
     [this, cid, oid, key]() -> seastar::future<bool>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -167,7 +167,7 @@ seastar::future<bool> StoreTool::remove_omap(
     }
     ceph::os::Transaction txn;
     txn.omap_rmkey(cid, oid, key);
-    co_await store->get_sharded_store().do_transaction(coll, std::move(txn));
+    co_await store->get_sharded_store()->do_transaction(coll, std::move(txn));
     co_return true;
   });
 }
@@ -181,7 +181,7 @@ seastar::future<std::string> StoreTool::get_bytes(
     shard_id,
     [this, cid, oid]() -> seastar::future<std::string>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -190,7 +190,7 @@ seastar::future<std::string> StoreTool::get_bytes(
       co_return std::string();
     }
 
-    auto stat_result = co_await store->get_sharded_store().stat(coll, oid);
+    auto stat_result = co_await store->get_sharded_store()->stat(coll, oid);
     uint64_t total_size = stat_result.st_size;
 
     if (total_size == 0) {
@@ -206,7 +206,7 @@ seastar::future<std::string> StoreTool::get_bytes(
     while (offset < total_size) {
       uint64_t len = std::min(max_read, total_size - offset);
       
-      auto read_result = co_await store->get_sharded_store().read(coll, oid, offset, len).safe_then(
+      auto read_result = co_await store->get_sharded_store()->read(coll, oid, offset, len).safe_then(
         [](auto&& bl) -> ceph::bufferlist {
           return std::move(bl);
         },
@@ -237,7 +237,7 @@ seastar::future<bool> StoreTool::set_bytes(
     shard_id,
     [this, cid, oid, data]() -> seastar::future<bool>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -253,7 +253,7 @@ seastar::future<bool> StoreTool::set_bytes(
     bl.append(data.c_str(), data.length());
     txn.write(cid, oid, 0, data.length(), bl, 0);
 
-    co_await store->get_sharded_store().do_transaction(coll, std::move(txn));
+    co_await store->get_sharded_store()->do_transaction(coll, std::move(txn));
     co_return true;
   });
 }
@@ -267,7 +267,7 @@ seastar::future<tl::expected<FuturizedStore::Shard::attrs_t, std::string>> Store
     shard_id,
     [this, cid, oid]() -> seastar::future<tl::expected<FuturizedStore::Shard::attrs_t, std::string>>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -278,7 +278,7 @@ seastar::future<tl::expected<FuturizedStore::Shard::attrs_t, std::string>> Store
     using ret_t = tl::expected<attrs_t, std::string>;
 
     co_return co_await store->get_sharded_store()
-      .get_attrs(coll, oid)   // ertr::future<attrs_t>
+      ->get_attrs(coll, oid)   // ertr::future<attrs_t>
       .safe_then(
         [](attrs_t&& a) {
           return ret_t{tl::in_place, std::move(a)};
@@ -300,7 +300,7 @@ seastar::future<tl::expected<std::string, std::string>> StoreTool::get_attr(
     shard_id,
     [this, cid, oid, key]() -> seastar::future<tl::expected<std::string, std::string>>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -308,7 +308,7 @@ seastar::future<tl::expected<std::string, std::string>> StoreTool::get_attr(
       co_return tl::make_unexpected(std::string("Failed to open collection: collection does not exist"));
     }
     using return_type = tl::expected<std::string, std::string>;
-    co_return co_await store->get_sharded_store().get_attr(coll, oid, key).safe_then(
+    co_return co_await store->get_sharded_store()->get_attr(coll, oid, key).safe_then(
       [](auto&& bl) {
         return return_type{tl::in_place, bl.to_str()};
       },
@@ -331,7 +331,7 @@ seastar::future<bool> StoreTool::set_attr(
     shard_id,
     [this, cid, oid, key, value]() -> seastar::future<bool>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -345,7 +345,7 @@ seastar::future<bool> StoreTool::set_attr(
     bl.append(value.c_str(), value.length());
     txn.setattr(cid, oid, key, bl);
 
-    co_await store->get_sharded_store().do_transaction(coll, std::move(txn));
+    co_await store->get_sharded_store()->do_transaction(coll, std::move(txn));
     co_return true;
   });
 }
@@ -359,7 +359,7 @@ seastar::future<bool> StoreTool::remove_attr(
     shard_id,
     [this, cid, oid, key]() -> seastar::future<bool>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -371,7 +371,7 @@ seastar::future<bool> StoreTool::remove_attr(
     ceph::os::Transaction txn;
     txn.rmattr(cid, oid, key);
 
-    co_await store->get_sharded_store().do_transaction(coll, std::move(txn));
+    co_await store->get_sharded_store()->do_transaction(coll, std::move(txn));
     co_return true;
   });
 }
@@ -387,7 +387,7 @@ seastar::future<bool> StoreTool::remove_object(
     shard_id,
     [this, cid, oid, all, force]() -> seastar::future<bool>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -398,7 +398,7 @@ seastar::future<bool> StoreTool::remove_object(
     
     // First check if the object exists
     try {
-      [[maybe_unused]] auto stat_result = co_await store->get_sharded_store().stat(coll, oid);
+      [[maybe_unused]] auto stat_result = co_await store->get_sharded_store()->stat(coll, oid);
       // Object exists, proceed with removal
     } catch (const std::exception& e) {
       fmt::println(std::cerr, "Object {} does not exist or stat failed: {}", oid, e.what());
@@ -421,7 +421,7 @@ seastar::future<bool> StoreTool::remove_object(
       txn.remove(cid, oid);
     }
 
-    co_await store->get_sharded_store().do_transaction(coll, std::move(txn));
+    co_await store->get_sharded_store()->do_transaction(coll, std::move(txn));
     fmt::println(std::cout, "Successfully removed object {}", oid);
     co_return true;
   });
@@ -436,7 +436,7 @@ seastar::future<std::string> StoreTool::dump_object_info(
     shard_id,
     [this, cid, oid]() -> seastar::future<std::string>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -464,7 +464,7 @@ seastar::future<bool> StoreTool::set_object_size(
     shard_id,
     [this, cid, oid, size]() -> seastar::future<bool>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -476,7 +476,7 @@ seastar::future<bool> StoreTool::set_object_size(
     ceph::os::Transaction txn;
     txn.truncate(cid, oid, size);
 
-    co_await store->get_sharded_store().do_transaction(coll, std::move(txn));
+    co_await store->get_sharded_store()->do_transaction(coll, std::move(txn));
     co_return true;
   });
 }
@@ -489,7 +489,7 @@ seastar::future<bool> StoreTool::clear_data_digest(
     shard_id,
     [this, cid, oid]() -> seastar::future<bool>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
@@ -501,7 +501,7 @@ seastar::future<bool> StoreTool::clear_data_digest(
     ceph::os::Transaction txn;
     txn.rmattr(cid, oid, "data_digest");
     
-    co_await store->get_sharded_store().do_transaction(coll, std::move(txn));
+    co_await store->get_sharded_store()->do_transaction(coll, std::move(txn));
     co_return true;
   });
 }
@@ -513,7 +513,7 @@ seastar::future<pg_info_t> StoreTool::get_pg_info(const coll_t& cid)
     shard_id,
     [this, cid]() -> seastar::future<pg_info_t>
   {
-    auto coll = co_await store->get_sharded_store().open_collection(cid
+    auto coll = co_await store->get_sharded_store()->open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });

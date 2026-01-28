@@ -106,7 +106,7 @@ class SegmentProvider;
 class Cache : public ExtentTransViewRetriever,
 	      public RetiredExtentPlaceholderInvalidater {
 public:
-  Cache(ExtentPlacementManager &epm);
+  Cache(ExtentPlacementManager &epm, unsigned int store_index);
   ~Cache();
 
   cache_stats_t get_stats(bool report_detail, double seconds) const;
@@ -1826,7 +1826,7 @@ private:
   }
 
   seastar::metrics::metric_group metrics;
-  void register_metrics();
+  void register_metrics(unsigned int store_index);
 
   void apply_backref_mset(
       backref_entry_refs_t& backref_entries) {

@@ -264,7 +264,7 @@ seastar::future<results_t> PGLogWorkload::run(
   const common_options_t &common,
   crimson::os::FuturizedStore &global_store)
 {
-  auto &local_store = global_store.get_sharded_store();
+  auto &local_store = *(global_store.get_sharded_store().get());
 
   std::map<int, coll_t> collection_id;
   std::map<int, crimson::os::CollectionRef> coll_ref_map;
@@ -460,7 +460,7 @@ seastar::future<results_t> RGWIndexWorkload::run(
   const common_options_t &common,
   crimson::os::FuturizedStore &global_store)
 {
-  auto &local_store = global_store.get_sharded_store();
+  auto &local_store = *(global_store.get_sharded_store().get());
   std::map<int, coll_t> collection_id_for_rgw;
   std::map<int, crimson::os::CollectionRef>
       coll_ref_map_rgw; // map of bucket number and coll_ref
@@ -634,7 +634,7 @@ seastar::future<results_t> RandomWriteWorkload::run(
   crimson::os::FuturizedStore &global_store)
 {
   LOG_PREFIX(random_write);
-  auto &local_store = global_store.get_sharded_store();
+  auto &local_store = *(global_store.get_sharded_store().get());
 
   auto random_buffer = co_await generate_random_bp(16<<20);
   auto get_random_buffer = [&random_buffer](uint64_t size) {

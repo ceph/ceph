@@ -138,14 +138,14 @@ struct btree_test_base :
         segment_manager::get_ephemeral_device_config(0, 1, 0));
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
-      journal = journal::make_segmented(*this, *this);
+      journal = journal::make_segmented(0, *this, *this);
       rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
 	"seastore_hot_tier_generations");
       rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
 	"seastore_cold_tier_generations");
       epm.reset(new ExtentPlacementManager(
-	hot_tier_generations, cold_tier_generations));
-      cache.reset(new Cache(*epm));
+	hot_tier_generations, cold_tier_generations, 0));
+      cache.reset(new Cache(*epm, 0));
 
       block_size = segment_manager->get_block_size();
       next = segment_id_t{segment_manager->get_device_id(), 0};
@@ -423,7 +423,7 @@ struct btree_lba_manager_test : btree_test_base {
   void complete_commit(Transaction &t) final {}
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
-    lba_manager.reset(new BtreeLBAManager(*cache));
+    lba_manager.reset(new BtreeLBAManager(*cache, 0));
     return lba_manager->mkfs(t);
   }
 
