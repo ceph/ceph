@@ -6011,9 +6011,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     rdata.append(ds);
   } else if (prefix == "osd blocklist ls" ||
 	     prefix == "osd blacklist ls") {
-    if (f)
+    // Use UMBRELLA flag here instead when it gets added
+    bool new_format = op->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_TENTACLE);
+    if (f) {
+      if (new_format) {
+        f->open_array_section("combined_blocklists");
+      }
       f->open_array_section("blocklist");
-
+    }
     for (auto p = osdmap.blocklist.begin(); p != osdmap.blocklist.end(); ++p) {
       if (f) {
 	f->open_object_section("entry");
@@ -6055,10 +6060,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     if (f) {
       f->close_section();
+      if (new_format) {
+        f->close_section();
+      }
       f->flush(rdata);
     }
-    ss << "listed " << osdmap.blocklist.size() + osdmap.range_blocklist.size() << " entries";
-
+    if (!new_format || !f) {
+      ss << "listed " << osdmap.blocklist.size() + osdmap.range_blocklist.size() << " entries";
+    }
   } else if (prefix == "osd pool ls") {
     string detail;
     cmd_getval(cmdmap, "detail", detail);
