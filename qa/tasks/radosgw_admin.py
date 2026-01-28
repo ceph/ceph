@@ -21,9 +21,8 @@ import errno
 from io import StringIO
 from queue import Queue
 
-import boto.exception
-import boto.s3.connection
-import boto.s3.acl
+import boto3
+from botocore.exceptions import ClientError
 
 import httplib2
 
@@ -226,38 +225,6 @@ class usage_acc:
             usage_acc_validate_s3select_fields(r, x, x2, "summary: s3select totals for user" + s['user'])
         return r
 
-def ignore_this_entry(cat, bucket, user, out, b_in, err):
-    pass
-class requestlog_queue():
-    def __init__(self, add):
-        self.q = Queue(1000)
-        self.adder = add
-    def handle_request_data(self, request, response, error=False):
-        now = datetime.datetime.now()
-        if error:
-            pass
-        elif response.status < 200 or response.status >= 400:
-            error = True
-        self.q.put({'t': now, 'o': request, 'i': response, 'e': error})
-    def clear(self):
-        with self.q.mutex:
-            self.q.queue.clear()
-    def log_and_clear(self, cat, bucket, user, add_entry = None):
-        while not self.q.empty():
-            j = self.q.get()
-            bytes_out = 0
-            if 'Content-Length' in j['o'].headers:
-                bytes_out = int(j['o'].headers['Content-Length'])
-            bytes_in = 0
-            msg = j['i'].msg
-            if 'content-length'in msg:
-                bytes_in = int(msg['content-length'])
-            log.info('RL: %s %s %s bytes_out=%d bytes_in=%d failed=%r'
-                     % (cat, bucket, user, bytes_out, bytes_in, j['e']))
-            if add_entry == None:
-                add_entry = self.adder
-            add_entry(cat, bucket, user, bytes_out, bytes_in, j['e'])
-
 def create_presigned_url(conn, method, bucket_name, key_name, expiration):
     return conn.generate_url(expires_in=expiration,
         method=method,
@@ -368,41 +335,23 @@ def task(ctx, config):
     bucket_name2='mybar'
 
     # connect to rgw
-    connection = boto.s3.connection.S3Connection(
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        is_secure=False,
-        port=endpoint.port,
-        host=endpoint.hostname,
-        calling_format=boto.s3.connection.OrdinaryCallingFormat(),
-        )
-    connection.auth_region_name='us-east-1'
-
-    connection2 = boto.s3.connection.S3Connection(
-        aws_access_key_id=access_key2,
-        aws_secret_access_key=secret_key2,
-        is_secure=False,
-        port=endpoint.port,
-        host=endpoint.hostname,
-        calling_format=boto.s3.connection.OrdinaryCallingFormat(),
-        )
-    connection2.auth_region_name='us-east-1'
-
-    connection3 = boto.s3.connection.S3Connection(
-        aws_access_key_id=access_key3,
-        aws_secret_access_key=secret_key3,
-        is_secure=False,
-        port=endpoint.port,
-        host=endpoint.hostname,
-        calling_format=boto.s3.connection.OrdinaryCallingFormat(),
-        )
-    connection3.auth_region_name='us-east-1'
+    connection = boto3.client(service_name='s3',
+                              aws_access_key_id=access_key,
+                              aws_secret_access_key=secret_key,
+                              endpoint_url=endpoint.url(),
+                              use_ssl=False)
+    connection2 = boto3.client(service_name='s3',
+                               aws_access_key_id=access_key2,
+                               aws_secret_access_key=secret_key2,
+                               endpoint_url=endpoint.url(),
+                               use_ssl=False)
+    connection3 = boto3.client(service_name='s3',
+                               aws_access_key_id=access_key3,
+                               aws_secret_access_key=secret_key3,
+                               endpoint_url=endpoint.url(),
+                               use_ssl=False)
 
     acc = usage_acc()
-    rl = requestlog_queue(acc.generate_make_entry())
-    connection.set_request_hook(rl)
-    connection2.set_request_hook(rl)
-    connection3.set_request_hook(rl)
 
     # legend (test cases can be easily grep-ed out)
     # TESTCASE 'testname','object','method','operation','assertion'
@@ -553,20 +502,16 @@ def task(ctx, config):
     assert len(out) == 0
 
     # create a first bucket
-    bucket = connection.create_bucket(bucket_name)
-
-    rl.log_and_clear("create_bucket", bucket_name, user1)
+    connection.create_bucket(Bucket=bucket_name)
 
     # TESTCASE 'bucket-list','bucket','list','one bucket','succeeds, expected list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'list', '--uid', user1], check_status=True)
     assert len(out) == 1
     assert out[0] == bucket_name
 
-    bucket_list = connection.get_all_buckets()
+    bucket_list = connection.list_buckets()['Buckets']
     assert len(bucket_list) == 1
-    assert bucket_list[0].name == bucket_name
-
-    rl.log_and_clear("list_buckets", '', user1)
+    assert bucket_list[0]['Name'] == bucket_name
 
     # TESTCASE 'bucket-list-all','bucket','list','all buckets','succeeds, expected list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'list'], check_status=True)
@@ -574,12 +519,9 @@ def task(ctx, config):
     assert bucket_name in out;
 
     # TESTCASE 'max-bucket-limit,'bucket','create','4 buckets','5th bucket fails due to max buckets == 4'
-    bucket2 = connection.create_bucket(bucket_name + '2')
-    rl.log_and_clear("create_bucket", bucket_name + '2', user1)
-    bucket3 = connection.create_bucket(bucket_name + '3')
-    rl.log_and_clear("create_bucket", bucket_name + '3', user1)
-    bucket4 = connection.create_bucket(bucket_name + '4')
-    rl.log_and_clear("create_bucket", bucket_name + '4', user1)
+    connection.create_bucket(Bucket=bucket_name + '2')
+    connection.create_bucket(Bucket=bucket_name + '3')
+    connection.create_bucket(Bucket=bucket_name + '4')
     # the 5th should fail.
     failed = False
     try:
@@ -587,15 +529,11 @@ def task(ctx, config):
     except Exception:
         failed = True
     assert failed
-    rl.log_and_clear("create_bucket", bucket_name + '5', user1)
 
     # delete the buckets
-    bucket2.delete()
-    rl.log_and_clear("delete_bucket", bucket_name + '2', user1)
-    bucket3.delete()
-    rl.log_and_clear("delete_bucket", bucket_name + '3', user1)
-    bucket4.delete()
-    rl.log_and_clear("delete_bucket", bucket_name + '4', user1)
+    connection.delete_bucket(Bucket=bucket_name + '2')
+    connection.delete_bucket(Bucket=bucket_name + '3')
+    connection.delete_bucket(Bucket=bucket_name + '4')
 
     # TESTCASE 'bucket-stats3','bucket','stats','new empty bucket','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, [
@@ -609,9 +547,7 @@ def task(ctx, config):
     assert out[0]['id'] == bucket_id    # does it return the same ID twice in a row?
 
     # use some space
-    key = boto.s3.key.Key(bucket)
-    key.set_contents_from_string('one')
-    rl.log_and_clear("put_obj", bucket_name, user1)
+    connection.put_object(Bucket=bucket_name, Key='one', Body='one')
 
     # TESTCASE 'bucket-stats5','bucket','stats','after creating key','succeeds, lists one non-empty object'
     (err, out) = rgwadmin(ctx, client, [
@@ -627,8 +563,7 @@ def task(ctx, config):
     assert out['stats']['size'] > 0
 
     # reclaim it
-    key.delete()
-    rl.log_and_clear("delete_obj", bucket_name, user1)
+    connection.delete_object(Bucket=bucket_name, Key='one')
 
     # TESTCASE 'bucket unlink', 'bucket', 'unlink', 'unlink bucket from user', 'fails', 'access denied error'
     (err, out) = rgwadmin(ctx, client,
@@ -647,20 +582,8 @@ def task(ctx, config):
             check_status=True)
 
     # try creating an object with the first user before the bucket is relinked
-    denied = False
-    key = boto.s3.key.Key(bucket)
-
-    try:
-        key.set_contents_from_string('two')
-    except boto.exception.S3ResponseError:
-        denied = True
-
-    assert not denied
-    rl.log_and_clear("put_obj", bucket_name, user1)
-
-    # delete the object
-    key.delete()
-    rl.log_and_clear("delete_obj", bucket_name, user1)
+    connection.put_object(Bucket=bucket_name, Key='two', Body='two')
+    connection.delete_object(Bucket=bucket_name, Key='one')
 
     # link the bucket to another user
     (err, out) = rgwadmin(ctx, client, ['metadata', 'get', 'bucket:{n}'.format(n=bucket_name)],
@@ -763,19 +686,15 @@ def task(ctx, config):
 
     # upload an object
     object_name = 'four'
-    key = boto.s3.key.Key(bucket, object_name)
-    key.set_contents_from_string(object_name)
-    rl.log_and_clear("put_obj", bucket_name, user1)
+    connection.put_object(Bucket=bucket_name, Key=object_name, Body=object_name)
 
     # fetch it too (for usage stats presently)
-    s = key.get_contents_as_string(encoding='ascii')
-    rl.log_and_clear("get_obj", bucket_name, user1)
+    s = connection.get_object(Bucket=bucket_name, Key=object_name)['Body'].read().decode()
     assert s == object_name
     # list bucket too (for usage stats presently)
-    keys = list(bucket.list())
-    rl.log_and_clear("list_bucket", bucket_name, user1)
+    keys = connection.list_objects(Bucket=bucket_name)['Contents']
     assert len(keys) == 1
-    assert keys[0].name == object_name
+    assert keys[0]['Name'] == object_name
 
     # now delete it
     (err, out) = rgwadmin(ctx, client,
@@ -832,36 +751,27 @@ def task(ctx, config):
     # TESTCASE 'user-suspend3','user','suspend','suspended user','cannot write objects'
     denied = False
     try:
-        key = boto.s3.key.Key(bucket)
-        key.set_contents_from_string('five')
-    except boto.exception.S3ResponseError as e:
+        connection.put_object(Bucket=bucket_name, Key='five', Body='five')
+    except ClientError as e:
         denied = True
-        assert e.status == 403
-
+        assert e.response['ResponseMetadata']['HTTPStatusCode'] == 403
     assert denied
-    rl.log_and_clear("put_obj", bucket_name, user1)
 
     # TESTCASE 'user-renable2','user','enable','suspended user','succeeds'
     (err, out) = rgwadmin(ctx, client, ['user', 'enable', '--uid', user1],
         check_status=True)
 
     # TESTCASE 'user-renable3','user','enable','reenabled user','can write objects'
-    key = boto.s3.key.Key(bucket)
-    key.set_contents_from_string('six')
-    rl.log_and_clear("put_obj", bucket_name, user1)
+    connection.put_object(Bucket=bucket_name, Key='six', Body='six')
 
     # TESTCASE 'gc-list', 'gc', 'list', 'get list of objects ready for garbage collection'
 
     # create an object large enough to be split into multiple parts
     test_string = 'foo'*10000000
-
-    big_key = boto.s3.key.Key(bucket)
-    big_key.set_contents_from_string(test_string)
-    rl.log_and_clear("put_obj", bucket_name, user1)
+    connection.put_object(Bucket=bucket_name, Key='big', Body=test_string)
 
     # now delete the head
-    big_key.delete()
-    rl.log_and_clear("delete_obj", bucket_name, user1)
+    connection.delete_object(Bucket=bucket_name, Key='big')
 
     # wait a bit to give the garbage collector time to cycle
     time.sleep(15)
@@ -886,59 +796,17 @@ def task(ctx, config):
 
     # delete should fail because ``key`` still exists
     try:
-        bucket.delete()
-    except boto.exception.S3ResponseError as e:
-        assert e.status == 409
-    rl.log_and_clear("delete_bucket", bucket_name, user1)
+        connection.delete_bucket(Bucket=bucket_name)
+    except ClientError as e:
+        assert e.response['ResponseMetadata']['HTTPStatusCode'] == 409
 
-    key.delete()
-    rl.log_and_clear("delete_obj", bucket_name, user1)
-    bucket.delete()
-    rl.log_and_clear("delete_bucket", bucket_name, user1)
-
-    # TESTCASE 'policy', 'bucket', 'policy', 'get bucket policy', 'returns S3 policy'
-    bucket = connection.create_bucket(bucket_name)
-    rl.log_and_clear("create_bucket", bucket_name, user1)
-
-    # create an object
-    key = boto.s3.key.Key(bucket)
-    key.set_contents_from_string('seven')
-    rl.log_and_clear("put_obj", bucket_name, user1)
-
-    # should be private already but guarantee it
-    key.set_acl('private')
-    rl.log_and_clear("put_acls", bucket_name, user1)
-
-    (err, out) = rgwadmin(ctx, client,
-        ['policy', '--bucket', bucket.name, '--object', key.key.decode()],
-        check_status=True, format='xml')
-
-    acl = get_acl(key)
-    rl.log_and_clear("get_acls", bucket_name, user1)
-
-    assert acl == out.strip('\n')
-
-    # add another grantee by making the object public read
-    key.set_acl('public-read')
-    rl.log_and_clear("put_acls", bucket_name, user1)
-
-    (err, out) = rgwadmin(ctx, client,
-        ['policy', '--bucket', bucket.name, '--object', key.key.decode()],
-        check_status=True, format='xml')
-
-    acl = get_acl(key)
-    rl.log_and_clear("get_acls", bucket_name, user1)
-
-    assert acl == out.strip('\n')
+    connection.delete_object(Bucket=bucket_name, Key='six')
+    connection.delete_bucket(Bucket=bucket_name)
 
     # TESTCASE 'rm-bucket', 'bucket', 'rm', 'bucket with objects', 'succeeds'
-    bucket = connection.create_bucket(bucket_name)
-    rl.log_and_clear("create_bucket", bucket_name, user1)
-    key_name = ['eight', 'nine', 'ten', 'eleven']
-    for i in range(4):
-        key = boto.s3.key.Key(bucket)
-        key.set_contents_from_string(key_name[i])
-    rl.log_and_clear("put_obj", bucket_name, user1)
+    connection.create_bucket(Bucket=bucket_name)
+    for key_name in ['eight', 'nine', 'ten', 'eleven']:
+        connection.put_object(Bucket=bucket_name, Key=key_name, Body=key_name)
 
     (err, out) = rgwadmin(ctx, client,
         ['bucket', 'rm', '--bucket', bucket_name, '--purge-objects'],
@@ -956,19 +824,13 @@ def task(ctx, config):
     assert not out['caps']
 
     # TESTCASE 'rm-user','user','rm','existing user','fails, still has buckets'
-    bucket = connection.create_bucket(bucket_name)
-    rl.log_and_clear("create_bucket", bucket_name, user1)
-    key = boto.s3.key.Key(bucket)
+    connection.create_bucket(Bucket=bucket_name)
 
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user1])
     assert err
 
     # TESTCASE 'rm-user2', 'user', 'rm', 'user with data', 'succeeds'
-    bucket = connection.create_bucket(bucket_name)
-    rl.log_and_clear("create_bucket", bucket_name, user1)
-    key = boto.s3.key.Key(bucket)
-    key.set_contents_from_string('twelve')
-    rl.log_and_clear("put_obj", bucket_name, user1)
+    connection.put_object(Bucket=bucket_name, Key='twelve', Body='twelve')
 
     time.sleep(35)
 
@@ -1033,15 +895,12 @@ def task(ctx, config):
         check_status=True)
 
     # create a bucket
-    bucket = connection3.create_bucket(bucket_name + '6')
-
-    rl.log_and_clear("create_bucket", bucket_name + '6', user3)
+    bucket_name6 = bucket_name + '6'
+    connection3.create_bucket(Bucket=bucket_name6)
 
     # create object
     object_name1 = 'thirteen'
-    key1 = boto.s3.key.Key(bucket, object_name1)
-    key1.set_contents_from_string(object_name1)
-    rl.log_and_clear("put_obj", bucket_name + '6', user3)
+    connection3.put_object(Bucket=bucket_name6, Key=object_name1, Body=object_name1)
 
     # rename user3
     (err, out) = rgwadmin(ctx, client, ['user', 'rename', '--uid', user3, '--new-uid', user4], check_status=True)
@@ -1052,9 +911,7 @@ def task(ctx, config):
     time.sleep(5)
 
     # get bucket and object to test if user keys are preserved
-    bucket = connection3.get_bucket(bucket_name + '6')
-    s = key1.get_contents_as_string(encoding='ascii')
-    rl.log_and_clear("get_obj", bucket_name + '6', user4)
+    s = connection3.get_object(Bucket=bucket_name6, Key=object_name1)['Body'].read().decode()
     assert s == object_name1
 
     # TESTCASE 'user-rename', 'user', 'rename', 'existing user', 'another existing user', 'fails'
@@ -1070,28 +927,21 @@ def task(ctx, config):
         check_status=True)
 
     # create a bucket
-    bucket = connection2.create_bucket(bucket_name + '7')
-
-    rl.log_and_clear("create_bucket", bucket_name + '7', user2)
+    bucket_name7 = bucket_name + '7'
+    connection2.create_bucket(Bucket=bucket_name7)
 
     # create object
     object_name2 = 'fourteen'
-    key2 = boto.s3.key.Key(bucket, object_name2)
-    key2.set_contents_from_string(object_name2)
-    rl.log_and_clear("put_obj", bucket_name + '7', user2)
+    connection2.put_object(Bucket=bucket_name7, Key=object_name2, Body=object_name2)
 
     (err, out) = rgwadmin(ctx, client, ['user', 'rename', '--uid', user4, '--new-uid', user2])
     assert err
 
     # test if user 2 and user4 can still access their bucket and objects after rename fails
-    bucket = connection3.get_bucket(bucket_name + '6')
-    s = key1.get_contents_as_string(encoding='ascii')
-    rl.log_and_clear("get_obj", bucket_name + '6', user4)
+    s = connection3.get_object(Bucket=bucket_name6, Key=object_name1)['Body'].read().decode()
     assert s == object_name1
 
-    bucket = connection2.get_bucket(bucket_name + '7')
-    s = key2.get_contents_as_string(encoding='ascii')
-    rl.log_and_clear("get_obj", bucket_name + '7', user2)
+    s = connection2.get_object(Bucket=bucket_name7, Key=object_name2)['Body'].read().decode()
     assert s == object_name2
 
     (err, out) = rgwadmin(ctx, client,
@@ -1101,14 +951,6 @@ def task(ctx, config):
     (err, out) = rgwadmin(ctx, client,
     ['user', 'rm', '--uid', user2, '--purge-data' ],
     check_status=True)
-
-    time.sleep(5)
-
-    # should be all through with connection. (anything using connection
-    #  should be BEFORE the usage stuff above.)
-    rl.log_and_clear("(before-close)", '-', '-', ignore_this_entry)
-    connection.close()
-    connection = None
 
     # the usage flush interval is 30 seconds, wait that much an then some
     # to make sure everything has been flushed
