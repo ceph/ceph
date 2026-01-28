@@ -2850,33 +2850,33 @@ tests:
  - interval: 1m
    input_series:
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn1",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn2",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn3",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn4",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn5",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn6",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn7",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn8",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn9",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn10",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
     - series: 'ceph_nvmeof_subsystem_namespace_count{instance="node-1:10008",nqn="nqn11",cluster="mycluster"}'
-      values: '200+0x10'
+      values: '400+0x10'
    promql_expr_test:
-     - expr: sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,"gateway_host","$1","instance","(.*):.*")) > 2048
+     - expr: sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,"gateway_host","$1","instance","(.*):.*")) > 4096
        eval_time: 1m
        exp_samples:
          - labels: '{gateway_host="node-1", cluster="mycluster"}'
-           value: 2200
+           value: 4400
    alert_rule_test:
     - eval_time: 5m
       alertname: NVMeoFTooManyNamespaces
@@ -2888,7 +2888,7 @@ tests:
           type: ceph_default
         exp_annotations:
           summary: "The number of namespaces defined to the NVMeoF gateway reached or exceeded supported values on cluster mycluster"
-          description: "NVMeoF gateway node-1 has reached or exceeded the supported maximum of 2048 namespaces. Current count: 2200."
+          description: "NVMeoF gateway node-1 has reached or exceeded the supported maximum of 4096 namespaces. Current count: 4400."
 
  # NVMeoFVersionMismatch
  - interval: 1m

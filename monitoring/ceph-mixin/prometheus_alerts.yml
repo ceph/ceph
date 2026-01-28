@@ -875,9 +875,9 @@ groups:
           type: "ceph_default"
       - alert: "NVMeoFTooManyNamespaces"
         annotations:
-          description: "NVMeoF gateway {{ $labels.gateway_host }} has reached or exceeded the supported maximum of 2048 namespaces. Current count: {{ $value }}."
+          description: "NVMeoF gateway {{ $labels.gateway_host }} has reached or exceeded the supported maximum of 4096 namespaces. Current count: {{ $value }}."
           summary: "The number of namespaces defined to the NVMeoF gateway reached or exceeded supported values on cluster {{ $labels.cluster }}"
-        expr: "sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,\"gateway_host\",\"$1\",\"instance\",\"(.*?)(?::.*)?\")) >= 2048.00"
+        expr: "sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,\"gateway_host\",\"$1\",\"instance\",\"(.*?)(?::.*)?\")) >= 4096.00"
         for: "1m"
         labels:
           severity: "warning"
