@@ -164,7 +164,18 @@ add_executable(unittest_ec_transaction
 add_ceph_unittest(unittest_ec_transaction)
 target_link_libraries(unittest_ec_transaction osd global ${BLKID_LIBRARIES})
 
-# unittest_mclock_scheduler
+# benchmark_ec_read
+add_executable(benchmark_ec_read
+  benchmark_ec_read.cc
+)
+target_link_libraries(benchmark_ec_read osd global ${BLKID_LIBRARIES})
+# benchmark_ec_memory
+add_executable(benchmark_ec_memory
+  benchmark_ec_memory.cc
+)
+target_link_libraries(benchmark_ec_memory osd global ${BLKID_LIBRARIES})
+
+
 # unittest_mclock_scheduler
 add_executable(unittest_mclock_scheduler
   TestMClockScheduler.cc

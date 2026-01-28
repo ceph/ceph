@@ -582,7 +582,7 @@ void shard_extent_map_t::pad_on_shard(const extent_set &pad_to,
     return;
   }
 
-  for (auto &[off, length] : pad_to) {
+  for (auto [off, length] : pad_to) {
     bufferlist bl;
     uint64_t start = align_prev(off);
     uint64_t end = align_next(off + length);
