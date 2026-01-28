@@ -1,0 +1,24 @@
+<header class="cds-mb-5">
+  <h2 class="cds--type-heading-05">{{ groupName }}</h2>
+</header>
+<div class="nvme-shell">
+  <div>
+    <cds-sidenav [expanded]="true">
+      <cds-sidenav-item
+        [route]="[basePath, groupName, 'nodes']"
+        [useRouter]="true"
+        [routerLinkActiveOptions]="{ exact: true }">
+        <span class="cds--type-heading-compact-01">Gateway nodes</span>
+      </cds-sidenav-item>
+      <cds-sidenav-item
+        [route]="[basePath, groupName, 'subsystems']"
+        [useRouter]="true">
+        <span class="cds--type-heading-compact-01">Subsystems</span>
+      </cds-sidenav-item>
+    </cds-sidenav>
+  </div>
+
+  <main class="nvme-main">
+    <router-outlet></router-outlet>
+  </main>
+</div>
