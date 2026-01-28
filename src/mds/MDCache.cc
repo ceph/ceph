@@ -23,6 +23,7 @@
 #include <deque>
 #include <ostream>
 #include <string>
+#include <sstream>
 #include <string_view>
 #include <map>
 #include <memory>
@@ -76,6 +77,8 @@
 
 #include "msg/Message.h"
 #include "msg/Messenger.h"
+
+#include "MDSTracer.h"
 
 #include "common/debug.h"
 #include "common/errno.h"
@@ -8528,6 +8531,10 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
   bool rdlock_authlock = (flags & MDS_TRAVERSE_RDLOCK_AUTHLOCK);
   bool forimport = (flags & MDS_TRAVERSE_IMPORT);
 
+  // Trace child span: path traversal (duration captured automatically)
+  ScopedSpan trace_span(mds->tracer, "path_traverse", mdr ? mdr->trace_span : jspan_ptr(),
+                        mdr ? &mdr->trace_data : nullptr);
+
   if (forward)
     ceph_assert(mdr);  // forward requires a request
 
@@ -9046,6 +9053,7 @@ void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, MDSContext *fin
  */
 CInode *MDCache::get_dentry_inode(CDentry *dn, const MDRequestRef& mdr, bool projected)
 {
+  ScopedSpan trace_span(mds->tracer, "get_dentry_inode", mdr ? mdr->trace_span : jspan_ptr(), mdr ? &mdr->trace_data : nullptr);
   CDentry::linkage_t *dnl;
   if (projected)
     dnl = dn->get_projected_linkage();
@@ -9979,6 +9987,26 @@ MDRequestRef MDCache::request_start_internal(int op)
     ceph_abort();
   }
   active_requests[mdr->reqid] = mdr;
+
+  // Initialize tracing for internal operations
+  if (mds->tracer.is_enabled()) {
+    const char* op_name = ceph_mds_op_name(op);
+    std::string trace_name = std::string("mds:internal:") + op_name;
+    
+    mdr->trace_span = mds->tracer.start_trace(trace_name.c_str());
+    
+    
+    std::ostringstream reqid_ss;
+    reqid_ss << mdr->reqid;
+    
+    if (mdr->trace_span && mdr->trace_span->IsRecording()) {
+      mdr->trace_span->SetAttribute(MDSTracer::ATTR_OP_TYPE, op);
+      mdr->trace_span->SetAttribute(MDSTracer::ATTR_OP_NAME, op_name);
+      mdr->trace_span->SetAttribute(MDSTracer::ATTR_MDS_RANK, static_cast<int64_t>(mds->get_nodeid()));
+      mdr->trace_span->SetAttribute(MDSTracer::ATTR_INTERNAL_OP, "true");
+    }
+  }
+
   dout(7) << __func__ << " " << *mdr << " op " << op << dendl;
   return mdr;
 }
@@ -10046,6 +10074,7 @@ void MDCache::request_finish(const MDRequestRef& mdr)
 
 void MDCache::request_forward(const MDRequestRef& mdr, mds_rank_t who, int port)
 {
+  ScopedSpan trace_span(mds->tracer, "request_forward", mdr->trace_span, &mdr->trace_data);
   CachedStackStringStream css;
   *css << "forwarding request to mds." << who;
   mdr->mark_event(css->strv());
@@ -10211,6 +10240,19 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
 
   if (mds->logger)
     log_stat();
+
+  // Finalize trace span and store in sliding window
+  if (mdr->trace_span && mdr->trace_span->IsRecording()) {
+    mdr->trace_span->AddEvent("request_cleanup");
+    mdr->trace_span->End();
+    
+    // Complete trace_data and store in sliding window
+    if (!mdr->trace_data.trace_id.empty()) {
+      mdr->trace_data.end_time = ceph_clock_now();
+      mdr->trace_data.duration_ms = (mdr->trace_data.end_time - mdr->trace_data.start_time) * 1000.0;
+      mds->tracer.store_trace(mdr->trace_data);
+    }
+  }
 
   mdr->mark_event("cleaned up request");
 }
@@ -12406,6 +12448,7 @@ void MDCache::fragment_frozen(const MDRequestRef& mdr, int r)
 
 void MDCache::dispatch_fragment_dir(const MDRequestRef& mdr, bool abort_if_freezing)
 {
+  ScopedSpan trace_span(mds->tracer, "fragment_dir", mdr->trace_span, &mdr->trace_data);
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
   auto it = fragments.find(basedirfrag);
   if (it == fragments.end() || it->second.mdr != mdr) {
@@ -13478,6 +13521,7 @@ void MDCache::enqueue_scrub(
 
 void MDCache::enqueue_scrub_work(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "enqueue_scrub", mdr->trace_span, &mdr->trace_data);
   CInode *in;
   CF_MDS_RetryRequestFactory cf(this, mdr, true);
   int r = path_traverse(mdr, cf, mdr->get_filepath(),
@@ -13990,6 +14034,7 @@ public:
 
 void MDCache::flush_dentry_work(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "flush_dentry", mdr->trace_span, &mdr->trace_data);
   MutationImpl::LockOpVec lov;
   CInode *in = mds->server->rdlock_path_pin_ref(mdr, true);
   if (!in)
@@ -14173,6 +14218,7 @@ void MDCache::quiesce_overdrive_fragmenting_async(CDir* dir) {
 
 void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "quiesce_inode", mdr->trace_span, &mdr->trace_data);
   if (mdr->internal_op_finish == nullptr) {
     dout(20) << __func__ << " " << *mdr << " already finished quiesce" << dendl;
     return;
@@ -14425,6 +14471,7 @@ void MDCache::add_quiesce(CInode* parent, CInode* in)
 
 void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "quiesce_path", mdr->trace_span, &mdr->trace_data);
   if (!mds->is_active()) {
     dout(20) << __func__ << " is not active!" << dendl;
     mds->server->respond_to_request(mdr, -EAGAIN);
@@ -14530,6 +14577,7 @@ MDRequestRef MDCache::quiesce_path(filepath p, C_MDS_QuiescePath* c, Formatter *
 
 void MDCache::dispatch_lock_path(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "lock_path", mdr->trace_span, &mdr->trace_data);
   CF_MDS_RetryRequestFactory cf(this, mdr, true);
   auto& lps = *static_cast<LockPathState*>(mdr->internal_op_private);
   CInode* in = lps.in;

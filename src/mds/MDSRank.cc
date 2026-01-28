@@ -60,6 +60,7 @@
 
 #include "QuiesceDbManager.h"
 #include "QuiesceAgent.h"
+#include "MDSTracer.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -476,6 +477,7 @@ MDSRank::MDSRank(
     timer(timer_), mdsmap(mdsmap_),
     objecter(new Objecter(g_ceph_context, msgr, monc_, ioc)),
     damage_table(whoami_), sessionmap(this),
+    tracer(cct),
     op_tracker(g_ceph_context, g_conf()->mds_enable_op_tracker,
                g_conf()->osd_num_op_tracker_shard),
     progress_thread(this), whoami(whoami_),
@@ -587,6 +589,9 @@ void MDSRankDispatcher::init()
 
   update_log_config();
   create_logger();
+
+  // Initialize MDS tracer for distributed tracing
+  tracer.init();
 
   // Expose the OSDMap (already populated during MDS::init) to anyone
   // who is interested in it.
@@ -818,6 +823,7 @@ void MDSRankDispatcher::shutdown()
   // shutdown metrics handler/updater -- this is ok even if it was not
   // inited.
   metrics_handler.shutdown();
+  tracer.shutdown();
 
   // shutdown metric aggergator
   if (metric_aggregator != nullptr) {
@@ -2675,6 +2681,8 @@ void MDSRankDispatcher::handle_asok_command(
     if (!op_tracker.dump_ops_in_flight(f)) {
       *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
     }
+  } else if (command == "trace dump") {
+    tracer.dump_traces(f);
   } else if (command == "ops") {
     vector<string> flags;
     cmd_getval(cmdmap, "flags", flags);
