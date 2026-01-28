@@ -1608,9 +1608,8 @@ static int validate_account_tenant(const DoutPrefixProvider* dpp,
                                    std::string& err)
 {
   RGWAccountInfo info;
-  rgw::sal::Attrs attrs;
   RGWObjVersionTracker objv;
-  int r = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+  int r = driver->load_account_by_id(dpp, y, account_id, info, objv);
   if (r < 0) {
     err = "Failed to load account by id";
     return r;
@@ -2109,11 +2108,9 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
         return ret;
       }
       RGWAccountInfo account_info;
-      rgw::sal::Attrs attrs;
       RGWObjVersionTracker objv;
       int r = driver->load_account_by_id(dpp, y, op_state.account_id,
-                                         account_info,
-                                         attrs, objv);
+                                         account_info, objv);
       if (r < 0) {
         err = "Failed to load account by id";
         return r;

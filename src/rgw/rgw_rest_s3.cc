@@ -37,6 +37,7 @@
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
+#include "rgw_rest_s3control.h"
 #include "rgw_rest_s3website.h"
 #include "rgw_rest_pubsub.h"
 #include "rgw_auth_s3.h"
@@ -5940,28 +5941,71 @@ void parse_post_action(const std::string& post_body, req_state* s)
   }
 }
 
+RGWRESTMgr_S3::RGWRESTMgr_S3(bool enable_s3control,
+                             bool _enable_s3website,
+                             bool _enable_sts,
+                             bool _enable_iam,
+                             bool _enable_pubsub)
+  : enable_sts(_enable_sts),
+    enable_iam(_enable_iam),
+    enable_pubsub(_enable_pubsub)
+{
+  if (enable_s3control) {
+    s3control = std::make_unique<RGWRESTMgr_S3Control>();
+  }
+  if (_enable_s3website) {
+    s3website = std::make_unique<RGWRESTMgr_S3Website>();
+  }
+}
+RGWRESTMgr_S3::~RGWRESTMgr_S3() = default;
+
+RGWRESTMgr* RGWRESTMgr_S3::get_resource_mgr_as_default(req_state* s,
+                                                       const std::string& uri,
+                                                       std::string* out_uri)
+{
+  // s3control apis all expect the request header x-amz-account-id,
+  // and s3 apis don't. use that to disambiguate between s3control
+  // and requests to s3 buckets named v20180820
+  if (s3control && s->info.env->exists("HTTP_X_AMZ_ACCOUNT_ID")) {
+    ldpp_dout(s, 20) << "checking for s3control path v20180820 in "
+        "request_uri=" << uri << dendl;
+    // route matching requests RGWRESTMgr_S3Control
+    constexpr std::string_view s3control_root = "/v20180820";
+    if (auto i = std::ranges::mismatch(s3control_root, uri);
+        i.in1 == s3control_root.end() && // matched full string
+        (i.in2 == uri.end() || *i.in2 == '/')) { // end or /
+      const auto suffix = std::string{i.in2, uri.end()}; // trim prefix
+      return s3control->get_resource_mgr(s, suffix, out_uri);
+    }
+  }
+
+  // check the Host header for virtual-host style requests, and
+  // rewrite the request_uri with the subdomain as the bucket name.
+  // this applies to s3 and s3website requests, but not s3control
+  int ret = rgw_rest_transform_s3_vhost_style(s);
+  if (ret < 0) {
+    return nullptr;
+  }
+  // use the updated decoded_uri for routing
+  const std::string& new_uri = s->decoded_uri;
+
+  // route matching requests to RGWRESTMgr_S3Website
+  const bool in_s3website_domain = (s->prot_flags & RGW_REST_WEBSITE);
+  if (s3website && in_s3website_domain) {
+    return s3website->get_resource_mgr(s, new_uri, out_uri);
+  }
+
+  return RGWRESTMgr::get_resource_mgr(s, new_uri, out_uri);
+}
+
 RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
 					    req_state* const s,
                                             const rgw::auth::StrategyRegistry& auth_registry,
                                             const std::string& frontend_prefix)
 {
-  bool is_s3website = enable_s3website && (s->prot_flags & RGW_REST_WEBSITE);
-  int ret =
-    RGWHandler_REST_S3::init_from_header(driver, s,
-					is_s3website ? RGWFormat::HTML :
-					RGWFormat::XML, true);
+  int ret = RGWHandler_REST_S3::init_from_header(driver, s, RGWFormat::XML, true);
   if (ret < 0) {
     return nullptr;
-  }
-
-  if (is_s3website) {
-    if (s->init_state.url_bucket.empty()) {
-      return new RGWHandler_REST_Service_S3Website(auth_registry);
-    }
-    if (rgw::sal::Object::empty(s->object.get())) {
-      return new RGWHandler_REST_Bucket_S3Website(auth_registry);
-    }
-    return new RGWHandler_REST_Obj_S3Website(auth_registry);
   }
 
   if (s->init_state.url_bucket.empty()) {
@@ -5999,6 +6043,26 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
   }
   // has bucket
   return new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
+}
+
+RGWHandler_REST* RGWRESTMgr_S3Website::get_handler(
+    rgw::sal::Driver* driver,
+    req_state* const s,
+    const rgw::auth::StrategyRegistry& auth_registry,
+    const std::string& frontend_prefix)
+{
+  int ret = RGWHandler_REST_S3::init_from_header(driver, s, RGWFormat::HTML, true);
+  if (ret < 0) {
+    return nullptr;
+  }
+
+  if (s->init_state.url_bucket.empty()) {
+    return new RGWHandler_REST_Service_S3Website(auth_registry);
+  }
+  if (rgw::sal::Object::empty(s->object)) {
+    return new RGWHandler_REST_Bucket_S3Website(auth_registry);
+  }
+  return new RGWHandler_REST_Obj_S3Website(auth_registry);
 }
 
 bool RGWHandler_REST_S3Website::web_dir() const {
@@ -6632,6 +6696,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_POST_BUCKET_LOGGING:
         case RGW_OP_GET_BUCKET_LOGGING: 
         case RGW_OP_PUT_BUCKET_OWNERSHIP_CONTROLS:
+        case RGW_OP_PUT_PUBLIC_ACCESS_BLOCK:
           break;
         default:
           ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;
@@ -7292,10 +7357,9 @@ rgw::auth::s3::STSEngine::authenticate(
     const auto& account_id = role->get_account_id();
     if (!account_id.empty()) {
       r.account.emplace();
-      rgw::sal::Attrs attrs; // ignored
       RGWObjVersionTracker objv; // ignored
       int ret = driver->load_account_by_id(dpp, y, account_id,
-                                           *r.account, attrs, objv);
+                                           *r.account, objv);
       if (ret < 0) {
         ldpp_dout(dpp, 1) << "ERROR: failed to load account "
             << account_id << " for role " << r.name
