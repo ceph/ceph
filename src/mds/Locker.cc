@@ -4501,7 +4501,7 @@ void Locker::handle_client_lease(const cref_t<MClientLease> &m)
       dout(7) << "handle_client_lease client." << client << " renew on " << *dn
 	      << (!dn->lock.can_lease(client)?", revoking lease":"") << dendl;
       if (dn->lock.can_lease(client)) {
-        auto reply = make_message<MClientLease>(*m);
+        auto reply = ceph::make_message<MClientLease>(*m);
 	int pool = 1;   // fixme.. do something smart!
 	reply->h.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
 	reply->h.seq = ++l->seq;
