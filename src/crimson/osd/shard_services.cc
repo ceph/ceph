@@ -9,6 +9,7 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
+#include "messages/MOSDPGReadyToMerge.h"
 
 #include "osd/osd_perf_counters.h"
 #include "osd/PeeringState.h"
@@ -103,6 +104,150 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
 	epoch,
 	PeeringCtx{}, false).second;
     });
+}
+
+seastar::future<Ref<PG>> ShardServices::extract_pg(spg_t pgid) {
+  auto pg = local_state.pg_map.get_pg(pgid);
+  ceph_assert(pg);
+  co_await remove_pg(pgid);
+  co_return pg;
+}
+
+seastar::future<> ShardServices::perform_source_cleanup(spg_t target_id)
+{
+  LOG_PREFIX(ShardServices::perform_source_cleanup);
+  auto& waiter = this->local_merge_waiter;
+
+  // Pull the metadata we left behind in wait_for_merge_sources
+  auto it = waiter.ready_pgs.find(target_id);
+  if (it == waiter.ready_pgs.end()) {
+      DEBUG(" Nothing to clean up");
+      co_return;
+  }
+
+  auto sources_with_meta = std::move(it->second);
+  waiter.ready_pgs.erase(it);
+
+  for (auto& [src_id, meta] : sources_with_meta) {
+    DEBUG(" Releasing source PG {} on shard {}; will be destroyed on shard {}",
+          src_id, seastar::this_shard_id(), meta.first);
+    meta.second.reset();
+  }
+  co_return;
+}
+
+void ShardServices::apply_register_source(
+    merge_waiter& waiter,
+    spg_t target,
+    spg_t source,
+    int sources_needed)
+{
+  LOG_PREFIX(ShardServices::apply_register_source);
+  // Record the source that is now on this shard
+  waiter.sources_ready[target].insert(source);
+
+  DEBUG("Source {} registered for target {}. Progress: {}/{}",
+        source, target, waiter.sources_ready[target].size(), sources_needed);
+
+  // Once all required sources arrive, we fulfill the promise to unblock the target.
+  if (waiter.sources_ready[target].size() >= static_cast<size_t>(sources_needed)) {
+    DEBUG("All sources ready for target {}!", target);
+
+    auto& promise_ptr = waiter.target_ready[target];
+
+    if (!promise_ptr) {
+      /* * CASE A: The sources arrived before the Target PG reached the merge point.
+       * We create a 'pre-fulfilled' promise. When the Target PG eventually
+       * calls wait_for_merge_sources(), it will find this available and
+       * continue without suspending.
+       */
+      DEBUG("Target {}: Pre-fulfilling promise", target);
+      promise_ptr = std::make_unique<seastar::shared_promise<>>();
+      promise_ptr->set_value();
+    } else if (!promise_ptr->available()) {
+      /* * CASE B: The Target PG is already suspended in wait_for_merge_sources().
+       * Fulfilling this promise wakes up the Target PG.
+       */
+      promise_ptr->set_value();
+    }
+  }
+}
+
+seastar::future<> ShardServices::register_merge_source(
+    spg_t target,
+    spg_t source,
+    int sources_needed)
+{
+  LOG_PREFIX(ShardServices::register_merge_source);
+
+  core_id_t birth_shard = seastar::this_shard_id();
+  core_id_t target_core = co_await get_pg_mapping(target);
+
+  // Remove the source pg from pg_to_shard_mapping so that
+  // it no longer receives any messages
+  auto pg_to_move = co_await extract_pg(source);
+
+  // If the target is on the current shard, just update the local map
+  if (target_core == seastar::this_shard_id()) {
+    // Wrap the PG to ensure its eventual destruction happens on the birth_shard.
+    auto source_pg = crimson::make_local_shared_foreign(std::move(pg_to_move));
+    DEBUG("Target {} is local to shard {}", target, target_core);
+    this->local_merge_waiter.ready_pgs[target].emplace(source,
+        std::make_pair(birth_shard, std::move(source_pg)));
+    apply_register_source(this->local_merge_waiter, target, source, sources_needed);
+    co_return;
+  }
+
+  // If the target is on another shard, tell that shard to update its map
+  // We wrap the PG in a foreign_ptr, to safely move across cores in a lambda.
+  auto foreign_pg = seastar::make_foreign(std::move(pg_to_move));
+
+  DEBUG("Target {} is on shard {}. Hopping...", target, target_core);
+
+  co_await container().invoke_on(
+      target_core,
+      [target, source, sources_needed, foreign_pg = std::move(foreign_pg), birth_shard]
+      (ShardServices& target_svc) mutable {
+      // This lambda runs on the target_core.
+      // Store the source PG in a temporary list for the target PG to pick up
+      // Convert to a shared wrapper to ensure destruction returns to the birth shard.
+      auto source_pg = crimson::make_local_shared_foreign<Ref<PG>>(std::move(foreign_pg));
+      target_svc.local_merge_waiter.ready_pgs[target].emplace(
+          source, std::make_pair(birth_shard, std::move(source_pg)));
+
+      target_svc.apply_register_source(target_svc.local_merge_waiter, target, source, sources_needed);
+  });
+}
+
+seastar::future<std::map<spg_t, crimson::local_shared_foreign_ptr<Ref<PG>>>>
+ShardServices::wait_for_merge_sources(
+    spg_t target,
+    std::set<spg_t> sources_needed)
+{
+  LOG_PREFIX(ShardServices::wait_for_merge_sources);
+
+  auto& waiter = this->local_merge_waiter;
+  auto& promise_ptr = waiter.target_ready[target];
+
+  if (promise_ptr && promise_ptr->available()) {
+    DEBUG("Target {}: Sources already ready. No wait.", target);
+  } else {
+    if (!promise_ptr) {
+      promise_ptr = std::make_unique<seastar::shared_promise<>>();
+    }
+    DEBUG("Target {}: Suspending on promise at {}", target, (void*)promise_ptr.get());
+    co_await promise_ptr->get_shared_future();
+    DEBUG("Target {}: Woke up!", target);
+  }
+
+  auto& pgs = waiter.ready_pgs[target];
+  std::map<spg_t, crimson::local_shared_foreign_ptr<Ref<PG>>> sources_for_merge;
+  for (auto& [src_id, meta] : pgs) {
+      sources_for_merge[src_id] = meta.second;
+  }
+  waiter.sources_ready.erase(target);
+  waiter.target_ready.erase(target);
+  co_return sources_for_merge;
 }
 
 Ref<PG> PerShardState::get_pg(spg_t pgid)
@@ -303,6 +448,135 @@ void OSDSingletonState::prune_pg_created()
     } else {
       DEBUG("keeping {}", *i);
       ++i;
+    }
+  }
+}
+
+seastar::future<> OSDSingletonState::set_ready_to_merge_source(pg_t pgid,
+                                                  eversion_t version)
+{
+  LOG_PREFIX(OSDSingletonState::set_ready_to_merge_source);
+  DEBUG("{}", pgid);
+  ready_to_merge_source[pgid] = version;
+  ceph_assert(not_ready_to_merge_source.count(pgid) == 0);
+  return send_ready_to_merge();
+
+}
+
+seastar::future<> OSDSingletonState::set_ready_to_merge_target(pg_t pgid,
+                                           eversion_t version,
+                                           epoch_t last_epoch_started,
+                                           epoch_t last_epoch_clean)
+{
+  LOG_PREFIX(OSDSingletonState::set_ready_to_merge_target);
+  DEBUG("{}", pgid);
+  ready_to_merge_target.insert(std::make_pair(pgid,
+                                         std::make_tuple(version,
+                                                    last_epoch_started,
+                                                    last_epoch_clean)));
+  ceph_assert(not_ready_to_merge_target.count(pgid) == 0);
+  return send_ready_to_merge();
+
+}
+
+seastar::future<> OSDSingletonState::set_not_ready_to_merge_source(pg_t source)
+{
+  LOG_PREFIX(OSDSingletonState::set_not_ready_to_merge_source);
+  DEBUG("{}", source);
+  not_ready_to_merge_source.insert(source);
+  ceph_assert(ready_to_merge_source.count(source) == 0);
+  return send_ready_to_merge();
+
+}
+
+seastar::future<> OSDSingletonState::set_not_ready_to_merge_target(pg_t target, pg_t source)
+{
+  LOG_PREFIX(OSDSingletonState::set_not_ready_to_merge_target);
+  DEBUG("{} source {}", target, source);
+  not_ready_to_merge_target[target] = source;
+  ceph_assert(ready_to_merge_source.count(target) == 0);
+  return send_ready_to_merge();
+
+}
+
+seastar::future<> OSDSingletonState::send_ready_to_merge()
+{
+  LOG_PREFIX(OSDSingletonState::send_ready_to_merge);
+  DEBUG(" ready_to_merge_source: {} not_ready_to_merge_source: {} \
+          ready_to_merge_target: {} not_ready_to_merge_target: {} \
+          sent_ready_to_merge_source {}", ready_to_merge_source,
+          not_ready_to_merge_source, ready_to_merge_target, not_ready_to_merge_target,
+          sent_ready_to_merge_source);
+  for (auto src : not_ready_to_merge_source) {
+    if (sent_ready_to_merge_source.count(src) == 0) {
+      return monc.send_message(crimson::make_message<MOSDPGReadyToMerge>(
+                               src,
+                               eversion_t{}, eversion_t{}, 0, 0,
+                               false,
+                               osdmap->get_epoch())).then([this, src] {
+        sent_ready_to_merge_source.insert(src);
+      });
+    }
+  }
+  for (auto p : not_ready_to_merge_target) {
+    if (sent_ready_to_merge_source.count(p.second) == 0) {
+      return monc.send_message(crimson::make_message<MOSDPGReadyToMerge>(
+                               p.second,
+                               eversion_t{}, eversion_t{}, 0, 0,
+                               false,
+                               osdmap->get_epoch())).then([this, p] {
+      sent_ready_to_merge_source.insert(p.second);
+      });
+    }
+  }
+  for (auto src : ready_to_merge_source) {
+    if (not_ready_to_merge_source.count(src.first) ||
+        not_ready_to_merge_target.count(src.first.get_parent())) {
+      continue;
+    }
+    auto p = ready_to_merge_target.find(src.first.get_parent());
+    if (p != ready_to_merge_target.end() &&
+        sent_ready_to_merge_source.count(src.first) == 0) {
+      return monc.send_message(crimson::make_message<MOSDPGReadyToMerge>(
+                               src.first,           // source pgid
+                               src.second,          // src version
+                               std::get<0>(p->second), // target version
+                               std::get<1>(p->second), // PG's last_epoch_started
+                               std::get<2>(p->second), // PG's last_epoch_clean
+                               true,
+                               osdmap->get_epoch())).then([this, src] {
+      sent_ready_to_merge_source.insert(src.first);
+      });
+    }
+  }
+  return seastar::now();
+}
+
+void OSDSingletonState::clear_ready_to_merge(pg_t pgid)
+{
+  ready_to_merge_source.erase(pgid);
+  ready_to_merge_target.erase(pgid);
+  not_ready_to_merge_source.erase(pgid);
+  not_ready_to_merge_target.erase(pgid);
+  sent_ready_to_merge_source.erase(pgid);
+}
+
+void OSDSingletonState::clear_sent_ready_to_merge()
+{
+  sent_ready_to_merge_source.clear();
+}
+
+void OSDSingletonState::prune_sent_ready_to_merge(const OSDMapService::cached_map_t osdmap)
+{
+  LOG_PREFIX(OSDSingletonState::prune_sent_ready_to_merge);
+  auto source = sent_ready_to_merge_source.begin();
+  while (source != sent_ready_to_merge_source.end()) {
+    if (!osdmap->pg_exists(*source)) {
+      DEBUG("{}", *source);
+      source = sent_ready_to_merge_source.erase(source);
+    } else {
+      DEBUG(" exist {}", *source);
+      ++source;
     }
   }
 }

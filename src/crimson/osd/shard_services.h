@@ -351,12 +351,32 @@ private:
   seastar::future<> store_maps(ceph::os::Transaction& t,
                                epoch_t start, Ref<MOSDMap> m);
   void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
+
+  // -- PG merging --
+  std::map<pg_t, eversion_t> ready_to_merge_source;
+  std::map<pg_t,std::tuple<eversion_t,epoch_t,epoch_t>> ready_to_merge_target;
+  std::set<pg_t> not_ready_to_merge_source;
+  std::map<pg_t,pg_t> not_ready_to_merge_target;
+  std::set<pg_t> sent_ready_to_merge_source;
+  seastar::future<> set_ready_to_merge_source(pg_t pgid,
+                                 eversion_t version);
+  seastar::future<> set_ready_to_merge_target(pg_t pgid,
+                                 eversion_t version,
+                                 epoch_t last_epoch_started,
+                                 epoch_t last_epoch_clean);
+  seastar::future<> set_not_ready_to_merge_source(pg_t source);
+  seastar::future<> set_not_ready_to_merge_target(pg_t target, pg_t source);
+  void clear_ready_to_merge(pg_t pgid);
+  seastar::future<> send_ready_to_merge();
+  void clear_sent_ready_to_merge();
+  void prune_sent_ready_to_merge(const cached_map_t osdmap);
 };
 
 /**
  * Represents services available to each PG
  */
-class ShardServices : public OSDMapService {
+class ShardServices : public OSDMapService,
+                      public seastar::peering_sharded_service<ShardServices> {
   friend class PGShardManager;
   friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
@@ -482,6 +502,21 @@ public:
 
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
+  struct merge_waiter {
+    // target_pg -> set of source pgids that are ready for merge
+    std::map<spg_t, std::set<spg_t>> sources_ready;
+    // target_pg -> promise that fulfills when all sources are in ready_pgs
+    std::map<spg_t, std::unique_ptr<seastar::shared_promise<>>> target_ready;
+    // target_pg -> map<source_pg_id, pair<birth_shard, Ref<PG>>>
+    // We wrap the source PG in a local_shared_foreign_ptr so that it can be
+    // safely stored and accessed on the target PG's shard. The wrapper
+    // ensures that when the PG is eventually released, its destruction
+    // is safely routed back to its birth_shard.
+    std::map<spg_t, std::map<spg_t,
+    std::pair<core_id_t, crimson::local_shared_foreign_ptr<Ref<PG>>>>> ready_pgs;
+  };
+  merge_waiter local_merge_waiter;
+
   crimson::os::FuturizedStore::Shard &get_store() {
     return local_state.store;
   }
@@ -495,6 +530,10 @@ public:
 
   auto create_split_pg_mapping(spg_t pgid, core_id_t core) {
     return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core);
+  }
+
+  seastar::future<core_id_t> get_pg_mapping(spg_t pgid) {
+    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid);
   }
 
   auto remove_pg(spg_t pgid) {
@@ -611,6 +650,29 @@ public:
 	return make_local_shared_foreign(std::move(fmap));
       });
   }
+
+  seastar::future<> perform_source_cleanup(spg_t target_id);
+  seastar::future<Ref<PG>> extract_pg(spg_t pgid);
+  void apply_register_source(
+    merge_waiter& waiter,
+    spg_t target,
+    spg_t source,
+    int sources_needed);
+  seastar::future<> register_merge_source(spg_t target,
+                                          spg_t source,
+					  int sources_needed);
+  seastar::future<std::map<spg_t, crimson::local_shared_foreign_ptr<Ref<PG>>>>
+  wait_for_merge_sources(spg_t target,
+                         std::set<spg_t> sources_needed);
+
+  FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_source)
+  FORWARD_TO_OSD_SINGLETON(set_ready_to_merge_target)
+  FORWARD_TO_OSD_SINGLETON(set_not_ready_to_merge_source)
+  FORWARD_TO_OSD_SINGLETON(set_not_ready_to_merge_target)
+  FORWARD_TO_OSD_SINGLETON(clear_ready_to_merge)
+  FORWARD_TO_OSD_SINGLETON(send_ready_to_merge)
+  FORWARD_TO_OSD_SINGLETON(clear_sent_ready_to_merge)
+  FORWARD_TO_OSD_SINGLETON(prune_sent_ready_to_merge)
 
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
   FORWARD(get_throttle, get_throttle, local_state.throttler)
