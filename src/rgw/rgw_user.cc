@@ -15,7 +15,7 @@ using namespace std;
 
 int rgw_sync_all_stats(const DoutPrefixProvider *dpp,
                        optional_yield y, rgw::sal::Driver* driver,
-                       const rgw_owner& owner, const std::string& tenant)
+                       const rgw_owner& owner, bool reset, const std::string& tenant)
 {
   size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
 
@@ -36,7 +36,7 @@ int rgw_sync_all_stats(const DoutPrefixProvider *dpp,
         ldpp_dout(dpp, 0) << "ERROR: could not read bucket info: bucket=" << bucket << " ret=" << ret << dendl;
         continue;
       }
-      ret = bucket->sync_owner_stats(dpp, y, &ent);
+      ret = bucket->sync_owner_stats(dpp, y, reset, &ent);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;
