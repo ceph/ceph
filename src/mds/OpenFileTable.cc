@@ -760,6 +760,7 @@ void OpenFileTable::_read_omap_values(const std::string& key, unsigned idx,
       op.omap_get_header(&c->header_bl, &c->header_r);
     op.omap_get_vals(key, "", uint64_t(-1),
 		     &c->values, &c->more, &c->values_r);
+    mds->objecter->add_global_op_flags(mds->get_filer_flags());
     mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, nullptr, 0,
 			new C_OnFinisher(c, mds->finisher));
 }

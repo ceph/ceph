@@ -607,7 +607,19 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi,
 			if (!cmi->cmi_mons)
 				return -ENOMEM;
 			mon_addr_specified = true;
-		} else {
+		} else if (strcmp(data, "read_from_replica") == 0) {
+          if (!value || !*value) {
+            fprintf(stderr, "mount option read_from_replica requires a value.\n");
+            return -EINVAL;
+          }
+          if (strcmp(value, "no") == 0) {
+            cmi->cmi_flags |= 0;
+          } else if (strcmp(value, "balance") == 0) {
+            cmi->cmi_flags |= CEPH_FLAG_BALANCE_READS;
+          } else if (strcmp (value, "localize") == 0) {
+            cmi->cmi_flags |= CEPH_FLAG_LOCALIZE_READS;
+          }
+        } else {
 			/* unrecognized mount options, passing to kernel */
 			skip = false;
 		}
