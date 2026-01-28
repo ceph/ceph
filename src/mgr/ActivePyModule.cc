@@ -66,6 +66,7 @@ void ActivePyModule::notify(const std::string &notify_type, const std::string &n
 
   Gil gil(py_module->pMyThreadState, true);
 
+  auto _start = ceph::mono_clock::now();
   // Execute
   auto pValue = PyObject_CallMethod(pClassInstance,
        const_cast<char*>("notify"), const_cast<char*>("(ss)"),
@@ -73,6 +74,11 @@ void ActivePyModule::notify(const std::string &notify_type, const std::string &n
 
   if (pValue != NULL) {
     Py_DECREF(pValue);
+    if (py_module->perfcounter) {
+      auto duration = ceph::mono_clock::now() - _start;
+      auto usec = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+      py_module->perfcounter->inc(py_module->l_pym_notify_avg_usec, usec);
+    }
   } else {
     derr << get_name() << ".notify:" << dendl;
     derr << handle_pyerror(true, get_name(), "ActivePyModule::notify") << dendl;
@@ -98,7 +104,8 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
   PyFormatter f;
   log_entry.dump(&f);
   auto py_log_entry = f.get();
-
+  
+  auto  _start = ceph::mono_clock::now();
   // Execute
   auto pValue = PyObject_CallMethod(pClassInstance,
        const_cast<char*>("notify"), const_cast<char*>("(sN)"),
@@ -106,6 +113,11 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
 
   if (pValue != NULL) {
     Py_DECREF(pValue);
+    if (py_module->perfcounter) {
+      auto duration = ceph::mono_clock::now() - _start;
+      auto usec = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+      py_module->perfcounter->inc(py_module->l_pym_notify_avg_usec, usec);
+    }
   } else {
     derr << get_name() << ".notify_clog:" << dendl;
     derr << handle_pyerror(true, get_name(), "ActivePyModule::notify_clog") << dendl;
@@ -219,7 +231,7 @@ int ActivePyModule::handle_command(
   ceph_assert(m_session == nullptr);
   m_command_perms = module_command.perm;
   m_session = &session;
-
+  auto _start = ceph::mono_clock::now();
   auto pResult = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("_handle_command"), const_cast<char*>("s#O"),
       instr.c_str(), instr.length(), py_cmd);
@@ -230,6 +242,11 @@ int ActivePyModule::handle_command(
 
   int r = 0;
   if (pResult != NULL) {
+    if (py_module->perfcounter) {
+      auto duration = ceph::mono_clock::now() - _start;
+      auto usec = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+      py_module->perfcounter->inc(py_module->l_pym_cmd_avg_usec, usec);
+    }
     if (PyTuple_Size(pResult) != 3) {
       derr << "module '" << py_module->get_name() << "' command handler "
               "returned wrong type!" << dendl;
