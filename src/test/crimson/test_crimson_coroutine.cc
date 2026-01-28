@@ -14,6 +14,8 @@
 
 #include "test/crimson/gtest_seastar.h"
 
+using namespace std::chrono_literals;
+
 struct coroutine_test_t : public seastar_test_suite_t {
   struct interruption_state_t {
     bool interrupted = false;
@@ -259,6 +261,27 @@ TEST_F(coroutine_test_t, interruptible_coroutine_interrupted)
     p.set_value(0);
     auto awaited = co_await std::move(ret);
     EXPECT_EQ(awaited, 2);
+  });
+}
+
+TEST_F(coroutine_test_t, interruptible_coroutine_interrupted_repeat)
+{
+  run_scl([this]() -> seastar::future<> {
+    int count = 0;
+    auto ret = cwi(
+      [](auto) { return 2; },
+      [&count]() mutable -> interruptor::future<int> {
+        while (true) {
+          count++;
+          co_await interruptor::make_interruptible(seastar::sleep(100ms));
+          continue;
+        }
+      });
+    auto backgroud = seastar::sleep(3s).then([this]{interrupt();});
+    auto awaited = co_await std::move(ret);
+    EXPECT_EQ(awaited, 2);
+    // Make sure that there were a few iterations prior to interrupting..
+    EXPECT_GE(count, 10);
   });
 }
 
