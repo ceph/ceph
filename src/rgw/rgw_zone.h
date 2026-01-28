@@ -32,6 +32,7 @@ struct RGWZoneParams {
   rgw_pool topics_pool;
   rgw_pool account_pool;
   rgw_pool group_pool;
+  rgw_pool policy_pool;
   rgw_pool dedup_pool;
   rgw_pool bucket_logging_pool;
 
@@ -101,6 +102,7 @@ struct RGWZoneParams {
     encode(group_pool, bl);
     encode(restore_pool, bl);
     encode(dedup_pool, bl);
+    encode(policy_pool, bl);
     encode(bucket_logging_pool, bl);
     ENCODE_FINISH(bl);
   }
@@ -200,11 +202,6 @@ struct RGWZoneParams {
       decode(dedup_pool, bl);
     } else {
       dedup_pool = name + ".rgw.dedup";
-    }
-    if (struct_v >= 18) {
-      decode(bucket_logging_pool, bl);
-    } else {
-      bucket_logging_pool = log_pool.name + ":logging";
     }
     DECODE_FINISH(bl);
   }

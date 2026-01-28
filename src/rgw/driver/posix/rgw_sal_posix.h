@@ -628,6 +628,83 @@ public:
 				  std::string_view marker,
 				  uint32_t max_items,
 				  GroupList& listing) override { return -ENOTSUP; }
+  virtual int store_customer_managed_policy(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          const rgw::IAM::ManagedPolicyInfo& info,
+          bool exclusive) override { return -ENOTSUP; }
+  virtual int count_account_policies(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account_id,
+          uint32_t& count) override { return -ENOTSUP; }
+  virtual int load_customer_managed_policy(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account,
+          std::string_view name,
+          rgw::IAM::ManagedPolicyInfo& info) override { return -ENOTSUP; }
+  virtual int delete_customer_managed_policy(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account,
+          std::string_view name) override { return -ENOTSUP; }
+  virtual int list_customer_mananged_policies(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account_id,
+          rgw::IAM::Scope scope,
+          bool only_attached,
+          std::string_view path_prefix,
+          rgw::IAM::PolicyUsageFilter policy_usage_filter,
+          std::string_view marker,
+          uint32_t max_items,
+          rgw::IAM::PolicyList& listing) override { return -ENOTSUP; }
+  virtual int create_policy_version(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account,
+          std::string_view policy_name,
+          const std::string_view policy_document,
+          bool set_as_default,
+          std::string &version_id,
+          ceph::real_time &create_date,
+          bool exclusive) override { return -ENOTSUP; }
+  virtual int delete_policy_version(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account,
+          std::string_view policy_name,
+          std::string_view version_id,
+          bool exclusive) override { return -ENOTSUP; }
+  virtual int get_policy_version(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account,
+          std::string_view policy_name,
+          std::string_view version_id,
+          rgw::IAM::PolicyVersion& policy_version) override { return -ENOTSUP; }
+  virtual int set_default_policy_version(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account,
+          std::string_view policy_name,
+          std::string_view version_id) override { return -ENOTSUP; }
+  virtual int list_policy_versions(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account_id,
+          std::string_view policy_name,
+          std::string_view marker,
+          uint32_t max_items,
+          rgw::IAM::VersionList& listing) override { return -ENOTSUP; }
+  virtual int tag_policy(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account,
+          std::string_view policy_name,
+          std::multimap<std::string, std::string>& tags) override { return -ENOTSUP; }
+  virtual int untag_policy(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account,
+          std::string_view policy_name,
+          std::vector<std::string>& keys) override { return -ENOTSUP; }
+  virtual int list_policy_tags(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account_id,
+          std::string_view policy_name,
+          std::string_view marker,
+          uint32_t max_items,
+          rgw::IAM::PolicyTagList& listing) override { return -ENOTSUP; }
 
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
