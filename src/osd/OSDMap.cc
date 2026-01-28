@@ -6974,6 +6974,16 @@ protected:
     }
   }
 
+  struct common_stat_t {
+    int64_t kb = 0;
+		int64_t kb_used = 0;
+		int64_t kb_used_data = 0;
+		int64_t kb_used_omap = 0;
+		int64_t kb_used_meta = 0;
+		int64_t kb_avail = 0;
+		int64_t kb_est_avail = 0;
+		int64_t kb_est_capac = 0;
+  };
   void dump_item(const CrushTreeDumper::Item &qi, F *f) override {
     if (!tree && (qi.is_bucket() || dumped_osds.count(qi.id)))
       return;
@@ -6983,13 +6993,11 @@ protected:
     if (!qi.is_bucket())
       dumped_osds.insert(qi.id);
     float reweight = qi.is_bucket() ? -1 : osdmap->get_weightf(qi.id);
-    int64_t kb = 0, kb_used = 0, kb_used_data = 0, kb_used_omap = 0,
-      kb_used_meta = 0, kb_avail = 0;
+    common_stat_t cs;
     double util = 0;
-    if (get_bucket_utilization(qi.id, &kb, &kb_used, &kb_used_data,
-			       &kb_used_omap, &kb_used_meta, &kb_avail))
-      if (kb_used && kb)
-        util = 100.0 * (double)kb_used / (double)kb;
+    if (get_bucket_utilization(qi.id, cs))
+      if (cs.kb_used && cs.kb)
+        util = 100.0 * (double)cs.kb_used / (double)cs.kb;
 
     double var = 1.0;
     if (average_util)
@@ -6997,9 +7005,7 @@ protected:
 
     size_t num_pgs = qi.is_bucket() ? 0 : pgmap.get_num_pg_by_osd(qi.id);
 
-    dump_item(qi, reweight, kb, kb_used,
-	      kb_used_data, kb_used_omap, kb_used_meta,
-	      kb_avail, util, var, num_pgs, f);
+    dump_item(qi, reweight, cs, util, var, num_pgs, f);
 
     if (!qi.is_bucket() && reweight > 0) {
       if (min_var < 0 || var < min_var)
@@ -7013,15 +7019,9 @@ protected:
       sum += reweight;
     }
   }
-
   virtual void dump_item(const CrushTreeDumper::Item &qi,
 			 float &reweight,
-			 int64_t kb,
-			 int64_t kb_used,
-			 int64_t kb_used_data,
-			 int64_t kb_used_omap,
-			 int64_t kb_used_meta,
-			 int64_t kb_avail,
+			 const common_stat_t& cs,
 			 double& util,
 			 double& var,
 			 const size_t num_pgs,
@@ -7038,74 +7038,52 @@ protected:
            osdmap->get_weight(i) == 0 ||
           !should_dump(i))
 	continue;
-      int64_t kb_i, kb_used_i, kb_used_data_i, kb_used_omap_i, kb_used_meta_i,
-	kb_avail_i;
-      if (get_osd_utilization(i, &kb_i, &kb_used_i, &kb_used_data_i,
-			      &kb_used_omap_i, &kb_used_meta_i, &kb_avail_i)) {
-	kb += kb_i;
-	kb_used += kb_used_i;
+      common_stat_t cs;
+      if (get_osd_utilization(i, cs)) {
+	kb += cs.kb;
+	kb_used += cs.kb_used;
       }
     }
     return kb > 0 ? 100.0 * (double)kb_used / (double)kb : 0;
   }
 
-  bool get_osd_utilization(int id, int64_t* kb, int64_t* kb_used,
-			   int64_t* kb_used_data,
-			   int64_t* kb_used_omap,
-			   int64_t* kb_used_meta,
-			   int64_t* kb_avail) const {
+  bool get_osd_utilization(int id, common_stat_t& cs) const {
     const osd_stat_t *p = pgmap.get_osd_stat(id);
     if (!p) return false;
-    *kb = p->statfs.kb();
-    *kb_used = p->statfs.kb_used_raw();
-    *kb_used_data = p->statfs.kb_used_data();
-    *kb_used_omap = p->statfs.kb_used_omap();
-    *kb_used_meta = p->statfs.kb_used_internal_metadata();
-    *kb_avail = p->statfs.kb_avail();
-    
+    cs.kb = p->statfs.kb();
+    cs.kb_used = p->statfs.kb_used_raw();
+    cs.kb_used_data = p->statfs.kb_used_data();
+    cs.kb_used_omap = p->statfs.kb_used_omap();
+    cs.kb_used_meta = p->statfs.kb_used_internal_metadata();
+    cs.kb_avail = p->statfs.kb_avail();
+    cs.kb_est_avail = p->statfs.kb_est_avail();
+    cs.kb_est_capac = p->statfs.kb_est_capac();
     return true;
   }
 
-  bool get_bucket_utilization(int id, int64_t* kb, int64_t* kb_used,
-			      int64_t* kb_used_data,
-			      int64_t* kb_used_omap,
-			      int64_t* kb_used_meta,
-			      int64_t* kb_avail) const {
+  bool get_bucket_utilization(int id, common_stat_t& cs) const {
     if (id >= 0) {
       if (osdmap->is_out(id) || !should_dump(id)) {
-        *kb = 0;
-        *kb_used = 0;
-	*kb_used_data = 0;
-	*kb_used_omap = 0;
-	*kb_used_meta = 0;
-        *kb_avail = 0;
+        cs = common_stat_t();
         return true;
       }
-      return get_osd_utilization(id, kb, kb_used, kb_used_data,
-				 kb_used_omap, kb_used_meta, kb_avail);
+      return get_osd_utilization(id, cs);
     }
 
-    *kb = 0;
-    *kb_used = 0;
-    *kb_used_data = 0;
-    *kb_used_omap = 0;
-    *kb_used_meta = 0;
-    *kb_avail = 0;
-
+    cs = common_stat_t();
     for (int k = osdmap->crush->get_bucket_size(id) - 1; k >= 0; k--) {
       int item = osdmap->crush->get_bucket_item(id, k);
-      int64_t kb_i = 0, kb_used_i = 0, kb_used_data_i = 0,
-	kb_used_omap_i = 0, kb_used_meta_i = 0, kb_avail_i = 0;
-      if (!get_bucket_utilization(item, &kb_i, &kb_used_i,
-				  &kb_used_data_i, &kb_used_omap_i,
-				  &kb_used_meta_i, &kb_avail_i))
+      common_stat_t cs_i;
+      if (!get_bucket_utilization(item, cs_i))
 	return false;
-      *kb += kb_i;
-      *kb_used += kb_used_i;
-      *kb_used_data += kb_used_data_i;
-      *kb_used_omap += kb_used_omap_i;
-      *kb_used_meta += kb_used_meta_i;
-      *kb_avail += kb_avail_i;
+      cs.kb += cs_i.kb;
+      cs.kb_used += cs_i.kb_used;
+      cs.kb_used_data += cs_i.kb_used_data;
+      cs.kb_used_omap += cs_i.kb_used_omap;
+      cs.kb_used_meta += cs_i.kb_used_meta;
+      cs.kb_avail += cs_i.kb_avail;
+      cs.kb_est_avail += cs_i.kb_est_avail;
+      cs.kb_est_capac += cs_i.kb_est_capac;
     }
     return true;
   }
@@ -7146,6 +7124,8 @@ public:
     tbl->define_column("META", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("%USE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("EST AVAIL", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("EST CAPAC", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("VAR", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("PGS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("STATUS", TextTable::LEFT, TextTable::RIGHT);
@@ -7167,6 +7147,8 @@ public:
 	 << byte_u_t(sum.statfs.internal_metadata)
 	 << byte_u_t(sum.statfs.available)
 	 << lowprecision_t(average_util)
+	 << byte_u_t(sum.statfs.est_available)
+	 << byte_u_t(sum.statfs.est_capacity)
 	 << ""
 	 << TextTable::endrow;
   }
@@ -7181,12 +7163,7 @@ protected:
   using OSDUtilizationDumper<TextTable>::dump_item;
   void dump_item(const CrushTreeDumper::Item &qi,
 			 float &reweight,
-			 int64_t kb,
-			 int64_t kb_used,
-			 int64_t kb_used_data,
-			 int64_t kb_used_omap,
-			 int64_t kb_used_meta,
-			 int64_t kb_avail,
+			 const common_stat_t& cs,
 			 double& util,
 			 double& var,
 			 const size_t num_pgs,
@@ -7198,13 +7175,15 @@ protected:
 	 << c
 	 << weightf_t(qi.weight)
 	 << weightf_t(reweight)
-	 << byte_u_t(kb << 10)
-	 << byte_u_t(kb_used << 10)
-	 << byte_u_t(kb_used_data << 10)
-	 << byte_u_t(kb_used_omap << 10)
-	 << byte_u_t(kb_used_meta << 10)
-	 << byte_u_t(kb_avail << 10)
+	 << byte_u_t(cs.kb << 10)
+	 << byte_u_t(cs.kb_used << 10)
+	 << byte_u_t(cs.kb_used_data << 10)
+	 << byte_u_t(cs.kb_used_omap << 10)
+	 << byte_u_t(cs.kb_used_meta << 10)
+	 << byte_u_t(cs.kb_avail << 10)
 	 << lowprecision_t(util)
+	 << byte_u_t(cs.kb_est_avail << 10)
+	 << byte_u_t(cs.kb_est_capac << 10)
 	 << lowprecision_t(var);
 
     if (qi.is_bucket()) {
@@ -7284,12 +7263,7 @@ protected:
   using OSDUtilizationDumper<Formatter>::dump_item;
   void dump_item(const CrushTreeDumper::Item &qi,
 		 float &reweight,
-		 int64_t kb,
-		 int64_t kb_used,
-		 int64_t kb_used_data,
-		 int64_t kb_used_omap,
-		 int64_t kb_used_meta,
-		 int64_t kb_avail,
+		 const common_stat_t& cs,
 		 double& util,
 		 double& var,
 		 const size_t num_pgs,
@@ -7297,13 +7271,15 @@ protected:
     f->open_object_section("item");
     CrushTreeDumper::dump_item_fields(crush, weight_set_names, qi, f);
     f->dump_float("reweight", reweight);
-    f->dump_int("kb", kb);
-    f->dump_int("kb_used", kb_used);
-    f->dump_int("kb_used_data", kb_used_data);
-    f->dump_int("kb_used_omap", kb_used_omap);
-    f->dump_int("kb_used_meta", kb_used_meta);
-    f->dump_int("kb_avail", kb_avail);
+    f->dump_int("kb", cs.kb);
+    f->dump_int("kb_used", cs.kb_used);
+    f->dump_int("kb_used_data", cs.kb_used_data);
+    f->dump_int("kb_used_omap", cs.kb_used_omap);
+    f->dump_int("kb_used_meta", cs.kb_used_meta);
+    f->dump_int("kb_avail", cs.kb_avail);
     f->dump_float("utilization", util);
+    f->dump_int("kb_est_avail", cs.kb_est_avail);
+    f->dump_int("kb_est_capac", cs.kb_est_capac);
     f->dump_float("var", var);
     f->dump_unsigned("pgs", num_pgs);
     if (!qi.is_bucket()) {
@@ -7332,6 +7308,8 @@ public:
     f->dump_int("total_kb_used_meta", s.kb_used_internal_metadata());
     f->dump_int("total_kb_avail", s.kb_avail());
     f->dump_float("average_utilization", average_util);
+    f->dump_int("kb_est_avail", s.kb_est_avail());
+    f->dump_int("kb_est_capac", s.kb_est_capac());
     f->dump_float("min_var", min_var);
     f->dump_float("max_var", max_var);
     f->dump_float("dev", dev());
