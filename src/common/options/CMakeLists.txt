@@ -108,6 +108,9 @@ add_library(legacy-option-headers INTERFACE)
 target_sources(legacy-option-headers
   PRIVATE
     ${legacy_options_headers})
+add_dependencies(common-options-objs
+  legacy-option-headers
+)
 
 include(AddCephTest)
 add_ceph_test(validate-options
