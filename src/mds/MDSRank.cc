@@ -4057,6 +4057,15 @@ epoch_t MDSRank::get_osd_epoch() const
   return objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch));
 }
 
+std::string MDSRank::get_path(inodeno_t ino) {
+  std::lock_guard locker(mds_lock);
+  CInode* inode = mdcache->get_inode(ino);
+  if (!inode) return {};
+  std::string res;
+  inode->make_path_string(res);
+  return res;
+}
+
 std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     const noexcept
 {
