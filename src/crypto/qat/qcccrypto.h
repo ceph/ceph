@@ -67,6 +67,12 @@ class QccCrypto {
                           Cpa8U *key,
                           CpaCySymCipherDirection op_type,
                           optional_yield y);
+    bool perform_op_gcm(unsigned char* out, const unsigned char* in, size_t size,
+                          Cpa8U *iv,
+                          Cpa8U *key,
+                          unsigned char* tag,
+                          CpaCySymCipherDirection op_type,
+                          optional_yield y);
 
   private:
     // Currently only supporting AES_256_CBC.
@@ -74,6 +80,9 @@ class QccCrypto {
     static const size_t AES_256_IV_LEN = 16;
     static const size_t AES_256_KEY_SIZE = 32;
     static const size_t MAX_NUM_SYM_REQ_BATCH = 32;
+
+    static const size_t AES_GCM_IV_LEN = 12;
+    static const size_t AES_GCM_TAG_LEN = 16;
 
     /*
      * Struct to hold an instance of QAT to handle the crypto operations. These
@@ -109,10 +118,12 @@ class QccCrypto {
     struct QCCOPMEM {
       // Op common  items
       bool is_mem_alloc;
+      bool tag_mem_alloc;
       bool op_complete;
       CpaCySymDpOpData *sym_op_data[MAX_NUM_SYM_REQ_BATCH];
       Cpa8U *src_buff[MAX_NUM_SYM_REQ_BATCH];
       Cpa8U *iv_buff[MAX_NUM_SYM_REQ_BATCH];
+      Cpa8U *tag_buff[MAX_NUM_SYM_REQ_BATCH];
     } *qcc_op_mem;
 
     /*
@@ -190,10 +201,22 @@ class QccCrypto {
                       Cpa32U ivLen,
                       optional_yield y);
 
+    bool symPerformOpGcm(int avail_inst,
+                         CpaCySymSessionCtx sessionCtx,
+                         const Cpa8U *pSrc,
+                         Cpa8U *pDst,
+                         Cpa32U size,
+                         Cpa8U *pIv,
+                         Cpa32U ivLen,
+                         unsigned char* tag,
+                         CpaCySymCipherDirection op_type,
+                         optional_yield y);
+
     CpaStatus initSession(CpaInstanceHandle cyInstHandle,
                           CpaCySymSessionCtx *sessionCtx,
                           Cpa8U *pCipherKey,
-                          CpaCySymCipherDirection cipherDirection);
+                          CpaCySymCipherDirection cipherDirection,
+                          CpaCySymCipherAlgorithm cipherAlg = CPA_CY_SYM_CIPHER_AES_CBC);
 
     CpaStatus updateSession(CpaCySymSessionCtx sessionCtx,
                             Cpa8U *pCipherKey,
@@ -207,10 +230,12 @@ class QatCrypto {
   boost::asio::any_io_executor ex;
   boost::asio::any_completion_handler<void(CpaStatus stat)> completion_handler;
   std::atomic<std::size_t> count;
+  std::atomic<CpaStatus> final_status;
  public:
+  void note_result(CpaStatus status, CpaBoolean verifyResult);
   void complete();
 
-  QatCrypto (boost::asio::any_io_executor ex) : ex(ex), count(0) {}
+  QatCrypto (boost::asio::any_io_executor ex) : ex(ex), count(0), final_status(CPA_STATUS_SUCCESS) {}
   QatCrypto (const QatCrypto &qat) = delete;
   QatCrypto (QatCrypto &&qat) = delete;
   void operator=(const QatCrypto &qat) = delete;

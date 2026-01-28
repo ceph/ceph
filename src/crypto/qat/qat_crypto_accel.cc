@@ -45,3 +45,29 @@ bool QccCryptoAccel::cbc_decrypt_batch(unsigned char* out, const unsigned char* 
       const_cast<unsigned char *>(&key[0]),
       CPA_CY_SYM_CIPHER_DIRECTION_DECRYPT, y);
 }
+
+bool QccCryptoAccel::gcm_encrypt(unsigned char* out, const unsigned char* in, size_t size,
+        const unsigned char (&iv)[AES_GCM_IVSIZE],
+        const unsigned char (&key)[AES_256_KEYSIZE],
+        unsigned char* tag,
+        optional_yield y) {
+
+  return qcccrypto.perform_op_gcm(out, in, size,
+      const_cast<unsigned char *>(&iv[0]),
+      const_cast<unsigned char *>(&key[0]),
+      tag,
+      CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT, y);
+}
+
+bool QccCryptoAccel::gcm_decrypt(unsigned char* out, const unsigned char* in, size_t size,
+        const unsigned char (&iv)[AES_GCM_IVSIZE],
+        const unsigned char (&key)[AES_256_KEYSIZE],
+        unsigned char* tag,
+        optional_yield y) {
+
+  return qcccrypto.perform_op_gcm(out, in, size,
+      const_cast<unsigned char *>(&iv[0]),
+      const_cast<unsigned char *>(&key[0]),
+      tag,
+      CPA_CY_SYM_CIPHER_DIRECTION_DECRYPT, y);
+}

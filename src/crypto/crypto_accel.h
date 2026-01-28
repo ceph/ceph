@@ -30,6 +30,8 @@ class CryptoAccel {
 
   static const int AES_256_IVSIZE = 128/8;
   static const int AES_256_KEYSIZE = 256/8;
+  static const int AES_GCM_IVSIZE = 96/8;
+  static const int AES_GCM_TAGSIZE = 16;
   virtual bool cbc_encrypt(unsigned char* out, const unsigned char* in, size_t size,
                    const unsigned char (&iv)[AES_256_IVSIZE],
                    const unsigned char (&key)[AES_256_KEYSIZE],
@@ -45,6 +47,16 @@ class CryptoAccel {
   virtual bool cbc_decrypt_batch(unsigned char* out, const unsigned char* in, size_t size,
                    const unsigned char iv[][AES_256_IVSIZE],
                    const unsigned char (&key)[AES_256_KEYSIZE],
+                   optional_yield y) = 0;
+  virtual bool gcm_encrypt(unsigned char* out, const unsigned char* in, size_t size,
+                   const unsigned char (&iv)[AES_GCM_IVSIZE],
+                   const unsigned char (&key)[AES_256_KEYSIZE],
+                   unsigned char* tag,
+                   optional_yield y) = 0;
+  virtual bool gcm_decrypt(unsigned char* out, const unsigned char* in, size_t size,
+                   const unsigned char (&iv)[AES_GCM_IVSIZE],
+                   const unsigned char (&key)[AES_256_KEYSIZE],
+                   unsigned char* tag,
                    optional_yield y) = 0;
 };
 #endif
