@@ -19,6 +19,15 @@ export interface NvmeofSubsystem {
   namespace_count: number;
   subtype: string;
   max_namespaces: number;
+  allow_any_host?: boolean;
+  enable_ha?: boolean;
+  gw_group?: string;
+  initiator_count?: number;
+}
+
+export interface NvmeofSubsystemData extends NvmeofSubsystem {
+  auth?: string;
+  hosts?: number;
 }
 
 export interface NvmeofSubsystemInitiator {

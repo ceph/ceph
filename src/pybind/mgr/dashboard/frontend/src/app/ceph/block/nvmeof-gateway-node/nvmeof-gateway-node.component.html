@@ -1,21 +1,31 @@
-
-<cd-table
-  #table
-  [data]="hosts"
-  [columns]="columns"
-  columnMode="flex"
-  (fetchData)="getHosts($event)"
-  selectionType="multiClick"
-  [searchableObjects]="true"
-  [serverSide]="false"
-  [maxLimit]="25"
-  (updateSelection)="updateSelection($event)"
-  emptyStateTitle="No nodes available"
-  i18n-emptyStateTitle
-  emptyStateMessage="Add your first gateway node to start using NVMe over Fabrics. Nodes provide the resources required to expose NVMe/TCP block storage."
-  i18n-emptyStateMessage
->
-</cd-table>
+<div class="cds-mt-5">
+  <cd-table
+    #table
+    [data]="hosts"
+    [columns]="columns"
+    columnMode="flex"
+    (fetchData)="getHosts($event)"
+    selectionType="single"
+    [searchableObjects]="true"
+    [serverSide]="false"
+    [maxLimit]="25"
+    identifier="hostname"
+    forceIdentifier="true"
+    [autoReload]="false"
+    (updateSelection)="updateSelection($event)"
+    emptyStateTitle="No nodes available"
+    i18n-emptyStateTitle
+    emptyStateMessage="Add your first gateway node to start using NVMe over Fabrics. Nodes provide the resources required to expose NVMe/TCP block storage."
+    i18n-emptyStateMessage
+  >
+    <cd-table-actions
+      class="table-actions"
+      [permission]="permission"
+      [selection]="selection"
+      [tableActions]="tableActions">
+    </cd-table-actions>
+  </cd-table>
+</div>
 
 <ng-template
   #addrTpl
@@ -43,8 +53,10 @@
 
 </ng-template>
 
-<ng-template #labelsTpl
-             let-value="data.value">
+<ng-template
+  #labelsTpl
+  let-value="data.value"
+>
 @if (value && value.length > 0) {
   <cds-tag *ngFor="let label of value"
            class="tag tag-dark">{{ label }}</cds-tag>

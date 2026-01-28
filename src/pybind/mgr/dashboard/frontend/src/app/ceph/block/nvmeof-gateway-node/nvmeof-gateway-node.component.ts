@@ -1,14 +1,15 @@
 import {
   Component,
   EventEmitter,
+  Input,
   OnDestroy,
   OnInit,
   Output,
   TemplateRef,
   ViewChild
 } from '@angular/core';
-import { forkJoin, Subject } from 'rxjs';
-import { map, mergeMap, takeUntil } from 'rxjs/operators';
+import { forkJoin, Subject, Subscription } from 'rxjs';
+import { finalize, mergeMap } from 'rxjs/operators';
 
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
@@ -25,7 +26,9 @@ import { Permission } from '~/app/shared/models/permissions';
 import { Host } from '~/app/shared/models/host.interface';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
 
 import _ from 'lodash';
 
@@ -56,8 +59,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
 
   @Output() selectionChange = new EventEmitter<CdTableSelection>();
   @Output() hostsLoaded = new EventEmitter<number>();
-
-  usedHostnames: Set<string> = new Set();
+  @Output() requestRefresh = new EventEmitter<void>();
 
   permission: Permission;
   columns: CdTableColumn[] = [];
@@ -71,17 +73,26 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   count = 5;
   orchStatus: OrchestratorStatus;
   private destroy$ = new Subject<void>();
+  private sub = new Subscription();
+  @Input() groupName!: string;
+
+  serviceSpec!: CephServiceSpec;
+  usedHostnames: Set<string> = new Set();
+
+  hasAvailableHosts = false;
 
   constructor(
     private authStorageService: AuthStorageService,
     private hostService: HostService,
     private orchService: OrchestratorService,
-    private nvmeofService: NvmeofService
+    private nvmeofService: NvmeofService,
+    private modalService: ModalCdsService
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
 
   ngOnInit(): void {
+    this.setTableActions();
     this.columns = [
       {
         name: $localize`Hostname`,
@@ -110,18 +121,59 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     ];
   }
 
+  private setTableActions() {
+    this.tableActions = [
+      {
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.addGateway(),
+        name: $localize`Add`,
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
+        disable: () => !this.hasAvailableHosts
+      },
+      {
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.removeGateway(),
+        name: $localize`Remove`,
+        disable: (selection: CdTableSelection) => !selection.hasSelection
+      }
+    ];
+  }
+
+  addGateway(): void {
+    const modalRef = this.modalService.show(NvmeofGatewayNodeAddModalComponent, {
+      groupName: this.groupName,
+      usedHostnames: Array.from(this.usedHostnames),
+      serviceSpec: this.serviceSpec
+    });
+    modalRef.groupName = this.groupName;
+    modalRef.usedHostnames = Array.from(this.usedHostnames);
+    modalRef.serviceSpec = this.serviceSpec;
+
+    modalRef.gatewayAdded.subscribe(() => {
+      this.requestRefresh.emit();
+      this.table.refreshBtn();
+    });
+  }
+
+  removeGateway(): void {
+    // TODO: Logic to remove gateway
+  }
+
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    this.sub.unsubscribe();
+  }
+
+  getSelectedHostnames(): string[] {
+    return this.selection.selected.map((host: Host) => host.hostname);
   }
 
   updateSelection(selection: CdTableSelection): void {
     this.selection = selection;
     this.selectionChange.emit(selection);
-  }
-
-  getSelectedHostnames(): string[] {
-    return this.selection.selected.map((host: Host) => host.hostname);
   }
 
   getHosts(context: CdTableFetchDataContext): void {
@@ -131,67 +183,84 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     if (this.tableContext == null) {
       this.tableContext = new CdTableFetchDataContext(() => undefined);
     }
-    if (this.isLoadingHosts) {
-      return;
-    }
+
     this.isLoadingHosts = true;
 
-    forkJoin([this.buildUsedHostsObservable(), this.buildHostListObservable()])
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(
-        ([usedHostnames, hostList]: [Set<string>, Host[]]) =>
-          this.processHostResults(usedHostnames, hostList),
-        () => {
+    if (this.sub) {
+      this.sub.unsubscribe();
+    }
+
+    // Self-contained fetching: Get gateway groups AND hosts
+    this.sub = forkJoin({
+      groups: this.nvmeofService.listGatewayGroups(),
+      hosts: this.orchService.status().pipe(
+        mergeMap((orchStatus) => {
+          this.orchStatus = orchStatus;
+          const factsAvailable = this.hostService.checkHostsFactsAvailable(orchStatus);
+          return this.hostService.list(this.tableContext?.toParams(), factsAvailable.toString());
+        })
+      )
+    })
+      .pipe(
+        finalize(() => {
           this.isLoadingHosts = false;
-          context.error();
+        })
+      )
+      .subscribe({
+        next: (result) => {
+          const groups = result.groups;
+          const hostList = result.hosts;
+          const groupList = groups?.[0] ?? [];
+
+          const allUsedHostnames = new Set<string>();
+          groupList.forEach((group: CephServiceSpec) => {
+            const hosts = group.placement?.hosts || (group.spec as any)?.placement?.hosts || [];
+            hosts.forEach((hostname: string) => allUsedHostnames.add(hostname));
+          });
+
+          this.usedHostnames = allUsedHostnames;
+
+          // Check if there are any available hosts globally (not used by any group)
+          this.hasAvailableHosts = hostList.some(
+            (host: Host) => !this.usedHostnames.has(host.hostname)
+          );
+          this.setTableActions();
+
+          const currentGroup = groupList.find((g: CephServiceSpec) => {
+            return (
+              g.service_id === `nvmeof.${this.groupName}` ||
+              g.service_id.endsWith(`.${this.groupName}`)
+            );
+          });
+
+          this.serviceSpec = currentGroup;
+
+          if (!this.serviceSpec) {
+            this.hosts = [];
+          } else {
+            // 3. Filter Table Hosts (Current Group Only)
+            const placementHosts =
+              this.serviceSpec.placement?.hosts ||
+              (this.serviceSpec.spec as any)?.placement?.hosts ||
+              [];
+            const currentGroupHosts = new Set<string>(placementHosts);
+
+            this.hosts = hostList
+              .map((host: Host) => ({
+                ...host,
+                status: host.status || HostStatus.AVAILABLE
+              }))
+              .filter((host: Host) => {
+                return currentGroupHosts.has(host.hostname);
+              });
+          }
+
+          this.count = this.hosts.length;
+          this.hostsLoaded.emit(this.count);
+        },
+        error: () => {
+          if (context) context.error();
         }
-      );
-  }
-
-  private buildUsedHostsObservable() {
-    return this.nvmeofService.listGatewayGroups().pipe(
-      map((groups: CephServiceSpec[][]) => {
-        const usedHosts = new Set<string>();
-        const groupList = groups?.[0] ?? [];
-        groupList.forEach((group: CephServiceSpec) => {
-          const hosts = group.placement?.hosts || [];
-          hosts.forEach((hostname: string) => usedHosts.add(hostname));
-        });
-        return usedHosts;
-      })
-    );
-  }
-
-  private buildHostListObservable() {
-    return this.orchService.status().pipe(
-      mergeMap((orchStatus) => {
-        this.orchStatus = orchStatus;
-        const factsAvailable = this.hostService.checkHostsFactsAvailable(orchStatus);
-        return this.hostService.list(this.tableContext?.toParams(), factsAvailable.toString());
-      })
-    );
-  }
-
-  private processHostResults(usedHostnames: Set<string>, hostList: Host[]) {
-    this.usedHostnames = usedHostnames;
-    this.hosts = (hostList || [])
-      .map((host: Host) => ({
-        ...host,
-        status: host.status || HostStatus.AVAILABLE
-      }))
-      .filter((host: Host) => {
-        const isNotUsed = !this.usedHostnames.has(host.hostname);
-        const status = host.status || HostStatus.AVAILABLE;
-        const isAvailable = status === HostStatus.AVAILABLE || status === HostStatus.RUNNING;
-        return isNotUsed && isAvailable;
       });
-
-    this.isLoadingHosts = false;
-    this.count = this.hosts.length;
-    this.hostsLoaded.emit(this.count);
-  }
-
-  checkHostsFactsAvailable(): boolean {
-    return this.hostService.checkHostsFactsAvailable(this.orchStatus);
   }
 }

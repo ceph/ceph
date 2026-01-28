@@ -1,0 +1,30 @@
+<div class="cds-mt-5">
+  <cd-table
+    [data]="subsystems"
+    [columns]="columns"
+    columnMode="flex"
+    selectionType="none"
+    identifier="nqn"
+    [forceIdentifier]="true"
+    [serverSide]="false"
+    [maxLimit]="25"
+    (updateSelection)="updateSelection($event)"
+    emptyStateTitle="No subsystems linked yet."
+    emptyStateMessage="Once a subsystem is associated, it will appear in this list."
+    [emptyStateIcon]="iconType.emptySearch"
+  >
+  </cd-table>
+</div>
+
+<ng-template #authTpl
+             let-row="data.row">
+  <div [cdsStack]="'horizontal'"
+       gap="4">
+  @if (row.auth === authType.NO_AUTH) {
+    <cd-icon type="warning"></cd-icon>
+  } @else {
+    <cd-icon type="success"></cd-icon>
+  }
+  <span class="cds-ml-3">{{ row.auth }}</span>
+  </div>
+</ng-template>

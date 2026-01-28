@@ -55,4 +55,8 @@ export class URLBuilderService {
   getReconnect(item: string, absolute = true): string {
     return this.getURL(URLVerbs.RECONNECT, absolute, item);
   }
+
+  getView(absolute = true): string {
+    return this.getURL(URLVerbs.VIEW, absolute);
+  }
 }
