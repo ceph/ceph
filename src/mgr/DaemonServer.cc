@@ -567,19 +567,22 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
       // ensure it's kept up-to-date
       auto metadata = m->daemon_metadata;
       if (key.type == "osd") {
-	try {
-	  int osd_id = std::stoi(key.name);
-	  cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	    if (osdmap.crush) {
-	      auto loc = osdmap.crush->get_full_location(osd_id);
-	      auto it = loc.find("host");
-	      if (it != loc.end()) {
-		metadata["hostname"] = it->second;
-	      }
-	    }
-	  });
-	} catch (const std::exception&) {
-	}
+        try {
+          int osd_id = std::stoi(key.name);
+          cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+            if (osdmap.crush) {
+              auto loc = osdmap.crush->get_full_location(osd_id);
+              auto it = loc.find("host");
+              if (it != loc.end()) {
+          metadata["hostname"] = it->second;
+              }
+            }
+          });
+        } catch (const std::exception& e) {
+            dout(20) << "DaemonServer: cannot derive CRUSH hostname for "
+                    << key.type << "." << key.name
+                    << " from OSDMap: " << e.what() << dendl;
+        }
       }
       daemon_state.update_metadata(daemon, metadata);
     }
@@ -678,9 +681,12 @@ bool DaemonServer::handle_update(const ref_t<MMgrUpdate>& m)
 		}
 	      }
 	    });
-	  } catch (const std::exception&) {
-	  }
-	}
+	  } catch (const std::exception& e) {
+      dout(20) << "DaemonServer: cannot derive CRUSH hostname for "
+               << key.type << "." << key.name
+               << " from OSDMap: " << e.what() << dendl;
+	    }
+    }
         daemon_state.update_metadata(daemon, metadata);
       }
     }
