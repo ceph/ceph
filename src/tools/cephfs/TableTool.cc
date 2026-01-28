@@ -35,8 +35,8 @@ using namespace std;
 void TableTool::usage()
 {
   std::cout << "Usage: \n"
-    << "  cephfs-table-tool <all|[mds rank]> <reset|show> <session|snap|inode>"
-    << "  cephfs-table-tool <all|[mds rank]> <take_inos> <max_ino>"
+    << "  cephfs-table-tool <all|[mds rank]> <reset|show> <session|snap|inode>\n"
+    << "  cephfs-table-tool <all|[mds rank]> <take_inos> <max_ino>\n"
     << std::endl;
 
   generic_client_usage();
