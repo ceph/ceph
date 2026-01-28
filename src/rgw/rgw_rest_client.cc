@@ -466,8 +466,6 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
     return tl::unexpected(-ERR_SERVICE_UNAVAILABLE);
   }
 
-  response.append((char)0); /* NULL terminate response */
-
   if (outbl) {
     *outbl = std::move(response);
   }
