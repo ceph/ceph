@@ -526,6 +526,8 @@ MDSRank::MDSRank(
 
   _heartbeat_reset_grace = g_conf().get_val<uint64_t>("mds_heartbeat_reset_grace");
   heartbeat_grace = g_conf().get_val<double>("mds_heartbeat_grace");
+  mds_dmclock_scheduler = new MDSDmclockScheduler(this);
+
   op_tracker.set_complaint_and_threshold(cct->_conf->mds_op_complaint_time,
                                          cct->_conf->mds_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->mds_op_history_size,
@@ -553,6 +555,7 @@ MDSRank::~MDSRank()
 
   if (server) { delete server; server = 0; }
   if (locker) { delete locker; locker = 0; }
+  if (mds_dmclock_scheduler) { delete mds_dmclock_scheduler; mds_dmclock_scheduler = 0; }
 
   if (logger) {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
@@ -2122,6 +2125,8 @@ void MDSRank::active_start()
   dout(1) << "active_start" << dendl;
 
   m_is_active = true;
+  mds_dmclock_scheduler->set_mds_is_active(true);
+  mds_dmclock_scheduler->try_enable_qos_feature();
 
   if (last_state == MDSMap::STATE_CREATING ||
       last_state == MDSMap::STATE_STARTING) {
@@ -2241,6 +2246,9 @@ void MDSRank::boot_create()
 void MDSRank::stopping_start()
 {
   dout(2) << "Stopping..." << dendl;
+
+  mds_dmclock_scheduler->try_disable_qos_feature();
+  mds_dmclock_scheduler->set_mds_is_active(false);
 
   if (mdsmap->get_num_in_mds() == 1 && !sessionmap.empty()) {
     std::vector<Session*> victims;
@@ -3117,6 +3125,18 @@ void MDSRankDispatcher::handle_asok_command(
      dout(10) << "dump_stray wait" << dendl;
     }
     return;
+  } else if (command == "dump qos") {
+    std::lock_guard l(mds_lock);
+    mds_dmclock_scheduler->dump(f);
+  } else if (command == "qos set") {
+    std::lock_guard l(mds_lock);
+    mds_dmclock_scheduler->process_asok_qos_set(cmdmap, *css, f);
+  } else if (command == "qos rm") {
+    std::lock_guard l(mds_lock);
+    mds_dmclock_scheduler->process_asok_qos_rm(cmdmap, *css, f);
+  } else if (command == "qos get") {
+    std::lock_guard l(mds_lock);
+    mds_dmclock_scheduler->process_asok_qos_get(cmdmap, *css, f);
   } else {
     r = -ENOSYS;
   }
@@ -4129,6 +4149,10 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_cap_revoke_eviction_timeout",
     "mds_debug_subtrees",
     "mds_dir_max_entries",
+    "mds_dmclock_enable",
+    "mds_dmclock_limit",
+    "mds_dmclock_reservation",
+    "mds_dmclock_weight",
     "mds_dump_cache_threshold_file",
     "mds_dump_cache_threshold_formatter",
     "mds_enable_op_tracker",
@@ -4261,6 +4285,7 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
     mdlog->handle_conf_change(changed, *mdsmap);
     purge_queue.handle_conf_change(changed, *mdsmap);
     scrubstack->handle_conf_change(changed);
+    mds_dmclock_scheduler->handle_conf_change(changed);
   }));
 }
 
