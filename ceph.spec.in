@@ -137,6 +137,8 @@
 %endif
 %bcond_without cephadm_bundling
 %bcond_without cephadm_pip_deps
+%bcond_without uca
+%global uca_pkgname uca
 %bcond_without dwz
 %if %{with dwz}
 %else
@@ -566,6 +568,29 @@ Requires: python3-jinja2 >= 2.10
 %description -n cephadm
 Utility to bootstrap a Ceph cluster and manage Ceph daemons deployed
 with systemd and podman.
+
+%if 0%{with uca}
+%package %{uca_pkgname}
+Summary:        Tool to manage Ceph clusters from a workstation
+BuildArch:      noarch
+Requires:       python%{python3_pkgversion}
+%if 0%{?weak_deps}
+Recommends:     podman >= 2.0.2
+%endif
+%if 0%{with cephadm_bundling}
+%if 0%{without cephadm_pip_deps}
+BuildRequires: python3-jinja2 >= 2.10
+%endif
+%else
+Requires: python3-jinja2 >= 2.10
+%endif
+%description %{uca_pkgname}
+Tool to manage one or more Ceph clusters from a user workstation.
+Based on cephadm technology this tool uses Ceph containers to
+run ceph management and administrative tools from a workstation
+as long as that workstation can connect to said clusters over
+SSH and RADOS.
+%endif
 
 %package -n ceph-common
 Summary:	Ceph Common
@@ -1538,6 +1563,9 @@ cmake .. \
 %if %{with sccache}
     -DWITH_SCCACHE=ON \
 %endif
+%if 0%{with uca}
+    -DWITH_UCA:BOOL=ON \
+%endif
 %if 0%{with cephadm_bundling}
 %if 0%{with cephadm_pip_deps}
     -DCEPHADM_BUNDLED_DEPENDENCIES=pip
@@ -1769,6 +1797,11 @@ exit 0
 %attr(0700,cephadm,cephadm) %dir %{_sharedstatedir}/cephadm
 %attr(0700,cephadm,cephadm) %dir %{_sharedstatedir}/cephadm/.ssh
 %config(noreplace) %attr(0600,cephadm,cephadm) %{_sharedstatedir}/cephadm/.ssh/authorized_keys
+
+%if 0%{with uca}
+%files %{uca_pkgname}
+%{_bindir}/uca
+%endif
 
 %files common
 %dir %{_docdir}/ceph
