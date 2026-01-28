@@ -495,28 +495,31 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     f.close_section();
   } else if (what == "have_local_config_map") {
     f.dump_bool("have_local_config_map", have_local_config_map);
-  } else if (what == "active_clean_pgs"){
+  } else if (what == "pg_stats_active_clean"){
     without_gil_t no_gil;
     cluster_state.with_pgmap(
         [&](const PGMap &pg_map) {
       no_gil.acquire_gil();
-      f.open_array_section("pg_stats");
+      f.open_array_section("active_clean_pgs");
+      int active_clean_count = 0;
       for (auto &i : pg_map.pg_stat) {
         const auto state = i.second.state;
-	const auto pgid_raw = i.first;
-	const auto pgid = stringify(pgid_raw.m_pool) + "." + stringify(pgid_raw.m_seed);
-	const auto reported_epoch = i.second.reported_epoch;
-	if (state & PG_STATE_ACTIVE && state & PG_STATE_CLEAN) {
-	  f.open_object_section("pg_stat");
-	  f.dump_string("pgid", pgid);
-	  f.dump_string("state", pg_state_string(state));
-	  f.dump_unsigned("reported_epoch", reported_epoch);
-	  f.close_section();
-	}
+	      const auto pgid_raw = i.first;
+	      const auto pgid = stringify(pgid_raw.m_pool) + "." + stringify(pgid_raw.m_seed);
+	      const auto reported_epoch = i.second.reported_epoch;
+	      if (state & PG_STATE_ACTIVE && state & PG_STATE_CLEAN) {
+          active_clean_count++;
+          f.open_object_section("");
+	        f.dump_string("pgid", pgid);
+	        f.dump_string("state", pg_state_string(state));
+	        f.dump_unsigned("reported_epoch", reported_epoch);
+	        f.close_section();
+	      }
       }
       f.close_section();
+      f.dump_unsigned("active_clean_pg_count", active_clean_count);
       const auto num_pg = pg_map.num_pg;
-      f.dump_unsigned("total_num_pgs", num_pg);
+      f.dump_unsigned("total_pg_count", num_pg);
     });
   } else {
     derr << "Python module requested unknown data '" << what << "'" << dendl;
