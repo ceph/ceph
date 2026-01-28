@@ -28,11 +28,51 @@ When writing an object, its head object is written last. This acts as an atomic 
 Sharding and Resharding
 -----------------------
 
-For a given bucket, the index may be split into several rados objects, called bucket index shards. In RADOS, multiple writes to the same object cannot run in parallel. By spreading the index over more rados objects, we increase its write parallelism. For a given object upload, the corresponding bucket index shard is selected based on a hash of the object's name.
+A bucket's index is generally split into several rados objects that
+are called bucket index shards. In RADOS multiple writes to the same
+object cannot run in parallel. By spreading the index over more rados
+objects, we increase its write parallelism. For a given object upload,
+the corresponding bucket index shard is selected based on a hash of
+the object's name.
 
-The default shard count for new buckets is 11, but can be overridden in the zonegroup's ``bucket_index_max_shards`` or ceph.conf's ``rgw_override_bucket_index_max_shards``. As the number of objects in a bucket grows, its index shard count will also increase as a result of dynamic resharding.
+The default shard count for new buckets is 11, but can be overridden
+in the zonegroup's ``bucket_index_max_shards`` or ceph.conf's
+``rgw_override_bucket_index_max_shards``.
 
-Information about the bucket's index object layout is stored in ``RGWBucketInfo`` as ``struct rgw::BucketLayout`` from ``src/rgw/rgw_bucket_layout.h``. The resharding logic is in ``src/rgw/driver/rados/rgw_reshard.cc``.
+For non-versioned buckets there is one entry in the bucket index for
+every object. For versioned buckets there are two entries for each
+version of an object, plus two additional fixed entries.
+
+The first fixed entry is a plain entry without an instance ID used for
+non-versioned bucket listings. The second fixed entry is known as the
+"object logical head" (or "OLH") that designates which version of the
+object is the current one.
+
+With respect to the two entries per version, one is a plain entry and
+the other is an instance entry. The plain entry is used for versioned
+bucket listings and the keys for these entry are mangled so that the
+versions are listed from most recent to oldest. The instance entry
+allows the metadata for a version to be looked up using its
+instance ID.
+
+As the number of objects in a bucket grows, the number of bucket index
+shards will also increase as a result of dynamic resharding.
+
+More recently dynamic resharding can also reduce the number of shards
+for a bucket. Because some buckets may experience rapid increases and
+decreases in the number of objects and because we don't want to chase
+those changes with multiple reshards, in order to reduce the number of
+shards there's a delay between when the need to reduce the number of
+shards is noted and when it will occur. At the time the resharding
+would occur, the bucket is checked again and only proceeds if the
+bucket still needs its number of bucket index shards reduced.  This
+delay is by default 5 days but can be configured with ceph.conf's
+``rgw_dynamic_resharding_reduction_wait``.
+
+Information about the bucket's index object layout is stored in
+``RGWBucketInfo`` as ``struct rgw::BucketLayout`` from
+``src/rgw/rgw_bucket_layout.h``. The resharding logic is in
+``src/rgw/driver/rados/rgw_reshard.cc``.
 
 -----------------
 Index Transaction
