@@ -685,6 +685,8 @@ void Replayer<I>::check_local_group_snapshots(
         // wait for pruning to complete
         if (m_pruning_group_snaps_inflight.size() > 0) {
           dout(10) << "waiting for pruning of snapshots to complete" << dendl;
+          locker->unlock();
+          schedule_load_group_snapshots();
           return;
         }
         dout(10) << "remote group demoted" << dendl;
