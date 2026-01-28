@@ -27,7 +27,6 @@ export class DocService {
     const docVersion = release === 'main' ? 'latest' : release;
     const domain = `https://docs.ceph.com/en/${docVersion}/`;
     const domainCeph = `https://ceph.io`;
-    const domainCephOld = `https://old.ceph.com`;
 
     const sections = {
       iscsi: `${domain}mgr/dashboard/#enabling-iscsi-management`,
@@ -40,7 +39,7 @@ export class DocService {
       dashboard: `${domain}mgr/dashboard`,
       grafana: `${domain}mgr/dashboard/#enabling-the-embedding-of-grafana-dashboards`,
       orch: `${domain}mgr/orchestrator`,
-      pgs: `${domainCephOld}/pgcalc`,
+      pgs: `${domain}/rados/operations/placement-groups/#choosing-number-of-placement-groups`,
       help: `${domainCeph}/en/users/`,
       security: `${domainCeph}/en/security/`,
       trademarks: `${domainCeph}/en/trademarks/`,

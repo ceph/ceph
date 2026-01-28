@@ -1,8 +1,8 @@
-import { Component, OnInit, Type, ViewChild } from '@angular/core';
-import { UntypedFormControl, Validators } from '@angular/forms';
+import { ChangeDetectorRef, Component, OnInit, Type, ViewChild } from '@angular/core';
+import { FormGroupDirective, UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { NgbNav, NgbTooltip } from '@ng-bootstrap/ng-bootstrap';
+import { NgbNav } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Observable, ReplaySubject, Subscription } from 'rxjs';
 
@@ -31,7 +31,6 @@ import { PoolFormInfo } from '~/app/shared/models/pool-form-info';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule-form-modal.component';
 import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
@@ -39,6 +38,7 @@ import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
 import { PoolEditModeResponseModel } from '../../block/mirroring/pool-edit-mode-modal/pool-edit-mode-response.model';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 interface FormFieldDescription {
   externalFieldName: string;
@@ -56,18 +56,23 @@ interface FormFieldDescription {
 })
 export class PoolFormComponent extends CdForm implements OnInit {
   @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;
-  @ViewChild('crushDeletionBtn') crushDeletionBtn: NgbTooltip;
   @ViewChild('ecpInfoTabs') ecpInfoTabs: NgbNav;
-  @ViewChild('ecpDeletionBtn') ecpDeletionBtn: NgbTooltip;
+  @ViewChild(FormGroupDirective)
+  formDir: FormGroupDirective;
+
+  isFormSubmitted = false;
 
   permission: Permission;
   form: CdFormGroup;
   ecProfiles: ErasureCodeProfile[];
+  selectedEcp: ErasureCodeProfile;
   info: PoolFormInfo;
   routeParamsSubscribe: any;
   editing = false;
   isReplicated = false;
   isErasure = false;
+  blobUnits = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  maxBytesUnits = ['KiB', 'MiB', 'GiB', 'TiB'];
   data = new PoolFormData();
   externalPgChange = false;
   current: Record<string, any> = {
@@ -85,6 +90,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   crushUsage: string[] = undefined; // Will only be set if a rule is used by some pool
   ecpUsage: string[] = undefined; // Will only be set if a rule is used by some pool
   crushRuleMaxSize = 10;
+  selectedCrushRule: CrushRule;
   DEFAULT_RATIO = 0.875;
   isApplicationsSelected = true;
   msrCrush: boolean = false;
@@ -95,15 +101,16 @@ export class PoolFormComponent extends CdForm implements OnInit {
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private route: ActivatedRoute,
     private router: Router,
-    private modalService: ModalService,
-    private poolService: PoolService,
+    private modalService: ModalCdsService,
+    public poolService: PoolService,
     private authStorageService: AuthStorageService,
     private formatter: FormatterService,
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
     private crushRuleService: CrushRuleService,
     public actionLabels: ActionLabelsI18n,
-    private rbdMirroringService: RbdMirroringService
+    private rbdMirroringService: RbdMirroringService,
+    private cdr: ChangeDetectorRef
   ) {
     super();
     this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
@@ -129,10 +136,18 @@ export class PoolFormComponent extends CdForm implements OnInit {
       mode: new UntypedFormControl('none'),
       algorithm: new UntypedFormControl(''),
       minBlobSize: new UntypedFormControl('', {
-        updateOn: 'blur'
+        updateOn: 'change',
+        validators: [Validators.min(0)]
+      }),
+      minBlobSizeUnit: new UntypedFormControl(this.blobUnits[0], {
+        updateOn: 'change'
       }),
       maxBlobSize: new UntypedFormControl('', {
-        updateOn: 'blur'
+        updateOn: 'change',
+        validators: [Validators.min(0)]
+      }),
+      maxBlobSizeUnit: new UntypedFormControl(this.blobUnits[2], {
+        updateOn: 'change'
       }),
       ratio: new UntypedFormControl(this.DEFAULT_RATIO, {
         updateOn: 'blur'
@@ -171,9 +186,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
             )
           ]
         }),
-        size: new UntypedFormControl('', {
-          updateOn: 'blur'
-        }),
+        size: new UntypedFormControl(''),
         erasureProfile: new UntypedFormControl(null),
         pgNum: new UntypedFormControl('', {
           validators: [Validators.required]
@@ -181,8 +194,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
         pgAutoscaleMode: new UntypedFormControl(null),
         ecOverwrites: new UntypedFormControl(false),
         compression: compressionForm,
-        max_bytes: new UntypedFormControl(''),
-        max_objects: new UntypedFormControl(0),
+        max_bytes: new UntypedFormControl(0, [Validators.min(0)]),
+        maxBytesUnit: new UntypedFormControl(this.maxBytesUnits[2]),
+        max_objects: new UntypedFormControl(0, [Validators.min(0)]),
         rbdMirroring: new UntypedFormControl(false)
       },
       [CdValidators.custom('form', (): null => null)]
@@ -201,7 +215,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       this.listenToChanges();
       this.setComplexValidators();
     });
-    this.erasureProfileChange();
+    this.loadingReady();
   }
 
   private initInfo(info: PoolFormInfo) {
@@ -215,6 +229,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   private initEcp(ecProfiles: ErasureCodeProfile[]) {
     this.setListControlStatus('erasureProfile', ecProfiles);
     this.ecProfiles = ecProfiles;
+    this.erasureProfileChange();
   }
 
   /**
@@ -229,7 +244,12 @@ export class PoolFormComponent extends CdForm implements OnInit {
     const control = this.form.get(controlName);
     const value = control.value;
     if (arr.length === 1 && (!value || !_.isEqual(value, arr[0]))) {
-      control.setValue(arr[0]);
+      if (controlName === 'erasureProfile') {
+        control.setValue(arr[0].name);
+      } else {
+        control.setValue(arr[0].rule_name);
+        this.replicatedRuleChange();
+      }
     } else if (arr.length === 0 && value) {
       control.setValue(null);
     }
@@ -264,23 +284,33 @@ export class PoolFormComponent extends CdForm implements OnInit {
       initialData: pool.configuration,
       sourceType: RbdConfigurationSourceField.pool
     });
+    const maxBytesConverted = this.dimlessBinaryPipe.transform(pool.quota_max_bytes).split(' ');
+    const minBlobSizeConverted = this.dimlessBinaryPipe
+      .transform(pool.options.compression_min_blob_size)
+      .split(' ');
+    const maxBlobSizeConverted = this.dimlessBinaryPipe
+      .transform(pool.options.compression_max_blob_size)
+      .split(' ');
     this.poolTypeChange(pool.type);
     const rules = this.info.crush_rules_replicated.concat(this.info.crush_rules_erasure);
     const dataMap = {
       name: pool.pool_name,
       poolType: pool.type,
-      crushRule: rules.find((rule: CrushRule) => rule.rule_name === pool.crush_rule),
+      crushRule: rules.find((rule: CrushRule) => rule.rule_name === pool.crush_rule)?.rule_name,
       size: pool.size,
-      erasureProfile: this.ecProfiles.find((ecp) => ecp.name === pool.erasure_code_profile),
+      erasureProfile: this.ecProfiles.find((ecp) => ecp.name === pool.erasure_code_profile)?.name,
       pgAutoscaleMode: pool.pg_autoscale_mode,
       pgNum: pool.pg_num,
       ecOverwrites: pool.flags_names.includes('ec_overwrites'),
       mode: pool.options.compression_mode,
       algorithm: pool.options.compression_algorithm,
-      minBlobSize: this.dimlessBinaryPipe.transform(pool.options.compression_min_blob_size),
-      maxBlobSize: this.dimlessBinaryPipe.transform(pool.options.compression_max_blob_size),
+      minBlobSize: minBlobSizeConverted[0],
+      minBlobSizeUnit: minBlobSizeConverted[1],
+      maxBlobSize: maxBlobSizeConverted[0],
+      maxBlobSizeUnit: maxBlobSizeConverted[1],
       ratio: pool.options.compression_required_ratio,
-      max_bytes: this.dimlessBinaryPipe.transform(pool.quota_max_bytes),
+      max_bytes: maxBytesConverted[0],
+      maxBytesUnit: maxBytesConverted[1],
       max_objects: pool.quota_max_objects
     };
     Object.keys(dataMap).forEach((controlName: string) => {
@@ -289,9 +319,20 @@ export class PoolFormComponent extends CdForm implements OnInit {
         this.form.silentSet(controlName, value);
       }
     });
+
+    // Set selected objects for info displays
+    this.selectedEcp = this.ecProfiles.find(
+      (ecp: ErasureCodeProfile) => ecp.name === pool.erasure_code_profile
+    );
+    this.selectedCrushRule = rules.find((rule: CrushRule) => rule.rule_name === pool.crush_rule);
+
+    // Trigger erasureProfile change handlers to set usage info
+    if (this.selectedEcp) this.ecpIsUsedBy(this.selectedEcp?.name);
+    if (this.selectedCrushRule) this.crushRuleIsUsedBy(this.selectedCrushRule?.rule_name);
+
     this.data.pgs = this.form.getValue('pgNum');
-    this.setAvailableApps(this.data.applications.default.concat(pool.application_metadata));
     this.data.applications.selected = pool.application_metadata;
+    this.setAvailableApps(this.data.applications.default.concat(pool.application_metadata));
     this.rbdMirroringService
       .getPool(pool.pool_name)
       .subscribe((resp: PoolEditModeResponseModel) => {
@@ -300,9 +341,12 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   private setAvailableApps(apps: string[] = this.data.applications.default) {
-    this.data.applications.available = _.uniq(apps.sort()).map(
-      (x: string) => new SelectOption(false, x, this.data.APP_LABELS[x] || x)
-    );
+    const selectedApps = this.data.applications.selected || [];
+    this.data.applications.available = _.uniq(apps.sort()).map((x: string) => {
+      const option = new SelectOption(selectedApps.includes(x), x, this.data.APP_LABELS?.[x] || x);
+      (option as any).content = x;
+      return option;
+    });
   }
 
   private listenToChanges() {
@@ -344,14 +388,17 @@ export class PoolFormComponent extends CdForm implements OnInit {
     });
     this.form.get('crushRule').valueChanges.subscribe((rule) => {
       // The crush rule can only be changed if type 'replicated' is set.
-      if (this.crushDeletionBtn && this.crushDeletionBtn.isOpen()) {
-        this.crushDeletionBtn.close();
-      }
       if (!rule) {
         return;
       }
+      this.data.crushInfo = false;
+
+      rule = (this.current.rules || []).find(
+        (r: CrushRule) => r.rule_name === rule || (r as any).name === rule
+      );
+      this.selectedCrushRule = rule;
       this.setCorrectMaxSize(rule);
-      this.crushRuleIsUsedBy(rule.rule_name);
+      this.crushRuleIsUsedBy(this.selectedCrushRule?.rule_name);
       this.replicatedRuleChange();
       this.pgCalc();
     });
@@ -359,15 +406,15 @@ export class PoolFormComponent extends CdForm implements OnInit {
       // The size can only be changed if type 'replicated' is set.
       this.pgCalc();
     });
+
     this.form.get('erasureProfile').valueChanges.subscribe((profile) => {
       // The ec profile can only be changed if type 'erasure' is set.
-      if (this.ecpDeletionBtn && this.ecpDeletionBtn.isOpen()) {
-        this.ecpDeletionBtn.close();
-      }
       if (!profile) {
         return;
       }
-      this.ecpIsUsedBy(profile.name);
+      this.data.erasureInfo = false;
+      this.erasureProfileChange();
+      this.ecpIsUsedBy(profile);
       this.pgCalc();
     });
     this.form.get('mode').valueChanges.subscribe(() => {
@@ -378,7 +425,13 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.form.get('minBlobSize').valueChanges.subscribe(() => {
       this.form.get('maxBlobSize').updateValueAndValidity({ emitEvent: false });
     });
+    this.form.get('minBlobSizeUnit').valueChanges.subscribe(() => {
+      this.form.get('maxBlobSize').updateValueAndValidity({ emitEvent: false });
+    });
     this.form.get('maxBlobSize').valueChanges.subscribe(() => {
+      this.form.get('minBlobSize').updateValueAndValidity({ emitEvent: false });
+    });
+    this.form.get('maxBlobSizeUnit').valueChanges.subscribe(() => {
       this.form.get('minBlobSize').updateValueAndValidity({ emitEvent: false });
     });
   }
@@ -438,7 +491,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   getMaxSize(): number {
-    const rule = this.form.getValue('crushRule');
+    const rule = this.selectedCrushRule;
     if (!this.info) {
       return 0;
     }
@@ -468,7 +521,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
     }
   }
 
-  private setCorrectMaxSize(rule: CrushRule = this.form.getValue('crushRule')) {
+  private setCorrectMaxSize(rule: CrushRule = this.selectedCrushRule) {
     if (!rule) {
       return;
     }
@@ -489,7 +542,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
   private erasurePgCalc(pgs: number): number {
     const ecpControl = this.form.get('erasureProfile');
-    const ecp = ecpControl.value;
+    const ecp = this.selectedEcp;
     return (ecpControl.valid || ecpControl.disabled) && ecp ? pgs / (ecp.k + ecp.m) : 0;
   }
 
@@ -541,13 +594,23 @@ export class PoolFormComponent extends CdForm implements OnInit {
     CdValidators.validateIf(this.form.get('minBlobSize'), () => this.hasCompressionEnabled(), [
       Validators.min(0),
       CdValidators.custom('maximum', (size: string) =>
-        this.oddBlobSize(size, this.form.getValue('maxBlobSize'))
+        this.oddBlobSize(
+          size,
+          this.form.getValue('minBlobSizeUnit'),
+          this.form.getValue('maxBlobSize'),
+          this.form.getValue('maxBlobSizeUnit')
+        )
       )
     ]);
     CdValidators.validateIf(this.form.get('maxBlobSize'), () => this.hasCompressionEnabled(), [
       Validators.min(0),
       CdValidators.custom('minimum', (size: string) =>
-        this.oddBlobSize(this.form.getValue('minBlobSize'), size)
+        this.oddBlobSize(
+          this.form.getValue('minBlobSize'),
+          this.form.getValue('minBlobSizeUnit'),
+          size,
+          this.form.getValue('maxBlobSizeUnit')
+        )
       )
     ]);
     CdValidators.validateIf(this.form.get('ratio'), () => this.hasCompressionEnabled(), [
@@ -556,9 +619,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
     ]);
   }
 
-  private oddBlobSize(minimum: string, maximum: string) {
-    const min = this.formatter.toBytes(minimum);
-    const max = this.formatter.toBytes(maximum);
+  private oddBlobSize(minimum: string, minUnit: string, maximum: string, maxUnit: string) {
+    const min = this.formatter.toBytes(minimum + minUnit);
+    const max = this.formatter.toBytes(maximum + maxUnit);
     return Boolean(min && max && min >= max);
   }
 
@@ -581,15 +644,14 @@ export class PoolFormComponent extends CdForm implements OnInit {
   private addModal(modalComponent: Type<any>, reload: (name: string) => void) {
     this.hideOpenTooltips();
     const modalRef = this.modalService.show(modalComponent);
-    modalRef.componentInstance.submitAction.subscribe((item: any) => {
+    modalRef.submitAction.subscribe((item: any) => {
       reload(item.name);
     });
   }
 
   private hideOpenTooltips() {
-    const hideTooltip = (btn: NgbTooltip) => btn && btn.isOpen() && btn.close();
-    hideTooltip(this.ecpDeletionBtn);
-    hideTooltip(this.crushDeletionBtn);
+    this.data.crushInfo = false;
+    this.data.erasureInfo = false;
   }
 
   private reloadECPs(profileName?: string) {
@@ -597,8 +659,9 @@ export class PoolFormComponent extends CdForm implements OnInit {
       newItemName: profileName,
       getInfo: () => this.ecpService.list(),
       initInfo: (profiles) => this.initEcp(profiles),
-      findNewItem: () => this.ecProfiles.find((p) => p.name === profileName),
-      controlName: 'erasureProfile'
+      findNewItem: () => this.ecProfiles.find((p: ErasureCodeProfile) => p.name === profileName),
+      controlName: 'erasureProfile',
+      nameAttribute: 'name'
     });
   }
 
@@ -607,13 +670,15 @@ export class PoolFormComponent extends CdForm implements OnInit {
     getInfo,
     initInfo,
     findNewItem,
-    controlName
+    controlName,
+    nameAttribute
   }: {
     newItemName: string;
     getInfo: () => Observable<any>;
     initInfo: (items: any) => void;
     findNewItem: () => any;
     controlName: string;
+    nameAttribute?: string;
   }) {
     if (this.modalSubscription) {
       this.modalSubscription.unsubscribe();
@@ -625,16 +690,16 @@ export class PoolFormComponent extends CdForm implements OnInit {
       }
       const item = findNewItem();
       if (item) {
-        this.form.get(controlName).setValue(item);
+        const value = nameAttribute ? item[nameAttribute] : item;
+        this.form.get(controlName)?.setValue(value);
       }
     });
   }
 
   deleteErasureCodeProfile() {
     this.deletionModal({
-      value: this.form.getValue('erasureProfile'),
+      value: this.selectedEcp,
       usage: this.ecpUsage,
-      deletionBtn: this.ecpDeletionBtn,
       dataName: 'erasureInfo',
       getTabs: () => this.ecpInfoTabs,
       tabPosition: 'used-by-pools',
@@ -649,7 +714,6 @@ export class PoolFormComponent extends CdForm implements OnInit {
   private deletionModal({
     value,
     usage,
-    deletionBtn,
     dataName,
     getTabs,
     tabPosition,
@@ -661,7 +725,6 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }: {
     value: any;
     usage: string[];
-    deletionBtn: NgbTooltip;
     dataName: string;
     getTabs: () => NgbNav;
     tabPosition: string;
@@ -675,15 +738,16 @@ export class PoolFormComponent extends CdForm implements OnInit {
       return;
     }
     if (usage) {
-      deletionBtn.animation = false;
-      deletionBtn.toggle();
-      this.data[dataName] = true;
-      setTimeout(() => {
-        const tabs = getTabs();
-        if (tabs) {
-          tabs.select(tabPosition);
-        }
-      }, 50);
+      const isOpen = (this.data as any)[dataName];
+      this.data[dataName] = !isOpen;
+      if (!isOpen) {
+        setTimeout(() => {
+          const tabs = getTabs();
+          if (tabs) {
+            tabs.select(tabPosition);
+          }
+        }, 50);
+      }
       return;
     }
     const name = value[nameAttribute];
@@ -715,15 +779,15 @@ export class PoolFormComponent extends CdForm implements OnInit {
       },
       findNewItem: () =>
         this.info.crush_rules_replicated.find((rule) => rule.rule_name === ruleName),
-      controlName: 'crushRule'
+      controlName: 'crushRule',
+      nameAttribute: 'rule_name'
     });
   }
 
   deleteCrushRule() {
     this.deletionModal({
-      value: this.form.getValue('crushRule'),
+      value: this.selectedCrushRule,
       usage: this.crushUsage,
-      deletionBtn: this.crushDeletionBtn,
       dataName: 'crushInfo',
       getTabs: () => this.crushInfoTabs,
       tabPosition: 'used-by-pools',
@@ -744,6 +808,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   submit() {
+    this.isFormSubmitted = true;
+    this.cdr.detectChanges();
     if (this.form.invalid) {
       this.form.setErrors({ cdSubmitButton: true });
       return;
@@ -768,18 +834,20 @@ export class PoolFormComponent extends CdForm implements OnInit {
         ? { externalFieldName: 'size', formControlName: 'size' }
         : {
             externalFieldName: 'erasure_code_profile',
-            formControlName: 'erasureProfile',
-            attr: 'name'
+            formControlName: 'erasureProfile'
           },
       {
         externalFieldName: 'rule_name',
         formControlName: 'crushRule',
-        replaceFn: (value: CrushRule) => (this.isReplicated ? value && value.rule_name : undefined)
+        replaceFn: (value: string) => (this.isReplicated ? value : undefined)
       },
       {
         externalFieldName: 'quota_max_bytes',
         formControlName: 'max_bytes',
-        replaceFn: this.formatter.toBytes,
+        replaceFn: (value: string) => {
+          const unit = this.form.getValue('maxBytesUnit');
+          return this.formatter.toBytes(value + unit);
+        },
         editable: true,
         resetValue: this.editing ? 0 : undefined
       },
@@ -821,14 +889,20 @@ export class PoolFormComponent extends CdForm implements OnInit {
           {
             externalFieldName: 'compression_min_blob_size',
             formControlName: 'minBlobSize',
-            replaceFn: this.formatter.toBytes,
+            replaceFn: (value: string) => {
+              const unit = this.form.getValue('minBlobSizeUnit');
+              return this.formatter.toBytes(value + unit);
+            },
             editable: true,
             resetValue: 0
           },
           {
             externalFieldName: 'compression_max_blob_size',
             formControlName: 'maxBlobSize',
-            replaceFn: this.formatter.toBytes,
+            replaceFn: (value: string) => {
+              const unit = this.form.getValue('maxBlobSizeUnit');
+              return this.formatter.toBytes(value + unit);
+            },
             editable: true,
             resetValue: 0
           },
@@ -942,15 +1016,21 @@ export class PoolFormComponent extends CdForm implements OnInit {
       });
   }
 
-  appSelection() {
+  appSelection(events: SelectOption[]) {
+    this.data.applications.selected = events.map((e: SelectOption) => e.name);
     this.form.get('name').updateValueAndValidity({ emitEvent: false, onlySelf: true });
   }
 
   erasureProfileChange() {
-    const profile = this.form.get('erasureProfile').value;
-    if (profile) {
+    if (!this.ecProfiles || this.ecProfiles.length === 0) {
+      return;
+    }
+    const selectedName = this.form.get('erasureProfile').value;
+    this.selectedEcp = this.ecProfiles.find((ecp: ErasureCodeProfile) => ecp.name === selectedName);
+    if (this.selectedEcp) {
       this.msrCrush =
-        profile['crush-num-failure-domains'] > 0 || profile['crush-osds-per-failure-domain'] > 0;
+        this.selectedEcp['crush-num-failure-domains'] > 0 ||
+        this.selectedEcp['crush-osds-per-failure-domain'] > 0;
     }
   }
 }

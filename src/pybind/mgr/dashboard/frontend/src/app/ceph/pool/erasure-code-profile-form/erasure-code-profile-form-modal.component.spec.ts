@@ -131,16 +131,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       const showDefaults = (plugin: string) => {
         formHelper.setValue('plugin', plugin);
         fixtureHelper.expectIdElementsVisible(
-          [
-            'name',
-            'plugin',
-            'k',
-            'm',
-            'crushFailureDomain',
-            'crushRoot',
-            'crushDeviceClass',
-            'directory'
-          ],
+          ['name', 'plugin', 'k', 'm', 'crushFailureDomain', 'crushDeviceClass', 'directory'],
           true
         );
       };
@@ -405,7 +396,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
 
       it(`does require 'm', 'c', 'd', 'scalar_mds' and 'k'`, () => {
-        fixtureHelper.clickElement('#d-calc-btn');
+        fixtureHelper.clickElement('[data-testid="d-calc-btn"]');
         expectRequiredControls(['k', 'm', 'd', 'scalar_mds']);
       });
 
@@ -443,7 +434,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       describe('Validity of d', () => {
         beforeEach(() => {
           // Don't automatically change d - the only way to get d invalid
-          fixtureHelper.clickElement('#d-calc-btn');
+          fixtureHelper.clickElement('[data-testid="d-calc-btn"]');
         });
 
         it('should not automatically change d if k or m have been changed', () => {
