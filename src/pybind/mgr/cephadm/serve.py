@@ -1666,7 +1666,12 @@ class CephadmServe:
                 self.log.debug('stdin: %s' % stdin)
 
             cmd = ssh.RemoteCommand(WHICH, ['python3'])
-            python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
+            try:
+                # when connection was broken/closed, retrying resets the connection
+                python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
+            except ssh.HostConnectionError:
+                python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
+
             # N.B. because the python3 executable is based on the results of the
             # which command we can not know it ahead of time and must be converted
             # into a RemoteExecutable.
