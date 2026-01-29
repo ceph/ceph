@@ -5,7 +5,7 @@ workload:
   full_sequential:
     - print: "**** done start rados_api.yaml"
     - workunit:
-        branch: reef
+        branch: tentacle
         clients:
           client.0:
             - cls

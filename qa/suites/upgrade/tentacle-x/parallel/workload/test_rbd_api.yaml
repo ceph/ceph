@@ -5,7 +5,7 @@ workload:
   full_sequential:
     - print: "**** done start test_rbd_api.yaml"
     - workunit:
-        branch: reef
+        branch: tentacle
         clients:
           client.0:
               - rbd/test_librbd.sh

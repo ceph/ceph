@@ -33,13 +33,15 @@ overrides:
       - POOL_FULL
 tasks:
 - install:
-    branch: reef
+    branch: tentacle
     exclude_packages:
+      - ceph-osd-classic
       - ceph-volume
+      - ceph-osd-crimson
 
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:reef
-    compiled_cephadm_branch: reef
+    image: quay.ceph.io/ceph-ci/ceph:tentacle
+    compiled_cephadm_branch: tentacle
     conf:
       osd:
         #set config option for which cls modules are allowed to be loaded / used
