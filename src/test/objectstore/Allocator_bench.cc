@@ -156,7 +156,7 @@ TEST_P(AllocTest, test_alloc_bench_seq)
   {
     tmp.clear();
     EXPECT_EQ(static_cast<int64_t>(want_size),
-	      alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
+	      alloc->allocate(want_size, alloc_unit, 0, -1, &tmp));
     if (0 == (i % (1 * 1024 * _1m))) {
       std::cout << "alloc " << i / 1024 / 1024 << " mb of "
         << capacity / 1024 / 1024 << std::endl;
@@ -234,7 +234,7 @@ TEST_P(AllocTest, test_alloc_bench)
     uint32_t want = alloc_unit << u1(rng);
 
     tmp.clear();
-    auto r = alloc->allocate(want, alloc_unit, 0, 0, &tmp);
+    auto r = alloc->allocate(want, alloc_unit, 0, -1, &tmp);
     if (r < want) {
       break;
     }
@@ -388,7 +388,7 @@ void AllocTest::doOverwriteTest(uint64_t capacity, uint64_t prefill,
   {
     uint32_t want = alloc_unit << u1(rng);
     tmp.clear();
-    auto r = alloc->allocate(want, alloc_unit, 0, 0, &tmp);
+    auto r = alloc->allocate(want, alloc_unit, 0, -1, &tmp);
     if (r < want) {
       break;
     }
@@ -828,10 +828,10 @@ TEST_P(AllocTest, mempoolAccounting)
   std::map<uint32_t, PExtentVector> all_allocs;
   for (size_t i = 0; i < 10000; i++) {
     PExtentVector tmp;
-    alloc->allocate(alloc_size, alloc_size, 0, 0, &tmp);
+    alloc->allocate(alloc_size, alloc_size, 0, -1, &tmp);
     all_allocs[rand()] = tmp;
     tmp.clear();
-    alloc->allocate(alloc_size, alloc_size, 0, 0, &tmp);
+    alloc->allocate(alloc_size, alloc_size, 0, -1, &tmp);
     all_allocs[rand()] = tmp;
     tmp.clear();
 
