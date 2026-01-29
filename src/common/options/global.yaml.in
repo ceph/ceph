@@ -6882,8 +6882,8 @@ options:
 - name: jaeger_agent_port
   type: int
   level: advanced
-  desc: TCP port number of the Jaeger agent
-  default: 6799
+  desc: TCP port number of the OpenTelemetry collector (OTLP gRPC endpoint)
+  default: 4317
   services:
   - rgw
   - osd
