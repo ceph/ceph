@@ -271,6 +271,7 @@ mirror_group_snapshot_and_wait_for_sync_complete ${CLUSTER1} ${CLUSTER2} ${POOL}
 compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image1}
 
 testlog " - failover (unmodified)"
+local snap_id
 mirror_group_demote ${CLUSTER2} ${POOL}/${group}
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group} 'snapshot' 'enabled' 'false'
 wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group} 0
@@ -279,6 +280,8 @@ wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group} 'up+unknown' 0
 mirror_group_promote ${CLUSTER1} ${POOL}/${group}
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group} 'snapshot' 'enabled' 'true'
 wait_for_group_replay_started ${CLUSTER2} ${POOL}/${group} 1
+wait_to_get_newest_complete_mirror_group_snapshot_id_by_snap_type ${CLUSTER1} ${POOL}/${group} 'primary' snap_id
+wait_for_test_group_snap_present ${CLUSTER2} ${POOL}/${group} ${snap_id} 1
 
 testlog " - failback (unmodified)"
 mirror_group_demote ${CLUSTER1} ${POOL}/${group}
@@ -286,6 +289,8 @@ test_fields_in_group_info ${CLUSTER1} ${POOL}/${group} 'snapshot' 'enabled' 'fal
 wait_for_group_replay_stopped ${CLUSTER2} ${POOL}/${group} 0
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+unknown' 0
 wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group} 'up+unknown' 0
+# tests removal of non-primary snapshot
+wait_for_test_group_snap_present ${CLUSTER2} ${POOL}/${group} ${snap_id} 0
 mirror_group_promote ${CLUSTER2} ${POOL}/${group}
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group} 'snapshot' 'enabled' 'true'
 wait_for_group_replay_started ${CLUSTER1} ${POOL}/${group} 1
