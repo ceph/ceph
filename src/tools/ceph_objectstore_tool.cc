@@ -3884,6 +3884,7 @@ int main(int argc, char **argv)
     op == "get-inc-osdmap" ||
     objcmd == "get-bytes" ||
     objcmd == "get-attrs" ||
+    objcmd == "get-attr" ||
     objcmd == "get-omap" ||
     objcmd == "get-omaphdr" ||
     objcmd == "list-attrs" ||
