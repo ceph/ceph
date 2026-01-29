@@ -162,6 +162,19 @@
                   </div>
                 </div>
                 <div class="form-group row">
+                  <div class="cd-col-form-offset">
+                    <input type="checkbox"
+                           formControlName="archive_zone"
+                           id="archive_zone">
+                    <label for="archive_zone"
+                           class="custom-control-label cds-ml-3"
+                           i18n>Archive</label>
+                    <cd-help-text>
+                      <span i18n>Enable archival storage to keep all object versions and protect data from deletion or corruption.</span>
+                    </cd-help-text>
+                  </div>
+                </div>
+                <div class="form-group row">
                   <label class="cd-col-form-label required"
                          for="zone_endpoints"
                          i18n>Zone Endpoints</label>
@@ -209,11 +222,20 @@
               </div>
             </ng-container>
             <ng-container *ngSwitchCase="2">
-              <div *ngIf="multisiteSetupForm.get('configType').value === 'newRealm'"
+              <div *ngIf="multisiteSetupForm.get('configType').value === 'newRealm' && !isMultiClusterConfigured"
                    class="ms-5">
-                <ng-container *ngIf="isMultiClusterConfigured; else newRealmReviewTemplate">
-                  <ng-container *ngTemplateOutlet="replicationTemplate"></ng-container>
+                <ng-container *ngIf="loading; else nonMultiClusterFinal">
+                  <ng-container *ngTemplateOutlet="progressTemplate"></ng-container>
                 </ng-container>
+              </div>
+              <ng-template #nonMultiClusterFinal>
+                <ng-container *ngIf="!setupCompleted; else exportTokenTemplate">
+                  <ng-container *ngTemplateOutlet="reviewTemplate"></ng-container>
+                </ng-container>
+              </ng-template>
+              <div *ngIf="multisiteSetupForm.get('configType').value === 'newRealm' && isMultiClusterConfigured"
+                   class="ms-5">
+                <ng-container *ngTemplateOutlet="replicationTemplate"></ng-container>
               </div>
               <div *ngIf="multisiteSetupForm.get('configType').value === 'existingRealm' && isMultiClusterConfigured"
                    class="ms-5">
@@ -224,9 +246,6 @@
                 </ng-container>
               </div>
             </ng-container>
-            <ng-template #newRealmReviewTemplate>
-              <ng-container *ngTemplateOutlet="reviewTemplate"></ng-container>
-            </ng-template>
             <ng-template #replicationTemplate>
               <div class="form-group row">
                 <label class="cd-col-form-label required"
