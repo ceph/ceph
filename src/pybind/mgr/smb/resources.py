@@ -14,7 +14,14 @@ from ceph.deployment.service_spec import (
     SMBClusterPublicIPSpec,
     SpecValidationError,
 )
-from ceph.smb.constants import REMOTE_CONTROL, REMOTE_CONTROL_LOCAL
+from ceph.smb.constants import (
+    BURST_MULT_MAX,
+    BURST_MULT_MIN,
+    BYTES_LIMIT_MAX,
+    IOPS_LIMIT_MAX,
+    REMOTE_CONTROL,
+    REMOTE_CONTROL_LOCAL,
+)
 from ceph.smb.network import to_network
 from object_format import ErrorResponseBase
 
@@ -141,10 +148,10 @@ class QoSConfig(_RBase):
 
     read_iops_limit: Optional[int] = None
     write_iops_limit: Optional[int] = None
-    read_bw_limit: Optional[int] = None
-    write_bw_limit: Optional[int] = None
-    read_delay_max: Optional[int] = 30
-    write_delay_max: Optional[int] = 30
+    read_bw_limit: Optional[str] = None
+    write_bw_limit: Optional[str] = None
+    read_burst_mult: Optional[int] = 15
+    write_burst_mult: Optional[int] = 15
 
 
 @resourcelib.component()
@@ -157,11 +164,6 @@ class CephFSStorage(_RBase):
     subvolume: str = ''
     provider: CephFSStorageProvider = CephFSStorageProvider.SAMBA_VFS
     qos: Optional[QoSConfig] = None
-    DELAY_MAX_LIMIT = 300
-    # Maximal value for iops_limit
-    IOPS_LIMIT_MAX = 1_000_000
-    # Maximal value for bw_limit (1 << 40 = 1 TB)
-    BYTES_LIMIT_MAX = 1 << 40
 
     def __post_init__(self) -> None:
         # Allow a shortcut form of <subvolgroup>/<subvol> in the subvolume
@@ -198,47 +200,83 @@ class CephFSStorage(_RBase):
         rc.qos.quiet = True
         return rc
 
+    @staticmethod
+    def _apply_limit(
+        qos_updates: Dict[str, Union[int, str, None]],
+        key: str,
+        value: Union[int, str, None],
+        maximum: int,
+    ) -> None:
+        """Apply a QoS limit to the updates dict, handling disable (0) and capping at maximum."""
+        if value is None:
+            return
+        if value == 0 or value == "0":
+            qos_updates[key] = None
+            return
+        if isinstance(value, str):
+            if value.isdigit():
+                qos_updates[key] = str(min(int(value), maximum))
+            else:
+                qos_updates[key] = value
+        else:
+            qos_updates[key] = min(value, maximum)
+
     def update_qos(
         self,
         *,
         read_iops_limit: Optional[int] = None,
         write_iops_limit: Optional[int] = None,
-        read_bw_limit: Optional[int] = None,
-        write_bw_limit: Optional[int] = None,
-        read_delay_max: Optional[int] = 30,
-        write_delay_max: Optional[int] = 30,
+        read_bw_limit: Optional[str] = None,
+        write_bw_limit: Optional[str] = None,
+        read_burst_mult: Optional[int] = None,
+        write_burst_mult: Optional[int] = None,
     ) -> Self:
         """Return a new CephFSStorage instance with updated QoS values."""
-
-        qos_updates = {}
+        qos_updates: Dict[str, Union[int, str, None]] = {}
         new_qos: Optional[QoSConfig] = None
-        if read_iops_limit is not None and read_iops_limit > 0:
-            qos_updates["read_iops_limit"] = min(
-                read_iops_limit, self.IOPS_LIMIT_MAX
+
+        self._apply_limit(
+            qos_updates, "read_iops_limit", read_iops_limit, IOPS_LIMIT_MAX
+        )
+        self._apply_limit(
+            qos_updates, "write_iops_limit", write_iops_limit, IOPS_LIMIT_MAX
+        )
+        self._apply_limit(
+            qos_updates, "read_bw_limit", read_bw_limit, BYTES_LIMIT_MAX
+        )
+        self._apply_limit(
+            qos_updates, "write_bw_limit", write_bw_limit, BYTES_LIMIT_MAX
+        )
+
+        if read_burst_mult is not None:
+            if read_burst_mult < BURST_MULT_MIN:
+                raise ValueError(
+                    f"read_burst_mult must be at least {BURST_MULT_MIN} (got {read_burst_mult})"
+                )
+            qos_updates["read_burst_mult"] = min(
+                read_burst_mult, BURST_MULT_MAX
             )
-        if write_iops_limit is not None and write_iops_limit > 0:
-            qos_updates["write_iops_limit"] = min(
-                write_iops_limit, self.IOPS_LIMIT_MAX
-            )
-        if read_bw_limit is not None and read_bw_limit > 0:
-            qos_updates["read_bw_limit"] = min(
-                read_bw_limit, self.BYTES_LIMIT_MAX
-            )
-        if write_bw_limit is not None and write_bw_limit > 0:
-            qos_updates["write_bw_limit"] = min(
-                write_bw_limit, self.BYTES_LIMIT_MAX
-            )
-        if read_delay_max is not None and read_delay_max > 0:
-            qos_updates["read_delay_max"] = min(
-                read_delay_max, self.DELAY_MAX_LIMIT
-            )
-        if write_delay_max is not None and write_delay_max > 0:
-            qos_updates["write_delay_max"] = min(
-                write_delay_max, self.DELAY_MAX_LIMIT
+        if write_burst_mult is not None:
+            if write_burst_mult < BURST_MULT_MIN:
+                raise ValueError(
+                    f"write_burst_mult must be at least {BURST_MULT_MIN} (got {write_burst_mult})"
+                )
+            qos_updates["write_burst_mult"] = min(
+                write_burst_mult, BURST_MULT_MAX
             )
 
         if qos_updates:
-            new_qos = replace(self.qos or QoSConfig(), **qos_updates)
+            new_qos = replace(self.qos or QoSConfig(), **qos_updates)  # type: ignore
+
+            if (
+                new_qos.read_iops_limit is None
+                and new_qos.write_iops_limit is None
+                and new_qos.read_bw_limit is None
+                and new_qos.write_bw_limit is None
+            ):
+                new_qos = None
+        else:
+            new_qos = self.qos
 
         return replace(self, qos=new_qos)
 

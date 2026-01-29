@@ -396,10 +396,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         share_id: str,
         read_iops_limit: Optional[int] = None,
         write_iops_limit: Optional[int] = None,
-        read_bw_limit: Optional[int] = None,
-        write_bw_limit: Optional[int] = None,
-        read_delay_max: Optional[int] = 30,
-        write_delay_max: Optional[int] = 30,
+        read_bw_limit: Optional[str] = None,
+        write_bw_limit: Optional[str] = None,
+        read_burst_mult: Optional[int] = None,
+        write_burst_mult: Optional[int] = None,
     ) -> results.Result:
         """Update QoS settings for a CephFS share"""
         try:
@@ -418,8 +418,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 write_iops_limit=write_iops_limit,
                 read_bw_limit=read_bw_limit,
                 write_bw_limit=write_bw_limit,
-                read_delay_max=read_delay_max,
-                write_delay_max=write_delay_max,
+                read_burst_mult=read_burst_mult,
+                write_burst_mult=write_burst_mult,
             )
 
             updated_share = replace(share, cephfs=updated_cephfs)
