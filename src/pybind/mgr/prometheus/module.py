@@ -2157,13 +2157,12 @@ class Module(MgrModule, OrchestratorClientMixin):
         # Main event loop: handle both shutdown and config change events
         while True:
             # Wait for either shutdown or config change event (check every 0.5s)
-            while not self.shutdown_event.is_set() and not self.config_change_event.is_set():
-                self.shutdown_event.wait(timeout=0.5)
-
-            if self.shutdown_event.is_set():
-                # Clean shutdown requested
+            # Use a simple polling approach to check both events
+            if self.shutdown_event.wait(timeout=0.5):
+                # Shutdown event was set
                 break
-
+            
+            # Check if config change event is set (not a race since we just checked shutdown)
             if self.config_change_event.is_set():
                 # Config changed, restart engine with new configuration
                 self.config_change_event.clear()
@@ -2172,8 +2171,11 @@ class Module(MgrModule, OrchestratorClientMixin):
                 # https://stackoverflow.com/questions/7254845/change-cherrypy-port-and-restart-web-server
                 # if we omit the line: cherrypy.server.httpserver = None
                 # then the cherrypy server is not restarted correctly
-                cherrypy.engine.stop()
-                cherrypy.server.httpserver = None
+                try:
+                    cherrypy.engine.stop()
+                    cherrypy.server.httpserver = None
+                except Exception as e:
+                    self.log.error(f'Error stopping engine during config change: {e}')
 
                 # Re-read configuration
                 server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
@@ -2189,14 +2191,19 @@ class Module(MgrModule, OrchestratorClientMixin):
                     self.log.info('Engine restarted.')
                 except Exception as e:
                     self.log.error(f'Failed to restart engine: {e}')
+                    # Don't break here - continue running with old config if restart fails
+                    # The module should remain active even if config change fails
 
         # Cleanup on shutdown
         self.shutdown_event.clear()
         # tell metrics collection thread to stop collecting new metrics
         self.metrics_thread.stop()
-        cherrypy.engine.stop()
-        cherrypy.server.httpserver = None
-        self.log.info('Engine stopped.')
+        try:
+            cherrypy.engine.stop()
+            cherrypy.server.httpserver = None
+            self.log.info('Engine stopped.')
+        except Exception as e:
+            self.log.warning(f'Error stopping engine during shutdown: {e}')
         self.shutdown_rbd_stats()
         # wait for the metrics collection thread to stop
         self.metrics_thread.join()
@@ -2295,9 +2302,12 @@ class StandbyModule(MgrStandbyModule):
         # Wait for shutdown event
         self.shutdown_event.wait()
         self.shutdown_event.clear()
-        cherrypy.engine.stop()
-        cherrypy.server.httpserver = None
-        self.log.info('Engine stopped.')
+        try:
+            cherrypy.engine.stop()
+            cherrypy.server.httpserver = None
+            self.log.info('Engine stopped.')
+        except Exception as e:
+            self.log.warning(f'Error stopping engine during shutdown: {e}')
 
     def shutdown(self) -> None:
         self.log.info("Stopping engine...")
