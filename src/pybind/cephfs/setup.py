@@ -226,7 +226,6 @@ setup(
                 **ext_args
             )
         ],
-        compiler_directives={'language_level': sys.version_info.major},
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
         **cythonize_args
     ),
