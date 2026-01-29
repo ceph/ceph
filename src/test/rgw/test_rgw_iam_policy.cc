@@ -76,6 +76,8 @@ using rgw::IAM::s3GetObjectTagging;
 using rgw::IAM::s3GetObjectVersion;
 using rgw::IAM::s3GetObjectVersionTagging;
 using rgw::IAM::s3GetObjectVersionTorrent;
+using rgw::IAM::s3GetObjectAttributes;
+using rgw::IAM::s3GetObjectVersionAttributes;
 using rgw::IAM::s3GetPublicAccessBlock;
 using rgw::IAM::s3GetReplicationConfiguration;
 using rgw::IAM::s3ListAllMyBuckets;
@@ -420,6 +422,8 @@ TEST_F(PolicyTest, Parse3) {
   act2[s3GetObjectVersionAcl] = 1;
   act2[s3GetObjectTorrent] = 1;
   act2[s3GetObjectVersionTorrent] = 1;
+  act2[s3GetObjectAttributes] = 1;
+  act2[s3GetObjectVersionAttributes] = 1;
   act2[s3GetAccelerateConfiguration] = 1;
   act2[s3GetBucketAcl] = 1;
   act2[s3GetBucketOwnershipControls] = 1;
@@ -488,6 +492,8 @@ TEST_F(PolicyTest, Eval3) {
   s3allow[s3GetObjectVersion] = 1;
   s3allow[s3GetObjectAcl] = 1;
   s3allow[s3GetObjectVersionAcl] = 1;
+  s3allow[s3GetObjectAttributes] = 1;
+  s3allow[s3GetObjectVersionAttributes] = 1;
   s3allow[s3GetObjectTorrent] = 1;
   s3allow[s3GetObjectVersionTorrent] = 1;
   s3allow[s3GetAccelerateConfiguration] = 1;
@@ -882,6 +888,8 @@ TEST_F(ManagedPolicyTest, AmazonS3ReadOnlyAccess)
   act[s3GetObjectVersionAcl] = 1;
   act[s3GetObjectTorrent] = 1;
   act[s3GetObjectVersionTorrent] = 1;
+  act[s3GetObjectAttributes] = 1;
+  act[s3GetObjectVersionAttributes] = 1;
   act[s3GetAccelerateConfiguration] = 1;
   act[s3GetBucketAcl] = 1;
   act[s3GetBucketOwnershipControls] = 1;

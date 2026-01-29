@@ -1,10 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <optional>
 #include "rgw_data_access.h"
 #include "rgw_acl_s3.h"
 #include "rgw_aio_throttle.h"
 #include "rgw_compression.h"
+#include "rgw_cksum.h"
 #include "common/BackTrace.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -208,12 +210,13 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   const req_context rctx{dpp, y, nullptr};
   return processor->complete(obj_size, etag,
-			    &mtime, mtime,
-			    attrs, delete_at,
-                            nullptr, nullptr,
-                            puser_data,
-                            nullptr, nullptr,
-                            rctx, rgw::sal::FLAG_LOG_OP);
+			     &mtime, mtime, attrs,
+			     rgw::cksum::no_cksum,
+			     delete_at,
+			     nullptr, nullptr,
+			     puser_data,
+			     nullptr, nullptr,
+			     rctx, rgw::sal::FLAG_LOG_OP);
 }
 
 void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)

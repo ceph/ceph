@@ -2020,9 +2020,9 @@ namespace rgw {
     }
 
     op_ret = processor->complete(state->obj_size, etag, &mtime, real_time(), attrs,
-                                 (delete_at ? *delete_at : real_time()),
-                                if_match, if_nomatch, nullptr, nullptr, nullptr,
-                                rctx, rgw::sal::FLAG_LOG_OP);
+                                 rgw::cksum::no_cksum, (delete_at ? *delete_at : real_time()),
+				 if_match, if_nomatch, nullptr, nullptr, nullptr,
+				 rctx, rgw::sal::FLAG_LOG_OP);
     if (op_ret != 0) {
       /* revert attr updates */
       rgw_fh->set_mtime(omtime);
