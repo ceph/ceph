@@ -56,3 +56,4 @@ overrides:
       - osds down
       - osd down
       - OBJECT_UNFOUND
+      - PG_DEGRADED
