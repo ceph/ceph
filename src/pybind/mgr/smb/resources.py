@@ -13,12 +13,14 @@ from ceph.deployment.service_spec import (
     SMBClusterPublicIPSpec,
     SpecValidationError,
 )
+from ceph.smb.network import to_network
 from object_format import ErrorResponseBase
 
 from . import resourcelib, validation
 from .enums import (
     AuthMode,
     CephFSStorageProvider,
+    HostAccess,
     Intent,
     JoinSourceType,
     LoginAccess,
@@ -189,6 +191,30 @@ class LoginAccessEntry(_RBase):
         validation.check_access_name(self.name)
 
 
+@resourcelib.component()
+class HostAccessEntry(_RBase):
+    access: HostAccess
+    address: str = ''
+    network: str = ''
+
+    def validate(self) -> None:
+        # to_network raises ValueError if values are invalid
+        to_network(network=self.network, address=self.address)
+
+    @property
+    def normalized_value(self) -> str:
+        if self.address:
+            return self.address
+        # normalize network string
+        return str(to_network(network=self.network))
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.address.quiet = True
+        rc.network.quiet = True
+        return rc
+
+
 @resourcelib.resource('ceph.smb.share')
 class RemovedShare(_RBase):
     """Represents a share that has / will be removed."""
@@ -229,6 +255,7 @@ class Share(_RBase):
     custom_smb_share_options: Optional[Dict[str, str]] = None
     login_control: Optional[List[LoginAccessEntry]] = None
     restrict_access: bool = False
+    hosts_access: Optional[List[HostAccessEntry]] = None
 
     def __post_init__(self) -> None:
         # if name is not given explicitly, take it from the share_id

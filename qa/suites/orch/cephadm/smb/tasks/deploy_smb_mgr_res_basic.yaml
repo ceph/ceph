@@ -93,7 +93,7 @@ tasks:
     timeout: 1h
     clients:
       client.0:
-        - [default]
+        - [default, hosts_access]
 
 - cephadm.shell:
     host.a:
