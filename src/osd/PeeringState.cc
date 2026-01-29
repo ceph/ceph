@@ -5678,9 +5678,9 @@ boost::statechart::result
 PeeringState::Backfilling::react(const RemoteReservationRevoked &)
 {
   DECLARE_LOCALS;
-  ps->state_set(PG_STATE_BACKFILL_WAIT);
-  suspend_backfill();
   if (ps->needs_backfill()) {
+    ps->state_set(PG_STATE_BACKFILL_WAIT);
+    suspend_backfill();
     return transit<WaitLocalBackfillReserved>();
   } else {
     // raced with MOSDPGBackfill::OP_BACKFILL_FINISH, ignore
