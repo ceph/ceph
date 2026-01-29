@@ -3056,7 +3056,8 @@ Then run the following:
             data_devices=DeviceSelection(paths=devices),
             unmanaged=False,
             method=drive_group.method,
-            objectstore=drive_group.objectstore
+            objectstore=drive_group.objectstore, 
+            osd_type=drive_group.osd_type
         )
 
         self.log.info(f"Creating OSDs with service ID: {drive_group.service_id} on {host}:{device_list}")

@@ -392,8 +392,8 @@ def test_ceph_volume_command_12(test_input2):
     cmds = translate.to_ceph_volume(drive, []).run()
 
     expected_cmds = [
-        'lvm batch --no-auto /dev/sdb --crush-device-class ssd --objectstore bluestore --yes --no-systemd',
-        'lvm batch --no-auto /dev/sda --crush-device-class hdd --objectstore bluestore --yes --no-systemd',
+        'lvm batch --no-auto /dev/sdb --crush-device-class ssd --objectstore bluestore --osd-type classic --yes --no-systemd',
+        'lvm batch --no-auto /dev/sda --crush-device-class hdd --objectstore bluestore --osd-type classic --yes --no-systemd',
     ]
     assert len(cmds) == len(expected_cmds), f"Expected {expected_cmds} got {cmds}"
     assert all(cmd in cmds for cmd in expected_cmds), f'Expected {expected_cmds} got {cmds}'
@@ -422,8 +422,8 @@ def test_ceph_volume_command_13(test_input3):
     cmds = translate.to_ceph_volume(drive, []).run()
 
     expected_cmds = [
-        'lvm batch --no-auto /dev/sdb --objectstore bluestore --yes --no-systemd',
-        'lvm batch --no-auto /dev/sda --crush-device-class hdd --objectstore bluestore --yes --no-systemd',
+        'lvm batch --no-auto /dev/sdb --objectstore bluestore --osd-type classic --yes --no-systemd',
+        'lvm batch --no-auto /dev/sda --crush-device-class hdd --objectstore bluestore --osd-type classic --yes --no-systemd',
     ]
     assert len(cmds) == len(expected_cmds), f"Expected {expected_cmds} got {cmds}"
     assert all(cmd in cmds for cmd in expected_cmds), f'Expected {expected_cmds} got {cmds}'
