@@ -88,6 +88,14 @@ class Activate(object):
             action='store_true',
             help='Do not use a tmpfs mount for OSD data dir'
         )
+        parser.add_argument(
+            '--osd-type',
+            dest='osd_type',
+            help='The Ceph OSD type to use.',
+            default='classic',
+            choices=['classic', 'crimson'],
+            type=str,
+        )
         if self.argv is None:
             self.argv = []
         if len(self.argv) == 0 and self.args is None:

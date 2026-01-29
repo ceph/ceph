@@ -96,6 +96,7 @@ class TestBaseObjectStore:
         bo.objectstore = 'my-fake-objectstore'
         bo.osd_id = '123'
         bo.monmap = '/etc/ceph/ceph.monmap'
+        bo.osd_type = 'classic'
         result = bo.build_osd_mkfs_cmd()
 
         assert result == ['ceph-osd',

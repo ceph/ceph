@@ -34,6 +34,7 @@ class BaseObjectStore:
         self.cephx_lockbox_secret: str = ''
         self.objectstore: str = getattr(args, "objectstore", '')
         self.osd_mkfs_cmd: List[str] = []
+        self.osd_type: str = getattr(args, "osd_type", '')
         self.block_device_path: str = ''
         self.dmcrypt_key: str = encryption_utils.create_dmcrypt_key()
         self.with_tpm: int = int(getattr(self.args, 'with_tpm', False))
@@ -139,7 +140,13 @@ class BaseObjectStore:
     def get_osd_path(self) -> str:
         return '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, self.osd_id)
 
+    def get_default_entrypoint_cmd(self) -> str:
+        if self.osd_type == "crimson":
+            return "ceph-osd-crimson"
+        return "ceph-osd"
+    
     def build_osd_mkfs_cmd(self) -> List[str]:
+        base_mkfs_cmd = self.get_default_entrypoint_cmd()
         self.supplementary_command = [
             '--osd-data', self.osd_path,
             '--osd-uuid', self.osd_fsid,
@@ -147,7 +154,7 @@ class BaseObjectStore:
             '--setgroup', 'ceph'
         ]
         self.osd_mkfs_cmd = [
-            'ceph-osd',
+            base_mkfs_cmd,
             '--cluster', conf.cluster,
             '--osd-objectstore', self.objectstore,
             '--mkfs',
