@@ -141,8 +141,13 @@ public:
                           cls::rbd::MIRROR_PEER_DIRECTION_RX_TX,
                           "siteA", "client", m_local_mirror_uuid}));
 
+      std::string remote_fsid;
+      librados::Rados remote_rados(m_remote_ioctx);
+      EXPECT_EQ(0, remote_rados.cluster_fsid(&remote_fsid));
+
       m_pool_meta_cache.set_remote_pool_meta(
-        m_remote_ioctx.get_id(), {m_remote_mirror_uuid, remote_peer_uuid});
+        remote_fsid, m_remote_ioctx.get_id(),
+        {m_remote_mirror_uuid, remote_peer_uuid});
     }
 
     EXPECT_EQ(0, librbd::api::Mirror<>::uuid_get(m_remote_ioctx,
