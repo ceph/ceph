@@ -46,9 +46,9 @@ class RedfishDellSystem(BaseRedfishSystem):
                 member_id = d.get('MemberId')
                 result[member_id] = {}
                 result[member_id] = process_data(member_id, fields, d)
-
-        except Exception as e:
+        except (KeyError, TypeError, AttributeError) as e:
             self.log.error(f"Can't build data: {e}")
+            raise
         return normalize_dict(result)
 
     def get_sn(self) -> str:
