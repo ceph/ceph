@@ -171,7 +171,7 @@ Examples:
   # OSD 0 write IOPS
   irate(ceph_osd_op_w{ceph_daemon=~"osd.0"}[1m])
 
-  # OSD 0 write thughtput (bytes)
+  # OSD 0 write throughput (bytes)
   irate(ceph_osd_op_w_in_bytes{ceph_daemon=~"osd.0"}[1m])
 
   # OSD.0 total raw capacity available
