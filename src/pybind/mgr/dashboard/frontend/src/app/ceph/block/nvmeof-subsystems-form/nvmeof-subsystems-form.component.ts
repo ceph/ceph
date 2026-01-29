@@ -14,6 +14,7 @@ import { TearsheetComponent } from '~/app/shared/components/tearsheet/tearsheet.
 export type SubsystemPayload = {
   nqn: string;
   gw_group: string;
+  subsystemDchapKey: string;
 };
 
 @Component({
@@ -34,11 +35,11 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     },
     {
       label: $localize`Host access control`,
-      complete: false
+      invalid: false
     },
     {
       label: $localize`Authentication`,
-      complete: false
+      invalid: false
     },
     {
       label: $localize`Advanced options`,
@@ -78,7 +79,12 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
         task: new FinishedTask(taskUrl, {
           nqn: payload.nqn
         }),
-        call: this.nvmeofService.createSubsystem({ ...payload, enable_ha: true })
+        call: this.nvmeofService.createSubsystem({
+          nqn: payload.nqn,
+          gw_group: this.group,
+          dhchap_key: payload.subsystemDchapKey,
+          enable_ha: true
+        })
       })
       .subscribe({
         error() {
