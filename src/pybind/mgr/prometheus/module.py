@@ -2162,11 +2162,19 @@ class Module(MgrModule, OrchestratorClientMixin):
                 # Shutdown event was set
                 break
             
-            # Check if config change event is set (not a race since we just checked shutdown)
+            # Check if config change event is set
             if self.config_change_event.is_set():
+                # Double-check shutdown wasn't set while we were waiting
+                if self.shutdown_event.is_set():
+                    break
+                
                 # Config changed, restart engine with new configuration
                 self.config_change_event.clear()
                 self.log.info('Restarting engine due to config change...')
+
+                # Save old configuration in case we need to revert
+                old_server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
+                old_server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
 
                 # https://stackoverflow.com/questions/7254845/change-cherrypy-port-and-restart-web-server
                 # if we omit the line: cherrypy.server.httpserver = None
@@ -2176,6 +2184,9 @@ class Module(MgrModule, OrchestratorClientMixin):
                     cherrypy.server.httpserver = None
                 except Exception as e:
                     self.log.error(f'Error stopping engine during config change: {e}')
+                    # If we can't stop cleanly, we're in a bad state - trigger shutdown
+                    self.log.error('Cannot recover from engine stop failure, shutting down module')
+                    break
 
                 # Re-read configuration
                 server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
@@ -2191,8 +2202,10 @@ class Module(MgrModule, OrchestratorClientMixin):
                     self.log.info('Engine restarted.')
                 except Exception as e:
                     self.log.error(f'Failed to restart engine: {e}')
-                    # Don't break here - continue running with old config if restart fails
-                    # The module should remain active even if config change fails
+                    # Engine is stopped and restart failed - we need to shut down gracefully
+                    # The module cannot serve metrics without a running engine
+                    self.log.error('Cannot serve metrics without running engine, shutting down module')
+                    break
 
         # Cleanup on shutdown
         self.shutdown_event.clear()
