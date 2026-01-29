@@ -1220,7 +1220,7 @@ void FSMap::erase_filesystem(fs_cluster_id_t fscid)
       });
     }
   }
-  for ([[maybe_unused]] auto& [fscid, fs] : filesystems) {
+  for ([[maybe_unused]] auto& [remaining_fscid, fs] : filesystems) {
     for (auto& [gid, info] : fs.mds_map.get_mds_info()) {
       if (info.join_fscid == fscid) {
         modify_daemon(gid, [](auto& info) {
