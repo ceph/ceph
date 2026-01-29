@@ -369,6 +369,55 @@ class TestNFS(MgrTestCase):
         except CommandFailedError as e:
             self.fail(f"expected read/write of a file to be successful but failed with {e.exitstatus}")
 
+    def _mnt_nfs(self, pseudo_path, port, ip):
+        '''
+        Mount created export
+        :param pseudo_path: It is the pseudo root name
+        :param port: Port of deployed nfs cluster
+        :param ip: IP of deployed nfs cluster
+        '''
+        tries = 3
+        while True:
+            try:
+                # TODO: NFS V4.2 is failing with libaio read.
+                # TODO: Reference: https://tracker.ceph.com/issues/70203
+                nfs_version_conf = self.ctx['config'].get('nfs', {})
+                nfs_version = nfs_version_conf.get('vers', 'latest')
+                if nfs_version == "latest":
+                    self.ctx.cluster.run(
+                        args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port}',
+                              f'{ip}:{pseudo_path}', '/mnt'])
+                else:
+                    self.ctx.cluster.run(
+                        args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port},vers={nfs_version}',
+                              f'{ip}:{pseudo_path}', '/mnt'])
+                    pass
+                break
+            except CommandFailedError:
+                if tries:
+                    tries -= 1
+                    time.sleep(2)
+                    continue
+                raise
+
+        self.ctx.cluster.run(args=['sudo', 'chmod', '1777', '/mnt'])
+
+    def _test_fio(self, pseudo_path, port, ip):
+        '''
+        run fio with libaio on /mnt/fio
+        :param mnt_path: nfs mount point
+        '''
+        try:
+            self._mnt_nfs(pseudo_path, port, ip)
+            self.ctx.cluster.run(args=['mkdir', '/mnt/fio'])
+            fio_cmd=['sudo', 'fio', '--ioengine=libaio', '-directory=/mnt/fio', '--filename=fio.randrw.test', '--name=job', '--bs=16k', '--direct=1', '--group_reporting', '--iodepth=128', '--randrepeat=0', '--norandommap=1', '--thread=2', '--ramp_time=20s', '--offset_increment=5%', '--size=5G', '--time_based', '--runtime=300', '--ramp_time=1s', '--percentage_random=0', '--rw=randrw', '--rwmixread=50']
+            self.ctx.cluster.run(args=fio_cmd)
+        except CommandFailedError as e:
+            self.fail(f"expected fio to be successful but failed with {e.exitstatus}")
+        finally:
+            self.ctx.cluster.run(args=['sudo', 'rm', '-rf', '/mnt/fio'])
+            self.ctx.cluster.run(args=['sudo', 'umount', '/mnt'])
+
     def _write_to_read_only_export(self, pseudo_path, port, ip):
         '''
         Check if write to read only export fails
@@ -610,6 +659,18 @@ class TestNFS(MgrTestCase):
         port, ip = self._get_port_ip_info()
         self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
         self._test_data_read_write(self.pseudo_path, port, ip)
+        self._test_delete_cluster()
+
+    def test_async_io_fio(self):
+        '''
+        Test async io using fio. Expect completion without hang or crash
+        '''
+        self._test_create_cluster()
+        self._create_export(export_id='1', create_fs=True,
+                            extra_cmd=['--pseudo-path', self.pseudo_path])
+        port, ip = self._get_port_ip_info()
+        self._check_nfs_cluster_status('running', 'NFS Ganesha cluster restart failed')
+        self._test_fio(self.pseudo_path, port, ip)
         self._test_delete_cluster()
 
     def test_cluster_info(self):
