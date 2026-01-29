@@ -2172,10 +2172,6 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.config_change_event.clear()
                 self.log.info('Restarting engine due to config change...')
 
-                # Save old configuration in case we need to revert
-                old_server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
-                old_server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
-
                 # https://stackoverflow.com/questions/7254845/change-cherrypy-port-and-restart-web-server
                 # if we omit the line: cherrypy.server.httpserver = None
                 # then the cherrypy server is not restarted correctly
