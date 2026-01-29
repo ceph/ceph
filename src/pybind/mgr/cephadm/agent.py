@@ -23,6 +23,7 @@ from mgr_util import test_port_allocation, PortAlreadyInUse
 from mgr_util import verify_tls_files
 import tempfile
 from cephadm.services.service_registry import service_registry
+from cephadm.utils import get_node_proxy_status_value
 
 from urllib.error import HTTPError, URLError
 from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO
@@ -174,6 +175,12 @@ class NodeProxyEndpoint:
         except AttributeError:
             raise cherrypy.HTTPError(400, 'Malformed data received.')
 
+    def _get_health_value(self, member_data: Any) -> str:
+        return get_node_proxy_status_value(member_data, 'health', lower=True)
+
+    def _get_state_value(self, member_data: Any) -> str:
+        return get_node_proxy_status_value(member_data, 'state')
+
     # TODO(guits): refactor this
     # TODO(guits): use self.node_proxy.get_critical_from_host() ?
     def get_nok_members(self,
@@ -194,9 +201,10 @@ class NodeProxyEndpoint:
 
         for sys_id in data.keys():
             for member in data[sys_id].keys():
-                _status = data[sys_id][member]['status']['health'].lower()
-                if _status.lower() != 'ok':
-                    state = data[sys_id][member]['status']['state']
+                member_data = data[sys_id][member]
+                _status = self._get_health_value(member_data)
+                if _status and _status != 'ok':
+                    state = self._get_state_value(member_data)
                     _member = dict(
                         sys_id=sys_id,
                         member=member,

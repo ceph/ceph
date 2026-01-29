@@ -25,7 +25,7 @@ from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
-from .utils import resolve_ip, SpecialHostLabels
+from .utils import get_node_proxy_status_value, resolve_ip, SpecialHostLabels
 from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec
 
 if TYPE_CHECKING:
@@ -1641,6 +1641,18 @@ class NodeProxyCache:
         self.keyrings[host] = key
         self.mgr.set_store(f'{NODE_PROXY_CACHE_PREFIX}/keyrings', json.dumps(self.keyrings))
 
+    def _get_health_value(self, status: Any) -> str:
+        return get_node_proxy_status_value(status, 'health', lower=True)
+
+    def _has_health_value(self, statuses: ValuesView, health_value: str) -> bool:
+        return any([self._get_health_value(status) == health_value for status in statuses])
+
+    def _is_error_status(self, statuses: ValuesView) -> bool:
+        return self._has_health_value(statuses, 'error')
+
+    def _is_unknown_status(self, statuses: ValuesView) -> bool:
+        return self._has_health_value(statuses, 'unknown') and not self._is_error_status(statuses)
+
     def fullreport(self, **kw: Any) -> Dict[str, Any]:
         """
         Retrieves the full report for the specified hostname.
@@ -1678,12 +1690,6 @@ class NodeProxyCache:
         hostname = kw.get('hostname')
         hosts = [hostname] if hostname else self.data.keys()
 
-        def is_unknown(statuses: ValuesView) -> bool:
-            return any([status['status']['health'].lower() == 'unknown' for status in statuses]) and not is_error(statuses)
-
-        def is_error(statuses: ValuesView) -> bool:
-            return any([status['status']['health'].lower() == 'error' for status in statuses])
-
         _result: Dict[str, Any] = {}
 
         for host in hosts:
@@ -1695,9 +1701,9 @@ class NodeProxyCache:
                 _sys_id_res: List[str] = []
                 for element in details.values():
                     values = element.values()
-                    if is_error(values):
+                    if self._is_error_status(values):
                         state = 'error'
-                    elif is_unknown(values) or not values:
+                    elif self._is_unknown_status(values) or not values:
                         state = 'unknown'
                     else:
                         state = 'ok'
@@ -1772,7 +1778,7 @@ class NodeProxyCache:
                     if component_name == 'memory':
                         data_member['status']['health'] = 'critical'
                         data_member['status']['state'] = 'errors detected'
-                    if data_member['status']['health'].lower() != 'ok':
+                    if self._get_health_value(data_member) != 'ok':
                         results[component_name][member] = data_member
         return results
 
