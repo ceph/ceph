@@ -708,7 +708,10 @@ int CryptoObjectDispatch<I>::prepare_copyup(
 
         encrypted_bl.append(aligned_bl);
       }
-
+      if (m_crypto->get_meta_size() != 0) {
+        std::tie(aligned_off, aligned_len) = m_crypto->map_logical_physical(aligned_off, aligned_len);
+      } 
+      ceph_assert(encrypted_bl.length() == aligned_len);
       encrypted_sparse_bufferlist.insert(
         aligned_off, aligned_len, {io::SPARSE_EXTENT_STATE_DATA, aligned_len,
                                    std::move(encrypted_bl)});
