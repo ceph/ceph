@@ -86,7 +86,7 @@ public:
 
 ostream& operator<<(ostream& out, const CDir& dir)
 {
-  out << "[dir " << dir.dirfrag() << " " << dir.get_path() << "/"
+  out << "[dir " << dir.dirfrag() << " " << dir.get_trimmed_path() << "/"
       << " [" << dir.first << ",head]";
   if (dir.is_auth()) {
     out << " auth";
@@ -2009,7 +2009,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     dout(0) << "_fetched missing object for " << *this << dendl;
 
     clog->error() << "dir " << dirfrag() << " object missing on disk; some "
-                     "files may be lost (" << get_path() << ")";
+                     "files may be lost (" << get_trimmed_path() << ")";
 
     go_bad(complete);
     return;
@@ -2024,14 +2024,14 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       derr << "Corrupt fnode in dirfrag " << dirfrag()
 	   << ": " << err.what() << dendl;
       clog->warn() << "Corrupt fnode header in " << dirfrag() << ": "
-		   << err.what() << " (" << get_path() << ")";
+		   << err.what() << " (" << get_trimmed_path() << ")";
       go_bad(complete);
       return;
     }
     if (!p.end()) {
       clog->warn() << "header buffer of dir " << dirfrag() << " has "
 		  << hdrbl.length() - p.get_off() << " extra bytes ("
-                  << get_path() << ")";
+                  << get_trimmed_path() << ")";
       go_bad(complete);
       return;
     }
@@ -2149,7 +2149,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     } catch (const buffer::error &err) {
       mdcache->mds->clog->warn() << "Corrupt dentry '" << key.name << "' in "
                                   "dir frag " << dirfrag() << ": "
-                               << err.what() << "(" << get_path() << ")";
+                               << err.what() << "(" << get_trimmed_path() << ")";
 
       // Remember that this dentry is damaged.  Subsequent operations
       // that try to act directly on it will get their EIOs, but this
@@ -3765,7 +3765,22 @@ bool CDir::scrub_local()
   return good;
 }
 
-std::string CDir::get_path() const
+/* XXX: Return string containing only final 10 components of the path. This
+ * shortened path is to be used usually for only logging. This prevents the
+ * unnecessary generation of full version of a very long path (imagine a path
+ * with 2000 components) from inode because not only repeatedly printing long
+ * path in logs is unnecessary and unreadable but more importantly because it
+ * is an expensive process (since it's done for more or less individual log
+ * entries).
+ */
+std::string CDir::get_trimmed_path() const
+{
+  std::string path;
+  get_inode()->make_trimmed_path_string(path, true);
+  return path;
+}
+
+std::string CDir::get_path(bool trim_path) const
 {
   std::string path;
   get_inode()->make_path_string(path, true);
