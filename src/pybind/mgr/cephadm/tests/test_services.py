@@ -375,11 +375,11 @@ class TestNVMEOFService:
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
     def test_nvmeof_config(self, _get_name, _run_cephadm, cephadm_module: CephadmOrchestrator):
 
-        nvmeof_daemon_id = 'testpool.test.qwert'
         pool = 'testpool'
+        group = 'mygroup'
+        nvmeof_daemon_id = f'{pool}.{group}.test.qwert'
         tgt_cmd_extra_args = '--cpumask=0xFF --msg-mempool-size=524288'
         default_port = 5500
-        group = 'mygroup'
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         _get_name.return_value = nvmeof_daemon_id
 
@@ -448,7 +448,7 @@ tgt_cmd_extra_args = {tgt_cmd_extra_args}
 timeout = 1.0\n"""
 
         with with_host(cephadm_module, 'test'):
-            with with_service(cephadm_module, NvmeofServiceSpec(service_id=pool,
+            with with_service(cephadm_module, NvmeofServiceSpec(service_id=f'{pool}.{group}',
                                                                 tgt_cmd_extra_args=tgt_cmd_extra_args,
                                                                 group=group,
                                                                 pool=pool)):
@@ -459,14 +459,14 @@ timeout = 1.0\n"""
                     [],
                     stdin=json.dumps({
                         "fsid": "fsid",
-                        "name": "nvmeof.testpool.test.qwert",
+                        "name": "nvmeof.testpool.mygroup.test.qwert",
                         "image": "",
                         "deploy_arguments": [],
                         "params": {
                             "tcp_ports": [5500, 4420, 8009]
                         },
                         "meta": {
-                            "service_name": "nvmeof.testpool",
+                            "service_name": "nvmeof.testpool.mygroup",
                             "ports": [5500, 4420, 8009],
                             "ip": None,
                             "deployed_by": [],
@@ -477,7 +477,7 @@ timeout = 1.0\n"""
                         },
                         "config_blobs": {
                             "config": "",
-                            "keyring": "[client.nvmeof.testpool.test.qwert]\nkey = None\n",
+                            "keyring": "[client.nvmeof.testpool.mygroup.test.qwert]\nkey = None\n",
                             "files": {
                                 "ceph-nvmeof.conf": nvmeof_gateway_conf
                             }
@@ -485,6 +485,70 @@ timeout = 1.0\n"""
                     }),
                     use_current_daemon_image=False,
                 )
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_validate_no_group_duplicate_on_apply(self, cephadm_module: CephadmOrchestrator):
+        nvmeof_spec_group1 = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            group='testgroup',
+            pool='testpool'
+        )
+        nvmeof_spec_also_group1 = NvmeofServiceSpec(
+            service_id='testpool2.testgroup',
+            group='testgroup',
+            pool='testpool2'
+        )
+        with with_host(cephadm_module, 'test'):
+            out = cephadm_module._apply_service_spec(nvmeof_spec_group1)
+            assert out == 'Scheduled nvmeof.testpool.testgroup update...'
+            nvmeof_specs = cephadm_module.spec_store.get_by_service_type('nvmeof')
+            assert len(nvmeof_specs) == 1
+            assert nvmeof_specs[0].spec.service_name() == 'nvmeof.testpool.testgroup'
+            with pytest.raises(
+                OrchestratorError,
+                match='Cannot create nvmeof service with group testgroup. That group is already '
+                      'being used by the service nvmeof.testpool.testgroup'
+            ):
+                cephadm_module._apply_service_spec(nvmeof_spec_also_group1)
+            assert len(cephadm_module.spec_store.get_by_service_type('nvmeof')) == 1
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_validate_service_id_matches_group_on_apply(self, cephadm_module: CephadmOrchestrator):
+        matching_nvmeof_spec_group_service_id = NvmeofServiceSpec(
+            service_id='pool1.right_group',
+            group='right_group',
+            pool='pool1'
+        )
+        mismatch_nvmeof_spec_group_service_id = NvmeofServiceSpec(
+            service_id='pool2.wrong_group',
+            group='right_group',
+            pool='pool2'
+        )
+        matching_nvmeof_spec_group_service_id_with_dot = NvmeofServiceSpec(
+            service_id='pool3.right.group',
+            group='right.group',
+            pool='pool3'
+        )
+        mismatch_nvmeof_spec_group_service_id_with_dot = NvmeofServiceSpec(
+            service_id='pool4.wrong.group',
+            group='right.group',
+            pool='pool4'
+        )
+        with with_host(cephadm_module, 'test'):
+            cephadm_module._apply_service_spec(matching_nvmeof_spec_group_service_id)
+            with pytest.raises(
+                OrchestratorError,
+                match='The \'nvmeof\' service id/name must end with \'.<nvmeof-group-name>\'. Found '
+                      'group name \'right_group\' and service id \'pool2.wrong_group\''
+            ):
+                cephadm_module._apply_service_spec(mismatch_nvmeof_spec_group_service_id)
+            cephadm_module._apply_service_spec(matching_nvmeof_spec_group_service_id_with_dot)
+            with pytest.raises(
+                OrchestratorError,
+                match='The \'nvmeof\' service id/name must end with \'.<nvmeof-group-name>\'. Found '
+                      'group name \'right.group\' and service id \'pool4.wrong.group\''
+            ):
+                cephadm_module._apply_service_spec(mismatch_nvmeof_spec_group_service_id_with_dot)
 
 
 class TestMonitoring:
