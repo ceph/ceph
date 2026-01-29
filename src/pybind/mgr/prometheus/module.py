@@ -2069,6 +2069,7 @@ class Module(MgrModule, OrchestratorClientMixin):
 
             @cherrypy.expose
             def metrics(self) -> Optional[str]:
+                cherrypy.response.headers['Content-Type'] = 'text/plain;charset=utf-8'
                 # Lock the function execution
                 assert isinstance(_global_instance, Module)
                 with _global_instance.collect_lock:
