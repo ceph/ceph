@@ -155,6 +155,20 @@ ninja vstart  # Builds minimal required components
 - **Required:** `Signed-off-by: Your Name <email@example.com>` (use `git commit -s`)
 - **Optional:** `Fixes: http://tracker.ceph.com/issues/XXXXX` (before Signed-off-by)
 
+**Common Subsystems:**
+- Core daemons: `mon`, `osd`, `mds`, `mgr`, `rgw`
+- Client libraries: `rados`, `rbd`, `librados`, `librbd`, `libcephfs`
+- Filesystems: `cephfs`, `cephfs-shell`, `cephfs-top`
+- Management: `mgr/dashboard`, `mgr/orchestrator`, `mgr/telemetry`, `cephadm`, `ceph-volume`
+- Storage backends: `bluestore`, `objectstore`, `rocksdb`
+- Core libraries: `common`, `global`, `msg`, `auth`, `crush`, `osdc`
+- Erasure coding: `erasure-code`, `cls`
+- Testing/QA: `qa`, `qa/suites`, `qa/tasks`
+- Build/Infrastructure: `build`, `cmake`, `debian`, `rpm`, `doc`, `admin`
+- Tools: `tools`, `rbd-mirror`, `rbd-nbd`, `ceph-fuse`
+- Other: `crimson`, `pybind`, `python-common`, `compressor`, `crypto`
+- Use path-based prefix for subdirectories: `mgr/dashboard`, `qa/suites`, `src/pybind`
+
 ## Common Build Patterns
 
 ### CMake Options (via ARGS)
