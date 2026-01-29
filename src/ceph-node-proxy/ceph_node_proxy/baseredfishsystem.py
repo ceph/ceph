@@ -17,30 +17,50 @@ class EndpointMgr:
         self.log = get_logger(f'{__name__}:{EndpointMgr.NAME}')
         self.prefix: str = prefix
         self.client: RedFishClient = client
+        # Use explicit dictionary instead of dynamic attributes
+        self._endpoints: Dict[str, Endpoint] = {}
+        self._session_url: str = ''
 
-    def __getitem__(self, index: str) -> Any:
-        if index in self.__dict__:
-            return self.__dict__[index]
-        else:
-            raise RuntimeError(f'{index} is not a valid endpoint.')
+    def __getitem__(self, index: str) -> 'Endpoint':
+        if index not in self._endpoints:
+            raise KeyError(f"'{index}' is not a valid endpoint. Available: {list(self._endpoints.keys())}")
+        return self._endpoints[index]
+
+    def get(self, name: str, default: Any = None) -> Any:
+        return self._endpoints.get(name, default)
+
+    def list_endpoints(self) -> List[str]:
+        return list(self._endpoints.keys())
+
+    @property
+    def session(self) -> str:
+        return self._session_url
 
     def init(self) -> None:
-        _error_msg: str = "Can't discover entrypoint(s)"
+        error_msg: str = "Can't discover entrypoint(s)"
         try:
             _, _data, _ = self.client.query(endpoint=self.prefix)
             json_data: Dict[str, Any] = json.loads(_data)
+
+            # Discover endpoints
             for k, v in json_data.items():
-                if '@odata.id' in v:
-                    self.log.debug(f'entrypoint found: {to_snake_case(k)} = {v["@odata.id"]}')
-                    _name: str = to_snake_case(k)
-                    _url: str = v['@odata.id']
-                    e = Endpoint(_url, self.client)
-                    setattr(self, _name, e)
-            setattr(self, 'session', json_data['Links']['Sessions']['@odata.id'])  # TODO(guits): needs to be fixed
-        except (URLError, KeyError) as e:
-            msg = f'{_error_msg}: {e}'
+                if isinstance(v, dict) and '@odata.id' in v:
+                    name: str = to_snake_case(k)
+                    url: str = v['@odata.id']
+                    self.log.info(f'entrypoint found: {name} = {url}')
+                    self._endpoints[name] = Endpoint(url, self.client)
+
+            # Extract session URL if available
+            try:
+                self._session_url = json_data['Links']['Sessions']['@odata.id']
+            except (KeyError, TypeError):
+                self.log.warning('Session URL not found in root response')
+                self._session_url = ''
+
+        except (URLError, KeyError, json.JSONDecodeError) as e:
+            msg = f'{error_msg}: {e}'
             self.log.error(msg)
-            raise RuntimeError
+            raise RuntimeError(msg) from e
 
 
 class Endpoint:
@@ -50,6 +70,7 @@ class Endpoint:
         self.log = get_logger(f'{__name__}:{Endpoint.NAME}')
         self.url: str = url
         self.client: RedFishClient = client
+        self._children: Dict[str, 'Endpoint'] = {}
         self.data: Dict[str, Any] = self.get_data()
         self.id: str = ''
         self.members_names: List[str] = []
@@ -61,24 +82,40 @@ class Endpoint:
             try:
                 self.id = self.data['Id']
             except KeyError:
-                self.id = self.data['@odata.id'].split('/')[-1:]
+                self.id = self.data['@odata.id'].split('/')[-1]
         else:
             self.log.warning(f'No data could be loaded for {self.url}')
 
-    def __getitem__(self, index: str) -> Any:
-        if not getattr(self, index, False):
-            _url: str = f'{self.url}/{index}'
-            setattr(self, index, Endpoint(_url, self.client))
-        return self.__dict__[index]
+    def __getitem__(self, key: str) -> 'Endpoint':
+        if not isinstance(key, str) or not key or '/' in key:
+            raise KeyError(key)
+
+        if key not in self._children:
+            child_url: str = f'{self.url.rstrip("/")}/{key}'
+            self._children[key] = Endpoint(child_url, self.client)
+
+        return self._children[key]
+
+    def list_children(self) -> List[str]:
+        return list(self._children.keys())
 
     def query(self, url: str) -> Dict[str, Any]:
         data: Dict[str, Any] = {}
         try:
             self.log.debug(f'Querying {url}')
             _, _data, _ = self.client.query(endpoint=url)
-            data = json.loads(_data)
+            if not _data:
+                self.log.warning(f'Empty response from {url}')
+            else:
+                data = json.loads(_data)
         except KeyError as e:
-            self.log.error(f'Error while querying {self.url}: {e}')
+            self.log.error(f'KeyError while querying {url}: {e}')
+        except HTTPError as e:
+            self.log.error(f'HTTP error while querying {url} - {e.code} - {e.reason}')
+        except json.JSONDecodeError as e:
+            self.log.error(f'JSON decode error while querying {url}: {e}')
+        except Exception as e:
+            self.log.error(f'Unexpected error while querying {url}: {type(e).__name__}: {e}')
         return data
 
     def get_data(self) -> Dict[str, Any]:
@@ -88,36 +125,82 @@ class Endpoint:
         result: List[str] = []
         if self.has_members:
             for member in self.data['Members']:
-                name: str = member['@odata.id'].split('/')[-1:][0]
+                name: str = member['@odata.id'].split('/')[-1]
                 result.append(name)
         return result
 
     def get_name(self, endpoint: str) -> str:
-        return endpoint.split('/')[-1:][0]
+        return endpoint.split('/')[-1]
 
     def get_members_endpoints(self) -> Dict[str, str]:
         members: Dict[str, str] = {}
-        name: str = ''
+
+        self.log.error(f'get_members_endpoints called on {self.url}, has_members={self.has_members}')
+
         if self.has_members:
+            url_parts = self.url.split('/redfish/v1/')
+            if len(url_parts) > 1:
+                base_path = '/redfish/v1/' + url_parts[1].split('/')[0]
+            else:
+                base_path = None
+
             for member in self.data['Members']:
                 name = self.get_name(member['@odata.id'])
-                members[name] = member['@odata.id']
+                endpoint_url = member['@odata.id']
+                self.log.debug(f'Found member: {name} -> {endpoint_url}')
+                
+                if base_path and not endpoint_url.startswith(base_path):
+                    self.log.warning(
+                        f'Member endpoint {endpoint_url} does not match base path {base_path} '
+                        f'from {self.url}. Skipping this member.'
+                    )
+                    continue
+
+                members[name] = endpoint_url
         else:
-            name = self.get_name(self.data['@odata.id'])
-            members[name] = self.data['@odata.id']
+            if self.data:
+                name = self.get_name(self.url)
+                members[name] = self.url
+                self.log.warning(f'No Members array, using endpoint itself: {name} -> {self.url}')
+            else:
+                self.log.debug(f'Endpoint {self.url} has no data and no Members array')
 
         return members
 
     def get_members_data(self) -> Dict[str, Any]:
         result: Dict[str, Any] = {}
+        self.log.debug(f'get_members_data called on {self.url}, has_members={self.has_members}')
+        
         if self.has_members:
-            for member, endpoint in self.get_members_endpoints().items():
-                result[member] = self.query(endpoint)
+            self.log.debug(f'Endpoint {self.url} has Members array: {self.data.get("Members", [])}')
+            members_endpoints = self.get_members_endpoints()
+            
+            # If no valid members after filtering, fall back to using the endpoint itself
+            if not members_endpoints:
+                self.log.warning(
+                    f'Endpoint {self.url} has Members array but no valid members after filtering. '
+                    f'Using endpoint itself as singleton resource.'
+                )
+                if self.data:
+                    name = self.get_name(self.url)
+                    result[name] = self.data
+            else:
+                for member, endpoint_url in members_endpoints.items():
+                    self.log.info(f'Fetching data for member: {member} at {endpoint_url}')
+                    result[member] = self.query(endpoint_url)
+        else:
+            self.log.debug(f'Endpoint {self.url} has no Members array, returning own data')
+            if self.data:
+                name = self.get_name(self.url)
+                result[name] = self.data
+            else:
+                self.log.warning(f'Endpoint {self.url} has no members and empty data')
+
         return result
 
     @property
     def has_members(self) -> bool:
-        return 'Members' in self.data.keys()
+        return bool(self.data and 'Members' in self.data and isinstance(self.data['Members'], list))
 
 
 class BaseRedfishSystem(BaseSystem):

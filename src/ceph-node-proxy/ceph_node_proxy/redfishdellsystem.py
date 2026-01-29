@@ -106,7 +106,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                     else:
                         data = self.endpoints[collection][member][path].data
                 except HTTPError as e:
-                    self.log.debug(f'Error while updating {component}: {e}')
+                    self.log.error(f'Error while updating {component}: {e}')
                 else:
                     data_built = self.build_data(data=data, fields=fields, attribute=attribute)
                     result[member] = data_built
