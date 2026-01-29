@@ -2296,8 +2296,12 @@ class StandbyModule(MgrStandbyModule):
         if not _wait_for_port_available(self.log, server_addr, server_port):
             self.log.warning(f'Port {server_port} still in use after waiting, attempting to start anyway')
         self.log.info('Starting engine...')
-        cherrypy.engine.start()
-        self.log.info('Engine started.')
+        try:
+            cherrypy.engine.start()
+            self.log.info('Engine started.')
+        except Exception as e:
+            self.log.error(f'Failed to start engine: {e}')
+            return
 
         # Wait for shutdown event
         self.shutdown_event.wait()
