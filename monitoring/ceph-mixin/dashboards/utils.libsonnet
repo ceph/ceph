@@ -220,7 +220,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
     },
 
   matchers()::
-    local clusterMatcher = '%s=~"$cluster"' % $._config.clusterLabel;
+    local clusterMatcher = '%s=~"$cluster|"' % $._config.clusterLabel;
     {
       // Common labels
       matchers: (if $._config.showMultiCluster then clusterMatcher + ', ' else ''),
