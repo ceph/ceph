@@ -1349,3 +1349,22 @@ options:
   with_legacy: true
   see_also:
   - osd_heartbeat_use_min_delay_socket
+- name: mon_netsplit_grace_period
+  type: secs
+  level: advanced
+  desc: Time (in seconds) to wait before emitting a MON_NETSPLIT
+    health warning.
+  default: 9
+  services :
+  - mon
+- name: pool_availability_update_interval
+  type: float
+  level: advanced
+  desc: Update data availability score at this interval. By default the interval 
+    is same as paxos_propose_interval configuration.  
+  default: 1
+  services :
+  - mon
+  flags:
+  - runtime
+
