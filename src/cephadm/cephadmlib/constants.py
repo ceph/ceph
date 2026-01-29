@@ -49,3 +49,4 @@ DEFAULT_RETRY = 15
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 QUIET_LOG_LEVEL = 9  # DEBUG is 10, so using 9 to be lower level than DEBUG
 NO_DEPRECATED = False
+DAEMON_FAILED_ERROR = 17
