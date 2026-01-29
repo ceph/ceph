@@ -20,6 +20,12 @@ Ceph is a scalable distributed storage system providing object, block, and file 
 
 ## Critical Build Requirements
 
+**IMPORTANT: Git Submodule Handling**
+- **DO NOT commit submodule updates** unless specifically working on submodule version updates
+- Use `git add <specific-files>` instead of `git add .` to avoid accidentally staging submodule changes
+- Submodules include: `ceph-erasure-code-corpus`, `ceph-object-corpus`, `src/BLAKE3`, and others
+- If submodules appear modified in `git status`, verify you haven't unintentionally updated them
+
 ### Prerequisites (MUST run before building)
 ```bash
 # 1. Initialize submodules (REQUIRED - will fail without this)
