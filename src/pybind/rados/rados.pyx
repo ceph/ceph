@@ -1,3 +1,4 @@
+# cython: language_level=3
 # cython: embedsignature=True, binding=True
 """
 This module is a thin wrapper around librados.
