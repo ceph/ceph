@@ -7871,6 +7871,8 @@ void Server::handle_client_link(const MDRequestRef& mdr)
 
   CInode* target_pin = targeti->get_projected_parent_dir()->inode;
   SnapRealm *target_realm = target_pin->find_snaprealm();
+  ceph_assert(target_realm);
+  dout(20) << "target_realm " << *target_realm << dendl;
   if (target_pin != dir->inode &&
       target_realm->get_subvolume_ino() !=
       dir->inode->find_snaprealm()->get_subvolume_ino() &&
@@ -9692,6 +9694,10 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
       src_realm = dest_realm;
     else
       src_realm = srcdir->inode->find_snaprealm();
+    ceph_assert(dest_realm);
+    ceph_assert(src_realm);
+    dout(20) << "src_realm " << *src_realm << dendl;
+    dout(20) << "dest_realm " << *dest_realm << dendl;
     if (src_realm != dest_realm &&
 	src_realm->get_subvolume_ino() != dest_realm->get_subvolume_ino()) {
       respond_to_request(mdr, -EXDEV);
