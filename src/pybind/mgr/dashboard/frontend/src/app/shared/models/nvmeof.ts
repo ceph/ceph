@@ -59,3 +59,8 @@ export interface NvmeofGatewayGroup extends CephServiceSpec {
   subSystemCount: number;
   nodeCount: number;
 }
+
+export enum AUTHENTICATION {
+  Unidirectional = 'unidirectional',
+  Bidirectional = 'bidirectional'
+}

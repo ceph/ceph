@@ -14,7 +14,8 @@ import {
 } from './nvmeof-subsystems-form.component';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystem-step-1/nvmeof-subsystem-step-1.component';
-import { GridModule, InputModule } from 'carbon-components-angular';
+import { GridModule, InputModule, RadioModule, TagModule } from 'carbon-components-angular';
+import { NvmeofSubsystemsStepThreeComponent } from './nvmeof-subsystem-step-3/nvmeof-subsystem-step-3.component';
 
 describe('NvmeofSubsystemsFormComponent', () => {
   let component: NvmeofSubsystemsFormComponent;
@@ -24,13 +25,18 @@ describe('NvmeofSubsystemsFormComponent', () => {
   const mockGroupName = 'default';
   const mockPayload: SubsystemPayload = {
     nqn: '',
-    gw_group: mockGroupName
+    gw_group: mockGroupName,
+    subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY='
   };
 
   beforeEach(async () => {
     spyOn(Date, 'now').and.returnValue(mockTimestamp);
     await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemsFormComponent, NvmeofSubsystemsStepOneComponent],
+      declarations: [
+        NvmeofSubsystemsFormComponent,
+        NvmeofSubsystemsStepOneComponent,
+        NvmeofSubsystemsStepThreeComponent
+      ],
       providers: [NgbActiveModal],
       imports: [
         HttpClientTestingModule,
@@ -40,6 +46,8 @@ describe('NvmeofSubsystemsFormComponent', () => {
         SharedModule,
         InputModule,
         GridModule,
+        RadioModule,
+        TagModule,
         ToastrModule.forRoot()
       ]
     }).compileComponents();
@@ -68,7 +76,8 @@ describe('NvmeofSubsystemsFormComponent', () => {
       expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
         nqn: expectedNqn,
         gw_group: mockGroupName,
-        enable_ha: true
+        enable_ha: true,
+        dhchap_key: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY='
       });
     });
   });
