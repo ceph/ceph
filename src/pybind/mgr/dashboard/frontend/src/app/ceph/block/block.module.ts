@@ -49,6 +49,7 @@ import { NvmeofInitiatorsListComponent } from './nvmeof-initiators-list/nvmeof-i
 import { NvmeofInitiatorsFormComponent } from './nvmeof-initiators-form/nvmeof-initiators-form.component';
 import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group/nvmeof-gateway-group.component';
 import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystems-form/nvme-subsystem-step-1/nvmeof-subsystem-step-1.component';
+import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystems-form/nvmeof-subsystem-step-2/nvmeof-subsystem-step-2.component';
 import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway-node.component';
 import { NvmeofGroupFormComponent } from './nvmeof-group-form /nvmeof-group-form.component';
 
@@ -147,7 +148,8 @@ import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
     NvmeofInitiatorsFormComponent,
     NvmeofGatewayNodeComponent,
     NvmeofGroupFormComponent,
-    NvmeofSubsystemsStepOneComponent
+    NvmeofSubsystemsStepOneComponent,
+    NvmeofSubsystemsStepTwoComponent
   ],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })

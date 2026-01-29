@@ -1,5 +1,4 @@
 import {
-  ChangeDetectorRef,
   Component,
   ContentChildren,
   EventEmitter,
@@ -80,7 +79,6 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor(
     protected formBuilder: FormBuilder,
-    private changeDetectorRef: ChangeDetectorRef,
     private cdsModalService: ModalCdsService,
     private route: ActivatedRoute,
     private location: Location,
@@ -90,6 +88,10 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit() {
     this.lastStep = this.steps.length - 1;
     this.hasModalOutlet = this.route.outlet === 'modal';
+  }
+
+  private _updateStepInvalid(index: number, invalid: boolean) {
+    this.steps = this.steps.map((step, i) => (i === index ? { ...step, invalid } : step));
   }
 
   onStepSelect(event: { step: Step; index: number }) {
@@ -157,19 +159,17 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    // Checking Step validity, subscries ot all steps
-    if (!this.stepContents || !this.steps) return;
+    if (!this.stepContents?.length) return;
 
     this.stepContents.forEach((wrapper, index) => {
       const form = wrapper.stepComponent?.formGroup;
       if (!form) return;
 
-      // Initialize invalid flag if missing
-      this.steps[index].invalid = form.invalid;
+      // initial state
+      this._updateStepInvalid(index, form.invalid);
 
       form.statusChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
-        this.steps[index].invalid = form.invalid;
-        this.changeDetectorRef.markForCheck();
+        this._updateStepInvalid(index, form.invalid);
       });
     });
   }

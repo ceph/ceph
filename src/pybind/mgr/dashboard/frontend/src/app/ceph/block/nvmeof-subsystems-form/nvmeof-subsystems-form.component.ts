@@ -24,20 +24,19 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   steps: Step[] = [
     {
       label: $localize`Subsystem Details`,
-      complete: false,
       invalid: false
     },
     {
       label: $localize`Host access control`,
-      complete: false
+      invalid: false
     },
     {
       label: $localize`Authentication`,
-      complete: false
+      invalid: false
     },
     {
       label: $localize`Advanced Options`,
-      complete: false,
+      invalid: false,
       secondaryLabel: $localize`Advanced`
     }
   ];
