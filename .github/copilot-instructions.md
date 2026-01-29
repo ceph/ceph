@@ -108,10 +108,12 @@ ninja vstart  # Builds minimal required components
 ```
 
 **vstart Options:**
-- `--new` or `-n`: Start fresh cluster (use `-n` to preserve data between restarts)
+- `--new` or `-n`: Start fresh cluster, destroying existing data
 - `--debug` or `-d`: Enable debug logging
-- `--localhost`: Bind to localhost only
-- `--bluestore`: Use BlueStore backend (recommended)
+- `--localhost` or `-l`: Bind to localhost only
+- `--bluestore` or `-b`: Use BlueStore backend (default)
+- `-x`: Enable cephx authentication (on by default)
+- No flags: Reuses existing cluster data (preserves data between restarts)
 
 ## Coding Standards
 
@@ -121,7 +123,7 @@ ninja vstart  # Builds minimal required components
   - Functions: `use_underscores()` (NOT CamelCase)
   - Classes: `CamelCase` with `m_` prefix for members
   - Structs (data containers): `lowercase_t`
-  - Constants: `ALL_CAPS` (NOT kCamelCase)
+  - Constants: `ALL_CAPS` (NOT Google's kConstantName style)
   - Enums: `ALL_CAPS`
 - **Formatting:**
   - Indent: 2 spaces (NO tabs)
@@ -143,7 +145,7 @@ ninja vstart  # Builds minimal required components
 ### Commit Messages
 - **Title Format:** `<subsystem>: <imperative mood description>` (max 72 chars)
   - Examples: `mon: add perf counter for finisher`, `doc/mgr: fix typo`
-- **Body:** Explain "what" and "why", not just "what"
+- **Body:** Explain both "what" changed and "why", not just "what" changed
 - **Required:** `Signed-off-by: Your Name <email@example.com>` (use `git commit -s`)
 - **Optional:** `Fixes: http://tracker.ceph.com/issues/XXXXX` (before Signed-off-by)
 
@@ -160,8 +162,8 @@ ARGS="-DWITH_RADOSGW=OFF" ./do_cmake.sh
 # Use system Boost:
 ARGS="-DWITH_SYSTEM_BOOST=ON" ./do_cmake.sh
 
-# Enable ccache/sccache (auto-detected if available):
-# Already handled by do_cmake.sh
+# Enable ccache/sccache (auto-detected and used if available in PATH):
+# No manual configuration needed - do_cmake.sh detects them automatically
 
 # Custom compiler:
 ARGS="-DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12" ./do_cmake.sh
