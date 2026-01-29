@@ -82,6 +82,14 @@ ninja check -j$(nproc)
 
 **Test logs on failure:** Located in `build/Testing/Temporary/`
 
+**Standalone Tests:**
+```bash
+cd build
+../qa/run-standalone.sh  # Runs standalone test suite
+```
+
+Note: Standalone tests are more extensive and take longer. Capture output to file for analysis.
+
 ### Development Cluster (vstart)
 
 Start a local test cluster for development:
@@ -124,12 +132,13 @@ ninja vstart  # Builds minimal required components
 
 ### Python Code
 - Follow PEP-8 strictly for new code
-- Multiple `tox.ini` files exist for Python linting:
-  - `src/pybind/tox.ini`
+- Multiple `tox.ini` files exist for Python linting (mypy, flake8, pylint):
+  - `src/pybind/tox.ini` (includes mypy type checking)
   - `src/cephadm/tox.ini`
   - `src/ceph-volume/tox.ini`
   - `src/python-common/tox.ini`
   - `qa/tox.ini`
+- Run Python tests with `tox` in the relevant directory before submitting
 
 ### Commit Messages
 - **Title Format:** `<subsystem>: <imperative mood description>` (max 72 chars)
