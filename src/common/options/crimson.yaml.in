@@ -89,6 +89,17 @@ options:
   flags:
   - startup
 
+- name: crimson_allow_pg_split
+  type: bool
+  level: advanced
+  default: true
+  desc: Allow Crimson pools to increase their PG count (split)
+  long_desc: When enabled, allows the monitor to increase pg_num for pools using
+             the crimson flag.
+  services:
+  - osd
+  - mon
+
 # Bluestore options:
 
 - name: crimson_bluestore_num_threads
