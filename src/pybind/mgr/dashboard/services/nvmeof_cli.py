@@ -249,6 +249,8 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
         return self._convert_to_text_output(data, model)
 
 
+DEFAULT_MAP_KEY = "__default__"  # you can delete this if you want
+
 class NvmeofCLICommand(CLICommand):
     desc: str
 
@@ -259,8 +261,7 @@ class NvmeofCLICommand(CLICommand):
                  perm: str = 'rw',
                  poll: bool = False,
                  success_message_template: Optional[str] = None,
-                 success_message_fn: Optional[Callable[[Dict[str, Any]], str]] = None
-                 ):
+                 success_message_map: Optional[Dict[str, Any]] = None):
         super().__init__(prefix, perm, poll)
         self._output_formatter = AnnotatedDataTextOutputFormatter()
         self._model = model
@@ -268,124 +269,60 @@ class NvmeofCLICommand(CLICommand):
         self._alias_cmd: Optional[NvmeofCLICommand] = None
 
         self._success_message_template = success_message_template
-        self._success_message_fn = success_message_fn
+        self._success_message_map = success_message_map or {}
         self._func_defaults: Dict[str, Any] = {}
 
-    def _use_api_endpoint_desc_if_available(self, func):
-        if not self.desc and hasattr(func, 'doc_info'):
-            self.desc = func.doc_info.get('summary', '')
-
-    def __call__(self, func) -> HandlerFuncType:  # type: ignore
+    def __call__(self, func):
         resp = super().__call__(func)
-        self._func_defaults = self._compute_func_defaults()
+
         if self._alias:
             self._alias_cmd = NvmeofCLICommand(
                 self._alias,
                 model=self._model,
                 success_message_template=self._success_message_template,
-                success_message_fn=self._success_message_fn
+                success_message_map=self._success_message_map,
             )
-            assert self._alias_cmd is not None
             self._alias_cmd(func)
-            self._alias_cmd._func_defaults = self._alias_cmd._compute_func_defaults()
 
         self._use_api_endpoint_desc_if_available(func)
         return resp
 
+    def _apply_single_map_spec(self, spec: Any, raw: Any, fields: Dict[str, Any]) -> Any:
+        """
+        spec can be:
+          - callable(value, fields)
+          - literal value (e.g. string)
+          - dict mapping exact raw values to literal/callable
+        """
+        if callable(spec):
+            return spec(raw, fields)
 
-    def _compute_func_defaults(self) -> Dict[str, Any]:
-        defaults: Dict[str, Any] = {}
-        sig = inspect.signature(self.func)
+        if isinstance(spec, dict):
+            if raw in spec:
+                val = spec[raw]
+                return val(raw, fields) if callable(val) else val
+            # No default behavior — if key missing → return raw unchanged
+            return raw
 
-        for name, param in sig.parameters.items():
-            if name in CLICommand.KNOWN_ARGS:
-                continue
-            if name not in self.arg_spec:
-                continue
-            if param.default is not inspect.Parameter.empty:
-                defaults[name] = param.default
+        # simple literal replacement
+        return spec
 
-        return defaults
-
-    def _args_map_from_argspec(self,
-                               cmd_dict: Dict[str, Any],
-                               inbuf: Optional[str] = None) -> Dict[str, Any]:
-        kwargs, specials = self._collect_args_by_argspec(cmd_dict)
-        if inbuf and 'inbuf' in specials:
-            kwargs['inbuf'] = inbuf
-
-        
-        return {**self._func_defaults, **kwargs}
-
-
-    def _stringify(self, value: Any) -> str:
-        if isinstance(value, (bytes, bytearray)):
+    def _apply_success_message_map(self, fields: Dict[str, Any]) -> Dict[str, Any]:
+        out = dict(fields)
+        for field, spec in self._success_message_map.items():
+            raw = out.get(field)
             try:
-                return value.decode('utf-8', errors='replace')
+                out[field] = self._apply_single_map_spec(spec, raw, out)
             except Exception:
-                return str(value)
+                logger.warning("Failed applying success_message_map for field %s on %s",
+                               field, self.prefix, exc_info=True)
+        return out
 
-        if isinstance(value, (list, tuple)):
-            try:
-                return ','.join(self._stringify(v) for v in value)
-            except Exception:
-                return str(value)
-
-        return str(value)
-
-    def _format_success_message_from_args(self, 
-                                          args_map: Dict[str, Any], 
-                                          response: Dict[str, Any]) -> Optional[str]:
-        if not self._success_message_template and not self._success_message_fn:
+    def _format_success_message_from_args(self, args_map, response):
+        if not self._success_message_template:
             return None
-
-        if self._success_message_fn:
-            try:
-                msg = self._success_message_fn(args_map, response)
-                if msg:
-                    return msg
-            except Exception:
-                logger.warning("Success message function failed for %s", self.prefix, exc_info=True)
-
-        if self._success_message_template:
-            try:
-                fields_dict = {**args_map, **response}
-                str_map = {k: self._stringify(v) for k, v in fields_dict.items()}
-                return self._success_message_template.format(**str_map)
-            except Exception:
-                logger.warning("Success message template failed for %s", self.prefix, exc_info=True)
-
-        return None
-
-    def call(self,
-             mgr: Any,
-             cmd_dict: Dict[str, Any],
-             inbuf: Optional[str] = None) -> HandleCommandResult:
-        try:
-            out_format = cmd_dict.get('format')
-            args_map = self._args_map_from_argspec(cmd_dict, inbuf)
-            ret = super().call(mgr, cmd_dict, inbuf)
-            if out_format == 'plain' or not out_format:
-                message: Optional[str] = None
-                try:
-                    message = self._format_success_message_from_args(args_map, ret)
-                except Exception:
-                    logger.warning("Formatting of success message failed for %s",
-                                   self.prefix, exc_info=True)
-                if message:
-                    out = message
-                else:
-                    out = self._output_formatter.format_output(ret, self._model)
-
-            elif out_format == 'json':
-                out = json.dumps(ret, indent=4)
-            elif out_format == 'yaml':
-                out = yaml.dump(ret)
-            else:
-                return HandleCommandResult(-errno.EINVAL, '',
-                                           f"format '{out_format}' is not implemented")
-
-            return HandleCommandResult(0, out, '')
-
-        except Exception as e:  # pylint: disable=broad-except
-            return HandleCommandResult(-errno.EINVAL, '', str(e))
+        fields = {**args_map, **response}
+        fields = self._apply_success_message_map(fields)
+        return self._success_message_template.format(
+            **{k: self._stringify(v) for k, v in fields.items()}
+        )

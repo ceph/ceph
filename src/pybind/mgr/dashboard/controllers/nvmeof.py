@@ -534,8 +534,20 @@ else:
             )
 
         @empty_response
-        @NvmeofCLICommand("nvmeof listener del", model.RequestStatus,
-                          success_message_fn=build_listener_del_success_message)
+        @NvmeofCLICommand(
+            "nvmeof listener del",
+            model.RequestStatus,
+            success_message_template=(
+                "Deleting listener {traddr}:{trsvcid} from {nqn} {host_msg}: Successful"
+            ),
+            success_message_map={
+                "traddr": lambda v, _f: escape_address_if_ipv6(v) if v is not None else "",
+                "host_msg": lambda _v, f: (
+                    "for all hosts" if f.get("host_name") == "*"
+                    else f"for host {f.get('host_name')}"
+                ),
+            }
+        )
         @EndpointDoc(
             "Delete an existing NVMeoF listener",
             parameters={
@@ -1062,9 +1074,18 @@ else:
         @ReadPermission
         @Endpoint('PUT', '{nsid}/change_visibility')
         @NvmeofCLICommand(
-            "nvmeof namespace change_visibility", model=model.RequestStatus,
+            "nvmeof namespace change_visibility",
+            model=model.RequestStatus,
             alias="nvmeof ns change_visibility",
-            success_message_fn=build_ns_change_visibility_success_message
+            success_message_template=(
+                'Changing visibility of namespace {nsid} in {nqn} to "{auto_visible}": Successful'
+            ),
+            success_message_map={
+                "auto_visible": lambda v, _f: (
+                    "visible to all hosts" if str_to_bool(v)
+                    else "visible to selected hosts"
+                )
+            }
         )
         @EndpointDoc(
             "changes the visibility of the specified NVMeoF namespace to all or selected hosts",
@@ -1103,9 +1124,18 @@ else:
         @ReadPermission
         @Endpoint('PUT', '{nsid}/set_auto_resize')
         @NvmeofCLICommand(
-            "nvmeof namespace set_auto_resize", model=model.RequestStatus,
+            "nvmeof namespace set_auto_resize",
+            model=model.RequestStatus,
             alias="nvmeof ns set_auto_resize",
-            success_message_fn=build_ns_set_auto_resize_success_message
+            success_message_template=(
+                'Setting auto resize flag for namespace {nsid} in {nqn} to "{auto_resize_text}": Successful'
+            ),
+            success_message_map={
+                "auto_resize_text": lambda _v, f: (
+                    "auto resize namespace" if str_to_bool(f.get("auto_resize_enabled"))
+                    else "do not auto resize namespace"
+                )
+            }
         )
         @EndpointDoc(
             "Enable or disable namespace auto resize when RBD image is resized",
@@ -1145,9 +1175,18 @@ else:
         @ReadPermission
         @Endpoint('PUT', '{nsid}/set_rbd_trash_image')
         @NvmeofCLICommand(
-            "nvmeof namespace set_rbd_trash_image", model=model.RequestStatus,
+            "nvmeof namespace set_rbd_trash_image",
+            model=model.RequestStatus,
             alias="nvmeof ns set_rbd_trash_image",
-            success_message_fn=build_ns_set_rbd_trash_image_success_message
+            success_message_template=(
+                'Setting RBD trash image flag for namespace {nsid} in {nqn} to "{trash_text}": Successful'
+            ),
+            success_message_map={
+                "trash_text": lambda _v, f: (
+                    "trash on namespace deletion" if str_to_bool(f.get("rbd_trash_image_on_delete"))
+                    else "do not trash on namespace deletion"
+                )
+            }
         )
         @EndpointDoc(
             "changes the trash image on delete of the specified NVMeoF \
@@ -1388,8 +1427,28 @@ else:
             )
 
         @empty_response
-        @NvmeofCLICommand("nvmeof host add", model.RequestStatus,
-                          success_message_fn=build_host_add_success_message)
+        @NvmeofCLICommand(
+            "nvmeof host add",
+            model.RequestStatus,
+            success_message_template="{messages}",
+            success_message_map={
+                "messages": lambda _v, f: (
+                    (lambda host_list, nqn:
+                        "\n".join(
+                            (
+                                f"Allowing open host access to {nqn}: Successful"
+                                if h == "*"
+                                else f"Adding host {h} to {nqn}: Successful"
+                            ) for h in host_list
+                        )
+                    )(
+                        f.get("host_nqn") if isinstance(f.get("host_nqn"), list)
+                        else ([f.get("host_nqn")] if f.get("host_nqn") else []),
+                        f.get("nqn"),
+                    )
+                )
+            }
+        )
         @EndpointDoc(
             "Allow hosts to access an NVMeoF subsystem",
             parameters={
@@ -1415,7 +1474,28 @@ else:
             )
 
         @empty_response
-        @NvmeofCLICommand("nvmeof host del", model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof host del",
+            model.RequestStatus,
+            success_message_template="{messages}",
+            success_message_map={
+                "messages": lambda _v, f: (
+                    (lambda host_list, nqn:
+                        "\n".join(
+                            (
+                                f"Disabling open host access to {nqn}: Successful"
+                                if h == "*"
+                                else f"Removing host {h} access from {nqn}: Successful"
+                            ) for h in host_list
+                        )
+                    )(
+                        f.get("host_nqn") if isinstance(f.get("host_nqn"), list)
+                        else ([f.get("host_nqn")] if f.get("host_nqn") else []),
+                        f.get("nqn"),
+                    )
+                )
+            }
+        )
         @EndpointDoc(
             "Disallow hosts from accessing an NVMeoF subsystem",
             parameters={
