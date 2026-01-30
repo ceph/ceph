@@ -4002,7 +4002,7 @@ int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool bu
     }
     h->dirty_devs[p->bdev] = true;
     if (p->bdev == BDEV_SLOW) {
-      bytes_written_slow += t.length();
+      bytes_written_slow += x_len;
     }
 
     bloff += x_len;
