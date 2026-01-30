@@ -217,6 +217,18 @@
   With this dashboard no longer relies on `rgw_dns_name`.
 * Dashboard: Added support for QAT compression in RGW service form. Users can select 'Hardware' or 'Software' for QAT compression . If 'None' is selected, compression is removed altogether.
 
+* MGR: A new command, `ceph osd ok-to-upgrade`, has been added that allows
+  users and orchestration tools to determine a safe set of OSDs within a CRUSH
+  bucket to upgrade simultaneously without impacting data availability. To help
+  converge to a safe set, a new config option
+  ``mgr_osd_upgrade_check_convergence_factor`` is introduced. This option can be
+  modified (if necessary) to help converge to an optimal set. Higher values
+  maximize the set of OSDs to upgrade at the cost of longer command response
+  times. Conversely, a lower value improves the command response time but
+  results in a non-optimal or smaller set of OSDs which impacts the overall time
+  to upgrade all OSDs in the cluster. For more details see tracker:
+  https://tracker.ceph.com/issues/73031.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
