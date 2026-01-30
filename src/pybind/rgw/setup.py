@@ -141,15 +141,14 @@ def check_sanity():
         shutil.rmtree(tmp_dir)
 
 
-import platform
 
 if 'BUILD_DOC' in os.environ or 'READTHEDOCS' in os.environ:
     ext_args = {}
-    cython_constants = dict(BUILD_DOC=True, UNAME_SYSNAME=platform.system())
+    cython_constants = dict(BUILD_DOC=True)
     cythonize_args = dict(compile_time_env=cython_constants)
 elif check_sanity():
     ext_args = get_python_flags(['rados', 'rgw'])
-    cython_constants = dict(BUILD_DOC=False, UNAME_SYSNAME=platform.system())
+    cython_constants = dict(BUILD_DOC=False)
     include_path = [os.path.join(os.path.dirname(__file__), "..", "rados")]
     cythonize_args = dict(compile_time_env=cython_constants,
                           include_path=include_path)
@@ -226,6 +225,7 @@ setup(
                 **ext_args
             )
         ],
+        compiler_directives={'language_level': sys.version_info.major},
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
         **cythonize_args
     ),

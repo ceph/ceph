@@ -20,6 +20,20 @@ from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
 
+# Platform-specific errno handling using C preprocessor
+cdef extern from *:
+    """
+    #include <errno.h>
+    #if defined(__FreeBSD__) || defined(__APPLE__)
+    // FreeBSD/Darwin use ENOATTR for "no data"
+    #define CEPH_ENODATA ENOATTR
+    #else
+    // Linux uses ENODATA
+    #define CEPH_ENODATA ENODATA
+    #endif
+    """
+    int CEPH_ENODATA
+
 {{if BUILD_DOC}}
 include "mock_rados.pxi"
 {{else}}
@@ -233,10 +247,8 @@ class ConnectionShutdown(OSError):
         super(ConnectionShutdown, self).__init__(
                 "RADOS connection was shutdown (%s)" % message, errno)
 
-
-# Build errno mapping based on platform
-# FreeBSD uses ENOATTR while Linux uses ENODATA
-{{if UNAME_SYSNAME == "FreeBSD"}}
+# Build errno mapping
+# Use CEPH_ENODATA which resolves to ENOATTR on FreeBSD or ENODATA on Linux
 cdef errno_to_exception = {
     errno.EPERM     : PermissionError,
     errno.ENOENT    : ObjectNotFound,
@@ -244,7 +256,7 @@ cdef errno_to_exception = {
     errno.ENOSPC    : NoSpace,
     errno.EEXIST    : ObjectExists,
     errno.EBUSY     : ObjectBusy,
-    errno.ENOATTR   : NoData,
+    CEPH_ENODATA    : NoData,
     errno.EINTR     : InterruptedOrTimeoutError,
     errno.ETIMEDOUT : TimedOut,
     errno.EACCES    : PermissionDeniedError,
@@ -254,25 +266,6 @@ cdef errno_to_exception = {
     errno.ENOTCONN  : NotConnected,
     errno.ESHUTDOWN : ConnectionShutdown,
 }
-{{else}}
-cdef errno_to_exception = {
-    errno.EPERM     : PermissionError,
-    errno.ENOENT    : ObjectNotFound,
-    errno.EIO       : IOError,
-    errno.ENOSPC    : NoSpace,
-    errno.EEXIST    : ObjectExists,
-    errno.EBUSY     : ObjectBusy,
-    errno.ENODATA   : NoData,
-    errno.EINTR     : InterruptedOrTimeoutError,
-    errno.ETIMEDOUT : TimedOut,
-    errno.EACCES    : PermissionDeniedError,
-    errno.EINPROGRESS : InProgress,
-    errno.EISCONN   : IsConnected,
-    errno.EINVAL    : InvalidArgumentError,
-    errno.ENOTCONN  : NotConnected,
-    errno.ESHUTDOWN : ConnectionShutdown,
-}
-{{endif}}
 
 
 cdef make_ex(ret: int, msg: str):
