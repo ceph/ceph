@@ -1,3 +1,6 @@
+<div
+  [ngClass]="{'empty-body': todayNotifications.length === 0 && previousNotifications.length === 0}"
+  class="notification-area">
 @if (executingTasks.length > 0) {
 <div
   class="notification-section-heading"
@@ -87,7 +90,7 @@
   Today
 </div>
 
-@for (notification of todayNotifications; track notification.timestamp; let last = $last) {
+@for (notification of todayNotifications; track notification.id; let last = $last) {
 <ng-container
   *ngTemplateOutlet="notificationItemTemplate;
     context: { notification: notification, last: last }">
@@ -102,7 +105,7 @@
   Previous
 </div>
 
-@for (notification of previousNotifications; track notification.timestamp; let last = $last) {
+@for (notification of previousNotifications; track notification.id; let last = $last) {
 <ng-container
   *ngTemplateOutlet="notificationItemTemplate;
     context: { notification: notification, last: last }">
@@ -115,3 +118,4 @@
   <div i18n>No notifications</div>
 </div>
 }
+</div>

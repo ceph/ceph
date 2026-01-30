@@ -51,7 +51,8 @@ describe('NotificationAreaComponent', () => {
     const spy = {
       remove: jasmine.createSpy('remove'),
       dataSource: mockDataSource,
-      data$: mockDataSource.asObservable()
+      data$: mockDataSource.asObservable(),
+      getNotificationsSnapshot: () => mockDataSource.getValue()
     };
 
     TestBed.overrideProvider(NotificationService, { useValue: spy });

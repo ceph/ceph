@@ -291,6 +291,8 @@ BuildRequires:	python%{python3_pkgversion}
 BuildRequires:	python%{python3_pkgversion}-devel
 BuildRequires:	python%{python3_pkgversion}-setuptools
 BuildRequires:	python%{python3_pkgversion}-Cython
+BuildRequires:	python%{python3_pkgversion}-pip
+BuildRequires:	python%{python3_pkgversion}-wheel
 BuildRequires:	snappy-devel
 BuildRequires:	sqlite-devel
 BuildRequires:	sudo
@@ -2458,7 +2460,7 @@ fi
 
 %files -n python%{python3_pkgversion}-rados
 %{python3_sitearch}/rados.cpython*.so
-%{python3_sitearch}/rados-*.egg-info
+%{python3_sitearch}/rados-*.dist-info
 
 %files -n libcephsqlite
 %{_libdir}/libcephsqlite.so
@@ -2530,11 +2532,11 @@ fi
 
 %files -n python%{python3_pkgversion}-rgw
 %{python3_sitearch}/rgw.cpython*.so
-%{python3_sitearch}/rgw-*.egg-info
+%{python3_sitearch}/rgw-*.dist-info
 
 %files -n python%{python3_pkgversion}-rbd
 %{python3_sitearch}/rbd.cpython*.so
-%{python3_sitearch}/rbd-*.egg-info
+%{python3_sitearch}/rbd-*.dist-info
 
 %files -n libcephfs2
 %{_libdir}/libcephfs.so.*
@@ -2570,7 +2572,7 @@ fi
 
 %files -n python%{python3_pkgversion}-cephfs
 %{python3_sitearch}/cephfs.cpython*.so
-%{python3_sitearch}/cephfs-*.egg-info
+%{python3_sitearch}/cephfs-*.dist-info
 
 %files -n python%{python3_pkgversion}-ceph-argparse
 %{python3_sitelib}/ceph_argparse.py

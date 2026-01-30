@@ -2,6 +2,7 @@ import { Component, OnInit, TemplateRef, ViewChild, ViewEncapsulation } from '@a
 import { BehaviorSubject, forkJoin, Observable, of } from 'rxjs';
 import { catchError, map, switchMap, tap } from 'rxjs/operators';
 import { GatewayGroup, NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { HostService } from '~/app/shared/api/host.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -21,13 +22,17 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+
+const BASE_URL = 'block/nvmeof/gateways';
 
 @Component({
   selector: 'cd-nvmeof-gateway-group',
   templateUrl: './nvmeof-gateway-group.component.html',
   styleUrls: ['./nvmeof-gateway-group.component.scss'],
   standalone: false,
-  encapsulation: ViewEncapsulation.None
+  encapsulation: ViewEncapsulation.None,
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class NvmeofGatewayGroupComponent implements OnInit {
   @ViewChild(TableComponent, { static: true })
@@ -44,6 +49,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
 
   permission: Permission;
   tableActions: CdTableAction[];
+  nodesAvailable = false;
   columns: CdTableColumn[] = [];
   selection: CdTableSelection = new CdTableSelection();
   gatewayGroup$: Observable<CephServiceSpec[]>;
@@ -61,10 +67,12 @@ export class NvmeofGatewayGroupComponent implements OnInit {
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private nvmeofService: NvmeofService,
+    private hostService: HostService,
     public modalService: ModalCdsService,
     private cephServiceService: CephServiceService,
     public taskWrapper: TaskWrapperService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private urlBuilder: URLBuilderService
   ) {}
 
   ngOnInit(): void {
@@ -90,10 +98,11 @@ export class NvmeofGatewayGroupComponent implements OnInit {
         cellTemplate: this.dateTpl
       }
     ];
-
     const createAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
+      disable: () => (this.nodesAvailable ? false : $localize`Gateway nodes are not available`),
+      routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
@@ -118,9 +127,16 @@ export class NvmeofGatewayGroupComponent implements OnInit {
               groups.map((group: NvmeofGatewayGroup) => {
                 const isRunning = (group.status?.running ?? 0) > 0;
                 const subsystemsObservable = isRunning
-                  ? this.nvmeofService
-                      .listSubsystems(group.spec.group)
-                      .pipe(catchError(() => of([])))
+                  ? this.nvmeofService.listSubsystems(group.spec.group).pipe(
+                      catchError(() => {
+                        this.notificationService.show(
+                          NotificationType.error,
+                          $localize`Unable to fetch Gateway group`,
+                          $localize`Gateway group does not exist`
+                        );
+                        return of([]);
+                      })
+                    )
                   : of([]);
 
                 return subsystemsObservable.pipe(
@@ -139,24 +155,23 @@ export class NvmeofGatewayGroupComponent implements OnInit {
               })
             );
           }),
-          catchError((error) => {
+          catchError(() => {
             this.notificationService.show(
               NotificationType.error,
               $localize`Unable to fetch Gateway group`,
               $localize`Gateway group does not exist`
             );
-            if (error?.preventDefault) {
-              error.preventDefault();
-            }
             return of([]);
           })
         )
       )
     );
+    this.checkNodesAvailability();
   }
 
   fetchData(): void {
     this.subject.next([]);
+    this.checkNodesAvailability();
   }
 
   updateSelection(selection: CdTableSelection): void {
@@ -182,7 +197,8 @@ export class NvmeofGatewayGroupComponent implements OnInit {
       itemNames: [selectedGroup.spec.group],
       bodyContext: {
         disableForm,
-        subsystemCount: selectedGroup.subSystemCount
+        subsystemCount: selectedGroup.subSystemCount,
+        deletionMessage: $localize`Deleting <strong>${selectedGroup.spec.group}</strong> will remove all associated subsystems and may disrupt traffic routing for services relying on it. This action cannot be undone.`
       },
       submitActionObservable: () => {
         return this.taskWrapper
@@ -205,5 +221,28 @@ export class NvmeofGatewayGroupComponent implements OnInit {
           );
       }
     });
+  }
+
+  private checkNodesAvailability(): void {
+    forkJoin([this.nvmeofService.listGatewayGroups(), this.hostService.getAllHosts()]).subscribe(
+      ([groups, hosts]: [GatewayGroup[][], any[]]) => {
+        const usedHosts = new Set<string>();
+        const groupList = groups?.[0] ?? [];
+        groupList.forEach((group: CephServiceSpec) => {
+          const placementHosts = group.placement?.hosts || [];
+          placementHosts.forEach((hostname: string) => usedHosts.add(hostname));
+        });
+
+        const availableHosts = (hosts || []).filter((host) => {
+          const hostname = host.hostname;
+          return hostname && !usedHosts.has(hostname);
+        });
+
+        this.nodesAvailable = availableHosts.length > 0;
+      },
+      () => {
+        this.nodesAvailable = false;
+      }
+    );
   }
 }

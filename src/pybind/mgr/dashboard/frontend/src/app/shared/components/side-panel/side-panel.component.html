@@ -3,7 +3,9 @@
      *ngIf="expanded && overlay"></div>
 
 <cds-panel [expanded]="expanded"
-           [attr.panel-size]="size">
+           [attr.panel-size]="size"
+           [cdsLayer]="layer"
+           [cdsTheme]="theme">
   <div>
     <cds-icon-button kind="ghost"
                      class="float-end"
@@ -11,7 +13,7 @@
                      (click)="close()">
       <svg cdsIcon="close"></svg>
     </cds-icon-button>
-    <div class="panel-header"
+    <div class="panel-header cds--type-heading-03"
          *ngIf="headerText">
     {{ headerText }}
     </div>

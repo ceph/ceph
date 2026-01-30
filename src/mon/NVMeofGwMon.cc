@@ -45,7 +45,7 @@ void NVMeofGwMon::on_restart()
 {
   dout(10) <<  "called " << dendl;
   last_beacon.clear();
-  last_tick = ceph::coarse_mono_clock::now();
+  last_beacon_check = ceph::coarse_mono_clock::now();
   cleanup_pending_map();
   synchronize_last_beacon();
 }
@@ -66,7 +66,7 @@ void NVMeofGwMon::synchronize_last_beacon()
 	  gw_availability_t::GW_AVAILABLE) {
 	dout(10) << "synchronize last_beacon for  GW :" << gw_id << dendl;
 	LastBeacon lb = {gw_id, group_key};
-	last_beacon[lb] = last_tick;
+	last_beacon[lb] = last_beacon_check;
       }
       // force send ack after nearest beacon after leader re-election
       gw_created_pair.second.beacon_index =
@@ -83,6 +83,28 @@ void NVMeofGwMon::on_shutdown()
   dout(10) <<  "called " << dendl;
 }
 
+void NVMeofGwMon::check_beacon_timeout(ceph::coarse_mono_clock::time_point now,
+     bool &propose_pending)
+{
+  const auto nvmegw_beacon_grace =
+	  g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_beacon_grace");
+  for (auto &itr : last_beacon) {
+    auto& lb = itr.first;
+    auto last_beacon_time = itr.second;
+    if (last_beacon_time < (now - nvmegw_beacon_grace)) {
+      auto diff = now - last_beacon_time;
+      int seconds = std::chrono::duration_cast<std::chrono::seconds>(diff).count();
+          dout(1) << "beacon timeout for GW " << lb.gw_id << " for "
+                  << seconds <<" sec" << dendl;
+      pending_map.process_gw_map_gw_down(lb.gw_id, lb.group_key, propose_pending);
+      last_beacon.erase(lb);
+    } else {
+      dout(20) << "beacon live for GW " << lb.group_key <<" "<< lb.gw_id << dendl;
+    }
+  }
+  last_beacon_check = now;
+}
+
 void NVMeofGwMon::tick()
 {
   if (!is_active() || !mon.is_leader()) {
@@ -93,50 +115,37 @@ void NVMeofGwMon::tick()
   bool _propose_pending = false;
   
   const auto now = ceph::coarse_mono_clock::now();
-  const auto nvmegw_beacon_grace =
-    g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_beacon_grace");
+  const std::chrono::duration<double>
+    mon_tick_interval(g_conf()->mon_tick_interval);
+
   dout(15) <<  "NVMeofGwMon leader got a tick, pending epoch "
 	   << pending_map.epoch << dendl;
 
-  const auto client_tick_period =
-    g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_tick_period");
   // handle exception of tick overdued in order to avoid false detection of
   // overdued beacons, like it done in  MgrMonitor::tick
-  if (last_tick != ceph::coarse_mono_clock::zero() &&
-      (now - last_tick > (nvmegw_beacon_grace - client_tick_period))) {
+  if (last_beacon_check != ceph::coarse_mono_clock::zero() &&
+    (now - last_beacon_check > (2 * mon_tick_interval))) { // 1 mon tick was missed
     // This case handles either local slowness (calls being delayed
     // for whatever reason) or cluster election slowness (a long gap
     // between calls while an election happened)
     dout(4) << ": resetting beacon timeouts due to mon delay "
-      "(slow election?) of " << now - last_tick << " seconds" << dendl;
+      "(slow election?) of " << now - last_beacon_check << " seconds" << dendl;
     for (auto &i : last_beacon) {
       i.second = now;
     }
   }
 
-  last_tick = now;
   bool propose = false;
 
   // Periodic: check active FSM timers
   pending_map.update_active_timers(propose);
   _propose_pending |= propose;
 
-  const auto cutoff = now - nvmegw_beacon_grace;
-
   // Pass over all the stored beacons
   NvmeGroupKey old_group_key;
-  for (auto &itr : last_beacon) {
-    auto& lb = itr.first;
-    auto last_beacon_time = itr.second;
-    if (last_beacon_time < cutoff) {
-      dout(1) << "beacon timeout for GW " << lb.gw_id << dendl;
-      pending_map.process_gw_map_gw_down(lb.gw_id, lb.group_key, propose);
-      _propose_pending |= propose;
-      last_beacon.erase(lb);
-    } else {
-      dout(20) << "beacon live for GW key: " << lb.gw_id << dendl;
-    }
-  }
+  check_beacon_timeout(now, propose);
+  _propose_pending |= propose;
+
   BeaconSubsystems empty_subsystems;
   for (auto &[group_key, gws_states]: pending_map.created_gws) {
     BeaconSubsystems *subsystems = &empty_subsystems;
@@ -913,6 +922,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
   bool apply_ack_logic = true;
   bool send_ack =  false;
 
+  check_beacon_timeout(now, gw_propose);
   if (avail == gw_availability_t::GW_CREATED) {
     if (!gw_exists) {
       gw_created = false;

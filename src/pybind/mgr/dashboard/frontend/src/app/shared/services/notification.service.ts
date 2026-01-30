@@ -1,7 +1,7 @@
 import { Injectable, NgZone } from '@angular/core';
 
 import _ from 'lodash';
-import { BehaviorSubject, Subject } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 import {
   ToastContent,
   NotificationType as CarbonNotificationType
@@ -23,96 +23,125 @@ export class NotificationService {
     [NotificationType.success]: 'success',
     [NotificationType.warning]: 'warning'
   };
-
-  private hideToasties = false;
+  private readonly MAX_NOTIFICATIONS = 10;
+  private readonly SHOW_DELAY = 10;
+  private readonly QUEUE_DELAY = 500;
+  private readonly LOCAL_STORAGE_KEY = 'cdNotifications';
+  private readonly LOCAL_STORAGE_MUTE_KEY = 'cdNotificationsMuted';
 
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
-  private panelStateSource = new BehaviorSubject<{ isOpen: boolean; useNewPanel: boolean }>({
-    isOpen: false,
-    useNewPanel: true
-  });
+  private panelState = new BehaviorSubject<boolean>(false);
   private muteStateSource = new BehaviorSubject<boolean>(false);
   private activeToastsSource = new BehaviorSubject<ToastContent[]>([]);
-  sidebarSubject = new Subject();
+  private hasUnreadSource = new BehaviorSubject<boolean>(false);
 
   data$ = this.dataSource.asObservable();
-  panelState$ = this.panelStateSource.asObservable();
+  panelState$ = this.panelState.asObservable();
   muteState$ = this.muteStateSource.asObservable();
   activeToasts$ = this.activeToastsSource.asObservable();
+  hasUnread$ = this.hasUnreadSource.asObservable();
 
-  private queued: CdNotificationConfig[] = [];
-  private queuedTimeoutId: number;
   private activeToasts: ToastContent[] = [];
-  KEY = 'cdNotifications';
-  MUTE_KEY = 'cdNotificationsMuted';
-  private readonly MAX_NOTIFICATIONS = 10;
+  private queued: CdNotificationConfig[] = [];
+  private queuedTimeoutId?: number;
+  private hideToasties = false;
 
   constructor(
     private taskMessageService: TaskMessageService,
     private cdDatePipe: CdDatePipe,
     private ngZone: NgZone
   ) {
-    const stringNotifications = localStorage.getItem(this.KEY);
+    this._loadStoredNotifications();
+    this._loadMutedState();
+  }
+
+  private _loadStoredNotifications() {
+    const stringNotifications = localStorage.getItem(this.LOCAL_STORAGE_KEY);
     let notifications: CdNotification[] = [];
-
     if (_.isString(stringNotifications)) {
-      notifications = JSON.parse(stringNotifications, (_key, value) => {
-        if (_.isPlainObject(value)) {
-          return _.assign(new CdNotification(), value);
-        }
-        return value;
-      });
+      try {
+        notifications = JSON.parse(stringNotifications, (_key, value) => {
+          if (_.isPlainObject(value)) {
+            return _.assign(new CdNotification(), value);
+          }
+          return value;
+        });
+      } catch {
+        localStorage.removeItem(this.LOCAL_STORAGE_KEY);
+        notifications = [];
+      }
     }
-
     this.dataSource.next(notifications);
+    this.hasUnreadSource.next(notifications?.length > 0);
+  }
 
-    // Load mute state from localStorage
-    const isMuted = localStorage.getItem(this.MUTE_KEY) === 'true';
+  private _loadMutedState() {
+    const isMuted = localStorage.getItem(this.LOCAL_STORAGE_MUTE_KEY) === 'true';
     this.hideToasties = isMuted;
     this.muteStateSource.next(isMuted);
   }
 
+  private _persistNotifications(notifications: CdNotification[]) {
+    try {
+      localStorage.setItem(this.LOCAL_STORAGE_KEY, JSON.stringify(notifications));
+    } catch (e) {
+      const fallback = notifications.slice(0, 10);
+      localStorage.removeItem(this.LOCAL_STORAGE_KEY);
+      localStorage.setItem(this.LOCAL_STORAGE_KEY, JSON.stringify(fallback));
+      this.dataSource.next(fallback);
+      this.hasUnreadSource.next(fallback?.length > 0);
+    }
+  }
+
+  // ============
+  // STORAGE API
+  // ============
+
   /**
-   * Removes all current saved notifications
+   * Gets all notifications from local storage
    */
-  removeAll() {
-    localStorage.removeItem(this.KEY);
-    this.dataSource.next([]);
+  getNotificationsSnapshot(): CdNotification[] {
+    return this.dataSource.getValue();
   }
 
   /**
-   * Removes a single saved notification
-   */
-  remove(index: number) {
-    const notifications = this.dataSource.getValue();
-    notifications.splice(index, 1);
-    this.dataSource.next(notifications);
-    this.persistNotifications(notifications);
-  }
-
-  /**
-   * Method used for saving a shown notification (check show() method).
+   * Saving a shown notification in local storage
    */
   save(notification: CdNotification) {
-    const notifications = this.dataSource.getValue();
-    notifications.push(notification);
-    notifications.sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1));
-    while (notifications.length > this.MAX_NOTIFICATIONS) {
-      notifications.pop();
-    }
-    this.dataSource.next(notifications);
-    this.persistNotifications(notifications);
+    const notifications = [notification, ...this.dataSource.getValue()];
+
+    const limited = notifications
+      .sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1))
+      .slice(0, this.MAX_NOTIFICATIONS);
+
+    this.dataSource.next(limited);
+    this.hasUnreadSource.next(limited?.length > 0);
+    this._persistNotifications(limited);
   }
 
   /**
-   * Persists notifications to localStorage
+   * Removes a single saved notification from local storage
    */
-  private persistNotifications(notifications: CdNotification[]) {
-    localStorage.setItem(this.KEY, JSON.stringify(notifications));
+  remove(index: number) {
+    const notifications = [...this.dataSource.getValue()];
+    notifications.splice(index, 1);
+    this.dataSource.next(notifications);
+    this.hasUnreadSource.next(notifications?.length > 0);
+    this._persistNotifications(notifications);
   }
 
   /**
-   * Method for showing a notification.
+   * Removes all current saved notifications from storage (and any appearing toasts)
+   */
+  removeAll() {
+    localStorage.removeItem(this.LOCAL_STORAGE_KEY);
+    this.dataSource.next([]);
+    this.hasUnreadSource.next(false);
+    this._clearAllToasts();
+  }
+
+  /**
+   * Method for showing a toast notification
    * @param {NotificationType} type toastr type
    * @param {string} title
    * @param {string} [message] The message to be displayed. Note, use this field
@@ -151,34 +180,34 @@ export class NotificationService {
           application
         );
       }
-      this.queueToShow(config);
-    }, 10);
+      this._queueToShow(config);
+    }, this.SHOW_DELAY);
   }
 
-  private queueToShow(config: CdNotificationConfig) {
+  private _queueToShow(config: CdNotificationConfig) {
     this.cancel(this.queuedTimeoutId);
     if (!this.queued.find((c) => _.isEqual(c, config))) {
       this.queued.push(config);
     }
     this.queuedTimeoutId = window.setTimeout(() => {
-      this.showQueued();
-    }, 500);
+      this._showQueued();
+    }, this.QUEUE_DELAY);
   }
 
-  private showQueued() {
-    this.getUnifiedTitleQueue().forEach((config) => {
+  private _showQueued() {
+    this._getUnifiedTitleQueue().forEach((config) => {
       const notification = new CdNotification(config);
 
       if (!notification.isFinishedTask) {
         this.save(notification);
       }
-      this.showToasty(notification);
+      this._showToasty(notification);
     });
     this.queued = [];
   }
 
-  private getUnifiedTitleQueue(): CdNotificationConfig[] {
-    return Object.values(this.queueShiftByTitle()).map((configs) => {
+  private _getUnifiedTitleQueue(): CdNotificationConfig[] {
+    return Object.values(this._queueShiftByTitle()).map((configs) => {
       const config = configs[0];
       if (configs.length > 1) {
         config.message = '<ul>' + configs.map((c) => `<li>${c.message}</li>`).join('') + '</ul>';
@@ -187,7 +216,7 @@ export class NotificationService {
     });
   }
 
-  private queueShiftByTitle(): { [key: string]: CdNotificationConfig[] } {
+  private _queueShiftByTitle(): { [key: string]: CdNotificationConfig[] } {
     const byTitle: { [key: string]: CdNotificationConfig[] } = {};
     let config: CdNotificationConfig;
     while ((config = this.queued.shift())) {
@@ -199,7 +228,7 @@ export class NotificationService {
     return byTitle;
   }
 
-  private showToasty(notification: CdNotification) {
+  private _showToasty(notification: CdNotification) {
     // Exit immediately if no toasty should be displayed.
     if (this.hideToasties) {
       return;
@@ -212,7 +241,7 @@ export class NotificationService {
     const toast: ToastContent = {
       title: notification.title,
       subtitle: notification.message || '',
-      caption: this.renderTimeAndApplicationHtml(notification),
+      caption: this._renderTimeAndApplicationHtml(notification),
       type: carbonType,
       lowContrast: lowContrast,
       showClose: true,
@@ -235,21 +264,45 @@ export class NotificationService {
     }
   }
 
-  /**
-   * Remove a toast
-   */
-  removeToast(toast: ToastContent) {
-    this.activeToasts = this.activeToasts.filter((t) => !_.isEqual(t, toast));
-    this.activeToastsSource.next(this.activeToasts);
-  }
-
-  renderTimeAndApplicationHtml(notification: CdNotification): string {
+  private _renderTimeAndApplicationHtml(notification: CdNotification): string {
     let html = `<div class="toast-caption-container">
       <small class="date">${this.cdDatePipe.transform(notification.timestamp)}</small>`;
 
     html += '</div>';
     return html;
   }
+
+  private _clearAllToasts() {
+    this.activeToasts = [];
+    this.activeToastsSource.next(this.activeToasts);
+  }
+
+  /**
+   * Suspend showing the notification toasties.
+   * @param {boolean} suspend Set to ``true`` to disable/hide toasties.
+   */
+  suspendToasties(suspend: boolean) {
+    this.hideToasties = suspend;
+    this.muteStateSource.next(suspend);
+    localStorage.setItem(this.LOCAL_STORAGE_MUTE_KEY, suspend.toString());
+  }
+
+  removeToast(toast: ToastContent) {
+    this.activeToasts = this.activeToasts.filter((t) => !_.isEqual(t, toast));
+    this.activeToastsSource.next(this.activeToasts);
+  }
+
+  /**
+   * Prevent the notification from being shown.
+   * @param {number} timeoutId A number representing the ID of the timeout to be canceled.
+   */
+  cancel(timeoutId?: number) {
+    window.clearTimeout(timeoutId);
+  }
+
+  // ==================
+  // Task Notifications
+  // ==================
 
   notifyTask(finishedTask: FinishedTask, success: boolean = true): number {
     const notification = this.finishedTaskToNotification(finishedTask, success);
@@ -279,38 +332,23 @@ export class NotificationService {
     return notification;
   }
 
-  /**
-   * Prevent the notification from being shown.
-   * @param {number} timeoutId A number representing the ID of the timeout to be canceled.
-   */
-  cancel(timeoutId: number) {
-    window.clearTimeout(timeoutId);
-  }
-
-  /**
-   * Suspend showing the notification toasties.
-   * @param {boolean} suspend Set to ``true`` to disable/hide toasties.
-   */
-  suspendToasties(suspend: boolean) {
-    this.hideToasties = suspend;
-    this.muteStateSource.next(suspend);
-    localStorage.setItem(this.MUTE_KEY, suspend.toString());
-  }
+  // =================
+  // NOTIFICATION PANEL
+  // =================
 
   /**
    * Toggle the sidebar/panel visibility
    * @param isOpen whether to open or close the panel
-   * @param useNewPanel which panel type to use
    */
-  toggleSidebar(isOpen: boolean, useNewPanel: boolean = true) {
-    this.panelStateSource.next({
-      isOpen: isOpen,
-      useNewPanel: useNewPanel
-    });
+  togglePanel(isOpen: boolean) {
+    this.panelState.next(isOpen);
   }
 
-  clearAllToasts() {
-    this.activeToasts = [];
-    this.activeToastsSource.next(this.activeToasts);
+  setPanelState(isOpen: boolean) {
+    this.panelState.next(isOpen);
+  }
+
+  getPanelState(): boolean {
+    return this.panelState.value;
   }
 }

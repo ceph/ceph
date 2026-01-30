@@ -93,14 +93,18 @@
               </span>
               <cds-tag class="tag-success me-2"
                        *ngIf="node?.data?.is_default">
-                  default
-            </cds-tag>
+                    default
+              </cds-tag>
               <cds-tag class="tag-warning me-2"
                        *ngIf="node?.data?.is_master"> master </cds-tag>
               <cds-tag class="tag-warning me-2"
                        *ngIf="node?.data?.secondary_zone">
-                secondary-zone
-            </cds-tag>
+                  secondary-zone
+              </cds-tag>
+              <cds-tag class="tag-info me-2"
+                       *ngIf="node?.data?.tier_type === 'archive'">
+                  archive
+              </cds-tag>
             </div>
             <div class="btn-group align-inline-btns"
                  [ngStyle]="{'visibility': activeNodeId === node?.data?.id ? 'visible' : 'hidden'}"

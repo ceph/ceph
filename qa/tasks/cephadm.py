@@ -393,15 +393,15 @@ def ceph_log(ctx, config):
             """
             args = [
                 'sudo',
-                'egrep', pattern,
+                'grep', '-E', pattern,
                 '/var/log/ceph/{fsid}/ceph.log'.format(
                     fsid=fsid),
             ]
             if only_match:
-                args.extend([run.Raw('|'), 'egrep', '|'.join(only_match)])
+                args.extend([run.Raw('|'), 'grep', '-E', '|'.join(only_match)])
             if excludes:
                 for exclude in excludes:
-                    args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+                    args.extend([run.Raw('|'), 'grep', '-E', '-v', exclude])
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
@@ -1961,22 +1961,27 @@ def task(ctx, config):
     ref = ctx.config.get("branch", "main")
     if not ctx.ceph[cluster_name].image:
         if not container_image_name:
-            container_image_name = 'quay.ceph.io/ceph-ci/ceph'
+            raise Exception("Configuration error occurred. "
+                            "The 'image' value is undefined for 'cephadm' task. "
+                            "Please provide corresponding options in the task's "
+                            "config, task 'overrides', or teuthology 'defaults' "
+                            "section.")
         sha1 = config.get('sha1')
         flavor = config.get('flavor', 'default')
+        distro_suffix = config.get('distro-suffix', None)
 
         if any(_ in container_image_name for _ in (':', '@')):
             log.info('Provided image contains tag or digest, using it as is')
             ctx.ceph[cluster_name].image = container_image_name
-        elif sha1:
-            if flavor == "crimson-debug" or flavor == "crimson-release":
-                ctx.ceph[cluster_name].image = container_image_name + ':' + sha1 + '-' + flavor
-            else:
-                ctx.ceph[cluster_name].image = container_image_name + ':' + sha1
-            ref = sha1
         else:
-            # fall back to using the branch value
+            if sha1:
+                ref = sha1
             ctx.ceph[cluster_name].image = container_image_name + ':' + ref
+
+            if distro_suffix is not None:
+                ctx.ceph[cluster_name].image += '-' + distro_suffix
+            if flavor == "crimson-debug" or flavor == "crimson-release":
+                ctx.ceph[cluster_name].image += '-' + flavor
     log.info('Cluster image is %s' % ctx.ceph[cluster_name].image)
 
 

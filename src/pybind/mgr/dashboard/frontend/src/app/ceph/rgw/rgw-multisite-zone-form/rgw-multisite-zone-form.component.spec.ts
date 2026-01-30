@@ -90,7 +90,10 @@ describe('RgwMultisiteZoneFormComponent', () => {
         is_master: true,
         endpoints: ['http://192.168.100.100:80'],
         access_key: 'zxcftyuuhgg',
-        secret_key: 'Qwsdcfgghuiioklpoozsd'
+        secret_key: 'Qwsdcfgghuiioklpoozsd',
+        info: {
+          tier_type: 'archive'
+        }
       }
     };
 

@@ -2553,43 +2553,34 @@ paths:
       tags:
       - Cephfs
   /api/cephfs/mirror:
-    get:
-      parameters:
-      - description: File system name
-        in: query
-        name: fs_name
-        required: true
-        schema:
-          type: string
+    post:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                fs_name:
+                  description: File system name
+                  type: string
+                token:
+                  description: Bootstrap token
+                  type: string
+              required:
+              - fs_name
+              - token
+              type: object
       responses:
-        '200':
+        '201':
           content:
             application/vnd.ceph.api.v1.0+json:
-              schema:
-                items:
-                  properties:
-                    uuid:
-                      description: Peer ID
-                      properties:
-                        client_name:
-                          description: Ceph client name
-                          type: string
-                        fs_name:
-                          description: File system name
-                          type: string
-                        site_name:
-                          description: Remote site name
-                          type: string
-                      required:
-                      - client_name
-                      - site_name
-                      - fs_name
-                      type: object
-                  type: object
-                required:
-                - uuid
-                type: array
-          description: OK
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
         '401':
@@ -2601,7 +2592,7 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Get peers
+      summary: Create bootstrap peer
       tags:
       - CephfsMirror
   /api/cephfs/mirror/daemon-status:
@@ -2698,6 +2689,145 @@ paths:
       security:
       - jwt: []
       summary: Get mirror daemon and peers information
+      tags:
+      - CephfsMirror
+  /api/cephfs/mirror/token:
+    post:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                client_name:
+                  description: Client entity's name
+                  type: string
+                fs_name:
+                  description: File system name
+                  type: string
+                site_name:
+                  description: Site name
+                  type: string
+              required:
+              - fs_name
+              - client_name
+              - site_name
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Create bootstrap token
+      tags:
+      - CephfsMirror
+  /api/cephfs/mirror/{fs_name}:
+    get:
+      parameters:
+      - description: File system name
+        in: path
+        name: fs_name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                items:
+                  properties:
+                    uuid:
+                      description: Peer ID
+                      properties:
+                        client_name:
+                          description: Ceph client name
+                          type: string
+                        fs_name:
+                          description: File system name
+                          type: string
+                        site_name:
+                          description: Remote site name
+                          type: string
+                      required:
+                      - client_name
+                      - site_name
+                      - fs_name
+                      type: object
+                  type: object
+                required:
+                - uuid
+                type: array
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get peers
+      tags:
+      - CephfsMirror
+  /api/cephfs/mirror/{fs_name}/{peer_uuid}:
+    delete:
+      parameters:
+      - description: File system name
+        in: path
+        name: fs_name
+        required: true
+        schema:
+          type: string
+      - description: Peer UUID
+        in: path
+        name: peer_uuid
+        required: true
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Delete peer
       tags:
       - CephfsMirror
   /api/cephfs/remove/{name}:
@@ -15984,6 +16114,9 @@ paths:
                   type: boolean
                 secret_key:
                   type: string
+                tier_type:
+                  default: ''
+                  type: string
                 zone_endpoints:
                   type: string
                 zone_name:
@@ -16353,6 +16486,9 @@ paths:
                   default: ''
                   type: string
                 storage_class:
+                  default: ''
+                  type: string
+                tier_type:
                   default: ''
                   type: string
                 zone_endpoints:
@@ -17062,6 +17198,172 @@ paths:
             application/vnd.ceph.api.v1.0+json:
               type: object
           description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Service
+  /api/service/certificate:
+    get:
+      description: "\n        List all certificates configured in the cluster.\n\n\
+        \        This endpoint returns a list of all certificates managed by certmgr,\n\
+        \        including both user-provided and cephadm-signed certificates.\n\n\
+        \        :param status: Filter by certificate status. Valid values: 'expired',\n\
+        \            'expiring', 'valid', 'invalid'\n        :param scope: Filter\
+        \ by certificate scope. Valid values: 'SERVICE',\n            'HOST', 'GLOBAL'\n\
+        \        :param service_type: Filter by service type. Supports wildcards\n\
+        \            (e.g., 'rgw*')\n        :param include_cephadm_signed: If True,\
+        \ include cephadm-signed certificates.\n            If False (default), only\
+        \ user-provided certificates are returned.\n        :return: List of certificate\
+        \ objects with their details\n        "
+      parameters:
+      - allowEmptyValue: true
+        description: Filter by certificate status (e.g., "expired", "expiring", "valid",
+          "invalid")
+        in: query
+        name: status
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Filter by certificate scope (e.g., "service", "host", "global")
+        in: query
+        name: scope
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Filter by certificate type (e.g., "rgw*")
+        in: query
+        name: service_type
+        schema:
+          type: string
+      - default: false
+        description: 'Include cephadm-signed certificates in the list (default: False)'
+        in: query
+        name: include_cephadm_signed
+        schema:
+          type: boolean
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                items:
+                  properties:
+                    cert_name:
+                      description: Certificate name
+                      type: string
+                    common_name:
+                      description: Certificate common name (CN)
+                      type: string
+                    days_to_expiration:
+                      description: Days remaining until expiration
+                      type: integer
+                    expiry_date:
+                      description: Certificate expiration date
+                      type: string
+                    issuer:
+                      description: Certificate issuer distinguished name
+                      type: string
+                    scope:
+                      description: Certificate scope (SERVICE, HOST, or GLOBAL)
+                      type: string
+                    signed_by:
+                      description: Certificate issuer (user or cephadm)
+                      type: string
+                    status:
+                      description: Certificate status (valid, expiring, expired, invalid)
+                      type: string
+                    target:
+                      description: Certificate target (service name or hostname)
+                      type: string
+                  type: object
+                required:
+                - cert_name
+                - scope
+                - signed_by
+                - status
+                - days_to_expiration
+                - expiry_date
+                - issuer
+                - common_name
+                - target
+                type: array
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List All Certificates
+      tags:
+      - Service
+  /api/service/certificate/root-ca:
+    get:
+      description: "\n        Get the cephadm root CA certificate.\n\n        This\
+        \ endpoint returns the root Certificate Authority (CA) certificate\n     \
+        \   used by cephadm to sign other certificates in the cluster.\n\n       \
+        \ :return: Dictionary with certificate field containing root CA certificate\
+        \ in PEM format\n        "
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                properties:
+                  certificate:
+                    description: Root CA certificate in PEM format
+                    type: string
+                required:
+                - certificate
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get Root CA Certificate
+      tags:
+      - Service
+  /api/service/certificate/{service_name}:
+    get:
+      description: "\n        Get detailed certificate information for a service.\n\
+        \n        :param service_name: The service name, e.g. 'rgw.myzone'.\n    \
+        \    :return: Detailed certificate information including full certificate\
+        \ details\n        "
+      parameters:
+      - in: path
+        name: service_name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
         '400':
           description: Operation exception. Please check the response body for details.
         '401':
