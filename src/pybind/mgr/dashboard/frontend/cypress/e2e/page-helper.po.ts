@@ -120,19 +120,45 @@ export abstract class PageHelper {
    * Helper method to select an option inside a select element.
    * This method will also expect that the option was set.
    * @param option The option text (not value) to be selected.
+   * @param isCarbon If true, uses Carbon select element selector (cds-select).
+   *   This is a temporary parameter that will be removed once carbonization is complete.
    */
-  selectOption(selectionName: string, option: string) {
-    cy.get(`select[id=${selectionName}]`).select(option);
-    return this.expectSelectOption(selectionName, option);
+  selectOption(selectionName: string, option: string, isCarbon = false) {
+    if (isCarbon) {
+      cy.get(`cds-select[id=${selectionName}] select`).select(option, { force: true });
+    } else {
+      cy.get(`select[id=${selectionName}]`).select(option);
+    }
+    return this.expectSelectOption(selectionName, option, isCarbon);
   }
 
   /**
    * Helper method to expect a set option inside a select element.
    * @param option The selected option text (not value) that is to
    *   be expected.
+   * @param isCarbon If true, uses Carbon select element selector (cds-select).
+   *   This is a temporary parameter that will be removed once carbonization is complete.
    */
-  expectSelectOption(selectionName: string, option: string) {
-    return cy.get(`select[id=${selectionName}] option:checked`).contains(option);
+  expectSelectOption(selectionName: string, option: string, isCarbon = false) {
+    if (isCarbon) {
+      return cy.get(`cds-select[id=${selectionName}] select option:checked`).should(($option) => {
+        const text = $option.text().trim().toLowerCase();
+        expect(text).to.include(option.toLowerCase());
+      });
+    } else {
+      return cy.get(`select[id=${selectionName}] option:checked`).contains(option);
+    }
+  }
+
+  /**
+   * Helper method to select an option inside a cds-radio-group element.
+   * @param testId The data-testid attribute of the cds-radio-group.
+   * @param option The option value to be selected.
+   */
+  selectRadioOption(testId: string, option: string) {
+    cy.get(`[data-testid="${testId}"] cds-radio input[type="radio"][value="${option}"]`).check({
+      force: true
+    });
   }
 
   getLegends() {
