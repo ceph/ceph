@@ -2365,7 +2365,25 @@ void Objecter::resend_mon_ops()
 // read | write ---------------------------
 
 void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
-  boost::asio::post(service, [this, op, ec, rc]() {
+  // While the following post is scheduled, this op is considered "in flight".
+  // If a new osdmap is published, this op might be cancelled/redriven, etc..
+  // before the following post is executed. Normally, an op would be protected
+  // from this in the messaging layer. However, we don't have that protection
+  // here.  So we consider the following:
+  // 1. The op could be returned and freed (op->get() prevents this).
+  // 2. The op could be removed from its session but not yet resent.
+  // 3. The op could be redriven in the new epoch.
+  op->get();
+  auto epoch = op->target.epoch;
+
+  boost::asio::post(service, [this, op, ec, rc, epoch]() {
+
+    bool freed = op->get_nref() == 1;
+    op->put();
+    if (freed || !op->session || op->target.epoch != epoch) {
+      return;
+    }
+
     shunique_lock rl(rwlock, ceph::acquire_shared);
     ceph_assert(op->session);
     unique_lock sl(op->session->lock);
