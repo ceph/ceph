@@ -119,25 +119,26 @@ class RgwMultisiteStatus(RESTController):
     @allow_empty_body
     # pylint: disable=W0102,W0613
     def migrate(self, daemon_name=None, realm_name=None, zonegroup_name=None, zone_name=None,
-                zonegroup_endpoints=None, zone_endpoints=None, username=None):
+                zonegroup_endpoints=None, zone_endpoints=None, username=None, tier_type=None):
         multisite_instance = RgwMultisite()
         result = multisite_instance.migrate_to_multisite(realm_name, zonegroup_name,
                                                          zone_name, zonegroup_endpoints,
-                                                         zone_endpoints, username)
+                                                         zone_endpoints, username, tier_type)
         return result
 
     @RESTController.Collection(method='POST', path='/multisite-replications')
     @allow_empty_body
     # pylint: disable=W0102,W0613
     def setup_multisite_replication(self, daemon_name=None, realm_name=None, zonegroup_name=None,
-                                    zonegroup_endpoints=None, zone_name=None, zone_endpoints=None,
-                                    username=None, cluster_fsid=None, replication_zone_name=None,
-                                    cluster_details=None, selectedRealmName=None):
+                                    zonegroup_endpoints=None, zone_name=None, tier_type=None,
+                                    zone_endpoints=None, username=None, cluster_fsid=None,
+                                    replication_zone_name=None, cluster_details=None,
+                                    selectedRealmName=None):
         multisite_instance = RgwMultisiteAutomation()
         result = multisite_instance.setup_multisite_replication(realm_name, zonegroup_name,
                                                                 zonegroup_endpoints, zone_name,
-                                                                zone_endpoints, username,
-                                                                cluster_fsid,
+                                                                tier_type, zone_endpoints,
+                                                                username, cluster_fsid,
                                                                 replication_zone_name,
                                                                 cluster_details,
                                                                 selectedRealmName)
@@ -1489,11 +1490,11 @@ class RgwZone(RESTController):
     @allow_empty_body
     # pylint: disable=W0613
     def create(self, zone_name, zonegroup_name=None, default=False, master=False,
-               zone_endpoints=None, access_key=None, secret_key=None):
+               zone_endpoints=None, access_key=None, secret_key=None, tier_type=''):
         multisite_instance = RgwMultisite()
         result = multisite_instance.create_zone(zone_name, zonegroup_name, default,
                                                 master, zone_endpoints, access_key,
-                                                secret_key)
+                                                secret_key, tier_type)
         return result
 
     @allow_empty_body
@@ -1538,13 +1539,13 @@ class RgwZone(RESTController):
             master: str = '', zone_endpoints: str = '', access_key: str = '', secret_key: str = '',
             placement_target: str = '', data_pool: str = '', index_pool: str = '',
             data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
-            compression: str = ''):
+            compression: str = '', tier_type: str = ''):
         multisite_instance = RgwMultisite()
         result = multisite_instance.edit_zone(zone_name, new_zone_name, zonegroup_name, default,
                                               master, zone_endpoints, access_key, secret_key,
                                               placement_target, data_pool, index_pool,
                                               data_extra_pool, storage_class, data_pool_class,
-                                              compression)
+                                              compression, tier_type)
         return result
 
     @Endpoint()

@@ -44,6 +44,7 @@ export class RgwZone {
   realm_id: string;
   notif_pool: string;
   endpoints: string;
+  tier_type: string;
 }
 
 export class SystemKey {

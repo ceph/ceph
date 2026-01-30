@@ -86,6 +86,7 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       }),
       default_zone: new UntypedFormControl(false),
       master_zone: new UntypedFormControl(false),
+      archive_zone: new UntypedFormControl(false),
       selectedZonegroup: new UntypedFormControl(null),
       zone_endpoints: new UntypedFormControl(null, {
         validators: [CdValidators.url, Validators.required]
@@ -161,6 +162,9 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       this.multisiteZoneForm.get('zone_endpoints').setValue(this.info.data.endpoints.toString());
       this.multisiteZoneForm.get('access_key').setValue(this.info.data.access_key);
       this.multisiteZoneForm.get('secret_key').setValue(this.info.data.secret_key);
+      this.multisiteZoneForm
+        .get('archive_zone')
+        .setValue(this.info.data.info.tier_type === 'archive');
       this.multisiteZoneForm
         .get('placementTarget')
         .setValue((this.info.data?.parentNode || this.info.parent.data)?.default_placement);
@@ -239,6 +243,7 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       this.zone.system_key = new SystemKey();
       this.zone.system_key.access_key = values['access_key'];
       this.zone.system_key.secret_key = values['secret_key'];
+      this.zone.tier_type = values['archive_zone'] ? 'archive' : '';
       this.rgwZoneService
         .create(
           this.zone,
@@ -268,6 +273,7 @@ export class RgwMultisiteZoneFormComponent extends CdForm implements OnInit {
       this.zone.system_key = new SystemKey();
       this.zone.system_key.access_key = values['access_key'];
       this.zone.system_key.secret_key = values['secret_key'];
+      this.zone.tier_type = values['archive_zone'] ? 'archive' : '';
       this.rgwZoneService
         .update(
           this.zone,

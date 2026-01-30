@@ -32,7 +32,8 @@ export class RgwMultisiteService {
         zone_name: zone.name,
         zonegroup_endpoints: zonegroup.endpoints,
         zone_endpoints: zone.endpoints,
-        username: username
+        username: username,
+        tier_type: zone.tier_type
       });
       return this.http.put(`${this.uiUrl}/migrate`, null, { params: params });
     });
@@ -90,6 +91,7 @@ export class RgwMultisiteService {
     zonegroupName: string,
     zonegroupEndpoints: string,
     zoneName: string,
+    tierType: string,
     zoneEndpoints: string,
     username: string,
     cluster?: string,
@@ -102,6 +104,7 @@ export class RgwMultisiteService {
       .set('zonegroup_name', zonegroupName)
       .set('zonegroup_endpoints', zonegroupEndpoints)
       .set('zone_name', zoneName)
+      .set('tier_type', tierType)
       .set('zone_endpoints', zoneEndpoints)
       .set('username', username);
 

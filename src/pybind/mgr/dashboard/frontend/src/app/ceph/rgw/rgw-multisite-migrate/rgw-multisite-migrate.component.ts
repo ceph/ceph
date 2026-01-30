@@ -80,6 +80,7 @@ export class RgwMultisiteMigrateComponent implements OnInit {
           })
         ]
       }),
+      archive_zone: new UntypedFormControl(false),
       zone_endpoints: new UntypedFormControl(null, {
         validators: [CdValidators.url, Validators.required]
       }),
@@ -126,6 +127,7 @@ export class RgwMultisiteMigrateComponent implements OnInit {
     this.zone = new RgwZone();
     this.zone.name = values['zoneName'];
     this.zone.endpoints = values['zone_endpoints'];
+    this.zone.tier_type = values['archive_zone'] ? 'archive' : '';
     this.rgwMultisiteService
       .migrate(this.realm, this.zonegroup, this.zone, values['username'])
       .subscribe(
