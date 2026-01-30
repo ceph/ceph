@@ -407,6 +407,27 @@ else:
                 )
             )
 
+    @APIRouter("/nvmeof/gateway_group/{gw_group}/namespace", Scope.NVME_OF)
+    @APIDoc("NVMe-oF Gateway Management API", "NVMe-oF Gateway")
+    class NVMeoFGatewayGroup(RESTController):
+        @Endpoint('GET')
+        @EndpointDoc(
+            "List all NVMeoF namespaces in a gateway group",
+            parameters={
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "server_address": Param(str, "NVMeoF gateway address", True, None),
+            },
+        )
+        @convert_to_model(model.NamespaceList)
+        @handle_nvmeof_error
+        def list(self, gw_group: str, server_address: Optional[str] = None):
+            return NVMeoFClient(
+                gw_group=gw_group,
+                server_address=server_address
+            ).stub.list_namespaces(
+                NVMeoFClient.pb2.list_namespaces_req()
+            )
+
     @APIRouter("/nvmeof/subsystem/{nqn}/namespace", Scope.NVME_OF)
     @APIDoc("NVMe-oF Subsystem Namespace Management API", "NVMe-oF Subsystem Namespace")
     class NVMeoFNamespace(RESTController):

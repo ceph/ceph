@@ -161,11 +161,9 @@ export class NvmeofNamespacesListComponent implements OnInit {
   }
 
   listNamespaces() {
-    this.nvmeofService
-      .listNamespaces(this.subsystemNQN, this.group)
-      .subscribe((res: NvmeofSubsystemNamespace[]) => {
-        this.namespaces = res;
-      });
+    this.nvmeofService.listNamespaces(this.group).subscribe((res: NvmeofSubsystemNamespace[]) => {
+      this.namespaces = res;
+    });
   }
 
   deleteNamespaceModal() {
