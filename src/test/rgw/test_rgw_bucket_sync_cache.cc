@@ -13,6 +13,7 @@
  */
 
 #include "rgw_bucket_sync_cache.h"
+#include <common/ceph_time.h>
 #include <gtest/gtest.h>
 
 using namespace rgw::bucket_sync;
@@ -27,7 +28,7 @@ static rgw_bucket_shard make_key(const std::string& tenant,
 
 TEST(BucketSyncCache, ReturnCachedPinned)
 {
-  auto cache = Cache::create(0);
+  auto cache = ShardCache::create(0);
   const auto key = make_key("", "1", 0);
   auto h1 = cache->get(key, std::nullopt); // pin
   h1->counter = 1;
@@ -37,7 +38,7 @@ TEST(BucketSyncCache, ReturnCachedPinned)
 
 TEST(BucketSyncCache, ReturnNewUnpinned)
 {
-  auto cache = Cache::create(0);
+  auto cache = ShardCache::create(0);
   const auto key = make_key("", "1", 0);
   cache->get(key, std::nullopt)->counter = 1; // pin+unpin
   EXPECT_EQ(0, cache->get(key, std::nullopt)->counter);
@@ -45,7 +46,7 @@ TEST(BucketSyncCache, ReturnNewUnpinned)
 
 TEST(BucketSyncCache, DistinctTenant)
 {
-  auto cache = Cache::create(2);
+  auto cache = ShardCache::create(2);
   const auto key1 = make_key("a", "bucket", 0);
   const auto key2 = make_key("b", "bucket", 0);
   cache->get(key1, std::nullopt)->counter = 1;
@@ -54,7 +55,7 @@ TEST(BucketSyncCache, DistinctTenant)
 
 TEST(BucketSyncCache, DistinctShards)
 {
-  auto cache = Cache::create(2);
+  auto cache = ShardCache::create(2);
   const auto key1 = make_key("", "bucket", 0);
   const auto key2 = make_key("", "bucket", 1);
   cache->get(key1, std::nullopt)->counter = 1;
@@ -63,7 +64,7 @@ TEST(BucketSyncCache, DistinctShards)
 
 TEST(BucketSyncCache, DistinctGen)
 {
-  auto cache = Cache::create(2);
+  auto cache = ShardCache::create(2);
   const auto key = make_key("", "bucket", 0);
   std::optional<uint64_t> gen1; // empty
   std::optional<uint64_t> gen2 = 5;
@@ -73,7 +74,7 @@ TEST(BucketSyncCache, DistinctGen)
 
 TEST(BucketSyncCache, DontEvictPinned)
 {
-  auto cache = Cache::create(0);
+  auto cache = ShardCache::create(0);
 
   const auto key1 = make_key("", "1", 0);
   const auto key2 = make_key("", "2", 0);
@@ -85,13 +86,13 @@ TEST(BucketSyncCache, DontEvictPinned)
   EXPECT_EQ(key1, h1->key.first); // h1 unchanged
 }
 
-TEST(BucketSyncCache, HandleLifetime)
+TEST(BucketSyncCache, ShardHandleLifetime)
 {
   const auto key = make_key("", "1", 0);
 
-  Handle h; // test that handles keep the cache referenced
+  ShardHandle h; // test that handles keep the cache referenced
   {
-    auto cache = Cache::create(0);
+    auto cache = ShardCache::create(0);
     h = cache->get(key, std::nullopt);
   }
   EXPECT_EQ(key, h->key.first);
@@ -99,7 +100,7 @@ TEST(BucketSyncCache, HandleLifetime)
 
 TEST(BucketSyncCache, TargetSize)
 {
-  auto cache = Cache::create(2);
+  auto cache = ShardCache::create(2);
 
   const auto key1 = make_key("", "1", 0);
   const auto key2 = make_key("", "2", 0);
@@ -117,14 +118,14 @@ TEST(BucketSyncCache, TargetSize)
   EXPECT_EQ(0, cache->get(key1, std::nullopt)->counter);
 }
 
-TEST(BucketSyncCache, HandleMoveAssignEmpty)
+TEST(BucketSyncCache, ShardHandleMoveAssignEmpty)
 {
-  auto cache = Cache::create(0);
+  auto cache = ShardCache::create(0);
 
   const auto key1 = make_key("", "1", 0);
   const auto key2 = make_key("", "2", 0);
 
-  Handle j1;
+  ShardHandle j1;
   {
     auto h1 = cache->get(key1, std::nullopt);
     j1 = std::move(h1); // assign over empty handle
@@ -134,32 +135,32 @@ TEST(BucketSyncCache, HandleMoveAssignEmpty)
   EXPECT_EQ(key1, j1->key.first); // j1 stays pinned
 }
 
-TEST(BucketSyncCache, HandleMoveAssignExisting)
+TEST(BucketSyncCache, ShardHandleMoveAssignExisting)
 {
   const auto key1 = make_key("", "1", 0);
   const auto key2 = make_key("", "2", 0);
 
-  Handle h1;
+  ShardHandle h1;
   {
-    auto cache1 = Cache::create(0);
+    auto cache1 = ShardCache::create(0);
     h1 = cache1->get(key1, std::nullopt);
   } // j1 has the last ref to cache1
   {
-    auto cache2 = Cache::create(0);
+    auto cache2 = ShardCache::create(0);
     auto h2 = cache2->get(key2, std::nullopt);
     h1 = std::move(h2); // assign over existing handle
   }
   EXPECT_EQ(key2, h1->key.first);
 }
 
-TEST(BucketSyncCache, HandleCopyAssignEmpty)
+TEST(BucketSyncCache, ShardHandleCopyAssignEmpty)
 {
-  auto cache = Cache::create(0);
+  auto cache = ShardCache::create(0);
 
   const auto key1 = make_key("", "1", 0);
   const auto key2 = make_key("", "2", 0);
 
-  Handle j1;
+  ShardHandle j1;
   {
     auto h1 = cache->get(key1, std::nullopt);
     j1 = h1; // assign over empty handle
@@ -169,21 +170,75 @@ TEST(BucketSyncCache, HandleCopyAssignEmpty)
   EXPECT_EQ(key1, j1->key.first); // j1 stays pinned
 }
 
-TEST(BucketSyncCache, HandleCopyAssignExisting)
+TEST(BucketSyncCache, ShardHandleCopyAssignExisting)
 {
   const auto key1 = make_key("", "1", 0);
   const auto key2 = make_key("", "2", 0);
 
-  Handle h1;
+  ShardHandle h1;
   {
-    auto cache1 = Cache::create(0);
+    auto cache1 = ShardCache::create(0);
     h1 = cache1->get(key1, std::nullopt);
   } // j1 has the last ref to cache1
   {
-    auto cache2 = Cache::create(0);
+    auto cache2 = ShardCache::create(0);
     auto h2 = cache2->get(key2, std::nullopt);
     h1 = h2; // assign over existing handle
     EXPECT_EQ(&*h1, &*h2);
   }
   EXPECT_EQ(key2, h1->key.first);
 }
+
+// helper function to construct rgw_bucket_shard
+static std::string make_key(const std::string& tenant,
+			    const std::string& bucket)
+{
+  auto key = rgw_bucket_key{tenant, bucket};
+  rgw_bucket b{std::move(key)};
+  return b.get_key();
+}
+
+TEST(BucketGenSyncCache, ReturnCachedPinned)
+{
+  auto cache = BucketCache::create(0);
+  const auto key = make_key("", "1");
+  auto h1 = cache->get(key, std::nullopt); // pin
+  auto now = ceph::coarse_mono_clock::now();
+  h1->last_future_generation_recovery = now;
+  auto h2 = cache->get(key, std::nullopt);
+  EXPECT_EQ(now, h2->last_future_generation_recovery);
+}
+
+TEST(BucketGenSyncCache, ReturnNewUnpinned)
+{
+  auto cache = BucketCache::create(0);
+  const auto key = make_key("", "1");
+  auto now = ceph::coarse_mono_clock::now();
+  cache->get(key, std::nullopt)->last_future_generation_recovery = now; // pin+unpin
+  EXPECT_EQ(ceph::coarse_mono_clock::zero(), cache->get(key, std::nullopt)->last_future_generation_recovery);
+}
+
+TEST(BucketGenSyncCache, DistinctTenant)
+{
+  auto cache = BucketCache::create(2);
+  const auto key1 = make_key("a", "bucket");
+  const auto key2 = make_key("b", "bucket");
+  auto now = ceph::coarse_mono_clock::now();
+  cache->get(key1, std::nullopt)->last_future_generation_recovery = now;
+  EXPECT_EQ(ceph::coarse_mono_clock::zero(), cache->get(key2, std::nullopt)->last_future_generation_recovery);
+}
+
+TEST(BucketGenSyncCache, DistinctGen)
+{
+  auto cache = BucketCache::create(2);
+  const auto key = make_key("", "bucket");
+  auto now = ceph::coarse_mono_clock::now();
+  std::optional<uint64_t> gen1; // empty
+  std::optional<uint64_t> gen2 = 5;
+  cache->get(key, gen1)->last_future_generation_recovery = now;
+  EXPECT_EQ(ceph::coarse_mono_clock::zero(), cache->get(key, gen2)->last_future_generation_recovery);
+}
+
+// Since it's templatized I think most of the lifetime stuff is tested
+// above. We could templatize the tests and do it more thoroughly if
+// we take the BucketCache upstream.
