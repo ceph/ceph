@@ -192,8 +192,8 @@ TEST_F(ClusterStateTest, NotifyOSDMap)
 
   OSDMap::Incremental notify_inc(osd_map.get_epoch() + 1);
   notify_inc.new_pool_max = 2;
-  notify_inc.new_pools[1] = pool1;
-  notify_inc.new_pools[2] = pool2;
+  notify_inc.new_pools.emplace(1, pool1);
+  notify_inc.new_pools.emplace(2, pool2);
   osd_map.apply_incremental(notify_inc);
 
   cs->with_osdmap_and_pgmap([&](const OSDMap& old_map, const PGMap& pg_map) {
