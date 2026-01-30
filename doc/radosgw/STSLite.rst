@@ -2,6 +2,8 @@
 STS Lite
 =========
 
+.. deprecated:: Tentacle
+
 Ceph Object Gateway provides support for a subset of Amazon Secure Token Service
 (STS) APIs. STS Lite is an extension of STS and builds upon one of its APIs to
 decrease the load on external IDPs like Keystone and LDAP.
