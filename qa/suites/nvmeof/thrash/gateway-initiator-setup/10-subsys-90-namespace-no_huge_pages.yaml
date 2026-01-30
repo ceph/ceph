@@ -13,7 +13,7 @@ tasks:
 - cephadm.wait_for_service:
     service: nvmeof.mypool.mygroup0
 
-- cephadm.exec:
+- exec:
     host.a:
       - ceph orch ls nvmeof --export > /tmp/nvmeof-orig.yaml
       - cp /tmp/nvmeof-orig.yaml /tmp/nvmeof-no-huge-page.yaml 
