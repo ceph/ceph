@@ -173,6 +173,7 @@ int log_record(rgw::sal::Driver* driver,
 // and create a new pending log object
 // if "must_commit" is "false" the function will return success even if the pending log object was not committed
 // if "last_committed" is not null, it will be set to the name of the last committed object
+// optional error message is returned by reference
 int rollover_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& bucket,
     std::string& obj_name,
@@ -182,28 +183,9 @@ int rollover_logging_object(const configuration& conf,
     optional_yield y,
     bool must_commit,
     RGWObjVersionTracker* objv_tracker,
-    std::string* last_committed);
-
-// commit the pending log object to the log bucket
-// use this for cleanup, when new pending object is not needed
-// and target bucket is known
-// if "last_committed" is not null, it will be set to the name of the last committed object
-int commit_logging_object(const configuration& conf,
-    const std::unique_ptr<rgw::sal::Bucket>& target_bucket,
-    const DoutPrefixProvider *dpp,
-    optional_yield y,
-    std::string* last_committed);
-
-// commit the pending log object to the log bucket
-// use this for cleanup, when new pending object is not needed
-// and target bucket shoud be loaded based on the configuration
-// if "last_committed" is not null, it will be set to the name of the last committed object
-int commit_logging_object(const configuration& conf,
-    const DoutPrefixProvider *dpp,
-    rgw::sal::Driver* driver,
-    const std::string& tenant_name,
-    optional_yield y,
-    std::string* last_committed);
+    bool async,
+    std::string* last_committed,
+    std::string* err_message = nullptr);
 
 // return the oid of the object holding the name of the temporary logging object
 // bucket - log bucket
@@ -251,24 +233,31 @@ int bucket_deletion_cleanup(const DoutPrefixProvider* dpp,
 // in addition:
 // any pending log objects should be comitted to the log bucket
 // and the log bucket should be updated to remove the bucket as a source
+// if "last_committed" is not null, it will be set to the name of the last committed object
 int source_bucket_cleanup(const DoutPrefixProvider* dpp,
                                    sal::Driver* driver,
                                    sal::Bucket* bucket,
                                    bool remove_attr,
-                                   optional_yield y);
+                                   optional_yield y,
+                                   std::string* last_committed);
 
 // verify that the target bucket has the correct policy to allow the source bucket to log to it
 // note that this function adds entries to the request state environment
+// optional error message is returned by reference
 int verify_target_bucket_policy(const DoutPrefixProvider* dpp,
     rgw::sal::Bucket* target_bucket,
     const rgw::ARN& target_resource_arn,
-    req_state* s);
+    req_state* s,
+    std::string* err_message = nullptr);
 
 // verify that target bucket does not have:
 // - bucket logging
 // - requester pays
 // - encryption
-int verify_target_bucket_attributes(const DoutPrefixProvider* dpp, rgw::sal::Bucket* target_bucket);
+// optional error message is returned by reference
+int verify_target_bucket_attributes(const DoutPrefixProvider* dpp,
+    rgw::sal::Bucket* target_bucket,
+    std::string* err_message = nullptr);
 
 // given a source bucket this function is parsing the configuration object
 // extracting the target bucket and load it

@@ -57,6 +57,7 @@
 #include "rgw_etag_verifier.h"
 #include "rgw_worker.h"
 #include "rgw_notify.h"
+#include "rgw_bl_rados.h"
 #include "rgw_http_errors.h"
 
 #undef fork // fails to compile RGWPeriod::fork() below
@@ -1144,6 +1145,10 @@ void RGWRados::finalize()
     v1_topic_migration.stop();
   }
 
+  if (run_bucket_logging_thread) {
+    rgw::bucketlogging::shutdown();
+  }
+
   if (use_restore_thread) {
     restore->stop_processor();
   }
@@ -1268,6 +1273,10 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
     return ret;
 
   ret = open_notif_pool_ctx(dpp);
+  if (ret < 0)
+    return ret;
+
+  ret = open_logging_pool_ctx(dpp);
   if (ret < 0)
     return ret;
 
@@ -1423,6 +1432,12 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
 
   index_completion_manager = new RGWIndexCompletionManager(this);
 
+  if (run_bucket_logging_thread) {
+    if (!rgw::bucketlogging::init(dpp, this->driver, *svc.site)) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to initialize bucket logging manager" << dendl;
+    }
+      ldpp_dout(dpp, 0) << "INFO: initialized bucket logging manager" << dendl;
+  }
   if (run_notification_thread) {
     if (!rgw::notify::init(dpp, driver, *svc.site)) {
       ldpp_dout(dpp, 0) << "ERROR: failed to initialize notification manager" << dendl;
@@ -1443,7 +1458,6 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
       v1_topic_migration.start(1);
     }
   }
-
   return ret;
 }
 
@@ -1545,6 +1559,11 @@ int RGWRados::open_reshard_pool_ctx(const DoutPrefixProvider *dpp)
 int RGWRados::open_notif_pool_ctx(const DoutPrefixProvider *dpp)
 {
   return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().notif_pool, notif_pool_ctx, true, true);
+}
+
+int RGWRados::open_logging_pool_ctx(const DoutPrefixProvider *dpp)
+{
+  return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().bucket_logging_pool, logging_pool_ctx, true, true);
 }
 
 int RGWRados::open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx& io_ctx,
