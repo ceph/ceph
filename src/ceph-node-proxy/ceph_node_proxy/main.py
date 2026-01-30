@@ -1,9 +1,11 @@
-from ceph_node_proxy.redfishdellsystem import RedfishDellSystem
 from ceph_node_proxy.api import NodeProxyApi
+from ceph_node_proxy.atollon import AtollonSystem
+from ceph_node_proxy.baseredfishsystem import BaseRedfishSystem
+from ceph_node_proxy.redfishdellsystem import RedfishDellSystem
 from ceph_node_proxy.reporter import Reporter
 from ceph_node_proxy.util import Config, get_logger, http_req, write_tmp_file, CONFIG
 from urllib.error import HTTPError
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Type
 
 import argparse
 import os
@@ -11,6 +13,13 @@ import ssl
 import json
 import time
 import signal
+
+
+REDFISH_SYSTEM_CLASSES: Dict[str, Type[BaseRedfishSystem]] = {
+    'generic': BaseRedfishSystem,
+    'dell': RedfishDellSystem,
+    'atollon': AtollonSystem,
+}
 
 
 class NodeProxyManager:
@@ -76,11 +85,13 @@ class NodeProxyManager:
             self.log.warning('No oob details could be loaded, exiting...')
             raise SystemExit(1)
         try:
-            self.system = RedfishDellSystem(host=oob_details['host'],
-                                            port=oob_details['port'],
-                                            username=oob_details['username'],
-                                            password=oob_details['password'],
-                                            config=self.config)
+            vendor = getattr(self.config, 'system', {}).get('vendor', 'generic')
+            system_cls = REDFISH_SYSTEM_CLASSES.get(vendor, BaseRedfishSystem)
+            self.system = system_cls(host=oob_details['host'],
+                                     port=oob_details['port'],
+                                     username=oob_details['username'],
+                                     password=oob_details['password'],
+                                     config=self.config)
             self.system.start()
         except RuntimeError:
             self.log.error("Can't initialize the redfish system.")

@@ -19,7 +19,8 @@ CONFIG: Dict[str, Any] = {
         'endpoint': 'https://%(mgr_host):%(mgr_port)/node-proxy/data',
     },
     'system': {
-        'refresh_interval': 5
+        'refresh_interval': 5,
+        'vendor': 'generic',
     },
     'api': {
         'port': 9456,
