@@ -152,6 +152,7 @@ struct InodeStat {
   std::vector<uint8_t> fscrypt_file;
 
   optmetadata_multiton<optmetadata_singleton_client_t,std::allocator> optmetadata;
+  inodeno_t subvolume_id;
 
  public:
   InodeStat() {}
@@ -166,7 +167,7 @@ struct InodeStat {
   void decode(ceph::buffer::list::const_iterator &p, const uint64_t features) {
     using ceph::decode;
     if (features == (uint64_t)-1) {
-      DECODE_START(8, p);
+      DECODE_START(9, p);
       decode(vino.ino, p);
       decode(vino.snapid, p);
       decode(rdev, p);
@@ -232,6 +233,9 @@ struct InodeStat {
       if (struct_v >= 8) {
         decode(optmetadata, p);
       }
+       if (struct_v >= 9) {
+         decode(subvolume_id, p);
+       }
       DECODE_FINISH(p);
     }
     else {
