@@ -108,10 +108,8 @@ def clean_custom_options(
 
 
 def check_access_name(name: str) -> None:
-    if ' ' in name or '\t' in name or '\n' in name:
-        raise ValueError(
-            'login name may not contain spaces, tabs, or newlines'
-        )
+    if '\t' in name or '\n' in name:
+        raise ValueError('login name may not contain tabs or newlines')
     if len(name) > 128:
         raise ValueError('login name may not exceed 128 characters')
 
