@@ -109,7 +109,7 @@ class RBDMirrorThrasher(Thrasher, Greenlet):
         while not self.stopping.is_set():
             delay = self.max_thrash_delay
             if self.randomize:
-                delay = random.randrange(self.min_thrash_delay, self.max_thrash_delay)
+                delay = random.uniform(self.min_thrash_delay, self.max_thrash_delay)
 
             if delay > 0.0:
                 self.log('waiting for {delay} secs before thrashing'.format(delay=delay))
@@ -145,7 +145,7 @@ class RBDMirrorThrasher(Thrasher, Greenlet):
                 # wait for a while before restarting
                 delay = self.max_revive_delay
                 if self.randomize:
-                    delay = random.randrange(0.0, self.max_revive_delay)
+                    delay = random.uniform(0.0, self.max_revive_delay)
 
                 self.log('waiting for {delay} secs before reviving daemons'.format(delay=delay))
                 sleep(delay)
