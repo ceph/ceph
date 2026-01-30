@@ -148,8 +148,10 @@ void KMSCache::stop_ttl_reaper() {
   std::visit(
       fu2::overload(
           [](const std::monostate& mono) {},
-          [](boost::asio::cancellation_signal& signal) {
-            signal.emit(boost::asio::cancellation_type::all);
+          [this](boost::asio::cancellation_signal& signal) {
+	    ceph_assert(reaper_strand);
+	    boost::asio::post(*reaper_strand,
+			      [&signal] { signal.emit(boost::asio::cancellation_type::all); });
           },
           [&](const std::jthread&) { reaper_state.emplace<std::monostate>(); }),
       reaper_state);

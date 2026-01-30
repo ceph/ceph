@@ -20,6 +20,10 @@
 #include <thread>
 #include <variant>
 
+#include <boost/asio/executor.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/strand.hpp>
+
 #include "common/async/call_once.h"
 #include "common/async/yield_context.h"
 #include "common/dout.h"
@@ -51,6 +55,8 @@ class KMSCache {
   // an executor elsewhere (where we keep a cancellation signal).
   std::variant<std::monostate, std::jthread, boost::asio::cancellation_signal>
       reaper_state;
+
+  std::optional<boost::asio::strand<boost::asio::io_context::executor_type>> reaper_strand;
 
  public:
   KMSCache() = delete;
