@@ -216,9 +216,6 @@ setup(
                 **ext_args
             )
         ],
-        # use "3str" when Cython 3.0 is available
-        compiler_directives={'language_level': sys.version_info.major},
-        compile_time_env=cython_constants,
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
     ),
     classifiers=[
