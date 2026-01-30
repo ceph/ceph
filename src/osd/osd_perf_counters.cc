@@ -530,6 +530,7 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
   rs_perf.add_time_avg(rs_getmissing_latency, "getmissing_latency", "Getmissing recovery state latency");
   rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency", "Waitupthru recovery state latency");
   rs_perf.add_time_avg(rs_notrecovering_latency, "notrecovering_latency", "Notrecovering recovery state latency");
+  rs_perf.add_u64_counter(rs_stats_invalidated, "stats_invalidated", "Number of times pg stats received invalidations");
 
   return rs_perf.create_perf_counters();
 }
