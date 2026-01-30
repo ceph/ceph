@@ -375,6 +375,16 @@ export class TaskMessageService {
       this.iscsiTarget(metadata)
     ),
     // nvmeof
+    'nvmeof/gateway/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nvmeofGateway(metadata)
+    ),
+    'nvmeof/gateway/node/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
+      this.nvmeofGatewayNode(metadata)
+    ),
+    'nvmeof/gateway-node/delete': this.newTaskMessage(
+      this.commonOperations.remove,
+      (metadata) => $localize`gateway node '${metadata.hostname}'`
+    ),
     'nvmeof/subsystem/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofSubsystem(metadata)
     ),
@@ -578,6 +588,14 @@ export class TaskMessageService {
 
   iscsiTarget(metadata: any) {
     return $localize`target '${metadata.target_iqn}'`;
+  }
+
+  nvmeofGateway(metadata: any) {
+    return $localize`gateway '${metadata.gateway_name}'`;
+  }
+
+  nvmeofGatewayNode(metadata: any) {
+    return $localize`gateway node '${metadata.hostname}'`;
   }
 
   nvmeofSubsystem(metadata: any) {
