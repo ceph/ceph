@@ -17,6 +17,7 @@
 #include "include/encoding.h"
 #include "common/Formatter.h"
 #include <sstream>
+#include <iomanip>
 
 namespace ceph {
 namespace osd {
@@ -27,7 +28,7 @@ namespace osd {
 
 void PackedObjectInfo::encode(ceph::buffer::list& bl) const {
   ENCODE_START(1, 1, bl);
-  encode(container_object_id, bl);
+  encode(container_index, bl);
   encode(offset, bl);
   encode(length, bl);
   encode(packed, bl);
@@ -36,7 +37,7 @@ void PackedObjectInfo::encode(ceph::buffer::list& bl) const {
 
 void PackedObjectInfo::decode(ceph::buffer::list::const_iterator& p) {
   DECODE_START(1, p);
-  decode(container_object_id, p);
+  decode(container_index, p);
   decode(offset, p);
   decode(length, p);
   decode(packed, p);
@@ -44,9 +45,10 @@ void PackedObjectInfo::decode(ceph::buffer::list::const_iterator& p) {
 }
 
 void PackedObjectInfo::dump(ceph::Formatter *f) const {
-  f->dump_stream("container_object_id") << container_object_id;
+  f->dump_unsigned("container_index", container_index);
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
+  f->dump_bool("packed", packed);
 }
 
 // ============================================================================
@@ -81,7 +83,7 @@ void ContainerReverseMapEntry::dump(ceph::Formatter *f) const {
 
 void ContainerInfo::encode(ceph::buffer::list& bl) const {
   ENCODE_START(1, 1, bl);
-  encode(container_id, bl);
+  encode(container_index, bl);
   encode(total_size, bl);
   encode(used_bytes, bl);
   encode(garbage_bytes, bl);
@@ -93,7 +95,7 @@ void ContainerInfo::encode(ceph::buffer::list& bl) const {
 
 void ContainerInfo::decode(ceph::buffer::list::const_iterator& p) {
   DECODE_START(1, p);
-  decode(container_id, p);
+  decode(container_index, p);
   decode(total_size, p);
   decode(used_bytes, p);
   decode(garbage_bytes, p);
@@ -104,7 +106,7 @@ void ContainerInfo::decode(ceph::buffer::list::const_iterator& p) {
 }
 
 void ContainerInfo::dump(ceph::Formatter *f) const {
-  f->dump_stream("container_id") << container_id;
+  f->dump_unsigned("container_index", container_index);
   f->dump_unsigned("total_size", total_size);
   f->dump_unsigned("used_bytes", used_bytes);
   f->dump_unsigned("garbage_bytes", garbage_bytes);
@@ -122,116 +124,10 @@ void ContainerInfo::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-// ============================================================================
-// PackOperation Static Factory Methods
-// ============================================================================
-
-PackOperation PackOperation::write_to_container(
-  const hobject_t& logical_obj,
-  const hobject_t& container_obj,
-  uint64_t off,
-  const ceph::buffer::list& bl)
-{
-  PackOperation op(PackOpType::WRITE_TO_CONTAINER);
-  op.logical_object = logical_obj;
-  op.container_object = container_obj;
-  op.offset = off;
-  op.length = bl.length();
-  op.data = bl;
-  return op;
-}
-
-PackOperation PackOperation::update_object_oi(
-  const hobject_t& logical_obj,
-  const PackedObjectInfo& info)
-{
-  PackOperation op(PackOpType::UPDATE_OBJECT_OI);
-  op.logical_object = logical_obj;
-  op.packed_info = info;
-  return op;
-}
-
-PackOperation PackOperation::update_container_omap(
-  const hobject_t& container_obj,
-  uint64_t off,
-  const ContainerReverseMapEntry& entry)
-{
-  PackOperation op(PackOpType::UPDATE_CONTAINER_OMAP);
-  op.container_object = container_obj;
-  op.offset = off;
-  op.reverse_entry = entry;
-  return op;
-}
-
-PackOperation PackOperation::read_from_container(
-  const hobject_t& logical_obj,
-  const hobject_t& container_obj,
-  uint64_t off,
-  uint64_t len)
-{
-  PackOperation op(PackOpType::READ_FROM_CONTAINER);
-  op.logical_object = logical_obj;
-  op.container_object = container_obj;
-  op.offset = off;
-  op.length = len;
-  return op;
-}
-
-PackOperation PackOperation::mark_garbage(
-  const hobject_t& container_obj,
-  uint64_t off,
-  uint64_t len)
-{
-  PackOperation op(PackOpType::MARK_GARBAGE);
-  op.container_object = container_obj;
-  op.offset = off;
-  op.length = len;
-  return op;
-}
-
-PackOperation PackOperation::promote_to_standalone(
-  const hobject_t& logical_obj)
-{
-  PackOperation op(PackOpType::PROMOTE_TO_STANDALONE);
-  op.logical_object = logical_obj;
-  return op;
-}
-
-PackOperation PackOperation::compact_container(
-  const hobject_t& container_obj)
-{
-  PackOperation op(PackOpType::COMPACT_CONTAINER);
-  op.container_object = container_obj;
-  return op;
-}
-
-PackOperation PackOperation::delete_container(
-  const hobject_t& container_obj)
-{
-  PackOperation op(PackOpType::DELETE_CONTAINER);
-  op.container_object = container_obj;
-  return op;
-}
 
 // ============================================================================
 // ObjectPackEngine Implementation
 // ============================================================================
-
-hobject_t ObjectPackEngine::generate_container_id(const hobject_t& logical_obj) const {
-  // Generate a container ID based on the logical object's pool and hash
-  // This ensures objects with similar hashes are packed together
-  std::ostringstream ss;
-  ss << ".container_" << logical_obj.pool << "_" << logical_obj.get_hash();
-  
-  hobject_t container_id;
-  container_id.pool = logical_obj.pool;
-  container_id.nspace = logical_obj.nspace;
-  container_id.oid = object_t(ss.str());
-  container_id.set_hash(logical_obj.get_hash());
-  container_id.snap = CEPH_NOSNAP;
-  
-  return container_id;
-}
 
 uint64_t ObjectPackEngine::calculate_aligned_offset(
   uint64_t current_offset, 
@@ -247,22 +143,19 @@ bool ObjectPackEngine::should_trigger_gc(const ContainerInfo& container) const {
          container.garbage_bytes >= config_.gc_min_garbage_bytes;
 }
 
-std::vector<PackOperation> ObjectPackEngine::generate_gc_operations(
-  const ContainerInfo& container,
-  const std::map<hobject_t, PackedObjectInfo>& affected_objects) const
+void ObjectPackEngine::encode_omap_entry(
+  std::map<std::string, ceph::buffer::list>& omap,
+  uint64_t offset,
+  const ContainerReverseMapEntry& entry) const
 {
-  std::vector<PackOperation> ops;
+  using ceph::encode;
+  std::ostringstream key_stream;
+  key_stream << std::setw(20) << std::setfill('0') << offset;
+  std::string key = key_stream.str();
   
-  // This is a placeholder for GC operation generation
-  // The actual implementation would:
-  // 1. Create a new container
-  // 2. Copy live objects to new container
-  // 3. Update all affected object OIs
-  // 4. Delete old container
-  
-  ops.push_back(PackOperation::compact_container(container.container_id));
-  
-  return ops;
+  ceph::buffer::list value_bl;
+  encode(entry, value_bl);
+  omap[key] = value_bl;
 }
 
 // ============================================================================
@@ -274,7 +167,7 @@ PackResult ObjectPackEngine::plan_write(
   const ceph::buffer::list& data,
   const std::optional<ContainerInfo>& current_container) const
 {
-  std::vector<PackOperation> ops;
+  using ceph::encode;
   
   uint64_t data_size = data.length();
   
@@ -283,67 +176,72 @@ PackResult ObjectPackEngine::plan_write(
     return PackResult::error("Object size exceeds packing threshold");
   }
   
-  // Determine target container
-  hobject_t container_id;
+  // Determine target container index
+  uint64_t container_index;
   uint64_t write_offset;
   
-  if (current_container.has_value() && 
+  if (current_container.has_value() &&
       !current_container->is_sealed &&
       current_container->available_space() >= data_size) {
     // Use existing container
-    container_id = current_container->container_id;
+    container_index = current_container->container_index;
     write_offset = calculate_aligned_offset(
-      current_container->next_offset, 
+      current_container->next_offset,
       data_size);
     
     // Check if aligned offset still fits
     if (write_offset + data_size > current_container->total_size) {
-      // Need a new container
-      container_id = generate_container_id(logical_obj);
-      write_offset = 0;
+      // Need a new container - caller must provide the next index
+      return PackResult::error("Current container full - caller must allocate new container");
     }
   } else {
-    // Create new container
-    container_id = generate_container_id(logical_obj);
-    write_offset = 0;
+    // Caller must provide a container index
+    return PackResult::error("No current container - caller must allocate container");
   }
   
-  // Generate operations
+  // Build transaction
+  ceph::os::Transaction t;
   
-  // 1. Write data to container
-  ops.push_back(PackOperation::write_to_container(
-    logical_obj, container_id, write_offset, data));
+  // Note: We need a collection ID (cid) to build transactions
+  // The caller must provide the correct cid when executing
+  coll_t cid;  // Placeholder - caller must set this
+  
+  // Generate container hobject from index
+  hobject_t container_hobj = container_hobject_from_index(
+    container_index, logical_obj.pool, logical_obj.nspace);
+  
+  // 1. Write data to container at offset
+  t.write(cid, ghobject_t(container_hobj), write_offset, data_size, data);
   
   // 2. Update logical object's OI with packing info
-  PackedObjectInfo packed_info(container_id, write_offset, data_size);
-  ops.push_back(PackOperation::update_object_oi(logical_obj, packed_info));
+  // The OI update is typically done by the caller after this transaction
+  // We return the packed_info for the caller to use
+  PackedObjectInfo packed_info(container_index, write_offset, data_size);
   
-  // 3. Update container's reverse map
+  // 3. Update container's reverse map (OMAP)
   ContainerReverseMapEntry reverse_entry(logical_obj, data_size, false);
-  ops.push_back(PackOperation::update_container_omap(
-    container_id, write_offset, reverse_entry));
+  std::map<std::string, ceph::buffer::list> omap_updates;
+  encode_omap_entry(omap_updates, write_offset, reverse_entry);
+  t.omap_setkeys(cid, ghobject_t(container_hobj), omap_updates);
   
-  return PackResult::ok(std::move(ops));
+  return PackResult::ok_with_info(std::move(t), packed_info);
 }
 
 PackResult ObjectPackEngine::plan_read(
   const hobject_t& logical_obj,
   const PackedObjectInfo& packed_info) const
 {
-  std::vector<PackOperation> ops;
-  
   if (!packed_info.is_packed()) {
     return PackResult::error("Object is not packed");
   }
   
-  // Generate read operation from container
-  ops.push_back(PackOperation::read_from_container(
-    logical_obj,
+  // Return read specification - caller will perform the actual read
+  PackReadSpec read_spec(
     packed_info.container_object_id,
     packed_info.offset,
-    packed_info.length));
+    packed_info.length);
   
-  return PackResult::ok(std::move(ops));
+  return PackResult::ok_with_read(read_spec);
 }
 
 PackResult ObjectPackEngine::plan_modify(
@@ -353,7 +251,7 @@ PackResult ObjectPackEngine::plan_modify(
   const PackedObjectInfo& packed_info,
   const std::optional<ContainerInfo>& current_container) const
 {
-  std::vector<PackOperation> ops;
+  using ceph::encode;
   
   // Combine existing and new data
   ceph::buffer::list combined_data;
@@ -364,24 +262,30 @@ PackResult ObjectPackEngine::plan_modify(
   
   // Check if object should be promoted to standalone
   if (!should_pack_object(new_size)) {
-    ops.push_back(PackOperation::promote_to_standalone(logical_obj));
+    // For promotion, we return an empty transaction
+    // The caller needs to handle the actual promotion (copy data out, create standalone object)
+    // We just mark the old location as garbage
+    ceph::os::Transaction t;
+    coll_t cid;  // Placeholder
     
-    // Mark old location as garbage
-    ops.push_back(PackOperation::mark_garbage(
-      packed_info.container_object_id,
-      packed_info.offset,
-      packed_info.length));
+    // Mark old location as garbage in OMAP
+    ContainerReverseMapEntry garbage_entry(logical_obj, packed_info.length, true);
+    std::map<std::string, ceph::buffer::list> omap_updates;
+    encode_omap_entry(omap_updates, packed_info.offset, garbage_entry);
+    t.omap_setkeys(cid, ghobject_t(packed_info.container_object_id), omap_updates);
     
-    return PackResult::ok(std::move(ops));
+    return PackResult::ok(std::move(t));
   }
   
   // Use copy-on-write: write to new location
+  ceph::os::Transaction t;
+  coll_t cid;  // Placeholder
   
   // 1. Mark old location as garbage
-  ops.push_back(PackOperation::mark_garbage(
-    packed_info.container_object_id,
-    packed_info.offset,
-    packed_info.length));
+  ContainerReverseMapEntry garbage_entry(logical_obj, packed_info.length, true);
+  std::map<std::string, ceph::buffer::list> omap_updates;
+  encode_omap_entry(omap_updates, packed_info.offset, garbage_entry);
+  t.omap_setkeys(cid, ghobject_t(packed_info.container_object_id), omap_updates);
   
   // 2. Write to new location (reuse plan_write logic)
   PackResult write_result = plan_write(logical_obj, combined_data, current_container);
@@ -390,12 +294,10 @@ PackResult ObjectPackEngine::plan_modify(
     return write_result;
   }
   
-  // Append write operations
-  ops.insert(ops.end(), 
-             write_result.operations.begin(), 
-             write_result.operations.end());
+  // Append write transaction
+  t.append(write_result.transaction);
   
-  return PackResult::ok(std::move(ops));
+  return PackResult::ok_with_info(std::move(t), *write_result.packed_info);
 }
 
 PackResult ObjectPackEngine::plan_delete(
@@ -403,38 +305,32 @@ PackResult ObjectPackEngine::plan_delete(
   const PackedObjectInfo& packed_info,
   const ContainerInfo& container_info) const
 {
-  std::vector<PackOperation> ops;
+  using ceph::encode;
   
   if (!packed_info.is_packed()) {
     return PackResult::error("Object is not packed");
   }
   
-  // Mark space as garbage in container
-  ops.push_back(PackOperation::mark_garbage(
-    packed_info.container_object_id,
-    packed_info.offset,
-    packed_info.length));
+  ceph::os::Transaction t;
+  coll_t cid;  // Placeholder
   
-  // Check if GC should be triggered
-  // Note: We create a hypothetical container state after this delete
-  ContainerInfo updated_container = container_info;
-  updated_container.used_bytes -= packed_info.length;
-  updated_container.garbage_bytes += packed_info.length;
+  // Mark space as garbage in container OMAP
+  ContainerReverseMapEntry garbage_entry(logical_obj, packed_info.length, true);
+  std::map<std::string, ceph::buffer::list> omap_updates;
+  encode_omap_entry(omap_updates, packed_info.offset, garbage_entry);
+  t.omap_setkeys(cid, ghobject_t(packed_info.container_object_id), omap_updates);
   
-  if (should_trigger_gc(updated_container)) {
-    // Note: Actual GC would be triggered asynchronously
-    // This is just a hint that GC should be scheduled
-    ops.push_back(PackOperation::compact_container(container_info.container_id));
-  }
+  // Note: GC triggering is a policy decision that should be made by the caller
+  // based on the updated container state
   
-  return PackResult::ok(std::move(ops));
+  return PackResult::ok(std::move(t));
 }
 
 PackResult ObjectPackEngine::plan_gc(
   const ContainerInfo& container_info,
   const std::map<hobject_t, PackedObjectInfo>& live_objects) const
 {
-  std::vector<PackOperation> ops;
+  using ceph::encode;
   
   // Check if container meets GC criteria (both conditions must be met)
   if (container_info.fragmentation_ratio() < config_.gc_fragmentation_threshold) {
@@ -444,64 +340,17 @@ PackResult ObjectPackEngine::plan_gc(
     return PackResult::error("Container garbage bytes below minimum");
   }
   
-  // Generate new container ID
-  hobject_t new_container_id = container_info.container_id;
-  // Modify to create a new version (simple approach: append timestamp or counter)
-  std::ostringstream ss;
-  ss << new_container_id.oid.name << "_gc";
-  new_container_id.oid = object_t(ss.str());
-  
-  uint64_t new_offset = 0;
-  
-  // Iterate through live objects in order
-  for (const auto& [logical_obj, packed_info] : live_objects) {
-    // Skip if not in this container
-    if (packed_info.container_object_id != container_info.container_id) {
-      continue;
-    }
-    
-    // Find the object in reverse map to get its data
-    auto it = container_info.reverse_map.find(packed_info.offset);
-    if (it == container_info.reverse_map.end() || it->second.is_garbage) {
-      continue; // Skip garbage entries
-    }
-    
-    uint64_t object_size = it->second.length;
-    
-    // Calculate aligned offset in new container
-    uint64_t aligned_offset = calculate_aligned_offset(new_offset, object_size);
-    
-    // 1. Read from old container (caller must execute this)
-    ops.push_back(PackOperation::read_from_container(
-      logical_obj,
-      container_info.container_id,
-      packed_info.offset,
-      object_size));
-    
-    // 2. Write to new container
-    // Note: Data will be provided by caller after read
-    ops.push_back(PackOperation::write_to_container(
-      logical_obj,
-      new_container_id,
-      aligned_offset,
-      ceph::buffer::list())); // Empty, caller fills after read
-    
-    // 3. Update object OI
-    PackedObjectInfo new_packed_info(new_container_id, aligned_offset, object_size);
-    ops.push_back(PackOperation::update_object_oi(logical_obj, new_packed_info));
-    
-    // 4. Update new container reverse map
-    ContainerReverseMapEntry new_entry(logical_obj, object_size, false);
-    ops.push_back(PackOperation::update_container_omap(
-      new_container_id, aligned_offset, new_entry));
-    
-    new_offset = aligned_offset + object_size;
-  }
-  
-  // 5. Delete old container
-  ops.push_back(PackOperation::delete_container(container_info.container_id));
-  
-  return PackResult::ok(std::move(ops));
+  // GC is a complex multi-step operation that requires:
+  // 1. Reading all live objects from old container
+  // 2. Writing them to new container
+  // 3. Updating all object OIs
+  // 4. Deleting old container
+  //
+  // This cannot be done in a single transaction because it requires reads.
+  // The caller must orchestrate this as a multi-phase operation.
+  //
+  // For now, we return an error indicating GC needs special handling
+  return PackResult::error("GC requires multi-phase operation - caller must orchestrate");
 }
 
 PackResult ObjectPackEngine::plan_promote(
@@ -509,7 +358,7 @@ PackResult ObjectPackEngine::plan_promote(
   const PackedObjectInfo& packed_info,
   uint64_t new_size) const
 {
-  std::vector<PackOperation> ops;
+  using ceph::encode;
   
   if (should_pack_object(new_size)) {
     return PackResult::error("Object size still within packing threshold");
@@ -519,16 +368,19 @@ PackResult ObjectPackEngine::plan_promote(
     return PackResult::error("Object is not packed");
   }
   
-  // 1. Promote to standalone
-  ops.push_back(PackOperation::promote_to_standalone(logical_obj));
+  ceph::os::Transaction t;
+  coll_t cid;  // Placeholder
   
-  // 2. Mark old location as garbage
-  ops.push_back(PackOperation::mark_garbage(
-    packed_info.container_object_id,
-    packed_info.offset,
-    packed_info.length));
+  // Mark old location as garbage
+  ContainerReverseMapEntry garbage_entry(logical_obj, packed_info.length, true);
+  std::map<std::string, ceph::buffer::list> omap_updates;
+  encode_omap_entry(omap_updates, packed_info.offset, garbage_entry);
+  t.omap_setkeys(cid, ghobject_t(packed_info.container_object_id), omap_updates);
   
-  return PackResult::ok(std::move(ops));
+  // Note: The actual promotion (creating standalone object) must be done by caller
+  // This transaction just marks the old location as garbage
+  
+  return PackResult::ok(std::move(t));
 }
 
 } // namespace osd

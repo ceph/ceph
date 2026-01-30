@@ -25,6 +25,7 @@
 #include "include/types.h"
 #include "common/hobject.h"
 #include "osd/osd_types.h"
+#include "os/Transaction.h"
 
 /**
  * ObjectPack - Small Object Packing Library for Ceph OSD
@@ -54,15 +55,15 @@ class ObjectPackEngine;
  * Metadata stored in logical object's OI to track packing location
  */
 struct PackedObjectInfo {
-  hobject_t container_object_id;  ///< ID of container holding the data
+  uint64_t container_index;       ///< Index of container holding the data
   uint64_t offset;                ///< Byte offset within container
   uint64_t length;                ///< Length of data in container
   bool packed;                    ///< True if object is packed
   
-  PackedObjectInfo() : offset(0), length(0), packed(false) {}
+  PackedObjectInfo() : container_index(0), offset(0), length(0), packed(false) {}
   
-  PackedObjectInfo(const hobject_t& container, uint64_t off, uint64_t len)
-    : container_object_id(container), offset(off), length(len), packed(true) {}
+  PackedObjectInfo(uint64_t container_idx, uint64_t off, uint64_t len)
+    : container_index(container_idx), offset(off), length(len), packed(true) {}
   
   bool is_packed() const {
     return packed;
@@ -98,7 +99,7 @@ WRITE_CLASS_ENCODER(ContainerReverseMapEntry)
  * Container metadata tracking utilization and fragmentation
  */
 struct ContainerInfo {
-  hobject_t container_id;
+  uint64_t container_index;      ///< Index of this container
   uint64_t total_size;           ///< Total size of container
   uint64_t used_bytes;           ///< Bytes actually used by live objects
   uint64_t garbage_bytes;        ///< Bytes wasted by deleted/relocated objects
@@ -108,12 +109,12 @@ struct ContainerInfo {
   // Reverse mapping: offset -> logical object info
   std::map<uint64_t, ContainerReverseMapEntry> reverse_map;
   
-  ContainerInfo() 
-    : total_size(0), used_bytes(0), garbage_bytes(0), 
+  ContainerInfo()
+    : container_index(0), total_size(0), used_bytes(0), garbage_bytes(0),
       next_offset(0), is_sealed(false) {}
   
-  explicit ContainerInfo(const hobject_t& id, uint64_t size = 0)
-    : container_id(id), total_size(size), used_bytes(0), 
+  explicit ContainerInfo(uint64_t idx, uint64_t size = 0)
+    : container_index(idx), total_size(size), used_bytes(0),
       garbage_bytes(0), next_offset(0), is_sealed(false) {}
   
   double fragmentation_ratio() const {
@@ -164,84 +165,52 @@ struct PackingConfig {
 };
 
 /**
- * Operation types returned by the packing engine
+ * Read specification for packed objects
+ * Since reads are not part of transactions, we return read specs separately
  */
-enum class PackOpType {
-  WRITE_TO_CONTAINER,      ///< Write data to container at offset
-  UPDATE_OBJECT_OI,        ///< Update logical object's OI with packing info
-  UPDATE_CONTAINER_OMAP,   ///< Update container's reverse map
-  READ_FROM_CONTAINER,     ///< Read data from container
-  MARK_GARBAGE,            ///< Mark space in container as garbage
-  PROMOTE_TO_STANDALONE,   ///< Promote packed object to standalone
-  COMPACT_CONTAINER,       ///< Compact container (GC operation)
-  DELETE_CONTAINER         ///< Delete empty/obsolete container
-};
-
-/**
- * Abstract operation descriptor
- */
-struct PackOperation {
-  PackOpType type;
-  hobject_t logical_object;
-  hobject_t container_object;
-  uint64_t offset;
-  uint64_t length;
-  ceph::buffer::list data;  ///< Data payload (for writes)
-  std::optional<PackedObjectInfo> packed_info;
-  std::optional<ContainerReverseMapEntry> reverse_entry;
+struct PackReadSpec {
+  uint64_t container_index;    ///< Index of container to read from
+  uint64_t offset;             ///< Offset within container
+  uint64_t length;             ///< Length to read
   
-  PackOperation(PackOpType t) : type(t), offset(0), length(0) {}
+  PackReadSpec() : container_index(0), offset(0), length(0) {}
   
-  static PackOperation write_to_container(
-    const hobject_t& logical_obj,
-    const hobject_t& container_obj,
-    uint64_t off,
-    const ceph::buffer::list& bl);
-  
-  static PackOperation update_object_oi(
-    const hobject_t& logical_obj,
-    const PackedObjectInfo& info);
-  
-  static PackOperation update_container_omap(
-    const hobject_t& container_obj,
-    uint64_t off,
-    const ContainerReverseMapEntry& entry);
-  
-  static PackOperation read_from_container(
-    const hobject_t& logical_obj,
-    const hobject_t& container_obj,
-    uint64_t off,
-    uint64_t len);
-  
-  static PackOperation mark_garbage(
-    const hobject_t& container_obj,
-    uint64_t off,
-    uint64_t len);
-  
-  static PackOperation promote_to_standalone(
-    const hobject_t& logical_obj);
-  
-  static PackOperation compact_container(
-    const hobject_t& container_obj);
-  
-  static PackOperation delete_container(
-    const hobject_t& container_obj);
+  PackReadSpec(uint64_t container_idx, uint64_t off, uint64_t len)
+    : container_index(container_idx), offset(off), length(len) {}
 };
 
 /**
  * Result of a packing operation request
+ * Contains a transaction to execute and optional read specifications
  */
 struct PackResult {
   bool success;
   std::string error_message;
-  std::vector<PackOperation> operations;
+  ceph::os::Transaction transaction;           ///< Transaction to execute
+  std::optional<PackReadSpec> read_spec;       ///< Read specification (for reads)
+  std::optional<PackedObjectInfo> packed_info; ///< Updated packing info (for caller)
   
   PackResult() : success(true) {}
   
-  static PackResult ok(std::vector<PackOperation>&& ops) {
+  static PackResult ok(ceph::os::Transaction&& t) {
     PackResult r;
     r.success = true;
-    r.operations = std::move(ops);
+    r.transaction = std::move(t);
+    return r;
+  }
+  
+  static PackResult ok_with_read(const PackReadSpec& read) {
+    PackResult r;
+    r.success = true;
+    r.read_spec = read;
+    return r;
+  }
+  
+  static PackResult ok_with_info(ceph::os::Transaction&& t, const PackedObjectInfo& info) {
+    PackResult r;
+    r.success = true;
+    r.transaction = std::move(t);
+    r.packed_info = info;
     return r;
   }
   
@@ -261,12 +230,42 @@ private:
   PackingConfig config_;
   
   // Helper methods
-  hobject_t generate_container_id(const hobject_t& logical_obj) const;
   uint64_t calculate_aligned_offset(uint64_t current_offset, uint64_t object_size) const;
   bool should_trigger_gc(const ContainerInfo& container) const;
-  std::vector<PackOperation> generate_gc_operations(
-    const ContainerInfo& container,
-    const std::map<hobject_t, PackedObjectInfo>& affected_objects) const;
+  
+  // Helper to encode OMAP entries
+  void encode_omap_entry(
+    std::map<std::string, ceph::buffer::list>& omap,
+    uint64_t offset,
+    const ContainerReverseMapEntry& entry) const;
+  
+public:
+  /**
+   * Generate a container object name from an index
+   * Format: ".pack_container_<index>"
+   */
+  static std::string container_name_from_index(uint64_t index) {
+    std::ostringstream ss;
+    ss << ".pack_container_" << index;
+    return ss.str();
+  }
+  
+  /**
+   * Generate a hobject_t for a container from its index
+   */
+  static hobject_t container_hobject_from_index(
+    uint64_t index,
+    int64_t pool,
+    const std::string& nspace = "") {
+    hobject_t hobj;
+    hobj.pool = pool;
+    hobj.nspace = nspace;
+    hobj.oid = object_t(container_name_from_index(index));
+    hobj.snap = CEPH_NOSNAP;
+    return hobj;
+  }
+  
+private:
   
 public:
   explicit ObjectPackEngine(const PackingConfig& config = PackingConfig())
