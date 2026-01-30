@@ -209,6 +209,51 @@ class TestNetSplit(CephTestCase):
         except Exception:
             return False
 
+    def _check_mon_netsplit_warning(self):
+        """
+        Returns True if MON_NETSPLIT warning exists in health checks.
+        """
+        (client,) = self.ctx.cluster.only(self.CLIENT).remotes.keys()
+        arg = ['ceph', 'health', 'detail', '--format=json']
+        proc = client.run(args=arg, wait=True, stdout=StringIO(), timeout=30)
+        if proc.exitstatus != 0:
+            log.error("ceph health detail failed")
+            raise Exception("ceph health detail failed")
+        out = proc.stdout.getvalue()
+        j = json.loads(out)
+        checks = j.get("checks", {})
+        log.debug("checks: {}".format(checks))
+        return "MON_NETSPLIT" in checks
+
+    def _check_mon_netsplit_warning_raised(self, detail):
+        """
+        Check if the MON_NETSPLIT warning with the given detail is raised.
+        """
+        log.info("Checking if MON_NETSPLIT warning is raised with detail: {}".format(detail))
+        (client,) = self.ctx.cluster.only(self.CLIENT).remotes.keys()
+        arg = ['ceph', 'health', 'detail', '--format=json']
+        proc = client.run(args=arg, wait=True, stdout=StringIO(), timeout=30)
+        if proc.exitstatus != 0:
+            log.error("ceph health detail failed")
+            raise Exception("ceph health detail failed")
+        out = proc.stdout.getvalue()
+        j = json.loads(out)
+        # Access health checks
+        checks = j.get("checks", {})
+        netsplit = checks.get("MON_NETSPLIT", {})
+        if not netsplit:
+            log.info("MON_NETSPLIT not found in health checks")
+            return False
+
+        # Check if the expected detail is present
+        for d in netsplit.get("detail", []):
+            if detail in d.get("message", ""):
+                log.info("Found MON_NETSPLIT warning with detail: {}".format(d))
+                return True
+
+        log.info("MON_NETSPLIT found but detail does not match")
+        return False
+
     def test_mon_netsplit(self):
         """
         Test the mon netsplit scenario, if cluster is actually accessible.
@@ -247,6 +292,7 @@ class TestNetSplit(CephTestCase):
         # Scenario 1: disconnect Site 1 and Site 2
         # Site 3 is still connected to both Site 1 and Site 2
         config = ["mon.a", "mon.d"]
+        location = ["dc1", "dc2"]
         # disconnect the mons
         self._disconnect_mons(config)
         # wait for the mons to be disconnected
@@ -255,6 +301,16 @@ class TestNetSplit(CephTestCase):
         self.wait_until_true(
             lambda: self._check_if_disconnect(config),
             timeout=self.RECOVERY_PERIOD,
+        )
+        # check if location level MON_NETSPLIT warning is raised
+        self.wait_until_true_and_hold(
+            lambda: self._check_mon_netsplit_warning_raised(
+                "Netsplit detected between {} and {}".format(
+                    location[0], location[1]
+                ),
+            ),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
         )
         # check the cluster is accessible
         self.wait_until_true_and_hold(
@@ -270,6 +326,12 @@ class TestNetSplit(CephTestCase):
         self.wait_until_true(
             lambda: self._check_if_connect(config),
             timeout=self.RECOVERY_PERIOD,
+        )
+        # check if the MON_NETSPLIT warning is cleared
+        self.wait_until_true_and_hold(
+            lambda: not self._check_mon_netsplit_warning(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
         )
         # wait for the PGs to recover
         time.sleep(self.RECOVERY_PERIOD)
