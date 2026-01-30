@@ -2365,6 +2365,13 @@ void Objecter::resend_mon_ops()
 // read | write ---------------------------
 
 void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
+
+  // If the parent op was already removed from its session by a map change, then
+  // ignore the completion here.
+  if (!op->session) {
+    return;
+  }
+
   // While the following post is scheduled, this op is considered "in flight".
   // If a new osdmap is published, this op might be cancelled/redriven, etc..
   // before the following post is executed. Normally, an op would be protected
