@@ -62,3 +62,12 @@
   </ng-container>
   <ng-template #noUrl>{{row.service_name}}</ng-template>
 </ng-template>
+
+<ng-template #certificateStatusTpl
+             let-row="data.row">
+  @if (row.certificate) {
+    {{ formatCertificateStatus(row.certificate) }}
+  } @else {
+    -
+  }
+</ng-template>
