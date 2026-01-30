@@ -1,49 +1,62 @@
 from ceph_node_proxy.api import NodeProxyApi
-from ceph_node_proxy.atollon import AtollonSystem
-from ceph_node_proxy.baseredfishsystem import BaseRedfishSystem
-from ceph_node_proxy.redfishdellsystem import RedfishDellSystem
+from ceph_node_proxy.bootstrap import create_node_proxy_manager
+from ceph_node_proxy.config import load_cephadm_config
+from ceph_node_proxy.registry import get_system_class
 from ceph_node_proxy.reporter import Reporter
-from ceph_node_proxy.util import Config, DEFAULTS, get_logger, http_req, write_tmp_file
+from ceph_node_proxy.util import Config, DEFAULTS, get_logger, http_req
 from urllib.error import HTTPError
-from typing import Dict, Any, Optional, Type
+from typing import Dict, Any, Optional
 
 import argparse
-import os
-import ssl
 import json
-import time
+import os
 import signal
-
-
-REDFISH_SYSTEM_CLASSES: Dict[str, Type[BaseRedfishSystem]] = {
-    'generic': BaseRedfishSystem,
-    'dell': RedfishDellSystem,
-    'atollon': AtollonSystem,
-}
+import ssl
+import time
 
 
 class NodeProxyManager:
-    def __init__(self, **kw: Any) -> None:
+    def __init__(
+        self,
+        *,
+        mgr_host: str,
+        cephx_name: str,
+        cephx_secret: str,
+        ca_path: str,
+        api_ssl_crt: str,
+        api_ssl_key: str,
+        mgr_agent_port: str,
+        config: Optional[Config] = None,
+        config_path: Optional[str] = None,
+        reporter_scheme: str = 'https',
+        reporter_endpoint: str = '/node-proxy/data',
+    ) -> None:
         self.exc: Optional[Exception] = None
         self.log = get_logger(__name__)
-        self.mgr_host: str = kw['mgr_host']
-        self.cephx_name: str = kw['cephx_name']
-        self.cephx_secret: str = kw['cephx_secret']
-        self.ca_path: str = kw['ca_path']
-        self.api_ssl_crt: str = kw['api_ssl_crt']
-        self.api_ssl_key: str = kw['api_ssl_key']
-        self.mgr_agent_port: str = str(kw['mgr_agent_port'])
+        self.mgr_host = mgr_host
+        self.cephx_name = cephx_name
+        self.cephx_secret = cephx_secret
+        self.ca_path = ca_path
+        self.api_ssl_crt = api_ssl_crt
+        self.api_ssl_key = api_ssl_key
+        self.mgr_agent_port = str(mgr_agent_port)
         self.stop: bool = False
         self.ssl_ctx = ssl.create_default_context()
         self.ssl_ctx.check_hostname = True
         self.ssl_ctx.verify_mode = ssl.CERT_REQUIRED
         self.ssl_ctx.load_verify_locations(self.ca_path)
-        self.reporter_scheme: str = kw.get('reporter_scheme', 'https')
-        self.reporter_endpoint: str = kw.get('reporter_endpoint', '/node-proxy/data')
+        self.reporter_scheme = reporter_scheme
+        self.reporter_endpoint = reporter_endpoint
         self.cephx = {'cephx': {'name': self.cephx_name,
                                 'secret': self.cephx_secret}}
-        config_path = kw.get('config_path') or os.environ.get('NODE_PROXY_CONFIG', '/etc/ceph/node-proxy.yml')
-        self.config = Config(config_path, defaults=DEFAULTS)
+        if config is not None:
+            self.config = config
+        else:
+            path = (
+                config_path or os.environ.get('NODE_PROXY_CONFIG')
+                or '/etc/ceph/node-proxy.yml'
+            )
+            self.config = Config(path, defaults=DEFAULTS)
         self.username: str = ''
         self.password: str = ''
 
@@ -87,7 +100,7 @@ class NodeProxyManager:
             raise SystemExit(1)
         try:
             vendor = self.config.get('system', {}).get('vendor', 'generic')
-            system_cls = REDFISH_SYSTEM_CLASSES.get(vendor, BaseRedfishSystem)
+            system_cls = get_system_class(vendor)
             self.system = system_cls(host=oob_details['host'],
                                      port=oob_details['port'],
                                      username=oob_details['username'],
@@ -100,12 +113,14 @@ class NodeProxyManager:
 
     def init_reporter(self) -> None:
         try:
+            max_retries = self.config.get('reporter', {}).get('push_data_max_retries', 30)
             self.reporter_agent = Reporter(self.system,
                                            self.cephx,
                                            reporter_scheme=self.reporter_scheme,
                                            reporter_hostname=self.mgr_host,
                                            reporter_port=self.mgr_agent_port,
-                                           reporter_endpoint=self.reporter_endpoint)
+                                           reporter_endpoint=self.reporter_endpoint,
+                                           max_retries=max_retries)
             self.reporter_agent.start()
         except RuntimeError:
             self.log.error("Can't initialize the reporter.")
@@ -121,19 +136,34 @@ class NodeProxyManager:
             raise
 
     def loop(self) -> None:
+        check_interval = 20
+        min_interval = 20
+        max_interval = 300
+        backoff_factor = 1.5
+        consecutive_failures = 0
+
         while not self.stop:
-            for thread in [self.system, self.reporter_agent]:
-                try:
+            try:
+                for thread in [self.system, self.reporter_agent]:
                     status = thread.check_status()
                     label = 'Ok' if status else 'Critical'
                     self.log.debug(f'{thread} status: {label}')
-                except Exception as e:
-                    self.log.error(f'{thread} not running: {e.__class__.__name__}: {e}')
+                consecutive_failures = 0
+                check_interval = min_interval
+                self.log.debug('All threads are alive, next check in %ds.', check_interval)
+            except Exception as e:
+                consecutive_failures += 1
+                self.log.error(
+                    f'{consecutive_failures} failure(s): thread not running: '
+                    f'{e.__class__.__name__}: {e}'
+                )
+                for thread in [self.system, self.reporter_agent]:
                     thread.shutdown()
-                    self.init_system()
-                    self.init_reporter()
-            self.log.debug('All threads are alive, next check in 20sec.')
-            time.sleep(20)
+                self.init_system()
+                self.init_reporter()
+                check_interval = min(int(check_interval * backoff_factor), max_interval)
+                self.log.debug('Next check in %ds (backoff).', check_interval)
+            time.sleep(check_interval)
 
     def shutdown(self) -> None:
         self.stop = True
@@ -147,11 +177,13 @@ class NodeProxyManager:
 
 
 def handler(signum: Any, frame: Any, t_mgr: 'NodeProxyManager') -> None:
-    t_mgr.system.pending_shutdown = True
+    if hasattr(t_mgr, 'system') and t_mgr.system is not None:
+        t_mgr.system.pending_shutdown = True
     t_mgr.log.info('SIGTERM caught, shutting down threads...')
     t_mgr.shutdown()
-    t_mgr.log.info('Logging out from RedFish API')
-    t_mgr.system.client.logout()
+    if hasattr(t_mgr, 'system') and t_mgr.system is not None and hasattr(t_mgr.system, 'client') and t_mgr.system.client is not None:
+        t_mgr.log.info('Logging out from RedFish API')
+        t_mgr.system.client.logout()
     raise SystemExit(0)
 
 
@@ -174,37 +206,14 @@ def main() -> None:
     if args.debug:
         DEFAULTS['logging']['level'] = 10
 
-    if not os.path.exists(args.config):
-        raise Exception(f'No config file found at provided config path: {args.config}')
+    try:
+        cephadm_config = load_cephadm_config(args.config)
+    except FileNotFoundError as e:
+        raise SystemExit(f'Config error: {e}')
+    except ValueError as e:
+        raise SystemExit(f'Config error: {e}')
 
-    with open(args.config, 'r') as f:
-        try:
-            config_json = f.read()
-            config = json.loads(config_json)
-        except Exception as e:
-            raise Exception(f'Failed to load json config: {str(e)}')
-
-    target_ip = config['target_ip']
-    target_port = config['target_port']
-    keyring = config['keyring']
-    root_cert = config['root_cert.pem']
-    listener_cert = config['listener.crt']
-    listener_key = config['listener.key']
-    name = config['name']
-
-    ca_file = write_tmp_file(root_cert,
-                             prefix_name='cephadm-endpoint-root-cert')
-
-    config_path = config.get('node_proxy_config') or os.environ.get('NODE_PROXY_CONFIG', '/etc/ceph/node-proxy.yml')
-
-    node_proxy_mgr = NodeProxyManager(mgr_host=target_ip,
-                                      cephx_name=name,
-                                      cephx_secret=keyring,
-                                      mgr_agent_port=target_port,
-                                      ca_path=ca_file.name,
-                                      api_ssl_crt=listener_cert,
-                                      api_ssl_key=listener_key,
-                                      config_path=config_path)
+    node_proxy_mgr = create_node_proxy_manager(cephadm_config)
     signal.signal(signal.SIGTERM,
                   lambda signum, frame: handler(signum, frame, node_proxy_mgr))
     node_proxy_mgr.run()

@@ -3,8 +3,8 @@ from urllib.error import HTTPError
 from cherrypy._cpserver import Server  # type: ignore
 from threading import Thread, Event
 from typing import Dict, Any, List
+from ceph_node_proxy.protocols import SystemBackend
 from ceph_node_proxy.util import Config, get_logger, write_tmp_file
-from ceph_node_proxy.basesystem import BaseSystem
 from ceph_node_proxy.reporter import Reporter
 from typing import TYPE_CHECKING, Optional
 
@@ -12,6 +12,8 @@ if TYPE_CHECKING:
     from ceph_node_proxy.main import NodeProxyManager
 
 
+# Admin endpoints (start/stop/reload) are not mounted by default.
+# To enable, mount: cherrypy.tree.mount(Admin(api), '/admin', config=config)
 @cherrypy.tools.auth_basic(on=True)
 @cherrypy.tools.allow(methods=['PUT'])
 @cherrypy.tools.json_out()
@@ -53,7 +55,7 @@ class Admin():
 
 class API(Server):
     def __init__(self,
-                 backend: 'BaseSystem',
+                 backend: SystemBackend,
                  reporter: 'Reporter',
                  config: 'Config',
                  addr: str = '0.0.0.0',

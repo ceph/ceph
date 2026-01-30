@@ -1,216 +1,16 @@
 import concurrent.futures
 import dataclasses
-import json
-from dataclasses import dataclass
 from ceph_node_proxy.basesystem import BaseSystem
+from ceph_node_proxy.redfish import (
+    ComponentUpdateSpec,
+    Endpoint,
+    EndpointMgr,
+    update_component,
+)
 from ceph_node_proxy.redfish_client import RedFishClient
-from time import sleep
 from ceph_node_proxy.util import get_logger, to_snake_case, normalize_dict
+from time import sleep
 from typing import Dict, Any, List, Callable, Optional
-from urllib.error import HTTPError, URLError
-
-
-@dataclass
-class ComponentUpdateSpec:
-    collection: str
-    path: str
-    fields: List[str]
-    attribute: Optional[str] = None
-
-
-class EndpointMgr:
-    NAME: str = 'EndpointMgr'
-
-    def __init__(self,
-                 client: RedFishClient,
-                 prefix: str = RedFishClient.PREFIX) -> None:
-        self.log = get_logger(f'{__name__}:{EndpointMgr.NAME}')
-        self.prefix: str = prefix
-        self.client: RedFishClient = client
-        # Use explicit dictionary instead of dynamic attributes
-        self._endpoints: Dict[str, Endpoint] = {}
-        self._session_url: str = ''
-
-    def __getitem__(self, index: str) -> 'Endpoint':
-        if index not in self._endpoints:
-            raise KeyError(f"'{index}' is not a valid endpoint. Available: {list(self._endpoints.keys())}")
-        return self._endpoints[index]
-
-    def get(self, name: str, default: Any = None) -> Any:
-        return self._endpoints.get(name, default)
-
-    def list_endpoints(self) -> List[str]:
-        return list(self._endpoints.keys())
-
-    @property
-    def session(self) -> str:
-        return self._session_url
-
-    def init(self) -> None:
-        error_msg: str = "Can't discover entrypoint(s)"
-        try:
-            _, _data, _ = self.client.query(endpoint=self.prefix)
-            json_data: Dict[str, Any] = json.loads(_data)
-
-            # Discover endpoints
-            for k, v in json_data.items():
-                if isinstance(v, dict) and '@odata.id' in v:
-                    name: str = to_snake_case(k)
-                    url: str = v['@odata.id']
-                    self.log.info(f'entrypoint found: {name} = {url}')
-                    self._endpoints[name] = Endpoint(url, self.client)
-
-            # Extract session URL if available
-            try:
-                self._session_url = json_data['Links']['Sessions']['@odata.id']
-            except (KeyError, TypeError):
-                self.log.warning('Session URL not found in root response')
-                self._session_url = ''
-
-        except (URLError, KeyError, json.JSONDecodeError) as e:
-            msg = f'{error_msg}: {e}'
-            self.log.error(msg)
-            raise RuntimeError(msg) from e
-
-
-class Endpoint:
-    NAME: str = 'Endpoint'
-
-    def __init__(self, url: str, client: RedFishClient) -> None:
-        self.log = get_logger(f'{__name__}:{Endpoint.NAME}')
-        self.url: str = url
-        self.client: RedFishClient = client
-        self._children: Dict[str, 'Endpoint'] = {}
-        self.data: Dict[str, Any] = self.get_data()
-        self.id: str = ''
-        self.members_names: List[str] = []
-
-        if self.has_members:
-            self.members_names = self.get_members_names()
-
-        if self.data:
-            try:
-                self.id = self.data['Id']
-            except KeyError:
-                self.id = self.data['@odata.id'].split('/')[-1]
-        else:
-            self.log.warning(f'No data could be loaded for {self.url}')
-
-    def __getitem__(self, key: str) -> 'Endpoint':
-        if not isinstance(key, str) or not key or '/' in key:
-            raise KeyError(key)
-
-        if key not in self._children:
-            child_url: str = f'{self.url.rstrip("/")}/{key}'
-            self._children[key] = Endpoint(child_url, self.client)
-
-        return self._children[key]
-
-    def list_children(self) -> List[str]:
-        return list(self._children.keys())
-
-    def query(self, url: str) -> Dict[str, Any]:
-        data: Dict[str, Any] = {}
-        try:
-            self.log.debug(f'Querying {url}')
-            _, _data, _ = self.client.query(endpoint=url)
-            if not _data:
-                self.log.warning(f'Empty response from {url}')
-            else:
-                data = json.loads(_data)
-        except KeyError as e:
-            self.log.error(f'KeyError while querying {url}: {e}')
-        except HTTPError as e:
-            self.log.error(f'HTTP error while querying {url} - {e.code} - {e.reason}')
-        except json.JSONDecodeError as e:
-            self.log.error(f'JSON decode error while querying {url}: {e}')
-        except Exception as e:
-            self.log.error(f'Unexpected error while querying {url}: {type(e).__name__}: {e}')
-        return data
-
-    def get_data(self) -> Dict[str, Any]:
-        return self.query(self.url)
-
-    def get_members_names(self) -> List[str]:
-        result: List[str] = []
-        if self.has_members:
-            for member in self.data['Members']:
-                name: str = member['@odata.id'].split('/')[-1]
-                result.append(name)
-        return result
-
-    def get_name(self, endpoint: str) -> str:
-        return endpoint.split('/')[-1]
-
-    def get_members_endpoints(self) -> Dict[str, str]:
-        members: Dict[str, str] = {}
-
-        self.log.error(f'get_members_endpoints called on {self.url}, has_members={self.has_members}')
-
-        if self.has_members:
-            url_parts = self.url.split('/redfish/v1/')
-            if len(url_parts) > 1:
-                base_path = '/redfish/v1/' + url_parts[1].split('/')[0]
-            else:
-                base_path = None
-
-            for member in self.data['Members']:
-                name = self.get_name(member['@odata.id'])
-                endpoint_url = member['@odata.id']
-                self.log.debug(f'Found member: {name} -> {endpoint_url}')
-                
-                if base_path and not endpoint_url.startswith(base_path):
-                    self.log.warning(
-                        f'Member endpoint {endpoint_url} does not match base path {base_path} '
-                        f'from {self.url}. Skipping this member.'
-                    )
-                    continue
-
-                members[name] = endpoint_url
-        else:
-            if self.data:
-                name = self.get_name(self.url)
-                members[name] = self.url
-                self.log.warning(f'No Members array, using endpoint itself: {name} -> {self.url}')
-            else:
-                self.log.debug(f'Endpoint {self.url} has no data and no Members array')
-
-        return members
-
-    def get_members_data(self) -> Dict[str, Any]:
-        result: Dict[str, Any] = {}
-        self.log.debug(f'get_members_data called on {self.url}, has_members={self.has_members}')
-        
-        if self.has_members:
-            self.log.debug(f'Endpoint {self.url} has Members array: {self.data.get("Members", [])}')
-            members_endpoints = self.get_members_endpoints()
-            
-            # If no valid members after filtering, fall back to using the endpoint itself
-            if not members_endpoints:
-                self.log.warning(
-                    f'Endpoint {self.url} has Members array but no valid members after filtering. '
-                    f'Using endpoint itself as singleton resource.'
-                )
-                if self.data:
-                    name = self.get_name(self.url)
-                    result[name] = self.data
-            else:
-                for member, endpoint_url in members_endpoints.items():
-                    self.log.info(f'Fetching data for member: {member} at {endpoint_url}')
-                    result[member] = self.query(endpoint_url)
-        else:
-            self.log.debug(f'Endpoint {self.url} has no Members array, returning own data')
-            if self.data:
-                name = self.get_name(self.url)
-                result[name] = self.data
-            else:
-                self.log.warning(f'Endpoint {self.url} has no members and empty data')
-
-        return result
-
-    @property
-    def has_members(self) -> bool:
-        return bool(self.data and 'Members' in self.data and isinstance(self.data['Members'], list))
 
 
 class BaseRedfishSystem(BaseSystem):
@@ -242,7 +42,9 @@ class BaseRedfishSystem(BaseSystem):
         self.username: str = kw['username']
         self.password: str = kw['password']
         # move the following line (class attribute?)
-        self.client: RedFishClient = RedFishClient(host=self.host, port=self.port, username=self.username, password=self.password)
+        self.client: RedFishClient = RedFishClient(
+            host=self.host, port=self.port, username=self.username, password=self.password
+        )
         self.endpoints: EndpointMgr = EndpointMgr(self.client)
         self.log.info(f'redfish system initialization, host: {self.host}, user: {self.username}')
         self.data_ready: bool = False
@@ -268,74 +70,16 @@ class BaseRedfishSystem(BaseSystem):
                 f = getattr(self, func)
                 self.update_funcs.append(f)
 
-    def build_data(self,
-                   data: Dict[str, Any],
-                   fields: List[str],
-                   attribute: Optional[str] = None) -> Dict[str, Dict[str, Dict]]:
-        result: Dict[str, Dict[str, Optional[Dict]]] = dict()
-        member_id: str = ''
-
-        def process_data(m_id: str, fields: List[str], data: Dict[str, Any]) -> Dict[str, Any]:
-            result: Dict[str, Any] = {}
-            for field in fields:
-                try:
-                    result[to_snake_case(field)] = data[field]
-                except KeyError:
-                    self.log.debug(f'Could not find field: {field} in data: {data}')
-                    result[to_snake_case(field)] = None
-            return result
-
-        try:
-            if attribute is not None:
-                data_items = data[attribute]
-            else:
-                # The following is a hack to re-inject the key to the dict
-                # as we have the following structure when `attribute` is passed:
-                # "PowerSupplies": [ {"MemberId": "0", ...}, {"MemberId": "1", ...} ]
-                # vs. this structure in the opposite case:
-                # { "CPU.Socket.2": { "Id": "CPU.Socket.2", "Manufacturer": "Intel" }, "CPU.Socket.1": {} }
-                # With the first case, we clearly use the field "MemberId".
-                # With the second case, we use the key of the dict.
-                # This is mostly for avoiding code duplication.
-                data_items = [{'MemberId': k, **v} for k, v in data.items()]
-            self.log.error(f"GUITS_DEBUG: data_items= {data_items}")
-            for d in data_items:
-                member_id = d.get('MemberId')
-                result[member_id] = {}
-                result[member_id] = process_data(member_id, fields, d)
-        except (KeyError, TypeError, AttributeError) as e:
-            self.log.error(f"Can't build data: {e}")
-            raise
-        return normalize_dict(result)
-
     def update(self,
                collection: str,
                component: str,
                path: str,
                fields: List[str],
                attribute: Optional[str] = None) -> None:
-        members: List[str] = self.endpoints[collection].get_members_names()
-        result: Dict[str, Any] = {}
-        data: Dict[str, Any] = {}
-        data_built: Dict[str, Any] = {}
-        if not members:
-            data = self.endpoints[collection][path].get_members_data()
-            data_built = self.build_data(data=data, fields=fields, attribute=attribute)
-            result = data_built
-        else:
-            for member in members:
-                data_built = {}
-                try:
-                    if attribute is None:
-                        data = self.endpoints[collection][member][path].get_members_data()
-                    else:
-                        data = self.endpoints[collection][member][path].data
-                except HTTPError as e:
-                    self.log.error(f'Error while updating {component}: {e}')
-                else:
-                    data_built = self.build_data(data=data, fields=fields, attribute=attribute)
-                    result[member] = data_built
-        self._sys[component] = result
+        update_component(
+            self.endpoints, collection, component, path, fields,
+            self._sys, self.log, attribute=attribute,
+        )
 
     def main(self) -> None:
         self.stop = False
