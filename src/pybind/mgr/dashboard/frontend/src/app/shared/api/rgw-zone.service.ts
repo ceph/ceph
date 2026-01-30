@@ -1,7 +1,12 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { RgwRealm, RgwZone, RgwZonegroup } from '~/app/ceph/rgw/models/rgw-multisite';
+import {
+  RgwRealm,
+  RgwZone,
+  RgwZonegroup,
+  RgwZoneTreeNode
+} from '~/app/ceph/rgw/models/rgw-multisite';
 import { Icons } from '../enum/icons.enum';
 
 @Injectable({
@@ -37,7 +42,7 @@ export class RgwZoneService {
     return this.http.get<object>(`${this.url}`);
   }
 
-  get(zone: RgwZone): Observable<object> {
+  get(zone: RgwZone | RgwZoneTreeNode): Observable<object> {
     return this.http.get(`${this.url}/${zone.name}`);
   }
 

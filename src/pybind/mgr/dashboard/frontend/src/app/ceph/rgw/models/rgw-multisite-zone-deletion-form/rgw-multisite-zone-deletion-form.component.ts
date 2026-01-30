@@ -1,33 +1,36 @@
-import { AfterViewInit, Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional, AfterViewInit } from '@angular/core';
 import { UntypedFormControl } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { RgwZoneTreeNode } from '../rgw-multisite';
 
 @Component({
   selector: 'cd-rgw-multisite-zone-deletion-form',
   templateUrl: './rgw-multisite-zone-deletion-form.component.html',
   styleUrls: ['./rgw-multisite-zone-deletion-form.component.scss']
 })
-export class RgwMultisiteZoneDeletionFormComponent implements OnInit, AfterViewInit {
+export class RgwMultisiteZoneDeletionFormComponent extends CdForm implements OnInit, AfterViewInit {
   zoneData$: any;
   poolList$: any;
-  zone: any;
+  zone: RgwZoneTreeNode;
   zoneForm: CdFormGroup;
   displayText: boolean = false;
   includedPools: Set<string> = new Set<string>();
 
   constructor(
-    public activeModal: NgbActiveModal,
+    @Optional() @Inject('zone') public zoneInput: RgwZoneTreeNode,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService,
     private rgwZoneService: RgwZoneService,
     private poolService: PoolService
   ) {
+    super();
+    this.zone = zoneInput;
     this.createForm();
   }
 
@@ -61,7 +64,7 @@ export class RgwMultisiteZoneDeletionFormComponent implements OnInit, AfterViewI
             NotificationType.success,
             $localize`Zone: '${this.zone.name}' deleted successfully`
           );
-          this.activeModal.close();
+          this.closeModal();
         },
         () => {
           this.zoneForm.setErrors({ cdSubmitButton: true });
