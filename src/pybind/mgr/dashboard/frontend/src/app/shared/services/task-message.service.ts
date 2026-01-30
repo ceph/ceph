@@ -381,6 +381,10 @@ export class TaskMessageService {
     'nvmeof/gateway/node/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
       this.nvmeofGatewayNode(metadata)
     ),
+    'nvmeof/gateway-node/delete': this.newTaskMessage(
+      this.commonOperations.remove,
+      (metadata) => $localize`gateway node '${metadata.hostname}'`
+    ),
     'nvmeof/subsystem/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofSubsystem(metadata)
     ),

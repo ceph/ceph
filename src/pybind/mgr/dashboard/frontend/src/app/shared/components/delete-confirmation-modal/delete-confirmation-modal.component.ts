@@ -41,7 +41,8 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
     public submitActionObservable?: () => Observable<any>,
     @Optional()
     @Inject('callBackAtionObservable')
-    public callBackAtionObservable?: () => Observable<any>
+    public callBackAtionObservable?: () => Observable<any>,
+    @Optional() @Inject('hideDefaultWarning') public hideDefaultWarning?: boolean
   ) {
     super();
     this.actionDescription = actionDescription || 'delete';
