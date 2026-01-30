@@ -202,7 +202,6 @@ PyObject *ActivePyModules::cacheable_get_python(const std::string &what)
   PyObject *obj = get_python(what);
   if(ttl_seconds && ttl_cache.is_cacheable(what)) {
     ttl_cache.insert(what, obj);
-    Py_INCREF(obj);
   }
   update_cache_metrics();
   return obj;
