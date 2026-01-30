@@ -19,6 +19,7 @@ set(osd_srcs
   ReplicatedBackend.cc
   PGBackend.cc
   OSDCap.cc
+  ObjectPack.cc
   scrubber/pg_scrubber.cc
   scrubber/osd_scrub.cc
   scrubber/osd_scrub_sched.cc
