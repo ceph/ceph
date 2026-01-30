@@ -81,7 +81,8 @@ TEST(PyUtil, IntTypeExtremes)
   Py_DECREF(int_obj_min);
 }
 
-/*Commented out until Tracker 74181 is resolved
+/*TODO: Also need to test/fix other type mismatches 
+  Commented out until Tracker 74181 is resolved
   Causes a segfault since there is no guard against bad input
 TEST(PyUtil, IntTypeMismatch)
 {
