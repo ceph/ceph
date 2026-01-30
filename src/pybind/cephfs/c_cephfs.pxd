@@ -4,6 +4,27 @@
 from libc.stdint cimport *
 from types cimport *
 
+# dirent struct with common fields and platform-specific d_off handling
+cdef extern from *:
+    """
+    #include <dirent.h>
+    #if defined(__FreeBSD__) || defined(__APPLE__)
+    #define DIRENT_D_OFF(d) 0UL
+    #else
+    #define DIRENT_D_OFF(d) ((d)->d_off)
+    #endif
+    """
+    # Declare struct with common fields
+    cdef struct dirent:
+        long int d_ino
+        unsigned short int d_reclen
+        unsigned char d_type
+        char d_name[256]
+        # Note: d_off only on Linux - use DIRENT_D_OFF macro to access
+
+    # Macro to get d_off portably
+    unsigned long DIRENT_D_OFF(dirent *d)
+
 cdef extern from "../include/platform_errno.h":
     ctypedef signed int int32_t;
     int32_t ceph_to_hostos_errno(int32_t e)

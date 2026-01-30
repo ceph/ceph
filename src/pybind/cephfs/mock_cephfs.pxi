@@ -9,6 +9,22 @@ cdef:
         pass
 
 
+cdef extern from *:
+    """
+    // Mock DIRENT_D_OFF macro for BUILD_DOC
+    #define DIRENT_D_OFF(d) 0UL
+    """
+    # dirent struct for mock (matches declaration in c_cephfs.pxd)
+    cdef struct dirent:
+        long int d_ino
+        unsigned short int d_reclen
+        unsigned char d_type
+        char d_name[256]
+
+    # Macro to get d_off portably (always returns 0 in mock)
+    unsigned long DIRENT_D_OFF(dirent *d)
+
+
 cdef:
     cdef struct statx "ceph_statx":
         uint32_t    stx_mask

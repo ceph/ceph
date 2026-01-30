@@ -300,6 +300,8 @@ cdef class DirResult(object):
         return False
 
     def readdir(self):
+        cdef dirent *dirent
+
         self.lib.require_state("mounted")
 
         with nogil:
@@ -307,20 +309,12 @@ cdef class DirResult(object):
         if not dirent:
             return None
 
-        IF UNAME_SYSNAME == "FreeBSD" or UNAME_SYSNAME == "Darwin":
-            return DirEntry(d_ino=dirent.d_ino,
-                            d_off=0,
-                            d_reclen=dirent.d_reclen,
-                            d_type=dirent.d_type,
-                            d_name=dirent.d_name,
-                            d_snapid=CEPH_NOSNAP)
-        ELSE:
-            return DirEntry(d_ino=dirent.d_ino,
-                            d_off=dirent.d_off,
-                            d_reclen=dirent.d_reclen,
-                            d_type=dirent.d_type,
-                            d_name=dirent.d_name,
-                            d_snapid=CEPH_NOSNAP)
+        return DirEntry(d_ino=dirent.d_ino,
+                        d_off=DIRENT_D_OFF(dirent),
+                        d_reclen=dirent.d_reclen,
+                        d_type=dirent.d_type,
+                        d_name=dirent.d_name,
+                        d_snapid=CEPH_NOSNAP)
 
     def close(self):
         if self.handle:
@@ -383,20 +377,12 @@ cdef class SnapDiffHandle(object):
         if ret == 0:
             return None
 
-        IF UNAME_SYSNAME == "FreeBSD" or UNAME_SYSNAME == "Darwin":
-            return DirEntry(d_ino=difent.dir_entry.d_ino,
-                            d_off=0,
-                            d_reclen=difent.dir_entry.d_reclen,
-                            d_type=difent.dir_entry.d_type,
-                            d_name=difent.dir_entry.d_name,
-                            d_snapid=difent.snapid)
-        ELSE:
-            return DirEntry(d_ino=difent.dir_entry.d_ino,
-                            d_off=difent.dir_entry.d_off,
-                            d_reclen=difent.dir_entry.d_reclen,
-                            d_type=difent.dir_entry.d_type,
-                            d_name=difent.dir_entry.d_name,
-                            d_snapid=difent.snapid)
+        return DirEntry(d_ino=difent.dir_entry.d_ino,
+                        d_off=DIRENT_D_OFF(&difent.dir_entry),
+                        d_reclen=difent.dir_entry.d_reclen,
+                        d_type=difent.dir_entry.d_type,
+                        d_name=difent.dir_entry.d_name,
+                        d_snapid=difent.snapid)
 
     def close(self):
         if (not self.opened):
