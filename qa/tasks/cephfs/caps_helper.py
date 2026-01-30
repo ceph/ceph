@@ -308,6 +308,19 @@ class MdsCapTester:
         log.info('absence of write perm was tested successfully: '
                  f'failed to be write data to file {self.path}.')
 
+    def conduct_neg_test_for_new_file_creation(self, sudo_write=False):
+        possible_errmsgs = ('permission denied', 'operation not permitted')
+        cmdargs = ['sudo', 'touch'] if sudo_write else ['touch']
+
+        # don't use data, cmd args to write are set already above.
+        log.info('test absence of write perm: expect failure '
+                 f'try creating a new "{self.new_file}"')
+        cmdargs.append(self.new_file)
+        self.mount.negtestcmd(args=cmdargs, retval=1, errmsgs=possible_errmsgs)
+        cmdargs.pop(-1)
+        log.info('absence of write perm was tested successfully: '
+                 f'failed to create a new file {self.new_file}.')
+
     def conduct_pos_test_for_new_file_creation(self, sudo_write=False):
         log.info(f'test write perm: try creating a new "{self.new_file}"')
         self.mount.create_file(self.new_file)
