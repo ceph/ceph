@@ -63,7 +63,7 @@ class API(Server):
         self.backend = backend
         self.reporter = reporter
         self.config = config
-        self.socket_port = self.config.__dict__['api']['port'] if not port else port
+        self.socket_port = port if port else self.config.get('api', {}).get('port', 9456)
         self.socket_host = addr
         self.subscribe()
 

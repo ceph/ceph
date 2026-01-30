@@ -12,7 +12,7 @@ from urllib.request import urlopen, Request
 from typing import Dict, Callable, Any, Optional, MutableMapping, Tuple, Union
 
 
-CONFIG: Dict[str, Any] = {
+DEFAULTS: Dict[str, Any] = {
     'reporter': {
         'check_interval': 5,
         'push_data_max_retries': 30,
@@ -27,14 +27,36 @@ CONFIG: Dict[str, Any] = {
     },
     'logging': {
         'level': logging.INFO,
-    }
+    },
 }
+
+
+def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    result = dict(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def load_config(
+    path: str,
+    defaults: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    defaults = defaults or {}
+    if not os.path.exists(path):
+        return _deep_merge({}, defaults)
+    with open(path, 'r') as f:
+        loaded = yaml.safe_load(f) or {}
+    return _deep_merge(defaults, loaded)
 
 
 def get_logger(name: str, level: Union[int, str] = logging.NOTSET) -> logging.Logger:
     log_level: Union[int, str] = level
     if log_level == logging.NOTSET:
-        log_level = CONFIG['logging']['level']
+        log_level = DEFAULTS['logging']['level']
     logger = logging.getLogger(name)
     logger.setLevel(log_level)
     handler = logging.StreamHandler()
@@ -52,32 +74,25 @@ logger = get_logger(__name__)
 
 
 class Config:
-    def __init__(self,
-                 config_file: str = '/etc/ceph/node-proxy.yaml',
-                 config: Dict[str, Any] = {}) -> None:
-        self.config_file = config_file
-        self.config = config
+    def __init__(
+        self,
+        path: str,
+        defaults: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        self.path = path
+        self.defaults = defaults or {}
+        self._data = load_config(self.path, self.defaults)
 
-        self.load_config()
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._data.get(key, default)
 
-    def load_config(self) -> None:
-        if os.path.exists(self.config_file):
-            with open(self.config_file, 'r') as f:
-                self.config = yaml.safe_load(f)
-        else:
-            self.config = self.config
+    def __getitem__(self, key: str) -> Any:
+        return self._data[key]
 
-        for k, v in self.config.items():
-            if k not in self.config.keys():
-                self.config[k] = v
-
-        for k, v in self.config.items():
-            setattr(self, k, v)
-
-    def reload(self, config_file: str = '') -> None:
-        if config_file != '':
-            self.config_file = config_file
-        self.load_config()
+    def reload(self, path: Optional[str] = None) -> None:
+        if path is not None:
+            self.path = path
+        self._data = load_config(self.path, self.defaults)
 
 
 class BaseThread(threading.Thread):

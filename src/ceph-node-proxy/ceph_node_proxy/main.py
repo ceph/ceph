@@ -3,7 +3,7 @@ from ceph_node_proxy.atollon import AtollonSystem
 from ceph_node_proxy.baseredfishsystem import BaseRedfishSystem
 from ceph_node_proxy.redfishdellsystem import RedfishDellSystem
 from ceph_node_proxy.reporter import Reporter
-from ceph_node_proxy.util import Config, get_logger, http_req, write_tmp_file, CONFIG
+from ceph_node_proxy.util import Config, DEFAULTS, get_logger, http_req, write_tmp_file
 from urllib.error import HTTPError
 from typing import Dict, Any, Optional, Type
 
@@ -42,7 +42,8 @@ class NodeProxyManager:
         self.reporter_endpoint: str = kw.get('reporter_endpoint', '/node-proxy/data')
         self.cephx = {'cephx': {'name': self.cephx_name,
                                 'secret': self.cephx_secret}}
-        self.config = Config('/etc/ceph/node-proxy.yml', config=CONFIG)
+        config_path = kw.get('config_path') or os.environ.get('NODE_PROXY_CONFIG', '/etc/ceph/node-proxy.yml')
+        self.config = Config(config_path, defaults=DEFAULTS)
         self.username: str = ''
         self.password: str = ''
 
@@ -85,7 +86,7 @@ class NodeProxyManager:
             self.log.warning('No oob details could be loaded, exiting...')
             raise SystemExit(1)
         try:
-            vendor = getattr(self.config, 'system', {}).get('vendor', 'generic')
+            vendor = self.config.get('system', {}).get('vendor', 'generic')
             system_cls = REDFISH_SYSTEM_CLASSES.get(vendor, BaseRedfishSystem)
             self.system = system_cls(host=oob_details['host'],
                                      port=oob_details['port'],
@@ -171,7 +172,7 @@ def main() -> None:
 
     args = parser.parse_args()
     if args.debug:
-        CONFIG['logging']['level'] = 10
+        DEFAULTS['logging']['level'] = 10
 
     if not os.path.exists(args.config):
         raise Exception(f'No config file found at provided config path: {args.config}')
@@ -194,13 +195,16 @@ def main() -> None:
     ca_file = write_tmp_file(root_cert,
                              prefix_name='cephadm-endpoint-root-cert')
 
+    config_path = config.get('node_proxy_config') or os.environ.get('NODE_PROXY_CONFIG', '/etc/ceph/node-proxy.yml')
+
     node_proxy_mgr = NodeProxyManager(mgr_host=target_ip,
                                       cephx_name=name,
                                       cephx_secret=keyring,
                                       mgr_agent_port=target_port,
                                       ca_path=ca_file.name,
                                       api_ssl_crt=listener_cert,
-                                      api_ssl_key=listener_key)
+                                      api_ssl_key=listener_key,
+                                      config_path=config_path)
     signal.signal(signal.SIGTERM,
                   lambda signum, frame: handler(signum, frame, node_proxy_mgr))
     node_proxy_mgr.run()
