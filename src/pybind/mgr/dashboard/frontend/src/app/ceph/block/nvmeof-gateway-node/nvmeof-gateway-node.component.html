@@ -57,3 +57,8 @@
   <span>-</span>
 }
 </ng-template>
+
+<ng-template #deleteGatewayTpl
+             let-deletionMessage="deletionMessage">
+  <p [innerHTML]="deletionMessage"></p>
+</ng-template>

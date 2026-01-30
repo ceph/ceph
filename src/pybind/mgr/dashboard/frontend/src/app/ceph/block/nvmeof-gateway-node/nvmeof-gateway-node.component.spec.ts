@@ -10,13 +10,19 @@ import { CephModule } from '~/app/ceph/ceph.module';
 import { CephSharedModule } from '~/app/ceph/shared/ceph-shared.module';
 import { CoreModule } from '~/app/core/core.module';
 import { HostService } from '~/app/shared/api/host.service';
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { TagModule } from 'carbon-components-angular';
@@ -28,6 +34,10 @@ describe('NvmeofGatewayNodeComponent', () => {
   let hostService: HostService;
   let orchService: OrchestratorService;
   let nvmeofService: NvmeofService;
+  let cephServiceService: CephServiceService;
+  let modalService: ModalCdsService;
+  let taskWrapperService: TaskWrapperService;
+  let notificationService: NotificationService;
 
   const fakeAuthStorageService = {
     getPermissions: () => {
@@ -107,7 +117,11 @@ describe('NvmeofGatewayNodeComponent', () => {
             params: new BehaviorSubject({ group: 'group1' })
           }
         }
-      }
+      },
+      ModalCdsService,
+      CephServiceService,
+      TaskWrapperService,
+      NotificationService
     ]
   });
 
@@ -117,6 +131,10 @@ describe('NvmeofGatewayNodeComponent', () => {
     hostService = TestBed.inject(HostService);
     orchService = TestBed.inject(OrchestratorService);
     nvmeofService = TestBed.inject(NvmeofService);
+    cephServiceService = TestBed.inject(CephServiceService);
+    modalService = TestBed.inject(ModalCdsService);
+    taskWrapperService = TestBed.inject(TaskWrapperService);
+    notificationService = TestBed.inject(NotificationService);
   });
 
   it('should create', () => {
@@ -479,4 +497,55 @@ describe('NvmeofGatewayNodeComponent', () => {
     const storedContext = (component as any).tableContext;
     expect(storedContext).toBe(context);
   }));
+
+  it('should remove gateway', () => {
+    spyOn(modalService, 'show').and.callFake((_component, options) => {
+      options.submitActionObservable();
+      return undefined;
+    });
+    const updateSpy = spyOn(cephServiceService, 'update').and.returnValue(of(null));
+    component.serviceSpec = {
+      service_name: 'nvmeof.group1',
+      placement: {
+        hosts: ['host1', 'host2']
+      }
+    } as any;
+    component.selection.selected = [{ hostname: 'host1' }] as any;
+
+    component.removeGateway();
+
+    expect(modalService.show).toHaveBeenCalledWith(DeleteConfirmationModalComponent, {
+      itemDescription: 'gateway node',
+      itemNames: ['host1'],
+      actionDescription: 'remove',
+      hideDefaultWarning: true,
+      impact: DeletionImpact.high,
+      bodyTemplate: component.deleteGatewayTpl,
+      bodyContext: {
+        deletionMessage:
+          'Removing <strong>host1</strong> will detach it from the gateway group and stop handling new I/O requests. Active connections may be disrupted.<br><br>You can re-add this node later if required.'
+      },
+      submitActionObservable: jasmine.any(Function)
+    });
+
+    const call = modalService.show.calls.mostRecent().args[1].submitActionObservable;
+    spyOn(taskWrapperService, 'wrapTaskAroundCall').and.callFake((args: any) => args.call);
+    call();
+
+    expect(taskWrapperService.wrapTaskAroundCall).toHaveBeenCalledWith({
+      task: jasmine.objectContaining({
+        name: 'nvmeof/gateway-node/delete',
+        metadata: {
+          hostname: 'host1'
+        }
+      }),
+      call: jasmine.any(Object)
+    });
+    expect(updateSpy).toHaveBeenCalledWith({
+      service_name: 'nvmeof.group1',
+      placement: {
+        hosts: ['host2']
+      }
+    });
+  });
 });

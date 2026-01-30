@@ -9,8 +9,10 @@ import {
   ViewChild
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { forkJoin, Subject, Subscription } from 'rxjs';
-import { finalize, mergeMap } from 'rxjs/operators';
+import { forkJoin, of, Subject, Subscription } from 'rxjs';
+import { catchError, finalize, mergeMap, tap } from 'rxjs/operators';
+
+import _ from 'lodash';
 
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
@@ -27,7 +29,15 @@ import { Permission } from '~/app/shared/models/permissions';
 import { Host } from '~/app/shared/models/host.interface';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 
 @Component({
   selector: 'cd-nvmeof-gateway-node',
@@ -50,6 +60,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
 
   @ViewChild('labelsTpl', { static: true })
   labelsTpl!: TemplateRef<any>;
+
+  @ViewChild('deleteGatewayTpl', { static: true })
+  deleteGatewayTpl: TemplateRef<any>;
 
   @Output() selectionChange = new EventEmitter<CdTableSelection>();
   @Output() hostsLoaded = new EventEmitter<number>();
@@ -78,7 +91,11 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     private hostService: HostService,
     private orchService: OrchestratorService,
     private nvmeofService: NvmeofService,
-    private route: ActivatedRoute
+    private cephServiceService: CephServiceService,
+    private modalService: ModalCdsService,
+    private route: ActivatedRoute,
+    private taskWrapper: TaskWrapperService,
+    private notificationService: NotificationService
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
@@ -139,7 +156,46 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   }
 
   removeGateway(): void {
-    // TODO: Logic to remove gateway
+    const hostname = this.selection.first().hostname;
+    this.modalService.show(DeleteConfirmationModalComponent, {
+      itemDescription: 'gateway node',
+      itemNames: [hostname],
+      actionDescription: 'remove',
+      hideDefaultWarning: true,
+      impact: DeletionImpact.high,
+      bodyTemplate: this.deleteGatewayTpl,
+      bodyContext: {
+        deletionMessage: $localize`Removing <strong>${hostname}</strong> will detach it from the gateway group and stop handling new I/O requests. Active connections may be disrupted.<br><br>You can re-add this node later if required.`
+      },
+      submitActionObservable: () => {
+        const updatedSpec = _.cloneDeep(this.serviceSpec);
+        updatedSpec.placement.hosts = updatedSpec.placement.hosts.filter((h) => h !== hostname);
+        delete updatedSpec.status;
+        if (updatedSpec['events']) {
+          delete updatedSpec['events'];
+        }
+        return this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('nvmeof/gateway-node/delete', {
+              hostname: hostname
+            }),
+            call: this.cephServiceService.update(updatedSpec)
+          })
+          .pipe(
+            tap(() => {
+              this.table.refreshBtn();
+            }),
+            catchError((error) => {
+              this.table.refreshBtn();
+              this.notificationService.show(
+                NotificationType.error,
+                $localize`Failed to remove gateway node ${hostname}. ${error.message}`
+              );
+              return of(null);
+            })
+          );
+      }
+    });
   }
 
   ngOnDestroy(): void {

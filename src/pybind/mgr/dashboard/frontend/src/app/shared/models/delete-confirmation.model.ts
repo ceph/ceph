@@ -3,4 +3,5 @@ export interface DeleteConfirmationBodyContext {
   disableForm?: boolean;
   inputLabel?: string;
   inputPlaceholder?: string;
+  deletionMessage?: string;
 }
