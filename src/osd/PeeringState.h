@@ -2546,6 +2546,7 @@ public:
   bool is_recovering() const { return state_test(PG_STATE_RECOVERING); }
   bool is_premerge() const { return state_test(PG_STATE_PREMERGE); }
   bool is_repair() const { return state_test(PG_STATE_REPAIR); }
+  bool is_migrating() const { return state_test(PG_STATE_MIGRATING); }
   bool is_empty() const { return info.last_update == eversion_t(0,0); }
 
   bool get_need_up_thru() const {
