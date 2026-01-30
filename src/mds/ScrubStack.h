@@ -213,6 +213,12 @@ private:
   void scrub_file_inode(CInode *in);
 
   /**
+   * Scrub a file inode.
+   * @param dn The remote dentry to identify
+   */
+  void identify_remote_link_damage(CDentry *dn);
+
+  /**
    * Callback from completion of CInode::validate_disk_state
    * @param in The inode we were validating
    * @param r The return status from validate_disk_state
