@@ -100,6 +100,7 @@ private:
   void recreate_gw_epoch();
   void restore_pending_map_info(NVMeofGwMap & tmp_map);
   void cleanup_pending_map();
+  void get_gw_listeners(ceph::Formatter *f, std::pair<std::string, std::string>& group_key);
 };
 
 #endif /* MON_NVMEGWMONITOR_H_ */
