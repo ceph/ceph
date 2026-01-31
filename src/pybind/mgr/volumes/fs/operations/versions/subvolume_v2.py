@@ -206,7 +206,7 @@ class SubvolumeV2(SubvolumeV1):
                 e = VolumeException(-e.args[0], e.args[1])
             raise e
 
-    def create_clone(self, pool, source_volname, source_subvolume, snapname):
+    def create_clone(self, pool, source_volname, source_subvolume, snapname, uid, gid):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
@@ -234,6 +234,11 @@ class SubvolumeV2(SubvolumeV1):
                 attrs["data_pool"] = pool
                 attrs["pool_namespace"] = None
 
+            if uid is not None:
+                attrs['uid'] = uid
+            if gid is not None:
+                attrs['gid'] = gid
+
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, attrs.get("mode"))
             self.mark_subvolume()
@@ -247,6 +252,12 @@ class SubvolumeV2(SubvolumeV1):
                 self.metadata_mgr.init(SubvolumeV2.VERSION, subvolume_type.value, qpath, initial_state.value)
             self.add_clone_source(source_volname, source_subvolume, snapname)
             self.metadata_mgr.flush()
+
+            if uid is not None:
+                self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_UID, uid)
+            if gid is not None:
+                self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_GID, gid)
+            self.metadata_mgr.flush()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
                 self._remove_on_failure(subvol_path, retained)
@@ -259,6 +270,25 @@ class SubvolumeV2(SubvolumeV1):
             elif isinstance(e, cephfs.Error):
                 e = VolumeException(-e.args[0], e.args[1])
             raise e
+
+    def get_uid_gid(self):
+        self.metadata_mgr.refresh()
+
+        try:
+            uid = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_UID)
+            assert uid
+            uid = int(uid)
+        except MetadataMgrException:
+            uid = -1
+
+        try:
+            gid = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_GID)
+            assert gid
+            gid = int(gid)
+        except MetadataMgrException:
+            gid = -1
+
+        return uid, gid
 
     def allowed_ops_by_type(self, vol_type):
         if vol_type == SubvolumeTypes.TYPE_CLONE:

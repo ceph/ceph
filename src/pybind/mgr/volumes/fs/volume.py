@@ -1003,8 +1003,11 @@ class VolumeClient(CephfsClient["Module"]):
         s_subvolname        = kwargs['sub_name']
         s_groupname         = kwargs['group_name']
         t_groupname         = kwargs['target_group_name']
+        uid                 = kwargs['uid']
+        gid                 = kwargs['gid']
 
-        create_clone(self.mgr, fs_handle, self.volspec, t_group, t_subvolname, t_pool, volname, s_subvolume, s_snapname)
+        create_clone(self.mgr, fs_handle, self.volspec, t_group, t_subvolname,
+                     t_pool, volname, s_subvolume, s_snapname, uid, gid)
         with open_subvol(self.mgr, fs_handle, self.volspec, t_group, t_subvolname, SubvolumeOpType.CLONE_INTERNAL) as t_subvolume:
             try:
                 if t_groupname == s_groupname and t_subvolname == s_subvolname:
