@@ -54,7 +54,7 @@
   <!-- ***************************** -->
   <ng-template #brandTemplate>
     <a class="cds--header__name navbar-brand ms-3"
-       routerLink="/dashboard">
+       routerLink="/overview">
       <img src="assets/Ceph_Ceph_Logo_with_text_white.svg"
            alt="Ceph" />
     </a>
@@ -81,17 +81,17 @@
     <ng-container *ngIf="enabledFeature$ | async as enabledFeature">
       <cds-sidenav [expanded]="showMenuSidebar"
                    class="mt-5">
-        <!-- Dashboard -->
-        <cds-sidenav-item route="/dashboard"
+        <!-- Overview -->
+        <cds-sidenav-item route="/overview"
                           [useRouter]="true"
-                          title="Dashboard"
+                          title="Overview"
                           i18n-title
-                          class="nav-item tc_menuitem_dashboard">
+                          class="nav-item tc_menuitem_overview">
           <svg cdsIcon="template"
                icon
                size="20"></svg>
           <span i18n>
-            Dashboard</span>
+            Overview</span>
         </cds-sidenav-item>
         <!-- Multi-cluster Dashboard -->
         <cds-sidenav-menu title="Multi-cluster"

@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 export class LanguagePageHelper extends PageHelper {
   pages = {
-    index: { url: '#/dashboard', id: 'cd-dashboard' }
+    index: { url: '#/overview', id: 'cd-dashboard' }
   };
 
   getLanguageBtn() {
