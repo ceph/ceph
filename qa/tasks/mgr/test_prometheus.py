@@ -72,6 +72,9 @@ class TestPrometheus(MgrTestCase):
             if r.status_code != 200:
                 failures.append(url)
 
+            if url == "/metrics":
+                self.assertEqual(r.headers["content-type"], "text/plain;charset=utf-8")
+
             log.info("{0}: {1} ({2} bytes)".format(
                 url, r.status_code, len(r.content)
             ))
