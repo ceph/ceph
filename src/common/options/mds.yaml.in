@@ -1812,3 +1812,15 @@ options:
   min: 30
   services:
   - mds
+- name: mds_trace_sliding_window_sec
+  type: secs
+  level: advanced
+  desc: MDS trace sliding window duration in seconds
+  long_desc: Duration in seconds to keep completed traces in memory for admin socket dump
+  default: 30
+  min: 5
+  max: 300
+  services:
+  - mds
+  flags:
+  - runtime

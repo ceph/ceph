@@ -20,6 +20,7 @@
 #include "CInode.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "MDSTracer.h"
 #include "events/EOpen.h"
 #include "events/EUpdate.h"
 #include "MDBalancer.h"
@@ -155,6 +156,7 @@ void Locker::send_lock_message(SimpleLock *lock, int msg, const bufferlist &data
 bool Locker::try_rdlock_snap_layout(CInode *in, const MDRequestRef& mdr,
 				    int n, bool want_layout)
 {
+  ScopedSpan trace_span(mds->tracer, "rdlock_snap_layout", mdr->trace_span, &mdr->trace_data);
   dout(10) << __func__ << " " << *mdr << " " << *in << dendl;
   // rdlock ancestor snaps
   inodeno_t root;
@@ -252,6 +254,9 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
     dout(20) << " auth_pin_freeze = " << *auth_pin_freeze << dendl;
   }
   dout(20) << " auth_pin_nonblocking=" << auth_pin_nonblocking << dendl;
+
+  // Trace child span: lock acquisition (duration captured automatically)
+  ScopedSpan trace_span(mds->tracer, "acquire_locks", mdr->trace_span, &mdr->trace_data);
 
   MarkEventOnDestruct marker(mdr, "failed to acquire_locks");
 
@@ -1089,6 +1094,7 @@ void Locker::invalidate_lock_caches(SimpleLock *lock)
 
 void Locker::create_lock_cache(const MDRequestRef& mdr, CInode *diri, file_layout_t *dir_layout)
 {
+  ScopedSpan trace_span(mds->tracer, "create_lock_cache", mdr->trace_span, &mdr->trace_data);
   if (mdr->lock_cache)
     return;
 
@@ -1885,6 +1891,7 @@ void Locker::rdlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *
 
 bool Locker::rdlock_try_set(MutationImpl::LockOpVec& lov, const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "rdlock_try_set", mdr->trace_span, &mdr->trace_data);
   dout(10) << __func__  << dendl;
   for (const auto& p : lov) {
     auto lock = p.lock;
@@ -2437,6 +2444,10 @@ Capability* Locker::issue_new_caps(CInode *in,
 				   SnapRealm *realm)
 {
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
+
+  // Trace child span: issuing new caps (duration captured automatically)
+  ScopedSpan trace_span(mds->tracer, "issue_caps", mdr->trace_span, &mdr->trace_data);
+
   Session *session = mdr->session;
   bool new_inode = (mdr->alloc_ino || mdr->used_prealloc_ino);
 
@@ -3698,6 +3709,7 @@ public:
 void Locker::process_request_cap_release(const MDRequestRef& mdr, client_t client, const ceph_mds_request_release& item,
 					 std::string_view dname)
 {
+  ScopedSpan trace_span(mds->tracer, "cap_release", mdr ? mdr->trace_span : jspan_ptr(), mdr ? &mdr->trace_data : nullptr);
   inodeno_t ino = (uint64_t)item.ino;
   uint64_t cap_id = item.cap_id;
   int caps = item.caps;
@@ -4526,6 +4538,7 @@ void Locker::handle_client_lease(const cref_t<MClientLease> &m)
 void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr, utime_t now,
                                 bufferlist &bl)
 {
+  ScopedSpan trace_span(mds->tracer, "issue_lease", mdr->trace_span, &mdr->trace_data);
   client_t client = mdr->get_client();
   Session *session = mdr->session;
 

@@ -37,6 +37,7 @@
 
 #include "common/StackStringStream.h"
 #include "common/TrackedOp.h"
+#include "MDSTracer.h"
 
 class LogSegment;
 class BatchOp;
@@ -491,6 +492,14 @@ struct MDRequestImpl : public MutationImpl {
 
   // referent straydn
   bool referent_straydn = false;
+
+  // -- tracing support --
+  // Span for tracing this request through the MDS
+  jspan_ptr trace_span;
+  // Collected trace data for sliding window storage
+  TraceData trace_data;
+  // Pending span ID for async journal wait tracking
+  uint32_t journal_span_id = 0;
 
 protected:
   void _dump(ceph::Formatter *f) const override {
