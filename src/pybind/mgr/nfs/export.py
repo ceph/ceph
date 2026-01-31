@@ -17,7 +17,7 @@ from ceph.fs.earmarking import EarmarkTopScope
 import cephfs
 
 from mgr_util import CephFSEarmarkResolver
-from rados import TimedOut, ObjectNotFound, Rados
+from rados import TimedOut, ObjectNotFound
 
 from object_format import ErrorResponse
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
@@ -27,18 +27,23 @@ from .ganesha_conf import (
     Export,
     GaneshaConfParser,
     RGWFSAL,
-    RawBlock,
     format_block)
+from .qos_conf import QOS, QOSBandwidthControl, QOSOpsControl, QOSParams
+from .export_utils import (
+    export_qos_bw_checks,
+    export_dict_qos_bw_ops_checks,
+    export_qos_ops_checks,
+    get_cluster_qos_config)
 from .exception import NFSException, NFSInvalidOperation, FSNotFound, NFSObjectNotFound
 from .utils import (
     EXPORT_PREFIX,
     NonFatalError,
-    USER_CONF_PREFIX,
     export_obj_name,
     conf_obj_name,
     available_clusters,
     check_fs,
     restart_nfs_service, cephfs_path_is_dir)
+from .rados_utils import NFSRados
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -86,79 +91,6 @@ def _validate_cmount_path(cmount_path: str, path: str) -> None:
             f"Please ensure that the cmount_path includes the specified path '{path}'. "
             "It is allowed to be any complete path hierarchy between / and the EXPORT {path}."
         )
-
-
-class NFSRados:
-    def __init__(self, rados: 'Rados', namespace: str) -> None:
-        self.rados = rados
-        self.pool = POOL_NAME
-        self.namespace = namespace
-
-    def _make_rados_url(self, obj: str) -> str:
-        return "rados://{}/{}/{}".format(self.pool, self.namespace, obj)
-
-    def _create_url_block(self, obj_name: str) -> RawBlock:
-        return RawBlock('%url', values={'value': self._make_rados_url(obj_name)})
-
-    def write_obj(self, conf_block: str, obj: str, config_obj: str = '') -> None:
-        with self.rados.open_ioctx(self.pool) as ioctx:
-            ioctx.set_namespace(self.namespace)
-            ioctx.write_full(obj, conf_block.encode('utf-8'))
-            if not config_obj:
-                # Return after creating empty common config object
-                return
-            log.debug("write configuration into rados object %s/%s/%s",
-                      self.pool, self.namespace, obj)
-
-            # Add created obj url to common config obj
-            ioctx.append(config_obj, format_block(
-                         self._create_url_block(obj)).encode('utf-8'))
-            _check_rados_notify(ioctx, config_obj)
-            log.debug("Added %s url to %s", obj, config_obj)
-
-    def read_obj(self, obj: str) -> Optional[str]:
-        with self.rados.open_ioctx(self.pool) as ioctx:
-            ioctx.set_namespace(self.namespace)
-            try:
-                return ioctx.read(obj, 1048576).decode()
-            except ObjectNotFound:
-                return None
-
-    def update_obj(self, conf_block: str, obj: str, config_obj: str,
-                   should_notify: Optional[bool] = True) -> None:
-        with self.rados.open_ioctx(self.pool) as ioctx:
-            ioctx.set_namespace(self.namespace)
-            ioctx.write_full(obj, conf_block.encode('utf-8'))
-            log.debug("write configuration into rados object %s/%s/%s",
-                      self.pool, self.namespace, obj)
-            if should_notify:
-                _check_rados_notify(ioctx, config_obj)
-            log.debug("Update export %s in %s", obj, config_obj)
-
-    def remove_obj(self, obj: str, config_obj: str) -> None:
-        with self.rados.open_ioctx(self.pool) as ioctx:
-            ioctx.set_namespace(self.namespace)
-            export_urls = ioctx.read(config_obj)
-            url = '%url "{}"\n\n'.format(self._make_rados_url(obj))
-            export_urls = export_urls.replace(url.encode('utf-8'), b'')
-            ioctx.remove_object(obj)
-            ioctx.write_full(config_obj, export_urls)
-            _check_rados_notify(ioctx, config_obj)
-            log.debug("Object deleted: %s", url)
-
-    def remove_all_obj(self) -> None:
-        with self.rados.open_ioctx(self.pool) as ioctx:
-            ioctx.set_namespace(self.namespace)
-            for obj in ioctx.list_objects():
-                obj.remove()
-
-    def check_user_config(self) -> bool:
-        with self.rados.open_ioctx(self.pool) as ioctx:
-            ioctx.set_namespace(self.namespace)
-            for obj in ioctx.list_objects():
-                if obj.key.startswith(USER_CONF_PREFIX):
-                    return True
-        return False
 
 
 class AppliedExportResults:
@@ -226,6 +158,7 @@ class ExportMgr:
         self.mgr = mgr
         self.rados_pool = POOL_NAME
         self._exports: Optional[Dict[str, List[Export]]] = export_ls
+        self.skip_notify_nfs_server = False
 
     @property
     def exports(self) -> Dict[str, List[Export]]:
@@ -346,7 +279,8 @@ class ExportMgr:
         self._rados(cluster_id).write_obj(
             format_block(export.to_export_block()),
             export_obj_name(export.export_id),
-            conf_obj_name(export.cluster_id)
+            conf_obj_name(export.cluster_id),
+            (not self.skip_notify_nfs_server)
         )
 
     def _delete_export(
@@ -371,7 +305,8 @@ class ExportMgr:
                         self._delete_export_user(export)
                 if pseudo_path:
                     self._rados(cluster_id).remove_obj(
-                        export_obj_name(export.export_id), conf_obj_name(cluster_id))
+                        export_obj_name(export.export_id), conf_obj_name(cluster_id),
+                        (not self.skip_notify_nfs_server))
                 self.exports[cluster_id].remove(export)
                 if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
                     self._delete_export_user(export)
@@ -405,7 +340,7 @@ class ExportMgr:
         self._rados(cluster_id).update_obj(
             format_block(export.to_export_block()),
             export_obj_name(export.export_id), conf_obj_name(export.cluster_id),
-            should_notify=not need_nfs_service_restart)
+            should_notify=(not need_nfs_service_restart and not self.skip_notify_nfs_server))
         if need_nfs_service_restart:
             restart_nfs_service(self.mgr, export.cluster_id)
 
@@ -908,6 +843,14 @@ class ExportMgr:
             elif old_rgw_fsal.secret_access_key != new_rgw_fsal.secret_access_key:
                 raise NFSInvalidOperation('secret_access_key change is not allowed')
 
+        # check QOS
+        if new_export_dict.get('qos_block'):
+            old_qos = {}
+            if old_export.qos_block:
+                old_qos = old_export.qos_block.to_dict()
+            export_dict_qos_bw_ops_checks(cluster_id, self.mgr, dict(new_export_dict.get('qos_block', {})),
+                                          old_qos)
+
         self.exports[cluster_id].remove(old_export)
 
         self._update_export(cluster_id, new_export, need_nfs_service_restart)
@@ -925,6 +868,118 @@ class ExportMgr:
             if export['fsal']['name'] == 'CEPH' and export['fsal']['cmount_path'] == cmount_path and export['fsal']['fs_name'] == fs_name:
                 exports_count += 1
         return exports_count
+
+    def update_export_qos(self,
+                          cluster_id: str,
+                          pseudo_path: str,
+                          export_obj: Export,
+                          enable_qos: bool,
+                          bw_obj: Optional[QOSBandwidthControl] = None,
+                          ops_obj: Optional[QOSOpsControl] = None) -> None:
+        """Update Export QoS block"""
+        # if qos_block does not exists in export create one else update existing block
+        if not export_obj.qos_block:
+            log.debug(f"Creating new QoS block for export {pseudo_path} of cluster {cluster_id}")
+            export_obj.qos_block = QOS(enable_qos=enable_qos, bw_obj=bw_obj, ops_obj=ops_obj)
+        else:
+            log.debug(f"Updating existing QoS block of export {pseudo_path} of cluster {cluster_id}")
+            export_obj.qos_block.enable_qos = enable_qos
+            if bw_obj:
+                export_obj.qos_block.bw_obj = bw_obj
+            if ops_obj:
+                export_obj.qos_block.ops_obj = ops_obj
+
+        self.exports[cluster_id].remove(export_obj)
+        self._update_export(cluster_id, export_obj, False)
+        log.debug(f"Successfully updated QoS control config for export {pseudo_path} of cluster {cluster_id}")
+
+    def get_export_obj(self, cluster_id: str, pseudo_path: str) -> Export:
+        self._validate_cluster_id(cluster_id)
+        export = self._fetch_export(cluster_id, pseudo_path)
+        if not export:
+            raise NFSObjectNotFound(f"Export {pseudo_path} not found in NFS cluster {cluster_id}")
+        return export
+
+    def enable_export_qos_bw(self,
+                             cluster_id: str,
+                             pseudo_path: str,
+                             bw_obj: QOSBandwidthControl
+                             ) -> None:
+        """
+        There are 2 cases to consider, based on QOS type set on cluster level
+        1. If combined bandwith control is disabled
+            a. If qos_type is pershare, then export_writebw and export_readbw parameters are compulsory
+            b. If qos_type is perclient, then can't enable export level qos
+            c. If qos_type is pershare_perclient then export_writebw, export_readbw, client_writebw and
+               client_readbw are compulsory parameters
+        2. If combined bandwidth control is enabled
+            a. If qos_type is pershare, then export_rw_bw parameter is compulsory
+            b. If qos_type is perclient, then can't enable export level qos
+            c. If qos_type is pershare_perclient, then export_rw_bw and client_rw_bw parameters are compulsory
+        """
+        try:
+            export_obj = self.get_export_obj(cluster_id, pseudo_path)
+            export_qos_bw_checks(cluster_id, self.mgr, bw_obj=bw_obj)
+            self.update_export_qos(cluster_id, pseudo_path, export_obj, True, bw_obj=bw_obj)
+            log.debug(f"Successfully enabled QoS bandwidth control for export {pseudo_path} of cluster {cluster_id}")
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QoS bandwidth control failed for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def get_export_qos(self, cluster_id: str, pseudo_path: str, ret_bw_in_bytes: bool = False) -> Dict[str, int]:
+        try:
+            clust_qos_obj = get_cluster_qos_config(cluster_id, self.mgr)
+            clust_qos_conf = {}
+            if clust_qos_obj:
+                clust_qos_conf[f'cluster_{QOSParams.enable_qos.value}'] = clust_qos_obj.enable_qos
+                if clust_qos_obj.bw_obj:
+                    clust_qos_conf[f'cluster_{QOSParams.enable_bw_ctrl.value}'] = clust_qos_obj.bw_obj.enable_bw_ctrl
+                if clust_qos_obj.ops_obj:
+                    clust_qos_conf[f'cluster_{QOSParams.enable_iops_ctrl.value}'] = clust_qos_obj.ops_obj.enable_iops_ctrl
+
+            export_obj = self.get_export_obj(cluster_id, pseudo_path)
+            if export_obj.qos_block:
+                qos_block = export_obj.qos_block.to_dict(ret_bw_in_bytes)
+                qos_block.update(clust_qos_conf)
+                return qos_block
+            return {}
+        except Exception as e:
+            log.exception(f"Failed to get QoS configuration for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def disable_export_qos_bw(self, cluster_id: str, pseudo_path: str) -> None:
+        try:
+            export_obj = self.get_export_obj(cluster_id, pseudo_path)
+            if export_obj.qos_block:
+                status = export_obj.qos_block.get_enable_qos_val(disable_bw=True)
+            self.update_export_qos(cluster_id, pseudo_path, export_obj, status, bw_obj=QOSBandwidthControl())
+            log.debug(f"Successfully disabled QoS bandwidth control for export {pseudo_path} of cluster {cluster_id}")
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QoS bandwidth control failed for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def enable_export_qos_ops(self, cluster_id: str, pseudo_path: str, ops_obj: QOSOpsControl) -> None:
+        try:
+            export_obj = self.get_export_obj(cluster_id, pseudo_path)
+            export_qos_ops_checks(cluster_id, self.mgr, ops_obj=ops_obj)
+            self.update_export_qos(cluster_id, pseudo_path, export_obj, True, ops_obj=ops_obj)
+            log.debug(f"Successfully enabled QoS IOPS control for export {pseudo_path} of cluster {cluster_id}")
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QoS IOPS control failed for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def disable_export_qos_ops(self, cluster_id: str, pseudo_path: str) -> None:
+        try:
+            export_obj = self.get_export_obj(cluster_id, pseudo_path)
+            if not export_obj:
+                raise NFSObjectNotFound(f"Export {pseudo_path} not found in NFS cluster {cluster_id}")
+            if export_obj.qos_block:
+                status = export_obj.qos_block.get_enable_qos_val(disable_ops=True)
+            self.update_export_qos(cluster_id, pseudo_path, export_obj, status, ops_obj=QOSOpsControl())
+            log.debug(f"Successfully updated QoS IOPS control for export {pseudo_path} of cluster {cluster_id}")
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QoS IOPS control failed for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
 
 
 def get_user_id(cluster_id: str, fs_name: str, cmount_path: str) -> str:
