@@ -20,6 +20,7 @@ namespace rgw::lua {
 
 enum class context {
   preRequest,
+  postAuth,
   postRequest,
   background,
   getData,

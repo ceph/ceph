@@ -9,6 +9,7 @@ Lua Scripting
 This feature allows users to assign execution context to Lua scripts. The supported contexts are:
 
  - ``prerequest`` which will execute a script before each operation is performed
+ - ``postauth`` which will execute a script before each operation is performed, but after the user is authenticated
  - ``postrequest`` which will execute after each operation is performed
  - ``background`` which will execute within a specified time interval
  - ``getdata`` which will execute on objects' data when objects are downloaded
@@ -49,27 +50,27 @@ To upload a script:
 
 ::
 
-   # radosgw-admin script put --infile={lua-file-path} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script put --infile={lua-file-path} --context={prerequest|postauth|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 * When uploading a script with the ``background`` context, a tenant name should not be specified.
 
 ::
 
-  # cephadm shell radosgw-admin script put --infile=/rootfs/{lua-file-path} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+  # cephadm shell radosgw-admin script put --infile=/rootfs/{lua-file-path} --context={prerequest|postauth|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 
 To print the content of the script to standard output:
 
 ::
 
-   # radosgw-admin script get --context={preRequest|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script get --context={preRequest|postAuth|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 
 To remove the script:
 
 ::
 
-   # radosgw-admin script rm --context={preRequest|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script rm --context={preRequest|postAuth|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 
 Package Management via CLI
