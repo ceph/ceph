@@ -10,6 +10,8 @@
 
 syntax = "proto3";
 
+option go_package = "github.com/ceph/ceph-nvmeof/lib/go/nvmeof";
+
 enum AddressFamily {
 	ipv4 = 0;
 	ipv6 = 1;
@@ -45,6 +47,12 @@ service Gateway {
 	// Changes subsystem key
 	rpc change_subsystem_key(change_subsystem_key_req) returns(req_status) {}
 
+	// Add a subsystem network
+	rpc add_subsystem_network(add_subsystem_network_req) returns(req_status) {}
+
+	// Delete a subsystem network
+	rpc del_subsystem_network(del_subsystem_network_req) returns(req_status) {}
+
 	// List namespaces
 	rpc list_namespaces(list_namespaces_req) returns(namespaces_info) {}
 
@@ -62,6 +70,9 @@ service Gateway {
 
 	// Changes namespace's visibility
 	rpc namespace_change_visibility(namespace_change_visibility_req) returns (req_status) {}
+
+	// Changes namespace's location
+	rpc namespace_change_location(namespace_change_location_req) returns (req_status) {}
 
 	// Set namespace's RBD trash image flag
 	rpc namespace_set_rbd_trash_image(namespace_set_rbd_trash_image_req) returns (req_status) {}
@@ -134,6 +145,9 @@ service Gateway {
 
 	// Gets gateway's stats
 	rpc get_gateway_stats(get_gateway_stats_req) returns (gateway_stats_info) {}
+
+	// Gets spdk thread stats
+	rpc get_thread_stats(get_thread_stats_req) returns (thread_stats_info) {}
 }
 
 // Request messages
@@ -153,6 +167,9 @@ message namespace_add_req {
 	optional bool trash_image = 12;
 	optional bool disable_auto_resize = 13;
 	optional bool read_only = 14;
+	optional string rbd_data_pool_name = 15;
+	optional string location = 16;
+	optional string rados_namespace_name = 17;
 }
 
 message namespace_resize_req {
@@ -192,6 +209,12 @@ message namespace_change_visibility_req {
 	uint32 nsid = 2;
 	bool auto_visible = 3;
 	optional bool force = 4;
+}
+
+message namespace_change_location_req {
+	string subsystem_nqn = 1;
+	uint32 nsid = 2;
+	optional string location = 3;
 }
 
 message namespace_set_rbd_trash_image_req {
@@ -234,16 +257,29 @@ message create_subsystem_req {
 	optional bool no_group_append = 5;
 	optional string dhchap_key = 6;
 	optional bool key_encrypted = 7;
+	repeated string network_mask = 8;
+	optional bool secure_listeners = 9;
 }
 
 message delete_subsystem_req {
 	string subsystem_nqn = 1;
 	optional bool force = 2;
+	optional bool i_am_sure = 3;
 }
 
 message change_subsystem_key_req {
 	string subsystem_nqn = 1;
 	optional string dhchap_key = 2;
+}
+
+message add_subsystem_network_req {
+	string subsystem_nqn = 1;
+	string network_mask = 2;
+}
+
+message del_subsystem_network_req {
+	string subsystem_nqn = 1;
+	string network_mask = 2;
 }
 
 message list_namespaces_req {
@@ -259,12 +295,15 @@ message add_host_req {
 	optional string dhchap_key = 4;
 	optional bool psk_encrypted = 5;
 	optional bool key_encrypted = 6;
+	optional string dhchap_ctrlr_key = 7;
+	optional bool ctrlr_key_encrypted = 8;
 }
 
 message change_host_key_req {
 	string subsystem_nqn = 1;
 	string host_nqn = 2;
 	optional string dhchap_key = 3;
+	optional string dhchap_ctrlr_key = 4;
 }
 
 message remove_host_req {
@@ -279,6 +318,7 @@ message list_hosts_req {
 
 message list_connections_req {
 	string subsystem = 1;
+	optional bool clear_alerts = 2;
 }
 
 message create_listener_req {
@@ -342,6 +382,9 @@ message show_gateway_listeners_info_req {
 }
 
 message get_gateway_stats_req {
+}
+
+message get_thread_stats_req {
 }
 
 // From https://nvmexpress.org/wp-content/uploads/NVM-Express-1_4-2019.06.10-Ratified.pdf page 138
@@ -411,6 +454,7 @@ message subsystem {
 	optional uint32 max_cntlid = 10;
 	repeated namespace namespaces = 11;
 	optional bool has_dhchap_key = 12;
+	repeated string network_mask = 13;
 }
 
 message listen_address {
@@ -453,6 +497,7 @@ message subsystem_cli {
 	optional bool has_dhchap_key = 10;
 	optional bool allow_any_host = 11;
 	optional bool created_without_key = 12;
+	repeated string network_mask = 13;
 }
 
 message gateway_info {
@@ -473,6 +518,7 @@ message gateway_info {
 	optional uint32 max_hosts_per_subsystem = 15;
 	optional uint32 max_namespaces_per_subsystem = 16;
 	optional uint32 max_hosts = 17;
+	optional bool gateway_initialization_over = 18;
 }
 
 message cli_version {
@@ -499,14 +545,27 @@ message poll_group_info {
 	uint32 current_io_qpairs = 5;
 	uint64 pending_bdev_io = 6;
 	uint64 completed_nvme_io = 7;
-        repeated poll_group_transport_info transports = 8;
+	repeated poll_group_transport_info transports = 8;
 }
 
 message gateway_stats_info {
 	int32 status = 1;
 	string error_message = 2;
 	uint64 tick_rate = 3;
-        repeated poll_group_info poll_groups = 4;
+	repeated poll_group_info poll_groups = 4;
+}
+
+message thread_stats_info {
+	int32 status = 1;
+	string error_message = 2;
+    repeated spdk_thread_info threads = 3;
+	uint64 tick_rate = 4;
+}
+
+message spdk_thread_info {
+	string name = 1;
+	uint64 busy = 2;
+	uint64 idle = 3;
 }
 
 message listener_info {
@@ -517,6 +576,7 @@ message listener_info {
 	uint32 trsvcid = 5;
 	optional bool secure = 6;
 	optional bool active = 7;
+	optional bool manual = 8;	
 }
 
 message listeners_info {
@@ -563,7 +623,7 @@ message connection {
 	optional bool secure = 9;
 	optional bool use_psk = 10;
 	optional bool use_dhchap = 11;
-        optional string subsystem = 12;
+	optional string subsystem = 12;
 	optional bool disconnected_due_to_keepalive_timeout = 13;
 }
 
@@ -593,9 +653,12 @@ message namespace_cli {
 	optional bool trash_image = 16;
 	optional bool disable_auto_resize = 17;
 	optional bool read_only = 18;
-        optional string cluster_name = 19;
-        optional uint32 configured_load_balancing_group = 20;
+	optional string cluster_name = 19;
+	optional uint32 configured_load_balancing_group = 20;
 	optional bool image_was_shrunk = 21;
+	optional string rbd_data_pool_name = 22;
+	optional string location = 23;
+	optional string rados_namespace_name = 24;
 }
 
 message namespaces_info {
@@ -658,4 +721,3 @@ message gateway_log_level_info {
 	string error_message = 2;
 	GwLogLevel log_level = 3;
 }
-
