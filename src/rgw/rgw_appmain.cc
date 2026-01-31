@@ -92,9 +92,7 @@ namespace {
 
 OpsLogFile* rgw::AppMain::ops_log_file;
 
-rgw::AppMain::AppMain(const DoutPrefixProvider* dpp) : dpp(dpp)
-{
-}
+rgw::AppMain::AppMain(const DoutPrefixProvider* dpp) : dpp(dpp), context_pool_holder(dpp) {}
 rgw::AppMain::~AppMain() = default;
 
 void rgw::AppMain::init_frontends1(bool nfs) 
@@ -200,17 +198,6 @@ void rgw::AppMain::init_numa()
   }
 } /* init_numa */
 
-void rgw::AppMain::need_context_pool() {
-  if (!context_pool) {
-    context_pool.emplace(
-      dpp->get_cct()->_conf->rgw_thread_pool_size,
-      [] {
-	// request warnings on synchronous librados calls in this thread
-	is_asio_thread = true;
-      });
-  }
-}
-
 int rgw::AppMain::init_storage()
 {
   auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
@@ -246,21 +233,20 @@ int rgw::AppMain::init_storage()
     (g_conf()->rgw_run_sync_thread &&
       ((!nfs) || (nfs && g_conf()->rgw_nfs_run_sync_thread)));
 
-  need_context_pool();
   DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
   env.driver = DriverManager::get_storage(dpp, dpp->get_cct(),
           cfg,
-	  *context_pool,
-	  site,
+          context_pool_holder.get(),
+          site,
           run_gc,
           run_lc,
-	  run_restore,
+          run_restore,
           run_quota,
           run_sync,
           g_conf().get_val<bool>("rgw_dynamic_resharding"),
-	  true, // run notification thread
-	  true, // run bucket-logging thread
-	  true, null_yield, env.cfgstore,
+          true, // run notification thread
+          true, // run bucket-logging thread
+          true, null_yield, env.cfgstore,
           g_conf()->rgw_cache_enabled);
   if (!env.driver) {
     return -EIO;
@@ -476,8 +462,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       fe = new RGWLoadGenFrontend(env, config);
     }
     else if (framework == "beast") {
-      need_context_pool();
-      fe = new RGWAsioFrontend(env, config, *sched_ctx, *context_pool);
+      fe = new RGWAsioFrontend(env, config, *sched_ctx, context_pool_holder.get());
     }
     else if (framework == "rgw-nfs") {
       fe = new RGWLibFrontend(env, config);
@@ -546,9 +531,8 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     if (dedup_background) {
       rgw_pauser->add_pauser(dedup_background.get());
     }
-      need_context_pool();
       reloader = std::make_unique<RGWRealmReloader>(
-          env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), *context_pool);
+          env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), context_pool_holder.get());
       realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
     }
   }
@@ -654,7 +638,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   env.driver->shutdown();
   // Do this before closing storage so requests don't try to call into
   // closed storage.
-  context_pool->finish();
+  context_pool_holder.get().finish();
 
   cfgstore.reset(); // deletes
   DriverManager::close_storage(env.driver);
@@ -681,3 +665,12 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   rgw_perf_stop(g_ceph_context);
   ratelimiter.reset(); // deletes--ensure this happens before we destruct
 } /* AppMain::shutdown */
+
+ceph::async::io_context_pool& rgw::AppMain::IOContextPoolHolder::get() {
+  if (!pool_) {
+    pool_.emplace(
+        dpp_->get_cct()->_conf->rgw_thread_pool_size,
+        [] { is_asio_thread = true; });
+  }
+  return *pool_;
+}
