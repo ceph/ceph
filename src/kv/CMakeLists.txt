@@ -10,4 +10,5 @@ add_library(kv STATIC ${kv_srcs}
 
 target_link_libraries(kv
   RocksDB::RocksDB
-  heap_profiler)
+  heap_profiler
+  ${FMT_LIB})
