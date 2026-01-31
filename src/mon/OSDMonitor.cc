@@ -8270,7 +8270,6 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->use_gmt_hitset = false;
   if (crimson) {
     pi->set_flag(pg_pool_t::FLAG_CRIMSON);
-    pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   }
 
   pi->size = size;
@@ -8626,6 +8625,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
     }
+    // check for Crimson pools
+    // pg merging is not yet supported in Crimson
+    if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      if (n < (int)p.get_pg_num()) {
+        ss << "crimson-osd does not support decreasing pg_num_actual (shrinking)";
+        return -ENOTSUP;
+      }
+      if (n > (int)p.get_pg_num() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
+        ss << "crimson_allow_pg_split is false; pg_num_actual increase denied";
+        return -EPERM;
+      }
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -8676,6 +8687,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
+    }
+    // check for Crimson pools
+    // pg merging is not yet supported in Crimson
+    if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      if (n < (int)p.get_pg_num_target()) {
+        ss << "crimson-osd does not support decreasing pg_num";
+        return -ENOTSUP;
+      }
+      if (n > (int)p.get_pg_num_target() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
+        ss << "crimson_allow_pg_split is false; pg_num increase denied for crimson pool";
+        return -EPERM;
+      }
     }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -8746,6 +8769,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
     }
+    // check for Crimson pools
+    // pg merging is not yet supported in Crimson
+    if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      if (n < (int)p.get_pgp_num()) {
+        ss << "crimson-osd does not support decreasing pgp_num_actual";
+        return -ENOTSUP;
+      }
+      if (n > (int)p.get_pgp_num() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
+        ss << "crimson_allow_pg_split is false; pgp_num_actual increase denied";
+        return -EPERM;
+      }
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -8768,6 +8803,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
+    }
+    // check for Crimson pools
+    // pg merging is not yet supported in Crimson
+    if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      if (n < (int)p.get_pgp_num_target()) {
+        ss << "crimson-osd does not support decreasing pgp_num";
+        return -ENOTSUP;
+      }
+      if (n > (int)p.get_pgp_num_target() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
+        ss << "crimson_allow_pg_split is false; pgp_num increase denied";
+        return -EPERM;
+      }
     }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
