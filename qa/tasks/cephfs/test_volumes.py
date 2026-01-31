@@ -10798,3 +10798,67 @@ class TestPerModuleFinsherThread(TestVolumesHelper):
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
+
+class TestCorruptedSubvolumes(TestVolumesHelper):
+    '''
+    Test that certain cases like subvolume deletion and clone cancellations and
+    deletions are handled well on a corrupted subvolume as well.
+    '''
+
+    def test_rm_subvol_with_missing_UUID_dir(self):
+        sv1 = 'sv1'
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {sv1}')
+
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {self.volname} '
+                                           f'{sv1}').strip()[1:]
+        sv_path = os.path.join(self.mount_a.hostfs_mntpt, sv_path)
+        self.mount_a.run_shell(f'sudo rmdir {sv_path}', omit_sudo=False)
+
+        self.negtest_ceph_cmd(f'fs subvolume rm {self.volname} {sv1}',
+                              retval=errno.ENOENT,
+                              errmsgs='mount path missing for subvolume')
+        self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')
+
+    def test_rm_subvol_that_has_snap_and_missing__UUID_dir(self):
+        sv1 = 'sv1'
+        ss1 = 'ss1'
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {sv1}')
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} {sv1} {ss1}')
+
+        sv_path = self.get_ceph_cmd_stdout('fs subvolume getpath '
+                                           f'{self.volname} {sv1}').strip()[1:]
+        self.mount_a.run_shell(f'sudo rmdir {sv_path}', omit_sudo=False)
+
+        self.negtest_ceph_cmd(f'fs subvolume snapshot rm {self.volname} {sv1} {ss1}',
+                              retval=errno.ENOENT,
+                              errmsgs='mount path missing for subvolume')
+        self.run_ceph_cmd(f'fs subvolume snapshot rm {self.volname} {sv1} {ss1} '
+                           '--force')
+
+        # cleanup
+        self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')
+
+    def test_clone_when_src_subvol_has_missing_UUID_dir(self):
+        sv1 = 'sv1'
+        ss1 = 'ss1'
+        c1 = 'c1'
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {sv1}')
+        sv_path = self.get_ceph_cmd_stdout('fs subvolume getpath '
+                                           f'{self.volname} {sv1}').strip()
+        sv_path = sv_path[1:]
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} {sv1} {ss1}')
+        self.run_ceph_cmd('config set mgr mgr/volumes/snapshot_clone_delay 2')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {self.volname} {sv1} {ss1} {c1}')
+
+        self.mount_a.run_shell(f'sudo rmdir {sv_path}', omit_sudo=False)
+
+        time.sleep(2)
+        self._wait_for_clone_to_fail(c1, timo=20)
+
+        # cleanup
+        self.run_ceph_cmd(f'fs subvolume snapshot rm {self.volname} {sv1} {ss1} '
+                           '--force')
+        self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')
