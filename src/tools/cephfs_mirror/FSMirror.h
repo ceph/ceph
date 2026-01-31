@@ -47,14 +47,7 @@ public:
 
   bool is_failed() {
     std::scoped_lock locker(m_lock);
-    bool failed = m_init_failed;
-    if (m_instance_watcher) {
-      failed |= m_instance_watcher->is_failed();
-    }
-    if (m_mirror_watcher) {
-      failed |= m_mirror_watcher->is_failed();
-    }
-    return failed;
+    return is_failed(locker);
   }
 
   monotime get_failed_ts() {
@@ -98,6 +91,17 @@ public:
   void reopen_logs();
 
 private:
+  bool is_failed(const std::scoped_lock<ceph::mutex> &locker) const {
+    bool failed = m_init_failed;
+    if (m_instance_watcher) {
+      failed |= m_instance_watcher->is_failed();
+    }
+    if (m_mirror_watcher) {
+      failed |= m_mirror_watcher->is_failed();
+    }
+    return failed;
+  }
+
   bool is_blocklisted(const std::scoped_lock<ceph::mutex> &locker) const {
     bool blocklisted = false;
     if (m_instance_watcher) {
