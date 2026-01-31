@@ -1,3 +1,9 @@
+@use '@carbon/layout';
+
 cds-loading {
-  margin-left: 0.5rem;
+  margin-left: layout.$spacing-03;
+}
+
+.submit-button-modal {
+  width: 100%;
 }
