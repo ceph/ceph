@@ -48,10 +48,10 @@ Pod::Usage::pod2usage(-verbose => 1) && exit if ($help);
 
 #== local variables ===
 our $mytestfilename;
-my $mytestfilename1;
+our $mytestfilename1;
 my $logmsg;
 my $kruft;
-my $s3;
+our $s3;
 my $hostdom  = $ENV{RGW_FQDN}||hostfqdn();
 my $port     = $ENV{RGW_PORT}||80;
 our $hostname = "$hostdom:$port";
@@ -195,7 +195,9 @@ sub upload_file {
 
 # delete the bucket
 sub delete_bucket {
-   #($bucket->delete_key($mytestfilename1) and print "delete keys on bucket succeeded second time\n" ) or die $s3->err . "delete keys on bucket failed second time\n" . $s3->errstr;
+   if (defined $mytestfilename1 && $mytestfilename1 ne '') {
+        $bucket->delete_key($mytestfilename1);
+    }
    ($bucket->delete_bucket) and (print "bucket delete succeeded \n") or die $s3->err . "delete bucket failed\n" . $s3->errstr;
 }
 
@@ -212,9 +214,9 @@ sub test_max_objects {
     } else {
         fail ( "Test max objects failed" );
     }
-    delete_user();
     delete_keys($mytestfilename);
     delete_bucket();
+    delete_user();
 }
 
 # Set bucket quota for specific user and ensure max objects set for the user is validated
@@ -230,9 +232,9 @@ sub test_max_objects_per_user{
     } else {
         fail ( "Test max objects for the given user failed" );
     }
-    delete_user();
     delete_keys($mytestfilename);
     delete_bucket();
+    delete_user();
 }
 
 # set bucket quota with max_objects and try to exceed the max_objects and verify 
@@ -249,9 +251,9 @@ sub test_beyond_max_objs {
     } else {
         fail ( "set max objects and test beyond max objects failed" );
     }
-    delete_user();
     delete_keys($mytestfilename);
     delete_bucket();
+    delete_user();
 }
 
 # set bucket quota for a user with max_objects and try to exceed the max_objects and verify 
@@ -268,9 +270,9 @@ sub test_beyond_max_objs_user {
     } else {
         fail ( "set max objects for a given user and test beyond max objects failed" );
     }
-    delete_user();
     delete_keys($mytestfilename);
     delete_bucket();
+    delete_user();
 }
 
 # set bucket quota for max size and ensure it is validated
@@ -299,9 +301,9 @@ sub test_quota_size {
     } else {
         fail ( "set max size and ensure that objects beyond max size is not allowed" );
     }
-    delete_user();
     delete_keys($mytestfilename);
     delete_bucket();
+    delete_user();
 }
 
 # set bucket quota for max size for a given user and ensure it is validated
@@ -330,9 +332,9 @@ sub test_quota_size_user {
     } else {
         fail ( "set max size for a given user and ensure that objects beyond max size is not allowed" );
     }
-    delete_user();
     delete_keys($mytestfilename);
     delete_bucket();
+    delete_user();
 }
 
 # set bucket quota size but disable quota and verify
@@ -349,9 +351,9 @@ sub test_quota_size_disabled {
     } else {
         fail ( "bucket quota size doesnt take effect when quota is disabled" );
     }
-    delete_user();
     delete_keys($mytestfilename);
     delete_bucket();
+    delete_user();
 }
 
 # set bucket quota size for a given user but disable quota and verify
@@ -368,9 +370,9 @@ sub test_quota_size_disabled_user {
     } else {
         fail ( "bucket quota size for a given user doesnt take effect when quota is disabled" );
     }
-    delete_user();
     delete_keys($mytestfilename);
     delete_bucket();
+    delete_user();
 }
 
 # set bucket quota for specified user and verify
