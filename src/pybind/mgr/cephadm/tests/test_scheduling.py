@@ -1857,3 +1857,166 @@ def test_blocking_daemon_host(
     ).place()
     assert sorted([h.hostname for h in to_add]) in expected_add
     assert sorted([h.name() for h in to_remove]) in expected_remove
+
+
+@pytest.mark.parametrize(
+    "service_type,placement,hosts,daemons,related_service_daemons,rank_map,expected,expected_add,expected_remove",
+    [
+        (
+            'ingress',
+            PlacementSpec(count=2),
+            'host1 host2 host3 host4'.split(),
+            [
+                DaemonDescription('haproxy', 'ingress1', 'host1'),
+                DaemonDescription('keepalived', 'ingress1', 'host1'),
+                DaemonDescription('haproxy', 'ingress2', 'host2'),
+                DaemonDescription('keepalived', 'ingress2', 'host2'),
+                DaemonDescription('haproxy', 'ingress3', 'host3'),
+                DaemonDescription('keepalived', 'ingress3', 'host3'),
+                DaemonDescription('haproxy', 'ingress4', 'host4'),
+                DaemonDescription('keepalived', 'ingress4', 'host4'),
+            ],
+            [
+                DaemonDescription('nfs', 'nfs1', 'host1'),
+                DaemonDescription('nfs', 'nfs3', 'host3'),
+            ],
+            None,
+            ['haproxy:host1(*:443,8888)', 'haproxy:host3(*:443,8888)', 'keepalived:host1', 'keepalived:host3'],
+            [],
+            ['haproxy.ingress2', 'haproxy.ingress4', 'keepalived.ingress2', 'keepalived.ingress4']  # to_remove
+        ),
+        (
+            'ingress',
+            PlacementSpec(count=1),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('haproxy', 'ingress1', 'host1'),
+                DaemonDescription('keepalived', 'ingress1', 'host1'),
+                DaemonDescription('haproxy', 'ingress2', 'host2'),
+                DaemonDescription('keepalived', 'ingress2', 'host2'),
+                DaemonDescription('haproxy', 'ingress3', 'host3'),
+                DaemonDescription('keepalived', 'ingress3', 'host3'),
+            ],
+            [
+                DaemonDescription('nfs', 'nfs1', 'host1'),
+                DaemonDescription('nfs', 'nfs2', 'host2'),
+            ],
+            None,
+            ['haproxy:host1(*:443,8888)', 'keepalived:host1'],
+            [],
+            ['haproxy.ingress2', 'haproxy.ingress3', 'keepalived.ingress2', 'keepalived.ingress3']  # to_remove
+        ),
+        (
+            'nfs',
+            PlacementSpec(count=1),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('nfs', 'nfs1', 'host1'),
+                DaemonDescription('nfs', 'nfs2', 'host2'),
+            ],
+            [],
+            None,
+            ['nfs:host1'],
+            [],
+            ['nfs.nfs2']  # to_remove
+        ),
+        (
+            'ingress',
+            PlacementSpec(count=2),
+            'host1 host2 host3 host4 host5 host6'.split(),
+            [
+                DaemonDescription('haproxy', 'ingress1', 'host1'),
+                DaemonDescription('keepalived', 'ingress1', 'host1'),
+                DaemonDescription('haproxy', 'ingress2', 'host2'),
+                DaemonDescription('keepalived', 'ingress2', 'host2'),
+                DaemonDescription('haproxy', 'ingress3', 'host3'),
+                DaemonDescription('keepalived', 'ingress3', 'host3'),
+                DaemonDescription('haproxy', 'ingress4', 'host4'),
+                DaemonDescription('keepalived', 'ingress4', 'host4'),
+            ],
+            [
+                DaemonDescription('nfs', 'nfs5', 'host5'),
+                DaemonDescription('nfs', 'nfs6', 'host6'),
+            ],
+            None,
+            ['haproxy:host1(*:443,8888)', 'haproxy:host2(*:443,8888)', 'keepalived:host1', 'keepalived:host2'],
+            [],
+            ['haproxy.ingress3', 'haproxy.ingress4', 'keepalived.ingress3', 'keepalived.ingress4']  # to_remove
+        ),
+        (
+            'nfs',
+            PlacementSpec(count=2),
+            'host1 host2 host3 host4'.split(),
+            [
+                DaemonDescription('nfs', 'nfs1', 'host1'),
+                DaemonDescription('nfs', 'nfs2', 'host2'),
+                DaemonDescription('nfs', 'nfs3', 'host3'),
+                DaemonDescription('nfs', 'nfs4', 'host4'),
+            ],
+            [
+                DaemonDescription('haproxy', 'ingress3', 'host3'),
+                DaemonDescription('keepalived', 'ingress3', 'host3'),
+                DaemonDescription('haproxy', 'ingress4', 'host4'),
+                DaemonDescription('keepalived', 'ingress4', 'host4'),
+            ],
+            None,
+            ['nfs:host3', 'nfs:host4'],
+            [],
+            ['nfs.nfs1', 'nfs.nfs2']  # to_remove
+        ),
+        (
+            'nfs',
+            PlacementSpec(count=2),
+            'host1 host2 host3'.split(),
+            [
+                DaemonDescription('nfs', '0.2', 'host1', rank=0, rank_generation=2),
+                DaemonDescription('nfs', '0.1', 'host2', rank=0, rank_generation=1),
+                DaemonDescription('nfs', '1.1', 'host3', rank=1, rank_generation=1),
+            ],
+            [
+                DaemonDescription('haproxy', 'ingress2', 'host2'),
+                DaemonDescription('keepalived', 'ingress2', 'host2'),
+                DaemonDescription('haproxy', 'ingress3', 'host3'),
+                DaemonDescription('keepalived', 'ingress3', 'host3'),
+            ],
+            {0: {1: '0.1', 2: '0.2'}, 1: {1: '1.1'}},
+            ['nfs:host1(rank=0.2)', 'nfs:host3(rank=1.1)'],
+            [],
+            ['nfs.0.1']
+        ),
+    ])
+def test_related_service_downsize(service_type, placement, hosts, daemons, related_service_daemons, rank_map, expected, expected_add, expected_remove):
+    if service_type == 'ingress':
+        spec = IngressSpec(
+            service_type='ingress',
+            service_id='nfs.test',
+            frontend_port=443,
+            monitor_port=8888,
+            virtual_ip='10.0.0.20/8',
+            backend_service='nfs.test',
+            placement=placement,
+        )
+    else:
+        spec = ServiceSpec(service_type=service_type,
+                           service_id='test',
+                           placement=placement)
+
+    all_slots, to_add, to_remove = HostAssignment(
+        spec=spec,
+        hosts=[HostSpec(h) for h in hosts],
+        unreachable_hosts=[],
+        draining_hosts=[],
+        daemons=daemons,
+        related_service_daemons=related_service_daemons,
+        primary_daemon_type='haproxy' if spec.service_type == 'ingress' else spec.service_type,
+        per_host_daemon_type='keepalived' if spec.service_type == 'ingress' else None,
+        rank_map=rank_map
+    ).place()
+
+    got = [str(p) for p in all_slots]
+    assert sorted(got) == sorted(expected)
+
+    got_add = [str(p) for p in to_add]
+    assert sorted(got_add) == sorted(expected_add)
+
+    assert sorted([d.name() for d in to_remove]) == sorted(expected_remove)
