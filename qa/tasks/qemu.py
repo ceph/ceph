@@ -177,17 +177,19 @@ def create_dirs(ctx, config):
                 )
 
 @contextlib.contextmanager
-def install_block_rbd_driver(ctx, config):
+def install_packages(ctx, config):
     """
-    Make sure qemu rbd block driver (block-rbd.so) is installed
+    Make sure qemu rbd block driver (block-rbd.so) and other required
+    packages are installed
     """
     packages = {}
     for role, _ in config.items():
         (remote,) = ctx.cluster.only(role).remotes.keys()
+        packages[role] = ['genisoimage']
         if remote.os.package_type == 'rpm':
-            packages[role] = ['qemu-kvm-block-rbd']
+            packages[role] += ['qemu-kvm-block-rbd']
         else:
-            packages[role] = ['qemu-block-extra', 'qemu-utils']
+            packages[role] += ['qemu-block-extra', 'qemu-utils']
         for pkg in packages[role]:
             install_package(pkg, remote)
     try:
@@ -500,7 +502,7 @@ def run_qemu(ctx, config):
 
         nfs_service_name = 'nfs'
         if (
-            remote.os.name in ['rhel', 'centos'] and
+            remote.os.name in ['rhel', 'centos', 'rocky'] and
             Version(remote.os.version.lower().removesuffix(".stream")) >= Version("8")
         ):
             nfs_service_name = 'nfs-server'
@@ -715,7 +717,7 @@ def task(ctx, config):
     create_images(ctx=ctx, config=config, managers=managers)
     managers.extend([
         lambda: create_dirs(ctx=ctx, config=config),
-        lambda: install_block_rbd_driver(ctx=ctx, config=config),
+        lambda: install_packages(ctx=ctx, config=config),
         lambda: generate_iso(ctx=ctx, config=config),
         lambda: download_image(ctx=ctx, config=config),
         ])
