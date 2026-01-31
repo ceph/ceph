@@ -403,6 +403,12 @@ def configure(ctx, config):
                 cloud_read_through_restore_days = client_rgw_config.get('cloud_read_through_restore_days')
                 if (cloud_read_through_restore_days != None):
                     s3tests_conf['s3 cloud']['read_through_restore_days'] = cloud_read_through_restore_days
+                cloud_target_by_bucket = client_rgw_config.get('cloud_target_by_bucket')
+                if (cloud_target_by_bucket != None):
+                    s3tests_conf['s3 cloud']['target_by_bucket'] = cloud_target_by_bucket
+                cloud_target_by_bucket_prefix = client_rgw_config.get('cloud_target_by_bucket_prefix')
+                if (cloud_target_by_bucket_prefix != None):
+                    s3tests_conf['s3 cloud']['target_by_bucket_prefix'] = cloud_target_by_bucket_prefix
 
         (remote,) = ctx.cluster.only(client).remotes.keys()
         conf_fp = BytesIO()
