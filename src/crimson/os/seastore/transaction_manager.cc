@@ -598,6 +598,9 @@ TransactionManager::do_submit_transaction(
     tref.get_handle().enter(write_pipeline.prepare)
   );
 
+  while (tref.need_wait_rewrite) {
+    co_await trans_intr::make_interruptible(seastar::yield());
+  }
   if (trim_alloc_to && *trim_alloc_to != JOURNAL_SEQ_NULL) {
     SUBTRACET(seastore_t, "trim backref_bufs to {}", tref, *trim_alloc_to);
     cache->trim_backref_bufs(*trim_alloc_to);

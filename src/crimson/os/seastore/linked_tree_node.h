@@ -230,6 +230,7 @@ public:
   }
   virtual key_t node_begin() const = 0;
   virtual bool is_retired_placeholder() const = 0;
+  virtual bool _is_pending_io() const = 0;
 protected:
   parent_tracker_ref<ParentT> parent_tracker;
   virtual bool _is_valid() const = 0;
@@ -425,6 +426,33 @@ public:
     set_child_ptracker(child);
   }
 
+  // copy dests points from a stable node back to its pending nodes
+  // having copy sources at the same tree level, it serves as a two-level index:
+  // transaction-id then node-key to the pending node.
+  //
+  // The copy dest pointers must be symmetric to the copy source pointers.
+  //
+  // copy_dests_t will be automatically unregisterred upon transaction destruction,
+  // see Transaction::views
+  struct copy_dests_t : trans_spec_view_t {
+    std::set<TCachedExtentRef<T>, Comparator> dests_by_key;
+    copy_dests_t(Transaction &t) : trans_spec_view_t{t.get_trans_id()} {}
+    ~copy_dests_t() {
+      LOG_PREFIX(~copy_dests_t);
+      SUBTRACE(seastore_fixedkv_tree, "copy_dests_t destroyed");
+    }
+  };
+
+  const copy_dests_t *get_copy_dests(Transaction &t) {
+    auto iter = copy_dests_by_trans.find(
+      t.get_trans_id(), trans_spec_view_t::cmp_t());
+    if (iter == copy_dests_by_trans.end()) {
+      return nullptr;
+    } else {
+      return static_cast<copy_dests_t*>(&*iter);
+    }
+  }
+
 protected:
   ParentNode(btreenode_pos_t capacity)
     : children(capacity, nullptr) {}
@@ -459,6 +487,17 @@ protected:
     }
     ceph_assert((*it)->get_begin() <= key && key < (*it)->get_end());
     return *it;
+  }
+
+  template <typename Func>
+  void for_each_copy_dest_set(Transaction &t, Func &&f) {
+    for (auto &dests : copy_dests_by_trans) {
+      if (dests.pending_for_transaction == t.get_trans_id()) {
+        continue;
+      }
+      auto &copy_dests = static_cast<copy_dests_t&>(dests);
+      std::invoke(f, copy_dests);
+    }
   }
 
   void add_copy_dest(Transaction &t, TCachedExtentRef<T> dest) {
@@ -989,6 +1028,8 @@ protected:
   }
 
   parent_tracker_t<T>* my_tracker = nullptr;
+  std::vector<BaseChildNode<T, node_key_t>*> children;
+
 private:
   T& down_cast() {
     return *static_cast<T*>(this);
@@ -1017,25 +1058,7 @@ private:
     }
   }
 
-  std::vector<BaseChildNode<T, node_key_t>*> children;
   std::set<TCachedExtentRef<T>, Comparator> copy_sources;
-
-  // copy dests points from a stable node back to its pending nodes
-  // having copy sources at the same tree level, it serves as a two-level index:
-  // transaction-id then node-key to the pending node.
-  //
-  // The copy dest pointers must be symmetric to the copy source pointers.
-  //
-  // copy_dests_t will be automatically unregisterred upon transaction destruction,
-  // see Transaction::views
-  struct copy_dests_t : trans_spec_view_t {
-    std::set<TCachedExtentRef<T>, Comparator> dests_by_key;
-    copy_dests_t(Transaction &t) : trans_spec_view_t{t.get_trans_id()} {}
-    ~copy_dests_t() {
-      LOG_PREFIX(~copy_dests_t);
-      SUBTRACE(seastore_fixedkv_tree, "copy_dests_t destroyed");
-    }
-  };
 
   using trans_view_set_t = trans_spec_view_t::trans_view_set_t;
   trans_view_set_t copy_dests_by_trans;
@@ -1152,6 +1175,9 @@ private:
   }
   bool _is_stable() const final {
     return down_cast().is_stable();
+  }
+  bool _is_pending_io() const final {
+    return down_cast().is_pending_io();
   }
   key_t node_begin() const final {
     return down_cast().get_begin();

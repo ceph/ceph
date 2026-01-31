@@ -29,6 +29,7 @@ namespace crimson::os::seastore::lba {
 using LBANode = FixedKVNode<laddr_t>;
 
 class BtreeLBAMapping;
+class BtreeLBAManager;
 
 constexpr size_t LBA_BLOCK_SIZE = 4096;
 
@@ -286,8 +287,105 @@ struct LBALeafNode
   }
 
   std::ostream &print_detail(std::ostream &out) const final;
+
+  template <template <typename...> typename Container, typename... T>
+  void merge_content_to(Transaction &t, Container<T...> &container) {
+    auto iter = this->begin();
+    for (auto &copy_dest : container) {
+      auto &pending_version = static_cast<LBALeafNode&>(*copy_dest);
+      auto it = pending_version.begin();
+      while (it != pending_version.end() && iter != this->end()) {
+        if (iter->get_val().pladdr.is_laddr() ||
+            iter->get_val().pladdr.get_paddr().is_zero()) {
+          iter++;
+          continue;
+        }
+        if (auto child = pending_version.children[it->get_offset()];
+            is_valid_child_ptr(child) &&
+            (pending_version.is_pending() || child->_is_pending_io())) {
+          it++;
+          continue;
+        }
+        if (it->get_key() == iter->get_key()) {
+          it->set_val(iter->get_val());
+          it++;
+          iter++;
+        } else if (it->get_key() > iter->get_key()) {
+          iter++;
+        } else {
+          it++;
+        }
+      }
+      if (pending_version.get_last_committed_crc()) {
+        // if pending_version has already calculated its crc,
+        // calculate it again.
+        pending_version.set_last_committed_crc(pending_version.calc_crc32c());
+      }
+    }
+  }
+
+  void merge_content_to_pending_versions(Transaction &t) {
+    ceph_assert(is_rewrite_transaction(t.get_src()));
+    this->for_each_copy_dest_set(t, [this, &t](auto &copy_dests) {
+#ifndef NDEBUG
+      for (auto &copy_dest : copy_dests.dests_by_key) {
+        auto &pending_version = static_cast<LBALeafNode&>(*copy_dest);
+        ceph_assert(pending_version.is_pending());
+      }
+#endif
+      this->merge_content_to(t, copy_dests.dests_by_key);
+    });
+  }
 };
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
+
+struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t, LBALeafNode> {
+  using Base = BtreeCursor<laddr_t, lba::lba_map_val_t, LBALeafNode>;
+  using Base::BtreeCursor;
+  bool is_indirect() const {
+    assert(is_viewable());
+    return !is_end() && iter.get_val().pladdr.is_laddr();
+  }
+  laddr_t get_laddr() const {
+    return key;
+  }
+  paddr_t get_paddr() const {
+    assert(is_viewable());
+    assert(!is_indirect());
+    assert(!is_end());
+    auto ret = iter.get_val().pladdr.get_paddr();
+    return ret.maybe_relative_to(parent->get_paddr());
+  }
+  laddr_t get_intermediate_key() const {
+    assert(is_viewable());
+    assert(is_indirect());
+    assert(!is_end());
+    return iter.get_val().pladdr.get_laddr();
+  }
+  checksum_t get_checksum() const {
+    assert(is_viewable());
+    assert(!is_end());
+    return iter.get_val().checksum;
+  }
+  bool contains(laddr_t laddr) const {
+    assert(is_viewable());
+    return get_laddr() <= laddr && get_laddr() + get_length() > laddr;
+  }
+  extent_ref_count_t get_refcount() const {
+    assert(is_viewable());
+    assert(!is_end());
+    return iter.get_val().refcount;
+  }
+
+  base_iertr::future<> refresh();
+private:
+
+  pladdr_t get_pladdr() const {
+    return std::move(iter.get_val().pladdr);
+  }
+  friend class BtreeLBAManager;
+};
+using LBACursorRef = boost::intrusive_ptr<LBACursor>;
 
 }
 
@@ -296,4 +394,5 @@ template <> struct fmt::formatter<crimson::os::seastore::lba::lba_node_meta_t> :
 template <> struct fmt::formatter<crimson::os::seastore::lba::lba_map_val_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::LBAInternalNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::LBALeafNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba::LBACursor> : fmt::ostream_formatter {};
 #endif

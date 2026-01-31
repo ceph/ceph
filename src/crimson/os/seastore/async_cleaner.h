@@ -18,7 +18,6 @@
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/transaction_interruptor.h"
 #include "crimson/os/seastore/segment_seq_allocator.h"
-#include "crimson/os/seastore/backref_mapping.h"
 
 namespace crimson::os::seastore {
 
@@ -1535,14 +1534,6 @@ private:
     }
   };
   std::optional<reclaim_state_t> reclaim_state;
-
-  using do_reclaim_space_ertr = base_ertr;
-  using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
-  do_reclaim_space_ret do_reclaim_space(
-    const std::vector<CachedExtentRef> &backref_extents,
-    const backref_mapping_list_t &pin_list,
-    std::size_t &reclaimed,
-    std::size_t &runs);
 
   /*
    * Segments calculations

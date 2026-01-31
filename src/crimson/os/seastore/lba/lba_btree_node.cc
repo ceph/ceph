@@ -84,4 +84,63 @@ LBALeafNode::internal_const_iterator_t LBALeafNode::insert(
   return iter;
 }
 
+base_iertr::future<> LBACursor::refresh()
+{
+  LOG_PREFIX(LBACursor::refresh);
+  return with_btree<lba::LBABtree>(
+    ctx.cache,
+    ctx,
+    [this, FNAME, c=ctx](auto &btree) {
+    c.trans.cursor_stats.num_refresh_parent_total++;
+
+    if (!parent->is_valid()) {
+      c.trans.cursor_stats.num_refresh_invalid_parent++;
+      SUBTRACET(
+	seastore_lba,
+	"cursor {} parent is invalid, re-search from scratch",
+	 c.trans, *this);
+      return btree.lower_bound(c, this->get_laddr()
+      ).si_then([this](lba::LBABtree::iterator it) {
+	assert(this->get_laddr() == it.get_key());
+	iter = LBALeafNode::iterator(
+	  it.get_leaf_node().get(),
+	  it.get_leaf_pos());
+	auto leaf = it.get_leaf_node();
+	parent = leaf;
+	modifications = leaf->modifications;
+      });
+    }
+    assert(parent->is_stable() ||
+      parent->is_pending_in_trans(c.trans.get_trans_id()));
+    auto leaf = parent->cast<lba::LBALeafNode>();
+    if (leaf->is_pending_in_trans(c.trans.get_trans_id())) {
+      if (leaf->modified_since(modifications)) {
+	c.trans.cursor_stats.num_refresh_modified_viewable_parent++;
+      } else {
+	// no need to refresh
+	return base_iertr::now();
+      }
+    } else {
+      auto [viewable, l] = leaf->resolve_transaction(c.trans, get_laddr());
+	SUBTRACET(seastore_lba, "cursor: {} viewable: {}",
+	  c.trans, *this, viewable);
+      if (!viewable) {
+	leaf = l;
+	c.trans.cursor_stats.num_refresh_unviewable_parent++;
+	parent = leaf;
+      } else {
+	assert(leaf.get() == l.get());
+	assert(leaf->is_stable());
+	return base_iertr::now();
+      }
+    }
+
+    modifications = leaf->modifications;
+    iter = leaf->lower_bound(get_laddr());
+    assert(is_viewable());
+
+    return base_iertr::now();
+  });
+}
+
 }

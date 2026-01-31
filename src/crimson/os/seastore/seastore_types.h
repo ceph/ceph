@@ -2262,6 +2262,12 @@ constexpr bool is_background_transaction(transaction_type_t type) {
           type < transaction_type_t::MAX);
 }
 
+constexpr bool is_rewrite_transaction(transaction_type_t type) {
+  return type == transaction_type_t::TRIM_DIRTY ||
+    type == transaction_type_t::CLEANER_MAIN ||
+    type == transaction_type_t::CLEANER_COLD;
+}
+
 constexpr bool is_trim_transaction(transaction_type_t type) {
   return (type == transaction_type_t::TRIM_DIRTY ||
       type == transaction_type_t::TRIM_ALLOC);
