@@ -15,6 +15,11 @@ class TestProgress(MgrTestCase):
     # and seeing the progress event pop up.
     EVENT_CREATION_PERIOD = 60
 
+    # We will set this in setUp once we have self.mgr_cluster available
+    PG_AUTOSCALER_EVENT_CREATION_PERIOD = None
+    # This is how long we expect to wait at most when a small pool scales up.
+    PG_SCALE_UP_PERIOD = None
+
     WRITE_PERIOD = 30
 
     # Generous period for OSD recovery, should be same order of magnitude
@@ -22,6 +27,9 @@ class TestProgress(MgrTestCase):
     RECOVERY_PERIOD = WRITE_PERIOD * 4
 
     def _get_progress(self):
+        """
+        Get the current progress information from the cluster.
+        """
         out = self.mgr_cluster.mon_manager.raw_cluster_cmd("progress", "json")
         return json.loads(out)
 
@@ -52,9 +60,15 @@ class TestProgress(MgrTestCase):
         return p['completed']
 
     def is_osd_marked_out(self, ev):
+        """
+        Check if the event indicates an OSD has been marked out.
+        """
         return ev['message'].endswith('marked out')
 
     def is_osd_marked_in(self, ev):
+        """
+        Check if the event indicates an OSD has been marked in.
+        """
         return ev['message'].endswith('marked in')
 
     def _get_osd_in_out_events(self, marked='both'):
@@ -102,11 +116,23 @@ class TestProgress(MgrTestCase):
         else:
             return marked_out_count
 
-    def _setup_pool(self, size=None):
+    def _setup_pool(self, **kwargs):
+        """
+        Setup a pool with optional additional pool settings.
+        Args:
+            **kwargs: Additional pool settings like bulk='true', pg_autoscale_bias=4, etc.
+                    These will be passed as 'osd pool set' commands
+        Examples:
+            self._setup_pool()  # Basic pool
+            self._setup_pool(size=3)  # Pool with size 3
+            self._setup_pool(bulk='true', pg_autoscale_bias=4)  # Pool with bulk=true and pg_autoscale_bias=4
+            self._setup_pool(size=2, bulk='true', pg_autoscale_bias=4, min_size=1)  # Combined
+        """
         self.mgr_cluster.mon_manager.create_pool(self.POOL)
-        if size is not None:
+        # Apply additional pool settings
+        for setting, value in kwargs.items():
             self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                'osd', 'pool', 'set', self.POOL, 'size', str(size))
+                'osd', 'pool', 'set', self.POOL, setting, str(value))
 
     def _osd_in_out_completed_events_count(self, marked='both'):
         """
@@ -150,6 +176,9 @@ class TestProgress(MgrTestCase):
 
     @contextmanager    
     def recovery_backfill_disabled(self):
+        """
+        Context manager to disable recovery and backfill temporarily.
+        """
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
             'osd', 'set', 'nobackfill')
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
@@ -159,9 +188,21 @@ class TestProgress(MgrTestCase):
             'osd', 'unset', 'nobackfill')
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
             'osd', 'unset', 'norecover')
-           
+
     def setUp(self):
+        """
+         Set up the test environment every time before a test is run.
+        """
         super(TestProgress, self).setUp()
+        # Speed up the test by reducing the sleep interval of the pg_autoscaler
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "config", "set", "mgr", "mgr/pg_autoscaler/sleep_interval", "5"
+        )
+        # Set PG_AUTOSCALER_EVENT_CREATION_PERIOD now that self.mgr_cluster is available
+        if self.PG_AUTOSCALER_EVENT_CREATION_PERIOD is None:
+            self.PG_AUTOSCALER_EVENT_CREATION_PERIOD = self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "config", "get", "mgr", "mgr/pg_autoscaler/sleep_interval"
+            ) * 3
         # Ensure we have at least four OSDs
         if self._osd_count() < 4:
             self.skipTest("Not enough OSDS!")
@@ -185,7 +226,12 @@ class TestProgress(MgrTestCase):
                     "--yes-i-really-really-mean-it")
 
         self._load_module("progress")
+        # Clear any existing progress events
         self.mgr_cluster.mon_manager.raw_cluster_cmd('progress', 'clear')
+        # Turn autoscale off globally, since we don't want
+        # any pg-autoscale progress events from being triggered by pool creation.
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'osd', 'pool', 'set', 'noautoscale')
 
     def _simulate_failure(self, osd_ids=None):
         """
@@ -216,6 +262,10 @@ class TestProgress(MgrTestCase):
         return ev
 
     def _simulate_back_in(self, osd_ids, initial_event):
+        """
+        Simulate an OSD coming back in, assuming that
+        recovery is still ongoing from a previous out event.
+        """
         for osd_id in osd_ids:
             self.mgr_cluster.mon_manager.raw_cluster_cmd(
                     'osd', 'in', str(osd_id))
@@ -243,11 +293,61 @@ class TestProgress(MgrTestCase):
 
     def _no_events_anywhere(self):
         """
-        Whether there are any live or completed events
+        Check whether there are any live or completed events.
+        Returns True if there are no events anywhere.
         """
         p = self._get_progress()
         total_events = len(p['events']) + len(p['completed'])
         return total_events == 0
+
+    def _pg_autoscaler_events_count(self):
+        """
+        Count the number of on going recovery events that deals with
+        PG autoscaler.
+        """
+        events_in_progress = self._events_in_progress()
+        pg_autoscaler_count = 0
+
+        for ev in events_in_progress:
+            if ev['message'].startswith('PG autoscaler'):
+                pg_autoscaler_count += 1
+
+        return pg_autoscaler_count
+
+    def _get_pg_autoscaler_events(self):
+        """
+        Return the event that deals with PG autoscaler
+        """
+        pg_autoscaler_events = []
+        events_in_progress = self._events_in_progress()
+        for ev in events_in_progress:
+            if ev['message'].startswith('PG autoscaler'):
+                pg_autoscaler_events.append(ev)
+
+        return pg_autoscaler_events
+
+    def _simulate_pg_autoscaler_event(self):
+        """
+        Simulate a PG autoscale event, assuming that
+        noautoscale flag is on.
+
+        Return the JSON representation of the pg_autoscale event.
+        """
+        self._setup_pool(size=3, bulk='true', pg_autoscale_bias=4) # create pool with pg_autoscale_bias 4 and --bulk flag
+        self._write_some_data(self.WRITE_PERIOD)
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'osd', 'pool', 'unset', 'noautoscale')
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'osd', 'pool', 'set', self.POOL, 'pg_autoscale_mode', 'on')
+        # Wait for a progress event to pop up
+        self.wait_until_equal(lambda: self._pg_autoscaler_events_count(), 1,
+                                  timeout=self.PG_AUTOSCALER_EVENT_CREATION_PERIOD,
+                                  period=1)
+        ev = self._get_pg_autoscaler_events()[0]
+        log.info(json.dumps(ev, indent=1))
+        self.assertIn("PG autoscaler", ev['message'])
+        return ev
+
 
     def _is_quiet(self):
         """
@@ -256,6 +356,8 @@ class TestProgress(MgrTestCase):
         return len(self._get_progress()['events']) == 0
 
     def _is_complete(self, ev_id):
+        """
+        Whether the event with the given ID has completed."""
         progress = self._get_progress()
         live_ids = [ev['id'] for ev in progress['events']]
         complete_ids = [ev['id'] for ev in progress['completed']]
@@ -267,6 +369,11 @@ class TestProgress(MgrTestCase):
             return False
 
     def _is_inprogress_or_complete(self, ev_id):
+        """
+        Whether the event with the given ID is either in progress
+        or complete.  This is useful for waiting on an event that
+        may complete while we're waiting.
+        """
         for ev in self._events_in_progress():
             if ev['id'] == ev_id:
                 return ev['progress'] > 0
@@ -274,6 +381,9 @@ class TestProgress(MgrTestCase):
         return self._is_complete(ev_id)
 
     def tearDown(self):
+        """
+        Clean up the test environment after a test is run.
+        """
         if self.POOL in self.mgr_cluster.mon_manager.pools:
             self.mgr_cluster.mon_manager.remove_pool(self.POOL)
 
@@ -414,7 +524,7 @@ class TestProgress(MgrTestCase):
         """
         pool_size = 3
         self._setup_pool(size=pool_size)
-        self._write_some_data(self.WRITE_PERIOD)        
+        self._write_some_data(self.WRITE_PERIOD)
 
         with self.recovery_backfill_disabled():
             self.mgr_cluster.mon_manager.raw_cluster_cmd(
@@ -429,3 +539,20 @@ class TestProgress(MgrTestCase):
         time.sleep(self.EVENT_CREATION_PERIOD/2)
 
         self.assertEqual(self._osd_in_out_events_count(), 0)
+
+    def test_pg_autoscaler_event(self):
+        """
+        Test PG autoscaler event creation and completion.
+        """
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'config', 'set', 'mgr',
+            'mgr/progress/allow_pg_recovery_event', 'true')
+
+        ev = self._simulate_pg_autoscaler_event()
+
+        # Wait for progress event to ultimately complete
+        self.wait_until_true(lambda: self._is_complete(ev['id']),
+                                 timeout=self.PG_SCALE_UP_PERIOD)
+
+        # There should not be any on going pg_autoscale event
+        self.assertEqual(self._pg_autoscaler_events_count(), 0)
