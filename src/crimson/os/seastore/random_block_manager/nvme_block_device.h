@@ -228,9 +228,14 @@ public:
   read_ertr::future<> read(
     uint64_t offset,
     bufferptr &bptr) final;
+  read_ertr::future<> _readv(
+    uint64_t offset,
+    std::vector<bufferptr> ptrs) final;
 
   read_ertr::future<> nvme_read(
     uint64_t offset, size_t len, void *buffer_ptr);
+  read_ertr::future<> nvme_readv(
+    uint64_t offset, std::vector<bufferptr> ptrs);
 
   close_ertr::future<> close() override;
 

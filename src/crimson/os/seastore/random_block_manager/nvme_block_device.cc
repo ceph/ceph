@@ -165,6 +165,39 @@ read_ertr::future<> NVMeBlockDevice::read(
   }
 }
 
+read_ertr::future<> NVMeBlockDevice::_readv(
+  uint64_t offset,
+  std::vector<bufferptr> ptrs) {
+  LOG_PREFIX(NVMeBlockDevice::_readv);
+  DEBUG("block: read offset {}, {} buffers", offset, ptrs.size());
+  if (ptrs.size() == 0) {
+    return read_ertr::now();
+  }
+
+  if (is_end_to_end_data_protection()) {
+    return nvme_readv(offset, std::move(ptrs));
+  }
+  std::vector<iovec> iov;
+  size_t length = 0;
+  for (auto &ptr : ptrs) {
+    length += ptr.length();
+    assert((ptr.length() % super.block_size) == 0);
+    iov.emplace_back(ptr.c_str(), ptr.length());
+  }
+  return device.dma_read(offset, std::move(iov)
+  ).handle_exception(
+    [FNAME](auto e) -> read_ertr::future<size_t> {
+      ERROR("read: dma_read got error{}", e);
+      return crimson::ct_error::input_output_error::make();
+    }).then([length, FNAME](auto result) -> read_ertr::future<> {
+      if (result != length) {
+        ERROR("read: dma_read got error with not proper length");
+        return crimson::ct_error::input_output_error::make();
+      }
+      return read_ertr::now();
+    });
+}
+
 write_ertr::future<> NVMeBlockDevice::writev(
   uint64_t offset,
   ceph::bufferlist bl,
@@ -417,6 +450,30 @@ read_ertr::future<> NVMeBlockDevice::nvme_read(
     ERROR("read nvm command with checksum offload fails : {}", ret);
     ceph_abort();
   }
+}
+
+read_ertr::future<> NVMeBlockDevice::nvme_readv(
+  uint64_t offset, std::vector<bufferptr> ptrs) {
+  struct io_t {
+    uint64_t offset = 0;
+    bufferptr ptr;
+  };
+  std::vector<io_t> iov;
+  size_t off = 0;
+  for (auto &ptr : ptrs) {
+    auto len = ptr.length();
+    iov.emplace_back(offset + off, std::move(ptr));
+    off += len;
+  }
+  return seastar::do_with(
+    std::move(iov),
+    [this](auto &iov) {
+    return read_ertr::parallel_for_each(
+      iov,
+      [this](auto &io) {
+      return nvme_read(io.offset, io.ptr.length(), io.ptr.c_str());
+    });
+  });
 }
 
 }
