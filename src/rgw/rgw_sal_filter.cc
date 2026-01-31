@@ -874,9 +874,10 @@ int FilterBucket::read_stats_async(const DoutPrefixProvider *dpp,
 }
 
 int FilterBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                   bool reset,
                                    RGWBucketEnt* ent)
 {
-  return next->sync_owner_stats(dpp, y, ent);
+  return next->sync_owner_stats(dpp, y, reset, ent);
 }
 
 int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
