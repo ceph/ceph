@@ -14,9 +14,9 @@ namespace crypto {
 
 template <typename T>
 BlockCrypto<T>::BlockCrypto(CephContext* cct, DataCryptor<T>* data_cryptor,
-                            uint64_t block_size, uint64_t data_offset)
+                            uint64_t block_size, uint64_t data_offset, uint32_t meta_size)
      : m_cct(cct), m_data_cryptor(data_cryptor), m_block_size(block_size),
-       m_data_offset(data_offset), m_iv_size(data_cryptor->get_iv_size()) {
+       m_data_offset(data_offset), m_meta_size(meta_size), m_iv_size(data_cryptor->get_iv_size()) {
   ceph_assert(std::has_single_bit(block_size));
   ceph_assert((block_size % data_cryptor->get_block_size()) == 0);
   ceph_assert((block_size % 512) == 0);
@@ -33,14 +33,28 @@ BlockCrypto<T>::~BlockCrypto() {
 template <typename T>
 int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
                            CipherMode mode) {
+  size_t block_in_size, block_out_size;
+  if (mode == CipherMode::CIPHER_MODE_ENC) {
+    block_in_size = m_block_size; // Reading Plaintext (e.g., 4096)
+    block_out_size =
+        m_block_size + m_meta_size; // Writing Ciphertext + Tag (e.g., 4112)
+  } else {
+    block_in_size = m_block_size + m_meta_size; // Reading Ciphertext + Tag
+    block_out_size = m_block_size;              // Writing Plaintext
+  }
+  // TODO: Encrypt data with physical or logical offset? 
+    // Currently Data is encrypted with logical offset
+    // The main reason for this is because we divide by 512 to 
+    // determine the sector IV. With logical offsets (4096 alignment)
+    // we will have no remainder.
   if (image_offset % m_block_size != 0) {
     lderr(m_cct) << "image offset: " << image_offset
                  << " not aligned to block size: " << m_block_size << dendl;
     return -EINVAL;
   }
-  if (data->length() % m_block_size != 0) {
+  if (data->length() % block_in_size != 0) {
     lderr(m_cct) << "data length: " << data->length()
-                 << " not aligned to block size: " << m_block_size << dendl;
+                 << " not aligned to block size: " << block_in_size << dendl;
     return -EINVAL;
   }
 
@@ -60,9 +74,12 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
       m_data_cryptor->return_context(ctx, mode); });
 
   auto sector_number = image_offset / 512;
-  auto appender = data->get_contiguous_appender(src.length());
+  size_t num_blocks = src.length() / block_in_size;
+  size_t total_output_size = num_blocks * block_out_size;
+  auto appender = data->get_contiguous_appender(total_output_size);
   unsigned char* out_buf_ptr = nullptr;
-  unsigned char* leftover_block = (unsigned char*)alloca(m_block_size);
+  // TODO: Can this buffer overflow? 
+  unsigned char* leftover_block = (unsigned char*)alloca(block_in_size);
   uint32_t leftover_size = 0;
   for (auto buf = src.buffers().begin(); buf != src.buffers().end(); ++buf) {
     auto in_buf_ptr = reinterpret_cast<const unsigned char*>(buf->c_str());
@@ -78,13 +95,13 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
         }
 
         out_buf_ptr = reinterpret_cast<unsigned char*>(
-                appender.get_pos_add(m_block_size));
+                appender.get_pos_add(block_out_size));
         sector_number += m_block_size / 512;
       }
 
-      if (leftover_size > 0 || remaining_buf_bytes < m_block_size) {
+      if (leftover_size > 0 || remaining_buf_bytes < block_in_size) {
         auto copy_size = std::min(
-                (uint32_t)m_block_size - leftover_size, remaining_buf_bytes);
+                (uint32_t)block_in_size - leftover_size, remaining_buf_bytes);
         memcpy(leftover_block + leftover_size, in_buf_ptr, copy_size);
         in_buf_ptr += copy_size;
         leftover_size += copy_size;
@@ -92,18 +109,32 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
       }
 
       int crypto_output_length = 0;
-      if (leftover_size == 0) {
-        crypto_output_length = m_data_cryptor->update_context(
-              ctx, in_buf_ptr, out_buf_ptr, m_block_size);
-
-        in_buf_ptr += m_block_size;
-        remaining_buf_bytes -= m_block_size;
-      } else if (leftover_size == m_block_size) {
-        crypto_output_length = m_data_cryptor->update_context(
-              ctx, leftover_block, out_buf_ptr, m_block_size);
-        leftover_size = 0;
+      if (leftover_size == 0 || leftover_size == block_in_size) {
+        const unsigned char* src_ptr = (leftover_size == 0) ? in_buf_ptr : leftover_block;
+        if (mode == CIPHER_MODE_DEC)  {
+          crypto_output_length = m_data_cryptor->decrypt(
+              ctx, src_ptr, out_buf_ptr,
+              block_in_size, block_out_size,
+              iv, m_iv_size);
+        } else {
+          crypto_output_length = m_data_cryptor->update_context(
+            ctx, src_ptr, out_buf_ptr,
+            block_in_size, block_out_size,
+            iv, m_iv_size);
+        }
+        if (std::cmp_not_equal(crypto_output_length, block_out_size)) {
+          lderr(m_cct) << "output size not expected\n expected: "
+                       << block_out_size << " got: " << crypto_output_length
+                       << dendl;
+          return crypto_output_length;
+        }
+        if (leftover_size == 0) {
+          in_buf_ptr += block_in_size;
+          remaining_buf_bytes -= block_in_size;
+        } else {
+          leftover_size = 0;
+        }
       }
-
       if (crypto_output_length < 0) {
         lderr(m_cct) << "crypt update failed" << dendl;
         return crypto_output_length;

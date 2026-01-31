@@ -15,6 +15,8 @@ struct MockCryptoInterface : CryptoInterface {
 
   static const uint64_t BLOCK_SIZE = 4096;
   static const uint64_t DATA_OFFSET = 4 * 1024 * 1024;
+  uint32_t meta_size;
+  MockCryptoInterface(uint32_t meta_size = 0) : meta_size(meta_size) {}
 
   MOCK_METHOD2(encrypt, int(ceph::bufferlist*, uint64_t));
   MOCK_METHOD2(decrypt, int(ceph::bufferlist*, uint64_t));
@@ -27,6 +29,10 @@ struct MockCryptoInterface : CryptoInterface {
 
   uint64_t get_data_offset() const override {
     return DATA_OFFSET;
+  }
+
+  uint32_t get_meta_size() const override{
+    return meta_size;
   }
 };
 

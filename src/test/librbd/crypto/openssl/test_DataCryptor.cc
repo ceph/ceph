@@ -67,13 +67,13 @@ TEST_F(TestCryptoOpensslDataCryptor, EncryptDecrypt) {
 
   unsigned char out[sizeof(TEST_DATA)];
   ASSERT_EQ(sizeof(TEST_DATA),
-            cryptor->update_context(ctx, TEST_DATA, out, sizeof(TEST_DATA)));
+            cryptor->update_context(ctx, TEST_DATA, out, sizeof(TEST_DATA), sizeof(TEST_DATA)));
   cryptor->return_context(ctx, CipherMode::CIPHER_MODE_ENC);
   ctx = cryptor->get_context(CipherMode::CIPHER_MODE_DEC);
   ASSERT_NE(ctx, nullptr);
   ASSERT_EQ(0, cryptor->init_context(ctx, TEST_IV, sizeof(TEST_IV)));
   ASSERT_EQ(sizeof(TEST_DATA),
-            cryptor->update_context(ctx, out, out, sizeof(TEST_DATA)));
+            cryptor->update_context(ctx, out, out, sizeof(TEST_DATA), sizeof(TEST_DATA)));
   ASSERT_EQ(0, memcmp(out, TEST_DATA, sizeof(TEST_DATA)));
   cryptor->return_context(ctx, CipherMode::CIPHER_MODE_DEC);
 }
@@ -85,11 +85,11 @@ TEST_F(TestCryptoOpensslDataCryptor, ReuseContext) {
   ASSERT_EQ(0, cryptor->init_context(ctx, TEST_IV, sizeof(TEST_IV)));
   unsigned char out[sizeof(TEST_DATA)];
   ASSERT_EQ(sizeof(TEST_DATA),
-            cryptor->update_context(ctx, TEST_DATA, out, sizeof(TEST_DATA)));
+            cryptor->update_context(ctx, TEST_DATA, out, sizeof(TEST_DATA), sizeof(TEST_DATA)));
 
   ASSERT_EQ(0, cryptor->init_context(ctx, TEST_IV_2, sizeof(TEST_IV_2)));
   ASSERT_EQ(sizeof(TEST_DATA),
-            cryptor->update_context(ctx, TEST_DATA, out, sizeof(TEST_DATA)));
+            cryptor->update_context(ctx, TEST_DATA, out, sizeof(TEST_DATA), sizeof(TEST_DATA)));
 
   auto ctx2 = cryptor->get_context(CipherMode::CIPHER_MODE_ENC);
   ASSERT_NE(ctx2, nullptr);
@@ -97,7 +97,7 @@ TEST_F(TestCryptoOpensslDataCryptor, ReuseContext) {
   ASSERT_EQ(0, cryptor->init_context(ctx2, TEST_IV_2, sizeof(TEST_IV_2)));
   unsigned char out2[sizeof(TEST_DATA)];
   ASSERT_EQ(sizeof(TEST_DATA),
-            cryptor->update_context(ctx2, TEST_DATA, out2, sizeof(TEST_DATA)));
+            cryptor->update_context(ctx2, TEST_DATA, out2, sizeof(TEST_DATA), sizeof(TEST_DATA)));
 
   ASSERT_EQ(0, memcmp(out, out2, sizeof(TEST_DATA)));
 
