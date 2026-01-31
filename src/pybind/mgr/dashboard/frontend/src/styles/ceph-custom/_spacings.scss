@@ -12,8 +12,20 @@
   margin-left: layout.$spacing-03;
 }
 
+.cds-ml-5 {
+  margin-left: layout.$spacing-05;
+}
+
 .cds-mr-3 {
   margin-right: layout.$spacing-03;
+}
+
+.cds-mr-5 {
+  margin-right: layout.$spacing-05;
+}
+
+.cds-mb-1 {
+  margin-bottom: layout.$spacing-01;
 }
 
 .cds-mb-2 {
@@ -28,6 +40,18 @@
   margin-bottom: layout.$spacing-05;
 }
 
+.cds-mb-6 {
+  margin-bottom: layout.$spacing-06;
+}
+
+.cds-mt-3 {
+  margin-top: layout.$spacing-03;
+}
+
 .cds-mt-5 {
   margin-top: layout.$spacing-05;
+}
+
+.cds-mt-6 {
+  margin-top: layout.$spacing-06;
 }

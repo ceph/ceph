@@ -548,7 +548,11 @@ export class TaskMessageService {
     'cephfs/smb/standalone/delete': this.newTaskMessage(
       this.commonOperations.delete,
       (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-    )
+    ),
+    'mirroring/cephUser/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata: { userEntity: string }) => this.cephUser(metadata)
+    ),
   };
 
   newTaskMessage(
@@ -718,5 +722,10 @@ export class TaskMessageService {
 
   getRunningText(task: Task) {
     return this._getTaskTitle(task).operation.running;
+  }
+
+
+  cephUser(metadata: { userEntity: string }) {
+    return $localize`Ceph User  '${metadata.userEntity}'`;
   }
 }

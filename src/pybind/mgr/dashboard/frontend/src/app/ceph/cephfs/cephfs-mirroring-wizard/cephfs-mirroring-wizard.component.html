@@ -1,0 +1,113 @@
+<cd-tearsheet
+  [steps]="steps"
+  [title]="title"
+  [description]="description"
+  (submitRequested)="onSubmit()"
+  (closeRequested)="onCancel()">
+  <cd-tearsheet-step>
+    <form [formGroup]="form">
+      <div>
+        <div class="cds--type-heading-03"
+             i18n>Choose mirror peer role</div>
+        <p i18n>Select how the cluster will participate in the CephFS Mirroring relationship.</p>
+      </div>
+
+      <div cdsStack="horizontal">
+        <div class="cds-mr-5">
+          <cds-tile>
+            <cds-radio-group formControlName="localRole">
+              <cds-radio
+                [value]="LOCAL_ROLE"
+                [checked]="form.get('localRole')?.value === LOCAL_ROLE"
+                (click)="onLocalRoleChange()">
+                <div>
+                  <div class="cds--type-heading-compact-02"
+                       i18n>Configure local peer</div>
+                  <div class="cds--type-label-01 cds-mt-3"
+                       i18n>
+                    This cluster will act as the initiating peer and send snapshots to a remote
+                    peer.
+                  </div>
+                  <ul class="cds--type-body-compact-01 cds-mt-6">
+                    @for (item of sourceList; track $index) {
+                    <li class="cds-mb-6 cds-mt-3">&rarr; {{ item }}</li>
+                    }
+                  </ul>
+                </div>
+              </cds-radio>
+            </cds-radio-group>
+          </cds-tile>
+        </div>
+        <cds-tile>
+          <cds-radio-group formControlName="remoteRole">
+            <cds-radio
+              [value]="REMOTE_ROLE"
+              [checked]="form.get('remoteRole')?.value === REMOTE_ROLE"
+              (click)="onRemoteRoleChange()">
+              <div>
+                <div class="cds--type-heading-compact-02"
+                     i18n>Configure remote peer</div>
+                <div class="cds--type-label-01 cds-mt-3"
+                     i18n>
+                  A remote cluster will act as the receiving peer and store replicated snapshots.
+                </div>
+                <ul class="cds--type-body-compact-01 cds-mt-6">
+                  @for (item of targetList; track $index) {
+                  <li class="cds-mb-6 cds-mt-3">&rarr; {{ item }}</li>
+                  }
+                </ul>
+              </div>
+            </cds-radio>
+          </cds-radio-group>
+        </cds-tile>
+      </div>
+
+      @if (form.get('localRole')?.value !== LOCAL_ROLE) {
+      <cd-alert-panel
+        type="info"
+        spacingClass="mb-3 mt-3"
+        dismissible="true"
+        class="align-items-center mirroring-alert">
+        <div>
+          <div class="cds--type-heading-compact-01 cds-mb-2"
+               i18n>About Remote Peer Setup</div>
+          <div class="cds--type-body-compact-01 cds-mb-3"
+               i18n>
+            As a remote peer, this cluster prepares to receive mirrored data from an initiating
+            cluster. The setup includes environment validation, enabling filesystem mirroring,
+            creating required Ceph users, and generating a bootstrap token.
+          </div>
+          <div class="cds--type-heading-compact-01 cds-mb-1 cds-mt-6"
+               i18n>What happens next:</div>
+          <ul class="list-disc cds-ml-5 cds--type-body-compact-01">
+            <li i18n>Environment validation</li>
+            <li i18n>Ceph user creation</li>
+            <li i18n>Filesystem mirroring activation</li>
+            <li i18n>Bootstrap token generation</li>
+          </ul>
+        </div>
+      </cd-alert-panel>
+      }
+    </form>
+  </cd-tearsheet-step>
+
+  <!-- Step 1 -->
+  <cd-tearsheet-step>
+    <cd-cephfs-filesystem-selector [selectedFilesystem$]="selectedFilesystem$">
+    </cd-cephfs-filesystem-selector>
+  </cd-tearsheet-step>
+
+  <!-- Step 2 -->
+  <cd-tearsheet-step>
+    <cd-cephfs-mirroring-entity [selectedFilesystem$]="selectedFilesystem$"
+                                [selectedEntity$]="selectedEntity$">
+    </cd-cephfs-mirroring-entity>
+  </cd-tearsheet-step>
+
+  <!-- Step 3 -->
+  <cd-tearsheet-step>
+    <div>
+      <p>Test3</p>
+    </div>
+  </cd-tearsheet-step>
+</cd-tearsheet>
