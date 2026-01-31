@@ -3754,8 +3754,10 @@ class TestIngressService:
             '        mount_path_pseudo = true;\n'
             '        Enable_UDP = false;\n'
             '        NFS_Port = 2049;\n'
-            '        allow_set_io_flusher_fail = true;\n'
             '        HAProxy_Hosts = 192.168.122.111, 10.10.2.20, 192.168.122.222;\n'
+            '}\n'
+            '\n'
+            'NFS_MONITORING {\n'
             '        Monitoring_Port = 9587;\n'
             '}\n'
             '\n'
@@ -3772,20 +3774,7 @@ class TestIngressService:
             '        nodeid = 0;\n'
             '        pool = ".nfs";\n'
             '        namespace = "foo";\n'
-            '}\n'
-            '\n'
-            'RADOS_URLS {\n'
-            '        UserId = "nfs.foo.test.0.0";\n'
-            '        watch_url = '
-            '"rados://.nfs/foo/conf-nfs.foo";\n'
-            '}\n'
-            '\n'
-            'RGW {\n'
-            '        cluster = "ceph";\n'
-            '        name = "client.nfs.foo.test.0.0-rgw";\n'
-            '}\n'
-            '\n'
-            "%url    rados://.nfs/foo/conf-nfs.foo"
+            '}'
         )
         nfs_expected_conf = {
             'files': {'ganesha.conf': nfs_ganesha_txt, 'idmap.conf': ''},
@@ -3797,14 +3786,6 @@ class TestIngressService:
             ),
             'namespace': 'foo',
             'pool': '.nfs',
-            'rgw': {
-                'cluster': 'ceph',
-                'keyring': (
-                    '[client.nfs.foo.test.0.0-rgw]\n'
-                    'key = None\n'
-                ),
-                'user': 'nfs.foo.test.0.0-rgw',
-            },
             'userid': 'nfs.foo.test.0.0',
         }
 
@@ -4025,6 +4006,8 @@ class TestNFS:
                     CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Monitoring_Addr = 1.2.3.1" in ganesha_conf
+                assert "allow_set_io_flusher_fail = true" in ganesha_conf
+                assert "NFS_MONITORING {" in ganesha_conf
 
             nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
                                       monitoring_networks=['1.2.3.0/24'])
@@ -4033,6 +4016,57 @@ class TestNFS:
                     CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Monitoring_Addr = 1.2.3.1" in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_config_monitoring_loopback_ip(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            # Note: We don't add loopback addresses to host networks cache
+            cephadm_module.cache.update_host_networks('host1', {
+                '1.2.3.0/24': {
+                    'if0': ['1.2.3.1']
+                }
+            })
+
+            # Test with a loopback monitoring IP
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['host1']),
+                                      monitoring_ip_addrs={'host1': '127.0.0.50'})
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='host1', daemon_id='foo.host1.0.0', service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                # Loopback IP should be accepted even though it's not in host network cache
+                assert "Monitoring_Addr = 127.0.0.50" in ganesha_conf
+                assert "Monitoring_Port = 9587" in ganesha_conf
+                assert "allow_set_io_flusher_fail = true" in ganesha_conf
+                assert "NFS_MONITORING {" in ganesha_conf
+
+            # Test with non-loopback IP that's not in host networks (should be ignored)
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['host1']),
+                                      monitoring_ip_addrs={'host1': '192.168.9.9'})
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='host1', daemon_id='foo.host1.0.0', service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                # Non-loopback IP not in host networks should not be in config
+                assert "Monitoring_Addr = 192.168.9.9" not in ganesha_conf
+                assert "NFS_MONITORING {" not in ganesha_conf
+
+            # Test with invalid IP (should be ignored)
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['host1']),
+                                      monitoring_ip_addrs={'host1': 'not-an-ip'})
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='host1', daemon_id='foo.host1.0.0', service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                # Invalid IP should not be in config
+                assert "Monitoring_Addr = not-an-ip" not in ganesha_conf
+                assert "NFS_MONITORING {" not in ganesha_conf
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
