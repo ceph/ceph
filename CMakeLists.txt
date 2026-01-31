@@ -413,7 +413,7 @@ if(WITH_KRBD AND NOT WITH_RBD)
 endif()
 if(LINUX)
   if(WITH_LIBCEPHFS OR WITH_KRBD)
-    # keyutils is only used when talking to the Linux Kernel key store 
+    # keyutils is only used when talking to the Linux Kernel key store
     find_package(keyutils REQUIRED)
     set(HAVE_KEYUTILS ${KEYUTILS_FOUND})
   endif()
@@ -629,10 +629,11 @@ option(WITH_CEPHFS "CephFS is enabled" ON)
 if(NOT WIN32)
 # Please specify 3.x if you want to build with a certain version of python3.
 set(WITH_PYTHON3 "3" CACHE STRING "build with specified python3 version")
+set(Python3_MINVERSION 3.9)
 find_package(Python3 ${WITH_PYTHON3} EXACT REQUIRED
   COMPONENTS Interpreter Development)
-if(Python3_VERSION VERSION_LESS 3.9)
-  message(FATAL_ERROR "${Python3_VERSION} is not supported, please use Python 3.9 and up")
+if(Python3_VERSION VERSION_LESS Python3_MINVERSION)
+  message(FATAL_ERROR "${Python3_VERSION} is not supported, please use Python ${Python3_MINVERSION} and up")
 endif()
 
 option(WITH_MGR "ceph-mgr is enabled" ON)
