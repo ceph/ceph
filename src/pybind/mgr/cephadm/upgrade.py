@@ -71,6 +71,7 @@ class UpgradeState:
                  services: Optional[List[str]] = None,
                  total_count: Optional[int] = None,
                  remaining_count: Optional[int] = None,
+                 mon_flags: Optional[List[str]] = None,
                  ):
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
         self.progress_id: str = progress_id
@@ -88,6 +89,7 @@ class UpgradeState:
         self.services = services
         self.total_count = total_count
         self.remaining_count = remaining_count
+        self.mon_flags = mon_flags
 
     def to_json(self) -> dict:
         return {
@@ -106,6 +108,7 @@ class UpgradeState:
             'services': self.services,
             'total_count': self.total_count,
             'remaining_count': self.remaining_count,
+            'mon_flags': self.mon_flags,
         }
 
     @classmethod
@@ -127,7 +130,8 @@ class CephadmUpgrade:
         'UPGRADE_REDEPLOY_DAEMON',
         'UPGRADE_BAD_TARGET_VERSION',
         'UPGRADE_EXCEPTION',
-        'UPGRADE_OFFLINE_HOST'
+        'UPGRADE_OFFLINE_HOST', 
+        'UPGRADE_FAILED_UNSETTING_MON_FLAGS'
     ]
 
     def __init__(self, mgr: "CephadmOrchestrator"):
@@ -311,7 +315,8 @@ class CephadmUpgrade:
         return r
 
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None,
-                      hosts: Optional[List[str]] = None, services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
+                      hosts: Optional[List[str]] = None, services: Optional[List[str]] = None, 
+                      limit: Optional[int] = None, unset_mon_flags: bool = False) -> str:
         fail_fs_value = cast(bool, self.mgr.get_module_option_ex(
             'orchestrator', 'fail_fs', False))
         if self.mgr.mode != 'root':
@@ -347,6 +352,7 @@ class CephadmUpgrade:
         if running_mgr_count < 2:
             raise OrchestratorError('Need at least 2 running mgr daemons for upgrade')
 
+        mon_flags = None if unset_mon_flags else [f.strip() for f in self.mgr.upgrade_unset_mon_flags.split(',')]
         self.mgr.log.info('Upgrade: Started with target %s' % target_name)
         self.upgrade_state = UpgradeState(
             target_name=target_name,
@@ -357,7 +363,29 @@ class CephadmUpgrade:
             services=services,
             total_count=limit,
             remaining_count=limit,
+            mon_flags=mon_flags,
         )
+
+        # unset mon flags for upgrade
+        if self.upgrade_state.mon_flags:
+            try:
+                flags_toggled = list()
+                for flag in self.upgrade_state.mon_flags:
+                    if self.mgr.is_global_mon_flag_set(flag):
+                        self.mgr.unset_global_mon_flag(flag)
+                        flags_toggled.append(flag)
+                # set mon_flags to the list of flags actually unset before upgrade.
+                # this is to ensure we only re-set these flags at end of upgrade 
+                # and don't mistakenly set any flag that wasn't set before upgrade. 
+                self.upgrade_state.mon_flags = flags_toggled
+            except OrchestratorError as e:
+                self._fail_upgrade('UPGRADE_FAILED_UNSETTING_MON_FLAGS', {
+                    'severity': 'error',
+                    'summary': 'Upgrade: Failed to unset mon flags for upgrade',
+                    'count': 1,
+                    'detail': [f'Upgrade: Failed to unset mon flags for upgrade: {str(e)}'],
+                })
+
         self._update_upgrade_progress(0.0)
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
@@ -493,6 +521,7 @@ class CephadmUpgrade:
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
         self.mgr.event.set()
+        self._reset_upgrade_mon_flags()
         return 'Stopped upgrade to %s' % target_image
 
     def update_service(self, service_type: str, service_image: str, image: str) -> List[str]:
@@ -578,6 +607,7 @@ class CephadmUpgrade:
 
         logger.error('Upgrade: Paused due to %s: %s' % (alert_id,
                                                         alert['summary']))
+        self._reset_upgrade_mon_flags() 
         self.upgrade_state.error = alert_id + ': ' + alert['summary']
         self.upgrade_state.paused = True
         self._save_upgrade_state()
@@ -603,6 +633,19 @@ class CephadmUpgrade:
             self.mgr.set_store('upgrade_state', None)
             return
         self.mgr.set_store('upgrade_state', json.dumps(self.upgrade_state.to_json()))
+
+    def _reset_upgrade_mon_flags(self) -> None: 
+        # Upgrade is complete. Reset mon flags
+        if self.upgrade_state.mon_flags:
+            try:
+                for flag in self.upgrade_state.mon_flags:
+                    if not self.mgr.is_global_mon_flag_set(flag):
+                        self.mgr.set_global_mon_flag(flag)
+            except OrchestratorError as e:
+                # the upgrade is already basically complete here
+                # so it doesn't make sense to mark it failed if we can't
+                # unset the OSD flags. Just log an error?
+                self.mgr.log.error(f'Failed to set MON flags at end of upgrade: {str(e)}') 
 
     def get_distinct_container_image_settings(self) -> Dict[str, str]:
         # get all distinct container_image settings
@@ -1086,6 +1129,7 @@ class CephadmUpgrade:
         if not self.upgrade_state:
             logger.debug('_mark_upgrade_complete upgrade already marked complete, exiting')
             return
+        self._reset_upgrade_mon_flags()
         logger.info('Upgrade: Complete!')
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
