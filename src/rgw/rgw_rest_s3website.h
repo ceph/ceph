@@ -71,6 +71,15 @@ public:
   ~RGWHandler_REST_Bucket_S3Website() override = default;
 };
 
+class RGWRESTMgr_S3Website : public RGWRESTMgr {
+  friend class RGWRESTMgr_S3; // for protected get_resource_mgr()
+public:
+  RGWHandler_REST *get_handler(rgw::sal::Driver* driver,
+                               req_state* s,
+                               const rgw::auth::StrategyRegistry& auth_registry,
+                               const std::string& frontend_prefix) override;
+};
+
 // TODO: do we actually need this?
 class  RGWGetObj_ObjStore_S3Website : public RGWGetObj_ObjStore_S3
 {

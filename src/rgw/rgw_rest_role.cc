@@ -135,9 +135,8 @@ int check_role_limit(const DoutPrefixProvider* dpp, optional_yield y,
                      std::string& err)
 {
   RGWAccountInfo account;
-  rgw::sal::Attrs attrs; // unused
   RGWObjVersionTracker objv; // unused
-  int r = driver->load_account_by_id(dpp, y, account_id, account, attrs, objv);
+  int r = driver->load_account_by_id(dpp, y, account_id, account, objv);
   if (r < 0) {
     ldpp_dout(dpp, 4) << "failed to load iam account "
         << account_id << ": " << cpp_strerror(r) << dendl;
