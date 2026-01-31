@@ -79,12 +79,10 @@ class CheckCounter(Task):
 
             for daemon_id, daemon in daemons.items():
                 if not daemon.running():
-                    log.info("Ignoring daemon {0}, it isn't running".format(daemon_id))
+                    log.info(f"Ignoring daemon {daemon_type}.{daemon_id}, it isn't running")
                     continue
                 elif daemon_type == 'mgr' and daemon_id != active_mgr:
                     continue
-                else:
-                    log.debug("Getting stats from {0}".format(daemon_id))
 
                 if daemon_type == 'mds':
                     mds_info = status.get_mds(daemon_id)
@@ -104,13 +102,14 @@ class CheckCounter(Task):
                             log.debug(f"Failed to do 'perf dump' on {mds}")
                         continue
                 else:
+                    log.debug(f"Getting stats from {daemon_type}.{daemon_id}")
                     manager = self.ctx.managers[cluster_name]
                     proc = manager.admin_socket(daemon_type, daemon_id, ["perf", "dump"])
                     response_data = proc.stdout.getvalue().strip()
                 if response_data:
                     perf_dump = json.loads(response_data)
                 else:
-                    log.warning("No response from {0}, skipping".format(daemon_id))
+                    log.warning(f"No response from {daemon_type}.{daemon_id}, skipping")
                     continue
 
                 minval = ''
@@ -137,18 +136,17 @@ class CheckCounter(Task):
                         val = val[key]
 
                     if val is not None:
-                        log.info(f"Daemon {daemon_type}.{daemon_id} {name}={val}")
-                        if isinstance(minval, int) and val >= minval:
-                            seen.add(name)
-                        elif isinstance(expected_val, int) and val == expected_val:
+                        if (isinstance(minval, int) and val >= minval) or \
+                           (isinstance(expected_val, int) and val == expected_val):
+                            log.info(f"Found daemon: {daemon_type}.{daemon_id}, "
+                                     f"counter: {name}={val} in perf dump")
                             seen.add(name)
 
             if not dry_run:
                 unseen = set(expected) - set(seen)
                 if unseen:
                     raise RuntimeError("The following counters failed to be set "
-                                       "on {0} daemons: {1}".format(
-                        daemon_type, unseen
-                    ))
+                                       f"on {daemon_type} daemon: {unseen}")
+                log.info(f"Expected counters {expected} passed to be set on {daemon_type} daemon")
 
 task = CheckCounter
