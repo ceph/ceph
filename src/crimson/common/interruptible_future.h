@@ -1351,6 +1351,20 @@ public:
     });
   }
 
+  template <InvokeReturnsInterruptibleFuture AsyncAction>
+  [[gnu::always_inline]]
+  static auto co_repeat_eagain(AsyncAction&& action) {
+    bool repeat = false;
+    do {
+      co_await action.handle_error_interruptible(
+          [&](const crimson::ct_error::eagain &e) {
+            repeat = true;
+         },
+        crimson::ct_error::pass_further_all{}
+        );
+    } while (repeat);
+  }
+
   template <typename AsyncAction>
   requires (!InvokeReturnsInterruptibleFuture<AsyncAction>)
   [[gnu::always_inline]]
