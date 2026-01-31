@@ -206,6 +206,9 @@ class TLSObjectStore():
             raise TLSObjectException(f'Attempted to remove {self.tlsobject_class.__name__.lower()} for unknown obj_name {obj_name}')
         return False
 
+    def tlsobject_exists(self, obj_name: str) -> bool:
+        return obj_name in self.objects_by_name
+
     def _validate_tlsobject_name(self, obj_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         cred_type = self.tlsobject_class.__name__.lower()
         if obj_name not in self.objects_by_name:
