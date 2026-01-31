@@ -219,6 +219,17 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     asok_hook = nullptr;
   }
 
+  void ImageCtx::set_context_wq(std::shared_ptr<asio::ContextWQ> context_wq) {
+    ceph_assert(context_wq != nullptr);
+    ceph_assert(asio_engine != nullptr);
+
+    // Set the external ContextWQ on the AsioEngine
+    asio_engine->set_context_wq(context_wq);
+
+    // Update op_work_queue pointer to point to the new work queue
+    op_work_queue = asio_engine->get_work_queue();
+  }
+
   void ImageCtx::init_layout(int64_t pool_id)
   {
     if (stripe_unit == 0 || stripe_count == 0) {

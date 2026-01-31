@@ -2504,6 +2504,8 @@ fi
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
 %{_includedir}/rbd/features.h
+%dir %{_includedir}/rbd/asio
+%{_includedir}/rbd/asio/ContextWQ.hpp
 %{_libdir}/librbd.so
 %if %{with lttng}
 %{_libdir}/librbd_tp.so

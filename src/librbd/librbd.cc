@@ -35,6 +35,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
@@ -4914,8 +4915,9 @@ extern "C" void rbd_config_pool_list_cleanup(rbd_config_option_t *options,
   }
 }
 
-extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,
-			const char *snap_name)
+extern "C" int rbd_open_with_context_wq(rados_ioctx_t p, const char *name,
+				       rbd_image_t *image, const char *snap_name,
+				       void *context_wq)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
@@ -4924,12 +4926,26 @@ extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,
 						false);
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
+  // set ContextWQ before opening
+  if (context_wq != NULL) {
+    auto wq = static_cast<librbd::asio::ContextWQ*>(context_wq);
+    std::shared_ptr<librbd::asio::ContextWQ> shared_wq(
+      wq, [](librbd::asio::ContextWQ*) { /* no-op deleter - caller owns it */ });
+    ictx->set_context_wq(shared_wq);
+  }
+
   int r = ictx->state->open(0);
   if (r >= 0) {
     *image = (rbd_image_t)ictx;
   }
   tracepoint(librbd, open_image_exit, r);
   return r;
+}
+
+extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,
+			const char *snap_name)
+{
+  return rbd_open_with_context_wq(p, name, image, snap_name, NULL);
 }
 
 extern "C" int rbd_open_by_id(rados_ioctx_t p, const char *id,
@@ -4987,8 +5003,9 @@ extern "C" int rbd_aio_open_by_id(rados_ioctx_t p, const char *id,
   return 0;
 }
 
-extern "C" int rbd_open_read_only(rados_ioctx_t p, const char *name,
-				  rbd_image_t *image, const char *snap_name)
+extern "C" int rbd_open_read_only_with_context_wq(rados_ioctx_t p, const char *name,
+						  rbd_image_t *image, const char *snap_name,
+						  void *context_wq)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
@@ -4997,12 +5014,46 @@ extern "C" int rbd_open_read_only(rados_ioctx_t p, const char *name,
 						true);
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
+  // set ContextWQ before opening
+  if (context_wq != NULL) {
+    auto wq = static_cast<librbd::asio::ContextWQ*>(context_wq);
+    std::shared_ptr<librbd::asio::ContextWQ> shared_wq(
+      wq, [](librbd::asio::ContextWQ*) { /* no-op deleter - caller owns it */ });
+    ictx->set_context_wq(shared_wq);
+  }
+
   int r = ictx->state->open(0);
   if (r >= 0) {
     *image = (rbd_image_t)ictx;
   }
   tracepoint(librbd, open_image_exit, r);
   return r;
+}
+
+extern "C" int rbd_open_read_only(rados_ioctx_t p, const char *name,
+				  rbd_image_t *image, const char *snap_name)
+{
+  return rbd_open_read_only_with_context_wq(p, name, image, snap_name, NULL);
+}
+
+extern "C" int rbd_get_ceph_context(rbd_image_t image, void** cct)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  if (ictx == NULL || cct == NULL) {
+    return -EINVAL;
+  }
+  *cct = static_cast<void*>(ictx->cct);
+  return 0;
+}
+
+extern "C" void rbd_context_complete(void* ctx, int r)
+{
+  if (ctx == NULL) {
+    return;
+  }
+  // Cast the opaque pointer to Context* and complete it
+  auto context = static_cast<Context*>(ctx);
+  context->complete(r);
 }
 
 extern "C" int rbd_open_by_id_read_only(rados_ioctx_t p, const char *id,
