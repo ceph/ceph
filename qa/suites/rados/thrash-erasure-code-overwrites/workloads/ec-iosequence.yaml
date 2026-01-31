@@ -1,0 +1,40 @@
+tasks:
+- iosequence:
+    clients: [client.0]
+    ec_pool: true
+    erasure_code_profile:
+      name: jerasure21profile
+      plugin: jerasure
+      k: 2
+      m: 1
+      technique: reed_sol_van
+      crush-failure-domain: osd
+    runs: 3
+    threads: 5
+    blocksize: 2048
+- iosequence:
+    clients: [client.0]
+    ec_pool: true
+    erasure_code_profile:
+      name: jerasure42profile
+      plugin: jerasure
+      k: 4
+      m: 2
+      technique: reed_sol_van
+      crush-failure-domain: osd
+    runs: 3
+    threads: 5
+    blocksize: 3767
+- iosequence:
+    clients: [client.0]
+    ec_pool: true
+    erasure_code_profile:
+      name: jerasure86profile
+      plugin: jerasure
+      k: 8
+      m: 6
+      technique: reed_sol_van
+      crush-failure-domain: osd
+    runs: 3
+    threads: 5
+    blocksize: 4096
