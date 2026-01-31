@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# Export radosgw bucket usage metrics to a prometheus pushgateway endpoint.
+#
+# dependencies:
+#   radosgw-admin, curl, jq
+#
+# environment variables:
+#   PROMETHEUS_PUSHGATEWAY_ENDPOINT=http://pushgateway.example.org:9091/metrics/job/some_job/instance/some_instance
+#   PROMETHEUS_PUSHGATEWAY_ARGS="--user username:password"
+
+rgw-format-bucket-usage | curl --data-binary @- $PROMETHEUS_PUSHGATEWAY_ENDPOINT $PROMETHEUS_PUSHGATEWAY_ARGS
