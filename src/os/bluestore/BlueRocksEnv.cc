@@ -6,6 +6,7 @@
 #include "include/stringify.h"
 #include "kv/RocksDBStore.h"
 #include "string.h"
+#include <cstdint>
 
 using std::string_view;
 
