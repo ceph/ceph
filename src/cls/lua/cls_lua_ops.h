@@ -4,6 +4,7 @@
 #include <string>
 
 #include "include/encoding.h"
+#include "include/rados/cls_traits.h"
 
 struct cls_lua_eval_op {
   std::string script;
@@ -27,5 +28,15 @@ struct cls_lua_eval_op {
   }
 };
 WRITE_CLASS_ENCODER(cls_lua_eval_op)
+
+namespace cls::lua {
+struct ClassId {
+  static constexpr auto name = "lua";
+};
+namespace method {
+constexpr auto eval_json = ClsMethod<RdWrTag, ClassId>("eval_json");
+constexpr auto eval_bufferlist = ClsMethod<RdWrTag, ClassId>("eval_bufferlist");
+}
+}
 
 #endif

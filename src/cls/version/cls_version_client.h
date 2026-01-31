@@ -27,6 +27,24 @@ void cls_version_read(librados::ObjectReadOperation& op, obj_version *objv);
 int cls_version_read(librados::IoCtx& io_ctx, std::string& oid, obj_version *ver);
 #endif
 
+[[deprecated("in favor of read/write variants")]]
 void cls_version_check(librados::ObjectOperation& op, obj_version& ver, VersionCond cond);
+
+template <typename ObjectOperation>
+void cls_version_check(ObjectOperation& op, obj_version& objv, VersionCond cond)
+{
+  bufferlist in;
+  cls_version_check_op call;
+  call.objv = objv;
+
+  obj_version_cond c;
+  c.cond = cond;
+  c.ver = objv;
+
+  call.conds.push_back(c);
+
+  encode(call, in);
+  op.exec(cls::version::method::check_conds, in);
+}
 
 #endif

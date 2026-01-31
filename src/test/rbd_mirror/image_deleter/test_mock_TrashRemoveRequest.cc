@@ -133,7 +133,7 @@ public:
   void expect_trash_get(const cls::rbd::TrashImageSpec& trash_spec, int r) {
     using ceph::encode;
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
-                exec(StrEq(RBD_TRASH), _, StrEq("rbd"),
+                exec_internal(StrEq(RBD_TRASH), _, StrEq("rbd"),
                      StrEq("trash_get"), _, _, _, _))
       .WillOnce(WithArg<5>(Invoke([trash_spec, r](bufferlist* bl) {
                              encode(trash_spec, *bl);
@@ -148,7 +148,7 @@ public:
     encode(cls::rbd::TRASH_IMAGE_STATE_NORMAL, in_bl);
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
-                exec(StrEq(RBD_TRASH), _, StrEq("rbd"),
+                exec_internal(StrEq(RBD_TRASH), _, StrEq("rbd"),
                      StrEq("trash_state_set"),
                      ContentsEqual(in_bl), _, _, _))
       .WillOnce(Return(r));
@@ -160,7 +160,7 @@ public:
     encode(snapc, bl);
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
-                exec(librbd::util::header_name(image_id), _, StrEq("rbd"),
+                exec_internal(librbd::util::header_name(image_id), _, StrEq("rbd"),
                      StrEq("get_snapcontext"), _, _, _, _))
       .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
                                           *out_bl = bl;

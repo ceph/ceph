@@ -57,7 +57,7 @@ namespace sys = boost::system;
 
 namespace async = ceph::async;
 namespace buffer = ceph::buffer;
-namespace fifo = rados::cls::fifo;
+namespace fifo = ::rados::cls::fifo;
 
 using neorados::RADOS;
 using neorados::Object;
@@ -175,7 +175,7 @@ public:
     gm.version = objv;
     return exec<fifo::op::get_meta_reply>(
       rados, std::move(obj), std::move(ioc),
-      fifo::op::CLASS, fifo::op::GET_META, std::move(gm),
+      fifo::method::get_meta, std::move(gm),
       [](fifo::op::get_meta_reply&& ret) {
 	return std::make_tuple(std::move(ret.info),
 			       ret.part_header_size,
@@ -214,7 +214,7 @@ public:
 	   encode(gm, in);
 	   ReadOp op;
 	   buffer::list out;
-	   op.exec(fifo::op::CLASS, fifo::op::GET_META, in, &out);
+	   op.exec(fifo::method::get_meta, in, &out);
 	   co_await r.execute(std::move(obj), std::move(ioc), std::move(op), nullptr,
 			      asio::deferred);
 	   fifo::op::get_meta_reply ret;
@@ -248,7 +248,7 @@ public:
 
     return exec<fifo::op::get_part_info_reply>(
       rados, std::move(std::move(part_oid)), ioc,
-      fifo::op::CLASS, fifo::op::GET_PART_INFO,
+      fifo::method::get_part_info,
       fifo::op::get_part_info{},
       [](fifo::op::get_part_info_reply&& ret) {
 	return std::move(ret.header);
@@ -282,7 +282,7 @@ public:
 	   encode(gpi, in);
 	   ReadOp op;
 	   buffer::list out;
-	   op.exec(fifo::op::CLASS, fifo::op::GET_PART_INFO, in, &out);
+	   op.exec(fifo::method::get_part_info, in, &out);
 	   co_await f->rados.execute(std::move(part_oid), f->ioc, std::move(op),
 				     nullptr, asio::deferred);
 
@@ -316,7 +316,7 @@ private:
     ip.params = info.params;
     buffer::list in;
     encode(ip, in);
-    op.exec(fifo::op::CLASS, fifo::op::INIT_PART, std::move(in));
+    op.exec(fifo::method::init_part, std::move(in));
     auto oid = info.part_oid(part_num);
     l.unlock();
     return rados.execute(oid, ioc, std::move(op),
@@ -365,7 +365,7 @@ private:
 
     buffer::list in;
     encode(um, in);
-    op.exec(fifo::op::CLASS, fifo::op::UPDATE_META, std::move(in));
+    op.exec(fifo::method::update_meta, std::move(in));
     return rados.execute(obj, ioc, std::move(op),
 			 std::forward<CompletionToken>(token));
   }
@@ -404,7 +404,7 @@ private:
 
     buffer::list in;
     encode(cm, in);
-    op.exec(fifo::op::CLASS, fifo::op::CREATE_META, in);
+    op.exec(fifo::method::create_meta, in);
     return rados.execute(std::move(obj), std::move(ioc), std::move(op),
 			 std::forward<CompletionToken>(token));
   }
@@ -449,7 +449,7 @@ private:
            buffer::list in;
            encode(pp, in);
            int pushes;
-           op.exec(fifo::op::CLASS, fifo::op::PUSH_PART, in,
+           op.exec(fifo::method::push_part, in,
                    [&pushes](sys::error_code, int r, const buffer::list &) {
                      pushes = r;
                    });
@@ -508,7 +508,7 @@ private:
 	   buffer::list in;
 	   encode(lp, in);
 	   buffer::list bl;
-	   op.exec(fifo::op::CLASS, fifo::op::LIST_PART, in, &bl, nullptr);
+	   op.exec(fifo::method::list_part, in, &bl, nullptr);
 	   co_await f->rados.execute(oid, f->ioc, std::move(op), nullptr,
 				     asio::deferred);
 	   bool more, full_part;
@@ -581,7 +581,7 @@ private:
 
 	   buffer::list in;
 	   encode(tp, in);
-	   op.exec(fifo::op::CLASS, fifo::op::TRIM_PART, in);
+	   op.exec(fifo::method::trim_part, in);
            co_await f->rados.execute(std::move(oid), f->ioc, std::move(op),
                                      asio::deferred);
 	   co_return sys::error_code{};

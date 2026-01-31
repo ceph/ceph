@@ -2440,6 +2440,8 @@ fi
 %dir %{_includedir}/rados
 %{_includedir}/rados/librados.h
 %{_includedir}/rados/rados_types.h
+%{_includedir}/rados/cls_flags.h
+%{_includedir}/rados/cls_traits.h
 %{_libdir}/librados.so
 %if %{with lttng}
 %{_libdir}/librados_tp.so
@@ -2457,6 +2459,8 @@ fi
 %{_includedir}/rados/librados_fwd.hpp
 %{_includedir}/rados/page.h
 %{_includedir}/rados/rados_types.hpp
+%{_includedir}/rados/cls_flags.h
+%{_includedir}/rados/cls_traits.h
 
 %files -n python%{python3_pkgversion}-rados
 %{python3_sitearch}/rados.cpython*.so
@@ -2610,7 +2614,6 @@ fi
 %{_bindir}/ceph_perf_msgr_client
 %{_bindir}/ceph_perf_msgr_server
 %{_bindir}/ceph_psim
-%{_bindir}/ceph_radosacl
 %{_bindir}/ceph_rgw_jsonparser
 %{_bindir}/ceph_rgw_multiparser
 %{_bindir}/ceph_scratchtool

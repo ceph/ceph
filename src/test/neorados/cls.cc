@@ -36,18 +36,34 @@ using namespace std::literals;
 using neorados::ReadOp;
 using neorados::WriteOp;
 
+namespace cls::bogus_classes {
+struct ClassId {
+  static constexpr auto name = "doesnotexistasdfasdf";
+};
+struct ClassIdLock { // This is a real class. We are adding a bogus method.
+  static constexpr auto name = "doesnotexistasdfasdf";
+};
+namespace method {
+constexpr auto bogus_class = ClsMethod<RdWrTag, ClassId>("method");
+constexpr auto bogus_method = ClsMethod<RdWrTag, ClassIdLock>("doesnotexistasdfasdfasdf");
+}
+}
+
+using namespace ::cls::bogus_classes;
+
 CORO_TEST_F(NeoRadosCls, DNE, NeoRadosTest)
 {
   std::string_view oid = "obj";
   co_await execute(oid, WriteOp{}.create(true));
+  bufferlist bl1, bl2;
   // Call a bogus class
   co_await expect_error_code(
-    execute(oid, ReadOp{}.exec("doesnotexistasdfasdf", "method", {})),
+    execute(oid, WriteOp{}.exec(method::bogus_class, std::move(bl1))),
     sys::errc::operation_not_supported);
 
   // Call a bogus method on an existent class
   co_await expect_error_code(
-    execute(oid, ReadOp{}.exec("lock", "doesnotexistasdfasdfasdf", {})),
+    execute(oid, WriteOp{}.exec(method::bogus_method, std::move(bl2))),
     sys::errc::operation_not_supported);
   co_return;
 }

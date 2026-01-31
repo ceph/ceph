@@ -7,6 +7,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "cls/otp/cls_otp_types.h"
+#include "include/rados/cls_traits.h"
 
 struct cls_otp_set_otp_op
 {
@@ -165,5 +166,19 @@ struct cls_otp_get_current_time_reply
   }
 };
 WRITE_CLASS_ENCODER(cls_otp_get_current_time_reply)
+
+namespace rados::cls::otp {
+struct ClassId {
+  static constexpr auto name = "otp";
+};
+namespace method {
+constexpr auto set = ClsMethod<RdWrTag, ClassId>("otp_set");
+constexpr auto get = ClsMethod<RdTag, ClassId>("otp_get");
+constexpr auto check = ClsMethod<RdWrTag, ClassId>("otp_check");
+constexpr auto get_result = ClsMethod<RdTag, ClassId>("otp_get_result");
+constexpr auto remove = ClsMethod<RdWrTag, ClassId>("otp_remove");
+constexpr auto get_current_time = ClsMethod<RdTag, ClassId>("get_current_time");
+}
+}
 
 #endif

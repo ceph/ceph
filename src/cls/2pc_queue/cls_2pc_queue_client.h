@@ -72,6 +72,7 @@ void cls_2pc_queue_abort(librados::ObjectWriteOperation& op,
 // optionally async incremental listing of all entries in the queue
 // after answer is received, call cls_2pc_queue_list_entries_result() to parse the results
 void cls_2pc_queue_list_entries(librados::ObjectReadOperation& op, const std::string& marker, uint32_t max, bufferlist* obl, int* prval);
+void cls_2pc_queue_list_entries(librados::ObjectWriteOperation& op, const std::string& marker, uint32_t max, bufferlist* obl, int* prval);
 
 int cls_2pc_queue_list_entries_result(const bufferlist& bl, std::vector<cls_queue_entry>& entries,
                             bool *truncated, std::string& next_marker);

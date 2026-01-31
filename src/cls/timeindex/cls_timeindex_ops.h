@@ -6,6 +6,7 @@
 
 #include "common/ceph_json.h"
 #include "cls_timeindex_types.h"
+#include "include/rados/cls_traits.h"
 
 struct cls_timeindex_add_op {
   std::list<cls_timeindex_entry> entries;
@@ -153,5 +154,16 @@ struct cls_timeindex_trim_op {
   }
 };
 WRITE_CLASS_ENCODER(cls_timeindex_trim_op)
+
+namespace cls::timeindex {
+struct ClassId {
+  static constexpr auto name = "timeindex";
+};
+namespace method {
+constexpr auto add = ClsMethod<RdWrTag, ClassId>("add");
+constexpr auto list = ClsMethod<RdTag, ClassId>("list");
+constexpr auto trim = ClsMethod<RdWrTag, ClassId>("trim");
+}
+}
 
 #endif /* CEPH_CLS_TIMEINDEX_OPS_H */

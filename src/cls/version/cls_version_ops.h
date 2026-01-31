@@ -6,6 +6,7 @@
 
 #include "cls_version_types.h"
 #include "common/ceph_json.h"
+#include "include/rados/cls_traits.h"
 
 struct cls_version_set_op {
   obj_version objv;
@@ -151,5 +152,18 @@ struct cls_version_read_ret {
 };
 WRITE_CLASS_ENCODER(cls_version_read_ret)
 
+namespace cls::version {
+struct ClassId {
+  static constexpr auto name = "version";
+};
+
+namespace method {
+constexpr auto set = ClsMethod<RdWrTag,  ClassId>("set");
+constexpr auto inc = ClsMethod<RdWrTag,  ClassId>("inc");
+constexpr auto inc_conds = ClsMethod<RdWrTag,  ClassId>("inc_conds");
+constexpr auto read = ClsMethod<RdTag,  ClassId>("read");
+constexpr auto check_conds = ClsMethod<RdTag,  ClassId>("check_conds");
+}
+}
 
 #endif

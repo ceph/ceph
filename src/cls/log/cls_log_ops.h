@@ -11,6 +11,7 @@
 #include "common/ceph_time.h"
 
 #include "cls_log_types.h"
+#include "include/rados/cls_traits.h"
 
 namespace cls::log::ops {
 struct add_op {
@@ -245,5 +246,17 @@ struct info_ret {
 };
 WRITE_CLASS_ENCODER(info_ret)
 } // namespace cls::log::ops
+
+namespace cls::log {
+struct ClassId {
+  static constexpr auto name = "log";
+};
+namespace method {
+constexpr auto add = ClsMethod<RdWrTag, ClassId>("add");
+constexpr auto list = ClsMethod<RdTag, ClassId>("list");
+constexpr auto trim = ClsMethod<RdWrTag, ClassId>("trim");
+constexpr auto info = ClsMethod<RdTag, ClassId>("info");
+}
+}
 
 #endif

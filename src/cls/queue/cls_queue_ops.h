@@ -5,7 +5,9 @@
 #define CEPH_CLS_QUEUE_OPS_H
 
 #include "common/ceph_json.h"
-#include "cls/queue/cls_queue_types.h"
+#include "include/rados/cls_traits.h"
+#include "cls_queue_const.h"
+#include "cls_queue_types.h"
 
 struct cls_queue_init_op {
   uint64_t queue_size{0};
@@ -244,5 +246,19 @@ struct cls_queue_get_stats_ret {
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_get_stats_ret)
+
+
+namespace cls::queue {
+struct ClassId {
+  static constexpr auto name = QUEUE_CLASS;
+};
+namespace method {
+constexpr auto init = ClsMethod<RdWrTag, ClassId>(QUEUE_INIT);
+constexpr auto get_capacity = ClsMethod<RdTag, ClassId>(QUEUE_GET_CAPACITY);
+constexpr auto enqueue = ClsMethod<RdWrTag, ClassId>(QUEUE_ENQUEUE);
+constexpr auto list_entries = ClsMethod<RdTag, ClassId>(QUEUE_LIST_ENTRIES);
+constexpr auto remove_entries = ClsMethod<RdWrTag, ClassId>(QUEUE_REMOVE_ENTRIES);
+}
+}
 
 #endif /* CEPH_CLS_QUEUE_OPS_H */

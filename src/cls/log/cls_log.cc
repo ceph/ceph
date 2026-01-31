@@ -313,13 +313,14 @@ CLS_INIT(log)
   cls_method_handle_t h_log_trim;
   cls_method_handle_t h_log_info;
 
-  cls_register("log", &h_class);
+  using namespace cls::log;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  /* log */
-  cls_register_cxx_method(h_class, "add", CLS_METHOD_RD | CLS_METHOD_WR, cls_log_add, &h_log_add);
-  cls_register_cxx_method(h_class, "list", CLS_METHOD_RD, cls_log_list, &h_log_list);
-  cls_register_cxx_method(h_class, "trim", CLS_METHOD_RD | CLS_METHOD_WR, cls_log_trim, &h_log_trim);
-  cls_register_cxx_method(h_class, "info", CLS_METHOD_RD, cls_log_info, &h_log_info);
+  cls.register_cxx_method(method::add,  cls_log_add,  &h_log_add);
+  cls.register_cxx_method(method::list, cls_log_list, &h_log_list);
+  cls.register_cxx_method(method::trim, cls_log_trim, &h_log_trim);
+  cls.register_cxx_method(method::info, cls_log_info, &h_log_info);
 
   return;
 }
