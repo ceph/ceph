@@ -116,14 +116,7 @@ private:
   FRIEND_MAKE_REF(Backoff);
   Backoff(spg_t pgid, PGRef pg, ceph::ref_t<Session> s,
 	  uint64_t i,
-	  const hobject_t& b, const hobject_t& e)
-    : RefCountedObject(g_ceph_context),
-      pgid(pgid),
-      id(i),
-      pg(pg),
-      session(std::move(s)),
-      begin(b),
-      end(e) {}
+	  const hobject_t& b, const hobject_t& e);
 };
 
 

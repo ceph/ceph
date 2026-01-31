@@ -38,6 +38,8 @@
 #include "common/StackStringStream.h"
 #include "common/TrackedOp.h"
 
+#include "messages/MMDSPeerRequest.h"
+
 class LogSegment;
 class BatchOp;
 class CInode;
@@ -52,7 +54,6 @@ struct sr_t;
 struct MDLockCache;
 class Message;
 class MClientRequest;
-class MMDSPeerRequest;
 
 struct MutationImpl : public TrackedOp {
 public:
