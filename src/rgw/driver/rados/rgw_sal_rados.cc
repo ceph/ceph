@@ -140,6 +140,25 @@ static rgw_raw_obj get_owner_buckets_obj(RGWSI_User* svc_user,
   return std::visit(visitor{svc_user, svc_zone}, owner);
 }
 
+static rgw_raw_obj get_owner_vector_buckets_obj(RGWSI_User* svc_user,
+                                         RGWSI_Zone* svc_zone,
+                                         const rgw_owner& owner)
+{
+  struct visitor {
+    RGWSI_User* svc_user;
+    RGWSI_Zone* svc_zone;
+
+    rgw_raw_obj operator()(const rgw_user& user) {
+      return svc_user->get_vector_buckets_obj(user);
+    }
+    rgw_raw_obj operator()(const rgw_account_id& id) {
+      const RGWZoneParams& zone = svc_zone->get_zone_params();
+      return rgwrados::account::get_vector_buckets_obj(zone, id);
+    }
+  };
+  return std::visit(visitor{svc_user, svc_zone}, owner);
+}
+
 int RadosStore::list_buckets(const DoutPrefixProvider* dpp,
                              const rgw_owner& owner, const std::string& tenant,
                              const std::string& marker, const std::string& end_marker,
@@ -628,6 +647,38 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
   return ret;
 }
 
+int RadosVectorBucket::unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, optional_yield y, bool update_entrypoint)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RadosVectorBucket::unlink called" << dendl;
+  librados::Rados& rados = *store->getRados()->get_rados_handle();
+  return store->ctl()->vector_bucket->unlink_bucket(rados, owner, info.bucket,
+                                             y, dpp, update_entrypoint);
+}
+
+int RadosVectorBucket::remove(const DoutPrefixProvider* dpp,
+			bool delete_children,
+			optional_yield y)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RadosVectorBucket::remove called" << dendl;
+  RGWObjVersionTracker ot;
+
+  int ret = store->getRados()->delete_vector_bucket(info, get_attrs(), ot, y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: could not remove s3vector bucket " <<
+      info.bucket.name << dendl;
+    return ret;
+  }
+
+  librados::Rados& rados = *store->getRados()->get_rados_handle();
+  ret = store->ctl()->vector_bucket->unlink_bucket(rados, info.owner,
+                                            info.bucket, y, dpp, false);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: unable to remove user s3vector bucket information" << dendl;
+  }
+
+  return ret;
+}
+
 int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret;
@@ -652,6 +703,137 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   bucket_version = ep_ot.read_version;
 
   return ret;
+}
+
+int RadosVectorBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RadosVectorBucket::load_bucket called" << dendl;
+  int ret;
+
+  RGWObjVersionTracker ep_ot;
+  if (info.bucket.bucket_id.empty()) {
+    ret = store->ctl()->vector_bucket->read_bucket_info(info.bucket, &info, y, dpp,
+				      RGWBucketCtl::BucketInstance::GetParams()
+				      .set_mtime(&mtime)
+				      .set_attrs(&attrs),
+				      &ep_ot);
+  } else {
+    ret  = store->ctl()->vector_bucket->read_bucket_instance_info(info.bucket, &info, y, dpp,
+				      RGWBucketCtl::BucketInstance::GetParams()
+				      .set_mtime(&mtime)
+				      .set_attrs(&attrs));
+  }
+  if (ret != 0) {
+    return ret;
+  }
+
+  bucket_version = ep_ot.read_version;
+
+  return ret;
+}
+
+int RadosVectorBucket::create(const DoutPrefixProvider* dpp,
+                        const CreateParams& params,
+                        optional_yield y)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RadosVectorBucket::create called" << dendl;
+  rgw_bucket key = get_key();
+  key.marker = params.marker;
+  key.bucket_id = params.bucket_id;
+
+  int ret = store->getRados()->create_vector_bucket(
+      dpp, y, key, params.owner, params.zonegroup_id,
+      params.placement_rule, params.attrs,
+      params.quota, params.creation_time, &bucket_version, info);
+
+  bool existed = false;
+  if (ret == -EEXIST) {
+    existed = true;
+    /* bucket already existed, might have raced with another bucket creation,
+     * or might be partial bucket creation that never completed. Read existing
+     * bucket info, verify that the reported bucket owner is the current user.
+     * If all is ok then update the user's list of buckets.  Otherwise inform
+     * client about a name conflict.
+     */
+    if (info.owner != params.owner) {
+      return -ERR_BUCKET_EXISTS;
+    }
+    // prevent re-creation with different index type or shard count
+    if ((params.index_type && *params.index_type !=
+         info.layout.current_index.layout.type) ||
+        (params.index_shards && *params.index_shards !=
+         info.layout.current_index.layout.normal.num_shards)) {
+      return -ERR_BUCKET_EXISTS;
+    }
+    ret = 0;
+  } else if (ret != 0) {
+    return ret;
+  }
+
+  ret = link(dpp, params.owner, y, true);
+  if (ret && !existed && ret != -EEXIST) {
+    /* if it exists (or previously existed), don't remove it! */
+    ret = unlink(dpp, params.owner, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "WARNING: failed to unlink bucket: ret=" << ret
+		       << dendl;
+    }
+  } else if (ret == -EEXIST) {
+    ret = -ERR_BUCKET_EXISTS;
+  } else if (ret == 0) {
+    /* this is to handle the following race condition:
+     * a concurrent DELETE bucket request deletes the bucket entry point and
+     * unlinks it (if the bucket pre-exists) before it's linked in this
+     * bucket creation request. */
+
+    if (existed) {
+      ret = -ERR_BUCKET_EXISTS;
+    }
+
+    RGWBucketEntryPoint ep;
+    RGWObjVersionTracker objv_tracker;
+    int r = store->ctl()->vector_bucket->read_bucket_entrypoint_info(info.bucket,
+                                                            &ep,
+                                                            y,
+                                                            dpp,
+                                                            RGWBucketCtl::Bucket::GetParams()
+                                                            .set_objv_tracker(&objv_tracker));
+    if (r == -ENOENT) {
+      ret = 0;
+
+      ldpp_dout(dpp, 5) << "WARNING: the bucket entry point has been deleted by a concurrent DELETE bucket request."
+                        << " Unlinking the bucket." << dendl;
+      r = unlink(dpp, params.owner, y);
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "WARNING: failed to unlink bucket: ret=" << r << dendl;
+      }
+    }
+  }
+
+  return ret;
+}
+
+int RadosVectorBucket::link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint, RGWObjVersionTracker* objv) {
+  ldpp_dout(dpp, 20) << "s3vector --- RadosVectorBucket::link called" << dendl;
+  RGWBucketEntryPoint ep;
+  ep.bucket = info.bucket;
+  ep.owner = new_owner;
+  ep.creation_time = get_creation_time();
+  ep.linked = true;
+  Attrs ep_attrs;
+  rgw_ep_info ep_data{ep, ep_attrs};
+
+  librados::Rados& rados = *store->getRados()->get_rados_handle();
+  int r = store->ctl()->vector_bucket->link_bucket(rados, new_owner, info.bucket,
+					    get_creation_time(), y, dpp, update_entrypoint,
+					    &ep_data);
+  if (r < 0)
+    return r;
+
+  if (objv)
+    *objv = ep_data.ep_objv;
+
+  return r;
 }
 
 int RadosBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
@@ -771,7 +953,13 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp,
 int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
 {
   mtime = _mtime;
-  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, y);
+  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, y, store->ctl()->bucket);
+}
+
+int RadosVectorBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
+{
+  mtime = _mtime;
+  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, y, store->ctl()->vector_bucket);
 }
 
 int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
@@ -797,7 +985,12 @@ int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new
 
 int RadosBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y)
 {
-  return store->getRados()->try_refresh_bucket_info(info, pmtime, dpp, y, &attrs);
+  return store->getRados()->try_refresh_bucket_info(info, pmtime, dpp, y, &attrs, store->ctl()->bucket);
+}
+
+int RadosVectorBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y)
+{
+  return store->getRados()->try_refresh_bucket_info(info, pmtime, dpp, y, &attrs, store->ctl()->vector_bucket);
 }
 
 int RadosBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
@@ -2788,6 +2981,24 @@ bool RadosStore::valid_placement(const rgw_placement_rule& rule)
 int RadosStore::get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx* ioctx)
 {
   return rados->get_obj_head_ioctx(dpp, bucket_info, obj, ioctx);
+}
+
+int RadosStore::load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                            std::unique_ptr<VectorBucket>* bucket, optional_yield y) {
+  *bucket = std::make_unique<RadosVectorBucket>(this, b);
+  return (*bucket)->load_bucket(dpp, y);
+}
+
+int RadosStore::list_vector_buckets(const DoutPrefixProvider* dpp,
+			     const rgw_owner& owner, const std::string& tenant,
+			     const std::string& marker, const std::string& end_marker,
+			     uint64_t max, BucketList& listing,
+			     optional_yield y) {
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const rgw_raw_obj& obj = get_owner_vector_buckets_obj(svc()->user, svc()->zone, owner);
+
+  return rgwrados::buckets::list(dpp, y, rados, obj, tenant,
+                                    marker, end_marker, max, listing);
 }
 
 RadosObject::~RadosObject()
