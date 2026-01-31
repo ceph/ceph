@@ -1,6 +1,3 @@
-teuthology:
-  postmerge:
-    - if yaml.os_type == "rocky" then reject() end
 overrides:
   ceph:
     log-ignorelist:
@@ -21,3 +18,4 @@ overrides:
       - \(MON_DOWN\)
       - noscrub
       - nodeep-scrub
+      - osds down
