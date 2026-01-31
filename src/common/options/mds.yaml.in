@@ -1812,3 +1812,39 @@ options:
   min: 30
   services:
   - mds
+- name: mds_dmclock_enable
+  type: bool
+  level: advanced
+  desc: enable MDS dmClock QoS scheduler
+  log_dest: This option can be configured when reservation, weight, and limit values are
+    greater than zero.
+  default: false
+  services:
+  - mds
+- name: mds_dmclock_reservation
+  type: float
+  level: advanced
+  desc: dmclock reservation for each MDS client
+  default: 1000.0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_dmclock_weight
+  type: float
+  level: advanced
+  desc: dmclock weight for each MDS client
+  default: 1000.0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_dmclock_limit
+  type: float
+  level: advanced
+  desc: dmclock limit for each MDS client
+  default: 1000.0
+  services:
+  - mds
+  flags:
+  - runtime

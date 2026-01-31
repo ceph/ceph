@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    cluster-conf:
+      mds:
+        mds dmclock enable: yes
