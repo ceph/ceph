@@ -171,30 +171,25 @@ struct omap_manager_test_t :
     const std::string &first,
     const std::string &last) {
     logger().debug("rm keys in range {} ~ {}", first, last);
-    auto config = OMapManager::omap_list_config_t()
-      .with_max(3000)
-      .with_inclusive(true, false);
 
     with_trans_intr(
       t,
       [&, this](auto &t) {
       return omap_manager->omap_rm_key_range(
-	omap_root, t, first, last, config);
+        omap_root, t, first, last);
     }).unsafe_get();
 
     std::vector<std::string> keys;
-    size_t count = 0;
     for (auto iter = test_omap_mappings.begin();
-	iter != test_omap_mappings.end(); ) {
+      iter != test_omap_mappings.end(); ) {
       if (iter->first >= first && iter->first < last) {
-	keys.push_back(iter->first);
-	iter = test_omap_mappings.erase(iter);
-	count++;
+        keys.push_back(iter->first);
+        iter = test_omap_mappings.erase(iter);
       } else {
-	iter++;
+        iter++;
       }
-      if (count == config.max_result_size) {
-	break;
+      if (iter->first >= last) {
+        break;
       }
     }
     return keys;
