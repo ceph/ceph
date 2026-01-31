@@ -1,0 +1,21 @@
+<header class="cds-mb-5"
+        *ngIf="title">
+  <h2 class="cds--type-heading-05">{{ title }}</h2>
+</header>
+<div class="sidebar-layout-shell">
+  <div>
+    <cds-sidenav [expanded]="true">
+      <cds-sidenav-item
+        *ngFor="let item of items"
+        [route]="item.route"
+        [useRouter]="true"
+        [routerLinkActiveOptions]="item.routerLinkActiveOptions || { exact: false }">
+        <span class="cds--type-heading-compact-01">{{ item.label }}</span>
+      </cds-sidenav-item>
+    </cds-sidenav>
+  </div>
+
+  <main class="sidebar-layout-main">
+    <router-outlet></router-outlet>
+  </main>
+</div>

@@ -1,0 +1,13 @@
+@use '@carbon/colors';
+@use '@carbon/layout';
+
+.sidebar-layout-shell {
+  min-height: calc(100vh - #{layout.rem(157px)});
+  background-color: colors.$gray-10;
+  transform: translate(0);
+  position: relative;
+}
+
+.sidebar-layout-main {
+  margin-left: layout.rem(272px);
+}
