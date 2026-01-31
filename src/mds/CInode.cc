@@ -1364,6 +1364,7 @@ void CInode::fetch(MDSContext *fin)
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(mdcache->mds->get_metadata_pool());
 
+  mdcache->mds->objecter->add_global_op_flags(mdcache->mds->get_filer_flags());
   // Old on-disk format: inode stored in xattr of a dirfrag
   ObjectOperation rd;
   rd.getxattr("inode", &c->bl, NULL);
@@ -4902,6 +4903,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       const int64_t pool = in->get_backtrace_pool();
       object_t oid = CInode::get_object_name(in->ino(), frag_t(), "");
 
+      in->mdcache->mds->objecter->add_global_op_flags(in->mdcache->mds->get_filer_flags());
       ObjectOperation fetch;
       fetch.getxattr("parent", bt, bt_r);
       in->mdcache->mds->objecter->read(oid, object_locator_t(pool), fetch, CEPH_NOSNAP,

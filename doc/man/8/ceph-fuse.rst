@@ -83,6 +83,20 @@ Any options not recognized by ceph-fuse will be passed on to libfuse.
    Pass the name of Ceph FS to be mounted. Not passing this option mounts the
    default Ceph FS on the Ceph cluster.
 
+.. option:: `--read_from_replica <no|balance|localize>`
+    - ``no``: Disable replica reads, always pick the primary OSD (default).
+
+    - ``balance``: When a replicated pool receives a read request, pick a random
+      OSD from the PG's acting set to serve it.
+
+    - ``localize``: When a replicated pool receives a read request, pick the most
+      local OSD to serve it. The locality metric is calculated against
+      the location of the client given with ``crush_location``; a match with the
+      lowest-valued bucket type wins. For example, an OSD in a matching rack
+      is closer than an OSD in a matching data center, which in turn is closer
+      than an OSD in a matching region.
+
+
 Availability
 ============
 
