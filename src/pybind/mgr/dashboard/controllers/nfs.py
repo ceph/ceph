@@ -10,13 +10,14 @@ import cephfs
 from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
 
 from .. import mgr
+from orchestrator.module import IngressType
 from ..security import Scope
 from ..services.cephfs import CephFS
 from ..services.exception import DashboardException, handle_cephfs_error, \
     serialize_dashboard_exception
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, Task, UIRouter
+    ReadPermission, CreatePermission, RESTController, Task, UIRouter
 from ._version import APIVersion
 
 logger = logging.getLogger('controllers.nfs')
@@ -94,6 +95,90 @@ class NFSGaneshaCluster(RESTController):
                 {"name": key, **value} for key, value in mgr.remote('nfs', 'cluster_info').items()
             ]
         return mgr.remote('nfs', 'cluster_ls')
+
+    @CreatePermission
+    @NfsTask('create', {'cluster_id': '{cluster_id}'}, 2.0)
+    @EndpointDoc("Create an NFS cluster",
+                 parameters={
+                     'cluster_id': (str, 'Cluster identifier'),
+                     'placement': (str, 'Placement spec'),
+                     'ingress': (bool, 'Enable ingress'),
+                     'virtual_ip': (str, 'Virtual IP for ingress'),
+                     'ingress_mode': (str, 'Ingress mode'),
+                     'port': (int, 'Port to use')
+                 })
+    @RESTController.MethodMap(version=APIVersion(1, 0))
+    def create(self, cluster_id: str, placement: Optional[str] = None,
+               ingress: Optional[bool] = None, virtual_ip: Optional[str] = None,
+               ingress_mode: Optional[str] = None, port: Optional[int] = None) -> None:
+        """Create an NFS-Ganesha cluster via the nfs module CLI wrapper"""
+        try:
+            # Defensive: log and coerce incoming types to help diagnose type errors
+            logger.debug("NFS create called with types: cluster_id=%s(%s), placement=%s(%s), ingress=%s(%s), virtual_ip=%s(%s), ingress_mode=%s(%s), port=%s(%s)",
+                         repr(cluster_id), type(cluster_id).__name__,
+                         repr(placement), type(placement).__name__,
+                         repr(ingress), type(ingress).__name__,
+                         repr(virtual_ip), type(virtual_ip).__name__,
+                         repr(ingress_mode), type(ingress_mode).__name__,
+                         repr(port), type(port).__name__)
+
+            # Ensure cluster_id is a string (re.search in backend expects a string)
+            try:
+                cluster_id = str(cluster_id)
+            except Exception:
+                raise NFSException('cluster_id must be convertible to string')
+
+            # Normalize placement: accept both string (CLI-style) and structured
+            # objects from the frontend, but the backend CLI expects a string
+            # Placement object shapes supported:
+            #  - { hosts: ["host1", ...], count: N }
+            #  - { label: "labelname", count: N }
+            pl = placement
+            if isinstance(pl, dict):
+                try:
+                    if 'hosts' in pl and pl.get('hosts'):
+                        hosts = [str(h) for h in pl.get('hosts')]
+                        cnt = int(pl.get('count', 1) or 1)
+                        pl = f"{cnt} " + " ".join(hosts)
+                    elif 'label' in pl and pl.get('label'):
+                        cnt = int(pl.get('count', 1) or 1)
+                        pl = f"{cnt} label:{pl.get('label')}"
+                    elif 'count' in pl:
+                        pl = str(int(pl.get('count', 1) or 1))
+                    else:
+                        # empty dict -> default to count 1
+                        pl = '1'
+                except Exception:
+                    # fallback: stringify the dict
+                    pl = json.dumps(pl)
+
+            # Convert ingress_mode string to IngressType enum when explicitly provided
+            if ingress_mode is not None:
+                try:
+                    im = ingress_mode
+                    if not isinstance(im, IngressType):
+                        if isinstance(im, str):
+                            ingress_mode = IngressType[im]
+                        else:
+                            ingress_mode = IngressType(im)
+                except Exception:
+                    raise NFSException(f"invalid ingress_mode: {ingress_mode}")
+
+            # Call the module CLI wrapper which handles parsing of extra config
+            params = {
+                'cluster_id': cluster_id,
+                'placement': pl,
+                'ingress': ingress,
+                'virtual_ip': virtual_ip,
+                'ingress_mode': ingress_mode,
+                'port': port,
+            }
+            # Some CLI wrappers return (error_code, out, err)
+            result = mgr.remote('nfs', '_cmd_nfs_cluster_create', None, params)
+            return result
+        except Exception as e:
+            logger.exception(f"Failed to create NFS cluster {cluster_id}")
+            raise NFSException(str(e))
 
 
 @APIRouter('/nfs-ganesha/export', Scope.NFS_GANESHA)
