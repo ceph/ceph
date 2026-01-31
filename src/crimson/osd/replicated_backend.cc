@@ -358,4 +358,14 @@ void ReplicatedBackend::do_pct(const MOSDPGPCT &m)
   pg.peering_state.update_pct(m.pg_committed_to);
 }
 
+PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
+ReplicatedBackend::getxattr(
+  const hobject_t& soid,
+  std::string&& key) const
+{
+  return seastar::do_with(key, [this, &soid](auto &key) {
+    return store->get_attr(coll, ghobject_t{soid}, key);
+  });
+}
+
 }

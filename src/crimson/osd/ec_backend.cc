@@ -38,4 +38,13 @@ ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
   return make_ready_future<rep_op_ret_t>(seastar::now(), seastar::now());
 }
 
+PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
+ECBackend::getxattr(
+  const hobject_t& soid,
+  std::string&& key) const
+{
+  // ENOSUPP! ECBackend reads xattr solely from the ObjectContext::attr_cache
+  return crimson::ct_error::enodata::make();
 }
+
+} // namespace crimson::osd

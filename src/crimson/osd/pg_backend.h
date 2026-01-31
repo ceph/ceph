@@ -18,6 +18,7 @@
 #include "messages/MOSDOpReply.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
+#include "crimson/os/futurized_store.h"
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/osdop_params.h"
@@ -267,7 +268,8 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
-    object_stat_sum_t& delta_stats);
+    object_stat_sum_t& delta_stats,
+    ObjectContext::attr_cache_t& attr_cache);
   using get_attr_errorator = crimson::os::FuturizedStore::Shard::get_attr_errorator;
   using get_attr_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
@@ -275,16 +277,15 @@ public:
       get_attr_errorator>;
   get_attr_ierrorator::future<> getxattr(
     const ObjectState& os,
+    const ObjectContext::attr_cache_t& attr_cache,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
-  get_attr_ierrorator::future<ceph::bufferlist> getxattr(
+  virtual get_attr_ierrorator::future<ceph::bufferlist> getxattr(
     const hobject_t& soid,
-    std::string_view key) const;
-  get_attr_ierrorator::future<ceph::bufferlist> getxattr(
-    const hobject_t& soid,
-    std::string&& key) const;
+    std::string&& key) const = 0;
   get_attr_ierrorator::future<> get_xattrs(
     const ObjectState& os,
+    const ObjectContext::attr_cache_t& attr_cache,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
   using cmp_xattr_errorator = get_attr_errorator::extend<
@@ -306,7 +307,8 @@ public:
   rm_xattr_iertr::future<> rm_xattr(
     ObjectState& os,
     const OSDOp& osd_op,
-    ceph::os::Transaction& trans);
+    ceph::os::Transaction& trans,
+    ObjectContext::attr_cache_t& attr_cache);
   interruptible_future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
@@ -447,6 +449,7 @@ public:
   struct loaded_object_md_t {
     ObjectState os;
     crimson::osd::SnapSetContextRef ssc;
+    crimson::os::FuturizedStore::Shard::attrs_t attr_cache;
     using ref = std::unique_ptr<loaded_object_md_t>;
   };
   load_metadata_iertr::future<loaded_object_md_t::ref>
