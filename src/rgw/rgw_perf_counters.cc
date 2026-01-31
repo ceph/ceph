@@ -6,6 +6,7 @@
 #include "common/perf_counters_key.h"
 #include "common/ceph_context.h"
 #include "rgw_sal.h"
+#include "rgw_usage_perf.h"
 
 using namespace ceph::perf_counters;
 using namespace rgw::op_counters;

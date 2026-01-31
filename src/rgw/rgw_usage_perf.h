@@ -1,0 +1,143 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+
+#pragma once
+
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <shared_mutex>
+#include <thread>
+#include <atomic>
+#include <chrono>
+
+#include "common/perf_counters.h"
+#include "rgw_usage_cache.h"
+#include "common/dout.h"
+
+// To avoid heavy header rgw_sal.h , we are adding a forward declaration here
+namespace rgw::sal {
+  class Driver;
+  class Bucket;
+  class User;
+}
+
+namespace rgw {
+
+// Performance counter indices
+enum {
+  l_rgw_usage_first = 920000,
+  l_rgw_usage_cache_hit,
+  l_rgw_usage_cache_miss,
+  l_rgw_usage_cache_update,
+  l_rgw_usage_cache_evict,
+  l_rgw_usage_last
+};
+
+class UsagePerfDoutPrefix : public DoutPrefixProvider {
+  CephContext* cct;
+public:
+  explicit UsagePerfDoutPrefix(CephContext* _cct) : cct(_cct) {}
+  
+  CephContext* get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return ceph_subsys_rgw; }
+  std::ostream& gen_prefix(std::ostream& out) const override {
+    return out << "usage_perf: ";
+  }
+};
+
+class UsagePerfCounters {
+private:
+  CephContext* cct;
+  rgw::sal::Driver* driver;
+  std::unique_ptr<UsageCache> cache;
+  
+  mutable std::shared_mutex counters_mutex;
+  
+  // Track raw pointers for proper cleanup
+  std::unordered_map<std::string, PerfCounters*> user_perf_counters;
+  std::unordered_map<std::string, PerfCounters*> bucket_perf_counters;
+  
+  PerfCounters* global_counters;
+  
+  // Track active buckets and users for background refresh
+  std::unordered_set<std::string> active_buckets;
+  std::unordered_set<std::string> active_users;
+  mutable std::mutex activity_mutex;
+  
+  std::thread refresh_thread;
+  std::atomic<bool> shutdown_flag{false};
+  std::chrono::seconds refresh_interval{1200};
+  
+  void create_global_counters();
+  PerfCounters* create_user_counters(const std::string& user_id);
+  PerfCounters* create_bucket_counters(const std::string& bucket_name);
+  
+  void cleanup_worker();
+  void refresh_worker();
+  void enumerate_all_buckets_from_metadata();
+  void enumerate_all_users_from_metadata();
+  
+  void refresh_bucket_stats(const std::string& bucket_key);
+  void refresh_user_stats(const std::string& user_id);
+
+public:
+  explicit UsagePerfCounters(CephContext* cct, 
+                            const UsageCache::Config& cache_config);
+  UsagePerfCounters(CephContext* cct);
+  UsagePerfCounters(CephContext* cct,
+                    rgw::sal::Driver* driver,
+                    const UsageCache::Config& cache_config);
+  ~UsagePerfCounters();
+  
+  // Lifecycle management
+  int init();
+  void start();
+  void stop();
+  void shutdown();
+  
+  void set_driver(rgw::sal::Driver* d) { driver = d; }
+
+  // User stats updates
+  void update_user_stats(const std::string& user_id,
+                        uint64_t bytes_used,
+                        uint64_t num_objects,
+                        bool update_cache = true);
+  
+  // Bucket stats updates
+  void update_bucket_stats(const std::string& bucket_name,
+                          uint64_t bytes_used,
+                          uint64_t num_objects,
+                          const std::string& user_id = "",
+                          bool update_cache = true);
+
+  void mark_bucket_active(const std::string& bucket_name,
+                          const std::string& tenant = "");
+
+  void mark_user_active(const std::string& user_id);
+
+// Cache operations
+void refresh_from_cache(const std::string& user_id,
+                        const std::string& bucket_name);
+void evict_from_cache(const std::string& user_id,
+                      const std::string& bucket_name);
+  
+void sync_user_from_rados(const std::string& user_id);
+void sync_bucket_from_rados(const std::string& bucket_key);
+
+// Stats retrieval (from cache)
+std::optional<UsageStats> get_user_stats(const std::string& user_id);
+std::optional<UsageStats> get_bucket_stats(const std::string& bucket_name);
+
+size_t get_cache_size() const;
+
+void set_refresh_interval(std::chrono::seconds interval) {
+  refresh_interval = interval;
+}
+};
+
+// Global singleton access
+UsagePerfCounters* get_usage_perf_counters();
+void set_usage_perf_counters(UsagePerfCounters* counters);
+
+} // namespace rgw

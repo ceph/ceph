@@ -1,0 +1,869 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+
+#include "rgw_usage_perf.h"
+#include "common/ceph_context.h"
+#include "common/perf_counters.h"
+#include "common/dout.h"
+#include "common/perf_counters_collection.h"
+#include "common/errno.h" 
+#include "common/async/yield_context.h"
+#include "rgw_sal.h"
+#include "rgw_common.h"
+#include "rgw_sal_rados.h"   
+
+#define dout_subsys ceph_subsys_rgw
+
+namespace rgw {
+
+// Global singleton
+static UsagePerfCounters* g_usage_perf_counters = nullptr;
+
+UsagePerfCounters* get_usage_perf_counters() {
+  return g_usage_perf_counters;
+}
+
+void set_usage_perf_counters(UsagePerfCounters* counters) {
+  g_usage_perf_counters = counters;
+}
+
+UsagePerfCounters::UsagePerfCounters(CephContext* cct, 
+                                     const UsageCache::Config& cache_config)
+                                    : cct(cct), driver(nullptr), 
+                                      cache(std::make_unique<UsageCache>(cct, cache_config)),
+                                      global_counters(nullptr) 
+{
+    create_global_counters();
+}
+
+UsagePerfCounters::UsagePerfCounters(CephContext* cct) 
+  : UsagePerfCounters(cct, UsageCache::Config{}) {}
+
+UsagePerfCounters::UsagePerfCounters(CephContext* cct,
+                                    rgw::sal::Driver* driver,
+                                    const UsageCache::Config& cache_config)
+                                    : cct(cct),
+                                      driver(driver),  // ADD THIS
+                                      cache(std::make_unique<UsageCache>(cct, cache_config)),
+                                      global_counters(nullptr)
+{
+  create_global_counters();
+}
+
+// Update the destructor
+UsagePerfCounters::~UsagePerfCounters() {
+  shutdown();
+}
+
+void UsagePerfCounters::create_global_counters() {
+  PerfCountersBuilder b(cct, "rgw_usage", l_rgw_usage_first, l_rgw_usage_last);
+  b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+  
+  // Global cache metrics
+  b.add_u64_counter(l_rgw_usage_cache_hit, "cache_hit", 
+                   "Number of cache hits", nullptr, 0, unit_t(0));
+  b.add_u64_counter(l_rgw_usage_cache_miss, "cache_miss",
+                   "Number of cache misses", nullptr, 0, unit_t(0));
+  b.add_u64_counter(l_rgw_usage_cache_update, "cache_update",
+                   "Number of cache updates", nullptr, 0, unit_t(0));
+  b.add_u64_counter(l_rgw_usage_cache_evict, "cache_evict",
+                   "Number of cache evictions", nullptr, 0, unit_t(0));
+  
+  global_counters = b.create_perf_counters();
+  cct->get_perfcounters_collection()->add(global_counters);
+}
+
+PerfCounters* UsagePerfCounters::create_user_counters(const std::string& user_id) {
+
+  std::string name = "rgw_user_" + user_id;
+
+  // Sanitize name for perf counters (replace non-alphanumeric with underscore)
+  for (char& c : name) {
+    if (!std::isalnum(c) && c != '_') {
+      c = '_';
+    }
+  }
+
+  // Create a separate enum range for user-specific counters
+  enum {
+    l_rgw_user_first = 930000,  // Different range from main counters
+    l_rgw_user_bytes,
+    l_rgw_user_objects,
+    l_rgw_user_last
+  };
+
+  PerfCountersBuilder b(cct, name, l_rgw_user_first, l_rgw_user_last);
+  b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+
+  b.add_u64(l_rgw_user_bytes, "used_bytes",
+           "Bytes used by user", nullptr, 0, unit_t(UNIT_BYTES));
+  b.add_u64(l_rgw_user_objects, "num_objects",
+           "Number of objects owned by user", nullptr, 0, unit_t(0));
+
+  PerfCounters* counters = b.create_perf_counters();
+  cct->get_perfcounters_collection()->add(counters);
+
+  return counters;
+}
+
+PerfCounters* UsagePerfCounters::create_bucket_counters(const std::string& bucket_name) {
+
+  std::string name = "rgw_bucket_" + bucket_name;
+  
+  // Sanitize name for perf counters
+  for (char& c : name) {
+    if (!std::isalnum(c) && c != '_') {
+      c = '_';
+    }
+  }
+
+  // Create a separate enum range for bucket-specific counters
+  enum {
+    l_rgw_bucket_first = 940000,  // Different range from main counters
+    l_rgw_bucket_bytes,
+    l_rgw_bucket_objects,
+    l_rgw_bucket_last
+  };
+
+  PerfCountersBuilder b(cct, name, l_rgw_bucket_first, l_rgw_bucket_last);
+  b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64(l_rgw_bucket_bytes, "used_bytes",
+           "Bytes used in bucket", nullptr, 0, unit_t(UNIT_BYTES));
+  b.add_u64(l_rgw_bucket_objects, "num_objects",
+           "Number of objects in bucket", nullptr, 0, unit_t(0));
+
+  PerfCounters* counters = b.create_perf_counters();
+  cct->get_perfcounters_collection()->add(counters);
+
+  return counters;
+}
+
+int UsagePerfCounters::init() {
+  int ret = cache->init();
+  if (ret < 0) {
+    ldout(cct, 0) << "Failed to initialize usage cache: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  
+  create_global_counters();
+  ldout(cct, 10) << "Usage performance counters initialized successfully" << dendl;
+  return 0;
+}
+
+void UsagePerfCounters::start() {
+  ldout(cct, 10) << "Starting usage perf counters" << dendl;
+  shutdown_flag = false;
+  bool cache_was_empty = false;
+  if (cache) {
+    ldout(cct, 10) << "Loading all stats from cache on startup" << dendl;
+    
+    // Load users - directly populate perf counters without touching cache
+    auto all_users = cache->get_all_users();
+    // Load buckets - directly populate perf counters without touching cache
+    auto all_buckets = cache->get_all_buckets();
+    if (all_users.empty() && all_buckets.empty()) {
+      ldout(cct, 10) << "Cache is empty (likely after recovery or first start)" << dendl;
+      cache_was_empty = true;
+    }
+    for (const auto& [user_id, stats] : all_users) {
+      // Create perf counter if needed
+      {
+        std::unique_lock lock(counters_mutex);
+        auto it = user_perf_counters.find(user_id);
+        if (it == user_perf_counters.end()) {
+          PerfCounters* counters = create_user_counters(user_id);
+          if (counters) {
+            user_perf_counters[user_id] = counters;
+            it = user_perf_counters.find(user_id);
+            ldout(cct, 15) << "Created perf counter for user " << user_id << dendl;
+          }
+        }
+        
+        // Set values directly on perf counter
+        if (it != user_perf_counters.end() && it->second) {
+          it->second->set(930001, stats.bytes_used);   // l_rgw_user_bytes
+          it->second->set(930002, stats.num_objects);  // l_rgw_user_objects
+          ldout(cct, 15) << "Set perf counter for user " << user_id 
+                         << " bytes=" << stats.bytes_used 
+                         << " objects=" << stats.num_objects << dendl;
+        }
+      }
+      
+      // Mark as active for refresh worker
+      mark_user_active(user_id);
+    }
+    
+    for (const auto& [bucket_key, stats] : all_buckets) {
+      std::string bucket_name = bucket_key;
+      std::string tenant;
+      size_t pos = bucket_key.find('/');
+      if (pos != std::string::npos) {
+        tenant = bucket_key.substr(0, pos);
+        bucket_name = bucket_key.substr(pos + 1);
+      }
+      
+      // Create perf counter if needed
+      {
+        std::unique_lock lock(counters_mutex);
+        auto it = bucket_perf_counters.find(bucket_name);
+        if (it == bucket_perf_counters.end()) {
+          PerfCounters* counters = create_bucket_counters(bucket_name);
+          if (counters) {
+            bucket_perf_counters[bucket_name] = counters;
+            it = bucket_perf_counters.find(bucket_name);
+            ldout(cct, 15) << "Created perf counter for bucket " << bucket_name << dendl;
+          }
+        }
+        
+        // Set values directly on perf counter
+        if (it != bucket_perf_counters.end() && it->second) {
+          it->second->set(940001, stats.bytes_used);   // l_rgw_bucket_bytes
+          it->second->set(940002, stats.num_objects);  // l_rgw_bucket_objects
+          ldout(cct, 15) << "Set perf counter for bucket " << bucket_name 
+                         << " bytes=" << stats.bytes_used 
+                         << " objects=" << stats.num_objects << dendl;
+        }
+      }
+      
+      // Mark as active for refresh worker
+      mark_bucket_active(bucket_name, tenant);
+    }
+    
+    ldout(cct, 10) << "Initial load complete: " << all_users.size() 
+                   << " users, " << all_buckets.size() << " buckets" << dendl;
+  }
+  if (cache_was_empty) {
+    ldout(cct, 10) << "Cache was empty, enumerating all buckets from RADOS metadata" << dendl;
+    enumerate_all_buckets_from_metadata();
+    enumerate_all_users_from_metadata();
+  }
+  // Start refresh thread
+  refresh_thread = std::thread(&UsagePerfCounters::refresh_worker, this);
+  
+  ldout(cct, 10) << "Started usage perf counters threads" << dendl;
+}
+
+void UsagePerfCounters::sync_user_from_rados(const std::string& user_id) {
+  if (!driver) {
+    ldout(cct, 10) << "sync_user_from_rados: no driver available" << dendl;
+    return;
+  }
+  
+  ldout(cct, 15) << "sync_user_from_rados: user=" << user_id << dendl;
+  
+  UsagePerfDoutPrefix dpp(cct);
+
+  // Use existing RGW infrastructure to get user stats from RADOS
+  // This is the distributed source of truth
+  RGWStorageStats stats;
+  ceph::real_time last_synced;
+  ceph::real_time last_updated;
+  
+  rgw_user uid(user_id);
+  
+  int ret = driver->load_stats(&dpp, null_yield, uid, stats, 
+                                last_synced, last_updated);
+  
+  if (ret < 0) {
+    ldout(cct, 10) << "Failed to load stats from RADOS for user " << user_id 
+                   << ": " << cpp_strerror(-ret) << dendl;
+    return;
+  }
+  
+  ldout(cct, 15) << "Got stats from RADOS: user=" << user_id
+                 << " bytes=" << stats.size
+                 << " objects=" << stats.num_objects << dendl;
+  
+  // Update local LMDB cache for persistence across restarts
+  if (cache) {
+    cache->update_user_stats(user_id, stats.size, stats.num_objects);
+  }
+  
+  // Update perf counters (for Prometheus)
+  update_user_stats(user_id, stats.size, stats.num_objects, false);
+}
+
+void UsagePerfCounters::sync_bucket_from_rados(const std::string& bucket_key) {
+  if (!driver) {
+    ldout(cct, 10) << "sync_bucket_from_rados: no driver available" << dendl;
+    return;
+  }
+  
+  ldout(cct, 15) << "sync_bucket_from_rados: bucket=" << bucket_key << dendl;
+  
+  // Parse tenant/bucket from bucket_key
+  std::string tenant;
+  std::string bucket_name = bucket_key;
+  size_t pos = bucket_key.find('/');
+  if (pos != std::string::npos) {
+    tenant = bucket_key.substr(0, pos);
+    bucket_name = bucket_key.substr(pos + 1);
+  }
+  
+  UsagePerfDoutPrefix dpp(cct);
+  
+  // Load the bucket
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int ret = driver->load_bucket(&dpp, rgw_bucket(tenant, bucket_name),
+                                 &bucket, null_yield);
+  if (ret < 0) {
+    ldout(cct, 10) << "Failed to load bucket " << bucket_key
+                   << ": " << cpp_strerror(-ret) << dendl;
+    
+    // If bucket doesn't exist anymore, clean up stale entries
+    if (ret == -ENOENT) {
+      ldout(cct, 10) << "Bucket " << bucket_key << " no longer exists, cleaning up" << dendl;
+      
+      // Remove from active_buckets
+      {
+        std::lock_guard<std::mutex> lock(activity_mutex);
+        active_buckets.erase(bucket_key);
+      }
+      
+      // Remove from LMDB cache
+      if (cache) {
+        cache->remove_bucket_stats(bucket_key);
+      }
+      
+      // Remove perf counter
+      {
+        std::unique_lock<std::shared_mutex> lock(counters_mutex);
+        auto it = bucket_perf_counters.find(bucket_name);
+        if (it != bucket_perf_counters.end()) {
+          auto* coll = cct->get_perfcounters_collection();
+          if (coll) {
+            coll->remove(it->second);
+          }
+          delete it->second;
+          bucket_perf_counters.erase(it);
+        }
+      }
+    }
+    return;
+  }
+  
+  // Get bucket stats
+  RGWBucketEnt ent;
+  ret = bucket->sync_owner_stats(&dpp, null_yield, &ent);
+  if (ret < 0) {
+    ldout(cct, 10) << "Failed to sync bucket stats for " << bucket_key 
+                   << ": " << cpp_strerror(-ret) << dendl;
+    return;
+  }
+  
+  ldout(cct, 15) << "Got stats from RADOS: bucket=" << bucket_key
+                 << " bytes=" << ent.size
+                 << " objects=" << ent.count << dendl;
+  
+  // Update local LMDB cache
+  if (cache) {
+    cache->update_bucket_stats(bucket_key, ent.size, ent.count);
+  }
+  
+  // Update perf counters
+  update_bucket_stats(bucket_name, ent.size, ent.count, tenant, false);
+}
+
+void UsagePerfCounters::stop() {
+  ldout(cct, 10) << "Stopping usage perf counters" << dendl;
+  
+  // Signal threads to stop
+  shutdown_flag = true;
+  
+  // Wait for refresh thread
+  if (refresh_thread.joinable()) {
+    refresh_thread.join();
+  }
+  
+  ldout(cct, 10) << "Stopped usage perf counters threads" << dendl;
+}
+
+void UsagePerfCounters::shutdown() {
+  shutdown_flag = true;
+  
+  if (refresh_thread.joinable()) {
+    refresh_thread.join();
+  }
+  
+  // Clean up perf counters
+  {
+    std::unique_lock lock(counters_mutex);
+    
+    auto* collection = cct->get_perfcounters_collection();
+    
+    // Remove and delete user counters
+    for (auto& [_, counters] : user_perf_counters) {
+      collection->remove(counters);
+      delete counters;
+    }
+    user_perf_counters.clear();
+    
+    // Remove and delete bucket counters
+    for (auto& [_, counters] : bucket_perf_counters) {
+      collection->remove(counters);
+      delete counters;
+    }
+    bucket_perf_counters.clear();
+    
+    // Remove global counters
+    if (global_counters) {
+      collection->remove(global_counters);
+      delete global_counters;
+      global_counters = nullptr;
+    }
+  }
+  
+  // Shutdown cache
+  cache->shutdown();
+  
+  ldout(cct, 10) << "Shutdown usage perf counters" << dendl;
+}
+void UsagePerfCounters::update_bucket_stats(const std::string& bucket_name,
+                                            uint64_t bytes_used,
+                                            uint64_t num_objects,
+                                            const std::string& user_id,
+                                            bool update_cache) {
+  ldout(cct, 20) << "update_bucket_stats: bucket=" << bucket_name
+                 << " bytes=" << bytes_used 
+                 << " objects=" << num_objects
+                 << " user=" << user_id 
+                 << " update_cache=" << update_cache << dendl;
+  
+  // Update cache if requested - cache will aggregate user stats
+  if (update_cache && cache && !user_id.empty()) {
+    int ret = cache->update_bucket_stats(bucket_name, bytes_used, num_objects, user_id);
+    if (ret == 0) {
+      global_counters->inc(l_rgw_usage_cache_update);
+      ldout(cct, 15) << "Cache updated for bucket " << bucket_name 
+                     << " total_bytes=" << bytes_used 
+                     << " total_objects=" << num_objects << dendl;
+    } else {
+      ldout(cct, 5) << "Failed to update bucket cache: " << cpp_strerror(-ret) << dendl;
+    }
+  }
+  
+  // Define local enum
+  enum {
+    l_rgw_bucket_first = 940000,
+    l_rgw_bucket_bytes,
+    l_rgw_bucket_objects,
+    l_rgw_bucket_last
+  };
+  
+  // Update perf counters
+  {
+    std::unique_lock lock(counters_mutex);
+    
+    auto it = bucket_perf_counters.find(bucket_name);
+    if (it == bucket_perf_counters.end()) {
+      PerfCounters* counters = create_bucket_counters(bucket_name);
+      if (counters) {
+        bucket_perf_counters[bucket_name] = counters;
+        it = bucket_perf_counters.find(bucket_name);
+        ldout(cct, 15) << "Created perf counter for bucket " << bucket_name << dendl;
+      }
+    }
+    
+    if (it != bucket_perf_counters.end() && it->second) {
+      it->second->set(l_rgw_bucket_bytes, bytes_used);
+      it->second->set(l_rgw_bucket_objects, num_objects);
+      ldout(cct, 15) << "Set perf counter for bucket " << bucket_name 
+                     << " bytes=" << bytes_used 
+                     << " objects=" << num_objects << dendl;
+    }
+  }
+}
+
+void UsagePerfCounters::update_user_stats(const std::string& user_id,
+                                          uint64_t bytes_used,
+                                          uint64_t num_objects,
+                                          bool update_cache) {
+  ldout(cct, 20) << "update_user_stats: user=" << user_id
+                 << " bytes=" << bytes_used 
+                 << " objects=" << num_objects 
+                 << " update_cache=" << update_cache << dendl;
+  
+  // Update cache if requested - ALWAYS write the total values passed in
+  if (update_cache && cache) {
+    int ret = cache->update_user_stats(user_id, bytes_used, num_objects);
+    if (ret == 0) {
+      global_counters->inc(l_rgw_usage_cache_update);
+      ldout(cct, 15) << "Cache updated for user " << user_id 
+                     << " total_bytes=" << bytes_used 
+                     << " total_objects=" << num_objects << dendl;
+    } else {
+      ldout(cct, 5) << "Failed to update user cache: " << cpp_strerror(-ret) << dendl;
+    }
+  }
+  
+  // Define local enum
+  enum {
+    l_rgw_user_first = 930000,
+    l_rgw_user_bytes,
+    l_rgw_user_objects,
+    l_rgw_user_last
+  };
+  
+  // Update perf counters
+  {
+    std::unique_lock lock(counters_mutex);
+    
+    auto it = user_perf_counters.find(user_id);
+    if (it == user_perf_counters.end()) {
+      PerfCounters* counters = create_user_counters(user_id);
+      if (counters) {
+        user_perf_counters[user_id] = counters;
+        it = user_perf_counters.find(user_id);
+        ldout(cct, 15) << "Created perf counter for user " << user_id << dendl;
+      }
+    }
+    
+    if (it != user_perf_counters.end() && it->second) {
+      it->second->set(l_rgw_user_bytes, bytes_used);
+      it->second->set(l_rgw_user_objects, num_objects);
+      ldout(cct, 15) << "Set perf counter for user " << user_id 
+                     << " bytes=" << bytes_used 
+                     << " objects=" << num_objects << dendl;
+    }
+  }
+}
+
+void UsagePerfCounters::mark_bucket_active(const std::string& bucket_name,
+                                           const std::string& tenant) {
+  std::string key = tenant.empty() ? bucket_name : tenant + "/" + bucket_name;
+  
+  ldout(cct, 20) << "mark_bucket_active: key=" << key << dendl;
+  
+  // Add to active set for background refresh
+  {
+    std::lock_guard<std::mutex> lock(activity_mutex);
+    active_buckets.insert(key);
+  }
+  
+  // Ensure perf counter exists
+  {
+    std::unique_lock lock(counters_mutex);
+    if (bucket_perf_counters.find(key) == bucket_perf_counters.end()) {
+      PerfCounters* pc = create_bucket_counters(key);
+      if (pc) {
+        bucket_perf_counters[key] = pc;
+      }
+    }
+  }
+  
+  // Immediately update from cache
+  auto cached_stats = cache->get_bucket_stats(key);
+  if (cached_stats) {
+    ldout(cct, 15) << "Updating from cache: bucket=" << key 
+                   << " bytes=" << cached_stats->bytes_used 
+                   << " objects=" << cached_stats->num_objects << dendl;
+    
+    std::string bucket_only = key;
+    size_t pos = key.find('/');
+    if (pos != std::string::npos) {
+      bucket_only = key.substr(pos + 1);
+    }
+    
+    update_bucket_stats(bucket_only, cached_stats->bytes_used, 
+                       cached_stats->num_objects,"" ,false);
+  }
+}
+
+void UsagePerfCounters::mark_user_active(const std::string& user_id) {
+  ldout(cct, 20) << "mark_user_active: user=" << user_id << dendl;
+  
+  // Add to active set for background refresh
+  {
+    std::lock_guard<std::mutex> lock(activity_mutex);
+    active_users.insert(user_id);
+  }
+  
+  // Ensure perf counter exists
+  {
+    std::unique_lock lock(counters_mutex);
+    if (user_perf_counters.find(user_id) == user_perf_counters.end()) {
+      PerfCounters* pc = create_user_counters(user_id);
+      if (pc) {
+        user_perf_counters[user_id] = pc;
+      }
+    }
+  }
+  
+  // Immediately update from cache
+  auto cached_stats = cache->get_user_stats(user_id);
+  if (cached_stats) {
+    ldout(cct, 15) << "Updating from cache: user=" << user_id
+                   << " bytes=" << cached_stats->bytes_used 
+                   << " objects=" << cached_stats->num_objects << dendl;
+    
+    update_user_stats(user_id, cached_stats->bytes_used, 
+                     cached_stats->num_objects, false);
+  }
+}
+
+void UsagePerfCounters::refresh_worker() {
+  ldout(cct, 10) << "Started usage stats refresh worker thread" << dendl;
+  
+  while (!shutdown_flag) {
+    // Sleep for the refresh interval with periodic checks for shutdown
+    auto sleep_until = std::chrono::steady_clock::now() + refresh_interval;
+    
+    while (!shutdown_flag && std::chrono::steady_clock::now() < sleep_until) {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    
+    if (shutdown_flag) {
+      break;
+    }
+    
+    // Get snapshot of active users
+    std::unordered_set<std::string> users_to_refresh;
+    {
+      std::lock_guard<std::mutex> lock(activity_mutex);
+      users_to_refresh = active_users;
+    }
+    
+    ldout(cct, 15) << "Background refresh: syncing " << users_to_refresh.size() 
+                   << " users from RADOS" << dendl;
+    
+    // Sync user stats from RADOS (source of truth)
+    for (const auto& user_id : users_to_refresh) {
+      if (shutdown_flag) break;
+      sync_user_from_rados(user_id);
+    }
+    
+    // Bucket stats can still be refreshed from local cache
+    // they're updated by the existing quota sync mechanism
+    std::unordered_set<std::string> buckets_to_refresh;
+    {
+      std::lock_guard<std::mutex> lock(activity_mutex);
+      buckets_to_refresh = active_buckets;
+    }
+    
+    for (const auto& bucket_key : buckets_to_refresh) {
+      if (shutdown_flag) break;
+      refresh_bucket_stats(bucket_key);
+    }
+  }
+  
+  ldout(cct, 10) << "Stopped usage stats refresh worker thread" << dendl;
+}
+
+void UsagePerfCounters::enumerate_all_buckets_from_metadata() {
+  if (!driver) {
+    ldout(cct, 10) << "enumerate_all_buckets: no driver available" << dendl;
+    return;
+  }
+  
+  UsagePerfDoutPrefix dpp(cct);
+  ldout(cct, 10) << "Enumerating all buckets via metadata API" << dendl;
+  
+  void* handle = nullptr;
+  int ret = driver->meta_list_keys_init(&dpp, "bucket.instance", "", &handle);
+  if (ret < 0) {
+    ldout(cct, 1) << "Failed to init bucket metadata listing: " 
+                  << cpp_strerror(-ret) << dendl;
+    return;
+  }
+  
+  int total_buckets = 0;
+  bool truncated = true;
+  
+  while (truncated && !shutdown_flag) {
+    std::list<std::string> keys;
+    ret = driver->meta_list_keys_next(&dpp, handle, 1000, keys, &truncated);
+    if (ret < 0) {
+      ldout(cct, 1) << "Failed to list bucket metadata: " 
+                    << cpp_strerror(-ret) << dendl;
+      break;
+    }
+    
+    for (const auto& key : keys) {
+      if (shutdown_flag) break;
+      
+      // Parse bucket key format: "tenant:bucket_name:bucket_id" or "bucket_name:bucket_id"
+      std::string bucket_name;
+      std::string tenant;
+      
+      size_t first_colon = key.find(':');
+      if (first_colon != std::string::npos) {
+        // Check if there's a second colon (indicates tenant is present)
+        size_t second_colon = key.find(':', first_colon + 1);
+        if (second_colon != std::string::npos) {
+          // Format: tenant:bucket_name:bucket_id
+          tenant = key.substr(0, first_colon);
+          bucket_name = key.substr(first_colon + 1, second_colon - first_colon - 1);
+        } else {
+          // Format: bucket_name:bucket_id (no tenant)
+          bucket_name = key.substr(0, first_colon);
+        }
+      } else {
+        // No colons, just bucket name
+        bucket_name = key;
+      }
+      
+      if (bucket_name.empty()) {
+        ldout(cct, 5) << "Skipping empty bucket name from key: " << key << dendl;
+        continue;
+      }
+      
+      std::string bucket_key = tenant.empty() ? bucket_name : tenant + "/" + bucket_name;
+      mark_bucket_active(bucket_key, tenant);
+      total_buckets++;
+      
+      ldout(cct, 20) << "Added bucket to monitoring: " << bucket_key 
+                     << " (from metadata key: " << key << ")" << dendl;
+    }
+  }
+  
+  driver->meta_list_keys_complete(handle);
+  ldout(cct, 10) << "Bucket enumeration complete: monitoring " 
+                 << total_buckets << " buckets from metadata" << dendl;
+}
+
+void UsagePerfCounters::enumerate_all_users_from_metadata() {
+  if (!driver) {
+    ldout(cct, 10) << "enumerate_all_users: no driver available" << dendl;
+    return;
+  }
+  
+  UsagePerfDoutPrefix dpp(cct);
+  ldout(cct, 10) << "Enumerating all users via metadata API" << dendl;
+  
+  void* handle = nullptr;
+  // Use "user" section which contains all users
+  int ret = driver->meta_list_keys_init(&dpp, "user", "", &handle);
+  if (ret < 0) {
+    ldout(cct, 1) << "Failed to init user metadata listing: " 
+                  << cpp_strerror(-ret) << dendl;
+    return;
+  }
+  
+  int total_users = 0;
+  bool truncated = true;
+  
+  while (truncated && !shutdown_flag) {
+    std::list<std::string> keys;
+    ret = driver->meta_list_keys_next(&dpp, handle, 1000, keys, &truncated);
+    if (ret < 0) {
+      ldout(cct, 1) << "Failed to list user metadata: " 
+                    << cpp_strerror(-ret) << dendl;
+      break;
+    }
+    
+    for (const auto& user_id : keys) {
+      if (shutdown_flag) break;
+      
+      if (user_id.empty()) {
+        continue;
+      }
+      
+      mark_user_active(user_id);
+      total_users++;
+      
+      ldout(cct, 20) << "Added user to monitoring: " << user_id 
+                     << " (from metadata)" << dendl;
+    }
+  }
+  
+  driver->meta_list_keys_complete(handle);
+  ldout(cct, 10) << "User enumeration complete: monitoring " 
+                 << total_users << " users from metadata" << dendl;
+}
+
+void UsagePerfCounters::refresh_bucket_stats(const std::string& bucket_key) {
+  ldout(cct, 20) << "refresh_bucket_stats: key=" << bucket_key << dendl;
+  
+  // Fetch real stats from RADOS
+  sync_bucket_from_rados(bucket_key);
+}
+
+void UsagePerfCounters::refresh_user_stats(const std::string& user_id) {
+  ldout(cct, 20) << "refresh_user_stats: user=" << user_id << dendl;
+  
+  sync_user_from_rados(user_id);
+}
+
+void UsagePerfCounters::refresh_from_cache(const std::string& user_id,
+                                           const std::string& bucket_name) {
+  if (!cache) {
+    return;
+  }
+  
+  // Refresh user stats
+  if (!user_id.empty()) {
+    auto user_stats = cache->get_user_stats(user_id);
+    if (user_stats) {
+      global_counters->inc(l_rgw_usage_cache_hit);
+      update_user_stats(user_id, user_stats->bytes_used, 
+                       user_stats->num_objects, false);
+    } else {
+      global_counters->inc(l_rgw_usage_cache_miss);
+    }
+  }
+  
+  // Refresh bucket stats
+  if (!bucket_name.empty()) {
+    auto bucket_stats = cache->get_bucket_stats(bucket_name);
+    if (bucket_stats) {
+      global_counters->inc(l_rgw_usage_cache_hit);
+      update_bucket_stats(bucket_name, bucket_stats->bytes_used,
+                         bucket_stats->num_objects, "", false);
+    } else {
+      global_counters->inc(l_rgw_usage_cache_miss);
+    }
+  }
+}
+
+void UsagePerfCounters::evict_from_cache(const std::string& user_id,
+                                         const std::string& bucket_name) {
+  if (!cache) {
+    return;
+  }
+  
+  if (!user_id.empty()) {
+    cache->remove_user_stats(user_id);
+    global_counters->inc(l_rgw_usage_cache_evict);
+  }
+  
+  if (!bucket_name.empty()) {
+    cache->remove_bucket_stats(bucket_name);
+    global_counters->inc(l_rgw_usage_cache_evict);
+  }
+}
+
+std::optional<UsageStats> UsagePerfCounters::get_user_stats(const std::string& user_id) {
+  if (!cache) {
+    return std::nullopt;
+  }
+  
+  auto stats = cache->get_user_stats(user_id);
+  if (stats) {
+    global_counters->inc(l_rgw_usage_cache_hit);
+  } else {
+    global_counters->inc(l_rgw_usage_cache_miss);
+  }
+  
+  return stats;
+}
+
+std::optional<UsageStats> UsagePerfCounters::get_bucket_stats(const std::string& bucket_name) {
+  if (!cache) {
+    return std::nullopt;
+  }
+  
+  auto stats = cache->get_bucket_stats(bucket_name);
+  if (stats) {
+    global_counters->inc(l_rgw_usage_cache_hit);
+  } else {
+    global_counters->inc(l_rgw_usage_cache_miss);
+  }
+  
+  return stats;
+}
+
+size_t UsagePerfCounters::get_cache_size() const {
+  return cache ? cache->get_cache_size() : 0;
+}
+
+} // namespace rgw
