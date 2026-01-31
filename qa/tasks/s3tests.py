@@ -296,7 +296,7 @@ def configure(ctx, config):
     for client, properties in config['clients'].items():
         properties = properties or {}
         s3tests_conf = config['s3tests_conf'][client]
-        s3tests_conf['DEFAULT']['calling_format'] = properties.get('calling-format', 'ordinary')
+        s3tests_conf['DEFAULT']['addressing_style'] = properties.get('addressing-style', 'path')
 
         # use rgw_server if given, or default to local client
         role = properties.get('rgw_server', client)
@@ -477,7 +477,7 @@ def run_tests(ctx, config):
             attrs += ["not test_of_sts"]
         if not client_config.get('webidentity_tests', False):
             attrs += ["not webidentity_test"]
-        if client_config.get('calling-format') != 'ordinary':
+        if client_config.get('addressing-style') != 'path':
             attrs += ['not fails_with_subdomain']
         if not client_config.get('with-sse-s3'):
             attrs += ['not sse_s3']
