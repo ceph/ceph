@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <string_view>
+
 #include "futurized_store.h"
 #include "cyanstore/cyan_store.h"
 #ifdef WITH_BLUESTORE
@@ -15,21 +17,22 @@ FuturizedStore::create(const std::string& type,
                        const std::string& data,
                        const ConfigValues& values)
 {
+  using namespace std::literals;
   if (type == "cyanstore") {
     using crimson::os::CyanStore;
     return std::make_unique<CyanStore>(data);
   } else if (type == "seastore") {
     return crimson::os::seastore::make_seastore(
       data);
-  } else {
+  } else if (const auto alien_prefix = "alienstore-"sv;
+             type.starts_with(alien_prefix)) {
     using crimson::os::AlienStore;
-#ifdef WITH_BLUESTORE
-    // use AlienStore as a fallback. It adapts e.g. BlueStore.
-    return std::make_unique<AlienStore>(type, data, values);
-#else
+    // strip the "alienstore-" prefix
+    const auto real_type = type.substr(alien_prefix.length());
+    return std::make_unique<AlienStore>(real_type, data, values);
+  } else {
     ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
     return {};
-#endif
   }
 }
 

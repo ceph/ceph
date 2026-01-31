@@ -214,7 +214,11 @@ int MemStore::mkfs()
   if (r < 0)
     return r;
 
+#ifdef OBJSTORE_NAME_PREFIX
+  r = write_meta("type", OBJSTORE_NAME_PREFIX "memstore");
+#else
   r = write_meta("type", "memstore");
+#endif
   if (r < 0)
     return r;
 

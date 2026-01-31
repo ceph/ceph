@@ -170,8 +170,10 @@ gssapi_authx=0
 cache=""
 if [ `uname` = FreeBSD ]; then
     objectstore="memstore"
+    crimson_objectstore="alienstore-memstore"
 else
     objectstore="bluestore"
+    crimson_objectstore="alienstore-bluestore"
 fi
 ceph_osd=ceph-osd
 rgw_frontend="beast"
@@ -559,15 +561,17 @@ case $1 in
         ;;
     --memstore)
         objectstore="memstore"
+        crimson_objectstore="alienstore-memstore"
         ;;
     --cyanstore)
         objectstore="cyanstore"
         ;;
     --seastore)
-        objectstore="seastore"
+        crimson_objectstore="seastore"
         ;;
     -b | --bluestore)
         objectstore="bluestore"
+        crimson_objectstore="alienstore-bluestore"
         ;;
     --hitset)
         hitset="$hitset $2 $3"
@@ -926,7 +930,7 @@ EOF
         fi
     fi
 
-    if [ "$objectstore" == "seastore" ]; then
+    if [ "$crimson_objectstore" == "seastore" ]; then
       if [[ ${seastore_size+x} ]]; then
         SEASTORE_OPTS="
         seastore device size = $seastore_size"
@@ -1026,6 +1030,7 @@ $DAEMONOPTS
         
 $BLUESTORE_OPTS
 
+        crimson osd objectstore = $crimson_objectstore
         osd objectstore = $objectstore
 $SEASTORE_OPTS
 $COSDSHORT
