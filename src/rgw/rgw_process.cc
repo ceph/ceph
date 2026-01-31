@@ -143,7 +143,7 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   bool limit_bucket = false;
   bool limit_user = s->ratelimit_data->should_rate_limit(method, s->ratelimit_user_name, s->time, user_ratelimit, s->info.request_params);
 
-  if(!rgw::sal::Bucket::empty(s->bucket.get()))
+  if(!rgw::sal::Bucket::empty(s->bucket.get()) && !limit_user)
   {
     iter = s->bucket->get_attrs().find(RGW_ATTR_RATELIMIT);
     if(iter != s->bucket->get_attrs().end()) {
@@ -160,9 +160,7 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
         return -EIO;
       }
     }
-    if (!limit_user) {
-      limit_bucket = s->ratelimit_data->should_rate_limit(method, s->ratelimit_bucket_marker, s->time, bucket_ratelimit, s->info.request_params);
-    }
+    limit_bucket = s->ratelimit_data->should_rate_limit(method, s->ratelimit_bucket_marker, s->time, bucket_ratelimit, s->info.request_params);
   }
   if(limit_bucket && !limit_user) {
     s->ratelimit_data->giveback_tokens(method, s->ratelimit_user_name, s->info.request_params, user_ratelimit);
