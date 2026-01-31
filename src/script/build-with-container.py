@@ -828,21 +828,30 @@ def bc_configure(ctx):
         _run(cmd, check=True, ctx=ctx)
 
 
-@Builder.set(Steps.BUILD)
-def bc_build(ctx):
-    """Execute a standard build."""
-    ctx.build.wants(Steps.NPM_CACHE, ctx)
-    ctx.build.wants(Steps.CONFIGURE, ctx)
+def _build(ctx, target, *, extra_args=None):
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"cd {ctx.cli.homedir} && source ./src/script/run-make.sh && build vstart",
+            (
+                f"cd {ctx.cli.homedir}"
+                " && source ./src/script/run-make.sh"
+                f" && build {target}"
+            ),
         ],
+        extra_args=extra_args,
     )
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
+
+
+@Builder.set(Steps.BUILD)
+def bc_build(ctx):
+    """Execute a standard build."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
+    ctx.build.wants(Steps.CONFIGURE, ctx)
+    _build(ctx, "vstart")
 
 
 @Builder.set(Steps.BUILD_TESTS)
@@ -850,19 +859,10 @@ def bc_build_tests(ctx):
     """Build the tests."""
     ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.CONFIGURE, ctx)
-    cmd = _container_cmd(
-        ctx,
-        [
-            "bash",
-            "-c",
-            f"cd {ctx.cli.homedir} && source ./src/script/run-make.sh && build tests",
-        ],
-        # for compatibility with earlier versions that baked this env var
-        # into the build images
-        extra_args=['-eFOR_MAKE_CHECK=1'],
-    )
-    with ctx.user_command():
-        _run(cmd, check=True, ctx=ctx)
+    # for compatibility with earlier versions that baked this env var
+    # into the build images
+    extra_args=['-eFOR_MAKE_CHECK=1']
+    _build(ctx, "tests", extra_args=extra_args)
 
 
 @Builder.set(Steps.TESTS)
