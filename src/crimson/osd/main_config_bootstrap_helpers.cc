@@ -13,6 +13,7 @@
 #include <seastar/util/std-compat.hh>
 #include <seastar/core/app-template.hh>
 
+#include <boost/program_options.hpp>
 #include "common/ceph_argparse.h"
 #include "common/config_tracker.h"
 #include "crimson/common/buffer_io.h"
@@ -24,6 +25,8 @@
 #include "crimson/osd/main_config_bootstrap_helpers.h"
 
 #include <sys/wait.h> // for waitpid()
+#include <unistd.h>   // for pipe(), fork(), read(), write()
+#include <errno.h>    // for errno
 
 using namespace std::literals;
 using crimson::common::local_conf;
@@ -128,15 +131,11 @@ std::optional<std::string> get_option_value(const SeastarOption& option) {
 }
 
 static tl::expected<early_config_t, int>
-_get_early_config(int argc, const char *argv[])
+_get_early_config(const std::vector<const char*>& args)
 {
   early_config_t ret;
 
-  // pull off ceph configs the stuff from early_args
-  std::vector<const char *> early_args;
-  early_args.insert(
-    std::end(early_args),
-    argv, argv + argc);
+  std::vector<const char *> early_args(args.begin(), args.end());
 
   ret.init_params = ceph_argparse_early_args(
     early_args,
@@ -148,12 +147,12 @@ _get_early_config(int argc, const char *argv[])
   app_cfg.name = "Crimson-startup";
   app_cfg.auto_handle_sigint_sigterm = false;
   seastar::app_template app(std::move(app_cfg));
-  const char *bootstrap_args[] = { argv[0], "--smp", "1" };
+  const char *bootstrap_args[] = { args[0], "--smp", "1" };
   int r = app.run(
     sizeof(bootstrap_args) / sizeof(bootstrap_args[0]),
     const_cast<char**>(bootstrap_args),
-    [argc, argv, &ret, &early_args] {
-      return seastar::async([argc, argv, &ret, &early_args] {
+    [&args, &ret, &early_args] {
+      return seastar::async([&args, &ret, &early_args] {
 	seastar::global_logger_registry().set_all_loggers_level(
 	  seastar::log_level::debug);
 	sharded_conf().start(
@@ -174,9 +173,8 @@ _get_early_config(int argc, const char *argv[])
 	  populate_config_from_mon().get();
 	}
 
-	// get ceph configs
 	std::set_difference(
-	  argv, argv + argc,
+	  args.begin(), args.end(),
 	  std::begin(early_args),
 	  std::end(early_args),
 	  std::back_inserter(ret.ceph_args));
@@ -277,10 +275,63 @@ get_early_config(int argc, const char *argv[])
     std::cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
   }
-  if (ceph_argparse_need_usage(args)) {
-    usage(argv[0]);
-    exit(0);
+  crimson_options_t crimson_options;
+  namespace bpo = boost::program_options;
+  bpo::options_description desc{"Crimson OSD Options"};
+  desc.add_options()
+    ("help,h", "produce help message")
+    ("mkkey", bpo::bool_switch(&crimson_options.mkkey),
+     "generate a new secret key. This is normally used in combination with --mkfs")
+    ("mkfs", bpo::bool_switch(&crimson_options.mkfs),
+     "create a [new] data directory")
+    ("debug", bpo::bool_switch(&crimson_options.debug),
+     "enable debug output on all loggers")
+    ("trace", bpo::bool_switch(&crimson_options.trace),
+     "enable trace output on all loggers")
+    ("osdspec-affinity", bpo::value<std::string>(&crimson_options.osdspec_affinity)->default_value(""),
+     "set affinity to an osdspec")
+    ("prometheus_port", bpo::value<uint16_t>(&crimson_options.prometheus_port)->default_value(0),
+     "Prometheus port. Set to zero to disable")
+    ("prometheus_address", bpo::value<std::string>(&crimson_options.prometheus_address)->default_value("0.0.0.0"),
+     "Prometheus listening address")
+    ("prometheus_prefix", bpo::value<std::string>(&crimson_options.prometheus_prefix)->default_value("osd"),
+     "Prometheus metrics prefix");
+  bpo::variables_map vm;
+  std::vector<const char*> seastar_options;
+  std::vector<std::string> unrecognized_options; // avoid lifetime issues
+  try {
+    auto parsed = bpo::command_line_parser(argc, argv)
+      .options(desc)
+      .allow_unregistered()
+      .run();
+    bpo::store(parsed, vm);
+
+    if (vm.count("help")) {
+      std::cout << "usage: crimson-osd -i <ID> [flags]\n\n";
+      std::cout << "Common Ceph options:\n";
+      std::cout << "  --conf/-c FILE    read configuration from the given configuration file\n";
+      std::cout << "  --id/-i ID        set ID portion of my name\n";
+      std::cout << "  --name/-n TYPE.ID set name\n";
+      std::cout << "  --cluster NAME    set cluster name (default: ceph)\n";
+      std::cout << "  --setuser USER    set uid to user or uid (and gid to user's gid)\n";
+      std::cout << "  --setgroup GROUP  set gid to group or gid\n";
+      std::cout << "  --version         show version and quit\n";
+      std::cout << "  -d                run in foreground, log to stderr\n";
+      std::cout << "  -f                run in foreground, log to usual location\n";
+      std::cout << "  --debug_ms N      set message debug level (e.g. 1)\n\n";
+      std::cout << desc << "\n";
+      exit(0);
+    }
+
+    bpo::notify(vm);
+    unrecognized_options =
+      bpo::collect_unrecognized(parsed.options, bpo::include_positional);
+  } catch(const bpo::error& e) {
+    std::cerr << "error: " << e.what() << std::endl;
+    std::cerr << desc << std::endl;
+    return tl::unexpected(-EINVAL);
   }
+
   int pipes[2];
   int r = pipe2(pipes, 0);
   if (r < 0) {
@@ -298,7 +349,11 @@ get_early_config(int argc, const char *argv[])
     return tl::unexpected(-errno);
   } else if (worker == 0) { // child
     close(pipes[0]);
-    auto ret = _get_early_config(argc, argv);
+    seastar_options.push_back(argv[0]);
+    for (auto& opt : unrecognized_options) {
+      seastar_options.push_back(opt.c_str());
+    }
+    auto ret = _get_early_config(seastar_options);
     if (ret.has_value()) {
       bufferlist bl;
       ::encode(ret.value(), bl);
@@ -344,6 +399,8 @@ get_early_config(int argc, const char *argv[])
     try {
       auto bliter = bl.cbegin();
       ::decode(ret, bliter);
+      // crimson options are collected in the parent process and don't need to be passed through the pipe
+      ret.crimson_options = crimson_options;
       return ret;
     } catch (...) {
       std::cerr << "get_early_config: parent failed to decode" << std::endl;
