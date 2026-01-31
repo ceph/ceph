@@ -1165,9 +1165,11 @@ options:
     is, RGW will be able to deal with more concurrent requests at the cost of more
     resource utilization.
   fmt_desc: The size of the thread pool.
-  default: 512
+  default: 128
   services:
   - rgw
+  see_also:
+  - rgw_max_concurrent_requests
   with_legacy: true
 - name: rgw_num_control_oids
   type: int
@@ -3623,6 +3625,7 @@ options:
   - rgw
   see_also:
   - rgw_frontends
+  - rgw_thread_pool_size
 - name: rgw_scheduler_type
   type: str
   level: advanced
