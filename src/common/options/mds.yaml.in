@@ -1812,3 +1812,22 @@ options:
   min: 30
   services:
   - mds
+- name: mds_log_submit_thread_count
+  type: uint
+  level: advanced
+  desc: number of threads used to submit log events
+  default: 3
+  services:
+  - mds
+  min: 1
+  max: 64
+- name: mds_log_encode_delay_max
+  type: millisecs
+  level: dev
+  desc: Delay encoding for a random time when submitting log event.
+  long_desc: Log event encoding will be delayed by random milliseconds up to this value, disabled if it is 0. (used for testing multiple log submit threads only)
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
