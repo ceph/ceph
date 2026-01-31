@@ -1002,6 +1002,38 @@ void ECBackend::submit_transaction(
 }
 
 int ECBackend::objects_read_sync(
+  const hobject_t &hoid,
+  uint64_t object_size,
+  const std::list<std::pair<ec_align_t,
+  std::pair<ceph::buffer::list*, Context*>>> &to_read,
+  CoroHandles coro)
+{
+  int result = 0;
+  bool done = false;
+  bool waiting = false;
+
+  // Callback for the async read
+  Context *on_finish = new LambdaContext([&, coro](int r) {
+    result = r;
+    done = true;
+
+    if (waiting) {
+      coro.resume();
+    }
+  });
+
+  objects_read_async(hoid, object_size, to_read, on_finish, true);
+
+  // If the async read is not yet complete, yield and wait for it to complete
+  if (!done) {
+    waiting = true;
+    coro.yield();
+  }
+
+  return result;
+}
+
+int ECBackend::objects_read_local(
     const hobject_t &hoid,
     uint64_t off,
     uint64_t len,
