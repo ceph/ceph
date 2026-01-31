@@ -1,0 +1,67 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
+#pragma once
+
+#include <seastar/core/future.hh>
+
+#include "crimson/common/type_helpers.h"
+#include "crimson/os/futurized_store.h"
+#include "crimson/os/futurized_collection.h"
+#include "crimson/osd/object_context.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
+#include "crimson/osd/recovery_backend.h"
+#include "crimson/osd/shard_services.h"
+
+
+#include "messages/MOSDPGBackfill.h"
+#include "messages/MOSDPGBackfillRemove.h"
+#include "messages/MOSDPGPush.h"
+#include "messages/MOSDPGPushReply.h"
+#include "messages/MOSDPGScan.h"
+#include "osd/ECCommon.h"
+#include "osd/recovery_types.h"
+#include "osd/osd_types.h"
+
+class PGBackend;
+
+namespace crimson::osd {
+class PG;
+
+class ECRecoveryBackend : public crimson::osd::RecoveryBackend,
+			  private ECCommon::RecoveryBackend {
+public:
+  ECRecoveryBackend(crimson::osd::PG& pg,
+		    crimson::osd::ShardServices& shard_services,
+		    crimson::os::CollectionRef coll,
+		    ECBackend* backend);
+
+  interruptible_future<> handle_recovery_op(
+    Ref<MOSDFastDispatchOp> m,
+    crimson::net::ConnectionXcoreRef conn) final;
+
+  interruptible_future<> recover_object(
+    const hobject_t& soid,
+    eversion_t need) final;
+
+  seastar::future<> on_stop() final {
+    return seastar::now();
+  }
+
+  interruptible_future<> handle_push(
+    Ref<MOSDPGPush> m);
+
+private:
+  void commit_txn_send_replies(
+    ceph::os::Transaction&& txn,
+    std::map<int, MOSDPGPushReply*> replies) override;
+
+  void maybe_load_obc(
+    const std::map<std::string, ceph::bufferlist, std::less<>>& raw_attrs,
+    RecoveryOp &op) final;
+
+  interruptible_future<> handle_push_reply(
+    Ref<MOSDPGPushReply> m);
+};
+
+} // namespace crimson::osd

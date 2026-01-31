@@ -14,13 +14,20 @@
  */
 
 #include <iostream>
-#include <vector>
+#include <map>
 #include <sstream>
+#include <vector>
 
 #include "ECTransaction.h"
 #include "ECUtil.h"
 #include "os/ObjectStore.h"
 #include "common/inline_variant.h"
+
+#ifndef WITH_CRIMSON
+#include "osd/osd_internal_types.h"
+#else
+#include "crimson/osd/object_context.h"
+#endif
 
 using std::less;
 using std::make_pair;
@@ -483,6 +490,10 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     plan(plan),
     read_sem(&sinfo),
     to_write(&sinfo) {
+  ldpp_dout(dpp, 20) << __func__ << ": " << oid
+		     << " partial_extents=" << partial_extents
+		     << " written_map=" << *written_map
+                     << dendl;
 
   vector<unsigned> old_transaction_counts(sinfo.get_k_plus_m());
 

@@ -37,6 +37,8 @@
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/os/futurized_collection.h"
+#include "crimson/osd/ec_backend.h"
+#include "crimson/osd/ec_recovery_backend.h"
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg_meta.h"
 #include "crimson/osd/pg_backend.h"
@@ -116,10 +118,15 @@ PG::PG(
 	coll_ref,
 	shard_services,
 	profile,
+	*this,
 	*this)),
     recovery_backend(
-      std::make_unique<ReplicatedRecoveryBackend>(
-	*this, shard_services, coll_ref, backend.get())),
+       RecoveryBackend::create(
+	pool,
+	*this,
+        shard_services,
+        coll_ref,
+        backend.get())),
     recovery_handler(
       std::make_unique<PGRecovery>(this)),
     peering_state(
@@ -336,6 +343,34 @@ void PG::recheck_readable()
   }
 }
 
+bool PG::should_send_op(pg_shard_t peer, const hobject_t &hoid)
+{
+  if (peer == get_primary()) {
+    return true;
+  }
+  bool should_send =
+    hoid.pool != (int64_t)get_pgid().pool() ||
+    hoid <= peering_state.get_peer_info(peer).last_backfill ||
+    (recovery_handler->backfill_state &&
+      hoid <= recovery_handler->backfill_state->get_last_backfill_started());
+  if (!should_send) {
+    ceph_assert(is_backfill_target(peer));
+    logger().debug("{}: {} shipping empty opt to osd.{}, object {}"
+		   " beyond std::max(last_backfill_started,"
+		   " peer_info[peer].last_backfill {})",
+		   *this, __func__, peer, hoid,
+		   peering_state.get_peer_info(peer).last_backfill);
+    return should_send;
+  }
+  if (peering_state.is_async_recovery_target(peer) &&
+      peering_state.get_peer_missing(peer).is_missing(hoid)) {
+    should_send = false;
+    logger().info("{}: {} shipping empty opt to osd.{}, object {}"
+		  " which is pending recovery in async_recovery_targets",
+		 *this, __func__, peer, hoid);
+  }
+  return should_send;
+}
 unsigned PG::get_target_pg_log_entries() const
 {
   const unsigned local_num_pgs = shard_services.get_num_local_pgs();
@@ -640,7 +675,7 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
   const auto new_removed_snaps = osdmap->get_new_removed_snaps();
   if (auto it = new_removed_snaps.find(get_pgid().pool());
       it != new_removed_snaps.end()) {
-    bool bad = false;
+    [[maybe_unused]] bool bad = false;
     for (auto j : it->second) {
       if (snap_trimq.intersects(j.first, j.second)) {
 	decltype(snap_trimq) added, overlap;
@@ -985,7 +1020,7 @@ PG::submit_transaction(
 
   auto [submitted, all_completed] = co_await backend->submit_transaction(
       peering_state.get_acting_recovery_backfill(),
-      obc->obs.oi.soid,
+      std::move(obc),
       std::move(new_clone),
       std::move(txn),
       std::move(osd_op_p),
@@ -1286,7 +1321,8 @@ void PG::check_blocklisted_obc_watchers(
       auto watch = crimson::osd::Watch::create(
         obc, winfo, src.second, this);
       watch->disconnect();
-      auto [it, emplaced] = obc->watchers.emplace(src, std::move(watch));
+      [[maybe_unused]] auto [it, emplaced] =
+        obc->watchers.emplace(src, std::move(watch));
       assert(emplaced);
       logger().debug("added watch for obj {}, client {}",
         obc->get_oid(), src.second);
@@ -1323,6 +1359,7 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
     txn);
 
   log_operation(std::move(log_entries),
+                std::nullopt,
                 req->pg_trim_to,
                 req->version,
                 req->pg_committed_to,
@@ -1367,6 +1404,7 @@ PG::interruptible_future<> PG::update_snap_map(
 
 void PG::log_operation(
   std::vector<pg_log_entry_t>&& logv,
+  const std::optional<pg_hit_set_history_t> &hset_history,
   const eversion_t &trim_to,
   const eversion_t &roll_forward_to,
   const eversion_t &pg_committed_to,
@@ -1377,6 +1415,9 @@ void PG::log_operation(
   DEBUGDPP("", *this);
   if (is_primary()) {
     ceph_assert(trim_to <= peering_state.get_pg_committed_to());
+  }
+  if (hset_history) {
+    peering_state.update_hset(*hset_history);
   }
   auto last = logv.rbegin();
   if (is_primary() && last != logv.rend()) {
@@ -1423,6 +1464,71 @@ void PG::handle_rep_op_reply(const MOSDRepOpReply& m)
   if (!can_discard_replica_op(m)) {
     backend->got_rep_op_reply(m);
   }
+}
+
+PG::interruptible_future<> PG::handle_rep_write_op(Ref<MOSDECSubOpWrite> m)
+{
+  logger().debug("{}", __func__);
+  if (!is_primary()) {
+    peering_state.update_stats([&new_stats=m->op.stats](auto&, auto &stats) {
+      stats = new_stats;
+      return false;
+    });
+  }
+  auto* ec_backend=dynamic_cast<crimson::osd::ECBackend*>(&get_backend());
+  assert(ec_backend);
+  const auto tid = m->op.tid;
+  return ec_backend->handle_rep_write_op(
+    std::move(m),
+    *this
+  ).si_then([this, then_lcod=peering_state.get_info().last_complete, tid] {
+    logger().debug("{} sending response", "handle_rep_write_op");
+    peering_state.update_last_complete_ondisk(then_lcod);
+    auto r = crimson::make_message<MOSDECSubOpWriteReply>();
+    r->pgid = spg_t(peering_state.get_info().pgid.pgid, get_primary().shard);
+    r->map_epoch = get_osdmap_epoch();
+    r->min_epoch = peering_state.get_info().history.same_interval_since;
+    r->op.tid = tid;
+    r->op.last_complete = then_lcod;
+    r->op.committed = true;
+    r->op.applied = true;
+    r->op.from = pg_whoami;
+    r->set_priority(CEPH_MSG_PRIO_HIGH);
+    return shard_services.send_to_osd(get_primary().osd, std::move(r), get_osdmap_epoch());
+  }).handle_error_interruptible(crimson::ct_error::assert_all{});
+}
+
+PG::interruptible_future<> PG::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply> m)
+{
+  if (const auto& op = m->op; op.committed) {
+    // TODO: trace.event("sub write committed");
+    if (op.from != pg_whoami) {
+      peering_state.update_peer_last_complete_ondisk(op.from, op.last_complete);
+    }
+  }
+  auto* ec_backend=dynamic_cast<crimson::osd::ECBackend*>(&get_backend());
+  assert(ec_backend);
+  return ec_backend->handle_rep_write_reply(
+    std::move(m->op)
+  ).handle_error_interruptible(crimson::ct_error::assert_all{});
+}
+
+PG::interruptible_future<> PG::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
+{
+  auto* ec_backend=dynamic_cast<crimson::osd::ECBackend*>(&get_backend());
+  assert(ec_backend);
+  return ec_backend->handle_rep_read_op(
+    std::move(m)
+  ).si_then([then_lcod=peering_state.get_info().last_complete,
+             this](auto&& rep) {
+    auto reply = crimson::make_message<MOSDECSubOpReadReply>();
+    reply->pgid = spg_t(peering_state.get_info().pgid.pgid, get_primary().shard);
+    reply->map_epoch = get_osdmap_epoch();
+    reply->min_epoch = get_interval_start_epoch();
+    reply->op = std::move(rep);
+    return shard_services.send_to_osd(
+      get_primary().osd, std::move(reply), get_osdmap_epoch());
+  }).handle_error_interruptible(crimson::ct_error::assert_all{});
 }
 
 PG::interruptible_future<> PG::do_update_log_missing(
@@ -1699,6 +1805,22 @@ bool PG::should_send_op(
   //       by crimson yet
 }
 
+void PG::op_applied(const eversion_t &applied_version)
+{
+  logger().info("{}: op_applied version {}", __func__, applied_version);
+  assert(applied_version != eversion_t());
+  assert(applied_version <= peering_state.get_info().last_update);
+  peering_state.local_write_applied(applied_version);
+
+#if 0
+  if (is_primary() && m_scrubber) {
+    // if there's a scrub operation waiting for the selected chunk to be fully updated -
+    // allow it to continue
+    m_scrubber->on_applied_when_primary(recovery_state.get_last_update_applied());
+  }
+#endif
+}
+
 PG::interruptible_future<std::optional<PG::complete_op_t>>
 PG::already_complete(const osd_reqid_t& reqid)
 {
@@ -1787,6 +1909,89 @@ bool PG::check_in_progress_op(
                               op_returns) ||
     peering_state.get_pg_log().get_log().get_request(
       reqid, version, user_version, return_code, op_returns));
+}
+
+void PG::send_message_osd_cluster(int osd, MOSDPGPush* msg, epoch_t from_epoch)
+{
+  logger().debug("{}: MOSDPGPush from_epoch {} to osd.{}",
+                 __func__, from_epoch, osd);
+  if (whoami_shard().osd == osd) {
+    std::ignore =
+      static_cast<ECRecoveryBackend&>(*recovery_backend).handle_push(msg);
+  } else {
+    std::vector wrapped_msg {
+      std::make_pair(osd, static_cast<Message*>(msg))
+    };
+    send_message_osd_cluster(wrapped_msg, from_epoch);
+  }
+}
+
+void PG::PGLogEntryHandler::partial_write(pg_info_t *info,
+                                          eversion_t previous_version,
+                                          const pg_log_entry_t &entry)
+{
+  assert(info != nullptr);
+  if (entry.written_shards.empty() && info->partial_writes_last_complete.empty()) {
+    return;
+  }
+  logger().debug("{}: version version={} written_shards={}"
+                 " pwlc={} previous_version={}",
+                 __func__,
+                 entry.version,
+                 entry.written_shards,
+                 info->partial_writes_last_complete,
+                 previous_version);
+  const pg_pool_t &pool = pg->get_pool();
+  for (shard_id_t shard : pool.nonprimary_shards) {
+    auto pwlc_iter = info->partial_writes_last_complete.find(shard);
+    if (!entry.is_written_shard(shard)) {
+      if (pwlc_iter == info->partial_writes_last_complete.end()) {
+	// 1st partial write since all logs were updated
+	info->partial_writes_last_complete[shard] =
+	  std::pair(previous_version, entry.version);
+
+	continue;
+      }
+      auto &&[old_v,  new_v] = pwlc_iter->second;
+      if (old_v == new_v) {
+        if (old_v.version == eversion_t::max().version) {
+	  // shard is backfilling or in async recovery, pwlc is
+	  // invalid
+          logger().debug("{}: pwlc invalid {}", __func__, shard);
+	} else if (old_v.version >= entry.version.version) {
+	  // Abnormal case - consider_adjusting_pwlc may advance pwlc
+	  // during peering because all shards have updates but these
+	  // have not been marked complete. At the end of peering
+	  // partial_write catches up with these entries - these need
+	  // to be ignored to preserve old_v.epoch
+          logger().debug("{}: pwlc is ahead of entry {}", __func__, shard);
+	} else {
+	  old_v = previous_version;
+	  new_v = entry.version;
+	}
+      } else if (new_v == previous_version) {
+	// Subsequent partial write, contiguous versions
+	new_v = entry.version;
+      } else {
+	// Subsequent partial write, discontiguous versions
+        logger().debug("{}: cannot update shard {}", __func__, shard);
+      }
+    } else if (pwlc_iter != info->partial_writes_last_complete.end()) {
+      auto &&[old_v,  new_v] = pwlc_iter->second;
+      // Log updated or shard absent, partial write entry is a no-op
+      if (old_v.version == eversion_t::max().version) {
+	// shard is backfilling or in async recovery, pwlc is invalid
+        logger().debug("{}: pwlc invalid {}", __func__, shard);
+      } else if (old_v.version >= entry.version.version) {
+	// Abnormal case - see above
+        logger().debug("{}: pwlc is ahead of entry {}", __func__, shard);
+      } else {
+	old_v = new_v = entry.version;
+      }
+    }
+  }
+  logger().debug("{}: after pwlc={}",
+                 __func__, info->partial_writes_last_complete);
 }
 
 }

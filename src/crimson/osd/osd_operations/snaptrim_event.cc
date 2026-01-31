@@ -255,7 +255,7 @@ SnapTrimObjSubEvent::adjust_snaps(
   obc->obs.oi.prior_version = obc->obs.oi.version;
   obc->obs.oi.version = osd_op_p.at_version;
   ceph::bufferlist bl;
-  obc->obs.oi.encode_no_oid(
+  obc->obs.oi.encode(
     bl,
     pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
   txn.setattr(
@@ -303,7 +303,7 @@ void SnapTrimObjSubEvent::update_head(
   attrs[SS_ATTR] = std::move(bl);
 
   bl.clear();
-  head_obc->obs.oi.encode_no_oid(bl,
+  head_obc->obs.oi.encode(bl,
     pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
   attrs[OI_ATTR] = std::move(bl);
   txn.setattrs(

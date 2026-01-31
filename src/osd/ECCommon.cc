@@ -158,11 +158,13 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
       continue;
     }
     const shard_id_t &shard = pg_shard.shard;
+#ifndef WITH_CRIMSON
     if (cct->_conf->bluestore_debug_inject_read_err &&
       ECInject::test_read_error1(ghobject_t(hoid, ghobject_t::NO_GEN, shard))) {
       dout(0) << __func__ << " Error inject - Missing shard " << shard << dendl;
       continue;
     }
+#endif
     if (!missing.is_missing(hoid)) {
       ceph_assert(!have.contains(shard));
       have.insert(shard);
@@ -638,12 +640,15 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
       for (auto &&read: req.to_read) {
         // Return a buffer containing both data and parity
         // if the parity read inject is set
+#ifndef WITH_CRIMSON
         if (cct->_conf->bluestore_debug_inject_read_err &&
             ECInject::test_parity_read(hoid)) {
           bufferlist data_and_parity;
           read_pipeline.create_parity_read_buffer(res.buffers_read, read, &data_and_parity);
           result.insert(read.offset, data_and_parity.length(), data_and_parity);
-        } else {
+        } else
+#endif
+        {
           result.insert(read.offset, read.size,
                         res.buffers_read.get_ro_buffer(read.offset, read.size));
         }
@@ -683,11 +688,13 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&[hoid, to_read]: reads) {
     ECUtil::shard_extent_set_t want_shard_reads(sinfo.get_k_plus_m());
+#ifndef WITH_CRIMSON
     if (cct->_conf->bluestore_debug_inject_read_err &&
         ECInject::test_parity_read(hoid)) {
       get_want_to_read_all_shards(to_read, want_shard_reads);
-    }
-    else {
+    } else
+#endif
+    {
       get_want_to_read_shards(to_read, want_shard_reads);
     }
 
@@ -923,12 +930,14 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     if (pg_shard == get_parent()->whoami_shard()) {
       should_write_local = true;
       local_write_op.claim(sop);
+#ifndef WITH_CRIMSON
     } else if (cct->_conf->bluestore_debug_inject_read_err &&
       ECInject::test_write_error1(ghobject_t(op.hoid,
                                              ghobject_t::NO_GEN,
                                              pg_shard.shard))) {
       dout(0) << " Error inject - Dropping write message to shard " <<
           pg_shard.shard << dendl;
+#endif
     } else {
       auto *r = new MOSDECSubOpWrite(sop);
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, pg_shard.shard);
@@ -965,6 +974,10 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
 }
 
 struct ECDummyOp final : ECCommon::RMWPipeline::Op {
+  ECDummyOp(ECCommon::RMWPipeline &rmw_pipeline)
+    : Op(rmw_pipeline) {
+  }
+
   void generate_transactions(
       ceph::ErasureCodeInterfaceRef &ec_impl,
       pg_t pgid,
@@ -1022,7 +1035,7 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
       dout(20) << __func__ << " cache idle " << op->version << dendl;
       // submit a dummy, transaction-empty op to kick the rollforward
       const auto tid = get_parent()->get_tid();
-      const auto nop = std::make_shared<ECDummyOp>();
+      const auto nop = std::make_shared<ECDummyOp>(*this);
       nop->hoid = op->hoid;
       nop->trim_to = op->trim_to;
       nop->pg_committed_to = op->version;
@@ -1434,7 +1447,11 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
       }
 
       read_request_t read_request(std::move(want),
+#ifdef WITH_CRIMSON
+                                  op.recovery_progress.first && op.xattrs.count(OI_ATTR) == 0,
+#else
                                   op.recovery_progress.first && !op.obc,
+#endif
                                   op.obc
                                     ? op.obc->obs.oi.size
                                     : get_recovery_chunk_size());

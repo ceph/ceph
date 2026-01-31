@@ -324,13 +324,19 @@ public:
 
   void notify_on_change(bool is_primary);
 
+  load_obc_iertr::future<> load_obc(
+    ObjectContextRef obc,
+    PGBackend::loaded_object_md_t::ref);
+
 private:
   ObjectContextRegistry& obc_registry;
   PGBackend& backend;
   DoutPrefixProvider& dpp;
   obc_accessing_list_t obc_set_accessing;
 
-  load_obc_iertr::future<> load_obc(ObjectContextRef obc);
+  load_obc_iertr::future<> load_obc(
+    ObjectContextRef obc,
+    PGBackend::load_metadata_iertr::future<PGBackend::loaded_object_md_t::ref> md);
 };
 
 using ObjectContextManager = ObjectContextLoader::Manager;

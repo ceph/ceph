@@ -337,6 +337,9 @@ private:
   }
 
   template <class Func>
+  auto do_read_attr_cache(Func&& f);
+
+  template <class Func>
   auto do_snapset_op(Func&& f) {
     ++num_read;
     return std::invoke(
@@ -352,6 +355,8 @@ private:
 
   template <class Func>
   auto do_write_op(Func&& f, modified_by m = modified_by::user);
+  template <class Func>
+  auto do_write_op_attr_cache(Func&& f, modified_by m = modified_by::user);
 
   decltype(auto) dont_do_legacy_op() {
     return crimson::ct_error::operation_not_supported::make();
