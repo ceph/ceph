@@ -475,7 +475,8 @@ health_status_t HealthMonitor::get_health_status(
   Formatter *f,
   std::string *plain,
   const char *sep1,
-  const char *sep2)
+  const char *sep2,
+  bool truncate_detail)
 {
   health_check_map_t all;
   gather_all_health_checks(&all);
@@ -506,44 +507,47 @@ health_status_t HealthMonitor::get_health_status(
     f->close_section();
   } else {
     auto now = ceph_clock_now();
-    // one-liner: HEALTH_FOO[ thing1[; thing2 ...]]
-    string summary;
-    for (auto& p : all.checks) {
-      if (!mutes.count(p.first)) {
-	if (!summary.empty()) {
-	  summary += sep2;
-	}
-	summary += p.second.summary;
+    if (sep1 != nullptr &&
+        sep2 != nullptr) {
+      // one-liner: HEALTH_FOO[ thing1[; thing2 ...]]
+      string summary;
+      for (auto& p : all.checks) {
+        if (!mutes.count(p.first)) {
+          if (!summary.empty()) {
+            summary += sep2;
+          }
+          summary += p.second.summary;
+        }
       }
-    }
-    *plain = stringify(r);
-    if (summary.size()) {
-      *plain += sep1;
-      *plain += summary;
-    }
-    if (!mutes.empty()) {
+      *plain = stringify(r);
       if (summary.size()) {
-	*plain += sep2;
-      } else {
-	*plain += sep1;
+        *plain += sep1;
+        *plain += summary;
       }
-      *plain += "(muted:";
-      for (auto& p : mutes) {
-	*plain += " ";
-	*plain += p.first;
-	if (p.second.ttl) {
-	  if (p.second.ttl > now) {
-	    auto left = p.second.ttl;
-	    left -= now;
-	    *plain += "("s + utimespan_str(left) + ")";
-	  } else {
-	    *plain += "(0s)";
-	  }
-	}
+      if (!mutes.empty()) {
+        if (summary.size()) {
+          *plain += sep2;
+        } else {
+          *plain += sep1;
+        }
+        *plain += "(muted:";
+        for (auto& p : mutes) {
+          *plain += " ";
+          *plain += p.first;
+          if (p.second.ttl) {
+            if (p.second.ttl > now) {
+              auto left = p.second.ttl;
+              left -= now;
+              *plain += "("s + utimespan_str(left) + ")";
+            } else {
+              *plain += "(0s)";
+            }
+          }
+        }
+        *plain += ")";
       }
-      *plain += ")";
+      *plain += "\n";
     }
-    *plain += "\n";
     // detail
     if (want_detail) {
       for (auto& p : all.checks) {
@@ -567,11 +571,20 @@ health_status_t HealthMonitor::get_health_status(
 	}
 	*plain += "["s + short_health_string(p.second.severity) + "] " +
 	  p.first + ": " + p.second.summary + "\n";
+        size_t maxmsg_size = g_conf()->mon_health_detail_check_message_max_bytes;
+        string check_detail;
 	for (auto& d : p.second.detail) {
-	  *plain += "    ";
-	  *plain += d;
-	  *plain += "\n";
+	  check_detail += "    ";
+	  check_detail += d;
+	  check_detail += "\n";
 	}
+        if (truncate_detail &&
+            check_detail.size() > maxmsg_size) {
+          check_detail.resize(maxmsg_size);
+          check_detail += " ...<truncated>";
+          check_detail += "\n";
+        }
+        *plain += check_detail;
       }
     }
   }
