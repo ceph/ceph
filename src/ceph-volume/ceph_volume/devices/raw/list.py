@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from ceph_volume import decorators, process
 from ceph_volume.util import disk
-from ceph_volume.util.device import Device
+from ceph_volume.api import lvm
 
 logger = logging.getLogger(__name__)
 
@@ -85,13 +85,32 @@ class List(object):
         self.devices_to_scan = result
 
     def exclude_lvm_osd_devices(self) -> None:
+        lvm_mappers = disk.get_lvm_mappers()
         with ThreadPoolExecutor() as pool:
-            filtered_devices_to_scan = pool.map(self.filter_lvm_osd_devices, self.devices_to_scan)
+            filtered_devices_to_scan = pool.map(
+                lambda device: self.filter_lvm_osd_devices(device, lvm_mappers),
+                self.devices_to_scan
+            )
             self.devices_to_scan = [device for device in filtered_devices_to_scan if device is not None]
 
-    def filter_lvm_osd_devices(self, device: str) -> Optional[str]:
-        d = Device(device)
-        return d.path if not d.ceph_device_lvm else None
+    def filter_lvm_osd_devices(self, device: str, lvm_mappers: _List[str]) -> Optional[str]:
+        real_path = os.path.realpath(device)
+
+        # If it's not an LV, it can't be a Ceph LVM device
+        if real_path not in lvm_mappers:
+            return device
+
+        # It's an LV, so we need to check if it's a Ceph device
+        # This requires a subprocess call, but it's much lighter than Device()
+        lvs = lvm.get_lvs_from_path(device)
+        if lvs:
+            # Check if any LV has ceph.osd_id tag (making it a Ceph device)
+            for lv in lvs:
+                if lvm.is_ceph_device(lv):
+                    # This is a Ceph LVM device, filter it out
+                    return None
+
+        return device
 
     def generate(self, devices: Optional[_List[str]] = None) -> Dict[str, Any]:
         logger.debug('Listing block devices via lsblk...')
