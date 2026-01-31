@@ -24,6 +24,7 @@
 
 #include "rgw_bucket_sync.h"
 #include "sync_fairness.h"
+#include <expected>
 
 // represents an obligation to sync an entry up a given time
 struct rgw_data_sync_obligation {
@@ -769,7 +770,7 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
 		  uint64_t* oldest_gen, uint64_t* latest_gen,
 		  uint64_t* num_shards);
 public:
-  static tl::expected<std::unique_ptr<RGWBucketPipeSyncStatusManager>, int>
+  static std::expected<std::unique_ptr<RGWBucketPipeSyncStatusManager>, int>
   construct(const DoutPrefixProvider* dpp, rgw::sal::RadosStore* driver,
 	    std::optional<rgw_zone_id> source_zone,
 	    std::optional<rgw_bucket> source_bucket,
@@ -794,7 +795,7 @@ public:
   std::ostream& gen_prefix(std::ostream& out) const override;
 
   int init_sync_status(const DoutPrefixProvider *dpp);
-  tl::expected<std::map<int, rgw_bucket_shard_sync_info>, int> read_sync_status(
+  std::expected<std::map<int, rgw_bucket_shard_sync_info>, int> read_sync_status(
     const DoutPrefixProvider *dpp);
   int run(const DoutPrefixProvider *dpp);
 };
