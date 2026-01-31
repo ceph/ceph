@@ -334,6 +334,17 @@ add_executable(unittest_rgw_shard_io test_rgw_shard_io.cc)
 add_ceph_unittest(unittest_rgw_shard_io)
 target_link_libraries(unittest_rgw_shard_io ${rgw_libs} unit-main ${UNITTEST_LIBS})
 
+# unittest_rgw_object_ctx
+add_executable(unittest_rgw_object_ctx test_rgw_object_ctx.cc)
+add_ceph_unittest(unittest_rgw_object_ctx)
+target_include_directories(unittest_rgw_object_ctx
+  SYSTEM PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/rgw
+    ${CMAKE_SOURCE_DIR}/src/rgw/driver/rados
+    ${CMAKE_SOURCE_DIR}/src/s3select/rapidjson/include
+)
+target_link_libraries(unittest_rgw_object_ctx ${rgw_libs})
+
 add_ceph_test(test-ceph-diff-sorted.sh
   ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-diff-sorted.sh)
 
