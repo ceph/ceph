@@ -119,15 +119,18 @@ class Module(MgrModule):
             '%s crashed on host %s at %s' % (
                 crash.get('entity_name', 'unidentified daemon'),
                 crash.get('utsname_hostname', '(unknown)'),
-                crash.get('timestamp', 'unknown time'))
-            for crash in daemon_crashes]
+                self.format_timestamp_utc(cast(str, crash.get('timestamp', ''))))
+            for crash in daemon_crashes
+            ]
         module_detail = [
             'mgr module %s crashed in daemon %s on host %s at %s' % (
                 crash.get('mgr_module', 'unidentified module'),
                 crash.get('entity_name', 'unidentified daemon'),
                 crash.get('utsname_hostname', '(unknown)'),
-                crash.get('timestamp', 'unknown time'))
-            for crash in module_crashes]
+                self.format_timestamp_utc(cast(str, crash.get('timestamp', ''))))
+            for crash in module_crashes
+            ]
+
         daemon_num = prune_detail(daemon_detail)
         module_num = prune_detail(module_detail)
 
@@ -151,6 +154,7 @@ class Module(MgrModule):
 
         self.set_health_checks(health_checks)
 
+
     def time_from_string(self, timestr: str) -> datetime.datetime:
         # drop the 'Z' timezone indication, it's always UTC
         timestr = timestr.rstrip('Z')
@@ -158,6 +162,16 @@ class Module(MgrModule):
             return datetime.datetime.strptime(timestr, DATEFMT)
         except ValueError:
             return datetime.datetime.strptime(timestr, OLD_DATEFMT)
+
+    def format_timestamp_utc(self, timestr: str) -> str:
+        """
+        Format crash timestamp explicitly as UTC for display.
+        """
+        try:
+            dt = self.time_from_string(timestr)
+            return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+        except Exception:
+            return timestr
 
     def validate_crash_metadata(self, inbuf: str) -> Dict[str, Union[str, List[str]]]:
         # raise any exceptions to caller
@@ -167,6 +181,8 @@ class Module(MgrModule):
                 raise AttributeError("missing '%s' field" % f)
         _ = self.time_from_string(metadata['timestamp'])
         return metadata
+
+
 
     def timestamp_filter(self, f: Callable[[datetime.datetime], bool]) -> Iterable[Tuple[str, CrashT]]:
         """
