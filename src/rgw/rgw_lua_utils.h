@@ -14,6 +14,7 @@
 #include "include/common_fwd.h"
 #include "rgw_perf_counters.h"
 #include <common/ceph_time.h>
+#include "rgw_lua_types.h"
 
 // a helper type traits structs for detecting std::variant
 template<class>
@@ -534,6 +535,8 @@ struct StringMapMetaTable : public EmptyMetaTable {
     return ONE_RETURNVAL;
   }
 };
+
+int lua_execute(lua_State* L, const DoutPrefixProvider* dpp, const rgw::lua::LuaCodeType& code);
 
 } // namespace rgw::lua
 

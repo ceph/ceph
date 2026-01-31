@@ -1156,6 +1156,8 @@ public:
   virtual ~FilterLuaManager() = default;
 
   virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  virtual std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
+                                                                        const std::string& key) override;
   virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
   virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
   virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
@@ -1165,6 +1167,7 @@ public:
   const std::string& luarocks_path() const override;
   void set_luarocks_path(const std::string& path) override;
 
+  void set_lua_background(rgw::lua::Background* background) override;
 };
 
 } } // namespace rgw::sal

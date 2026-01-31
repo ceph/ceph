@@ -788,7 +788,7 @@ int execute(
     OpsLogSink* olog,
     req_state* s, 
     RGWOp* op,
-    const std::string& script)
+    const rgw::lua::LuaCodeType& code)
 {
   lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state,
                          s->cct->_conf->rgw_lua_max_runtime_per_state, s);
@@ -820,13 +820,8 @@ int execute(
     if (s->penv.lua.background) {
       s->penv.lua.background->create_background_metatable(L);
     }
+    rc = rgw::lua::lua_execute(L, s, code);
 
-    // execute the lua script
-    if (luaL_dostring(L, script.c_str()) != LUA_OK) {
-      const std::string err(lua_tostring(L, -1));
-      ldpp_dout(s, 1) << "Lua ERROR: " << err << dendl;
-      rc = -1;
-    }
   } catch (const std::runtime_error& e) {
     ldpp_dout(s, 1) << "Lua ERROR: " << e.what() << dendl;
     rc = -1;

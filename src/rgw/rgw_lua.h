@@ -3,6 +3,7 @@
 #include <string>
 #include <set>
 #include "rgw_lua_version.h"
+#include "rgw_lua_types.h"
 #include "common/async/yield_context.h"
 #include "common/dout.h"
 #include "rgw_sal_fwd.h"
@@ -40,6 +41,8 @@ int write_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, c
 
 // read the stored lua script from a context
 int read_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::string& script);
+
+std::tuple<LuaCodeType, int> read_script_or_bytecode(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx);
 
 // delete the stored lua script from a context
 int delete_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx);
