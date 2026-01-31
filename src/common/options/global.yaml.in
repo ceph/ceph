@@ -5029,6 +5029,17 @@ options:
   default: 0.04
   see_also:
   - bluestore_cache_size
+- name: bluestore_cache_meta_evict_limit
+  type: int
+  level: advanced
+  desc: Elements in onode cache shards are evicted when new element is inserted into the cache.
+    In rare cases of cluster inactivity cache can be reduced, but not evicted. Adjusting size at once
+    will cause stall first time cache shard is accessed. The setting limits how many onodes can get evicted in one go.
+    Any value is less than 2 it is treated as request to adjust immediately.
+  default: 10
+  see_also:
+  - bluestore_cache_meta_ratio
+  with_legacy: true
 - name: bluestore_cache_autotune
   type: bool
   level: dev
@@ -5039,6 +5050,18 @@ options:
   see_also:
   - bluestore_cache_size
   - bluestore_cache_meta_ratio
+- name: bluestore_cache_meta_evict_in_autotune
+  type: bool
+  level: advanced
+  desc: Controls eviction of onodes from cache shards as part of autotune.
+    When enabled (true), right after autotune memory allocation run onode cache tries to adapt.
+    Depending on `bluestore_cache_meta_evict_limit` either some or all excess onodes are evicted.
+    When disabled (false), cluster inactivity makes cache to keep its onode elements.
+  default: true
+  see_also:
+  - bluestore_cache_meta_evict_limit
+  - bluestore_cache_autotune
+  with_legacy: true
 - name: bluestore_cache_autotune_interval
   type: float
   level: dev

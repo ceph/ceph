@@ -2067,7 +2067,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::add_onode(const ghobject_t& oid,
   }
   ldout(cache->cct, 20) << __func__ << " " << oid << " " << o << dendl;
   cache->_add(o.get(), 1);
-  cache->_trim();
+  cache->_trim_some();
   return o;
 }
 
@@ -2153,7 +2153,7 @@ void BlueStore::OnodeSpace::rename(
 
   o->oid = new_oid;
   o->key = new_okey;
-  cache->_trim();
+  cache->_trim_some();
 }
 
 bool BlueStore::OnodeSpace::map_any(std::function<bool(Onode*)> f)
