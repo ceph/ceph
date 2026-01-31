@@ -38,8 +38,6 @@ namespace mirror {
 
 namespace {
 
-const std::string SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY("mirroring_failed");
-
 class SafeTimerSingleton : public CommonSafeTimer<ceph::mutex> {
 public:
   ceph::mutex timer_lock = ceph::make_mutex("cephfs::mirror::timer_lock");

@@ -48,9 +48,6 @@ public:
 private:
   inline static const std::string PRIMARY_SNAP_ID_KEY = "primary_snap_id";
 
-  inline static const std::string SERVICE_DAEMON_FAILED_DIR_COUNT_KEY = "failure_count";
-  inline static const std::string SERVICE_DAEMON_RECOVERED_DIR_COUNT_KEY = "recovery_count";
-
   using Snapshot = std::pair<std::string, uint64_t>;
 
   // file descriptor "triplet" for synchronizing a snapshot
