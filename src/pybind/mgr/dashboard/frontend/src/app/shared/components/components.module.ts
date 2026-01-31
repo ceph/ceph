@@ -109,6 +109,7 @@ import NotificationFilledIcon from '@carbon/icons/es/notification--filled/16';
 import CloseIcon from '@carbon/icons/es/close/16';
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { ProductiveCardComponent } from './productive-card/productive-card.component';
+import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
 
 @NgModule({
   imports: [
@@ -206,7 +207,9 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     ToastComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent
+    TearsheetStepComponent,
+    ProductiveCardComponent,
+    SidebarLayoutComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -252,7 +255,9 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     ToastComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent
+    TearsheetStepComponent,
+    ProductiveCardComponent,
+    SidebarLayoutComponent
   ]
 })
 export class ComponentsModule {

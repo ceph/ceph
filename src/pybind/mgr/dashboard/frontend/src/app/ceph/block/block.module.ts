@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { NgModule } from '@angular/core';
+import { NgModule, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
@@ -63,7 +63,9 @@ import {
   SelectModule,
   UIShellModule,
   TreeviewModule,
+  SideNavModule,
   TabsModule,
+  ThemeModule,
   TagModule
 } from 'carbon-components-angular';
 
@@ -75,9 +77,15 @@ import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
 import Reset from '@carbon/icons/es/reset/32';
 import SubtractAlt from '@carbon/icons/es/subtract--alt/20';
 import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
+import Search from '@carbon/icons/es/search/32';
 import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group/nvmeof-gateway-group.component';
 import { NvmeofGroupFormComponent } from './nvmeof-group-form /nvmeof-group-form.component';
+
 import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway-node.component';
+import { NvmeofGatewaySubsystemComponent } from './nvmeof-gateway-subsystem/nvmeof-gateway-subsystem.component';
+import { NvmeGatewayViewComponent } from './nvme-gateway-view/nvme-gateway-view.component';
+import { NvmeGatewayViewBreadcrumbResolver } from './nvme-gateway-view/nvme-gateway-view-breadcrumb.resolver';
+import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node/nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
 
 @NgModule({
   imports: [
@@ -94,8 +102,8 @@ import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway
     TreeviewModule,
     UIShellModule,
     InputModule,
-    GridModule,
     ButtonModule,
+    GridModule,
     IconModule,
     CheckboxModule,
     RadioModule,
@@ -105,8 +113,9 @@ import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway
     DatePickerModule,
     ComboBoxModule,
     TabsModule,
-    TagModule,
-    GridModule
+    SideNavModule,
+    ThemeModule,
+    TagModule
   ],
   declarations: [
     RbdListComponent,
@@ -145,11 +154,16 @@ import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway
     NvmeofInitiatorsListComponent,
     NvmeofInitiatorsFormComponent,
     NvmeofGatewayNodeComponent,
-    NvmeofGroupFormComponent
+    NvmeofGroupFormComponent,
+    NvmeGatewayViewComponent,
+    NvmeofGatewaySubsystemComponent,
+    NvmeofGatewayNodeAddModalComponent
   ],
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
 export class BlockModule {
+  // Re-trigger compilation
   constructor(private iconService: IconService) {
     this.iconService.registerAll([
       ChevronDown,
@@ -158,7 +172,8 @@ export class BlockModule {
       SubtractFilled,
       Reset,
       ProgressBarRound,
-      SubtractAlt
+      SubtractAlt,
+      Search
     ]);
   }
 }
@@ -304,6 +319,25 @@ const routes: Routes = [
         path: `gateways/${URLVerbs.CREATE}`,
         component: NvmeofGroupFormComponent,
         data: { breadcrumbs: `${ActionLabels.CREATE}${URLVerbs.GATEWAY_GROUP}` }
+      },
+
+      {
+        path: `gateways/${URLVerbs.VIEW}/:group`,
+        component: NvmeGatewayViewComponent,
+        data: { breadcrumbs: NvmeGatewayViewBreadcrumbResolver }, // Use resolver here
+        children: [
+          { path: '', redirectTo: 'nodes', pathMatch: 'full' },
+          {
+            path: 'nodes',
+            component: NvmeofGatewayNodeComponent,
+            data: { breadcrumbs: $localize`Gateway nodes` }
+          },
+          {
+            path: 'subsystems',
+            component: NvmeofGatewaySubsystemComponent,
+            data: { breadcrumbs: $localize`Subsystems` }
+          }
+        ]
       },
       {
         path: 'subsystems',
