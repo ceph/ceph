@@ -22,8 +22,6 @@ Admin commands
    Aborts an active dedup session and release all resources used by it.
 - ``radosgw-admin dedup stats``:
    Collects & displays last dedup statistics.
-- ``radosgw-admin dedup estimate``:
-   Starts a new dedup estimate session (aborting first existing session if exists).
 - ``radosgw-admin dedup throttle --max-bucket-index-ops=<count>``:
    Specify max bucket-index requests per second allowed for a single RGW server during dedup, 0 means unlimited.
 - ``radosgw-admin dedup throttle --stat``:
@@ -34,12 +32,16 @@ Skipped Objects
 ***************
 Dedup Estimate process skips the following objects:
 
-- Objects smaller than 4 MB (unless they are multipart).
+- Objects smaller than rgw_dedup_min_obj_size_for_dedup (unless they are multipart).
 - Objects with different placement rules.
 - Objects with different pools.
 - Objects with different storage classes.
 
 The full dedup process skips all the above and it also skips **compressed** and **user-encrypted** objects.
+
+The minimum size object for dedup is controlled by the following config option:
+
+.. confval:: rgw_dedup_min_obj_size_for_dedup
 
 *******************
 Estimate Processing
@@ -84,6 +86,17 @@ If they are, we proceed with the deduplication:
 - incrementing the reference count on the source tail-objects one by one.
 - copying the manifest from the source to the target.
 - removing all tail-objects on the target.
+
+***************
+Split Head Mode
+***************
+Dedup code can split the head object into 2 objects
+
+- one with attributes and no data and
+- a new tail-object with only data.
+
+The new-tail object will be deduped (unlike the head objects which can't be deduplicated)
+This feature is only enabled for RGW Objects without existing tail-objects (in other words object-size <= 4MB)
 
 ************
 Memory Usage

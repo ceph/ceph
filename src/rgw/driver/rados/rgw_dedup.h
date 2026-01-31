@@ -97,6 +97,8 @@ namespace rgw::dedup {
       STEP_REMOVE_DUPLICATES
     };
 
+    inline uint64_t __calc_deduped_bytes(uint16_t num_parts, uint64_t size_bytes);
+    inline bool should_split_head(uint64_t head_size, uint64_t obj_size);
     void run();
     int  setup(struct dedup_epoch_t*);
     void work_shards_barrier(work_shard_t num_work_shards);
@@ -182,11 +184,18 @@ namespace rgw::dedup {
                            remapper_t *remapper);
 
 #ifdef FULL_DEDUP_SUPPORT
-    int calc_object_blake3(const disk_record_t *p_rec, uint8_t *p_hash);
-    int add_obj_attrs_to_record(rgw_bucket            *p_rb,
-                                disk_record_t         *p_rec,
+    int calc_object_blake3(const RGWObjManifest &manifest,
+                           disk_record_t *p_rec,
+                           uint8_t *p_hash,
+                           blake3_hasher *p_pre_calc_hmac = nullptr);
+    int split_head_object(disk_record_t *p_src_rec,     // IN/OUT PARAM
+                          RGWObjManifest &src_manifest, // IN/OUT PARAM
+                          const disk_record_t *p_tgt_rec,
+                          std::string &tail_oid,        // OUT PARAM
+                          md5_stats_t *p_stats);
+
+    int add_obj_attrs_to_record(disk_record_t         *p_rec,
                                 const rgw::sal::Attrs &attrs,
-                                dedup_table_t         *p_table,
                                 md5_stats_t           *p_stats); /* IN-OUT */
 
     int read_object_attribute(dedup_table_t    *p_table,
@@ -197,26 +206,36 @@ namespace rgw::dedup {
                               md5_stats_t      *p_stats /* IN-OUT */,
                               disk_block_seq_t *p_disk,
                               remapper_t       *remapper);
-    int try_deduping_record(dedup_table_t       *p_table,
-                            const disk_record_t *p_rec,
-                            disk_block_id_t      block_id,
-                            record_id_t          rec_id,
-                            md5_shard_t          md5_shard,
-                            md5_stats_t         *p_stats, /* IN-OUT */
-                            remapper_t          *remapper);
-    int inc_ref_count_by_manifest(const std::string &ref_tag,
-                                  const std::string &oid,
-                                  RGWObjManifest    &manifest);
-    int rollback_ref_by_manifest(const std::string &ref_tag,
-                                 const std::string &oid,
-                                 RGWObjManifest    &tgt_manifest);
-    int free_tail_objs_by_manifest(const std::string &ref_tag,
-                                   const std::string &oid,
-                                   RGWObjManifest    &tgt_manifest);
-    int dedup_object(const disk_record_t *p_src_rec,
-                     const disk_record_t *p_tgt_rec,
-                     md5_stats_t         *p_stats,
-                     bool                 is_shared_manifest_src);
+    bool check_and_set_strong_hash(disk_record_t *p_src_rec, // IN/OUT PARAM
+                                   disk_record_t *p_tgt_rec, // IN/OUT PARAM
+                                   RGWObjManifest &src_manifest,
+                                   const RGWObjManifest &tgt_manifest,
+                                   const dedup_table_t::value_t *p_src_val,
+                                   std::string &tail_oid,    // OUT PARAM
+                                   md5_stats_t *p_stats);
+    int try_deduping_record(dedup_table_t   *p_table,
+                            disk_record_t   *p_rec,
+                            disk_block_id_t  block_id,
+                            record_id_t      rec_id,
+                            md5_shard_t      md5_shard,
+                            md5_stats_t     *p_stats, /* IN-OUT */
+                            remapper_t      *remapper);
+    int inc_ref_count_by_manifest(const std::string    &ref_tag,
+                                  const std::string    &oid,
+                                  const RGWObjManifest &manifest);
+    int rollback_ref_by_manifest(const std::string    &ref_tag,
+                                 const std::string    &oid,
+                                 const RGWObjManifest &tgt_manifest);
+    int free_tail_objs_by_manifest(const std::string    &ref_tag,
+                                   const std::string    &oid,
+                                   const RGWObjManifest &tgt_manifest);
+    int dedup_object(disk_record_t                *p_src_rec,
+                     disk_record_t                *p_tgt_rec,
+                     const RGWObjManifest         &src_manifest,
+                     const RGWObjManifest         &tgt_manifest,
+                     md5_stats_t                  *p_stats,
+                     const dedup_table_t::value_t *p_src_val,
+                     const std::string            &tail_oid);
 #endif
     int  remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count);
     int  init_rados_access_handles(bool init_pool);
@@ -235,8 +254,9 @@ namespace rgw::dedup {
     unsigned d_heart_beat_max_elapsed_sec;
     uint64_t d_all_buckets_obj_count   = 0;
     uint64_t d_all_buckets_obj_size    = 0;
-    // we don't benefit from deduping RGW objects smaller than head-object size
-    uint32_t d_min_obj_size_for_dedup = (4ULL * 1024 * 1024);
+
+    uint32_t d_min_obj_size_for_dedup = (64ULL * 1024);
+    uint32_t d_max_obj_size_for_split = (16ULL * 1024 * 1024);
     uint32_t d_head_object_size       = (4ULL * 1024 * 1024);
     control_t d_ctl;
     uint64_t d_watch_handle = 0;
