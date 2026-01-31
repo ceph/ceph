@@ -77,7 +77,8 @@ def scrape_path(path):
                 # or the daemon crashed before finishing it
                 time.sleep(1)
                 if not os.path.isfile(donepath):
-                    return
+                    log.warning('no `done` file present. Not processing crash path {}.'.format(crashpath))
+                    continue
             # ok, we can process this one
             rc = post_crash(crashpath)
             if rc == 0:
@@ -128,9 +129,10 @@ def main():
         log.error("directory %s does not exist; please create" % postdir)
         time.sleep(30)
 
-    log.info("pinging cluster to exercise our key")
-    pr = subprocess.Popen(args=['timeout', '30', 'ceph', '-s'])
-    pr.wait()
+    for n in auth_names:
+        log.info("pinging cluster to exercise our key, trying key {}.".format(n))
+        pr = subprocess.Popen(args=['timeout', '30', 'ceph', '-s', '-n', n])
+        pr.wait()
 
     log.info("monitoring path %s, delay %ds" % (args.path, args.delay * 60.0))
     while True:
