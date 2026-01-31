@@ -15,6 +15,7 @@
 
 #include "Paxos.h"
 #include "Monitor.h"
+#include "MonMap.h"
 #include "messages/MMonPaxos.h"
 
 #include "mon/mon_types.h"

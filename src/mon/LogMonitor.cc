@@ -50,6 +50,7 @@
 #include "LogMonitor.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
+#include "MonMap.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
