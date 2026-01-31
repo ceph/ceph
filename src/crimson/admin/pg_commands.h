@@ -5,7 +5,11 @@
 
 namespace crimson::admin::pg {
 
+class PGOldFormCommand;
+class DeepScrubHyphenCommand;
 class QueryCommand;
+class LogCommand;
+class ListUnfoundCommand;
 class MarkUnfoundLostCommand;
 template <bool deep>
 class ScrubCommand;
