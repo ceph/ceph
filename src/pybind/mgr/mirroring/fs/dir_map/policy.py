@@ -12,7 +12,7 @@ from ..exception import MirrorException
 log = logging.getLogger(__name__)
 
 class DirectoryState:
-    def __init__(self, instance_id=None, mapped_time=None):
+    def __init__(self, prio_mode, instance_id=None, mapped_time=None):
         self.instance_id = instance_id
         self.mapped_time = mapped_time
         self.state = State.UNASSOCIATED
@@ -20,16 +20,20 @@ class DirectoryState:
         self.transition = Transition(ActionType.NONE)
         self.next_state = None
         self.purging = False
+        self.prio_mode = prio_mode
 
     def __str__(self):
         return f'[instance_id={self.instance_id}, mapped_time={self.mapped_time},'\
             f' state={self.state}, transition={self.transition}, next_state={self.next_state},'\
-            f' purging={self.purging}]'
+            f' purging={self.purging}, prio_mode={self.prio_mode}]'
 
 class Policy:
     # number of seconds after which a directory can be reshuffled
     # to other mirror daemon instances.
     DIR_SHUFFLE_THROTTLE_INTERVAL = 300
+
+    DEFAULT_MODE = 'thread-shared'
+    ALLOWED_MODES = ['thread-shared', 'per-thread']
 
     def __init__(self):
         self.dir_states = {}
@@ -81,7 +85,10 @@ class Policy:
                     if not instance_id in self.instance_to_dir_map:
                         self.instance_to_dir_map[instance_id] = []
                     self.instance_to_dir_map[instance_id].append(dir_path)
-                self.dir_states[dir_path] = DirectoryState(instance_id, dir_map['last_shuffled'])
+                # pre-existing added directories get default mode until prio
+                # mode is set.
+                prio_mode = dir_map.get('prio_mode', self.DEFAULT_MODE)
+                self.dir_states[dir_path] = DirectoryState(prio_mode, instance_id, dir_map['last_shuffled'])
                 dir_state = self.dir_states[dir_path]
                 state = State.INITIALIZING if instance_id else State.ASSOCIATING
                 purging = dir_map.get('purging', 0)
@@ -102,7 +109,8 @@ class Policy:
             if dir_state:
                 return {'instance_id': dir_state.instance_id,
                         'mapped_time': dir_state.mapped_time,
-                        'purging': dir_state.purging}
+                        'purging': dir_state.purging,
+                        'prio_mode': dir_state.prio_mode}
             return None
 
     def map(self, dir_path, dir_state):
@@ -234,7 +242,7 @@ class Policy:
                 return (tracked_path, what)
         return None
 
-    def add_dir(self, dir_path):
+    def add_dir(self, dir_path, prio_mode):
         log.debug(f'adding dir_path {dir_path}')
         with self.lock:
             if dir_path in self.dir_states:
@@ -242,7 +250,7 @@ class Policy:
             as_info = self.find_tracked_ancestor_or_subtree(dir_path)
             if as_info:
                 raise MirrorException(-errno.EINVAL, f'{dir_path} is a {as_info[1]} of tracked path {as_info[0]}')
-            self.dir_states[dir_path] = DirectoryState()
+            self.dir_states[dir_path] = DirectoryState(prio_mode)
             dir_state = self.dir_states[dir_path]
             log.debug(f'add dir_state: {dir_state}')
             if dir_state.state == State.INITIALIZING:
@@ -262,6 +270,18 @@ class Policy:
                 dir_state.state = State.UNASSOCIATED
                 dir_state.transition = StateTransition.transit(State.DISASSOCIATING, ActionType.NONE)
             r = self.set_state(dir_state, State.DISASSOCIATING)
+            log.debug(f'dir_state: {dir_state}')
+            return r
+
+    def set_prio_mode(self, dir_path, prio_mode):
+        log.debug(f'setting pririty mode: {prio_mode}')
+        with self.lock:
+            dir_state = self.dir_states.get(dir_path, None)
+            if not dir_state:
+                return False
+            log.debug(f'set_prio_mode dir_state: {dir_state}')
+            dir_state.prio_mode = prio_mode
+            r = self.set_state(dir_state, State.ASSOCIATING)
             log.debug(f'dir_state: {dir_state}')
             return r
 

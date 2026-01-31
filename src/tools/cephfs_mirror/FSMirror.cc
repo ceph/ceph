@@ -371,18 +371,18 @@ void FSMirror::handle_shutdown_instance_watcher(int r) {
   }
 }
 
-void FSMirror::handle_acquire_directory(string_view dir_path) {
-  dout(5) << ": dir_path=" << dir_path << dendl;
+void FSMirror::handle_acquire_directory(string_view dir_path, std::string_view prio_mode) {
+  dout(5) << ": dir_path=" << dir_path << ", prio_mode=" << prio_mode << dendl;
 
   {
     std::scoped_lock locker(m_lock);
-    m_directories.emplace(dir_path);
+    m_directories.emplace(dir_path, prio_mode);
     m_service_daemon->add_or_update_fs_attribute(m_filesystem.fscid, SERVICE_DAEMON_DIR_COUNT_KEY,
                                                  m_directories.size());
 
     for (auto &[peer, peer_replayer] : m_peer_replayers) {
       dout(10) << ": peer=" << peer << dendl;
-      peer_replayer->add_directory(dir_path);
+      peer_replayer->add_directory(dir_path, prio_mode);
     }
   }
   if (m_perf_counters) {
@@ -393,9 +393,10 @@ void FSMirror::handle_acquire_directory(string_view dir_path) {
 void FSMirror::handle_release_directory(string_view dir_path) {
   dout(5) << ": dir_path=" << dir_path << dendl;
 
+  std::string _dir_path(dir_path);
   {
     std::scoped_lock locker(m_lock);
-    auto it = m_directories.find(dir_path);
+    auto it = m_directories.find(_dir_path);
     if (it != m_directories.end()) {
       m_directories.erase(it);
       m_service_daemon->add_or_update_fs_attribute(m_filesystem.fscid, SERVICE_DAEMON_DIR_COUNT_KEY,

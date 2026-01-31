@@ -167,18 +167,23 @@ private:
 
 PeerReplayer::PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
                            RadosRef local_cluster, const Filesystem &filesystem,
-                           const Peer &peer, const std::set<std::string, std::less<>> &directories,
+                           const Peer &peer, const std::unordered_map<std::string, std::string> &directories,
                            MountRef mount, ServiceDaemon *service_daemon)
   : m_cct(cct),
     m_fs_mirror(fs_mirror),
     m_local_cluster(local_cluster),
     m_filesystem(filesystem),
     m_peer(peer),
-    m_directories(directories.begin(), directories.end()),
     m_local_mount(mount),
     m_service_daemon(service_daemon),
     m_asok_hook(new PeerReplayerAdminSocketHook(cct, filesystem, peer, this)),
     m_lock(ceph::make_mutex("cephfs::mirror::PeerReplayer::" + stringify(peer.uuid))) {
+  for (auto &[dir_root, prio_mode] : directories) {
+    m_directories.emplace_back(dir_root);
+    if (!prio_mode.compare("per-thread")) {
+      m_per_thread_directories.emplace_back(dir_root);
+    }
+  }
   // reset sync stats sent via service daemon
   m_service_daemon->add_or_update_peer_attribute(m_filesystem.fscid, m_peer,
                                                  SERVICE_DAEMON_FAILED_DIR_COUNT_KEY, (uint64_t)0);
@@ -228,7 +233,8 @@ PeerReplayer::~PeerReplayer() {
 }
 
 int PeerReplayer::init() {
-  dout(20) << ": initial dir list=[" << m_directories << "]" << dendl;
+  dout(20) << ": initial dir list=[" << m_directories << "], per-thread dir list=["
+           << m_per_thread_directories << "]" << dendl;
   for (auto &dir_root : m_directories) {
     m_snap_sync_stats.emplace(dir_root, SnapSyncStat());
   }
@@ -286,6 +292,17 @@ int PeerReplayer::init() {
   }
 
   std::scoped_lock locker(m_lock);
+
+  // start per-thread replayers first, so that the shared threads will
+  // skip those directories.
+  for (auto &dir_root : m_per_thread_directories) {
+    std::unique_ptr<SnapshotReplayerThread> replayer(
+      new PerDirectorySnapshotReplayerThread(this, dir_root));
+    std::string name("replayer-" + dir_root);
+    replayer->create(name.c_str());
+    m_per_directory_replayer.emplace(dir_root, std::move(replayer));
+  }
+
   auto nr_replayers = g_ceph_context->_conf.get_val<uint64_t>(
     "cephfs_mirror_max_concurrent_directory_syncs");
   dout(20) << ": spawning " << nr_replayers << " snapshot replayer(s)" << dendl;
@@ -314,6 +331,14 @@ void PeerReplayer::shutdown() {
   for (auto &replayer : m_replayers) {
     replayer->join();
   }
+
+  // per directory threads are detached, so this just needs to wait
+  // till all those threads terminate.
+  {
+    std::unique_lock locker(m_lock);
+    m_cond.wait(locker, [this]{return m_per_directory_replayer.empty();});
+  }
+
   m_replayers.clear();
   ceph_unmount(m_remote_mount);
   ceph_release(m_remote_mount);
@@ -321,12 +346,46 @@ void PeerReplayer::shutdown() {
   m_remote_cluster.reset();
 }
 
-void PeerReplayer::add_directory(string_view dir_root) {
-  dout(20) << ": dir_root=" << dir_root << dendl;
+void PeerReplayer::add_directory(string_view dir_root, std::string_view prio_mode) {
+  dout(20) << ": dir_root=" << dir_root << ", prio_mode=" << prio_mode << dendl;
+  ceph_assert(!prio_mode.compare("thread-shared"sv) || !prio_mode.compare("per-thread"sv));
 
-  std::scoped_lock locker(m_lock);
-  m_directories.emplace_back(dir_root);
-  m_snap_sync_stats.emplace(dir_root, SnapSyncStat());
+  auto _dir_root = std::string(dir_root);
+
+  std::unique_lock locker(m_lock);
+  if (m_snap_sync_stats.find(_dir_root) == m_snap_sync_stats.end()) {
+    m_directories.emplace_back(dir_root);
+    m_snap_sync_stats.emplace(dir_root, SnapSyncStat());
+  }
+
+  auto it1 = m_per_directory_replayer.find(_dir_root);
+  auto it2 = m_registered.find(_dir_root);
+  if (!prio_mode.compare("thread-shared"sv)) {
+    // thread-shared prio mode
+    if (it1 != m_per_directory_replayer.end()) {
+      // currently synchronizing in per-thread prio mode -- preempt it
+      // out. nothing more to do here -- the directory will be picked
+      // by one of the shared threads in the pool.
+      if (it2 != m_registered.end()) {
+        it2->second.canceled = true;
+      }
+    }
+  } else {
+    // per-thread prio mode
+    if (it1 == m_per_directory_replayer.end()) {
+      // currently synchronizing in thread-shared mode -- interrupt
+      // and assign own thread.
+      if (it2 != m_registered.end()) {
+        it2->second.canceled = true;
+      }
+
+      std::unique_ptr<SnapshotReplayerThread> replayer(
+        new PerDirectorySnapshotReplayerThread(this, _dir_root));
+      std::string name("replayer-" + _dir_root);
+      replayer->create(name.c_str());
+      m_per_directory_replayer.emplace(_dir_root, std::move(replayer));
+    }
+  }
   m_cond.notify_all();
 }
 
@@ -334,7 +393,7 @@ void PeerReplayer::remove_directory(string_view dir_root) {
   dout(20) << ": dir_root=" << dir_root << dendl;
   auto _dir_root = std::string(dir_root);
 
-  std::scoped_lock locker(m_lock);
+  std::unique_lock locker(m_lock);
   auto it = std::find(m_directories.begin(), m_directories.end(), _dir_root);
   if (it != m_directories.end()) {
     m_directories.erase(it);
@@ -365,7 +424,11 @@ boost::optional<std::string> PeerReplayer::pick_directory() {
         continue;
       }
     }
-    if (!m_registered.count(dir_root)) {
+    // normally checking @m_registered would suffice as the per-thread
+    // replayer would register once initially, however, this additional
+    // check is to avoid a shared threads picking up a directory which
+    // is yet to be registerd by the per-thread.
+    if (!m_registered.count(dir_root) && !m_per_directory_replayer.contains(dir_root)) {
       candidate = dir_root;
       break;
     }
@@ -403,6 +466,7 @@ void PeerReplayer::unregister_directory(const std::string &dir_root) {
   if (std::find(m_directories.begin(), m_directories.end(), dir_root) == m_directories.end()) {
     m_snap_sync_stats.erase(dir_root);
   }
+  m_cond.notify_all();
 }
 
 int PeerReplayer::try_lock_directory(const std::string &dir_root,
@@ -2036,7 +2100,7 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
 }
 
 int PeerReplayer::sync_snaps(const std::string &dir_root,
-                              std::unique_lock<ceph::mutex> &locker) {
+                             std::unique_lock<ceph::mutex> &locker) {
   dout(20) << ": dir_root=" << dir_root << dendl;
   locker.unlock();
   int r = do_sync_snaps(dir_root);
@@ -2053,7 +2117,7 @@ int PeerReplayer::sync_snaps(const std::string &dir_root,
 }
 
 void PeerReplayer::run(SnapshotReplayerThread *replayer) {
-  dout(10) << ": snapshot replayer=" << replayer << dendl;
+  dout(10) << ": (thread-shared) snapshot replayer=" << replayer << dendl;
 
   monotime last_directory_scan = clock::zero();
   auto scan_interval = g_ceph_context->_conf.get_val<uint64_t>(
@@ -2061,21 +2125,12 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
 
   std::unique_lock locker(m_lock);
   while (true) {
-    // do not check if client is blocklisted under lock
     m_cond.wait_for(locker, 1s, [this]{return is_stopping();});
-    if (is_stopping()) {
-      dout(5) << ": exiting" << dendl;
+    int r;
+    if (should_backoff(boost::none, &r, locker)) {
+      dout(5) << ": stopping or blocklisted (r=" << r << ")" << dendl;
       break;
     }
-
-    locker.unlock();
-
-    if (m_fs_mirror->is_blocklisted()) {
-      dout(5) << ": exiting as client is blocklisted" << dendl;
-      break;
-    }
-
-    locker.lock();
 
     auto now = clock::now();
     std::chrono::duration<double> timo = now - last_directory_scan;
@@ -2084,25 +2139,56 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
       auto dir_root = pick_directory();
       if (dir_root) {
         dout(5) << ": picked dir_root=" << *dir_root << dendl;
-        int r = register_directory(*dir_root, replayer);
+        r = register_directory(*dir_root, replayer);
         if (r == 0) {
-          r = sync_perms(*dir_root);
-          if (r == 0) {
-            r = sync_snaps(*dir_root, locker);
-            if (r < 0 && m_perf_counters) {
-              m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
-            }
-          } else {
-            _inc_failed_count(*dir_root);
-            if (m_perf_counters) {
-              m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
-            }
-          }
+          sync(*dir_root, locker);
           unregister_directory(*dir_root);
         }
       }
 
       last_directory_scan = now;
+    }
+  }
+}
+
+void PeerReplayer::run(SnapshotReplayerThread *replayer,
+                       const std::string &dir_root) {
+  dout(10) << ": (per-thread) snapshot replayer=" << replayer << ", dir_root="
+           << dir_root << dendl;
+
+  // detach so that noone has to join me when I'm done.
+  replayer->detach();
+
+  std::unique_lock locker(m_lock);
+  // wait if @dir_root was already in registry map. can happen
+  // if @dir_root was synchronizing in thread-shared mode.
+  m_cond.wait(locker, [this, dir_root]{return !m_registered.contains(dir_root);});
+  int r = register_directory(dir_root, replayer);
+  while (true) {
+    m_cond.wait_for(locker, 1s, [this]{return is_stopping();});
+    if (should_backoff(dir_root, &r, locker)) {
+      dout(5) << ": stopping or blocklisted or canceled (r=" << r << ")" << dendl;
+      break;
+    }
+    sync(dir_root, locker);
+  }
+  m_per_directory_replayer.erase(dir_root);
+  unregister_directory(dir_root);
+  m_cond.notify_all();
+}
+
+void PeerReplayer::sync(const std::string &dir_root,
+                        std::unique_lock<ceph::mutex> &locker) {
+  int r = sync_perms(dir_root);
+  if (r == 0) {
+    r = sync_snaps(dir_root, locker);
+    if (r < 0 && m_perf_counters) {
+      m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
+    }
+  } else {
+    _inc_failed_count(dir_root);
+    if (m_perf_counters) {
+      m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
     }
   }
 }
