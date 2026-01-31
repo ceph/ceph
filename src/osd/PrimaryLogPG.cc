@@ -421,8 +421,7 @@ void PrimaryLogPG::on_local_recover(
       snaps.insert(p->second.begin(), p->second.end());
       dout(20) << " snaps " << snaps << dendl;
       snap_mapper.add_oid(
-	recovery_info.soid,
-	snaps,
+	SnapMapper::object_snaps(recovery_info.soid, snaps),
 	&_t);
     } else {
       derr << __func__ << " " << hoid << " had no clone_snaps" << dendl;
@@ -3520,6 +3519,7 @@ int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_o
   // snap
   SnapSet& ss = obc->ssc->snapset;
   const OSDMapRef& osdmap = get_osdmap();
+  OSDMap::removed_snaps_queue_ctx_t rsq_ctx;
   for (vector<snapid_t>::const_reverse_iterator p = ss.clones.rbegin();
       p != ss.clones.rend();
       ++p) {
@@ -3528,7 +3528,7 @@ int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_o
     ObjectContextRef obc_g = nullptr;
     hobject_t clone_oid = obc->obs.oi.soid;
     clone_oid.snap = *p;
-    if (osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *p)) {
+    if (osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *p, &rsq_ctx)) {
       return -EBUSY;
     }
     if (is_unreadable_object(clone_oid)) {
@@ -4702,7 +4702,8 @@ void PrimaryLogPG::do_backfill_remove(OpRequestRef op)
 
 int PrimaryLogPG::trim_object(
   bool first, const hobject_t &coid, snapid_t snap_to_trim,
-  PrimaryLogPG::OpContextUPtr *ctxp)
+  PrimaryLogPG::OpContextUPtr *ctxp,
+  OSDMap::removed_snaps_queue_ctx_t *rsq_ctx)
 {
   *ctxp = NULL;
 
@@ -4747,12 +4748,10 @@ int PrimaryLogPG::trim_object(
 
   set<snapid_t> new_snaps;
   const OSDMapRef& osdmap = get_osdmap();
-  for (set<snapid_t>::iterator i = old_snaps.begin();
-       i != old_snaps.end();
-       ++i) {
-    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *i) &&
-	*i != snap_to_trim) {
-      new_snaps.insert(*i);
+  for (auto& s : old_snaps) {
+    if (s != snap_to_trim &&
+        osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), s, rsq_ctx)) {
+      new_snaps.emplace_hint(new_snaps.cend(), s);
     }
   }
 
@@ -15901,8 +15900,8 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 {
   PrimaryLogPGRef pg = context< SnapTrimmer >().pg;
   snapid_t snap_to_trim = context<Trimming>().snap_to_trim;
-  auto &in_flight = context<Trimming>().in_flight;
-  ceph_assert(in_flight.empty());
+  auto &in_flight_ops = context<Trimming>().in_flight_ops;
+  ceph_assert(in_flight_ops == 0);
 
   ceph_assert(pg->is_primary() && pg->is_active());
   if (!context< SnapTrimmer >().can_trim()) {
@@ -15954,11 +15953,13 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     return transit< NotTrimming >();
   }
 
+  OSDMap::removed_snaps_queue_ctx_t rsq_ctx;
   for (auto &&object: *to_trim) {
     // Get next
     ldout(pg->cct, 10) << "AwaitAsyncWork react trimming " << object << dendl;
     OpContextUPtr ctx;
-    int error = pg->trim_object(in_flight.empty(), object, snap_to_trim, &ctx);
+
+    int error = pg->trim_object(in_flight_ops == 0, object, snap_to_trim, &ctx, &rsq_ctx);
     if (error) {
       if (error == -ENOLCK) {
 	ldout(pg->cct, 10) << "could not get write lock on obj "
@@ -15967,7 +15968,7 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 	pg->state_set(PG_STATE_SNAPTRIM_ERROR);
 	ldout(pg->cct, 10) << "Snaptrim error=" << error << dendl;
       }
-      if (!in_flight.empty()) {
+      if (in_flight_ops != 0) {
 	ldout(pg->cct, 10) << "letting the ones we already started finish" << dendl;
 	return transit< WaitRepops >();
       }
@@ -15979,12 +15980,12 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
       return transit< NotTrimming >();
     }
 
-    in_flight.insert(object);
+    in_flight_ops++;
     ctx->register_on_success(
-      [pg, object, &in_flight]() {
-	ceph_assert(in_flight.find(object) != in_flight.end());
-	in_flight.erase(object);
-	if (in_flight.empty()) {
+      [pg, object, &in_flight_ops]() {
+        ceph_assert(in_flight_ops != 0);
+	in_flight_ops--;
+	if (in_flight_ops == 0) {
 	  if (pg->state_test(PG_STATE_SNAPTRIM_ERROR)) {
 	    pg->snap_trimmer_machine.process_event(Reset());
 	  } else {
