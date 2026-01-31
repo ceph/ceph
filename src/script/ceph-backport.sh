@@ -584,7 +584,7 @@ function interactive_setup_routine {
     echo "\"Full control of private repositories\" scope."
     echo
     echo "For more details, see:"
-    echo "https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line"
+    echo "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
     echo
     echo -n "What is your GitHub token? "
     default_val="$github_token"
@@ -900,7 +900,7 @@ function milestone_number_from_remote_api {
 }
 
 function munge_body {
-    echo "$new_body" | tr '\r' '\n' | sed 's/$/\\n/' | tr -d '\n'
+    echo "$*" | tr '\r' '\n' | sed 's/$/\\n/' | tr -d '\n'
 }
 
 function number_to_url {
