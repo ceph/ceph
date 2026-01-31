@@ -1200,6 +1200,21 @@ ACLOwner rgw::auth::RoleApplier::get_aclowner() const
   return owner;
 }
 
+uint32_t rgw::auth::RoleApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
+{
+  if (role.account) {
+    // match acls against account id
+    return rgw_perms_from_aclspec_default_strategy(role.account->id, aclspec, dpp);
+  }
+  // ignore acl grants against original user id
+  return 0;
+}
+
+uint32_t rgw::auth::RoleApplier::get_perm_mask() const
+{
+  return RGW_PERM_FULL_CONTROL;
+}
+
 bool rgw::auth::RoleApplier::is_owner_of(const rgw_owner& o) const
 {
   return match_owner(o, token_attrs.user_id, role.account);
