@@ -80,6 +80,7 @@ class ConfigNS(_StrEnum):
     USERS_AND_GROUPS = 'users_and_groups'
     JOIN_AUTHS = 'join_auths'
     TLS_CREDENTIALS = 'tls_creds'
+    EXTERNAL_CEPH_CLUSTERS = 'ext_ceph_clusters'
 
 
 class LoginCategory(_StrEnum):

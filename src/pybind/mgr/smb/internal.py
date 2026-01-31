@@ -223,6 +223,21 @@ class TLSCredentialEntry(CommonResourceEntry):
         return self.get_resource_type(resources.TLSCredential)
 
 
+class ExternalCephClusterEntry(CommonResourceEntry):
+    """ExternalCephCluster resource getter/setter for internal store."""
+
+    namespace = ConfigNS.EXTERNAL_CEPH_CLUSTERS
+    _for_resource = resources.ExternalCephCluster
+
+    @classmethod
+    def to_key(cls, resource: SMBResource) -> ResourceKey:
+        assert isinstance(resource, cls._for_resource)
+        return ResourceIDKey(resource.external_ceph_cluster_id)
+
+    def get_external_ceph_cluster(self) -> resources.ExternalCephCluster:
+        return self.get_resource_type(resources.ExternalCephCluster)
+
+
 def _map_resource_entry(
     resource: Union[SMBResource, Type[SMBResource]]
 ) -> Type[ResourceEntry]:
@@ -235,6 +250,7 @@ def _map_resource_entry(
         resources.JoinAuth: JoinAuthEntry,
         resources.UsersAndGroups: UsersAndGroupsEntry,
         resources.TLSCredential: TLSCredentialEntry,
+        resources.ExternalCephCluster: ExternalCephClusterEntry,
     }
     try:
         return _map[rcls]

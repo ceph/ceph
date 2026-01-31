@@ -3682,6 +3682,85 @@ class SMBClusterBindIPSpec:
         return out
 
 
+class SMBExternalCephCluster:
+    """Configure access to a non-local Ceph cluster for SMB services."""
+    def __init__(
+        self,
+        alias: str,
+        fsid: str,
+        mon_host: str,
+        # default user and key
+        user: str,
+        key: str,
+    ) -> None:
+        self.alias = alias
+        self.fsid = fsid
+        self.mon_host = mon_host
+        self.user = user
+        self.key = key
+        self.validate()
+
+    def validate(self) -> None:
+        if not self.alias:
+            raise SpecValidationError('an alias value is required')
+        if not self.fsid:
+            raise SpecValidationError('an fsid value is required')
+        if not self.mon_host:
+            raise SpecValidationError('a mon_host value is required')
+        if not self.user:
+            raise SpecValidationError('a default user name is required')
+        if not self.key:
+            raise SpecValidationError('a default key is required')
+
+    def __repr__(self) -> str:
+        _names = ['alias', 'fsid', 'mon_host', 'user', 'key']
+        fields = ', '.join(f'{n}={getattr(self, n, "")!r}' for n in _names)
+        return f'{self.__class__.__name__}({fields})'
+
+    def to_simplified(self) -> Dict[str, Any]:
+        """Return a serializable representation of SMBExternalCephCluster."""
+        return {
+            'alias': self.alias,
+            'fsid': self.fsid,
+            'mon_host': self.mon_host,
+            'user': self.user,
+            'key': self.key,
+        }
+
+    def to_json(self) -> Dict[str, Any]:
+        """Return a JSON-compatible dict."""
+        return self.to_simplified()
+
+    @classmethod
+    def from_json(cls, spec: Dict[str, Any]) -> 'SMBExternalCephCluster':
+        """Convert value from a JSON-compatible dict."""
+        return cls(**spec)
+
+    @classmethod
+    def convert_list(
+        cls, arg: Optional[List[Any]]
+    ) -> Optional[List['SMBExternalCephCluster']]:
+        """Convert a list of values into a list of SMBExternalCephCluster objects.
+        Ignores None inputs returning None.
+        """
+        if arg is None:
+            return None
+        assert isinstance(arg, list)
+        out = []
+        for value in arg:
+            if isinstance(value, cls):
+                out.append(value)
+            elif hasattr(value, 'to_json'):
+                out.append(cls.from_json(value.to_json()))
+            elif isinstance(value, dict):
+                out.append(cls.from_json(value))
+            else:
+                raise SpecValidationError(
+                    f"Unknown type for {cls.__name__}: {type(value)}"
+                )
+        return out
+
+
 class SMBSpec(ServiceSpec):
     service_type = 'smb'
     _valid_features = smbconst.FEATURES
@@ -3749,7 +3828,12 @@ class SMBSpec(ServiceSpec):
         remote_control_ssl_cert: Optional[str] = None,
         remote_control_ssl_key: Optional[str] = None,
         remote_control_ca_cert: Optional[str] = None,
-        # --- genearal tweaks ---
+        # === cluster configs ===
+        # ceph_cluster_configs - An optional list of extra ceph clusters
+        # typically external to the current cluster that the smb services
+        # may be permitted to connect to
+        ceph_cluster_configs: Optional[List[SMBExternalCephCluster]] = None,
+        # --- general tweaks ---
         extra_container_args: Optional[GeneralArgList] = None,
         extra_entrypoint_args: Optional[GeneralArgList] = None,
         custom_configs: Optional[List[CustomConfig]] = None,
@@ -3786,6 +3870,9 @@ class SMBSpec(ServiceSpec):
         self.remote_control_ssl_cert = remote_control_ssl_cert
         self.remote_control_ssl_key = remote_control_ssl_key
         self.remote_control_ca_cert = remote_control_ca_cert
+        self.ceph_cluster_configs = SMBExternalCephCluster.convert_list(
+            ceph_cluster_configs
+        )
         self.validate()
 
     def validate(self) -> None:
@@ -3827,7 +3914,7 @@ class SMBSpec(ServiceSpec):
                 raise ValueError(f'{key} is not a valid service name')
 
     def _derive_cluster_uri(self, uri: str, objname: str) -> str:
-        if not uri.startswith('rados://'):
+        if not uri.startswith(('rados://', 'mem:')):
             raise ValueError('invalid uri scheme for cluster metadata')
         parts = uri[8:].split('/')
         parts[-1] = objname
@@ -3874,6 +3961,10 @@ class SMBSpec(ServiceSpec):
             ]
         if spec and spec.get('bind_addrs'):
             spec['bind_addrs'] = [a.to_json() for a in spec['bind_addrs']]
+        if spec and spec.get('ceph_cluster_configs'):
+            spec['ceph_cluster_configs'] = [
+                c.to_json() for c in spec['ceph_cluster_configs']
+            ]
         return obj
 
 

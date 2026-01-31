@@ -516,6 +516,27 @@ class TLSSource(_RBase):
 
 
 @resourcelib.component()
+class ExternalCephClusterSource(_RBase):
+    """References Ceph cluster configurations for clusters other than the
+    current cluster.
+    """
+
+    source_type: SourceReferenceType = SourceReferenceType.RESOURCE
+    ref: str = ''
+
+    def validate(self) -> None:
+        if not self.ref:
+            raise ValueError('reference value must be specified')
+        else:
+            validation.check_id(self.ref)
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.ref.quiet = True
+        return rc
+
+
+@resourcelib.component()
 class RemoteControl(_RBase):
     # enabled can be set to explicitly toggle the remote control server
     enabled: Optional[bool] = None
@@ -559,6 +580,9 @@ class Cluster(_RBase):
     bind_addrs: Optional[List[ClusterBindIP]] = None
     # configure a remote control sidecar server.
     remote_control: Optional[RemoteControl] = None
+    # connect the smb cluster and all its shares to cephfs file systems
+    # hosted on an external ceph cluster
+    external_ceph_cluster: Optional[ExternalCephClusterSource] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -751,6 +775,41 @@ class TLSCredential(_RBase):
         return self
 
 
+@resourcelib.component()
+class CephUserKey(_RBase):
+    """A Ceph User Key name and value pair."""
+
+    name: str
+    key: str
+
+
+@resourcelib.component()
+class ExternalCephClusterValues(_RBase):
+    """Contains values that can be used to connect to a Ceph cluster
+    other than the current cluster.
+    """
+
+    fsid: str
+    mon_host: str
+    cephfs_user: CephUserKey
+
+
+@resourcelib.resource('ceph.smb.ext.cluster')
+class ExternalCephCluster(_RBase):
+    """Resource used to configure an external Ceph cluster."""
+
+    external_ceph_cluster_id: str
+    intent: Intent = Intent.PRESENT
+    cluster: Optional[ExternalCephClusterValues] = None
+
+    def validate(self) -> None:
+        if not self.external_ceph_cluster_id:
+            raise ValueError('external_ceph_cluster_id requires a value')
+        validation.check_id(self.external_ceph_cluster_id)
+        if self.intent is Intent.PRESENT and not self.cluster:
+            raise ValueError('cluster parameter must be specified')
+
+
 # SMBResource is a union of all valid top-level smb resource types.
 SMBResource = Union[
     Cluster,
@@ -760,6 +819,7 @@ SMBResource = Union[
     Share,
     UsersAndGroups,
     TLSCredential,
+    ExternalCephCluster,
 ]
 
 

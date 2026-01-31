@@ -806,7 +806,7 @@ class SMB(ContainerDaemonForm):
             self.identity, smb_ctr.name()
         )
         img = smb_ctr.container_image() or ctx.image or self.default_image
-        return SidecarContainer(
+        sc = SidecarContainer(
             ctx,
             entrypoint='',
             image=img,
@@ -818,6 +818,8 @@ class SMB(ContainerDaemonForm):
             init=False,
             remove=True,
         )
+        deployment_utils.enhance_container(ctx, sc)
+        return sc
 
     def container(self, ctx: CephadmContext) -> CephContainer:
         ctr = daemon_to_container(ctx, self, host_network=self._cfg.clustered)
@@ -880,6 +882,9 @@ class SMB(ContainerDaemonForm):
         if self._tls_files:
             tls_dir = str(data_dir / 'tls')
             mounts[tls_dir] = f'{_ETC_SAMBA_TLS}:z'
+        for filename in self._files or []:
+            if filename.endswith(('.ceph.conf', '.ceph.keyring')):
+                mounts[str(data_dir / filename)] = f'/etc/ceph/{filename}'
         if self._cfg.clustered:
             ctdb_persistent = str(data_dir / 'ctdb/persistent')
             ctdb_run = str(data_dir / 'ctdb/run')  # TODO: tmpfs too!
