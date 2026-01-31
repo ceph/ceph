@@ -616,6 +616,7 @@ Miscellaneous
 .. confval:: mon_mds_skip_sanity
 .. confval:: mon_max_mdsmap_epochs
 .. confval:: mon_config_key_max_entry_size
+.. confval:: mon_config_history_size
 .. confval:: mon_scrub_interval
 .. confval:: mon_scrub_max_keys
 .. confval:: mon_compact_on_start
