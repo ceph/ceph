@@ -17,6 +17,14 @@
   and the scrubbing process is delayed between each read in order to avoid monopolizing
   the I/O capacity of the OSD.
   The default stride size (``osd_deep_scrub_stride``) was 512 KBytes, and is now 4 MBytes.
+* RBD: Fixed incorrect behavior of the "start-time" argument for mirror
+  snapshot and trash purge schedules, where it previously offset the schedule
+  anchor instead of defining it. The argument now requires an ISO 8601
+  date-time. The `schedule ls` output displays the start time in UTC, including
+  the date and time in the format "%Y-%m-%d %H:%M:00".
+* RBD: Mirror snapshot creation and trash purge schedules are now automatically
+  staggered when no explicit "start-time" is specified. This reduces
+  synchronized scheduling spikes and distributes work more evenly over time.
 
 * CephFS: The offline CephFS tools (cephfs-data-scan, cephfs-journal-tool,
   and cephfs-table-tool) now include progress tracking with ETA (Estimated Time of

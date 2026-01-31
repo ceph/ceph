@@ -421,6 +421,10 @@ globally, per-pool, or per-image levels. Multiple mirror-snapshot schedules can
 be defined at any level, but only the most-specific snapshot schedules that
 match an individual mirrored image will run.
 
+When multiple images share the same schedule interval and no explicit
+``start-time`` is defined, snapshot execution is automatically staggered across
+the interval to reduce scheduling spikes.
+
 To create a mirror-snapshot schedule with ``rbd``, specify the
 ``mirror snapshot schedule add`` command along with an optional pool or
 image name; interval; and optional start time::
@@ -428,10 +432,10 @@ image name; interval; and optional start time::
         rbd mirror snapshot schedule add [--pool {pool-name}] [--image {image-name}] {interval} [{start-time}]
 
 The ``interval`` can be specified in days, hours, or minutes using ``d``, ``h``,
-``m`` suffix respectively. The optional ``start-time`` can be specified using
+``m`` suffix respectively. The optional ``start-time`` must be specified in
 the ISO 8601 time format. For example::
 
-        $ rbd --cluster site-a mirror snapshot schedule add --pool image-pool 24h 14:00:00-05:00
+        $ rbd --cluster site-a mirror snapshot schedule add --pool image-pool 24h 2020-01-14T11:30+05:30
         $ rbd --cluster site-a mirror snapshot schedule add --pool image-pool --image image1 6h
 
 To remove a mirror-snapshot schedules with ``rbd``, specify the
@@ -441,12 +445,14 @@ corresponding ``add`` schedule command.
 To list all snapshot schedules for a specific level (global, pool, or image)
 with ``rbd``, specify the ``mirror snapshot schedule ls`` command along with
 an optional pool or image name. Additionally, the ``--recursive`` option can
-be specified to list all schedules at the specified level and below. For
-example::
+be specified to list all schedules at the specified level and below.
+User-defined schedule start times are displayed in UTC.
+
+For example::
 
         $ rbd --cluster site-a mirror snapshot schedule ls --pool image-pool --recursive
         POOL        NAMESPACE IMAGE  SCHEDULE                            
-        image-pool  -         -      every 1d starting at 14:00:00-05:00 
+        image-pool  -         -      every 1d starting at 2020-01-14 06:00:00
         image-pool            image1 every 6h                            
 
 To view the status for when the next snapshots will be created for
@@ -456,11 +462,12 @@ image name::
 
         rbd mirror snapshot schedule status [--pool {pool-name}] [--image {image-name}]
 
-For example::
+The scheduled time is shown in UTC. For example::
 
         $ rbd --cluster site-a mirror snapshot schedule status
         SCHEDULE TIME       IMAGE             
-        2020-02-26 18:00:00 image-pool/image1 
+        2026-01-24 06:00:00 image-pool/image1
+
 
 Disable Image Mirroring
 -----------------------

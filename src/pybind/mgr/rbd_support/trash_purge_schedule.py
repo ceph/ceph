@@ -1,9 +1,10 @@
 import json
 import rados
+import random
 import rbd
 import traceback
 
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import Condition, Lock, Thread
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -21,7 +22,7 @@ class TrashPurgeScheduleHandler:
         self.condition = Condition(self.lock)
         self.module = module
         self.log = module.log
-        self.last_refresh_pools = datetime(1970, 1, 1)
+        self.last_refresh_pools = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
         self.stop_thread = False
         self.thread = Thread(target=self.run)
@@ -51,7 +52,7 @@ class TrashPurgeScheduleHandler:
                 pool_id, namespace = ns_spec
                 self.trash_purge(pool_id, namespace)
                 with self.lock:
-                    self.enqueue(datetime.now(), pool_id, namespace)
+                    self.enqueue(datetime.now(timezone.utc), pool_id, namespace)
 
         except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
             self.log.exception("TrashPurgeScheduleHandler: client blocklisted")
@@ -64,7 +65,7 @@ class TrashPurgeScheduleHandler:
         try:
             with self.module.rados.open_ioctx2(int(pool_id)) as ioctx:
                 ioctx.set_namespace(namespace)
-                rbd.RBD().trash_purge(ioctx, datetime.now())
+                rbd.RBD().trash_purge(ioctx, datetime.now(timezone.utc))
         except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
             raise
         except Exception as e:
@@ -72,7 +73,7 @@ class TrashPurgeScheduleHandler:
                 pool_id, namespace, e))
 
     def init_schedule_queue(self) -> None:
-        self.queue: Dict[str, List[Tuple[str, str]]] = {}
+        self.queue: Dict[datetime, List[Tuple[str, str]]] = {}
         # pool_id => {namespace => pool_name}
         self.pools: Dict[str, Dict[str, str]] = {}
         self.schedules = Schedules(self)
@@ -84,7 +85,7 @@ class TrashPurgeScheduleHandler:
         self.schedules.load()
 
     def refresh_pools(self) -> float:
-        elapsed = (datetime.now() - self.last_refresh_pools).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - self.last_refresh_pools).total_seconds()
         if elapsed < self.REFRESH_DELAY_SECONDS:
             return self.REFRESH_DELAY_SECONDS - elapsed
 
@@ -96,7 +97,7 @@ class TrashPurgeScheduleHandler:
                 self.log.debug("TrashPurgeScheduleHandler: no schedules")
                 self.pools = {}
                 self.queue = {}
-                self.last_refresh_pools = datetime.now()
+                self.last_refresh_pools = datetime.now(timezone.utc)
                 return self.REFRESH_DELAY_SECONDS
 
         pools: Dict[str, Dict[str, str]] = {}
@@ -112,7 +113,7 @@ class TrashPurgeScheduleHandler:
             self.refresh_queue(pools)
             self.pools = pools
 
-        self.last_refresh_pools = datetime.now()
+        self.last_refresh_pools = datetime.now(timezone.utc)
         return self.REFRESH_DELAY_SECONDS
 
     def load_pool(self, ioctx: rados.Ioctx, pools: Dict[str, Dict[str, str]]) -> None:
@@ -137,13 +138,11 @@ class TrashPurgeScheduleHandler:
             pools[pool_id][namespace] = pool_name
 
     def rebuild_queue(self) -> None:
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         # don't remove from queue "due" images
-        now_string = datetime.strftime(now, "%Y-%m-%d %H:%M:00")
-
         for schedule_time in list(self.queue):
-            if schedule_time > now_string:
+            if schedule_time > now:
                 del self.queue[schedule_time]
 
         if not self.schedules:
@@ -156,7 +155,7 @@ class TrashPurgeScheduleHandler:
         self.condition.notify()
 
     def refresh_queue(self, current_pools: Dict[str, Dict[str, str]]) -> None:
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         for pool_id, namespaces in self.pools.items():
             for namespace in namespaces:
@@ -180,7 +179,8 @@ class TrashPurgeScheduleHandler:
                     pool_id, namespace))
             return
 
-        schedule_time = schedule.next_run(now)
+        schedule_time = schedule.next_run(now,
+                                          "{}/{}".format(pool_id, namespace))
         if schedule_time not in self.queue:
             self.queue[schedule_time] = []
         self.log.debug(
@@ -194,16 +194,15 @@ class TrashPurgeScheduleHandler:
         if not self.queue:
             return None, 1000.0
 
-        now = datetime.now()
-        schedule_time = sorted(self.queue)[0]
+        now = datetime.now(timezone.utc)
+        schedule_time = min(self.queue)
 
-        if datetime.strftime(now, "%Y-%m-%d %H:%M:%S") < schedule_time:
-            wait_time = (datetime.strptime(schedule_time,
-                                           "%Y-%m-%d %H:%M:%S") - now)
-            return None, wait_time.total_seconds()
+        if now < schedule_time:
+            return None, (schedule_time - now).total_seconds()
 
         namespaces = self.queue[schedule_time]
-        namespace = namespaces.pop(0)
+        rng = random.Random(schedule_time.timestamp())
+        namespace = namespaces.pop(rng.randrange(len(namespaces)))
         if not namespaces:
             del self.queue[schedule_time]
         return namespace, 0.0
@@ -273,7 +272,7 @@ class TrashPurgeScheduleHandler:
                         continue
                     pool_name = self.pools[pool_id][namespace]
                     scheduled.append({
-                        'schedule_time': schedule_time,
+                        'schedule_time': schedule_time.strftime("%Y-%m-%d %H:%M:00"),
                         'pool_id': pool_id,
                         'pool_name': pool_name,
                         'namespace': namespace
