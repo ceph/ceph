@@ -76,6 +76,7 @@ class SimpleBitmap;
 #define MAX_BUFFER_SLOP_RATIO_DEN  8  // so actually 1/N
 #define CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
 
+/* BPF-EXPORT-START */
 enum {
   l_bluestore_first = 732430,
   // space utilization stats
@@ -237,6 +238,7 @@ enum {
   //****************************************
   l_bluestore_last
 };
+/* BPF-EXPORT-END */
 
 #define META_POOL_ID ((uint64_t)-1ull)
 using bptr_c_it_t = buffer::ptr::const_iterator;
