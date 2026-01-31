@@ -2949,12 +2949,80 @@ options:
   with_legacy: true
 # extra keys that may be used for aws:kms
 # defined as map "key1=YmluCmJvb3N0CmJvb3N0LQ== key2=b3V0CnNyYwpUZXN0aW5nCg=="
+- name: rgw_crypt_s3_kms_cache_enabled
+  type: bool
+  level: advanced
+  desc: Enable caching of encryption keys for SSE-KMS.
+  default: true
+  with_legacy: true
+  services:
+  - rgw
+  see_also:
+  - rgw_crypt_s3_kms_cache_max_size
+  - rgw_crypt_s3_kms_cache_positive_ttl
+  - rgw_crypt_s3_kms_cache_transient_error_ttl
+  - rgw_crypt_s3_kms_cache_negative_ttl
+- name: rgw_crypt_s3_kms_cache_max_size
+  type: uint
+  level: advanced
+  desc: Maximum number of SSE-KMS secrets cached.
+    Each key consumes 32 byte (AES-256) + overhead in memory
+  default: 128
+  with_legacy: true
+  services:
+  - rgw
+  see_also:
+  - rgw_crypt_s3_kms_cache_enabled
+- name: rgw_crypt_s3_kms_cache_positive_ttl
+  type: uint
+  level: advanced
+  desc: Time in seconds after which the KMS cache evicts successful lookups.
+  services:
+  - rgw
+  with_legacy: true
+  default: 60
+  min: 10
+  max: 3600
+  see_also:
+  - rgw_crypt_s3_kms_cache_enabled
 - name: rgw_crypt_s3_kms_encryption_keys
   type: str
   level: dev
   services:
   - rgw
   with_legacy: true
+- name: rgw_crypt_s3_kms_cache_transient_error_ttl
+  type: uint
+  level: advanced
+  desc: Time in seconds after which the KMS cache evicts entries representing transient errors (timeouts, temporary outages, misconfiguration, etc).
+  services:
+  - rgw
+  with_legacy: true
+  default: 10
+  min: 0
+  max: 3600
+  see_also:
+  - rgw_crypt_s3_kms_cache_enabled
+- name: rgw_crypt_s3_kms_cache_negative_ttl
+  type: uint
+  level: advanced
+  desc: Time in seconds after which the KMS cache evicts permanent look-up errors (e.g key does not exist).
+  services:
+  - rgw
+  with_legacy: true
+  default: 120
+  min: 0
+  max: 3600
+  see_also:
+  - rgw_crypt_s3_kms_cache_enabled
+- name: rgw_crypt_s3_kms_testing_delay
+  type: uint
+  level: dev
+  desc: Add delay in milliseconds to the 'testing' KMS key retrieval.
+  services:
+  - rgw
+  with_legacy: true
+  default: 0
 - name: rgw_crypt_vault_auth
   type: str
   level: advanced

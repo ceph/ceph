@@ -24,6 +24,7 @@
 #include "include/compat.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
+#include "rgw_kms_cache.h"
 #include "rgw_main.h"
 #include "rgw_asio_thread.h"
 #include "rgw_common.h"
@@ -477,6 +478,13 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     }
     else if (framework == "beast") {
       need_context_pool();
+      if (context_pool.has_value() &&
+          g_conf()->rgw_crypt_s3_kms_cache_enabled) {
+        env.kms_cache->initialize_ttl_reaper(
+            g_conf()->rgw_beast_enable_async
+                ? std::optional(context_pool->get_executor())
+                : nullopt);
+      }
       fe = new RGWAsioFrontend(env, config, *sched_ctx, *context_pool);
     }
     else if (framework == "rgw-nfs") {
@@ -614,6 +622,15 @@ void rgw::AppMain::init_dedup()
 }
 #endif
 
+void rgw::AppMain::init_kms_cache()
+{
+  if (!g_conf().get_val<bool>("rgw_crypt_s3_kms_cache_enabled")) {
+    return;
+  }
+  env.kms_cache = std::make_unique<rgw::kms::KMSCache>(
+      dpp->get_cct(), Keyring::get_best());
+}
+
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
   // stop the realm reloader
@@ -633,6 +650,8 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
     }
   }
 #endif
+
+  env.kms_cache.reset();
 
   for (auto& fe : fes) {
     fe->stop();
