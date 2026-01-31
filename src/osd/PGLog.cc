@@ -226,6 +226,7 @@ void PGLog::proc_replica_log(
   const pg_log_t &olog,
   pg_missing_t& omissing,
   pg_shard_t from,
+  const pg_shard_t &to,
   bool ec_optimizations_enabled) const
 {
   dout(10) << "proc_replica_log for osd." << from << ": "
@@ -302,8 +303,9 @@ void PGLog::proc_replica_log(
     oinfo,
     olog.get_can_rollback_to(),
     omissing,
-    0,
+    nullptr,
     ec_optimizations_enabled,
+    to.shard,
     this);
 
   if (lu < oinfo.last_update) {
@@ -337,7 +339,8 @@ void PGLog::proc_replica_log(
 void PGLog::rewind_divergent_log(eversion_t newhead,
 				 pg_info_t &info, LogEntryHandler *rollbacker,
 				 bool &dirty_info, bool &dirty_big_info,
-				 bool ec_optimizations_enabled)
+				 bool ec_optimizations_enabled,
+				 const pg_shard_t &shard)
 {
   dout(10) << "rewind_divergent_log truncate divergent future " <<
     newhead << dendl;
@@ -375,6 +378,7 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
     missing,
     rollbacker,
     ec_optimizations_enabled,
+    shard.shard,
     this);
 
   dirty_info = true;
@@ -444,7 +448,8 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
   // do we have divergent entries to throw out?
   if (olog.head < log.head) {
     rewind_divergent_log(olog.head, info, rollbacker,
-			 dirty_info, dirty_big_info, ec_optimizations_enabled);
+			 dirty_info, dirty_big_info, ec_optimizations_enabled,
+			 toosd);
     changed = true;
   }
 
@@ -504,6 +509,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
       missing,
       rollbacker,
       ec_optimizations_enabled,
+      toosd.shard,
       this);
 
     info.last_update = log.head = olog.head;
