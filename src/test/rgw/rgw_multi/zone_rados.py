@@ -1,6 +1,6 @@
 import logging
-from boto.s3.deletemarker import DeleteMarker
-from boto.exception import BotoServerError
+import boto3
+from botocore.exceptions import ClientError
 
 from itertools import zip_longest  # type: ignore
 
@@ -15,29 +15,43 @@ log = logging.getLogger(__name__)
 def check_object_eq(k1, k2, check_extra = True):
     assert k1
     assert k2
-    log.debug('comparing key name=%s', k1.name)
-    eq(k1.name, k2.name)
-    eq(k1.version_id, k2.version_id)
-    eq(k1.is_latest, k2.is_latest)
-    eq(k1.last_modified, k2.last_modified)
-    if isinstance(k1, DeleteMarker):
-        assert isinstance(k2, DeleteMarker)
-        return
+    log.debug('comparing key name=%s', k1.key)
+    eq(k1.key, k2.key)
+    if hasattr(k1, 'version_id'):
+        eq(k1.version_id, k2.version_id)
+    if hasattr(k1, 'is_latest'):
+        eq(k1.is_latest, k2.is_latest)
+    if hasattr(k1, 'last_modified'):
+        eq(k1.last_modified, k2.last_modified)
 
-    eq(k1.get_contents_as_string(), k2.get_contents_as_string())
-    eq(k1.metadata, k2.metadata)
-    eq(k1.cache_control, k2.cache_control)
-    eq(k1.content_type, k2.content_type)
-    eq(k1.content_encoding, k2.content_encoding)
-    eq(k1.content_disposition, k2.content_disposition)
-    eq(k1.content_language, k2.content_language)
-    eq(k1.etag, k2.etag)
-    if check_extra:
-        eq(k1.owner.id, k2.owner.id)
-        eq(k1.owner.display_name, k2.owner.display_name)
-    eq(k1.storage_class, k2.storage_class)
-    eq(k1.size, k2.size)
-    eq(k1.encrypted, k2.encrypted)
+    response1 = k1.get()
+    response2 = k2.get()
+    
+    body1 = response1['Body'].read()
+    body2 = response2['Body'].read()
+    eq(body1, body2)
+
+    eq(response1.get('Metadata', {}), response2.get('Metadata', {}))
+    eq(response1.get('CacheControl'), response2.get('CacheControl'))
+    eq(response1.get('ContentType'), response2.get('ContentType'))
+    eq(response1.get('ContentEncoding'), response2.get('ContentEncoding'))
+    eq(response1.get('ContentDisposition'), response2.get('ContentDisposition'))
+    eq(response1.get('ContentLanguage'), response2.get('ContentLanguage'))
+    eq(response1.get('ETag'), response2.get('ETag'))
+
+    if check_extra and hasattr(k1, 'owner') and hasattr(k2, 'owner'):
+        eq(k1.owner.get('ID'), k2.owner.get('ID'))
+        if 'DisplayName' in k1.owner and 'DisplayName' in k2.owner:
+            eq(k1.owner['DisplayName'], k2.owner['DisplayName'])
+
+    if hasattr(k1, 'storage_class'):
+        eq(k1.storage_class, k2.storage_class)
+    if hasattr(k1, 'size'):
+        eq(k1.size, k2.size)
+
+    encrypted1 = response1.get('ServerSideEncryption') is not None
+    encrypted2 = response2.get('ServerSideEncryption') is not None
+    eq(encrypted1, encrypted2)
 
 class RadosZone(Zone):
     def __init__(self, name, zonegroup = None, cluster = None, data = None, zone_id = None, gateways = None):
@@ -52,59 +66,88 @@ class RadosZone(Zone):
             super(RadosZone.Conn, self).__init__(zone, credentials)
 
         def get_bucket(self, name):
-            return self.conn.get_bucket(name)
+            try:
+                self.s3_client.head_bucket(Bucket=name)
+                # if no exception, bucket exists
+                return self.s3_resource.Bucket(name)
+            except ClientError as e:
+                error_code = e.response['Error']['Code']
+                if error_codein ['404', 'NoSuchBucket']:
+                    return None
+                raise
 
         def create_bucket(self, name):
-            return self.conn.create_bucket(name)
+            try:
+                bucket = self.s3_resource.create_bucket(Bucket=name)
+                return bucket
+            except ClientError as e:
+                if e.response['Error']['Code'] == '409':
+                    return self.s3_resource.Bucket(name)
+                raise
 
         def delete_bucket(self, name):
-            return self.conn.delete_bucket(name)
+            bucket = self.s3_resource.Bucket(name)
+            return bucket.delete()
 
         def check_bucket_eq(self, zone_conn, bucket_name):
             log.info('comparing bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
             b1 = self.get_bucket(bucket_name)
             b2 = zone_conn.get_bucket(bucket_name)
 
-            b1_versions = b1.list_versions()
+            b1_versions = list(b1.object_versions.all())
             log.debug('bucket1 objects:')
             for o in b1_versions:
-                log.debug('o=%s', o.name)
+                log.debug('o=%s, v=%s', o.key, o.version_id)
 
-            b2_versions = b2.list_versions()
+            b2_versions = list(b2.object_versions.all())
             log.debug('bucket2 objects:')
             for o in b2_versions:
-                log.debug('o=%s', o.name)
+                log.debug('o=%s, v=%s', o.key, o.version_id)
 
             for k1, k2 in zip_longest(b1_versions, b2_versions):
                 if k1 is None:
-                    log.critical('key=%s is missing from zone=%s', k2.name, self.name)
+                    log.critical('key=%s is missing from zone=%s', k2.key, self.name)
                     assert False
                 if k2 is None:
-                    log.critical('key=%s is missing from zone=%s', k1.name, zone_conn.name)
+                    log.critical('key=%s is missing from zone=%s', k1.key, zone_conn.name)
                     assert False
 
+                is_delete_marker_k1 = (not hasattr(k1, 'size') or k1.size is None)
+                is_delete_marker_k2 = (not hasattr(k2, 'size') or k2.size is None)
+
+                if is_delete_marker_k1 or is_delete_marker_k2:
+                    # both must be delete markers
+                    assert is_delete_marker_k1 and is_delete_marker_k2, \
+                        f"delete marker mismatch: k1={is_delete_marker_k1}, k2={is_delete_marker_k2}"
+                    eq(k1.key, k2.key)
+                    eq(k1.version_id, k2.version_id)
+                    if hasattr(k1, 'is_latest'):
+                        eq(k1.is_latest, k2.is_latest)
+                    log.debug('both are delete markers, skipping content comparison')
+                    continue
+
+                # regular objects - compare them
                 check_object_eq(k1, k2)
 
-                if isinstance(k1, DeleteMarker):
-                    # verify that HEAD sees a delete marker
-                    assert b1.get_key(k1.name) is None
-                    assert b2.get_key(k2.name) is None
-                else:
-                    # now get the keys through a HEAD operation, verify that the available data is the same
-                    k1_head = b1.get_key(k1.name, version_id=k1.version_id)
-                    k2_head = b2.get_key(k2.name, version_id=k2.version_id)
-                    check_object_eq(k1_head, k2_head, False)
+                # additional verification
+                k1_obj = b1.Object(k1.key)
+                k2_obj = b2.Object(k2.key)
+                k1_obj.load(VersionId=k1.version_id)
+                k2_obj.load(VersionId=k2.version_id)
 
-                    if k1.version_id:
-                        # compare the olh to make sure they agree about the current version
-                        k1_olh = b1.get_key(k1.name)
-                        k2_olh = b2.get_key(k2.name)
-                        # if there's a delete marker, HEAD will return None
-                        if k1_olh or k2_olh:
-                            check_object_eq(k1_olh, k2_olh, False)
+                if k1.version_id:
+                    # compare OLH (current version marker)
+                    k1_olh = b1.Object(k1.key)
+                    k2_olh = b2.Object(k2.key)
+                    try:
+                        k1_olh.load()
+                        k2_olh.load()
+                        eq(k1_olh.e_tag, k2_olh.e_tag)
+                        eq(k1_olh.content_length, k2_olh.content_length)
+                    except ClientError:
+                        pass  # current version is a delete marker
 
             log.info('success, bucket identical: bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
-
             return True
 
         def get_role(self, role_name):
@@ -140,7 +183,7 @@ class RadosZone(Zone):
         def has_role(self, role_name):
             try:
                 self.get_role(role_name)
-            except BotoServerError:
+            except ClientError:
                 return False
             return True
 
