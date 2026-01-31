@@ -295,7 +295,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     std::cout << "full sequential";
     break;
   default:
-    ceph_assert(false);
+    ceph_abort();
     break;
   }
   std::cout << std::endl;

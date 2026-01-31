@@ -408,7 +408,7 @@ private:
       l2_table->decode();
       *request.l2_table = l2_table;
     } else {
-      ceph_assert(false);
+      ceph_abort();
     }
 
     // complete the L2 cache request

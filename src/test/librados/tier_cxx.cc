@@ -136,7 +136,7 @@ void check_fp_oid_refcount(librados::IoCtx& ioctx, std::string foid, uint64_t co
   } else if (fp_algo.empty()) {
     ioctx.getxattr(foid, CHUNK_REFCOUNT_ATTR, t);
   } else if (!fp_algo.empty()) {
-    ceph_assert(0 == "unrecognized fingerprint algorithm");
+    ceph_abort_msg("unrecognized fingerprint algorithm");
   }
 
   chunk_refs_t refs;
@@ -182,7 +182,7 @@ void is_intended_refcount_state(librados::IoCtx& src_ioctx,
       auto iter = t.cbegin();
       decode(refs, iter);
     } catch (buffer::error& err) {
-      ceph_assert(0);
+      ceph_abort();
     }
     dst_refcount = refs.count();
   }

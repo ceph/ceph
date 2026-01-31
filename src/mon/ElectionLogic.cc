@@ -245,7 +245,7 @@ void ElectionLogic::receive_propose(int from, epoch_t mepoch,
     propose_connectivity_handler(from, mepoch, ct);
     break;
   default:
-    ceph_assert(0 == "how did election strategy become an invalid value?");
+    ceph_abort_msg("election strategy became an invalid value");
   }
 }
 
@@ -532,7 +532,7 @@ bool ElectionLogic::victory_makes_sense(int from)
     makes_sense = (leader_score >= my_score);
     break;
   default:
-    ceph_assert(0 == "how did you get a nonsense election strategy assigned?");
+    ceph_abort_msg("election strategy became an invalid value");
   }
   return makes_sense;
 }
