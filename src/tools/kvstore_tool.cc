@@ -51,22 +51,34 @@ StoreTool::StoreTool(const string& type,
 }
 
 
+#ifdef WITH_BLUESTORE
+void close_delete_bluestore(ObjectStore* store)
+{
+  auto bluestore = dynamic_cast<BlueStore*>(store);
+  ceph_assert(bluestore);
+  bluestore->close_db_environment();
+  delete bluestore;
+}
+
 int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair)
 {
-#ifdef WITH_BLUESTORE
-    auto bluestore = new BlueStore(g_ceph_context, path);
-    KeyValueDB *db_ptr;
-    int r = bluestore->open_db_environment(&db_ptr, read_only, to_repair);
-    if (r < 0) {
+  auto bluestore = new BlueStore(g_ceph_context, path);
+  KeyValueDB *db_ptr;
+  int r = bluestore->open_db_environment(&db_ptr, read_only, to_repair);
+  if (r < 0) {
      return -EINVAL;
-    }
-    db = decltype(db){db_ptr, Deleter((ObjectStore*)bluestore)};
-    return 0;
+  }
+  db = decltype(db){db_ptr, Deleter(bluestore, close_delete_bluestore)};
+  return 0;
+}
 #else
+
+int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair)
+{
     cerr << "bluestore not compiled in" << std::endl;
     return -1;
-#endif // WITH_BLUESTORE
 }
+#endif // WITH_BLUESTORE
 
 
 uint32_t StoreTool::traverse(const string& prefix,
