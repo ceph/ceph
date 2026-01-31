@@ -16,9 +16,9 @@
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
+#include <expected>
 #include <optional>
 #include <system_error>
-#include "include/expected.hpp"
 
 // create/destroy a pool that's shared by all tests in the process
 struct RadosEnv : public ::testing::Environment {
@@ -61,7 +61,7 @@ class ClsAccount : public ::testing::Test {
   }
 
   auto get(const std::string& oid, std::string_view name)
-      -> tl::expected<cls_user_account_resource, int>
+      -> std::expected<cls_user_account_resource, int>
   {
     librados::ObjectReadOperation op;
     cls_user_account_resource resource;
@@ -69,8 +69,8 @@ class ClsAccount : public ::testing::Test {
     cls_user_account_resource_get(op, name, resource, &r2);
 
     int r1 = ioctx.operate(oid, &op, nullptr);
-    if (r1 < 0) return tl::unexpected(r1);
-    if (r2 < 0) return tl::unexpected(r2);
+    if (r1 < 0) return std::unexpected(r1);
+    if (r2 < 0) return std::unexpected(r2);
     return resource;
   }
 
@@ -157,9 +157,9 @@ TEST_F(ClsAccount, get)
   const std::string oid = __PRETTY_FUNCTION__;
   const auto u1 = cls_user_account_resource{.name = "user1", .path = "A"};
   const auto u2 = cls_user_account_resource{.name = "USER1"};
-  EXPECT_EQ(tl::unexpected(-ENOENT), get(oid, u1.name));
+  EXPECT_EQ(std::unexpected(-ENOENT), get(oid, u1.name));
   EXPECT_EQ(-EUSERS, add(oid, u1, true, 0));
-  EXPECT_EQ(tl::unexpected(-ENOENT), get(oid, u1.name));
+  EXPECT_EQ(std::unexpected(-ENOENT), get(oid, u1.name));
   EXPECT_EQ(0, add(oid, u1, true, 1));
   EXPECT_EQ(u1, get(oid, u1.name));
   EXPECT_EQ(0, add(oid, u2, false, 1)); // overwrite with different case

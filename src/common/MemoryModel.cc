@@ -8,6 +8,7 @@
 #endif
 
 #include <charconv>
+#include <expected>
 
 #include "common/fmt_common.h"
 
@@ -39,10 +40,10 @@ inline bool MemoryModel::cmp_against(
 }
 
 
-tl::expected<int64_t, std::string> MemoryModel::get_mapped_heap()
+std::expected<int64_t, std::string> MemoryModel::get_mapped_heap()
 {
   if (!proc_maps.is_open()) {
-    return tl::unexpected("unable to open proc/maps");
+    return std::unexpected("unable to open proc/maps");
   }
   // always rewind before reading
   proc_maps.clear();
@@ -108,10 +109,10 @@ tl::expected<int64_t, std::string> MemoryModel::get_mapped_heap()
 }
 
 
-tl::expected<mem_snap_t, std::string> MemoryModel::full_sample()
+std::expected<mem_snap_t, std::string> MemoryModel::full_sample()
 {
   if (!proc_status.is_open()) {
-    return tl::unexpected("unable to open proc/status");
+    return std::unexpected("unable to open proc/status");
   }
   // always rewind before reading
   proc_status.clear();

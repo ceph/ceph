@@ -16,12 +16,12 @@
 #ifndef CEPH_MEMORYMODEL_H
 #define CEPH_MEMORYMODEL_H
 
+#include <expected>
 #include <fstream>
 #include <string>
 #include <string_view>
 #include "include/common_fwd.h"
 #include "include/compat.h"
-#include "include/expected.hpp"
 
 
 class MemoryModel {
@@ -54,7 +54,7 @@ private:
    * \retval the mapped heap size, or an error message if the file had not been opened
    *    when the object was constructed.
    */
-  tl::expected<int64_t, std::string> get_mapped_heap();
+  std::expected<int64_t, std::string> get_mapped_heap();
 
   /**
    * @brief Compare a line against an expected data label
@@ -76,7 +76,7 @@ public:
    *    Note that no error is returned if only /proc/maps is not open (the heap
    *    size will be reported as 0).
    */
-  tl::expected<mem_snap_t, std::string> full_sample();
+  std::expected<mem_snap_t, std::string> full_sample();
 };
 
 #endif
