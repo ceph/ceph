@@ -2753,7 +2753,7 @@ rgw::IAM::Effect RGWUserPermHandler::Bucket::evaluate_iam_policies(const rgw_obj
                                  ps->env,
                                  *ps->identity,
                                  account_root,
-                                 op, arn,
+                                 op, arn, arn,
                                  bucket_policy,
                                  info->user_policies,
                                  {});
