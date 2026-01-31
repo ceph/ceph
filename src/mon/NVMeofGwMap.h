@@ -62,6 +62,16 @@ public:
    */
   std::map<NvmeGroupKey, epoch_t> gw_epoch;
 
+  /* in stretched cluster configuration:
+   * map stores disaster state per location - can be several locations in disaster state
+   * location in disaster:
+   *   failbacks/failovers to disaster location are not allowed
+   * in disaster recovery state:
+   *  periodic process to relocate ana groups, allowed failbacks between locations
+   * disaster_locations map should be updated when last location is removed
+   * */
+  std::map<NvmeGroupKey, LocationStates> disaster_locations;
+
   void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const;
   void track_deleting_gws(const NvmeGroupKey& group_key,
     const BeaconSubsystems&  subs, bool &propose_pending);
@@ -70,6 +80,16 @@ public:
   int cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     uint64_t features);
   int cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
+  int cfg_admin_state_change(const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
+		  gw_admin_state_t state, bool &propose_pending);
+  int cfg_set_location(const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
+		  std::string &location, bool &propose_pending);
+  bool is_last_gw_in_location(const NvmeGwId &gw_id,
+              const NvmeGroupKey& group_key, NvmeLocation& location);
+  int cfg_location_disaster_set(const NvmeGroupKey& group_key,
+          std::string &location, bool &propose_pending);
+  int cfg_location_disaster_clear(const NvmeGroupKey& group_key,
+          std::string &location, bool &propose_pending);
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     epoch_t& last_osd_epoch,  bool &propose_pending);
@@ -100,6 +120,8 @@ public:
       uint64_t& old_sequence);
   bool set_gw_beacon_sequence_number(const NvmeGwId &gw_id, int gw_version,
          const NvmeGroupKey& group_key, uint64_t beacon_sequence);
+  bool is_location_in_disaster(const NvmeGroupKey& group_key,
+             NvmeLocation& location, bool &cleanup_in_process);
 private:
   int  do_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   int  do_erase_gw_id(const NvmeGwId &gw_id,
@@ -146,42 +168,28 @@ private:
   void validate_gw_map(
     const NvmeGroupKey& group_key);
   void increment_gw_epoch(const NvmeGroupKey& group_key);
+  int find_failover_gw_logic(const NvmeGroupKey& group_key,
+    NvmeGwMonStates& gws_states, NvmeLocation& location,
+    NvmeGwId& min_loaded_gw_id, bool ignore_locations);
+  bool get_location_in_disaster_cleanup(const NvmeGroupKey& group_key,
+             NvmeLocation& returned_location);
+  void disaster_map_remove_location(const NvmeGroupKey& group_key,
+             NvmeLocation& location);
+  bool validate_number_locations(int num_gws, int num_locations);
+  void check_relocate_ana_groups(const NvmeGroupKey& group_key,
+           bool &propose);
+  int relocate_ana_grp(const NvmeGwId &src_gw_id,
+   const NvmeGroupKey& group_key, NvmeAnaGrpId grpid,
+   NvmeLocation& location, bool &propose);
 
 public:
   int blocklist_gw(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     NvmeAnaGrpId ANA_groupid, epoch_t &epoch, bool failover);
 
-  void encode(ceph::buffer::list &bl, uint64_t features) const {
-    using ceph::encode;
-    uint8_t version = 1;
-    if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
-       version = 2;
-    }
-    ENCODE_START(version, version, bl);
-    encode(epoch, bl);// global map epoch
+  void encode(ceph::buffer::list &bl, uint64_t features) const ;
 
-    encode(created_gws, bl, features); //Encode created GWs
-    encode(fsm_timers, bl, features);
-    if (version >= 2) {
-      encode(gw_epoch, bl);
-    }
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(ceph::buffer::list::const_iterator &bl) {
-    using ceph::decode;
-    DECODE_START(2, bl);
-
-    decode(epoch, bl);
-    decode(created_gws, bl);
-    decode(fsm_timers, bl);
-    if (struct_v >= 2) {
-      decode(gw_epoch, bl);
-    }
-    DECODE_FINISH(bl);
-  }
-
+  void decode(ceph::buffer::list::const_iterator &bl);
   void get_health_checks(health_check_map_t *checks);
 };
 
