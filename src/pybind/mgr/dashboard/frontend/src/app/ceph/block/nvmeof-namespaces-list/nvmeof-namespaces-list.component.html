@@ -1,8 +1,26 @@
-<legend>
-  <cd-help-text>
-    An NVMe namespace is a quantity of non-volatile storage that can be formatted into logical blocks and presented to a host as a standard block device.
-  </cd-help-text>
-</legend>
+<div cdsGrid
+     [useCssGrid]="true"
+     [narrow]="true"
+     [fullWidth]="true">
+<div cdsCol
+     [columnNumbers]="{sm: 4, md: 8}">
+  <div class="pb-3 form-item"
+       cdsRow>
+    <cds-combo-box
+        type="single"
+        label="Selected Gateway Group"
+        i18n-label
+        [placeholder]="gwGroupPlaceholder"
+        [items]="gwGroups"
+        (selected)="onGroupSelection($event)"
+        (clear)="onGroupClear()"
+        [disabled]="gwGroupsEmpty">
+      <cds-dropdown-list></cds-dropdown-list>
+    </cds-combo-box>
+  </div>
+</div>
+</div>
+
 <cd-table [data]="namespaces"
           columnMode="flex"
           (fetchData)="listNamespaces()"
