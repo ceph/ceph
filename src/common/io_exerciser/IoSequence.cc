@@ -59,6 +59,9 @@ std::ostream& ceph::io_exerciser::operator<<(std::ostream& os,
     case Sequence::SEQUENCE_SEQ15:
       os << "SEQUENCE_SEQ15";
       break;
+    case Sequence::SEQUENCE_SEQ16:
+      os << "SEQUENCE_SEQ16";
+      break;
     case Sequence::SEQUENCE_END:
       os << "SEQUENCE_END";
       break;
@@ -108,6 +111,8 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(
       return std::make_unique<Seq14>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ15:
       return std::make_unique<Seq15>(obj_size_range, seed, check_consistency);
+    case Sequence::SEQUENCE_SEQ16:
+      return std::make_unique<Seq16>(obj_size_range, seed, check_consistency);
     default:
       break;
   }
@@ -858,5 +863,57 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq15::_next() {
       break;
   }
 
+  return r;
+}
+
+ceph::io_exerciser::Seq16::Seq16(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency), length(1) {
+      set_min_object_size(2);
+    }
+
+Sequence ceph::io_exerciser::Seq16::get_id() const {
+  return Sequence::SEQUENCE_SEQ16;
+}
+
+std::string ceph::io_exerciser::Seq16::get_name() const {
+  return "Different lengths of writes and truncates";
+}
+
+std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq16::_next() {
+  std::unique_ptr<IoOp> r = BarrierOp::generate();
+  using Stage = ceph::io_exerciser::Seq16::Stage;
+  auto next_stage = [this]() {
+    stage = static_cast<Stage>(static_cast<int>(stage)+1);
+  };
+  switch (stage) {
+    case Stage::WRITE1:
+      r = SingleWriteOp::generate(0, obj_size);
+      break;
+    case Stage::READ1:
+      r = SingleReadOp::generate(0, obj_size);
+      break;
+    case Stage::TRUNCATE:
+      r = TruncateOp::generate(length);
+      break;
+    case Stage::WRITE2:
+      r = SingleWriteOp::generate(0, obj_size);
+      break;
+    case Stage::READ2:
+      r = SingleReadOp::generate(0, std::max(length,obj_size));
+      break;
+    default:
+      stage = Stage::WRITE1;
+      length++;
+      if (length > max_obj_size) {
+	length = 1;
+	return increment_object_size();
+      }
+      create = true;
+      barrier = true;
+      remove = true;
+      return r;
+  }
+  next_stage();
+  barrier = true;
   return r;
 }
