@@ -44,10 +44,11 @@ int PyModuleRunner::serve()
   // This method is called from a separate OS thread (i.e. a thread not
   // created by Python), so tell Gil to wrap this in a new thread state.
   Gil gil(py_module->pMyThreadState, true);
-
+  if (py_module->perfcounter) {
+    py_module->perfcounter->set(py_module->l_pym_alive, 1);
+  }
   auto pValue = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("serve"), nullptr);
-
   int r = 0;
   if (pValue != NULL) {
     Py_DECREF(pValue);
@@ -71,6 +72,10 @@ int PyModuleRunner::serve()
     return -EINVAL;
   }
 
+  if (py_module->perfcounter) {
+    py_module->perfcounter->set(py_module->l_pym_alive, 0);
+  }
+
   return r;
 }
 
@@ -89,7 +94,9 @@ void PyModuleRunner::shutdown()
     derr << "Failed to invoke shutdown() on " << get_name() << dendl;
     derr << handle_pyerror(true, get_name(), "PyModuleRunner::shutdown") << dendl;
   }
-
+  if (py_module->perfcounter) {
+    py_module->perfcounter->set(py_module->l_pym_alive, 0);
+  }
   dead = true;
 }
 
@@ -104,8 +111,8 @@ void PyModuleRunner::log(const std::string &record)
 
 void* PyModuleRunner::PyModuleRunnerThread::entry()
 {
-  // No need to acquire the GIL here; the module does it.
-  dout(4) << "Entering thread for " << mod->get_name() << dendl;
+  runner_tid.store(ceph_gettid(), std::memory_order_release); 
+
   mod->serve();
   return nullptr;
 }

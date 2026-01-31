@@ -50,6 +50,7 @@ private:
 
   std::unique_ptr<ActivePyModules> active_modules;
   std::unique_ptr<StandbyPyModules> standby_modules;
+  std::unique_ptr<ThreadMonitor> thread_monitor;
 
   PyThreadState *pMainThreadState;
 
@@ -64,6 +65,7 @@ private:
   std::vector<std::string> probe_modules(const std::string &path) const;
 
   PyModuleConfig module_config;
+  PyObject* process_obj = nullptr;
 
 public:
   void handle_config(const std::string &k, const std::string &v);
@@ -94,8 +96,11 @@ public:
 
   explicit PyModuleRegistry(LogChannelRef clog_)
     : clog(clog_)
-  {}
+  { thread_monitor = std::make_unique<ThreadMonitor>(g_ceph_context); }
 
+  ~PyModuleRegistry() {
+    thread_monitor->stop_monitoring();
+  }
   /**
    * @return true if the mgrmap has changed such that the service needs restart
    */
