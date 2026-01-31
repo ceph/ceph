@@ -11,7 +11,6 @@ from distutils.ccompiler import new_compiler
 from itertools import filterfalse, takewhile
 
 import os
-import platform
 import shutil
 import sys
 import tempfile
@@ -140,10 +139,10 @@ def check_sanity():
 
 if 'BUILD_DOC' in os.environ or 'READTHEDOCS' in os.environ:
     ext_args = dict(extra_compile_args=['-DBUILD_DOC'])
-    cython_constants = dict(BUILD_DOC=True, UNAME_SYSNAME=platform.system())
+    cython_constants = dict(BUILD_DOC=True)
 elif check_sanity():
     ext_args = get_python_flags(['rados'])
-    cython_constants = dict(BUILD_DOC=False, UNAME_SYSNAME=platform.system())
+    cython_constants = dict(BUILD_DOC=False)
 else:
     sys.exit(1)
 
@@ -217,7 +216,6 @@ setup(
                 **ext_args
             )
         ],
-        compile_time_env=cython_constants,
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
     ),
     classifiers=[
