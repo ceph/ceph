@@ -505,10 +505,15 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
   }
 
   keystone_url.append("v3/");
-  keystone_url.append("users/");
-  keystone_url.append(user_id);
-  keystone_url.append("/credentials/OS-EC2/");
-  keystone_url.append(std::string(access_key_id));
+  keystone_url.append("credentials/");
+
+  sha256_digest_t hash = calc_hash_sha256(access_key_id);
+
+  char hex_str[(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2) + 1];
+  buf_to_hex((unsigned char *)hash.v, CEPH_CRYPTO_SHA256_DIGESTSIZE, hex_str);
+
+  std::string access_key_actual_id = std::string(hex_str);
+  keystone_url.append(access_key_actual_id);
 
   /* get authentication token for Keystone. */
   std::string admin_token;
@@ -552,8 +557,8 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
   /* now parse response */
 
   JSONParser parser;
-  if (! parser.parse(token_body_bl.c_str(), token_body_bl.length())) {
-    ldpp_dout(dpp, 0) << "Keystone credential parse error: malformed json" << dendl;
+  if (!parser.parse(token_body_bl.c_str(), token_body_bl.length())) {
+    ldpp_dout(dpp, 0) << "Keystone credential parse error: malformed json." << dendl;
     return make_pair(boost::none, -EINVAL);
   }
 
@@ -562,7 +567,25 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
 
   try {
     if (!credential_iter.end()) {
-      JSONDecoder::decode_json("secret", secret_string, *credential_iter, true);
+      std::string blob_string;
+      JSONDecoder::decode_json("blob", blob_string, *credential_iter, true);
+
+      JSONParser blob_parser;
+      if (!blob_parser.parse(blob_string.c_str(), blob_string.length())) {
+        ldpp_dout(dpp, 0) << "Keystone credential parse error: malformed 'blob' section in json" << dendl;
+        return make_pair(boost::none, -EINVAL);
+      }
+
+      JSONObjIter json_blob_iterator = blob_parser.find_first("secret");
+
+      if (!json_blob_iterator.end()) {
+        secret_string = (*json_blob_iterator)->get_data();
+
+        ldpp_dout(dpp, 10) << "Loaded secret for access key [" << access_key_id << "] with credential ID [" << access_key_actual_id << "]." << dendl;
+      } else {
+        ldpp_dout(dpp, 0) << "Keystone credential secret not found in the response from Keystone server blob [" << blob_string << "] ." << dendl;
+        return make_pair(boost::none, -EINVAL);
+      }
     } else {
       ldpp_dout(dpp, 0) << "Keystone credential not present in return from server" << dendl;
       return make_pair(boost::none, -EINVAL);
