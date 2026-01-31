@@ -230,6 +230,7 @@ class Module(MgrModule):
         return 0, val, ''
 
     @CLICommand('crash post')
+    @with_crashes
     def do_post(self, inbuf: str) -> Tuple[int, str, str]:
         """
         Add a crash dump (use -i <jsonfile>)
@@ -252,9 +253,10 @@ class Module(MgrModule):
         return 0, '', ''
 
     def ls(self) -> Tuple[int, str, str]:
-        if not self.crashes:
-            self._load_crashes()
-        return self.do_ls_all('')
+        with self.crashes_lock:
+            if not self.crashes:
+                self._load_crashes()
+            return self.do_ls_all('')
 
     def _do_ls(self, t: Iterable[CrashT], format: Optional[str]) -> Tuple[int, str, str]:
         r = sorted(t, key=lambda i: i['crash_id'])
@@ -321,9 +323,12 @@ class Module(MgrModule):
         now = datetime.datetime.utcnow()
         cutoff = now - datetime.timedelta(seconds=seconds)
         removed_any = False
-        # make a copy of the list, since we'll modify self.crashes below
-        to_prune = list(self.timestamp_filter(lambda ts: ts <= cutoff))
+        # Create a static list to prune by evaluating the dict before modifying it
         assert self.crashes is not None
+        to_prune = [
+            (crashid, crash) for crashid, crash in self.crashes.items()
+            if self.time_from_string(cast(str, crash["timestamp"])) <= cutoff
+        ]
         for crashid, crash in to_prune:
             del self.crashes[crashid]
             key = 'crash/%s' % crashid
