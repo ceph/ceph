@@ -19,7 +19,7 @@
 #include "common/ceph_argparse.h"
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_filestore
+#define dout_subsys ceph_subsys_bluestore
 
 using namespace std;
 

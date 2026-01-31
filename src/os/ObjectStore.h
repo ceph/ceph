@@ -253,11 +253,6 @@ public:
   explicit ObjectStore(const ObjectStore& o) = delete;
   const ObjectStore& operator=(const ObjectStore& o) = delete;
 
-  // versioning
-  virtual int upgrade() {
-    return 0;
-  }
-
   virtual void get_db_statistics(ceph::Formatter *f) { }
   virtual void generate_db_histogram(ceph::Formatter *f) { }
   virtual int flush_cache(std::ostream *os = NULL) { return -1; }
