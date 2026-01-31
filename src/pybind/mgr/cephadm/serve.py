@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 REQUIRES_POST_ACTIONS = ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'rgw', 'nvmeof', 'mgmt-gateway']
+DISABLED_SERVICES = ['nfs']
 
 WHICH = ssh.RemoteExecutable('which')
 CEPHADM_EXE = ssh.RemoteExecutable('/usr/bin/cephadm')
@@ -943,10 +944,11 @@ class CephadmServe:
                 for d in daemons_to_remove:
                     assert d.hostname is not None
                     self._remove_daemon(d.name(), d.hostname)
-                daemons_to_remove = []
 
                 # fence them
-                svc.fence_old_ranks(spec, rank_map, len(all_slots))
+                if daemons_to_remove:
+                    svc.fence_old_ranks(spec, rank_map, len(all_slots))
+                daemons_to_remove = []
 
             # create daemons
             daemon_place_fails = []
@@ -1205,6 +1207,30 @@ class CephadmServe:
                     dd.daemon_type in CEPH_TYPES:
                 self.log.info('Reconfiguring %s (extra config changed)...' % dd.name())
                 action = 'reconfig'
+            elif dd.daemon_type in DISABLED_SERVICES:
+                if dd.status == 0 and not dd.user_stopped:
+                    should_start = False
+                    if spec and service_registry.get_service(daemon_type_to_service(dd.daemon_type)).ranked(spec):
+                        # For ranked services, check if we should start this daemon
+                        same_rank_daemons = [
+                            d for d in self.mgr.cache.get_daemons_by_service(dd.service_name())
+                            if d.rank == dd.rank and d.daemon_type == dd.daemon_type
+                        ]
+                        self.log.debug(
+                            f'Start hightest rank_gen daemon of same rank daemons {same_rank_daemons}'
+                        )
+                        if len(same_rank_daemons) == 1:
+                            should_start = True
+                        else:
+                            # Multiple daemons exist for this rank, only start the highest generation
+                            highest_gen_daemon = max(same_rank_daemons,
+                                                     key=lambda d: d.rank_generation or 0)
+                            should_start = (dd == highest_gen_daemon)
+                    else:
+                        should_start = True
+                    if should_start:
+                        self.log.debug(f'Starting daemon {dd.name()}')
+                        action = 'start'
 
             if action:
                 if self.mgr.cache.get_scheduled_daemon_action(dd.hostname, dd.name()) == 'redeploy' \
