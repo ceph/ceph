@@ -515,7 +515,6 @@ set(libcommon_files
   ceph_ver.c
   global/global_context.cc
   xxHash/xxhash.c
-  include/filepath.cc
   include/invoke_date.cc
   include/object.cc
   include/types.cc
