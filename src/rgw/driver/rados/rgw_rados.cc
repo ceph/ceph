@@ -9252,7 +9252,8 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
 			    bool null_verid,
 			    rgw_zone_set* zones_trace,
 			    bool log_op,
-			    const bool force)
+			    const bool force,
+			    bool& deleted_more)
 {
   if (log.empty()) {
     return 0;
@@ -9373,7 +9374,11 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
     int ret = delete_obj(dpp, obj_ctx, bucket_info, obj_instance, 0, y,
 			 null_verid, RGW_BILOG_FLAG_VERSIONED_OP,
 			 ceph::real_time(), zones_trace, log_op, force, true /* skip_olh_obj_update */);
-    if (ret < 0 && ret != -ENOENT) {
+    if (ret >= 0) {
+      // instruct update_olh() that delete_obj() may have written more olh log
+      // entries, because skip_olh_obj_update would not have applied them yet
+      deleted_more = true;
+    } else if (ret != -ENOENT) {
       ldpp_dout(dpp, 0) << "ERROR: delete_obj() returned " << ret << " obj_instance=" << obj_instance << dendl;
       return ret;
     }
@@ -9494,11 +9499,22 @@ int RGWRados::update_olh(const DoutPrefixProvider* dpp,
     if (ret < 0) {
       return ret;
     }
+    bool deleted_more = false;
     ret = apply_olh_log(dpp, obj_ctx, *state, bucket_info, obj,
 			state->olh_tag, log, &ver_marker, y,
-			null_verid, zones_trace, log_op, force);
+			null_verid, zones_trace, log_op, force,
+			deleted_more);
     if (ret < 0) {
       return ret;
+    }
+    if (deleted_more) {
+      // if apply_olh_log() deleted instance entries, it would have written
+      // more olh log entries and we need to replay those too
+      is_truncated = true;
+      // those pending deletes may have caused clear_olh() to fail when
+      // replaying CLS_RGW_OLH_OP_UNLINK_OLH, so we need to replay any earlier
+      // log entries too
+      ver_marker = 0;
     }
   } while (is_truncated);
 
