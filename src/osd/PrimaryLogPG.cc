@@ -6064,6 +6064,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   const hobject_t& soid = oi.soid;
   const bool skip_data_digest = osd->store->has_builtin_csum() &&
     *osd->osd_skip_data_digest;
+  int write_hint = ctx->op->get_req<MOSDOp>()->get_write_hint();
 
   PGTransaction* t = ctx->op_t.get();
 
@@ -6861,7 +6862,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	} else {
 	  t->write(
-	    soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
+	    soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags, write_hint); 
 	}
 
 	if (op.extent.offset == 0 && op.extent.length >= oi.size
@@ -6909,7 +6910,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  t->truncate(soid, op.extent.length);
 	}
 	if (op.extent.length) {
-	  t->write(soid, 0, op.extent.length, osd_op.indata, op.flags);
+	  t->write(soid, 0, op.extent.length, osd_op.indata, op.flags, write_hint);
 	}
         if (!skip_data_digest) {
 	  obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
