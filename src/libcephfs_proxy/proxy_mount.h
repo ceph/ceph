@@ -12,6 +12,7 @@ typedef struct _proxy_instance {
 	list_t list;
 	list_t siblings;
 	list_t changes;
+	proxy_settings_t *settings;
 	struct ceph_mount_info *cmount;
 	struct Inode *root;
 	bool inited;
@@ -36,7 +37,8 @@ static inline struct ceph_mount_info *proxy_cmount(proxy_mount_t *mount)
 
 int32_t proxy_inode_ref(proxy_mount_t *mount, uint64_t inode);
 
-int32_t proxy_mount_create(proxy_mount_t **pmount, const char *id);
+int32_t proxy_mount_create(proxy_mount_t **pmount, proxy_settings_t *settings,
+			   const char *id);
 
 int32_t proxy_mount_config(proxy_mount_t *mount, const char *config);
 
