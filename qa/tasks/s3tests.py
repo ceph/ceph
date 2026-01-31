@@ -33,30 +33,34 @@ def download(ctx, config):
     log.info('Downloading s3-tests...')
     testdir = teuthology.get_testdir(ctx)
     for (client, client_config) in config.items():
-        s3tests_branch = client_config.get('force-branch', None)
+        s3tests_branch = client_config.get('suite_sha1', None);
+        s3tests_sha = client_config.get('suite_sha1', client_config.get('sha1'))
         if not s3tests_branch:
             raise ValueError(
-                "Could not determine what branch to use for s3-tests. Please add 'force-branch: {s3-tests branch name}' to the .yaml config for this s3tests task.")
+                "Could not determine what branch to use for ceph suite.")
 
         log.info("Using branch '%s' for s3tests", s3tests_branch)
-        sha1 = client_config.get('sha1')
-        git_remote = client_config.get('git_remote', teuth_config.ceph_git_base_url)
-        ctx.cluster.only(client).run(
-            args=[
-                'git', 'clone',
-                '-b', s3tests_branch,
-                git_remote + 's3-tests.git',
-                '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
-                ],
-            )
-        if sha1 is not None:
+        git_remote = teuth_config.get_ceph_qa_suite_git_url()
+        if s3tests_sha is not None:
             ctx.cluster.only(client).run(
                 args=[
-                    'cd', '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
-                    run.Raw('&&'),
-                    'git', 'reset', '--hard', sha1,
-                    ],
-                )
+                    'git', 'clone',
+                    '--revision={rev}'.format(rev=s3tests_sha),
+                    '-depth', "1",
+                    git_remote,
+                    '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
+                ],
+            )
+        else:
+            ctx.cluster.only(client).run(
+                args=[
+                    'git', 'clone',
+                    '-b', s3tests_branch,
+                    '-depth', "1",
+                    git_remote,
+                    '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
+                ],
+            )
         if client_config.get('boto3_extensions'):
             ctx.cluster.only(client).run(
                     args=['mkdir',
@@ -457,7 +461,7 @@ def run_tests(ctx, config):
         client_config = client_config or {}
         (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [
-            'cd', '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client), run.Raw('&&'),
+            'cd', '{tdir}/s3-tests-{client}/qa/rgw/s3-tests'.format(tdir=testdir, client=client), run.Raw('&&'),
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
             'BOTO_CONFIG={tdir}/boto-{client}.cfg'.format(tdir=testdir, client=client)
             ]
