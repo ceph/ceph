@@ -162,6 +162,7 @@ export interface PlacementTarget {
   tier_targets?: TierTarget[];
   data_pool?: string;
   placement_target?: string;
+  storage_classes?: string[];
 }
 
 export interface TierConfigRm {
