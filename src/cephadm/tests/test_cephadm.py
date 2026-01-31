@@ -3145,3 +3145,60 @@ class TestRescan(fake_filesystem_unittest.TestCase):
         self.fs.create_file('/sys/class/scsi_host/host1/proc_name', contents='unknown')
         out = _cephadm.command_rescan_disks(self.ctx)
         assert out.startswith('Ok. 2 adapters detected: 1 rescanned, 1 skipped, 0 failed')
+
+
+class TestExec(object):
+    """Test cases for the 'cephadm exec' command"""
+
+    @mock.patch.object(_cephadm, 'call')
+    @mock.patch('cephadm.logger')
+    def test_exec_non_zero_exit(self, _logger, mock_call):
+        """Test command execution with non-zero exit code"""
+        mock_call.return_value = ('', 'command not found\n', 127)
+
+        cmd = ['exec', '--command', 'nonexistent_command']
+        with with_cephadm_ctx(cmd, mock_cephadm_call_fn=False) as ctx:
+            ctx.command = ['nonexistent_command']
+            ctx.timeout = 300
+            retval = _cephadm.command_exec(ctx)
+            assert retval == 127
+
+    @mock.patch('subprocess.run')
+    @mock.patch('cephadm.logger')
+    def test_exec_empty_command_list(self, _logger, mock_run):
+        """Test command_exec with empty command list"""
+        cmd = ['exec', '--command']
+        with with_cephadm_ctx(cmd) as ctx:
+            ctx.command = []
+            ctx.timeout = 300
+            with pytest.raises(_cephadm.Error, match='No command provided to execute'):
+                _cephadm.command_exec(ctx)
+
+    @mock.patch.object(_cephadm, 'call')
+    @mock.patch('cephadm.logger')
+    @mock.patch('sys.stdout')
+    @mock.patch('sys.stderr')
+    def test_exec_with_stdout_and_stderr(self, mock_stderr, mock_stdout, _logger, mock_call):
+        """Test command execution with both stdout and stderr"""
+        mock_call.return_value = ('Standard output\n', 'Standard error\n', 2)
+
+        cmd = ['exec', '--command', 'test_command']
+        with with_cephadm_ctx(cmd, mock_cephadm_call_fn=False) as ctx:
+            ctx.command = ['test_command']
+            ctx.timeout = 300
+            retval = _cephadm.command_exec(ctx)
+            assert retval == 2
+            mock_stdout.write.assert_called_once_with('Standard output\n')
+            mock_stderr.write.assert_called_once_with('Standard error\n')
+
+    @mock.patch.object(_cephadm, 'call')
+    @mock.patch('cephadm.logger')
+    def test_exec_general_exception(self, _logger, mock_call):
+        """Test command execution with general exception"""
+        mock_call.side_effect = Exception('Unexpected error')
+        cmd = ['exec', '--command', 'test']
+        with with_cephadm_ctx(cmd, mock_cephadm_call_fn=False) as ctx:
+            ctx.command = ['test']
+            ctx.timeout = 300
+            retval = _cephadm.command_exec(ctx)
+            assert retval == 1
