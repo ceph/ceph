@@ -458,7 +458,12 @@ else
                 ;;
             *Jammy*)
                 $SUDO apt-get install -y gcc
-		ensure_decent_gcc_on_ubuntu 12 jammy
+                # libstdc++-12 is needed for clang builds for make check
+                # but ceph-dev-new does not use install-deps.sh, so still builds jammy with gcc-11
+                # ceph-dev-pipeline does use install-deps.sh, which we want to use that same toolchain
+                if $for_make_check; then
+                    ensure_decent_gcc_on_ubuntu 12 jammy
+                fi
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
                 ;;
             *)
