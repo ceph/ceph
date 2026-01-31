@@ -22,7 +22,7 @@ from cephadm.services.cephadmservice import CephExporterService
 from cephadm.services.nvmeof import NvmeofService
 from cephadm.services.service_registry import service_registry
 
-from ceph.deployment.service_spec import SMBSpec
+from ceph.deployment.service_spec import CustomContainerSpec, SMBSpec
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -297,15 +297,27 @@ class Root(Server):
     def container_sd_config(self, service: str) -> List[Dict[str, Collection[str]]]:
         """Return <http_sd_config> compatible prometheus config for a container service."""
         srv_entries = []
+
+        custom_labels: Dict[str, str] = {}
+        port_index = 0
+        try:
+            spec = cast(CustomContainerSpec, self.mgr.spec_store[service].spec)
+            custom_labels = getattr(spec, 'prometheus_sd_labels', {}) or {}
+            port_index = getattr(spec, 'prometheus_sd_port_index', 0)
+        except KeyError:
+            pass
+
         for dd in self.mgr.cache.get_daemons_by_service(service):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
             if not dd.ports:
                 continue
-            port = dd.ports[0]
+            port = dd.ports[port_index] if port_index < len(dd.ports) else dd.ports[0]
+            labels: Dict[str, str] = {'instance': dd.hostname}
+            labels.update(custom_labels)
             srv_entries.append({
                 'targets': [build_url(host=addr, port=port).lstrip('/')],
-                'labels': {'instance': dd.hostname}
+                'labels': labels
             })
         return srv_entries
 
