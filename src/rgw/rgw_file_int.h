@@ -1070,7 +1070,7 @@ namespace rgw {
 	/* LATCHED, LOCKED */
 	if (! (flags & RGWFileHandle::FLAG_LOCK))
 	  fh->mtx.unlock(); /* ! LOCKED */
-      }
+      } /* fh */
       lat.lock->unlock(); /* !LATCHED */
       get<0>(fhr) = fh;
       if (fh) {
