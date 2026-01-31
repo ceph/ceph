@@ -1,7 +1,7 @@
 import errno
 import logging
 import os
-
+from re import fullmatch
 from typing import List, Tuple
 
 from contextlib import contextmanager
@@ -11,7 +11,8 @@ import orchestrator
 from .lock import GlobalLock
 from ..exception import VolumeException, IndexException
 from ..fs_util import create_pool, remove_pool, rename_pool, create_filesystem, \
-    remove_filesystem, rename_filesystem, create_mds, volume_exists, listdir
+    remove_filesystem, rename_filesystem, create_mds, volume_exists, listdir, \
+    add_data_pool_to_fs
 from .trash import Trash
 from mgr_util import open_filesystem, CephfsConnectionException
 from .clone_index import open_clone_index
@@ -72,6 +73,19 @@ def get_pool_ids(mgr, volname):
         return None, None
     return metadata_pool_id, data_pool_ids
 
+def get_non_existent_pools(mgr, pools):
+    non_existent_pools = []
+
+    r, out, err = mgr.mon_command({'prefix': 'osd pool ls'})
+    if r != 0:
+        return r, out, err
+
+    for i in pools:
+        if i not in out:
+            non_existent_pools.append(i)
+
+    return non_existent_pools
+
 def create_fs_pools(mgr, volname, data_pool, metadata_pool):
     '''
     Generate names of metadata pool and data pool and create these pools.
@@ -87,13 +101,37 @@ def create_fs_pools(mgr, volname, data_pool, metadata_pool):
     if r != 0:
         return [False, r, outb, outs]
 
-    # default to a bulk pool for data. In case autoscaling has been disabled
-    # for the cluster with `ceph osd pool set noautoscale`, this will have
-    # no effect.
-    r, outb, outs = create_pool(mgr, data_pool, bulk=True)
+    # in case we have multiple data pool names in the "data_pool".
+    if ',' in data_pool:
+        pools = tuple(data_pool.split(',') + metadata_pool)
+    else:
+        pools = (data_pool, metadata_pool)
+    non_existent_pools = get_non_existent_pools(mgr, pools)
+
+    if metadata_pool in non_existent_pools:
+        r, outb, outs = create_pool(mgr, metadata_pool)
+        if r != 0:
+            return r, outb, outs
+        cleanup_metadata_pool = True
+        non_existent_pools.remove(metadata_pool)
+    else:
+        cleanup_metadata_pool = False
+
+    for data_pool in non_existent_pools:
+        # default to a bulk pool for data. In case autoscaling has been disabled
+        # for the cluster with `ceph osd pool set noautoscale`, this will have
+        # no effect.
+        r, outb, outs = create_pool(mgr, data_pool, bulk=True)
+        if r != 0:
+            break
+
     # cleanup
     if r != 0:
-        remove_pool(mgr, metadata_pool)
+        if cleanup_metadata_pool:
+            non_existent_pools.append(metadata_pool)
+        for pool in non_existent_pools:
+            # TODO: add a log.error() here and check and return retval of remove_pool()
+            remove_pool(mgr, pool)
         return [False, r, outb, outs]
 
     return [True, data_pool, metadata_pool]
@@ -103,6 +141,20 @@ def create_volume(mgr, volname, placement, data_pool, metadata_pool):
     Create volume, create pools if pool names are not passed and create MDS
     based on placement passed.
     """
+    # NOTE keep this variable name as it is since elsewhere good chars are
+    # defined with same name. this makes it easy to find and modify if needed
+    # in future.
+    goodchars = '[A-Za-z0-9-_.,]*'
+    # NOTE check data_pool is made of goodchars since this check was avoided in
+    # arg parser since adding "," to goodchars stringi is not possible since
+    # arg parser has its own special meaning for comma. Thus the check needs to
+    # happen somewhere but not during definition of the command.
+    if not fullmatch(goodchars, data_pool):
+        errmsg = ('received data pool name has invalid characters. valid '
+                  f'chars = "{goodchars}"   data_pool = "{data_pool}"')
+        log.error(errmsg)
+        return -errno.EINVAL, '', errmsg
+
     # although writing this case is technically redundant (because pool names
     # are passed by user they must exist already), leave it here so that some
     # future readers know that this case is already considered and not missed
@@ -127,7 +179,12 @@ def create_volume(mgr, volname, placement, data_pool, metadata_pool):
         else:
             return retval
 
-    # create filesystem
+    rest_of_data_pools = []
+    if ',' in data_pool:
+        list_ = data_pool.split(',')
+        data_pool = list_[0]
+        rest_of_data_pools = list_[1:]
+
     r, outb, outs = create_filesystem(mgr, volname, metadata_pool, data_pool)
     if r != 0:
         log.error("Filesystem creation error: {0} {1} {2}".format(r, outb, outs))
@@ -137,8 +194,24 @@ def create_volume(mgr, volname, placement, data_pool, metadata_pool):
         if metadata_pool_was_created:
             remove_pool(mgr, metadata_pool)
         return r, outb, outs
-    return create_mds(mgr, volname, placement)
 
+    if rest_of_data_pools:
+        for i in rest_of_data_pools:
+            r, outb, outs = add_data_pool_to_fs(mgr, volname, i)
+            if r != 0:
+                log.error(f'Error adding data pool "{i}" to volume "{volname}".'
+                          f' return value of "ceph fs add_data_pool commmand: i'
+                          f'{r}\nerror message: {outb}\n{outs}')
+                break
+
+    if r != 0:
+        pools = [metadata_pool, data_pool] + rest_of_data_pools
+        for p in pools:
+            # TODO: check retval and add log error if it is not zero
+            remove_pool(mgr, p)
+            return r, outb, outs
+
+    return create_mds(mgr, volname, placement)
 
 def delete_volume(mgr, volname, metadata_pool, data_pools):
     """
