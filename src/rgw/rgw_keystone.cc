@@ -466,6 +466,13 @@ void rgw::keystone::TokenEnvelope::Role::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("name", name, obj, true);
 }
 
+void rgw::keystone::TokenEnvelope::AccessRule::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("service", service, obj);
+  JSONDecoder::decode_json("method", method, obj);
+  JSONDecoder::decode_json("path", path, obj);
+}
+
 void rgw::keystone::TokenEnvelope::Domain::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj, true);
@@ -494,6 +501,11 @@ void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
   JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj, true);
   JSONDecoder::decode_json("roles", roles, root_obj, true);
   JSONDecoder::decode_json("project", project, root_obj, true);
+
+  JSONObjIter app_cred_iter = root_obj->find_first("application_credential");
+  if (!app_cred_iter.end()) {
+    JSONDecoder::decode_json("access_rules", access_rules, *app_cred_iter);
+  }
 
   struct tm t;
   if (parse_iso8601(expires_iso8601.c_str(), &t)) {
