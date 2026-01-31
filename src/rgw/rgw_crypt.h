@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string_view>
 
 #include <rgw/rgw_op.h>
@@ -14,6 +15,7 @@
 #include <rgw/rgw_rest_s3.h>
 #include "rgw_putobj.h"
 #include "common/async/yield_context.h"
+#include "rgw_crypt_types.h"
 
 /**
  * \brief Interface for block encryption methods
@@ -69,6 +71,7 @@ public:
    * input - source buffer of data
    * in_ofs - offset of chunk inside input
    * size - size of chunk, must be chunk-aligned unless last part is processed
+   * out_size - size of decrypted data
    * output - destination buffer to encrypt to
    * stream_offset - location of <in_ofs,in_ofs+size) chunk in data stream, must be chunk-aligned
    * \return true iff successfully encrypted
@@ -76,6 +79,7 @@ public:
   virtual bool decrypt(bufferlist& input,
                        off_t in_ofs,
                        size_t size,
+                       size_t& out_size,
                        bufferlist& output,
                        off_t stream_offset,
                        optional_yield y) = 0;
@@ -90,6 +94,15 @@ bool AES_256_ECB_encrypt(const DoutPrefixProvider* dpp,
                          uint8_t* data_out,
                          size_t data_size);
 
+// Helper factory (primarily for tests) for AES-256-GCM.
+// GCM requires an IV prefix (salt) for IV generation.
+std::unique_ptr<BlockCrypt> AES_256_GCM_create_with_iv_prefix(
+  const DoutPrefixProvider* dpp,
+  CephContext* cct,
+  const uint8_t* key,
+  size_t len,
+  std::string_view iv_prefix);
+
 class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   const DoutPrefixProvider *dpp;
   CephContext* cct;
@@ -103,7 +116,16 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   optional_yield y;
   std::vector<size_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
 
+  std::optional<RGWEncryptionInfo> enc_info;
+  std::vector<encryption_block>::const_iterator first_block;
+  std::vector<encryption_block>::const_iterator last_block;
+  off_t q_ofs{0};
+  off_t q_len{0};
+  off_t cur_cipher_ofs{0};
+  bufferlist waiting;
+
   int process(bufferlist& cipher, size_t part_ofs, size_t size);
+  int handle_data_blocks(bufferlist& bl, off_t bl_ofs, off_t bl_len);
 
 public:
   RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
@@ -111,7 +133,8 @@ public:
                          RGWGetObj_Filter* next,
                          std::unique_ptr<BlockCrypt> crypt,
                          std::vector<size_t> parts_len,
-                         optional_yield y);
+                         optional_yield y,
+                         std::optional<RGWEncryptionInfo> enc_info = std::nullopt);
   virtual ~RGWGetObj_BlockDecrypt();
 
   virtual int fixup_range(off_t& bl_ofs,
@@ -135,6 +158,8 @@ class RGWPutObj_BlockEncrypt : public rgw::putobj::Pipe
                                           for operations when enough data is accumulated */
   bufferlist cache; /**< stores extra data that could not (yet) be processed by BlockCrypt */
   const size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
+  std::vector<encryption_block> blocks;
+  uint64_t encrypted_ofs{0};
   optional_yield y;
 public:
   RGWPutObj_BlockEncrypt(const DoutPrefixProvider *dpp,
@@ -144,6 +169,15 @@ public:
                          optional_yield y);
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
+
+  bool has_encryption_blocks() const { return !blocks.empty(); }
+  const std::vector<encryption_block>& get_encryption_blocks() const { return blocks; }
+  uint64_t get_encrypted_size() const {
+    if (blocks.empty()) {
+      return 0;
+    }
+    return blocks.back().new_ofs + blocks.back().len;
+  }
 }; /* RGWPutObj_BlockEncrypt */
 
 
