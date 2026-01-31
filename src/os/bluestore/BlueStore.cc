@@ -6260,6 +6260,11 @@ void BlueStore::_init_logger()
 	    "st_b",
 	    PerfCountersBuilder::PRIO_CRITICAL,
 	    unit_t(UNIT_BYTES));
+  b.add_u64(l_bluestore_omap, "omap_bytes",
+	    "Sum of bytes in OMAPs",
+	    "omap",
+	    PerfCountersBuilder::PRIO_INTERESTING,
+	    unit_t(UNIT_BYTES));
   b.add_u64(l_bluestore_fragmentation, "fragmentation_micros",
             "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000",
 	    "fbss",
@@ -12213,6 +12218,8 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
     buf->total += bdev->get_size();
   }
   buf->available = bfree;
+
+  logger->set(l_bluestore_omap, buf->omap_allocated);
 }
 
 int BlueStore::statfs(struct store_statfs_t *buf,
