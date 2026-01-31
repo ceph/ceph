@@ -588,11 +588,15 @@ The ``reconfig`` command also ensures that the Ceph Dashboard URL
 is updated to use the correct certificate. The ``reconfig`` command
 also sets the proper URL for the Ceph Dashboard.
 
-Setting the Initial admin Password
+Change the Initial admin Password
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-By default, Grafana will not create an initial
-admin user. In order to create the admin user, please create a file
+The Grafana deployment provisions a default admin user and password.
+
+To change the initial password, log into Grafana and change it there.
+
+The instructions below change the initial password set upon deployment.
+create a file
 ``grafana.yaml`` with this content:
 
 .. code-block:: yaml
