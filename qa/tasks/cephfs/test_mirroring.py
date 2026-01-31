@@ -1548,3 +1548,51 @@ class TestMirroring(CephFSTestCase):
         self.verify_snapshot(dir_name, snap_a)
         self.verify_snapshot(dir_name, snap_b)
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_mirroring_recovery_from_failure_in_service_daemon(self):
+        """Test mirror daemon updates recovery from failure in ServiceDaemon"""
+
+        def get_mirroring_failed(data):
+            for key, value in data["cephfs-mirror"].items():
+                status_json = json.loads(value["status"]["status_json"])
+                for item in status_json.values():
+                    if "mirroring_failed" in item:
+                        return item["mirroring_failed"]
+            return None
+
+        # disable mgr mirroring plugin as it would try to load dir map on
+        # on mirroring enabled for a filesystem (an throw up errors in
+        # the logs)
+        self.disable_mirroring_module()
+
+        # enable mirroring through mon interface -- this should result in the mirror daemon
+        # failing to enable mirroring due to absence of `cephfs_mirror` index object.
+        self.run_ceph_cmd("fs", "mirror", "enable", self.primary_fs_name)
+
+        with safe_while(sleep=5, tries=10, action='wait for mirror_failed=true') as proceed:
+            while proceed():
+                try:
+                    service_status = json.loads(self.get_ceph_cmd_stdout("service", "status"))
+                    log.debug(f'service_status={service_status}')
+                    mirror_failed = get_mirroring_failed(service_status)
+                    break
+                except KeyError:
+                    pass
+        log.debug(f'mirror_failed={mirror_failed}')
+        self.assertTrue(mirror_failed)
+
+        # check if mirror_failed is returning to False
+        self.run_ceph_cmd("fs", "mirror", "disable", self.primary_fs_name)
+        self.enable_mirroring_module()
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        with safe_while(sleep=5, tries=10, action='wait for mirror_failed=false') as proceed:
+            while proceed():
+                try:
+                    service_status = json.loads(self.get_ceph_cmd_stdout("service", "status"))
+                    log.debug(f'service_status={service_status}')
+                    mirror_failed = get_mirroring_failed(service_status)
+                    break
+                except KeyError:
+                    pass
+        log.debug(f'mirror_failed={mirror_failed}')
+        self.assertFalse(mirror_failed)

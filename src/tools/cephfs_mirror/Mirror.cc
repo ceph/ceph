@@ -375,6 +375,7 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem,
   }
 
   dout(10) << ": Initialized FSMirror for filesystem=" << filesystem << dendl;
+  m_service_daemon->remove_fs_attribute(filesystem.fscid, SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY);
   if (m_perf_counters) {
     m_perf_counters->inc(l_cephfs_mirror_file_systems_mirrorred);
   }
@@ -407,6 +408,7 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem, int r) {
   m_cond.notify_all();
 
   dout(10) << ": Initialized FSMirror for filesystem=" << filesystem << dendl;
+  m_service_daemon->remove_fs_attribute(filesystem.fscid, SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY);
   if (m_perf_counters) {
     m_perf_counters->inc(l_cephfs_mirror_file_systems_mirrorred);
   }
