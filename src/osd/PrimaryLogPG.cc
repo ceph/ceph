@@ -7755,12 +7755,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
       // OMAP Read ops
     case CEPH_OSD_OP_OMAPGETKEYS:
+    case CEPH_OSD_OP_OMAPGETKEYSREV:
       ++ctx->num_read;
       {
-	string start_after;
+	string start; // for forward, start is start_after
 	uint64_t max_return;
 	try {
-	  decode(start_after, bp);
+	  decode(start, bp);
 	  decode(max_return, bp);
 	}
 	catch (ceph::buffer::error& e) {
@@ -7771,7 +7772,32 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (max_return > cct->_conf->osd_max_omap_entries_per_request) {
 	  max_return = cct->_conf->osd_max_omap_entries_per_request;
 	}
-	tracepoint(osd, do_osd_op_pre_omapgetkeys, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return);
+
+        // the enum is unnamed, so use decltype to work around
+        decltype(ObjectStore::omap_iter_seek_t::LOWER_BOUND) seek_type;
+
+        ObjectStore::omap_iter_ret_t iterator_return;
+        bool skip_first;
+
+        if (op.op == CEPH_OSD_OP_OMAPGETKEYS) {
+            seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND;
+            iterator_return = ObjectStore::omap_iter_ret_t::NEXT;
+            skip_first = false;
+        } else { // op.op == CEPH_OSD_OP_OMAPGETKEYSREV
+          iterator_return = ObjectStore::omap_iter_ret_t::PREV;
+
+          if (start.empty()) {
+            // when start is empty, we must begin at the extreme,
+            // which is last for a reverse iteration
+            seek_type = ObjectStore::omap_iter_seek_t::LAST;
+            skip_first = false;
+          } else {
+            seek_type = ObjectStore::omap_iter_seek_t::LOWER_BOUND;
+            skip_first = true;
+          }
+        };
+
+	tracepoint(osd, do_osd_op_pre_omapgetkeys, soid.oid.name.c_str(), soid.snap.val, start.c_str(), max_return);
 
 	bufferlist bl;
 	uint32_t num = 0;
@@ -7780,18 +7806,24 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           const auto result = osd->store->omap_iterate(
             ch, ghobject_t(soid),
             ObjectStore::omap_iter_seek_t{
-              .seek_position = start_after,
-              .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+              .seek_position = start,
+              .seek_type = seek_type
             },
-            [&bl, &num, max_return,
+            [&bl, &num, max_return, iterator_return, skip_first,
 	     max_bytes=cct->_conf->osd_max_omap_bytes_per_request]
             (std::string_view key, std::string_view value) mutable {
+              if (skip_first) {
+                // this is a reverse iteration, so the first returned
+                // value is needs to be skipped
+                skip_first = false;
+                return iterator_return;
+              }
 	      if (num >= max_return || bl.length() >= max_bytes) {
                 return ObjectStore::omap_iter_ret_t::STOP;
 	      }
 	      encode(key, bl);
 	      ++num;
-              return ObjectStore::omap_iter_ret_t::NEXT;
+              return iterator_return;
             });
           if (result < 0) {
 	    ceph_abort();
@@ -7808,6 +7840,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_OMAPGETVALS:
+    case CEPH_OSD_OP_OMAPGETVALSREV:
       ++ctx->num_read;
       {
 	string start_after;
@@ -7826,26 +7859,93 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (max_return > cct->_conf->osd_max_omap_entries_per_request) {
 	  max_return = cct->_conf->osd_max_omap_entries_per_request;
 	}
+
+        // the enum is unnamed, so use decltype to work around
+        decltype(ObjectStore::omap_iter_seek_t::LOWER_BOUND) seek_type;
+
+        ObjectStore::omap_iter_ret_t iterator_return;
+        bool skip_first;
+        std::string actual_start;
+
+        if (op.op == CEPH_OSD_OP_OMAPGETVALS) {
+            iterator_return = ObjectStore::omap_iter_ret_t::NEXT;
+            skip_first = false;
+            actual_start = std::max(start_after, filter_prefix);
+            if (actual_start == start_after) {
+              seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND;
+            } else { // must have advanced to filter_prefix
+              seek_type = ObjectStore::omap_iter_seek_t::LOWER_BOUND;
+            }
+        } else { // op.op == CEPH_OSD_OP_OMAPGETVALSREV
+          auto calc_after_filter = [&start_after, &filter_prefix, this]() -> std::string {
+            std::string just_after_filter_prefix = filter_prefix;
+            bool overflow = true;
+            for (auto c = just_after_filter_prefix.rbegin();
+                 c != just_after_filter_prefix.rend();
+                 ++c)
+            {
+              if (*c == '\xFF') {
+                // if this char at highest value, we zero it and
+                // "carry" the increment
+                *c = '\0';
+              } else {
+                ++(*c);
+                overflow = false;
+                break;
+              }
+            }
+            if (overflow) {
+              // the implication is that the filter_prefix is a
+              // sequence of '\xFF' characters...
+              return start_after;
+            } else if (start_after.empty()) {
+              return just_after_filter_prefix;
+            } else {
+              return std::min(start_after, just_after_filter_prefix);
+            }
+          }; // calc_after_filter lambda
+
+          actual_start =
+            filter_prefix.empty() ? start_after : calc_after_filter();
+
+          iterator_return = ObjectStore::omap_iter_ret_t::PREV;
+
+          if (actual_start.empty()) {
+            // when start is empty, we must begin at the extreme,
+            // which is last for a reverse iteration
+            seek_type = ObjectStore::omap_iter_seek_t::LAST;
+            skip_first = false;
+          } else {
+            seek_type = ObjectStore::omap_iter_seek_t::LOWER_BOUND;
+            skip_first = true;
+          }
+        };
+
 	tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return, filter_prefix.c_str());
 
 	uint32_t num = 0;
 	bool truncated = false;
 	bufferlist bl;
 	if (oi.is_omap()) {
-	  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
 	  const auto result = osd->store->omap_iterate(
 	    ch, ghobject_t(soid),
 	    // try to seek as many keys-at-once as possible for the sake of performance.
 	    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
 	    // than just seek(n).
 	    ObjectStore::omap_iter_seek_t{
-	      .seek_position = std::max(start_after, filter_prefix),
-	      .seek_type = filter_prefix > start_after ? omap_iter_seek_t::LOWER_BOUND
-						       : omap_iter_seek_t::UPPER_BOUND
+	      .seek_position = actual_start,
+              .seek_type = seek_type
 	    },
 	    [&bl, &truncated, &filter_prefix, &num, max_return,
+             iterator_return, skip_first,
 	     max_bytes=cct->_conf->osd_max_omap_bytes_per_request]
 	    (std::string_view key, std::string_view value) mutable {
+              if (skip_first) {
+                // this is a reverse iteration, so the first returned
+                // value is needs to be skipped
+                skip_first = false;
+                return iterator_return;
+              }
 	      if (key.substr(0, filter_prefix.size()) != filter_prefix) {
 	        return ObjectStore::omap_iter_ret_t::STOP;
 	      }
@@ -7856,7 +7956,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      encode(key, bl);
 	      encode(value, bl);
 	      ++num;
-	      return ObjectStore::omap_iter_ret_t::NEXT;
+	      return iterator_return;
 	    });
 	  if (result < 0) {
 	    goto fail;
