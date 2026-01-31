@@ -24,12 +24,13 @@ if TYPE_CHECKING:
         from typing_extensions import Literal
 
 from ceph.cryptotools.select import choose_crypto_caller
-from mgr_module import CLIReadCommand, CLIWriteCommand, HandleCommandResult, \
-    MgrModule, MgrStandbyModule, NotifyType, Option, _get_localized_key
+from mgr_module import HandleCommandResult, MgrModule, MgrStandbyModule, \
+    NotifyType, Option, _get_localized_key
 from mgr_util import ServerConfigException, build_url, \
     create_self_signed_cert, get_default_addr, verify_tls_files
 
 from . import mgr
+from .cli import DBCLICommand
 from .controllers import nvmeof  # noqa # pylint: disable=unused-import
 from .controllers import Router, json_error_page
 from .grafana import push_local_dashboards
@@ -233,6 +234,7 @@ class Module(MgrModule, CherryPyConfig):
     """
     dashboard module entrypoint
     """
+    CLICommand = DBCLICommand
 
     COMMANDS = [
         {
@@ -405,15 +407,15 @@ class Module(MgrModule, CherryPyConfig):
         cluster_credentials_files, clusters_credentials = multi_cluster_instance.get_cluster_credentials_files(targets)  # noqa E501 #pylint: disable=line-too-long
         return cluster_credentials_files, clusters_credentials
 
-    @CLIWriteCommand("dashboard set-ssl-certificate")
+    @DBCLICommand.Write("dashboard set-ssl-certificate")
     def set_ssl_certificate(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
         return self._set_ssl_item('certificate', 'crt', mgr_id, inbuf)
 
-    @CLIWriteCommand("dashboard set-ssl-certificate-key")
+    @DBCLICommand.Write("dashboard set-ssl-certificate-key")
     def set_ssl_certificate_key(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
         return self._set_ssl_item('certificate key', 'key', mgr_id, inbuf)
 
-    @CLIWriteCommand("dashboard create-self-signed-cert")
+    @DBCLICommand.Write("dashboard create-self-signed-cert")
     def set_mgr_created_self_signed_cert(self):
         cert, pkey = create_self_signed_cert('IT', 'ceph-dashboard')
         result = HandleCommandResult(*self.set_ssl_certificate(inbuf=cert))
@@ -425,7 +427,7 @@ class Module(MgrModule, CherryPyConfig):
             return result
         return 0, 'Self-signed certificate created', ''
 
-    @CLIWriteCommand("dashboard set-rgw-credentials")
+    @DBCLICommand.Write("dashboard set-rgw-credentials")
     def set_rgw_credentials(self):
         try:
             rgw_service_manager = RgwServiceManager()
@@ -435,7 +437,7 @@ class Module(MgrModule, CherryPyConfig):
 
         return 0, 'RGW credentials configured', ''
 
-    @CLIWriteCommand("dashboard set-rgw-hostname")
+    @DBCLICommand.Write("dashboard set-rgw-hostname")
     def set_rgw_hostname(self, daemon_name: str, hostname: str):
         try:
             rgw_service_manager = RgwServiceManager()
@@ -444,7 +446,7 @@ class Module(MgrModule, CherryPyConfig):
         except Exception as error:
             return -errno.EINVAL, '', str(error)
 
-    @CLIWriteCommand("dashboard unset-rgw-hostname")
+    @DBCLICommand.Write("dashboard unset-rgw-hostname")
     def unset_rgw_hostname(self, daemon_name: str):
         try:
             rgw_service_manager = RgwServiceManager()
@@ -453,7 +455,7 @@ class Module(MgrModule, CherryPyConfig):
         except Exception as error:
             return -errno.EINVAL, '', str(error)
 
-    @CLIWriteCommand("dashboard set-login-banner")
+    @DBCLICommand.Write("dashboard set-login-banner")
     def set_login_banner(self, inbuf: str):
         '''
         Set the custom login banner read from -i <file>
@@ -467,7 +469,7 @@ class Module(MgrModule, CherryPyConfig):
         mgr.set_store('custom_login_banner', inbuf)
         return HandleCommandResult(stdout=f'{item_label} added')
 
-    @CLIReadCommand("dashboard get-login-banner")
+    @DBCLICommand.Read("dashboard get-login-banner")
     def get_login_banner(self):
         '''
         Get the custom login banner text
@@ -478,7 +480,7 @@ class Module(MgrModule, CherryPyConfig):
         else:
             return HandleCommandResult(stdout=banner_text)
 
-    @CLIWriteCommand("dashboard unset-login-banner")
+    @DBCLICommand.Write("dashboard unset-login-banner")
     def unset_login_banner(self):
         '''
         Unset the custom login banner
@@ -488,7 +490,7 @@ class Module(MgrModule, CherryPyConfig):
 
     # allow cors by setting cross_origin_url
     # the value is a comma separated list of URLs
-    @CLIWriteCommand("dashboard set-cross-origin-url")
+    @DBCLICommand.Write("dashboard set-cross-origin-url")
     def set_cross_origin_url(self, value: str):
         cross_origin_urls = self.get_module_option('cross_origin_url', '')
         cross_origin_urls_list = [url.strip()
@@ -502,14 +504,14 @@ class Module(MgrModule, CherryPyConfig):
         configure_cors()
         return 0, 'Cross-origin URL set', ''
 
-    @CLIReadCommand("dashboard get-cross-origin-url")
+    @DBCLICommand.Read("dashboard get-cross-origin-url")
     def get_cross_origin_url(self):
         urls = self.get_module_option('cross_origin_url', '')
         if urls:
             return HandleCommandResult(stdout=urls)  # type: ignore
         return HandleCommandResult(stdout='No cross-origin URL set')
 
-    @CLIReadCommand("dashboard rm-cross-origin-url")
+    @DBCLICommand.Read("dashboard rm-cross-origin-url")
     def rm_cross_origin_url(self, value: str):
         urls = self.get_module_option('cross_origin_url', '')
         urls_list = [url.strip() for url in urls.split(',')]  # type: ignore

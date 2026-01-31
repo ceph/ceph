@@ -1,11 +1,12 @@
 import errno
 import json
+import logging
 import unittest
 from typing import Annotated, List, NamedTuple
 from unittest.mock import MagicMock
 
 import pytest
-from mgr_module import CLICommand, HandleCommandResult
+from mgr_module import CLICommandBase, HandleCommandResult
 
 from ..controllers import EndpointDoc
 from ..model.nvmeof import CliFieldTransformer, CliFlags, CliHeader
@@ -23,7 +24,7 @@ def fixture_sample_command():
         b: int
 
     @NvmeofCLICommand(test_cmd, Model)
-    def func(_): # noqa # pylint: disable=unused-variable
+    def func(_):  # noqa # pylint: disable=unused-variable
         return {'a': '1', 'b': 2}
     yield test_cmd
     del NvmeofCLICommand.COMMANDS[test_cmd]
@@ -35,7 +36,7 @@ def fixture_base_call_mock(monkeypatch):
     mock_result = {'a': 'b'}
     super_mock = MagicMock()
     super_mock.return_value = mock_result
-    monkeypatch.setattr(CLICommand, 'call', super_mock)
+    monkeypatch.setattr(CLICommandBase, 'call', super_mock)
     return super_mock
 
 
@@ -44,7 +45,7 @@ def fixture_base_call_return_none_mock(monkeypatch):
     mock_result = None
     super_mock = MagicMock()
     super_mock.return_value = mock_result
-    monkeypatch.setattr(CLICommand, 'call', super_mock)
+    monkeypatch.setattr(CLICommandBase, 'call', super_mock)
     return super_mock
 
 
@@ -55,6 +56,7 @@ class TestNvmeofCLICommand:
 
     def test_command_return_cmd_result_default_format(self, base_call_mock, sample_command):
         result = NvmeofCLICommand.COMMANDS[sample_command].call(MagicMock(), {})
+        logging.getLogger().error(result)
         assert isinstance(result, HandleCommandResult)
         assert result.retval == 0
         assert result.stdout == (
@@ -136,7 +138,7 @@ class TestNvmeofCLICommand:
 
         @NvmeofCLICommand(test_cmd, Model)
         @EndpointDoc(test_desc)
-        def func(_): # noqa # pylint: disable=unused-variable
+        def func(_):  # noqa # pylint: disable=unused-variable
             return {'a': '1', 'b': 2}
 
         assert NvmeofCLICommand.COMMANDS[test_cmd].desc == test_desc
@@ -155,7 +157,7 @@ class TestNvmeofCLICommand:
 
         @NvmeofCLICommand(test_cmd, Model)
         @EndpointDoc(test_desc)
-        def func(_): # noqa # pylint: disable=unused-variable
+        def func(_):  # noqa # pylint: disable=unused-variable
             """test docstr"""
             return {'a': '1', 'b': 2}
 
@@ -173,7 +175,7 @@ class TestNvmeofCLICommand:
             b: int
 
         @NvmeofCLICommand(test_cmd, Model, alias=test_alias)
-        def func(_): # noqa # pylint: disable=unused-variable
+        def func(_):  # noqa # pylint: disable=unused-variable
             return {'a': '1', 'b': 2}
 
         assert test_cmd in NvmeofCLICommand.COMMANDS

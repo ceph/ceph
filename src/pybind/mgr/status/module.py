@@ -11,10 +11,13 @@ import fnmatch
 import mgr_util
 import json
 
-from mgr_module import CLIReadCommand, MgrModule, HandleCommandResult
+from .cli import StatusCLICommand
+
+from mgr_module import MgrModule, HandleCommandResult
 
 
 class Module(MgrModule):
+    CLICommand = StatusCLICommand
     def get_unlabeled_counter_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
         data = self.get_unlabeled_counter(daemon_type, daemon_name, stat)[stat]
         if data:
@@ -29,7 +32,7 @@ class Module(MgrModule):
         else:
             return 0
 
-    @CLIReadCommand("fs status")
+    @StatusCLICommand.Read("fs status")
     def handle_fs_status(self,
                          fs: Optional[str] = None,
                          format: str = 'plain') -> Tuple[int, str, str]:
@@ -278,7 +281,7 @@ class Module(MgrModule):
         else:
             return HandleCommandResult(stdout=output)
 
-    @CLIReadCommand("osd status")
+    @StatusCLICommand.Read("osd status")
     def handle_osd_status(self, bucket: Optional[str] = None, format: str = 'plain') -> Tuple[int, str, str]:
         """
         Show the status of OSDs within a bucket, or all
