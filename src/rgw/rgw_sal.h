@@ -28,6 +28,7 @@
 #include "rgw_req_context.h"
 #include "include/random.h"
 #include "include/function2.hpp"
+#include "rgw_iam_managed_policy.h"
 
 // FIXME: following subclass dependencies
 #include "driver/rados/rgw_user.h"
@@ -389,6 +390,11 @@ class Driver {
                                     optional_yield y,
                                     std::string_view account_id,
                                     uint32_t& count) = 0;
+     /** Count the number of policy belonging to the given account. */
+    virtual int count_account_policies(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t& count) = 0;
     /** Return a paginated listing of the account's roles. */
     virtual int list_account_roles(const DoutPrefixProvider* dpp,
                                    optional_yield y,
@@ -690,6 +696,78 @@ class Driver {
                                    optional_yield y,
                                    std::string_view tenant,
                                    std::vector<RGWOIDCProviderInfo>& providers) = 0;
+    virtual int store_customer_managed_policy(const DoutPrefixProvider* dpp,
+          optional_yield y,const rgw::IAM::ManagedPolicyInfo& info,bool exclusive) = 0;
+    virtual int load_customer_managed_policy(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view name,
+                            rgw::IAM::ManagedPolicyInfo& info) = 0;
+    virtual int delete_customer_managed_policy(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view name) = 0;
+    virtual int list_customer_mananged_policies(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account_id,
+                            rgw::IAM::Scope scope,
+                            bool only_attached,
+                            std::string_view path_prefix,
+                            rgw::IAM::PolicyUsageFilter policy_usage_filter,
+                            std::string_view marker,
+                            uint32_t max_items,
+                            rgw::IAM::PolicyList& listing) = 0;
+    virtual int create_policy_version(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view policy_name,
+                            const std::string_view policy_document,
+                            bool set_as_default,
+                            std::string &version_id,
+                            ceph::real_time &create_date,
+                            bool exclusive) = 0;
+    virtual int delete_policy_version(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view policy_name,
+                            std::string_view version_id,
+                            bool exclusive) = 0;
+    virtual int get_policy_version(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view policy_name,
+                            std::string_view version_id,
+                            rgw::IAM::PolicyVersion& policy_version) = 0;
+    virtual int set_default_policy_version(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view policy_name,
+                            std::string_view version_id) = 0;
+    virtual int list_policy_versions(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account_id,
+                            std::string_view policy_name,
+                            std::string_view marker,
+                            uint32_t max_items,
+                            rgw::IAM::VersionList& listing) = 0;
+    virtual int tag_policy(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view policy_name,
+                            std::multimap<std::string, std::string>& tags) = 0;
+    virtual int untag_policy(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view policy_name,
+                            std::vector<std::string>& keys) = 0;
+    virtual int list_policy_tags(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account_id,
+                            std::string_view policy_name,
+                            std::string_view marker,
+                            uint32_t max_items,
+                            rgw::IAM::PolicyTagList& listing) = 0;
+
     /** Get a Writer that appends to an object */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,

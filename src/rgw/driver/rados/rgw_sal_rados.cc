@@ -89,6 +89,7 @@
 #include "topic.h"
 #include "topics.h"
 #include "users.h"
+#include "policy.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -1858,6 +1859,17 @@ int RadosStore::count_account_roles(const DoutPrefixProvider* dpp,
   return rgwrados::account::resource_count(dpp, y, rados, obj, count);
 }
 
+int RadosStore::count_account_policies(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t& count)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::policy::get_policy_obj(zone, account_id);
+  return rgwrados::account::resource_count(dpp, y, rados, obj, count);
+}
+
 int RadosStore::list_account_roles(const DoutPrefixProvider* dpp,
                                    optional_yield y,
                                    std::string_view account_id,
@@ -2735,6 +2747,182 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
   } while (is_truncated);
 
   return 0;
+}
+
+int RadosStore::store_customer_managed_policy(const DoutPrefixProvider* dpp,
+      optional_yield y, const rgw::IAM::ManagedPolicyInfo& info, bool exclusive)
+{
+ return rgwrados::policy::write_policy( dpp, y, *getRados()->get_rados_handle(), *svc()->sysobj, svc()->zone->get_zone_params(), info, exclusive);
+}
+
+int RadosStore::load_customer_managed_policy(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view name,
+                            rgw::IAM::ManagedPolicyInfo& info) 
+{
+  return rgwrados::policy::get_policy(dpp, y, *svc()->sysobj, svc()->zone->get_zone_params(), account, name, info);
+}
+
+int RadosStore::delete_customer_managed_policy(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view name) 
+{
+  return rgwrados::policy::delete_policy(dpp, y, *getRados()->get_rados_handle(), *svc()->sysobj, svc()->zone->get_zone_params(), account, name);
+}
+
+int RadosStore::list_customer_mananged_policies(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          rgw::IAM::Scope scope,
+                          bool only_attached,
+                          std::string_view path_prefix,
+                          rgw::IAM::PolicyUsageFilter policy_usage_filter,
+                          std::string_view marker,
+                          uint32_t max_items,
+                          rgw::IAM::PolicyList& listing)
+{
+  return rgwrados::policy::list_policies(dpp, y,
+                                         *getRados()->get_rados_handle(),
+                                         *svc()->sysobj,
+                                         svc()->zone->get_zone_params(),
+                                         account_id, scope, only_attached,
+                                         path_prefix, policy_usage_filter,
+                                         marker, max_items, listing);
+}
+int RadosStore::create_policy_version(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        const std::string_view policy_document,
+                        bool set_as_default,
+                        std::string &version_id,
+                        ceph::real_time &create_date,
+                        bool exclusive)
+{
+  return rgwrados::policy::create_policy_version(dpp, y,
+                      *getRados()->get_rados_handle(),
+                      *svc()->sysobj,
+                      svc()->zone->get_zone_params(),
+                      account,
+                      policy_name,
+                      policy_document,
+                      set_as_default,
+                      version_id,
+                      create_date,
+                      exclusive);
+}
+
+int RadosStore::delete_policy_version(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::string_view version_id,
+                        bool exclusive)
+{
+  return rgwrados::policy::delete_policy_version(dpp, y,
+                      *getRados()->get_rados_handle(),
+                      *svc()->sysobj,
+                      svc()->zone->get_zone_params(),
+                      account,
+                      policy_name,
+                      version_id,
+                      exclusive);
+}
+
+int RadosStore::get_policy_version(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::string_view version_id,
+                        rgw::IAM::PolicyVersion& policy_version)
+{
+  return rgwrados::policy::get_policy_version(dpp, y,
+                      *getRados()->get_rados_handle(),
+                      *svc()->sysobj,
+                      svc()->zone->get_zone_params(),
+                      account,
+                      policy_name,
+                      version_id,
+                      policy_version);
+}
+
+int RadosStore::set_default_policy_version(const DoutPrefixProvider* dpp,
+                      optional_yield y,
+                      std::string_view account,
+                      std::string_view policy_name,
+                      std::string_view version_id)
+{
+  return rgwrados::policy::set_default_policy_version(dpp, y,
+                      *getRados()->get_rados_handle(),
+                      *svc()->sysobj,
+                      svc()->zone->get_zone_params(),
+                      account,
+                      policy_name,
+                      version_id);
+}
+
+int RadosStore::list_policy_versions(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          std::string_view policy_name,
+                          std::string_view marker,
+                          uint32_t max_items,
+                          rgw::IAM::VersionList& listing)
+{
+  return rgwrados::policy::list_policy_versions(dpp, y,
+                                         *getRados()->get_rados_handle(),
+                                         *svc()->sysobj,
+                                         svc()->zone->get_zone_params(),
+                                         account_id, policy_name,
+                                         marker, max_items, listing);
+}
+
+int RadosStore::tag_policy(const DoutPrefixProvider* dpp,
+                      optional_yield y,
+                      std::string_view account,
+                      std::string_view policy_name,
+                      std::multimap<std::string, std::string>& tags)
+{
+  return rgwrados::policy::tag_policy(dpp, y,
+                      *getRados()->get_rados_handle(),
+                      *svc()->sysobj,
+                      svc()->zone->get_zone_params(),
+                      account,
+                      policy_name,
+                      tags);
+}
+
+int RadosStore::untag_policy(const DoutPrefixProvider* dpp,
+                      optional_yield y,
+                      std::string_view account,
+                      std::string_view policy_name,
+                      std::vector<std::string>& keys)
+{
+  return rgwrados::policy::untag_policy(dpp, y,
+                      *getRados()->get_rados_handle(),
+                      *svc()->sysobj,
+                      svc()->zone->get_zone_params(),
+                      account,
+                      policy_name,
+                      keys);
+}
+
+int RadosStore::list_policy_tags(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          std::string_view policy_name,
+                          std::string_view marker,
+                          uint32_t max_items,
+                          rgw::IAM::PolicyTagList& listing)
+{
+  return rgwrados::policy::list_policy_tags(dpp, y,
+                                         *getRados()->get_rados_handle(),
+                                         *svc()->sysobj,
+                                         svc()->zone->get_zone_params(),
+                                         account_id, policy_name,
+                                         marker, max_items, listing);
 }
 
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,

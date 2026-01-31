@@ -172,6 +172,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("tier_config", tier_config, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
   JSONDecoder::decode_json("restore_pool", restore_pool, obj);
+  JSONDecoder::decode_json("policy_pool", policy_pool, obj);
 }
 
 void RGWZoneParams::dump(Formatter *f) const
@@ -202,6 +203,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("placement_pools", placement_pools, f);
   encode_json("tier_config", tier_config, f);
   encode_json("realm_id", realm_id, f);
+  encode_json("policy_pool", policy_pool, f);
   encode_json("restore_pool", restore_pool, f);
 }
 
@@ -260,6 +262,7 @@ void add_zone_pools(const RGWZoneParams& info,
   pools.insert(info.topics_pool);
   pools.insert(info.account_pool);
   pools.insert(info.group_pool);
+  pools.insert(info.policy_pool);
 
   for (const auto& [pname, placement] : info.placement_pools) {
     pools.insert(placement.index_pool);
@@ -853,6 +856,7 @@ int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
       fix_zone_pool_dup(pools, info.name, ".rgw.meta:topics", info.topics_pool);
   info.account_pool = fix_zone_pool_dup(pools, info.name, ".rgw.meta:accounts", info.account_pool);
   info.group_pool = fix_zone_pool_dup(pools, info.name, ".rgw.meta:groups", info.group_pool);
+  info.policy_pool = fix_zone_pool_dup(pools, info.name, ".rgw.meta:policy", info.policy_pool);
 
   for (auto& [pname, placement] : info.placement_pools) {
     placement.index_pool = fix_zone_pool_dup(pools, info.name, "." + default_bucket_index_pool_suffix, placement.index_pool);
