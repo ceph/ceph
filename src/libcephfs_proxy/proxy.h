@@ -28,7 +28,8 @@
 	((_type *)((uintptr_t)(_ptr) - offset_of(_type, _field)))
 
 enum {
-	/* Support for ceph_ll_nonblocking_readv_writev */
+	/* Support for asynchronous I/O operations, like
+	 * ceph_ll_nonblocking_readv_writev and ceph_ll_nonblocking_fsync */
 	PROXY_FEAT_ASYNC_IO = 0x00000001,
 
 	/* Support for embedding the user credentials inside the request itself
