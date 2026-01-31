@@ -7974,6 +7974,12 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
     }
 
     r = call(bs);
+    if (r == -ENOENT) {
+      ldpp_dout(dpp, 10) << "ENOENT in guard_reshard(), likely bucket resharding, retrying" << dendl;
+      invalidate_bs();
+      continue;
+    }
+
     if (r != -ERR_BUSY_RESHARDING) {
       break;
     }
@@ -8678,6 +8684,10 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
     }
 
     r = call(bs);
+    if (r == -ENOENT) {
+      ldpp_dout(dpp, 10) << "ENOENT in guard_reshard(), likely bucket resharding, retrying" << dendl;
+      continue;
+    }
     if (r != -ERR_BUSY_RESHARDING) {
       break;
     }
