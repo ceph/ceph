@@ -496,7 +496,12 @@ enum {
 	CEPH_OSD_OP_FLAG_FADVISE_DONTNEED   = 0x20,/* data will not be accessed in the near future */
 	CEPH_OSD_OP_FLAG_FADVISE_NOCACHE   = 0x40, /* data will be accessed only once by this client */
 	CEPH_OSD_OP_FLAG_WITH_REFERENCE   = 0x80, /* need reference couting */
-	CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE = 0x100, /* bypass ObjectStore cache, mainly for deep-scrub */
+	CEPH_OSD_OP_FLAG_SCRUB = 0x100,	/* hint ObjectStore for deep-scrub ops
+									 * Marks op as scrub or deep-scrub operations.
+									 * This flag allows ObjectStore to identify scrub-originated ops
+									 * and handle them separately from normal ops,
+									 * apply scrub-specific behavior (e.g. bypassing clean cache)
+									 */
 };
 
 #define EOLDSNAPC    85  /* ORDERSNAP flag set; writer has old snapc*/
