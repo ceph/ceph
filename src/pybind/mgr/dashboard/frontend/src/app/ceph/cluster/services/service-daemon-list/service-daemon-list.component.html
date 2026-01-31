@@ -52,14 +52,12 @@
       <b>{{ event.created | relativeDate }} - </b>
       <cds-tag class="tag-info">{{ event.subject }}</cds-tag><br>
       <span *ngIf="event.level === 'INFO'">
-        <svg [cdsIcon]="icons.infoCircle"
-             [size]="icons.size16"
-             class="cds-info-color"></svg>
+        <cd-icon type="infoCircle"
+                 class="cds-info-color"></cd-icon>
       </span>
       <span *ngIf="event.level === 'ERROR'">
-        <svg [cdsIcon]="icons.warning"
-             [size]="icons.size16"
-             class="cds-warning-color"></svg>
+        <cd-icon type="warning"
+                 class="cds-warning-color"></cd-icon>
       </span>
       {{ event.message }}
     </li>

@@ -11,7 +11,7 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum';
 import { NvmeofGatewayGroup } from '~/app/shared/models/nvmeof';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
@@ -59,7 +59,6 @@ export class NvmeofGatewayGroupComponent implements OnInit {
   subsystemCount: number;
   gatewayCount: number;
 
-  icons = Icons;
 
   iconSize = IconSize;
 
@@ -100,7 +99,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
     ];
     const createAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: ICON_TYPE.add,
       disable: () => (this.nodesAvailable ? false : $localize`Gateway nodes are not available`),
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE,
@@ -109,7 +108,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
 
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: ICON_TYPE.destroy,
       click: () => this.deleteGatewayGroupModal(),
       name: this.actionLabels.DELETE,
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection

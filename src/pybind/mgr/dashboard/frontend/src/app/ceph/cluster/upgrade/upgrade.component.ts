@@ -4,7 +4,7 @@ import { catchError, shareReplay, switchMap } from 'rxjs/operators';
 import { DaemonService } from '~/app/shared/api/daemon.service';
 import { HealthService } from '~/app/shared/api/health.service';
 import { UpgradeService } from '~/app/shared/api/upgrade.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { Daemon } from '~/app/shared/models/daemon.interface';
@@ -40,6 +40,7 @@ export class UpgradeComponent implements OnInit, OnDestroy {
   columns: CdTableColumn[] = [];
 
   icons = Icons;
+  iconSize = IconSize;
 
   upgradeStatus$: Observable<any>;
   subject = new ReplaySubject<any>();

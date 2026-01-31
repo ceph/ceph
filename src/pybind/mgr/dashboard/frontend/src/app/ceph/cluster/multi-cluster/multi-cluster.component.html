@@ -27,9 +27,8 @@
           <div class="text-center">
             <button class="btn btn-primary"
                     (click)="openConnectClusterForm()">
-              <i class="mx-auto"
-                 [ngClass]="icons.add">
-              </i> Connect Cluster
+              <cd-icon type="add"
+                       class="mx-auto"></cd-icon> Connect Cluster
             </button>
           </div>
         </div>
@@ -52,6 +51,7 @@
   <div class="container h-75">
     <div class="row h-100 justify-content-center align-items-center">
       <div class="blank-page">
+        <!-- TODO: update to loading component-->
         <i class="mx-auto d-block"
            [ngClass]="[icons.large3x, icons.spinner, icons.spin]">
         </i>
@@ -108,22 +108,22 @@
                 <h3 *ngIf="queriesResults['HEALTH_ERROR_COUNT'][0][1] === '0' && queriesResults['HEALTH_OK_COUNT'][0][1] === '0' && queriesResults['HEALTH_WARNING_COUNT'][0][1] === '0'">{{ queriesResults.CLUSTER_COUNT[0][1] }}</h3>
                 <h3 class="text-danger"
                     *ngIf="queriesResults.HEALTH_ERROR_COUNT[0][1] !== '0'">
-                  <i [ngClass]="icons.danger"></i>
+                  <cd-icon type="danger"></cd-icon>
                   {{ queriesResults.HEALTH_ERROR_COUNT[0][1] }}
                 </h3>
                 <h3 class="text-warning"
                     *ngIf="queriesResults.HEALTH_WARNING_COUNT[0][1] !== '0'">
-                  <i [ngClass]="icons.warning"></i>
+                  <cd-icon type="warning"></cd-icon>
                     {{ queriesResults.HEALTH_WARNING_COUNT[0][1] }}
                 </h3>
                 <h3 class="text-danger"
                     *ngIf="queriesResults.HEALTH_ERROR_COUNT[0][1] !== '0'">
-                  <i [ngClass]="icons.danger"></i>
+                  <cd-icon type="danger"></cd-icon>
                   {{ queriesResults.HEALTH_ERROR_COUNT[0][1] }}
                 </h3>
                 <h3 class="text-success"
                     *ngIf="queriesResults.HEALTH_OK_COUNT[0][1] !== '0'">
-                  <i [ngClass]="icons.success"></i>
+                  <cd-icon type="success"></cd-icon>
                     {{ queriesResults.HEALTH_OK_COUNT[0][1] }}
                 </h3>
               </span>
@@ -140,12 +140,12 @@
                 </h3>
                 <h3 class="text-danger"
                     *ngIf="queriesResults['CRITICAL_ALERTS_COUNT'][0][1] !== '0'">
-                  <i [ngClass]="icons.danger"></i>
+                  <cd-icon type="danger"></cd-icon>
                   {{ queriesResults['CRITICAL_ALERTS_COUNT'][0][1] }}
                 </h3>
                 <h3 class="text-warning"
                     *ngIf="queriesResults['WARNING_ALERTS_COUNT'][0][1] !== '0'">
-                  <i [ngClass]="icons.warning"></i>
+                  <cd-icon type="warning"></cd-icon>
                     {{ queriesResults['WARNING_ALERTS_COUNT'][0][1] }}
                 </h3>
               </span>
@@ -158,8 +158,8 @@
                      aria-label="Connection Errors">
               <span class="text-center">
                 <h3 [ngClass]="{'text-danger': connectionErrorsCount > 0}">
-                  <i [ngClass]="icons.danger"
-                     *ngIf="connectionErrorsCount > 0"></i>
+                  <cd-icon type="warningFilled"
+                           *ngIf="connectionErrorsCount > 0"></cd-icon>
                   {{ connectionErrorsCount }}
                 </h3>
               </span>

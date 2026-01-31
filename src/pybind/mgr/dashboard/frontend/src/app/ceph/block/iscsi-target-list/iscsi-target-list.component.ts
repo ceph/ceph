@@ -10,7 +10,7 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -47,7 +47,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
   summaryDataSubscription: Subscription;
   tableActions: CdTableAction[];
   targets: any[] = [];
-  icons = Icons;
+  iconSize = IconSize;
 
   builders = {
     'iscsi/target/create': (metadata: object) => {
@@ -74,20 +74,20 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     this.tableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         routerLink: () => '/block/iscsi/targets/create',
         name: this.actionLabels.CREATE
       },
       {
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         routerLink: () => `/block/iscsi/targets/edit/${this.selection.first().target_iqn}`,
         name: this.actionLabels.EDIT,
         disable: () => this.getEditDisableDesc()
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         click: () => this.deleteIscsiTargetModal(),
         name: this.actionLabels.DELETE,
         disable: () => this.getDeleteDisableDesc()

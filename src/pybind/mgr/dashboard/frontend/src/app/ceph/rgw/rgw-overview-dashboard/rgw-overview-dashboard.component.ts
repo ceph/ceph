@@ -14,7 +14,7 @@ import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 
 import { RgwPromqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize, Icons } from '~/app/shared/enum/icons.enum';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { catchError, shareReplay, switchMap, tap } from 'rxjs/operators';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -27,7 +27,8 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
   standalone: false
 })
 export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
-  icons = Icons;
+  icons = Icons; // Keep for FontAwesome spinner icons
+  iconSize = IconSize;
 
   interval = new Subscription();
   permissions: Permissions;

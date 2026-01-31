@@ -10,7 +10,7 @@ import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -49,7 +49,7 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
   selection: CdTableSelection = new CdTableSelection();
   userDataSubject = new Subject();
   declare staleTimeout: number;
-  icons = Icons;
+  iconSize = IconSize;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -141,20 +141,20 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
       this.selection.first() && `${encodeURIComponent(this.selection.first().uid)}`;
     const addAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: ICON_TYPE.add,
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       routerLink: () => this.urlBuilder.getEdit(getUserUri()),
       name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: ICON_TYPE.destroy,
       click: () => this.deleteAction(),
       disable: () => !this.selection.hasSelection,
       name: this.actionLabels.DELETE

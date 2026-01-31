@@ -10,7 +10,7 @@ import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SMBJoinAuth } from '../smb.model';
 import { Router } from '@angular/router';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
@@ -72,21 +72,21 @@ export class SmbJoinAuthListComponent implements OnInit {
       {
         name: `${this.actionLabels.CREATE} AD`,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () => this.router.navigate([this.urlBuilder.getCreate()]),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () =>
           this.router.navigate([this.urlBuilder.getEdit(String(this.selection.first().auth_id))])
       },
       {
         name: this.actionLabels.DELETE,
         permission: 'update',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         click: () => this.openDeleteModal()
       }
     ];

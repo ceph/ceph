@@ -12,7 +12,7 @@ import { catchError, switchMap, tap } from 'rxjs/operators';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -70,7 +70,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
   context: CdTableFetchDataContext;
   selection = new CdTableSelection();
   removeForm: CdFormGroup;
-  icons = Icons;
+  iconSize = IconSize;
   permissions: Permissions;
   modalRef: NgbModalRef;
   errorMessage: string = '';
@@ -147,26 +147,26 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () => this.openModal()
       },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () => this.openModal(true)
       },
       {
         name: this.actionLabels.ATTACH,
         permission: 'read',
-        icon: Icons.bars,
+        icon: ICON_TYPE.dataCards,
         disable: () => !this.selection?.hasSelection,
         click: () => this.showAttachInfo()
       },
       {
         name: this.actionLabels.NFS_EXPORT,
         permission: 'create',
-        icon: Icons.nfsExport,
+        icon: ICON_TYPE.bareMetalServer,
         routerLink: () => [
           '/cephfs/nfs/create',
           this.fsName,
@@ -178,7 +178,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         click: () => this.removeSubVolumeModal()
       }
     ];

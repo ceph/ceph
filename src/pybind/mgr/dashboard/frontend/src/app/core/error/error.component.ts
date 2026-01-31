@@ -9,7 +9,7 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { DocService } from '~/app/shared/services/doc.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize, ICON_TYPE } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-error',
@@ -37,7 +37,7 @@ export class ErrorComponent implements OnDestroy, OnInit {
   module_name: string;
   navigateTo: string;
   component: string;
-  icons = Icons;
+  iconSize = IconSize;
 
   constructor(
     private router: Router,
@@ -111,5 +111,16 @@ export class ErrorComponent implements OnDestroy, OnInit {
 
   enableModule(): void {
     this.mgrModuleService.updateModuleState(this.module_name, false, null, this.navigateTo);
+  }
+
+  getIconType(icon: string): keyof typeof ICON_TYPE {
+    // Map common icon names to ICON_TYPE keys
+    if (!icon) return 'warning';
+    const iconLower = icon.toLowerCase();
+    if (iconLower.includes('error') || iconLower.includes('danger')) return 'danger';
+    if (iconLower.includes('warning') || iconLower.includes('warn')) return 'warning';
+    if (iconLower.includes('success') || iconLower.includes('check')) return 'success';
+    if (iconLower.includes('info')) return 'infoCircle';
+    return 'warning'; // default
   }
 }

@@ -10,16 +10,16 @@
                        description="Close"
                        i18n-description
                        (click)="close()">
-        <svg [size]="icons.size16"
-             [cdsIcon]="icons.destroy"></svg>
+        <cd-icon type="destroy"
+></cd-icon>
       </cds-icon-button>
     </div>
 
     <div class="inline-tip-body"
          [cdsStack]="'horizontal'"
          [gap]="4">
-      <svg [cdsIcon]="icons.idea"
-           [size]="icons.size20"></svg>
+      <cd-icon type="idea"
+               [size]="iconSize.size20"></cd-icon>
 
       <div [cdsStack]="'vertical'"
            [gap]="1"

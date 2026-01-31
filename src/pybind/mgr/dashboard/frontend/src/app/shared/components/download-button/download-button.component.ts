@@ -1,6 +1,6 @@
 import { Component, Input } from '@angular/core';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize } from '~/app/shared/enum/icons.enum';
 import { TextToDownloadService } from '~/app/shared/services/text-to-download.service';
 
 @Component({
@@ -15,7 +15,7 @@ export class DownloadButtonComponent {
   @Input() fileName: any;
   @Input() title = $localize`Download`;
 
-  icons = Icons;
+  iconSize = IconSize;
   constructor(private textToDownloadService: TextToDownloadService) {}
 
   download(format?: string) {

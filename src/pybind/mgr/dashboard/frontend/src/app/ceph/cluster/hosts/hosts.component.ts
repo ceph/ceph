@@ -16,7 +16,7 @@ import { SelectMessages } from '~/app/shared/components/select/select-messages.m
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -101,7 +101,6 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   draining: boolean = false;
   bsModalRef: NgbModalRef;
 
-  icons = Icons;
   private tableContext: CdTableFetchDataContext = null;
   count = 5;
 
@@ -142,7 +141,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         name: this.actionLabels.EXPAND_CLUSTER,
         permission: 'create',
         buttonKind: 'secondary',
-        icon: Icons.expand,
+        icon: ICON_TYPE.maximize,
         routerLink: '/expand-cluster',
         disable: (selection: CdTableSelection) => this.getDisable('add', selection),
         visible: () => this.showExpandClusterBtn
@@ -152,7 +151,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: this.actionLabels.ADD,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () =>
           this.router.url.includes('/hosts')
             ? this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.ADD] } }])
@@ -164,35 +163,35 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () => this.editAction(),
         disable: (selection: CdTableSelection) => this.getDisable('edit', selection)
       },
       {
         name: this.actionLabels.START_DRAIN,
         permission: 'update',
-        icon: Icons.exit,
+        icon: ICON_TYPE.logout,
         click: () => this.hostDrain(),
         visible: () => !this.showGeneralActionsOnly && !this.draining
       },
       {
         name: this.actionLabels.STOP_DRAIN,
         permission: 'update',
-        icon: Icons.exit,
+        icon: ICON_TYPE.logout,
         click: () => this.hostDrain(true),
         visible: () => !this.showGeneralActionsOnly && this.draining
       },
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         click: () => this.deleteAction(),
         disable: (selection: CdTableSelection) => this.getDisable('remove', selection)
       },
       {
         name: this.actionLabels.ENTER_MAINTENANCE,
         permission: 'update',
-        icon: Icons.enter,
+        icon: ICON_TYPE.login,
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
           this.getDisable('maintenance', selection) ||
@@ -203,7 +202,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: this.actionLabels.EXIT_MAINTENANCE,
         permission: 'update',
-        icon: Icons.exit,
+        icon: ICON_TYPE.logout,
         click: () => this.hostMaintenance(),
         disable: (selection: CdTableSelection) =>
           this.getDisable('maintenance', selection) ||

@@ -1,4 +1,5 @@
 import { NgModule } from '@angular/core';
+import { IconModule } from 'carbon-components-angular';
 
 import { AuthStorageDirective } from './auth-storage.directive';
 import { AutofocusDirective } from './autofocus.directive';
@@ -23,7 +24,7 @@ import { DynamicInputComboboxDirective } from './dynamic-input-combobox.directiv
 import { ValidateDirective } from './validate.directive';
 
 @NgModule({
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, IconModule],
   declarations: [
     AutofocusDirective,
     DimlessBinaryDirective,

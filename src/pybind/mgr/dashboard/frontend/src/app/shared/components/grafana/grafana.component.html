@@ -22,7 +22,7 @@
                 i18n-title
                 title="Reset Settings"
                 (click)="reset()">
-          <i [ngClass]="[icons.undo]"></i>
+          <cd-icon type="undo"></cd-icon>
         </button>
       </div>
       <div class="col-sm-1">
@@ -30,7 +30,8 @@
                 i18n-title
                 title="Show hidden information"
                 (click)="showMessage = !showMessage">
-          <i [ngClass]="[icons.infoCircle, icons.large]"></i>
+          <cd-icon type="infoCircle"
+                   [size]="iconSize.size24"></cd-icon>
         </button>
       </div>
     </div>

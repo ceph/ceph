@@ -5,7 +5,7 @@ import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-g
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -106,20 +106,20 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () => this.openModal()
       },
       {
         name: this.actionLabels.CLONE,
         permission: 'create',
-        icon: Icons.clone,
+        icon: ICON_TYPE.clone,
         disable: () => !this.selection.hasSingleSelection,
         click: () => this.cloneModal()
       },
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         disable: () => !this.selection.hasSingleSelection,
         click: () => this.deleteSnapshot()
       }

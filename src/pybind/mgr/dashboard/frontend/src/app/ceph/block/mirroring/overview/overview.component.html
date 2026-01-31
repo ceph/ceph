@@ -19,14 +19,13 @@
                            size="md"
                            (click)="updateSiteName()"
                            [title]="editing ? 'Save' : 'Edit'">
-            <svg [cdsIcon]="icons.edit"
-                 [size]="icons.size32"
-                 class="cds--btn__icon"
-                 *ngIf="!editing"></svg>
-            <svg [cdsIcon]="icons.check"
-                 [size]="icons.size32"
-                 class="cds--btn__icon"
-                 *ngIf="editing"></svg>
+            <cd-icon type="edit"
+                     class="cds--btn__icon"
+                     *ngIf="!editing"></cd-icon>
+            <cd-icon type="check"
+                     class="cds--btn__icon"
+                 *ngIf="editing">
+          </cd-icon>
           </cds-icon-button>
           <cd-copy-2-clipboard-button [source]="siteName"
                                       [byId]="false">
@@ -46,9 +45,9 @@
                   [attr.data-testid]="action.name"
                   [preserveFragment]="action.preserveFragment ? '' : null">
             <span i18n>{{ action.name }}</span>
-            <svg class="cds--btn__icon"
-                 [cdsIcon]="action.icon"
-                 size="16"></svg>
+            <cd-icon [type]="action.icon"
+                     class="cds--btn__icon"
+            ></cd-icon>
           </button>
         </ng-container>
       </div>

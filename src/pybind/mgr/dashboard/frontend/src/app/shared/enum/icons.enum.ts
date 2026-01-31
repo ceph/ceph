@@ -1,44 +1,22 @@
 export enum Icons {
   /* Icons for Symbol */
-  add = 'add', // Create, Add
-  addCircle = 'add--filled', // Plus with Circle
-  minusCircle = 'subtract--alt', // Minus with Circle
-  edit = 'edit', // Edit, Edit Mode, Rename
-  destroy = 'close', // Destroy, Remove, Delete
-  exchange = 'arrows--horizontal', // Edit-Peer
   copy = 'copy', // Copy
   clipboard = 'copy--file', // Clipboard
-  flatten = 'unlink', // Flatten, Link broken, Mark Lost
-  trash = 'trash-can', // Move to trash
-  lock = 'locked', // Protect
-  unlock = 'unlocked', // Unprotect
-  clone = 'fa fa-clone', // clone
-  undo = 'fa fa-undo', // Rollback, Restore
   search = 'search', // Search
-  start = 'fa fa-play', // Enable
-  stop = 'fa fa-stop', // Disable
   analyse = 'fa fa-stethoscope', // Scrub
-  deepCheck = 'settings', // Deep Scrub, Setting, Configuration
   cogs = 'fa fa-cogs', // Multiple Settings, Configurations
   reweight = 'scales', // Reweight
   up = 'arrow--up', // Up
-  left = 'arrow--left', // Mark out
-  right = 'arrow--right', // Mark in
-  down = 'arrow--down', // Mark Down
   erase = 'fa fa-eraser', // Purge  color: bd.$white;
-  expand = 'maximize', // Expand cluster
   user = 'user', // User, Initiators
   users = 'user--multiple', // Users, Groups
   share = 'share', // share
   key = 'password', // S3 Keys, Swift Keys, Authentication
   warning = 'warning--alt--filled', // Notification warning
-  info = 'information', // Notification information
   infoCircle = 'information--filled', // Info on landing page
   questionCircle = 'help',
-  danger = 'warning--filled',
   success = 'checkmark--filled',
   check = 'checkmark', // Notification check
-  show = 'view', // Show
   paragraph = 'fa fa-paragraph', // Silence Matcher - Attribute name
   terminal = 'fa fa-terminal', // Silence Matcher - Value
   magic = 'fa fa-magic', // Silence Matcher - Regex checkbox
@@ -52,40 +30,27 @@ export enum Icons {
   server = 'fa fa-server', // Server, Portal
   filter = 'filter', // Filter
   lineChart = 'analytics', // Line chart
-  signOut = 'fa fa-sign-out', // Sign Out
   circle = 'dot-mark', // Circle
   bell = 'notification', // Notification
   mute = 'notification--off', // Mute or silence
   leftArrow = 'caret--left', // Left facing angle
   rightArrow = 'caret--right', // Right facing angle
   downArrow = 'caret--down',
-  flag = 'fa fa-flag', // OSD configuration
-  clearFilters = 'close--filled', // Clear filters, solid x
   download = 'download', // Download
-  upload = 'fa fa-upload', // Upload
   code = 'code', // JSON file
   document = 'document', // Text file
-  wrench = 'tools', // Configuration Error
-  enter = 'fa fa-sign-in', // Enter
-  exit = 'fa fa-sign-out', // Exit
-  restart = 'fa fa-history', // Restart
   deploy = 'cube', // Deploy, Redeploy
-  cubes = 'fa fa-cubes', // Object storage
   sitemap = 'fa fa-sitemap', // Cluster, network, connections
   database = 'fa fa-database', // Database, Block storage
-  bars = 'fa fa-bars', // Stack, bars
   navicon = 'fa fa-navicon', // Navigation
   areaChart = 'fa fa-area-chart', // Area Chart, dashboard
   eye = 'fa fa-eye', // Observability
   calendar = 'fa fa-calendar',
   externalUrl = 'fa fa-external-link', // links to external page
-  nfsExport = 'fa fa-server', // NFS export
-  launch = 'launch',
   parentChild = 'parent-child',
   dataTable = 'data-table',
   idea = 'idea',
   userAccessLocked = 'user--access-locked', // User access locked
-  chevronDown = 'chevron--down',
   connect = 'connect',
   /* Icons for special effect */
   size16 = '16',
@@ -115,16 +80,74 @@ export enum IconSize {
 }
 
 export const ICON_TYPE = {
+  add: 'add',
+  bell: 'bell',
   check: 'check',
+  circle: 'circle',
+  closeFilled: 'close--filled',
+  code: 'code',
   copy: 'copy',
   danger: 'danger',
+  dataTable: 'dataTable',
+  deepCheck: 'deepCheck',
   deploy: 'deploy',
+  destroy: 'destroy',
+  document: 'document',
+  download: 'download',
   edit: 'edit',
   error: 'error--filled',
+  filter: 'filter',
+  idea: 'idea',
   infoCircle: 'info-circle',
+  key: 'key',
+  launch: 'launch',
+  lineChart: 'lineChart',
+  minusCircle: 'subtract--alt',
+  mute: 'mute',
   notification: 'notification',
   notificationOff: 'notification--off',
   notificationNew: 'notification--new',
+  parentChild: 'parentChild',
+  refresh: 'refresh',
+  reweight: 'reweight',
+  search: 'search',
+  show: 'show',
   success: 'success',
-  warning: 'warning'
+  trash: 'trash-can',
+  up: 'up',
+  userAccessLocked: 'userAccessLocked',
+  warning: 'warning',
+  undo: 'undo',
+  erase: 'erase',
+  arrowDown: 'arrow--down',
+  dataClass: 'data-class',
+  scales: 'scales',
+  tools: 'tools',
+  tag: 'tag',
+  settings: 'settings',
+  close: 'close',
+  warningFilled: 'warning--filled',
+  chevronDown: 'chevron--down',
+  addCircle: 'add--filled',
+  exchange: 'arrows--horizontal',
+  unlink: 'unlink',
+  lock: 'locked',
+  unlock: 'unlocked',
+  clone: 'replicate',
+  logout: 'logout',
+  dataCards: 'show-data--cards',
+  bareMetalServer: 'bare-metal-server',
+  maximize: 'maximize',
+  login: 'login',
+  view: 'view',
+  viewOff: 'view--off',
+  playFilled: 'play--filled--alt',
+  stopFilled: 'stop--filled--alt',
+  flag: 'flag',
+  arrowLeft: 'arrow--left',
+  arrowRight: 'arrow--right',
+  restart: 'restart',
+  upload: 'upload',
+  cube: 'cube',
+  info: 'information',
 } as const;
