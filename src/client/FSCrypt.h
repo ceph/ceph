@@ -199,12 +199,23 @@ public:
 
   virtual void encode_extra(bufferlist& bl) const {}
 
+  void standardize(struct fscrypt_policy_v2 src, struct fscrypt_policy_v2 *dest) {
+    memset(dest, 0, sizeof(struct fscrypt_policy_v2));
+
+    dest->version = src.version;
+    dest->contents_encryption_mode = src.contents_encryption_mode;
+    dest->filenames_encryption_mode = src.filenames_encryption_mode;
+    dest->flags = src.flags;
+    memcpy(dest->master_key_identifier, src.master_key_identifier, sizeof(src.master_key_identifier));
+  }
+
   void convert_to(struct fscrypt_policy_v2 *dest) {
+    memset(dest, 0, sizeof(struct fscrypt_policy_v2));
+
     dest->version = version;
     dest->contents_encryption_mode = contents_encryption_mode;
     dest->filenames_encryption_mode = filenames_encryption_mode;
     dest->flags = flags;
-    memset(dest->__reserved, 0, sizeof(dest->__reserved));
     memcpy(dest->master_key_identifier, master_key_identifier.raw, sizeof(master_key_identifier.raw));
   }
 
