@@ -26,6 +26,15 @@ CephFS
 * ``EOPNOTSUPP`` (Operation not supported) is now returned by the CephFS FUSE
   client for ``fallocate`` for the default case (i.e. ``mode == 0``).
 
+NVMe/TCP 
+* Full support for NVMe/TCP GWs has been added including support for HA
+* Qualified with RH 9.4 and ESxi7u3 or later hosts
+* Scales to up to 4 GW groups, and up to 8 GWs in a GW group
+* Namespaces auto load balancing across the GWs when scaling up/down 
+* NVMe Reservations and Cancel commands support 
+* NVMe in-band authentication 
+* Data encryption with TLS-PSK 
+
 Dashboard
 
 * Support has been added for NVMe/TCP gateway groups and multiple
