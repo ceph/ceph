@@ -72,11 +72,13 @@
 
 <ng-template #hostNameTpl
              let-row="data.row">
-  <span [ngClass]="row">
+  <span data-testid="hostname"
+        [ngClass]="row">
     {{ row.hostname }}
   </span><br>
   <span class="text-muted fst-italic"
-        *ngIf="row.addr">
+        *ngIf="row.addr"
+        data-testid="ip-address">
     ({{ row.addr }})
   </span>
 </ng-template>
