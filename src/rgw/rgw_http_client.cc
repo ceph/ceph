@@ -367,12 +367,30 @@ size_t RGWHTTPClient::receive_http_header(void * const ptr,
     return len;
   }
 
-  int ret = req_data->client->receive_header(ptr, size * nmemb);
+  size_t& skip_bytes = req_data->client->receive_pause_skip;
+
+  if (skip_bytes >= len) {
+    skip_bytes -= len;
+    return len;
+  }
+
+  bool pause = false;
+
+  int ret = req_data->client->receive_header((char *)ptr + skip_bytes, len - skip_bytes, &pause);
   if (ret < 0) {
     dout(5) << "WARNING: client->receive_header() returned ret=" << ret << dendl;
     req_data->user_ret = ret;
     return CURLE_WRITE_ERROR;
   }
+
+  if (pause) {
+    dout(20) << "RGWHTTPClient::receive_http_header(): pause" << dendl;
+    skip_bytes = len;
+    req_data->read_paused = true;
+    return CURL_WRITEFUNC_PAUSE;
+  }
+
+  skip_bytes = 0;
 
   return len;
 }
@@ -682,7 +700,7 @@ RGWHTTPClient::~RGWHTTPClient()
 }
 
 
-int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len)
+int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len, bool *pause)
 {
   const std::string_view header_line(static_cast<const char *>(ptr), len);
 

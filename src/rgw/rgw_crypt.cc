@@ -209,16 +209,12 @@ add_object_to_context(rgw_obj &obj, rapidjson::Document &d)
     return true;
 }
 
-static inline const std::string &
-get_tenant_or_id(req_state *s)
-{
-    const std::string &tenant{ s->user->get_tenant() };
-    if (!tenant.empty()) return tenant;
-    return s->user->get_id().id;
-}
-
 int
-make_canonical_context(req_state *s,
+make_canonical_context(const DoutPrefixProvider *dpp,
+    CephContext *cct,
+    rgw::sal::Bucket* bucket,
+    const rgw_obj_key& object,
+    std::string* err_msg,
     std::string_view &context,
     std::string &cooked_context)
 {
@@ -229,11 +225,11 @@ mec_option options {
 mec_option::empty };
     rgw_obj obj;
     std::ostringstream oss;
-    canonical_char_sorter<MyMember> ccs{s, s->cct};
+    canonical_char_sorter<MyMember> ccs{dpp, cct};
 
-    obj.bucket.tenant = get_tenant_or_id(s);
-    obj.bucket.name = s->bucket->get_name();
-    obj.key.name = s->object->get_name();
+    obj.bucket.tenant = bucket->get_tenant();
+    obj.bucket.name = bucket->get_name();
+    obj.key.name = object.name;
     std::string iline;
     rapidjson::Document::AllocatorType &allocator { d.GetAllocator() };
 
@@ -241,7 +237,7 @@ mec_option::empty };
 	iline = rgw::from_base64(context);
     } catch (const std::exception& e) {
 	oss << "bad context: " << e.what();
-	s->err.message = oss.str();
+        if (err_msg) *err_msg = oss.str();
         return -ERR_INVALID_REQUEST;
     }
     rapidjson::StringStream isw(iline.c_str());
@@ -254,34 +250,34 @@ mec_option::empty };
     if (isw.Tell() != iline.length()) {
         oss << "bad context: did not consume all of input: @ "
 	    << isw.Tell();
-	s->err.message = oss.str();
+        if (err_msg) *err_msg = oss.str();
         return -ERR_INVALID_REQUEST;
     }
     if (d.HasParseError()) {
         oss << "bad context: parse error: @ " << d.GetErrorOffset()
 	    << " " << rapidjson::GetParseError_En(d.GetParseError());
-	s->err.message = oss.str();
+	if (err_msg) *err_msg = oss.str();
         return -ERR_INVALID_REQUEST;
     }
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
     if (!add_object_to_context(obj, d)) {
-	ldpp_dout(s, -1) << "ERROR: can't add default value to context" << dendl;
-	s->err.message = "context: internal error adding defaults";
+	ldpp_dout(dpp, -1) << "ERROR: can't add default value to context" << dendl;
+        if (err_msg) *err_msg = "context: internal error adding defaults";
         return -ERR_INVALID_REQUEST;
     }
     b = make_everything_canonical(d, allocator, ccs, options) == mec_error::success;
     if (!b) {
-	ldpp_dout(s, -1) << "ERROR: can't make canonical json <"
+	ldpp_dout(dpp, -1) << "ERROR: can't make canonical json <"
 	    << context << ">" << dendl;
-	s->err.message = "context: can't make canonical";
+        if (err_msg) *err_msg = "context: can't make canonical";
         return -ERR_INVALID_REQUEST;
     }
     b = sort_and_write(d, writer, ccs);
     if (!b) {
-	    ldpp_dout(s, 5) << "format error <" << context
+	ldpp_dout(dpp, 5) << "format error <" << context
 	    << ">: partial.results=" << buf.GetString() << dendl;
-	s->err.message = "unable to reformat json";
+        if (err_msg) *err_msg = "unable to reformat json";
         return -ERR_INVALID_REQUEST;
     }
     cooked_context = rgw::to_base64(buf.GetString());
@@ -935,10 +931,10 @@ struct CryptAttributes {
   }
 };
 
-std::string fetch_bucket_key_id(req_state *s)
+std::string fetch_bucket_key_id(const rgw::sal::Attrs& bucket_attrs)
 {
-  auto kek_iter = s->bucket_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID);
-  if (kek_iter == s->bucket_attrs.end())
+  auto kek_iter = bucket_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID);
+  if (kek_iter == bucket_attrs.end())
     return std::string();
   std::string a_key { kek_iter->second.to_str() };
   // early code appends a nul; pretend that didn't happen
@@ -950,7 +946,7 @@ std::string fetch_bucket_key_id(req_state *s)
 }
 
 const std::string cant_expand_key{ "\uFFFD" };
-std::string expand_key_name(req_state *s, const std::string_view&t)
+std::string expand_key_name(rgw::sal::Bucket *bucket, const std::string_view&t)
 {
   std::string r;
   size_t i, j;
@@ -971,7 +967,7 @@ std::string expand_key_name(req_state *s, const std::string_view&t)
       continue;
     }
     if (t.compare(i+1, 9, "bucket_id") == 0) {
-      r.append(s->bucket->get_marker());
+      r.append(bucket->get_marker());
       i += 10;
       continue;
     }
@@ -982,7 +978,7 @@ std::string expand_key_name(req_state *s, const std::string_view&t)
           },
           [] (const rgw_account_id& account_id) -> const std::string& {
             return account_id;
-          }), s->bucket->get_info().owner));
+          }), bucket->get_info().owner));
       i += 9;
       continue;
     }
@@ -991,50 +987,100 @@ std::string expand_key_name(req_state *s, const std::string_view&t)
   return r;
 }
 
-static int get_sse_s3_bucket_key(req_state *s, optional_yield y,
+static int get_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
+                                 CephContext *cct, optional_yield y,
+                                 std::string *err_msg,
+                                 rgw::sal::Bucket *bucket,
                                  std::string &key_id)
 {
   int res;
   std::string saved_key;
 
-  key_id = expand_key_name(s, s->cct->_conf->rgw_crypt_sse_s3_key_template);
+  key_id = expand_key_name(bucket, cct->_conf->rgw_crypt_sse_s3_key_template);
 
   if (key_id == cant_expand_key) {
-    ldpp_dout(s, 5) << "ERROR: unable to expand key_id " <<
-      s->cct->_conf->rgw_crypt_sse_s3_key_template << " on bucket" << dendl;
-    s->err.message = "Server side error - unable to expand key_id";
+    ldpp_dout(dpp, 5) << "ERROR: unable to expand key_id " <<
+      cct->_conf->rgw_crypt_sse_s3_key_template << " on bucket" << dendl;
+    if (err_msg) *err_msg = "Server side error - unable to expand key_id";
     return -EINVAL;
   }
 
-  saved_key = fetch_bucket_key_id(s);
+  saved_key = fetch_bucket_key_id(bucket->get_attrs());
   if (saved_key != "") {
-    ldpp_dout(s, 5) << "Found KEK ID: " << key_id << dendl;
+    ldpp_dout(dpp, 5) << "Found KEK ID: " << key_id << dendl;
   }
   if (saved_key != key_id) {
-    res = create_sse_s3_bucket_key(s, key_id, y);
+    res = create_sse_s3_bucket_key(dpp, key_id, y);
     if (res != 0) {
       return res;
     }
     bufferlist key_id_bl;
     key_id_bl.append(key_id.c_str(), key_id.length());
-    for (int count = 0; count < 15; ++count) {
-      rgw::sal::Attrs attrs = s->bucket->get_attrs();
+    res = retry_raced_bucket_write(dpp, bucket, [bucket, key_id_bl, dpp, y] {
+      rgw::sal::Attrs attrs = bucket->get_attrs();
       attrs[RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID] = key_id_bl;
-      res = s->bucket->merge_and_store_attrs(s, attrs, s->yield);
-      if (res != -ECANCELED) {
-        break;
-      }
-      res = s->bucket->try_refresh_info(s, nullptr, s->yield);
-      if (res != 0) {
-        break;
-      }
-    }
+      return bucket->merge_and_store_attrs(dpp, attrs, y);
+    }, y);
     if (res != 0) {
-      ldpp_dout(s, 5) << "ERROR: unable to save new key_id on bucket" << dendl;
-      s->err.message = "Server side error - unable to save key_id";
+      ldpp_dout(dpp, 5) << "ERROR: unable to save new key_id on bucket" << dendl;
+      if (err_msg) *err_msg = "Server side error - unable to save key_id";
       return res;
     }
   }
+
+  return 0;
+}
+
+int handle_sse_s3_encryption(const DoutPrefixProvider *dpp,
+  CephContext *cct,
+  optional_yield y,
+  rgw::sal::Bucket* bucket,
+  const rgw_obj_key& object,
+  std::string* err_msg,
+  std::map<std::string, ceph::bufferlist>& attrs,
+  std::unique_ptr<BlockCrypt>* block_crypt,
+  std::map<std::string, std::string>* crypt_http_responses)
+{
+  int res;
+  ldpp_dout(dpp, 5) << "RGW_ATTR_BUCKET_ENCRYPTION ALGO: AES256" << dendl;
+  std::string_view context = "";
+  std::string cooked_context;
+  if (res = make_canonical_context(dpp, cct, bucket, object, err_msg, context, cooked_context); res < 0) {
+    return res;
+  }
+
+  std::string key_id;
+  if (res = get_sse_s3_bucket_key(dpp, cct, y, err_msg, bucket, key_id); res < 0) {
+    return res;
+  }
+
+  set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
+  set_attr(attrs, RGW_ATTR_CRYPT_MODE, "AES256");
+  set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
+  std::string actual_key;
+  res = make_actual_key_from_sse_s3(dpp, attrs, y, actual_key);
+  if (res != 0) {
+    ldpp_dout(dpp, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
+    if (err_msg) *err_msg = "Failed to retrieve the actual key";
+    return res;
+  }
+  if (actual_key.size() != AES_256_KEYSIZE) {
+    ldpp_dout(dpp, 5) << "ERROR: key obtained from key_id:" << key_id << " is not 256 bit size" << dendl;
+    if (err_msg) *err_msg = "SSE-S3 provided an invalid key for the given keyid.";
+    return -EINVAL;
+  }
+
+  if (block_crypt) {
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(dpp, cct));
+    aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
+    *block_crypt = std::move(aes);
+  }
+  ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
+
+  if (crypt_http_responses) {
+    crypt_http_responses->insert({"x-amz-server-side-encryption", "AES256"});
+  }
+
   return 0;
 }
 
@@ -1170,7 +1216,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         std::string_view context =
           crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION_CONTEXT);
         std::string cooked_context;
-        if ((res = make_canonical_context(s, context, cooked_context)))
+        if ((res = make_canonical_context(s, s->cct, s->bucket.get(), s->object->get_key(), &s->err.message, context, cooked_context)))
           return res;
         std::string_view key_id =
           crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
@@ -1227,46 +1273,8 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         return -EINVAL;
       }
 
-      ldpp_dout(s, 5) << "RGW_ATTR_BUCKET_ENCRYPTION ALGO: "
-              <<  req_sse << dendl;
-      std::string_view context = "";
-      std::string cooked_context;
-      if ((res = make_canonical_context(s, context, cooked_context)))
-        return res;
-
-      std::string key_id;
-      res = get_sse_s3_bucket_key(s, y, key_id);
-      if (res != 0) {
-        return res;
-      }
-
-      set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
-      set_attr(attrs, RGW_ATTR_CRYPT_MODE, "AES256");
-      set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
-      std::string actual_key;
-      res = make_actual_key_from_sse_s3(s, attrs, y, actual_key);
-      if (res != 0) {
-        ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
-        s->err.message = "Failed to retrieve the actual key";
-        return res;
-      }
-      if (actual_key.size() != AES_256_KEYSIZE) {
-        ldpp_dout(s, 5) << "ERROR: key obtained from key_id:" <<
-                       key_id << " is not 256 bit size" << dendl;
-        s->err.message = "SSE-S3 provided an invalid key for the given keyid.";
-        return -EINVAL;
-      }
-
-      if (block_crypt) {
-        auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
-        aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
-        *block_crypt = std::move(aes);
-      }
-      ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
-
-      crypt_http_responses["x-amz-server-side-encryption"] = "AES256";
-
-      return 0;
+      return handle_sse_s3_encryption(s, s->cct, y, s->bucket.get(), s->object->get_key(), &s->err.message,
+                                      attrs, block_crypt, &crypt_http_responses);
     } else if (s->cct->_conf->rgw_crypt_default_encryption_key != "") {
       std::string master_encryption_key;
       try {
@@ -1525,8 +1533,8 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
 int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y)
 {
   int res;
-  auto key_id { expand_key_name(s, s->cct->_conf->rgw_crypt_sse_s3_key_template) };
-  auto saved_key { fetch_bucket_key_id(s) };
+  auto key_id { expand_key_name(s->bucket.get(), s->cct->_conf->rgw_crypt_sse_s3_key_template) };
+  auto saved_key { fetch_bucket_key_id(s->bucket_attrs) };
   size_t i;
 
   if (key_id == cant_expand_key) {
