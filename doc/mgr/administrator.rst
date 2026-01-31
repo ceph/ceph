@@ -31,6 +31,52 @@ which should now include a mgr status line::
 
     mgr active: $name
 
+Interpreting Manager Daemon Status
+==================================
+
+A cluster's health status will show each ``ceph-mgr`` daemon in one of three states:
+
+1. **active**
+
+   This Manager daemon has been fully initialized, which means it is ready to receive
+   and execute commands. Only one Manager will be in this state at a time.
+
+2. **active (starting)**
+
+   This Manager daemon has been chosen to be ``active``, but it is not done initializing.
+   Although it is not yet ready to execute commands, an operator may still issue commands,
+   which will be held and executed once the Manager becomes ``active``. Only one Manager
+   will be in this state at a time.
+
+3. **standby**
+
+   This Manager daemon is not currently receiving or executing commands, but it is ready to
+   take over if the current active Manager becomes unavailable. An administrator may
+   manually promote a standby to become active via ``ceph mgr fail`` if desired. All other
+   Manager daemons which are not ``active`` or ``active (starting)`` will be in this state.
+
+Each of these states are visible in the output of the ``ceph status`` command. For example:
+
+.. code-block:: console
+
+   $ ceph status
+     cluster:
+       id:     b150f540-745a-460c-a566-376b28b95ac3
+       health: HEALTH_OK
+
+     services:
+       mon: 3 daemons, quorum a,b,c (age 47m) [leader: a]
+       mgr: x(active, starting, since 3s)
+       mds: 1/1 daemons up, 2 standby
+       osd: 4 osds: 4 up (since 47m), 4 in (since 47m)
+
+     data:
+       volumes: 1/1 healthy
+       pools:   4 pools, 177 pgs
+       objects: 24 objects, 451 KiB
+       usage:   4.0 GiB used, 400 GiB / 404 GiB avail
+       pgs:     177 active+clean
+
 Client authentication
 ---------------------
 

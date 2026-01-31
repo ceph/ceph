@@ -160,6 +160,41 @@ options:
   flags:
   - no_mon_update
   - cluster_create
+- name: mgr_module_load_delay
+  type: millisecs
+  level: dev
+  default: 0
+  desc: Number of milliseconds for Manager modules to delay loading. For testing purposes only.
+  long_desc: Number of milliseconds for Manager modules to delay loading. For testing purposes only.
+  see_also:
+  - mgr_module_load_delay_name
+  flags:
+  - runtime
+  services:
+  - mgr
+- name: mgr_module_load_delay_name
+  type: str
+  level: dev
+  desc: Specify which Manager module is to delay loading by mgr_module_load_delay milliseconds. For testing purposes only.
+  long_desc: Specify which Manager module is to delay loading by mgr_module_load_delay milliseconds. For testing purposes only.
+  see_also:
+  - mgr_module_load_delay
+  flags:
+  - runtime
+  services:
+  - mgr
+- name: mgr_module_load_expiration
+  type: millisecs
+  level: dev
+  default: 20000
+  desc: Maximum number of milliseconds the active mgr is allowed to load the mgr modules before declaring availability.
+  long_desc: Maximum number of milliseconds the active mgr is allowed to load the mgr modules. If any modules are still
+    uninitialized after the expiration is exceeded, the mgr proceeds to declare availability, but a health error will be
+    issued indicating which modules didn't load in time.
+  flags:
+  - runtime
+  services:
+  - mgr
 - name: cephadm_path
   type: str
   level: advanced
