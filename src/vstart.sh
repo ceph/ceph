@@ -1575,6 +1575,7 @@ start_ganesha() {
             Enable_RQUOTA = false;
             Protocols = 4;
             NFS_Port = $port;
+            allow_set_io_flusher_fail = true;
         }
 
         MDCACHE {
@@ -1582,20 +1583,20 @@ start_ganesha() {
         }
 
         NFSv4 {
-           RecoveryBackend = rados_cluster;
+           RecoveryBackend = "\"rados_cluster\"";
            Minor_Versions = 1, 2;
         }
 
         RADOS_KV {
-           pool = '$pool_name';
-           namespace = $namespace;
-           UserId = $test_user;
+           pool = "\"$pool_name\"";
+           namespace = "\"$namespace\"";
+           UserId = "\"$test_user\"";
            nodeid = $name;
         }
 
         RADOS_URLS {
-	   Userid = $test_user;
-	   watch_url = '$url';
+	   Userid = "\"$test_user\"";
+	   watch_url = "\"$url\"";
         }
 
 	%url $url" > "$ganesha_dir/ganesha-$name.conf"
