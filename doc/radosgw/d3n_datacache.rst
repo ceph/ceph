@@ -1,3 +1,5 @@
+.. _radosgw-d3n-datacache:
+
 ==================
 D3N RGW Data Cache
 ==================
@@ -42,7 +44,7 @@ Implementation
 
 - The D3N cache supports both the `S3` and `Swift` object storage interfaces.
 - D3N currently caches only tail objects, because they are immutable (by default it is parts of objects that are larger than 4MB).
-  (the NGINX `RGW Data cache and CDN`_ supports caching of all object sizes)
+  (the NGINX :ref:`radosgw-data-caching` supports caching of all object sizes)
 
 
 Requirements
@@ -92,7 +94,7 @@ In containerized deployments the cache directory should be mounted as a volume::
       - "-v"
       - "/mnt/nvme0/rgw_datacache/client.rgw.8000/:/mnt/nvme0/rgw_datacache/client.rgw.8000/"
 
-(Reference: `Service Management - Mounting Files with Extra Container Arguments`_)
+(Reference: :ref:`cephadm-container-mount`)
 
 If another RADOS Gateway is co-located on the same host, configure its persistent
 path to a discrete directory, for example in the case of ``client.rgw.8001``:
@@ -125,5 +127,3 @@ The following D3N related settings can be added to the Ceph configuration file
 
 .. _MOC D3N (Datacenter-scale Data Delivery Network): https://massopen.cloud/research-and-development/cloud-research/d3n/
 .. _Red Hat Research D3N Cache for Data Centers: https://research.redhat.com/blog/research_project/d3n-multilayer-cache/
-.. _RGW Data cache and CDN: ../rgw-cache/
-.. _Service Management - Mounting Files with Extra Container Arguments: ../cephadm/services/#mounting-files-with-extra-container-arguments
