@@ -44,6 +44,10 @@ export const events: ComboBoxItem[] = [
     name: 's3:ObjectCreated:CompleteMultipartUpload'
   },
   { content: 's3:ObjectRemoved:*', name: 's3:ObjectRemoved:*' },
+  { content: 's3:ObjectRestore:*', name: 's3:ObjectRestore:*' },
+  { content: 's3:ObjectRestore:Post', name: 's3:ObjectRestore:Post' },
+  { content: 's3:ObjectRestore:Completed', name: 's3:ObjectRestore:Completed' },
+  { content: 's3:ObjectRestore:Delete', name: 's3:ObjectRestore:Delete' },
   { content: 's3:ObjectRemoved:Delete', name: 's3:ObjectRemoved:Delete' },
   { content: 's3:ObjectRemoved:DeleteMarkerCreated', name: 's3:ObjectRemoved:DeleteMarkerCreated' }
 ];
