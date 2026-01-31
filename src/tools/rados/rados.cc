@@ -103,7 +103,7 @@ void usage(ostream& out)
 "   purge <pool-name> --yes-i-really-really-mean-it\n"
 "                                    remove all objects from pool <pool-name> without removing the pool itself\n"
 "   df                               show per-pool and total usage\n"
-"   ls                               list objects in pool\n\n"
+"   ls [--size]                      list objects in pool (with object size if --size specified)\n\n"
 "\n"
 "POOL SNAP COMMANDS\n"
 "   lssnap                           list snaps\n"
@@ -2500,7 +2500,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (wildcard) {
       io_ctx.set_namespace(all_nspaces);
     }
+
     bool use_stdout = (!output && (nargs.size() < 2 || (strcmp(nargs[1], "-") == 0)));
+    bool display_size = false;
+    if (opts.find("size") != opts.end()) {
+      display_size = true;
+    }
+
     if (!use_stdout && !output) {
       cerr << "Please use --output to specify the output file name" << std::endl;
       return 1;
@@ -2518,6 +2524,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
         formatter->open_array_section("objects");
       }
       try {
+        IoCtx stat_ioctx(io_ctx);
 	librados::NObjectIterator i = pgid ? io_ctx.nobjects_begin(pgid->ps()) : io_ctx.nobjects_begin();
 	const librados::NObjectIterator i_end = io_ctx.nobjects_end();
 	for (; i != i_end; ++i) {
@@ -2540,12 +2547,30 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
               break;
 	    }
           }
+          uint64_t obj_size = 0;
+          int stat_ret = 0;
+          if (display_size) {
+            stat_ioctx.set_namespace(i->get_nspace());
+            stat_ioctx.locator_set_key(i->get_locator());
+            struct timespec unused_mtime;
+            stat_ret = detail::stat2(stat_ioctx, i->get_oid(), obj_size,
+                                     unused_mtime, use_striper);
+          }
+
 	  if (!formatter) {
 	    // Only include namespace in output when wildcard specified
 	    if (wildcard) {
 	      *outstream << i->get_nspace() << "\t";
 	    }
 	    *outstream << detail::get_oid(i, use_striper);
+            if (display_size) {
+              if (stat_ret == 0) {
+                *outstream << "\t" << obj_size;
+              } else {
+                *outstream << "\tNA";
+              }
+            }
+
 	    if (i->get_locator().size()) {
 	      *outstream << "\t" << i->get_locator();
 	    }
@@ -2555,6 +2580,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	    formatter->dump_string("namespace", i->get_nspace());
 
 	    detail::dump_name(formatter.get(), i, use_striper);
+            if (display_size) {
+              if (stat_ret == 0) {
+                formatter->dump_unsigned("size", obj_size);
+              } else {
+                formatter->dump_null("size");
+              }
+            }
 
 	    if (i->get_locator().size()) {
 	      formatter->dump_string("locator", i->get_locator());
@@ -4307,6 +4339,8 @@ int main(int argc, const char **argv)
       opts["all"] = "true";
     } else if (ceph_argparse_flag(args, i, "--default", (char*)nullptr)) {
       opts["default"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--size", (char*)nullptr)) {
+      opts["size"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--output", (char*)nullptr)) {
       opts["output"] = val;
     } else if (ceph_argparse_flag(args, i, "--write-omap", (char*)nullptr)) {
