@@ -1,0 +1,62 @@
+
+<form [formGroup]="formGroup"
+      novalidate>
+  <div cdsGrid
+       [useCssGrid]="true"
+       [narrow]="true"
+       [fullWidth]="true">
+    <div cdsCol
+         [columnNumbers]="{sm: 4, md: 8}">
+      <div cdsRow
+           class="form-heading">
+        <h3 class="cds--type-heading-03"
+            i18n>Authentication</h3>
+        <p
+          class="cds--type-label-02"
+          i18n>Configure authentication to verify the identity of connecting hosts and protect the subsystem from unauthorized access.</p>
+      </div>
+      <div cdsRow
+           class="form-item">
+        <cds-radio-group
+          formControlName="authType"
+          [helperText]="formGroup.get('authType').value === AUTHENTICATION.Unidirectional ? uniHelperText : biHelperText"
+          legend="Authentication type"
+          i18n-legend>
+          <cds-radio
+            [value]="AUTHENTICATION.Unidirectional"
+            i18n>Unidirectional</cds-radio>
+          <cds-radio
+            [value]="AUTHENTICATION.Bidirectional"
+            i18n>Bidirectional</cds-radio>
+        </cds-radio-group>
+      </div>
+      @if(formGroup.get('authType').value === AUTHENTICATION.Bidirectional) {
+      <div cdsRow
+           class="form-item">
+        <cds-text-label
+          i18n
+          helperText="A secret key for the subsystem to authenticate itself to hosts."
+          i18n-helperText
+          [invalid]="subDK.isInvalid"
+          [invalidText]="subsystemDchapKeyInvalidTemplate">
+          Subsystem DH-HMAC-CHAP key
+          <input cdsPassword
+                 cdValidate
+                 #subDK="cdValidate"
+                 [invalid]="subDK.isInvalid"
+                 formControlName="subsystemDchapKey"
+                 type="password"
+                 placeholder="Enter subsystem DH-HMAC-CHAP key"
+                 i18n-placeholder>
+        </cds-text-label>
+      </div>
+      }
+    </div>
+  </div>
+</form>
+
+<ng-template #subsystemDchapKeyInvalidTemplate>
+@for (err of formGroup.get('subsystemDchapKey').errors | keyvalue; track err.key) {
+<span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
+}
+</ng-template>

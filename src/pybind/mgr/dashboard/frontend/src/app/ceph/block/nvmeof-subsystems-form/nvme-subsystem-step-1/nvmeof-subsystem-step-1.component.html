@@ -1,0 +1,58 @@
+
+<form [formGroup]="formGroup"
+      novalidate>
+  <div cdsGrid
+       [useCssGrid]="true"
+       [narrow]="true"
+       [fullWidth]="true">
+    <div cdsCol
+         [columnNumbers]="{sm: 4, md: 8}">
+      <div cdsRow
+           class="form-heading">
+        <h3 class="cds--type-heading-03"
+            i18n>Subsystem details</h3>
+        <p
+          class="cds--type-label-02"
+          i18n>Enter identifying and network details for this subsystem.</p>
+      </div>
+      <div cdsRow
+           class="form-item">
+        <cds-text-label
+          i18n
+          [invalid]="nqnRef.isInvalid"
+          [invalidText]="nqnInvalidTemplate"
+          helperText="A unique identifier for the subsystem."
+          i18n-helperText>
+          Subsystem NQN (NVMe Qualified Name)
+          <input cdsText
+                 cdValidate
+                 #nqnRef="cdValidate"
+                 type="text"
+                 formControlName="nqn"
+                 [invalid]="nqnRef.isInvalid">
+        </cds-text-label>
+      </div>
+      <div cdsRow
+           class="form-item">
+        <cds-text-label
+          i18n
+          helperText="Gateway group routes traffic for this subsystem."
+          i18n-helperText
+          [disabled]="true">
+          Gateway group
+          <input cdsText
+                 type="text"
+                 disabled
+                 [value]="group"
+                 [skeleton]="!group">
+        </cds-text-label>
+      </div>
+    </div>
+  </div>
+</form>
+
+<ng-template #nqnInvalidTemplate>
+@for (err of formGroup.get('nqn').errors | keyvalue; track err.key) {
+<span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
+}
+</ng-template>

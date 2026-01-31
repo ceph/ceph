@@ -7,24 +7,23 @@ import { ToastrModule } from 'ngx-toastr';
 
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
-import { NvmeofSubsystemsFormComponent } from './nvmeof-subsystems-form.component';
+import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystem-step-2.component';
+import { FormHelper } from '~/testing/unit-test-helper';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 
-describe('NvmeofSubsystemsFormComponent', () => {
-  let component: NvmeofSubsystemsFormComponent;
-  let fixture: ComponentFixture<NvmeofSubsystemsFormComponent>;
+describe('NvmeofSubsystemsStepTwoComponent', () => {
+  let component: NvmeofSubsystemsStepTwoComponent;
+  let fixture: ComponentFixture<NvmeofSubsystemsStepTwoComponent>;
   let nvmeofService: NvmeofService;
-  const mockTimestamp = 1720693470789;
+  let form: CdFormGroup;
+  let formHelper: FormHelper;
   const mockGroupName = 'default';
-  const mockPayload = {
-    nqn: ''
-  };
 
   beforeEach(async () => {
-    spyOn(Date, 'now').and.returnValue(mockTimestamp);
     await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemsFormComponent],
+      declarations: [NvmeofSubsystemsStepTwoComponent],
       providers: [NgbActiveModal],
       imports: [
         HttpClientTestingModule,
@@ -36,9 +35,11 @@ describe('NvmeofSubsystemsFormComponent', () => {
       ]
     }).compileComponents();
 
-    fixture = TestBed.createComponent(NvmeofSubsystemsFormComponent);
+    fixture = TestBed.createComponent(NvmeofSubsystemsStepTwoComponent);
     component = fixture.componentInstance;
     component.ngOnInit();
+    form = component.formGroup;
+    formHelper = new FormHelper(form);
     fixture.detectChanges();
     component.group = mockGroupName;
   });
@@ -53,14 +54,9 @@ describe('NvmeofSubsystemsFormComponent', () => {
       spyOn(nvmeofService, 'createSubsystem').and.stub();
     });
 
-    it('should be creating request correctly', () => {
-      const expectedNqn = 'nqn.2001-07.com.ceph:' + mockTimestamp;
-      mockPayload['nqn'] = expectedNqn;
-      component.onSubmit(mockPayload);
-      expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
-        nqn: expectedNqn,
-        gw_group: mockGroupName
-      });
+    it('should give error on invalid nqn', () => {
+      formHelper.setValue('nqn', 'nqn:2001-07.com.ceph:');
+      formHelper.expectError('nqn', 'pattern');
     });
   });
 });

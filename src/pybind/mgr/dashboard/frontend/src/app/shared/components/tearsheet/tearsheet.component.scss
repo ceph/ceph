@@ -1,11 +1,23 @@
 // WIDE TEARSHEET
 // No css variable to apply css to modal div hence using css ngdeep
 // This is needed to set the width of tearsheet as per carbon standards.
-:host ::ng-deep .cds--modal-container {
-  block-size: 100%;
-  inset-block-start: auto;
-  inline-size: calc(100% - 8rem);
-  max-block-size: calc(100% - 5.5rem);
+:host ::ng-deep .cds--modal-container.cds--modal-container--lg {
+  position: fixed;
+
+  // 88px from top
+  inset-block-start: 88px;
+
+  // Fill remaining viewport height
+  block-size: calc(100vh - 88px);
+  max-block-size: calc(100vh - 88px);
+
+  // 64px margins left & right
+  inset-inline-start: 64px;
+  inset-inline-end: 64px;
+  inline-size: auto;
+  max-inline-size: none;
+  display: flex;
+  flex-direction: column;
 }
 
 // FULL TEARSHEET
@@ -89,8 +101,17 @@
     margin-left: var(--cds-spacing-05);
   }
 
+  &-submit {
+    display: flex;
+    justify-content: start;
+  }
+
   &--full {
     position: sticky;
     bottom: 0;
   }
+}
+
+cds-loading {
+  margin-right: var(--cds-spacing-05);
 }
