@@ -10,7 +10,7 @@ Benefits of building ceph in a container:
 * you can cache the image and save time downloading dependencies
 * you can build for multiple different distros on the same build hardware
 * you can make experiemental changes to the build scripts, dependency
-  packages, compilers, etc. and test them before submitting the changes
+  packages, compliers, etc. and test them before submitting the changes
   to a real CI job
 * it's cool!
 
@@ -105,15 +105,10 @@ class DistroKind(StrEnum):
     CENTOS8 = "centos8"
     CENTOS9 = "centos9"
     FEDORA41 = "fedora41"
-    FEDORA42 = "fedora42"
-    FEDORA43 = "fedora43"
     ROCKY9 = "rocky9"
     ROCKY10 = "rocky10"
-    UBUNTU2004 = "ubuntu20.04"
     UBUNTU2204 = "ubuntu22.04"
     UBUNTU2404 = "ubuntu24.04"
-    DEBIAN12 = "debian12"
-    DEBIAN13 = "debian13"
 
     @classmethod
     def uses_dnf(cls):
@@ -135,70 +130,39 @@ class DistroKind(StrEnum):
     @classmethod
     def aliases(cls):
         return {
-            # EL distros
             str(cls.CENTOS10): cls.CENTOS10,
             "centos10stream": cls.CENTOS10,
             str(cls.CENTOS8): cls.CENTOS8,
             str(cls.CENTOS9): cls.CENTOS9,
             "centos9stream": cls.CENTOS9,
+            str(cls.FEDORA41): cls.FEDORA41,
+            "fc41": cls.FEDORA41,
             str(cls.ROCKY9): cls.ROCKY9,
             'rockylinux9': cls.ROCKY9,
             str(cls.ROCKY10): cls.ROCKY10,
             'rockylinux10': cls.ROCKY10,
-            # fedora
-            str(cls.FEDORA41): cls.FEDORA41,
-            "fc41": cls.FEDORA41,
-            str(cls.FEDORA42): cls.FEDORA42,
-            "fc42": cls.FEDORA42,
-            str(cls.FEDORA43): cls.FEDORA43,
-            "fc43": cls.FEDORA43,
-            # ubuntu
-            str(cls.UBUNTU2004): cls.UBUNTU2004,
-            "ubuntu-focal": cls.UBUNTU2004,
-            "focal": cls.UBUNTU2004,
             str(cls.UBUNTU2204): cls.UBUNTU2204,
             "ubuntu-jammy": cls.UBUNTU2204,
             "jammy": cls.UBUNTU2204,
             str(cls.UBUNTU2404): cls.UBUNTU2404,
             "ubuntu-noble": cls.UBUNTU2404,
             "noble": cls.UBUNTU2404,
-            # debian
-            str(cls.DEBIAN12): cls.DEBIAN12,
-            "debian-bookworm": cls.DEBIAN12,
-            "bookworm": cls.DEBIAN12,
-            str(cls.DEBIAN13): cls.DEBIAN13,
-            "debian-trixie": cls.DEBIAN13,
-            "trixie": cls.DEBIAN13,
         }
 
     @classmethod
     def from_alias(cls, value):
-        try:
-            return cls.aliases()[value]
-        except KeyError:
-            valid = ", ".join(sorted(cls.aliases()))
-            msg = f"unknown distro: {value!r} not in {valid}"
-            raise argparse.ArgumentTypeError(msg)
+        return cls.aliases()[value]
 
 
 class DefaultImage(StrEnum):
-    # EL distros
     CENTOS10 = "quay.io/centos/centos:stream10"
     CENTOS8 = "quay.io/centos/centos:stream8"
     CENTOS9 = "quay.io/centos/centos:stream9"
+    FEDORA41 = "registry.fedoraproject.org/fedora:41"
     ROCKY9 = "docker.io/rockylinux/rockylinux:9"
     ROCKY10 = "docker.io/rockylinux/rockylinux:10"
-    # fedora
-    FEDORA41 = "registry.fedoraproject.org/fedora:41"
-    FEDORA42 = "registry.fedoraproject.org/fedora:42"
-    FEDORA43 = "registry.fedoraproject.org/fedora:43"
-    # ubuntu
-    UBUNTU2004 = "docker.io/ubuntu:20.04"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
     UBUNTU2404 = "docker.io/ubuntu:24.04"
-    # debian
-    DEBIAN12 = "docker.io/debian:bookworm"
-    DEBIAN13 = "docker.io/debian:trixie"
 
 
 class CommandFailed(Exception):
@@ -237,9 +201,7 @@ def _run(cmd, *args, **kwargs):
     return subprocess.run(cmd, *args, **kwargs)
 
 
-def _container_cmd(
-    ctx, args, *, workdir=None, interactive=False, extra_args=None
-):
+def _container_cmd(ctx, args, *, workdir=None, interactive=False):
     rm_container = not ctx.cli.keep_container
     cmd = [
         ctx.container_engine,
@@ -279,8 +241,8 @@ def _container_cmd(
         )
         cmd.append(f"-eCCACHE_DIR={ccdir}")
         cmd.append(f"-eCCACHE_BASEDIR={ctx.cli.homedir}")
-    cmd.extend(extra_args or [])
-    cmd.extend(ctx.cli.extra or [])
+    for extra_arg in ctx.cli.extra or []:
+        cmd.append(extra_arg)
     if ctx.npm_cache_dir:
         # use :z so that other builds can use the cache
         cmd.extend([
@@ -315,26 +277,6 @@ def _git_current_sha(ctx, short=True):
     cmd = _git_command(ctx, args)
     res = _run(cmd, check=True, capture_output=True)
     return res.stdout.decode("utf8").strip()
-
-
-def _sanitize_for_oci_tag(branch_name):
-    """Sanitize a git branch name to be OCI tag compliant.
-
-    OCI tags must match: [a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}
-    """
-    sanitized = branch_name.replace("/", "-")
-    sanitized = re.sub(r"[^a-zA-Z0-9._-]", "_", sanitized)
-    sanitized = re.sub(r"^[^a-zA-Z0-9_]+", "", sanitized)
-    result = sanitized[:128] if sanitized else "UNKNOWN"
-
-    if result != branch_name:
-        log.warning(
-            "Branch name '%s' was sanitized to '%s' for OCI tag compliance",
-            branch_name,
-            result
-        )
-
-    return result
 
 
 @ftcache
@@ -389,17 +331,6 @@ class ImageSource(StrEnum):
         return ", ".join(s.value for s in cls)
 
 
-class ImageVariant(StrEnum):
-    DEFAULT = 'default'  # build everything + make check
-    # test dependencies will not be instaled, other parameters
-    # are automatically pulled from the environment (etc)
-    PACKAGES_AUTO = 'packages'
-    # test dependencies will not be installed nor crimson deps
-    PACKAGES_MINIMAL = 'packages.minimal'
-    # test dependencies skipped but crimson deps are included
-    PACKAGES_AND_CRIMSON = 'packages.crimson'
-
-
 class Context:
     """Command context."""
 
@@ -430,91 +361,6 @@ class Context:
         base = self.cli.image_repo or "ceph-build"
         return f"{base}:{self.target_tag()}"
 
-    @ftcache
-    def _env_file(self):
-        if not self.cli.env_file:
-            return None
-        with open(self.cli.env_file) as fh:
-            return fh.readlines()
-
-    @ftcache
-    def lookup_env_file(self, key):
-        """Simplistic env file parser/key lookup function.
-        Finds a value assignment in the env file, returns str unless
-        the env file parameter is not set or the key is not present,
-        in that case None will be returned.
-        """
-        # This script has minimal dependencies and so we avoid using
-        # a 3rd party "env file parser" library.
-        lines = self._env_file()
-        if not lines:
-            return None
-        prefix = f'{key}='
-        found = None
-        for line in lines:
-            if line.startswith(prefix):
-                found = line
-        if not found:
-            return None
-        temp_value = found.strip().split('=', 1)[-1]
-        # ensure there's only one value on this line, otherwise we could be
-        # reading garbage, or an arbitary shell command
-        values = shlex.split(temp_value)
-        if len(values) != 1:
-            raise ValueError(f"unexpected value in env file: {found!r}")
-        return values[0]
-
-    def packages_build(self):
-        """Return true if only packages will be build (not make check)."""
-        return self.cli.image_variant in {
-            ImageVariant.PACKAGES_AUTO,
-            ImageVariant.PACKAGES_MINIMAL,
-            ImageVariant.PACKAGES_AND_CRIMSON,
-        }
-
-    @ftcache
-    def _with_crimson(self):
-        with_crimson = os.environ.get('WITH_CRIMSON')
-        log.debug("Environment WITH_CRIMSON=%r", with_crimson)
-        with_crimson2 = self.lookup_env_file('WITH_CRIMSON')
-        log.debug("Env file WITH_CRIMSON=%r", with_crimson2)
-        if (
-            with_crimson != with_crimson2
-            and (with_crimson is not None)
-            and (with_crimson2 is not None)
-        ):
-            raise ValueError(
-                'conflicting WITH_CRIMSON values in env and env file'
-            )
-        elif with_crimson2 is not None:
-            with_crimson = with_crimson2
-        return with_crimson
-
-    def variant(self):
-        """Return calculated variant. Checks env vars to select between
-        packages with or without crimson.
-        """
-        with_crimson = self._with_crimson()
-        if (
-            self.cli.image_variant is ImageVariant.PACKAGES_AUTO
-            and with_crimson
-        ):
-            return ImageVariant.PACKAGES_AND_CRIMSON
-        elif self.cli.image_variant is ImageVariant.PACKAGES_AUTO:
-            return ImageVariant.PACKAGES_MINIMAL
-        return self.cli.image_variant
-
-    def crimson_build(self):
-        """Detects if crimson deps should be installed in the build image.
-        Returns True/False if build flag is known or None for default.
-        """
-        if self.variant() is ImageVariant.PACKAGES_AND_CRIMSON:
-            return True
-        if self.variant() is ImageVariant.DEFAULT:
-            with_crimson = self._with_crimson()
-            return None if with_crimson is None else bool(with_crimson)
-        return False
-
     def target_tag(self):
         suffix = ""
         if self.cli.tag and self.cli.tag.startswith("+"):
@@ -524,14 +370,9 @@ class Context:
         branch = self.cli.current_branch
         if not branch:
             try:
-                branch = _git_current_branch(self)
+                branch = _git_current_branch(self).replace("/", "-")
             except subprocess.CalledProcessError:
                 branch = "UNKNOWN"
-        # Sanitize branch name to be OCI tag compliant
-        branch = _sanitize_for_oci_tag(branch)
-        variant = self.variant()
-        if variant is not ImageVariant.DEFAULT:
-            suffix = f".{variant}{suffix}"
         return f"{branch}.{self.cli.distro}{suffix}"
 
     def base_branch(self):
@@ -723,7 +564,6 @@ def build_container(ctx):
         "-t",
         ctx.image_name,
         f"--label=io.ceph.build-with-container.src={_hash_sources()}",
-        f"--label=io.ceph.build-with-container.image-variant={ctx.variant()}",
         f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
     if ctx.cli.distro:
@@ -738,13 +578,6 @@ def build_container(ctx):
             f"--volume={ctx.dnf_cache_dir}:/var/cache/dnf:Z",
             "--build-arg=CLEAN_DNF=no",
         ]
-    if ctx.packages_build():
-        cmd.append("--build-arg=FOR_MAKE_CHECK=false")
-    crimson_build = ctx.crimson_build()
-    if crimson_build is not None:
-        # the WITH_CRIMSON var is false only when empty (in install-deps)
-        with_crimson = '1' if crimson_build else ''
-        cmd.append(f"--build-arg=WITH_CRIMSON={with_crimson}")
     if ctx.cli.build_args:
         cmd.extend([f"--build-arg={v}" for v in ctx.cli.build_args])
     cmd += ["-f", ctx.cli.containerfile, ctx.cli.containerdir]
@@ -857,9 +690,6 @@ def bc_build_tests(ctx):
             "-c",
             f"cd {ctx.cli.homedir} && source ./src/script/run-make.sh && build tests",
         ],
-        # for compatibility with earlier versions that baked this env var
-        # into the build images
-        extra_args=['-eFOR_MAKE_CHECK=1'],
     )
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
@@ -1126,21 +956,24 @@ def parse_cli(build_step_names):
     g_basic = parser.add_argument_group(
         title="Basic options",
     )
+    distro_choices = DistroKind.aliases().keys()
     g_basic.add_argument(
         "--distro",
         "-d",
-        choices=DistroKind.aliases().keys(),
+        choices=distro_choices,
         type=DistroKind.from_alias,
+        metavar='DISTRO',
         default=str(DistroKind.CENTOS9),
-        help="Specify a distro short name",
+        help=f"Specify a distro short name; choices: {(', '.join(distro_choices))}",
     )
     g_basic.add_argument(
         "--execute",
         "-e",
         dest="steps",
+        metavar='STEP',
         action="append",
         choices=build_step_names,
-        help="Execute the target build step(s)",
+        help=f"Execute the target build step(s); choices: {', '.join(build_step_names)}",
     )
     g_basic.add_argument(
         "--cwd",
@@ -1211,13 +1044,6 @@ def parse_cli(build_step_names):
         type=ImageSource.argument,
         help="Specify a set of valid image sources. "
         f"May be a comma separated list of {ImageSource.hint()}",
-    )
-    g_image.add_argument(
-        "--image-variant",
-        type=ImageVariant,
-        choices=sorted(v.value for v in ImageVariant),
-        default=ImageVariant.DEFAULT.value,
-        help="Specify the variant of the build image desired.",
     )
     g_image.add_argument(
         "--base-image",
@@ -1409,9 +1235,9 @@ def main():
         else:
             log.error("Command failed!")
         log.warning(
-            "🚧 the command may have failed due to circumstances"
+            "🚧 the command may have faild due to circumstances"
             " beyond the influence of this build script. For example: a"
-            " compiler error caused by a source code change."
+            " complier error caused by a source code change."
             " Pay careful attention to the output generated by the command"
             " before reporting this as a problem with the"
             " build-with-container.py script. 🚧"
