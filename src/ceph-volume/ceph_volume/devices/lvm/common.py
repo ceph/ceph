@@ -102,6 +102,13 @@ common_args: Dict[str, Any] = {
         'action': 'store_true',
         'help': 'Skip creating and enabling systemd units and starting OSD services when activating',
     },
+    '--osd-type': {
+        'dest': 'osd_type',
+        'help': 'The Ceph OSD type to use.',
+        'default': 'classic',
+        'choices': ['classic', 'crimson'],
+        'type': str,
+    },
 }
 
 bluestore_args: Dict[str, Any] = {

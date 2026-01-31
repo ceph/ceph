@@ -172,6 +172,7 @@ def test_orch_ls(_describe_service):
         spec:
           filter_logic: AND
           objectstore: bluestore
+          osd_type: classic
           termination_grace_period_seconds: 30
         status:
           running: 123

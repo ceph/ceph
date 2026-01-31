@@ -134,6 +134,10 @@ class to_ceph_volume(object):
                     cmd += " --crush-device-class {}".format(d)
 
                 cmd += " --objectstore {}".format(self.spec.objectstore)
+
+                if self.spec.osd_type:
+                    cmd += " --osd-type {}".format(self.spec.osd_type)
+
                 cmds.append(cmd)
 
         for i in range(len(cmds)):
