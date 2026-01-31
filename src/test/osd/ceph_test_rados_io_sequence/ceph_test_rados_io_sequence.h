@@ -289,6 +289,8 @@ using SelectLayers =
                           io_sequence::tester::lrc::mapping_layer_array_sizes,
                           io_sequence::tester::lrc::layer_choices>;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsubobject-linkage"
 class SelectMappingAndLayers {
  public:
   SelectMappingAndLayers(ceph::util::random_number_generator<int>& rng,
@@ -304,6 +306,8 @@ class SelectMappingAndLayers {
 
   SelectMapping sma;
   SelectLayers sly;
+#pragma GCC diagnostic pop
+
 };
 }  // namespace lrc
 
@@ -352,6 +356,8 @@ struct Profile {
   std::optional<bool> jerasure_per_chunk_alignment;
 };
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsubobject-linkage"
 class SelectErasureProfile : public ProgramOptionReader<Profile> {
  public:
   SelectErasureProfile(boost::intrusive_ptr<CephContext> cct,
@@ -376,6 +382,7 @@ class SelectErasureProfile : public ProgramOptionReader<Profile> {
 
   std::unique_ptr<ErasureCodePlugin> erasure_code;
 };
+#pragma GCC diagnostic pop
 
 class SelectErasurePool : public ProgramOptionReader<std::string> {
  public:
@@ -486,6 +493,8 @@ class TestObject {
   bool checkconsistency;
 };
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsubobject-linkage"
 class TestRunner {
  public:
   TestRunner(boost::intrusive_ptr<CephContext> cct,
@@ -553,6 +562,7 @@ class TestRunner {
   void help();
   void list_sequence(bool testrecovery);
 };
+#pragma GCC diagnostic pop
 }  // namespace tester
 }  // namespace io_sequence
 }  // namespace ceph
