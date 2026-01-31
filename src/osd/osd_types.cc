@@ -155,6 +155,9 @@ const char * ceph_osd_op_flag_name(unsigned flag)
     case CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE:
       name = "bypass_clean_cache";
       break;
+    case CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING:
+      name = "allow_data_reformatting";
+      break;
     default:
       name = "???";
   };
@@ -1409,7 +1412,11 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	   ("read_ratio", pool_opts_t::opt_desc_t(
              pool_opts_t::READ_RATIO, pool_opts_t::INT))
 	   ("pct_update_delay", pool_opts_t::opt_desc_t(
-             pool_opts_t::PCT_UPDATE_DELAY, pool_opts_t::INT));
+             pool_opts_t::PCT_UPDATE_DELAY, pool_opts_t::INT))
+	   ("deep_scrub_defragment", pool_opts_t::opt_desc_t(
+             pool_opts_t::DEEP_SCRUB_DEFRAGMENT, pool_opts_t::INT))
+           ("deep_scrub_recompress", pool_opts_t::opt_desc_t(
+	     pool_opts_t::DEEP_SCRUB_RECOMPRESS, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name)
 {

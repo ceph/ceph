@@ -1646,3 +1646,11 @@ bool shared_blob_2hash_tracker_t::test_all_zero_range(
   }
   return true;
 }
+
+std::ostream& operator<<(std::ostream& out, const span_stat_t& s)
+{
+  return out << "s=" << s.stored << " ch=" << s.cached << " a=" << s.allocated
+             << " sc=" << s.stored_compressed << " ac=" << s.allocated_compressed
+	     << " sh=" << s.allocated_shared
+	     << " e=" << s.extents << " f=" << s.frags;
+}
