@@ -242,6 +242,9 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
     ldpp_dout(dpp, 1) << "Lua ERROR: failed to create temporary directory from template: " << 
       tmp_path_template << ". error: " << rc << dendl;
     return rc;
+  } else {
+    // rgw starts as root and will later drop to user ceph
+    chmod(tmp_luarocks_path, 0755);
   }
   install_dir.assign(tmp_luarocks_path);
 
