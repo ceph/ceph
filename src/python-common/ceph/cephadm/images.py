@@ -79,6 +79,16 @@ class DefaultImages(Enum):
     def desc(self) -> str:
         return self.value.desc
 
+    @classmethod
+    def as_dict(cls) -> dict:
+        return {
+            item.name: {
+                'key': item.key,
+                'image_ref': item.image_ref,
+                'desc': item.desc
+            }
+            for item in cls
+        }
 
 class NonCephImageServiceTypes(Enum):
     prometheus = 'prometheus'

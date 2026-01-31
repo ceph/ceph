@@ -1689,6 +1689,7 @@ def command_agent(ctx: CephadmContext) -> None:
 
 ##################################
 
+
 @executes_early
 def command_version(ctx):
     # type: (CephadmContext) -> int
@@ -4331,13 +4332,20 @@ def command_rescan_disks(ctx: CephadmContext) -> str:
     return f'Ok. {len(all_scan_files)} adapters detected: {len(scan_files)} rescanned, {len(skipped)} skipped, {len(failures)} failed ({elapsed:.2f}s)'
 
 
+@executes_early
 def command_list_images(ctx: CephadmContext) -> None:
     """this function will list the default images used by different services"""
-    cp_obj = ConfigParser()
-    cp_obj['mgr'] = get_mgr_images()
-    # print default images
-    cp_obj.write(sys.stdout)
-
+    from ceph.cephadm.images import DefaultImages
+    if ctx.format == 'json':
+        print(json.dumps(DefaultImages.as_dict(), indent=2))
+    elif ctx.format == 'yaml':
+        import yaml
+        print(yaml.dump(DefaultImages.as_dict(), sort_keys=True))
+    else:
+        cp_obj = ConfigParser()
+        cp_obj['mgr'] = get_mgr_images()
+        # print default images
+        cp_obj.write(sys.stdout)
 
 def update_service_for_daemon(ctx: CephadmContext,
                               available_daemons: list,
@@ -5270,6 +5278,11 @@ def _get_parser():
     parser_list_images = subparsers.add_parser(
         'list-images', help='list all the default images')
     parser_list_images.set_defaults(func=command_list_images)
+    parser_list_images.add_argument(
+        '--format',
+        choices=['json', 'yaml'],
+        default=None,
+        help='Specifies output format (json or yaml)')
 
     parser_update_service = subparsers.add_parser(
         'update-osd-service', help='update service for provided daemon')
