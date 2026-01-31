@@ -74,26 +74,31 @@ namespace neorados {
 
 Object::Object() {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t();
 }
 
 Object::Object(const char* s) {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t(s);
 }
 
 Object::Object(std::string_view s) {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t(s);
 }
 
 Object::Object(std::string&& s) {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t(std::move(s));
 }
 
 Object::Object(const std::string& s) {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t(s);
 }
 
@@ -103,6 +108,7 @@ Object::~Object() {
 
 Object::Object(const Object& o) {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t(*reinterpret_cast<const object_t*>(&o.impl));
 }
 Object& Object::operator =(const Object& o) {
@@ -112,6 +118,7 @@ Object& Object::operator =(const Object& o) {
 }
 Object::Object(Object&& o) {
   static_assert(impl_size >= sizeof(object_t));
+  static_assert(alignof(decltype(impl)) >= alignof(object_t));
   new (&impl) object_t(std::move(*reinterpret_cast<object_t*>(&o.impl)));
 }
 Object& Object::operator =(Object&& o) {
@@ -165,6 +172,7 @@ struct IOContextImpl {
 
 IOContext::IOContext() {
   static_assert(impl_size >= sizeof(IOContextImpl));
+  static_assert(alignof(decltype(impl)) >= alignof(IOContextImpl));
   new (&impl) IOContextImpl();
 }
 
@@ -185,6 +193,7 @@ IOContext::~IOContext() {
 
 IOContext::IOContext(const IOContext& rhs) {
   static_assert(impl_size >= sizeof(IOContextImpl));
+  static_assert(alignof(decltype(impl)) >= alignof(IOContextImpl));
   new (&impl) IOContextImpl(*reinterpret_cast<const IOContextImpl*>(&rhs.impl));
 }
 
@@ -196,6 +205,7 @@ IOContext& IOContext::operator =(const IOContext& rhs) {
 
 IOContext::IOContext(IOContext&& rhs) {
   static_assert(impl_size >= sizeof(IOContextImpl));
+  static_assert(alignof(decltype(impl)) >= alignof(IOContextImpl));
   new (&impl) IOContextImpl(
     std::move(*reinterpret_cast<IOContextImpl*>(&rhs.impl)));
 }
@@ -414,6 +424,7 @@ struct OpImpl {
 
 Op::Op() {
   static_assert(Op::impl_size >= sizeof(OpImpl));
+  static_assert(alignof(decltype(impl)) >= alignof(OpImpl));
   new (&impl) OpImpl;
 }
 
@@ -1756,16 +1767,19 @@ void RADOS::notify_(Object o, IOContext _ioc, bufferlist bl,
 
 Cursor::Cursor() {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   new (&impl) hobject_t();
 };
 
 Cursor::Cursor(end_magic_t) {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   new (&impl) hobject_t(hobject_t::get_max());
 }
 
 Cursor::Cursor(void* p) {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   new (&impl) hobject_t(std::move(*reinterpret_cast<hobject_t*>(p)));
 }
 
@@ -1781,11 +1795,13 @@ Cursor Cursor::end() {
 
 Cursor::Cursor(const Cursor& rhs) {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   new (&impl) hobject_t(*reinterpret_cast<const hobject_t*>(&rhs.impl));
 }
 
 Cursor& Cursor::operator =(const Cursor& rhs) {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   reinterpret_cast<hobject_t*>(&impl)->~hobject_t();
   new (&impl) hobject_t(*reinterpret_cast<const hobject_t*>(&rhs.impl));
   return *this;
@@ -1793,11 +1809,13 @@ Cursor& Cursor::operator =(const Cursor& rhs) {
 
 Cursor::Cursor(Cursor&& rhs) {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   new (&impl) hobject_t(std::move(*reinterpret_cast<hobject_t*>(&rhs.impl)));
 }
 
 Cursor& Cursor::operator =(Cursor&& rhs) {
   static_assert(impl_size >= sizeof(hobject_t));
+  static_assert(alignof(decltype(impl)) >= alignof(hobject_t));
   reinterpret_cast<hobject_t*>(&impl)->~hobject_t();
   new (&impl) hobject_t(std::move(*reinterpret_cast<hobject_t*>(&rhs.impl)));
   return *this;
