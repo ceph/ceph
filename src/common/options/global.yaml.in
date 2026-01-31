@@ -1602,7 +1602,7 @@ options:
     in `ceph status`.  This is also used in automated PG management, as the threshold
     at which some pools' pg_num may be shrunk in order to enable increasing the pg_num
     of others.
-  default: 250
+  default: 500
   flags:
   - runtime
   services:
