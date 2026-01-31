@@ -1417,7 +1417,7 @@ class Module(MgrModule, OrchestratorClientMixin):
             daemons = raise_if_exception(self.list_daemons(daemon_type='rgw'))
             for daemon in daemons:
                 if daemon.daemon_id and '.' in daemon.daemon_id:
-                    instance_id = daemon.daemon_id.split(".")[2]
+                    instance_id = daemon.daemon_id
                 else:
                     instance_id = daemon.daemon_id if daemon.daemon_id else ""
                 self.metrics['rgw_metadata'].set(1,
@@ -1432,7 +1432,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.metrics['rgw_metadata'].set(
                     1,
                     ('{}.{}'.format(service_type, name),
-                     hostname, version, service_id)
+                     hostname, version, name)
                 )
             elif service_type == 'rbd-mirror':
                 mirror_metadata = self.get_metadata('rbd-mirror', service_id)
