@@ -136,7 +136,6 @@ public:
 
     std::map<std::string, std::optional<ceph::buffer::list> > attr_updates;
 
-    enum class OmapUpdateType {Remove, Insert, RemoveRange};
     std::vector<std::pair<OmapUpdateType, ceph::buffer::list> > omap_updates;
 
     std::optional<ceph::buffer::list> omap_header;
@@ -454,7 +453,7 @@ public:
     auto &op = get_object_op_for_modify(hoid);
     op.omap_updates.emplace_back(
       std::make_pair(
-	ObjectOperation::OmapUpdateType::Insert,
+	OmapUpdateType::Insert,
 	keys_bl));
   }
   void omap_setkeys(
@@ -473,7 +472,7 @@ public:
     auto &op = get_object_op_for_modify(hoid);
     op.omap_updates.emplace_back(
       std::make_pair(
-	ObjectOperation::OmapUpdateType::Remove,
+	OmapUpdateType::Remove,
 	keys_bl));
   }
   void omap_rmkeys(
@@ -492,7 +491,7 @@ public:
     auto &op = get_object_op_for_modify(hoid);
     op.omap_updates.emplace_back(
       std::make_pair(
-	ObjectOperation::OmapUpdateType::RemoveRange,
+	OmapUpdateType::RemoveRange,
 	range_bl));
   }
   void omap_rmkeyrange(
