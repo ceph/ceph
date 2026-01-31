@@ -1214,9 +1214,6 @@ def cluster(ctx, config):
             stdout = r.stdout.getvalue().decode()
             if stdout:
                 return stdout
-            stderr = r.stderr.getvalue()
-            if stderr:
-                return stderr
             return None
 
         if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
