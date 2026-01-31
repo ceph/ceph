@@ -403,6 +403,11 @@ if(WITH_LIBCEPHSQLITE)
   find_package(SQLite3 REQUIRED)
 endif()
 
+option(WITH_AUDITLOGGING "audit logging" ON)
+if (WITH_AUDITLOGGING AND NOT WITH_LIBCEPHSQLITE)
+  message(FATAL_ERROR "Cannot have WITH_AUDITLOGGING without WITH_LIBCEPHSQLITE")
+endif()
+
 # key-value store
 option(WITH_KVS "Key value store is here" OFF)
 
