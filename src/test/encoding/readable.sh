@@ -36,15 +36,18 @@ test_object() {
       #echo "type $type";
       echo "        $vdir/objects/$type"
 
-      # is there a fwd incompat change between $arversion and $version?
+      # Check for forward and backward incompat changes
       incompat=""
       incompat_paths=""
+      backcompat=""
+      backcompat_paths=""
       sawarversion=0
       for iv in `ls $dir/archive | sort -n`; do
         if [ "$iv" = "$arversion" ]; then
           sawarversion=1
         fi
 
+        # Check for forward incompatibility (introduced after arversion)
         if [ $sawarversion -eq 1 ] && [ -e "$dir/archive/$iv/forward_incompat/$type" ]; then
           incompat="$iv"
 
@@ -60,12 +63,42 @@ test_object() {
           fi
         fi
 
+        # Check for backward incompatibility (affects this arversion)
+        # backward_incompat at version X means decoders < X can't decode objects from X onwards
+        # Check for backward_incompat in versions UP TO AND INCLUDING arversion
+        if [ $sawarversion -eq 0 ] || [ "$iv" = "$arversion" ]; then
+          if [ -e "$dir/archive/$iv/backward_incompat/$type" ]; then
+            backcompat="$iv"
+
+            # Check if we'll be ignoring only specified objects, not whole type
+            if [ -d "$dir/archive/$iv/backward_incompat/$type" ]; then
+              if [ -n "`ls $dir/archive/$iv/backward_incompat/$type/ | sort -n`" ]; then
+                backcompat_paths="$backcompat_paths $dir/archive/$iv/backward_incompat/$type"
+              else
+                echo "type $type directory empty, ignoring whole type instead of single objects"
+              fi;
+            fi
+          fi
+        fi
+
         if [ "$iv" = "$version" ]; then
           rm -rf $tmp1 $tmp2
           break
         fi
       done
 
+      # Skip if our decoder is too old for backward compatibility requirement
+      # Only skip whole type if NO per-object markers exist (like forward_incompat)
+      if [ -n "$backcompat" ] && [ -z "$backcompat_paths" ]; then
+        # Use sort -V for proper version comparison (handles 19.5 vs 19.10 correctly)
+        if [ "$(echo -e "$myversion\n$backcompat" | sort -V | head -n1)" = "$myversion" ]; then
+          echo "skipping backward incompat $type version $arversion, requires decoder >= $backcompat, current decoder is $myversion"
+          rm -rf $tmp1 $tmp2
+          return
+        fi
+      fi
+
+      # Skip if our decoder is too old for forward incompatibility
       if [ -n "$incompat" ]; then
         if [ -z "$incompat_paths" ]; then
           echo "skipping incompat $type version $arversion, changed at $incompat < code $myversion"
@@ -82,15 +115,31 @@ test_object() {
 
         skip=0;
         # Check if processed object $f of $type should be skipped (postponed skip)
+        # Check both forward_incompat and backward_incompat paths
         if [ -n "$incompat_paths" ]; then
             for i_path in $incompat_paths; do
               # Check if $f is a symbolic link and if it's pointing to existing target
               if [ -L "$i_path/$f" ]; then
-                echo "skipping object $f of type $type"
+                echo "skipping object $f of type $type (forward incompat)"
                 skip=1
                 break
               fi;
             done;
+        fi;
+
+        if [ -n "$backcompat_paths" ]; then
+          # Only skip individual objects marked as backward_incompat if decoder is too old
+          # Use sort -V for proper version comparison
+          if [ "$(echo -e "$myversion\n$backcompat" | sort -V | head -n1)" = "$myversion" ]; then
+            for b_path in $backcompat_paths; do
+              # Check if $f is a symbolic link and if it's pointing to existing target
+              if [ -L "$b_path/$f" ]; then
+                echo "skipping object $f of type $type (backward incompat)"
+                skip=1
+                break
+              fi;
+            done;
+          fi
         fi;
 
         if [ $skip -ne 0 ]; then
@@ -121,9 +170,9 @@ test_object() {
         # nothing.
         if ! $CEPH_DENCODER type $type is_deterministic; then
           echo "  sorting json output for nondeterministic object"
-          for f in $tmp1 $tmp2; do
-            sort $f | sed 's/,$//' > $f.new
-            mv $f.new $f
+          for tmpfile in $tmp1 $tmp2; do
+            sort $tmpfile | sed 's/,$//' > $tmpfile.new
+            mv $tmpfile.new $tmpfile
           done
         fi
 
@@ -238,4 +287,3 @@ if [ $numtests -eq 0 ]; then
 fi
 
 echo "passed $numtests tests."
-
