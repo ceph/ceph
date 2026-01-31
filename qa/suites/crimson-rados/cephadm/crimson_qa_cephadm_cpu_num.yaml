@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        crimson cpu num: 2
