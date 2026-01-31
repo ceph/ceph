@@ -1510,6 +1510,14 @@ struct ObjectOperation {
     osd_op.op.assert_ver.ver = ver;
   }
 
+  void get_internal_versions(boost::system::error_code* ec,
+		buffer::list *pbl) {
+  	ceph::buffer::list bl;
+  	add_op(CEPH_OSD_OP_GET_INTERNAL_VERSIONS);
+  	out_bl.back() = pbl;
+  	out_ec.back() = ec;
+  }
+
   void cmpxattr(const char *name, const ceph::buffer::list& val,
 		int op, int mode) {
     add_xattr(CEPH_OSD_OP_CMPXATTR, name, val);
@@ -2836,6 +2844,9 @@ private:
 			      ceph::shunique_lock<ceph::shared_mutex>& lc,
 			      ceph_tid_t *ptid,
 			      int *ctx_budget = NULL);
+  void _op_submit_with_timeout(Op *op,
+                            ceph::shunique_lock<ceph::shared_mutex>& lc,
+                            ceph_tid_t *ptid);
   // public interface
 public:
   void op_post_submit(Op *op);

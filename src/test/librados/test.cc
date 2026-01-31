@@ -18,13 +18,15 @@
 #include <iostream>
 #include "gtest/gtest.h"
 
-std::string create_one_pool(
-    const std::string &pool_name, rados_t *cluster, uint32_t pg_num)
-{
+std::string create_one_pool(const std::string &pool_name, rados_t *cluster) {
   std::string err_str = connect_cluster(cluster);
   if (err_str.length())
     return err_str;
 
+  return create_pool(pool_name, cluster);
+}
+
+std::string create_pool(const std::string &pool_name, rados_t *cluster) {
   int ret = rados_pool_create(*cluster, pool_name.c_str());
   if (ret) {
     rados_shutdown(*cluster);
@@ -92,13 +94,41 @@ int destroy_ec_profile_and_rule(rados_t *cluster,
   return destroy_rule(cluster, rule, oss);
 }
 
+std::string set_pool_flags(const std::string &pool_name, rados_t *cluster, int64_t flags, bool set_not_unset) {
+  std::ostringstream oss;
 
-std::string create_one_ec_pool(const std::string &pool_name, rados_t *cluster)
-{
+  std::string cmdstr = fmt::format(
+      R"({{"prefix": "osd pool set", "pool": "{}", "var": "{}", "val": "{}", "yes_i_really_mean_it": true}})",
+      pool_name,
+      (set_not_unset ? "set_pool_flags" : "unset_pool_flags"),
+      flags
+  );
+
+  char *cmd[2];
+  cmd[0] = (char *)cmdstr.c_str();
+  cmd[1] = NULL;
+
+  int ret = rados_mon_command(*cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0);
+  if (ret) {
+    oss << "rados_mon_command osd pool set set_pool_flags failed with error " << ret;
+  }
+
+  return oss.str();
+}
+
+std::string set_split_ops(const std::string &pool_name, rados_t *cluster, bool set_not_unset) {
+  return set_pool_flags(pool_name, cluster, 1<<20, set_not_unset);
+}
+
+std::string create_one_ec_pool(const std::string &pool_name, rados_t *cluster, bool fast_ec) {
   std::string err = connect_cluster(cluster);
   if (err.length())
     return err;
 
+  return create_ec_pool(pool_name, cluster, fast_ec);
+}
+
+std::string create_ec_pool(const std::string &pool_name, rados_t *cluster, bool fast_ec) {
   std::ostringstream oss;
   int ret = destroy_ec_profile_and_rule(cluster, pool_name, oss);
   if (ret) {
@@ -127,6 +157,20 @@ std::string create_one_ec_pool(const std::string &pool_name, rados_t *cluster)
     rados_shutdown(*cluster);
     oss << "rados_mon_command osd pool create failed with error " << ret;
     return oss.str();
+  }
+
+  if (fast_ec) {
+    std::string fast_ec_str = "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+        "\", \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}";
+    cmd[0] = (char *)fast_ec_str.c_str();
+    ret = rados_mon_command(*cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0);
+    if (ret) {
+      destroy_one_pool(pool_name, cluster);
+      destroy_ec_profile(cluster, pool_name, oss);
+      rados_shutdown(*cluster);
+      oss << "rados_mon_command osd pool create failed with error " << ret;
+      return oss.str();
+    }
   }
 
   rados_wait_for_latest_osdmap(*cluster);
@@ -163,35 +207,34 @@ std::string connect_cluster(rados_t *cluster)
   return "";
 }
 
-int destroy_one_pool(const std::string &pool_name, rados_t *cluster)
-{
-  int ret = rados_pool_delete(*cluster, pool_name.c_str());
+int destroy_pool(const std::string &pool_name, rados_t *cluster) {
+  return rados_pool_delete(*cluster, pool_name.c_str());
+}
+
+int destroy_ec_pool(const std::string &pool_name, rados_t *cluster) {
+  int ret = destroy_pool(pool_name, cluster);
   if (ret) {
-    rados_shutdown(*cluster);
     return ret;
   }
+  CephContext *cct = static_cast<CephContext*>(rados_cct(*cluster));
+  if (!cct->_conf->mon_fake_pool_delete) { // hope this is in [global]
+    std::ostringstream oss;
+    ret = destroy_ec_profile_and_rule(cluster, pool_name, oss);
+  }
+
+  return ret;
+}
+
+int destroy_one_pool(const std::string &pool_name, rados_t *cluster)
+{
+  destroy_pool(pool_name, cluster);
   rados_shutdown(*cluster);
   return 0;
 }
 
 int destroy_one_ec_pool(const std::string &pool_name, rados_t *cluster)
 {
-  int ret = rados_pool_delete(*cluster, pool_name.c_str());
-  if (ret) {
-    rados_shutdown(*cluster);
-    return ret;
-  }
-
-  CephContext *cct = static_cast<CephContext*>(rados_cct(*cluster));
-  if (!cct->_conf->mon_fake_pool_delete) { // hope this is in [global]
-    std::ostringstream oss;
-    ret = destroy_ec_profile_and_rule(cluster, pool_name, oss);
-    if (ret) {
-      rados_shutdown(*cluster);
-      return ret;
-    }
-  }
-
+  int ret = destroy_ec_pool(pool_name, cluster);
   rados_wait_for_latest_osdmap(*cluster);
   rados_shutdown(*cluster);
   return ret;

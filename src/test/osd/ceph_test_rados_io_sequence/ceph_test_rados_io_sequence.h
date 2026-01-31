@@ -460,7 +460,8 @@ class TestObject {
              bool verbose,
              std::optional<int> seqseed,
              bool testRecovery,
-             bool checkConsistency);
+             bool checkConsistency,
+             int balanced_read_percentage);
 
   int get_num_io();
   bool readyForIo();
@@ -484,6 +485,7 @@ class TestObject {
       pool_mappinglayers;
   bool testrecovery;
   bool checkconsistency;
+  int balanced_read_percentage;
 };
 
 class TestRunner {
@@ -539,6 +541,8 @@ class TestRunner {
   std::string line;
   ceph::split split = ceph::split("");
   ceph::spliterator tokens;
+
+  int balanced_read_percentage;
 
   void clear_tokens();
   std::string get_token(bool allow_eof = false);

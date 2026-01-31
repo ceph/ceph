@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <thread>
+#include <string_view>
 
 #include <errno.h>
 #include <fmt/format.h>
@@ -12,6 +13,9 @@
 #include "test_shared.h"
 #include "crimson_utils.h"
 #include "include/scope_guard.h"
+
+#include "common/ceph_context.h"
+#include "common/perf_counters_collection.h"
 
 using namespace librados;
 
@@ -189,7 +193,7 @@ void RadosTestECPPNS::TearDown()
 }
 
 std::string RadosTestPP::pool_name;
-Rados RadosTestPP::s_cluster;
+Rados RadosTestPPBase::s_cluster;
 
 void RadosTestPP::SetUpTestCase()
 {
@@ -223,14 +227,14 @@ void RadosTestPP::TearDown()
   ioctx.close();
 }
 
-void RadosTestPP::cleanup_default_namespace(librados::IoCtx ioctx)
+void RadosTestPPBase::cleanup_default_namespace(librados::IoCtx ioctx)
 {
   // remove all objects from the default namespace to avoid polluting
   // other tests
   cleanup_namespace(ioctx, "");
 }
 
-void RadosTestPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
+void RadosTestPPBase::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
 {
   ioctx.snap_set_read(librados::SNAP_HEAD);
   ioctx.set_namespace(ns);
@@ -272,7 +276,6 @@ void RadosTestPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
 
 std::string RadosTestParamPP::pool_name;
 std::string RadosTestParamPP::cache_pool_name;
-Rados RadosTestParamPP::s_cluster;
 
 void RadosTestParamPP::SetUpTestCase()
 {
@@ -363,26 +366,48 @@ void RadosTestParamPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
   }
 }
 
-std::string RadosTestECPP::pool_name;
-Rados RadosTestECPP::s_cluster;
+std::string RadosTestECPP::pool_name_default;
+std::string RadosTestECPP::pool_name_fast;
+std::string RadosTestECPP::pool_name_fast_split;
 
 void RadosTestECPP::SetUpTestCase()
 {
   SKIP_IF_CRIMSON();
   auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
-  pool_name = get_temp_pool_name(pool_prefix);
-  ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
+  pool_name_default = get_temp_pool_name(pool_prefix);
+  pool_name_fast = get_temp_pool_name(pool_prefix);
+  pool_name_fast_split = get_temp_pool_name(pool_prefix);
+  ASSERT_EQ("", connect_cluster_pp(s_cluster));
+  ASSERT_EQ("", create_ec_pool_pp(pool_name_default, s_cluster, false));
+  ASSERT_EQ("", create_ec_pool_pp(pool_name_fast, s_cluster, true));
+  ASSERT_EQ("", create_ec_pool_pp(pool_name_fast_split, s_cluster, true));
+  ASSERT_EQ("", set_split_ops_pp(pool_name_fast_split, s_cluster, true));
 }
 
 void RadosTestECPP::TearDownTestCase()
 {
   SKIP_IF_CRIMSON();
-  ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
+  ASSERT_EQ(0, destroy_ec_pool_pp(pool_name_default, s_cluster));
+  ASSERT_EQ(0, destroy_ec_pool_pp(pool_name_fast, s_cluster));
+  ASSERT_EQ(0, destroy_ec_pool_pp(pool_name_fast_split, s_cluster));
+  s_cluster.shutdown();
 }
 
 void RadosTestECPP::SetUp()
 {
   SKIP_IF_CRIMSON();
+  const auto& params = GetParam();
+  fast_ec = std::get<0>(params);
+  split_ops = std::get<1>(params);
+  if (fast_ec && split_ops) {
+    pool_name = pool_name_fast_split;
+  } else if (fast_ec) {
+    pool_name = pool_name_fast;
+  } else if (!split_ops) {
+    pool_name = pool_name_default;
+  } else {
+    GTEST_SKIP() << "Legacy EC does not support split ops";
+  }
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
   nspace = get_temp_pool_name();
   ioctx.set_namespace(nspace);
@@ -401,8 +426,12 @@ void RadosTestECPP::TearDown()
     cleanup_namespace(ioctx, nspace);
   }
   if (ec_overwrites_set) {
-    ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
-    ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
+    ASSERT_EQ(0, destroy_ec_pool_pp(pool_name, s_cluster));
+    ASSERT_EQ("", create_ec_pool_pp(pool_name, s_cluster, fast_ec));
+    if (split_ops) {
+      set_split_ops_pp(pool_name, s_cluster, true);
+    }
+
     ec_overwrites_set = false;
   }
   ioctx.close();
@@ -428,4 +457,39 @@ void RadosTestECPP::set_allow_ec_overwrites()
     ASSERT_LT(std::chrono::steady_clock::now(), end);
     std::this_thread::sleep_for(std::chrono::seconds(2));
   }
+}
+
+uint64_t RadosTestPPBase::get_perf_counter_by_path(std::string_view path) {
+  CephContext* cct = (CephContext*)cluster.cct();
+  PerfCountersCollection *coll = cct->get_perfcounters_collection();
+
+  std::stringstream ss;
+  bool found = false;
+
+  uint64_t value = 0;
+  coll->with_counters([&](const auto& counter_map) {
+    auto it = counter_map.find(std::string(path));
+    if (it != counter_map.end()) {
+      value = it->second.data->u64.load();
+      found = true;
+    }
+  });
+
+  if (!found) {
+    ss << "Performance counter not found: '" << path << "'.\n";
+    ss << "Available counters are:\n";
+    coll->with_counters([&](const auto& counter_map) {
+      if (counter_map.empty()) {
+        ss << "  <none> (The collection is empty, check initialization timing)";
+      } else {
+        for (const auto& pair : counter_map) {
+          ss << "  - " << pair.first << "\n";
+        }
+      }
+    });
+
+    throw(std::range_error(ss.str()));
+  }
+
+  return value;
 }
