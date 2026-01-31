@@ -813,6 +813,10 @@ def ceph_bootstrap(ctx, config):
         yield
 
     finally:
+        log.info('Tearing down any agents...')
+        _shell(ctx, cluster_name, bootstrap_remote,
+                ['ceph', 'config', 'set', 'mgr', 'mgr/cephadm/use_agent', 'false'])
+
         log.info('Disabling cephadm mgr module')
         _shell(
             ctx,
