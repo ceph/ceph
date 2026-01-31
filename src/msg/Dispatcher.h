@@ -22,6 +22,7 @@
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 #include "msg/MessageRef.h"
+#include "msg/msg_types.h"
 
 #include <variant>
 
@@ -32,6 +33,12 @@ class KeyStore;
 
 class Dispatcher {
 public:
+  typedef struct {
+    uint64_t takenslots;
+    uint64_t maxslots;
+    uint64_t failedrequests;
+  } ThrottleInfo;
+
   /* Ordering of dispatch for a list of Dispatchers. */
   using priority_t = uint32_t;
   static constexpr priority_t PRIORITY_HIGH = std::numeric_limits<priority_t>::max() / 4;
@@ -242,6 +249,16 @@ public:
    * return false for failure (failure to parse caps, for instance)
    */
   [[nodiscard]] virtual bool ms_handle_fast_authentication(Connection *con) {
+    return false;
+  }
+
+  /**
+   * handle throttle limit hit and cluster log it.
+   *
+   * return true if handled
+   * return false if not handled
+   */
+  virtual bool ms_handle_throttle(ms_throttle_t ttype, const ThrottleInfo& tinfo) {
     return false;
   }
 
