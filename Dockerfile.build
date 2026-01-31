@@ -36,6 +36,8 @@ RUN DISTRO=$DISTRO \
     FOR_MAKE_CHECK=${FOR_MAKE_CHECK} \
     bash -x ${CEPH_CTR_SRC}/buildcontainer-setup.sh
 RUN \
+    if [ $(uname -m) != ppc64le ]; then \
     SCCACHE_URL="${SCCACHE_REPO}/releases/download/${SCCACHE_VERSION}/sccache-${SCCACHE_VERSION}-$(uname -m)-unknown-linux-musl.tar.gz"; \
     echo "${SCCACHE_URL}"; \
-    curl -sS -L $SCCACHE_URL | tar --no-anchored --strip-components=1 -C /usr/local/bin/ -xzf - sccache
+    curl -sS -L $SCCACHE_URL | tar --no-anchored --strip-components=1 -C /usr/local/bin/ -xzf - sccache; \
+    fi
