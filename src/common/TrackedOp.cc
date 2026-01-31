@@ -190,7 +190,8 @@ void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters, bool by
 struct ShardedTrackingData {
   ceph::mutex ops_in_flight_lock_sharded;
   TrackedOp::tracked_op_list_t ops_in_flight_sharded;
-  explicit ShardedTrackingData(string lock_name)
+  std::atomic<uint64_t> ops_in_flight_count{0};
+  explicit ShardedTrackingData(const char* lock_name)
     : ops_in_flight_lock_sharded(ceph::make_mutex(lock_name)) {}
 };
 
@@ -316,6 +317,21 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
   return true;
 }
 
+uint64_t OpTracker::get_num_ops_in_flight()
+{
+  if (!tracking_enabled)
+    return 0;
+
+  std::shared_lock l{lock};
+  uint64_t total_ops_in_flight = 0;
+  for (uint32_t i = 0; i < num_optracker_shards; ++i) {
+    ShardedTrackingData* sdata = sharded_in_flight_list[i];
+    ceph_assert(nullptr != sdata);
+    total_ops_in_flight += sdata->ops_in_flight_count.load(std::memory_order_relaxed);
+  }
+  return total_ops_in_flight;
+}
+
 bool OpTracker::register_inflight_op(TrackedOp *i)
 {
   if (!tracking_enabled)
@@ -330,6 +346,7 @@ bool OpTracker::register_inflight_op(TrackedOp *i)
     std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
     sdata->ops_in_flight_sharded.push_back(*i);
     i->seq = current_seq;
+    sdata->ops_in_flight_count.fetch_add(1, std::memory_order_relaxed);
   }
   return true;
 }
@@ -346,6 +363,7 @@ void OpTracker::unregister_inflight_op(TrackedOp* const i)
     std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
     auto p = sdata->ops_in_flight_sharded.iterator_to(*i);
     sdata->ops_in_flight_sharded.erase(p);
+    sdata->ops_in_flight_count.fetch_sub(1, std::memory_order_relaxed);
   }
 }
 

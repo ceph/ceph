@@ -4,6 +4,7 @@
 #include "MetricAggregator.h"
 #include "MDSMap.h"
 #include "MDSRank.h"
+#include "MetricsHandler.h"
 #include "mgr/MgrClient.h"
 
 #include "common/ceph_context.h"
@@ -21,11 +22,11 @@
 #define dout_prefix *_dout << "mds.metric.aggregator" << " " << __func__
 
 // Performance Counters
- enum {
+enum {
   l_mds_client_metrics_start = 10000,
   l_mds_client_metrics_num_clients,
   l_mds_client_metrics_last
- };
+};
 
 enum {
   l_mds_per_client_metrics_start = 20000,
@@ -45,7 +46,7 @@ enum {
   l_mds_per_client_metrics_total_write_ops,
   l_mds_per_client_metrics_total_write_size,
   l_mds_per_client_metrics_last
- };
+};
 
 enum {
   l_subvolume_metrics_first = 30000,
@@ -55,6 +56,8 @@ enum {
   l_subvolume_metrics_write_iops,
   l_subvolume_metrics_write_tp_Bps,
   l_subvolume_metrics_avg_write_latency,
+  l_subvolume_metrics_quota_bytes,
+  l_subvolume_metrics_used_bytes,
   l_subvolume_metrics_last
 };
 
@@ -108,9 +111,11 @@ int MetricAggregator::init() {
     });
 
   subv_window_sec = g_conf().get_val<std::chrono::seconds>("subv_metrics_window_interval").count();
-  if (!subv_window_sec)
-    return -EINVAL;
-
+  if (!subv_window_sec) {
+    dout(0) << "subv_metrics_window_interval is not set, setting to 300 seconds" << dendl;
+    subv_window_sec = 300;
+  }
+ 
   return 0;
 }
 
@@ -132,6 +137,14 @@ void MetricAggregator::shutdown() {
       }
     }
     client_perf_counters.clear();
+
+    for (auto &[rank, perf_counters] : rank_perf_counters) {
+      if (perf_counters != nullptr) {
+        m_cct->get_perfcounters_collection()->remove(perf_counters);
+        delete perf_counters;
+      }
+    }
+    rank_perf_counters.clear();
 
     PerfCounters *perf_counters = nullptr;
     std::swap(perf_counters, m_perf_counters);
@@ -186,6 +199,12 @@ void MetricAggregator::refresh_subvolume_metrics_for_rank(
                   "Average write throughput (Bps)", "wbps", PerfCountersBuilder::PRIO_CRITICAL);
       plb.add_u64(l_subvolume_metrics_avg_write_latency, "avg_write_lat_msec",
                   "Average write latency (ms)", "wlav", PerfCountersBuilder::PRIO_CRITICAL);
+      plb.add_u64(l_subvolume_metrics_quota_bytes, "quota_bytes",
+                  "Configured quota (bytes) for the subvolume", nullptr,
+                  PerfCountersBuilder::PRIO_USEFUL, UNIT_BYTES);
+      plb.add_u64(l_subvolume_metrics_used_bytes, "used_bytes",
+                  "Current logical bytes used by the subvolume", nullptr,
+                  PerfCountersBuilder::PRIO_USEFUL, UNIT_BYTES);
 
       auto perf_counter = plb.create_perf_counters();
       subvolume_perf_counters[m.subvolume_path] = perf_counter;
@@ -259,6 +278,9 @@ void MetricAggregator::refresh_subvolume_metrics_for_rank(
       uint64_t total_read_ops = 0, total_write_ops = 0;
       uint64_t total_read_bytes = 0, total_write_bytes = 0;
       uint64_t weighted_read_latency_sum = 0, weighted_write_latency_sum = 0;
+      uint64_t latest_sample_ts = 0;
+      uint64_t latest_quota_bytes = 0;
+      uint64_t latest_used_bytes = 0;
 
       tracker.for_each_value([&](const SubvolumeMetric &m) {
           total_read_ops += m.read_ops;
@@ -267,6 +289,11 @@ void MetricAggregator::refresh_subvolume_metrics_for_rank(
           total_write_bytes += m.write_size;
           weighted_read_latency_sum += m.avg_read_latency * m.read_ops;
           weighted_write_latency_sum += m.avg_write_latency * m.write_ops;
+          if (m.time_stamp >= latest_sample_ts) {
+            latest_sample_ts = m.time_stamp;
+            latest_quota_bytes = m.quota_bytes;
+            latest_used_bytes = m.used_bytes;
+          }
       });
 
       aggr_metric.read_iops = total_read_ops / aggr_metric.time_window_last_dur_sec;
@@ -280,6 +307,8 @@ void MetricAggregator::refresh_subvolume_metrics_for_rank(
       aggr_metric.avg_write_latency = (total_write_ops > 0)
                                       ? (weighted_write_latency_sum / total_write_ops) / 1000
                                       : 0;
+      aggr_metric.quota_bytes = latest_quota_bytes;
+      aggr_metric.used_bytes = latest_used_bytes;
 
       // update PerfCounters
       auto counter = subvolume_perf_counters[path];
@@ -290,6 +319,8 @@ void MetricAggregator::refresh_subvolume_metrics_for_rank(
       counter->set(l_subvolume_metrics_write_iops, aggr_metric.write_iops);
       counter->set(l_subvolume_metrics_write_tp_Bps, aggr_metric.write_tBps);
       counter->set(l_subvolume_metrics_avg_write_latency, aggr_metric.avg_write_latency);
+      counter->set(l_subvolume_metrics_quota_bytes, aggr_metric.quota_bytes);
+      counter->set(l_subvolume_metrics_used_bytes, aggr_metric.used_bytes);
 
       // Update query_metrics_map
       auto sub_key_func_subvolume = [this, &path](const MDSPerfMetricSubKeyDescriptor &desc,
@@ -340,6 +371,12 @@ void MetricAggregator::refresh_subvolume_metrics_for_rank(
                         break;
                       case MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC:
                         counter->first = aggr_metric.avg_write_latency;
+                        break;
+                      case MDSPerformanceCounterType::SUBV_QUOTA_BYTES_METRIC:
+                        counter->first = aggr_metric.quota_bytes;
+                        break;
+                      case MDSPerformanceCounterType::SUBV_USED_BYTES_METRIC:
+                        counter->first = aggr_metric.used_bytes;
                         break;
                       default:
                         break;
@@ -574,6 +611,8 @@ void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
     case MDSPerformanceCounterType::SUBV_WRITE_IOPS_METRIC:
     case MDSPerformanceCounterType::SUBV_READ_THROUGHPUT_METRIC:
     case MDSPerformanceCounterType::SUBV_WRITE_THROUGHPUT_METRIC:
+    case MDSPerformanceCounterType::SUBV_QUOTA_BYTES_METRIC:
+    case MDSPerformanceCounterType::SUBV_USED_BYTES_METRIC:
       break;
     default:
       ceph_abort_msg("unknown counter type");
@@ -724,6 +763,32 @@ void MetricAggregator::handle_mds_metrics(const cref_t<MMDSMetrics> &m) {
   }
 
   refresh_subvolume_metrics_for_rank(rank, subvolume_metrics);
+  update_rank_perf_metrics(rank, metrics_message.rank_metrics);
+}
+
+void MetricAggregator::update_rank_perf_metrics(mds_rank_t rank, const RankPerfMetrics& metrics) {
+  auto &perf_counter = rank_perf_counters[rank];
+  if (!perf_counter) {
+    std::string labels = ceph::perf_counters::key_create(
+      "mds_rank_perf",
+      {{"rank", stringify(rank)}});
+    PerfCountersBuilder plb(m_cct, labels,
+                            l_mds_rank_perf_start, l_mds_rank_perf_last);
+    plb.add_u64(l_mds_rank_perf_cpu_usage,
+                "cpu_usage",
+                "Sum of per-core CPU utilisation reported for this MDS (100 == one full core)",
+                "cpu%",
+                PerfCountersBuilder::PRIO_USEFUL);
+    plb.add_u64(l_mds_rank_perf_open_requests,
+                "open_requests",
+                "Number of metadata requests currently in flight on this MDS",
+                "req",
+                PerfCountersBuilder::PRIO_USEFUL);
+    perf_counter = plb.create_perf_counters();
+    m_cct->get_perfcounters_collection()->add(perf_counter);
+  }
+  perf_counter->set(l_mds_rank_perf_cpu_usage, metrics.cpu_usage_percent);
+  perf_counter->set(l_mds_rank_perf_open_requests, metrics.open_requests);
 }
 
 void MetricAggregator::cull_metrics_for_rank(mds_rank_t rank) {
@@ -736,6 +801,16 @@ void MetricAggregator::cull_metrics_for_rank(mds_rank_t rank) {
 
   dout(10) << ": culled " << p.size() << " clients" << dendl;
   clients_by_rank.erase(rank);
+  remove_rank_perf_metrics_for_rank(rank);
+}
+
+void MetricAggregator::remove_rank_perf_metrics_for_rank(mds_rank_t rank) {
+  auto it = rank_perf_counters.find(rank);
+  if (it != rank_perf_counters.end()) {
+    m_cct->get_perfcounters_collection()->remove(it->second);
+    delete it->second;
+    rank_perf_counters.erase(it);
+  }
 }
 
 void MetricAggregator::notify_mdsmap(const MDSMap &mdsmap) {
