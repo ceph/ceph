@@ -556,6 +556,9 @@ class TestSessionClientEvict(CephFSTestCase):
         with self.assertRaises(CommandFailedError) as ce:
             self.fs.rank_tell(cmd + ['evict', 'id=0'])
         self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_tell(cmd + ['evict', 'id=000'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
 
     def _evict_with_invalid_id(self, cmd):
         info_initial = self.fs.rank_asok(cmd + ['ls'])
