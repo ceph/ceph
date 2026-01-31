@@ -3393,7 +3393,7 @@ options:
   with_legacy: true
 # to adjust various transactions that batch smaller items
 - name: osd_target_transaction_size
-  type: int
+  type: uint
   level: advanced
   default: 30
   with_legacy: true

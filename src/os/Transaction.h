@@ -626,7 +626,7 @@ public:
     return !data.ops;
   }
   /// Number of operations in the transaction
-  int get_num_ops() {
+  uint64_t get_num_ops() {
     return data.ops;
   }
 
