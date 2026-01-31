@@ -342,7 +342,7 @@ class CephFSTestCase(CephTestCase):
 
     def _get_subtrees(self, status=None, rank=None, path=None):
         if path is None:
-            path = "/"
+            path = "/"  # everything below root but not root
         try:
             with contextutil.safe_while(sleep=1, tries=3) as proceed:
                 while proceed():
@@ -356,7 +356,16 @@ class CephFSTestCase(CephTestCase):
                                 subtrees += s
                         else:
                             subtrees = self.fs.rank_asok(["get", "subtrees"], status=status, rank=rank)
-                        subtrees = filter(lambda s: s['dir']['path'].startswith(path), subtrees)
+                        def match(s):
+                            if path == "" and s['dir']['path'] == "":
+                                return True
+                            elif path == "" and s['dir']['path'].startswith("/"):
+                                return True
+                            elif path != "" and s['dir']['path'].startswith(path):
+                                return True
+                            else:
+                                return False
+                        subtrees = filter(match, subtrees)
                         return list(subtrees)
                     except CommandFailedError as e:
                         # Sometimes we get transient errors
@@ -368,6 +377,8 @@ class CephFSTestCase(CephTestCase):
             raise RuntimeError(f"could not get subtree state from rank {rank}") from e
 
     def _wait_subtrees(self, test, status=None, rank=None, timeout=30, sleep=2, action=None, path=None):
+        log.info(f'_wait_subtrees test={test} status={status} rank={rank} timeout={timeout} '
+                 f'sleep={sleep} action={action} path={path}')
         test = sorted(test)
         try:
             with contextutil.safe_while(sleep=sleep, tries=timeout//sleep) as proceed:
@@ -423,6 +434,16 @@ class CephFSTestCase(CephTestCase):
                         return subtrees
         except contextutil.MaxWhileTries as e:
             raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank)) from e
+
+    def _wait_xattrs(self, mount, path, key, exp):
+        try:
+            with contextutil.safe_while(sleep=5, tries=20) as proceed:
+                while proceed():
+                    value = mount.getfattr(path, key)
+                    if value == exp:
+                        return value
+        except contextutil.MaxWhileTries as e:
+            raise RuntimeError("client failed to get desired value with key {0}".format(key)) from e
 
     def create_client(self, client_id, moncap=None, osdcap=None, mdscap=None):
         if not (moncap or osdcap or mdscap):

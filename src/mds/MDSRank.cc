@@ -3268,6 +3268,7 @@ void MDSRank::command_get_subtrees(Formatter *f)
 	f->dump_int("export_pin", export_pin >= 0 ? export_pin : -1);
 	f->dump_bool("distributed_ephemeral_pin", export_pin == MDS_RANK_EPHEMERAL_DIST);
 	f->dump_bool("random_ephemeral_pin", export_pin == MDS_RANK_EPHEMERAL_RAND);
+	f->dump_string("bal_rank_mask", dir->inode->get_bal_rank_mask_from_xattrs());
       }
       f->dump_int("export_pin_target", dir->get_export_pin(false));
       f->open_object_section("dir");
