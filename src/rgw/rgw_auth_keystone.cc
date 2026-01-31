@@ -55,7 +55,7 @@ admin_token_retry:
   /* The container for plain response obtained from Keystone. It will be
    * parsed token_envelope_t::parse method. */
   ceph::bufferlist token_body_bl;
-  RGWValidateKeystoneToken validate(cct, "GET", "", &token_body_bl);
+  RGWValidateKeystoneToken validate(cct, "GET", RGWEndpoint{}, &token_body_bl);
 
   std::string url = config.get_endpoint_url();
   if (url.empty()) {
@@ -435,7 +435,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   /* The container for plain response obtained from Keystone. It will be
    * parsed token_envelope_t::parse method. */
   ceph::bufferlist token_body_bl;
-  RGWValidateKeystoneToken validate(cct, "POST", keystone_url, &token_body_bl);
+  RGWValidateKeystoneToken validate(cct, "POST", RGWEndpoint{keystone_url}, &token_body_bl);
 
   /* set required headers for keystone request */
   validate.append_header("X-Auth-Token", admin_token);
@@ -526,7 +526,7 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
 
   /* The container for plain response obtained from Keystone.*/
   ceph::bufferlist token_body_bl;
-  RGWGetAccessSecret secret(cct, "GET", keystone_url, &token_body_bl);
+  RGWGetAccessSecret secret(cct, "GET", RGWEndpoint{keystone_url}, &token_body_bl);
 
   /* set required headers for keystone request */
   secret.append_header("X-Auth-Token", admin_token);

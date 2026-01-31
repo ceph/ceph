@@ -26,6 +26,7 @@
 #include <list>
 #include <map>
 #include <string>
+#include <vector>
 
 namespace ceph {
 
@@ -133,6 +134,17 @@ class DNSResolver {
         const SRV_Protocol trans_protocol, const std::string& domain,
         std::map<std::string, Record> *srv_hosts);
 
+    /**
+     * Resolves all IP addresses (A and AAAA) for the given hostname.
+     *
+     * @param hostname the hostname to resolve
+     * @param[out] addrs vector of resolved addresses
+     * @returns 0 on success, negative error code on failure
+     */
+    int resolve_all_addrs(CephContext *cct,
+                      const std::string& hostname,
+                      std::vector<entity_addr_t>* addrs);
+
   private:
     DNSResolver() { resolv_h = new ResolvHWrapper(); }
     ~DNSResolver();
@@ -152,6 +164,10 @@ class DNSResolver {
      */
     int resolve_ip_addr(CephContext *cct, res_state *res,
         const std::string& hostname, entity_addr_t *addr);
+
+    int resolve_all_addrs(CephContext *cct, res_state *res,
+        const std::string& hostname,
+        std::vector<entity_addr_t>* addrs);
 #endif
 
     std::string srv_protocol_to_str(SRV_Protocol proto) {

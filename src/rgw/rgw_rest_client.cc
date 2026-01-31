@@ -436,7 +436,7 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
   string params_str;
   get_params_str(new_info.args.get_params(), params_str);
 
-  string new_url = url;
+  string new_url = endpoint.get_url();
   string& resource = new_info.request_uri;
   string new_resource = resource;
   if (new_url[new_url.size() - 1] == '/' && resource[0] == '/') {
@@ -457,7 +457,7 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
   }
 
   method = new_info.method;
-  url = new_url;
+  endpoint.set_url(new_url);
 
   std::ignore = process(dpp, y);
 
@@ -575,7 +575,7 @@ RGWRESTGenerateHTTPHeaders::RGWRESTGenerateHTTPHeaders(CephContext *_cct, RGWEnv
 }
 
 void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
-                                      const string& resource_prefix, const string& _url,
+                                      const string& resource_prefix, const RGWEndpoint& _endpoint,
                                       const string& resource, const param_vec_t& params,
                                       std::optional<string> api_name)
 {
@@ -592,7 +592,7 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
                           url_encode(iter->second, encode_slash));
   }
 
-  url = _url + resource + params_str;
+  endpoint = _endpoint.with_url(_endpoint.get_url() + resource + params_str);
 
   string date_str;
   get_gmt_date_str(date_str);
@@ -698,32 +698,29 @@ void RGWRESTStreamS3PutObj::send_init(const rgw_obj& obj)
 {
   string resource_str;
   string resource;
-  string new_url = url;
+  RGWEndpoint new_endpoint = endpoint;
   string new_host = host;
 
    const auto& bucket_name = obj.bucket.name;
 
   if (host_style == VirtualStyle) {
     resource_str = obj.get_oid();
-
-    new_url = protocol + "://" + bucket_name + "." + host;
+    new_endpoint.set_url(protocol + "://" + bucket_name + "." + host);
     new_host = bucket_name + "." + new_host;
   } else {
     resource_str = bucket_name + "/" + obj.get_oid();
   }
+  new_endpoint.add_trailing_slash();
 
   //do not encode slash in object key name
   url_encode(resource_str, resource, false);
 
-  if (new_url[new_url.size() - 1] != '/')
-    new_url.append("/");
-
-  ldpp_dout(this, 20) << __func__ << "(): host = " << host << " , resource = " << resource << " , new_host = " << new_host << " , new_url = " << new_url  << dendl;
+  ldpp_dout(this, 20) << __func__ << "(): host = " << host << " , resource = " << resource << " , new_host = " << new_host << " , new_url = " << new_endpoint.get_url()  << dendl;
 
   method = "PUT";
-  headers_gen.init(method, new_host, resource_prefix, new_url, resource, params, api_name);
+  headers_gen.init(method, new_host, resource_prefix, new_endpoint, resource, params, api_name);
 
-  url = headers_gen.get_url();
+  endpoint = headers_gen.get_endpoint();
 }
 
 void RGWRESTStreamS3PutObj::send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, bufferlist>& rgw_attrs)
@@ -838,10 +835,10 @@ int RGWRESTStreamRWRequest::send_prepare(const DoutPrefixProvider *dpp, RGWAcces
 int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
                                          bufferlist *send_data)
 {
-  string new_url = url;
-  if (!new_url.empty() && new_url.back() != '/')
-    new_url.append("/");
-  
+  RGWEndpoint new_endpoint = endpoint;
+
+  new_endpoint.add_trailing_slash();
+
   string new_resource;
   string bucket_name;
   string old_resource = resource;
@@ -862,7 +859,7 @@ int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAc
   }
 
   if (host_style == VirtualStyle) {
-    new_url = protocol + "://" + bucket_name + "." + host;
+    new_endpoint.set_url(protocol + "://" + bucket_name + "." + host);
     if(pos == string::npos) {
       new_resource = "";
     } else {
@@ -870,15 +867,13 @@ int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAc
     }
     new_host = bucket_name + "." + host;
   }
-
-  if (new_url[new_url.size() - 1] != '/')
-    new_url.append("/");
+  new_endpoint.add_trailing_slash();
 
   headers_gen.emplace(cct, &new_env, &new_info);
 
-  ldpp_dout(this, 20) << __func__ << "(): host = " << host << " , resource = " << resource << " , new_host = " << new_host << " , new_url = " << new_url  << " , new_resource = " << new_resource << dendl;
+  ldpp_dout(this, 0) << __func__ << "(): host = " << host << " , resource = " << resource << " , new_host = " << new_host << " , new_url = " << new_endpoint.get_url()  << " , new_resource = " << new_resource << dendl;
 
-  headers_gen->init(method, new_host, resource_prefix, new_url, new_resource, params, api_name);
+  headers_gen->init(method, new_host, resource_prefix, new_endpoint, new_resource, params, api_name);
 
   headers_gen->set_http_attrs(extra_headers);
 
@@ -893,7 +888,7 @@ int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAc
   }
 
   method = new_info.method;
-  url = headers_gen->get_url();
+  endpoint = headers_gen->get_endpoint();
 
   return 0;
 }

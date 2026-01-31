@@ -20,6 +20,39 @@ void rgw_http_client_cleanup();
 struct rgw_http_req_data;
 class RGWHTTPManager;
 
+struct RGWEndpoint {
+private:
+  std::string url;
+  std::string connect_to;
+
+public:
+  RGWEndpoint() = default;
+
+  RGWEndpoint(std::string u, std::string c = {})
+    : url(std::move(u)), connect_to(std::move(c)) {}
+
+  RGWEndpoint with_url(std::string new_url) const {
+    RGWEndpoint e = *this;
+    e.set_url(std::move(new_url));
+    return e;
+  }
+
+  void set_url(const std::string& _url) { url = _url; }
+  const std::string& get_url() const { return url; }
+
+  void set_connect_to(const std::string& _connect_to) { connect_to = _connect_to; }
+  const std::string& get_connect_to() const { return connect_to; }
+
+  void add_trailing_slash() {
+    if (! url.empty() && url.back() != '/')
+      append_to_url("/");
+  }
+
+  void append_to_url(const std::string& suffix) {
+    url.append(suffix);
+  }
+};
+
 class RGWHTTPClient : public RGWIOProvider,
                       public NoDoutPrefix
 {
@@ -47,13 +80,12 @@ class RGWHTTPClient : public RGWIOProvider,
 
   std::atomic<unsigned> stopped { 0 };
 
-
 protected:
   CephContext *cct;
 
   std::string method;
-  std::string url_orig;
-  std::string url;
+  RGWEndpoint endpoint_orig;
+  RGWEndpoint endpoint;
 
   std::string protocol;
   std::string host;
@@ -116,7 +148,7 @@ public:
   virtual ~RGWHTTPClient();
   explicit RGWHTTPClient(CephContext *cct,
                          const std::string& _method,
-                         const std::string& _url);
+                         const RGWEndpoint& _endpoint);
 
   std::ostream& gen_prefix(std::ostream& out) const override;
 
@@ -170,12 +202,16 @@ public:
 
   int get_req_retcode();
 
-  void set_url(const std::string& _url) {
-    url = _url;
+  void set_endpoint(const RGWEndpoint& _endpoint) {
+    endpoint = _endpoint;
   }
 
-  const std::string& get_url_orig() const {
-    return url_orig;
+  void set_url(const std::string& _url) {
+    endpoint.set_url(_url);
+  }
+
+  const RGWEndpoint& get_endpoint_orig() const {
+    return endpoint_orig;
   }
 
   void set_method(const std::string& _method) {
@@ -212,9 +248,9 @@ public:
 
   RGWHTTPHeadersCollector(CephContext * const cct,
                           const std::string& method,
-                          const std::string& url,
+                          const RGWEndpoint& endpoint,
                           const header_spec_t &relevant_headers)
-    : RGWHTTPClient(cct, method, url),
+    : RGWHTTPClient(cct, method, endpoint),
       relevant_headers(relevant_headers) {
   }
 
@@ -244,21 +280,21 @@ class RGWHTTPTransceiver : public RGWHTTPHeadersCollector {
 public:
   RGWHTTPTransceiver(CephContext * const cct,
                      const std::string& method,
-                     const std::string& url,
+                     const RGWEndpoint& endpoint,
                      bufferlist * const read_bl,
                      const header_spec_t intercept_headers = {})
-    : RGWHTTPHeadersCollector(cct, method, url, intercept_headers),
+    : RGWHTTPHeadersCollector(cct, method, endpoint, intercept_headers),
       read_bl(read_bl),
       post_data_index(0) {
   }
 
   RGWHTTPTransceiver(CephContext * const cct,
                      const std::string& method,
-                     const std::string& url,
+                     const RGWEndpoint& endpoint,
                      bufferlist * const read_bl,
                      const bool verify_ssl,
                      const header_spec_t intercept_headers = {})
-    : RGWHTTPHeadersCollector(cct, method, url, intercept_headers),
+    : RGWHTTPHeadersCollector(cct, method, endpoint, intercept_headers),
       read_bl(read_bl),
       post_data_index(0) {
     set_verify_ssl(verify_ssl);

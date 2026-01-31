@@ -16,6 +16,7 @@ public:
   ~RGWResolver();
   RGWResolver();
   int resolve_cname(const std::string& hostname, std::string& cname, bool *found);
+  int resolve_all_addrs(const std::string& hostname, std::vector<entity_addr_t>* addrs);
 };
 
 

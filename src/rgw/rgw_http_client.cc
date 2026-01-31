@@ -35,6 +35,7 @@ static void do_curl_easy_cleanup(RGWCurlHandle *curl_handle);
 struct rgw_http_req_data : public RefCountedObject {
   RGWCurlHandle *curl_handle{nullptr};
   curl_slist *h{nullptr};
+  curl_slist *connect_to_slist{nullptr};
   uint64_t id;
   int ret{0};
   std::atomic<bool> done = { false };
@@ -106,7 +107,14 @@ struct rgw_http_req_data : public RefCountedObject {
 
     curl_handle = NULL;
     h = NULL;
+
+    if (connect_to_slist) {
+      curl_slist_free_all(connect_to_slist);
+      connect_to_slist = nullptr;
+    }
+
     done = true;
+
     if (completion) {
       boost::system::error_code ec(-ret, boost::system::system_category());
       Completion::post(std::move(completion), ec);
@@ -294,7 +302,7 @@ void RGWIOProvider::assign_io(RGWIOIDProvider& io_id_provider, int io_type)
 
 RGWHTTPClient::RGWHTTPClient(CephContext *cct,
                              const string& _method,
-                             const string& _url)
+                             const RGWEndpoint& _endpoint)
     : NoDoutPrefix(cct, dout_subsys),
       has_send_len(false),
       http_status(HTTP_STATUS_NOSTATUS),
@@ -302,14 +310,14 @@ RGWHTTPClient::RGWHTTPClient(CephContext *cct,
       verify_ssl(cct->_conf->rgw_verify_ssl),
       cct(cct),
       method(_method),
-      url_orig(_url),
-      url(_url) {
+      endpoint_orig(_endpoint),
+      endpoint(_endpoint) {
   init();
 }
 
 std::ostream& RGWHTTPClient::gen_prefix(std::ostream& out) const
 {
-  out << "http_client[" << method << "/" << url << "]";
+  out << "http_client[" << method << "/" << endpoint.get_url() << "]";
   return out;
 }
 
@@ -325,6 +333,8 @@ void RGWHTTPClient::init()
       set_ca_path(ca_bundle);
     }
   }
+
+  const string& url = endpoint.get_url();
 
   auto pos = url.find("://");
   if (pos == string::npos) {
@@ -551,7 +561,7 @@ int RGWHTTPClient::process(const DoutPrefixProvider* dpp, optional_yield y)
 string RGWHTTPClient::to_str()
 {
   string method_str = (method.empty() ? "<no-method>" : method);
-  string url_str = (url.empty() ? "<no-url>" : url);
+  string url_str = (endpoint.get_url().empty() ? "<no-url>" : endpoint.get_url());
   return method_str + " " + url_str;
 }
 
@@ -577,14 +587,32 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
 
   CURL *easy_handle = req_data->get_easy_handle();
 
-  dout(20) << "sending request to " << url << dendl;
+  dout(20) << "sending request to url=" << endpoint.get_url()
+    << " connect_to=" << endpoint.get_connect_to() << dendl;
 
   curl_slist *h = headers_to_slist(headers);
 
   req_data->h = h;
 
   curl_easy_setopt(easy_handle, CURLOPT_CUSTOMREQUEST, method.c_str());
-  curl_easy_setopt(easy_handle, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(easy_handle, CURLOPT_URL, endpoint.get_url().c_str());
+
+  // apply CONNECT_TO mapping if provided for this request
+  if (! endpoint.get_connect_to().empty()) {
+    if (req_data->connect_to_slist) {
+      curl_slist_free_all(req_data->connect_to_slist);
+      req_data->connect_to_slist = nullptr;
+    }
+
+    req_data->connect_to_slist = curl_slist_append(req_data->connect_to_slist, endpoint.get_connect_to().c_str());
+    if (! req_data->connect_to_slist) {
+      dout(0) << "ERROR: RGWHTTPClient::init_request failed to allocate connect_to_slist" << dendl;
+    } else {
+      dout(20) << "applying CURLOPT_CONNECT_TO=" << endpoint.get_connect_to() << " for url=" << endpoint.get_url() << dendl;
+      curl_easy_setopt(easy_handle, CURLOPT_CONNECT_TO, req_data->connect_to_slist);
+    }
+  }
+
   curl_easy_setopt(easy_handle, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(easy_handle, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(easy_handle, CURLOPT_HEADERFUNCTION, receive_http_header);
