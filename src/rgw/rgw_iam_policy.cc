@@ -1223,7 +1223,7 @@ Effect Statement::eval(const Environment& e,
     }
   }
 
-  if (!(action[act] == 1) || (notaction[act] == 1)) {
+  if ((action.any() && !action[act]) || (notaction.any() && notaction[act])) {
     return Effect::Pass;
   }
 
