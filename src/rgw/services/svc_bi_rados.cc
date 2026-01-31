@@ -584,6 +584,15 @@ int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
       result->size += stats.total_size;
       result->size_rounded += stats.total_size_rounded;
     }
+    for(auto it = hiter->storage_class_stats.begin(); it != hiter->storage_class_stats.end(); ++it){
+      std::string storage_class = it->first;
+      struct rgw_bucket_category_stats& stats = it->second;
+      result->storage_class_ents[storage_class].count += stats.num_entries;
+      result->storage_class_ents[storage_class].size += stats.total_size;
+      result->storage_class_ents[storage_class].size_rounded += stats.total_size_rounded;
+      result->storage_class_ents[storage_class].bucket = result->bucket;
+    }
+
   }
 
   result->placement_rule = std::move(bucket_info.placement_rule);

@@ -23,8 +23,12 @@
 #include "rgw/rgw_user_types.h"
 #include "common/async/yield_context.h"
 #include "rgw_sal_fwd.h"
+#include "rgw_sc_quota_checker.h"
 
 struct rgw_bucket;
+
+// Global quota checker instance
+extern RGWStorageClassQuotaChecker* g_sc_quota_checker;
 
 class RGWQuotaHandler {
 public:
@@ -39,6 +43,20 @@ public:
 
   static RGWQuotaHandler *generate_handler(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, bool quota_threads);
   static void free_handler(RGWQuotaHandler *handler);
+  
+  int get_storage_class_quota_stats(
+    const DoutPrefixProvider* dpp,
+    const rgw_bucket& bucket,
+    const std::string& user_id,
+    RGWQuotaStats* stats,
+    optional_yield y);
+    
+  int get_storage_class_quota_stats(
+    const DoutPrefixProvider* dpp,
+    const rgw_bucket& bucket,
+    const std::string& user_id,
+    RGWQuotaStats* stats,
+    optional_yield y);
 };
 
 // apply default quotas from configuration

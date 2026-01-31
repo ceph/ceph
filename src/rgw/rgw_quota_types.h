@@ -19,6 +19,7 @@
  */
 
 #pragma once
+#include "rgw_sc_quota_types.h"
 
 static inline int64_t rgw_rounded_kb(int64_t bytes)
 {
@@ -35,6 +36,10 @@ struct RGWQuotaInfo {
    * or maybe rounded-to-4KiB RGWStorageStats::size_rounded (false)? */
   bool check_on_raw;
 
+  std::unordered_map<std::string, RGWStorageClassQuota> storage_class_quotas;
+  RGWQuotaEnforcementMode mode{RGWQuotaEnforcementMode::LEGACY};
+
+
   RGWQuotaInfo()
     : max_size(-1),
       max_objects(-1),
@@ -43,7 +48,7 @@ struct RGWQuotaInfo {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     if (max_size < 0) {
       encode(-rgw_rounded_kb(abs(max_size)), bl);
     } else {
@@ -53,10 +58,12 @@ struct RGWQuotaInfo {
     encode(enabled, bl);
     encode(max_size, bl);
     encode(check_on_raw, bl);
+    encode(storage_class_quotas, bl);
+    encode(mode, bl);                   
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 1, 1, bl);
     int64_t max_size_kb;
     decode(max_size_kb, bl);
     decode(max_objects, bl);
@@ -68,6 +75,10 @@ struct RGWQuotaInfo {
     }
     if (struct_v >= 3) {
       decode(check_on_raw, bl);
+    }
+    if (struct_v >= 4) {
+      decode(storage_class_quotas, bl);
+      decode(mode, bl);
     }
     DECODE_FINISH(bl);
   }

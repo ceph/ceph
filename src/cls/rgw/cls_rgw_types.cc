@@ -413,7 +413,8 @@ void rgw_cls_bi_entry::dump(Formatter *f) const
 
 bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
                                 RGWObjCategory *category,
-                                rgw_bucket_category_stats *accounted_stats) const
+                                rgw_bucket_category_stats *accounted_stats,
+                                string *storage_class) const
 {
   using ceph::decode;
   auto iter = data.cbegin();
@@ -433,6 +434,7 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
   rgw_bucket_dir_entry entry;
   decode(entry, iter);
   *key = entry.key;
+  *storage_class = entry.meta.storage_class;
   *category = entry.meta.category;
   accounted_stats->num_entries++;
   accounted_stats->total_size += entry.meta.accounted_size;

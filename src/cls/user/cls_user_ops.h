@@ -9,23 +9,28 @@
 struct cls_user_set_buckets_op {
   std::list<cls_user_bucket_entry> entries;
   bool add;
+  bool reset;
   ceph::real_time time; /* op time */
 
-  cls_user_set_buckets_op() : add(false) {}
+  cls_user_set_buckets_op() : add(false), reset(false) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(entries, bl);
     encode(add, bl);
     encode(time, bl);
+    encode(reset, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(entries, bl);
     decode(add, bl);
     decode(time, bl);
+    if (struct_v >= 2) {
+        decode(reset, bl);
+    }
     DECODE_FINISH(bl);
   }
 

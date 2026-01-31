@@ -169,6 +169,11 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   encode_json("group_ids", info.group_ids, f);
   if (stats) {
     encode_json("stats", *stats, f);
+    f->open_object_section("stats.storage-classes");
+    for(auto it = stats->storage_class_stats.begin(); it != stats->storage_class_stats.end(); ++it){
+      encode_json(it->first.c_str(), it->second, f);
+    }
+    f->close_section();
   }
   f->close_section();
 }
@@ -2321,7 +2326,7 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
   }
 
   if (op_state.sync_stats) {
-    ret = rgw_sync_all_stats(dpp, y, driver, owner, ruser->get_tenant());
+    ret = rgw_sync_all_stats(dpp, y, driver, owner, false, ruser->get_tenant());
     if (ret < 0) {
       return ret;
     }
