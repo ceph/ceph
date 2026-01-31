@@ -19,6 +19,12 @@ overrides:
       - is down
       - TELEMETRY_CHANGED
       - pg .*? is .*?degraded.*?, acting
+      - pg .* is stuck peering
+      - filesystem is degraded
+      - filesystem is offline
+      - osds down
+      - osd down
+      - OBJECT_UNFOUND
 tasks:
 - install:
     branch: squid

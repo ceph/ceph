@@ -25,6 +25,10 @@ overrides:
       - MDS_UP_LESS_THAN_MAX
       - filesystem is offline
       - with fewer MDS than max_mds
+      - filesystem is degraded
+      - osds down
+      - osd down
+      - OBJECT_UNFOUND
 tasks:
 - install:
     branch: reef
