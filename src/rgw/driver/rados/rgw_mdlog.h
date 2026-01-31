@@ -29,14 +29,6 @@
 class RGWSI_Cls;
 class RGWSI_Zone;
 
-struct RGWMetadataLogInfo {
-  std::string marker;
-  real_time last_update;
-
-  void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
-};
-
 class RGWCompletionManager;
 
 class RGWMetadataLogInfoCompletion : public RefCountedObject {
@@ -145,28 +137,6 @@ public:
 
   void read_clear_modified(std::set<int> &modified);
 };
-
-struct LogStatusDump {
-  RGWMDLogStatus status;
-
-  explicit LogStatusDump(RGWMDLogStatus _status) : status(_status) {}
-  void dump(Formatter *f) const;
-};
-
-struct RGWMetadataLogData {
-  obj_version read_version;
-  obj_version write_version;
-  RGWMDLogStatus status;
-
-  RGWMetadataLogData() : status(MDLOG_STATUS_UNKNOWN) {}
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
-  static std::list<RGWMetadataLogData> generate_test_instances();
-};
-WRITE_CLASS_ENCODER(RGWMetadataLogData)
 
 struct RGWMetadataLogHistory {
   epoch_t oldest_realm_epoch;

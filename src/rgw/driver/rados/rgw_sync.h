@@ -20,49 +20,6 @@
 #define ERROR_LOGGER_SHARDS 32
 #define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"
 
-struct rgw_mdlog_info {
-  uint32_t num_shards;
-  std::string period; //< period id of the master's oldest metadata log
-  epoch_t realm_epoch; //< realm epoch of oldest metadata log
-
-  rgw_mdlog_info() : num_shards(0), realm_epoch(0) {}
-
-  void decode_json(JSONObj *obj);
-};
-
-
-struct rgw_mdlog_entry {
-  std::string id;
-  std::string section;
-  std::string name;
-  ceph::real_time timestamp;
-  RGWMetadataLogData log_data;
-
-  void decode_json(JSONObj *obj);
-
-  bool convert_from(cls::log::entry& le) {
-    id = le.id;
-    section = le.section;
-    name = le.name;
-    timestamp = le.timestamp;
-    try {
-      auto iter = le.data.cbegin();
-      decode(log_data, iter);
-    } catch (buffer::error& err) {
-      return false;
-    }
-    return true;
-  }
-};
-
-struct rgw_mdlog_shard_data {
-  std::string marker;
-  bool truncated;
-  std::vector<rgw_mdlog_entry> entries;
-
-  void decode_json(JSONObj *obj);
-};
-
 class RGWAsyncRadosProcessor;
 class RGWMetaSyncStatusManager;
 class RGWMetaSyncCR;
