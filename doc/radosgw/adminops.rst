@@ -2683,7 +2683,7 @@ Quotas
 ======
 
 The Admin Operations API enables you to set quotas on users and on buckets owned
-by users, and on accounts and on buckets owned by accounts. See `Quota Management`_
+by users, and on accounts and on buckets owned by accounts. See :ref:`radosgw-quota-management`
 for additional details. Quotas include the maximum number of objects in a bucket 
 and the maximum storage size in megabytes.
 
@@ -2692,7 +2692,7 @@ modify or disable a quota, the user must have ``users=write`` capability.
 
 To view quotas for accounts, the user must have a ``accounts=read`` capability. To set,
 modify or disable a quota, the user must have ``accounts=write`` capability.
-See the `Admin Guide`_ for details.
+See the :ref:`radosgw-admin-guide` for details.
 
 Valid parameters for quotas include:
 
@@ -2788,13 +2788,13 @@ permission. ::
 Rate Limit
 ==========
 
-The Admin Operations API enables you to set and get ratelimit configurations on users and on bucket and global rate limit configurations. See `Rate Limit Management`_ for additional details.
+The Admin Operations API enables you to set and get ratelimit configurations on users and on bucket and global rate limit configurations. See :ref:`radosgw-rate-limit-management` for additional details.
 Rate Limit includes the maximum number of operations and/or bytes per accumulation interval, separated by read and/or write (Additionally list and get operations),
 to a bucket and/or by a user and the maximum storage size in megabytes.
 
 To view rate limit, the user must have a ``ratelimit=read`` capability. To set,
 modify or disable a ratelimit, the user must have ``ratelimit=write`` capability.
-See the `Admin Guide`_ for details.
+See the :ref:`radosgw-admin-guide` for details.
 
 Valid parameters for quotas include:
 
@@ -2966,12 +2966,7 @@ Binding libraries
 
 
 
-.. _Admin Guide: ../admin
-.. _Quota Management: ../admin#quota-management
-.. _IrekFasikhov/go-rgwadmin: https://github.com/IrekFasikhov/go-rgwadmin
-.. _QuentinPerez/go-radosgw: https://github.com/QuentinPerez/go-radosgw
 .. _ceph/go-ceph: https://github.com/ceph/go-ceph/
-.. _Rate Limit Management: ../admin#rate-limit-management
 .. _IrekFasikhov/go-rgwadmin: https://github.com/IrekFasikhov/go-rgwadmin
 .. _QuentinPerez/go-radosgw: https://github.com/QuentinPerez/go-radosgw
 .. _twonote/radosgw-admin4j: https://github.com/twonote/radosgw-admin4j
