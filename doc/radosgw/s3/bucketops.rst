@@ -288,6 +288,8 @@ Request Entities
 | ``Permission``            | String      | The permission given to the ``Grantee`` bucket.                                              |
 +---------------------------+-------------+----------------------------------------------------------------------------------------------+
 
+.. note:: For accounts users, the ``Owner`` and ``ID`` in ``AccessControlPolicy`` may be set to either the legacy user ID or the new account ID. Both are accepted for backward compatibility.
+
 List Bucket Multipart Uploads
 -----------------------------
 
