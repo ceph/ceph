@@ -53,6 +53,10 @@ endif
 
 ifeq ($(DWZ), false)
 override_dh_dwz:
+else
+override_dh_dwz:
+	# Exclude ceph-osd-crimson due to excessive debug info (too many DIEs)
+	dh_dwz -Xceph-osd-crimson
 endif
 
 # for python3-${pkg} packages
