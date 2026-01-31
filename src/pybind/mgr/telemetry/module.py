@@ -73,6 +73,7 @@ class Collection(str, enum.Enum):
     basic_pool_options_bluestore = 'basic_pool_options_bluestore'
     basic_pool_flags = 'basic_pool_flags'
     basic_stretch_cluster = 'basic_stretch_cluster'
+    basic_mgr_modules_list = 'basic_mgr_modules_list'
 
 MODULE_COLLECTION : List[Dict] = [
     {
@@ -150,6 +151,12 @@ MODULE_COLLECTION : List[Dict] = [
     {
         "name": Collection.basic_stretch_cluster,
         "description": "Stretch mode information for stretch clusters",
+        "channel": "basic",
+        "nag": False
+    },
+    {
+        "name": Collection.basic_mgr_modules_list,
+        "description": "The always_on_modules, force_disabled_modules and enabled_modules of mgr",
         "channel": "basic",
         "nag": False
     },
@@ -1031,6 +1038,7 @@ class Module(MgrModule):
         if 'basic' in channels:
             mon_map = self.get('mon_map')
             osd_map = self.get('osd_map')
+            mgr_map = self.get('mgr_map')
             service_map = self.get('service_map')
             fs_map = self.get('fs_map')
             df = self.get('df')
@@ -1351,6 +1359,17 @@ class Module(MgrModule):
                     'recovering_stretch_mode': stretch_mode.get("recovering_stretch_mode", {}),
                     'stretch_mode_bucket': stretch_mode.get("stretch_mode_bucket", {}),
                 }
+            
+            # MGR Modules
+            if self.is_enabled_collection(Collection.basic_mgr_modules_list):
+                always_on_modules_all_releases = mgr_map.get("always_on_modules", {})
+                always_on_modules = always_on_modules_all_releases.get(self.release_name, {})
+                force_disabled_modules = mgr_map.get("force_disabled_modules", {})
+                enabled_modules = mgr_map.get("modules", {})
+
+                report['always_on_modules'] = always_on_modules
+                report['force_disabled_modules'] = force_disabled_modules
+                report['enabled_modules'] = enabled_modules
 
         if 'crash' in channels:
             report['crashes'] = self.gather_crashinfo()
