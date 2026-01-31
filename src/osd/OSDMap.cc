@@ -7842,6 +7842,55 @@ void OSDMap::check_health(CephContext *cct,
     }
   }
 
+  // POOL_MIN_SIZE_TOO_LOW
+  if (cct->_conf.get_val<bool>("mon_warn_on_pool_min_size_too_low"))
+  {
+    list<string> detail;
+    for (auto it : get_pools()) {
+      pg_pool_t pool = it.second;
+      auto min_size = pool.get_min_size(); // Minimum number of osds per pg
+      
+      if (pool.is_erasure()) {
+        auto& ecp = 
+        get_erasure_code_profile(pool.erasure_code_profile);
+        auto pk = ecp.find("k");
+        unsigned int k;
+        if (pk != ecp.end()) {
+          k = atoi(pk->second.c_str());
+        } else {
+          k = 1;
+        }
+
+        if (min_size < k + 1) {
+          ostringstream ss;
+          ss << "pool '" << get_pool_name(it.first)
+          << "' has 'min_size' of " << min_size 
+          << "with k = " << k << ". 'min_size' >= k+1 recommended for erasure pools";
+          detail.push_back(ss.str());
+        }
+      } else if (pool.is_replicated()) {
+        if (min_size <= 1) {
+          ostringstream ss;
+          ss << "pool '" << get_pool_name(it.first)
+          << "' has 'min_size' of " << min_size 
+          << ". 'min_size' > 1 recommended for replica pools";
+          detail.push_back(ss.str());
+        }
+      } else {
+        ceph_abort_msg("unhandled pool type");
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " pool(s) have too low minimum osds per pg";
+      auto& d = checks->add("POOL_MIN_SIZE_TOO_LOW", HEALTH_WARN,
+        ss.str(), detail.size());
+      string tip = "use 'ceph osd pool set <pool-name> min_size <min-size>'";
+      detail.push_back(tip);
+      d.detail.swap(detail);
+    }
+  }
+
   // DEGRADED STRETCH MODE
   if (cct->_conf.get_val<bool>("mon_warn_on_degraded_stretch_mode")) {
     if (recovering_stretch_mode) {
