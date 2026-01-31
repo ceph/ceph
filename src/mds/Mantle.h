@@ -30,11 +30,14 @@
 class Mantle {
   public:
     Mantle();
-    ~Mantle() { if (L) lua_close(L); }
-    int balance(std::string_view script,
-                mds_rank_t whoami,
-                const std::vector <std::map<std::string, double>> &metrics,
-                std::map<mds_rank_t,double> &my_targets);
+    ~Mantle() { if (L) lua_close(L);
+    }
+
+    int balance(
+        const std::string& script,
+        mds_rank_t whoami,
+        const std::vector<std::map<std::string, double>>& metrics,
+        std::map<mds_rank_t, double>& my_targets);
 
   protected:
     lua_State *L;
