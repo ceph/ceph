@@ -32,7 +32,7 @@ Request Parameters
 
 ``ThumbprintList.member.N``
 
-:Description: List of OpenID Connect IDP's server certificates' thumbprints. A maximum of 5 thumbprints are allowed.
+:Description: List of OpenID Connect IDP's server certificates' thumbprints. A maximum of 10 thumbprints are allowed.
 :Type: Array of Strings
 
 ``Url``
@@ -164,7 +164,7 @@ Request Parameters
 
 ``ThumbprintList.member.N``
 
-:Description: List of OpenID Connect IDP's server certificates' thumbprints. A maximum of 5 thumbprints are allowed.
+:Description: List of OpenID Connect IDP's server certificates' thumbprints. A maximum of 10 thumbprints are allowed.
 :Type: Array of Strings
 
 Example::

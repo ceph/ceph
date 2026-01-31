@@ -67,7 +67,7 @@ RGWCreateOIDCProvider::RGWCreateOIDCProvider()
 
 inline constexpr int MAX_OIDC_NUM_CLIENT_IDS = 100;
 inline constexpr int MAX_OIDC_CLIENT_ID_LEN = 255;
-inline constexpr int MAX_OIDC_NUM_THUMBPRINTS = 5;
+inline constexpr int MAX_OIDC_NUM_THUMBPRINTS = 10;
 inline constexpr int MAX_OIDC_THUMBPRINT_LEN = 40;
 inline constexpr int MAX_OIDC_URL_LEN = 255;
 
