@@ -5,6 +5,10 @@ import fnmatch
 import inspect
 import json
 import logging
+import os
+import ssl
+import sys
+import tempfile
 import threading
 import time
 import urllib
@@ -12,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 import cherrypy
 from ceph.utils import strtobool
-from mgr_util import build_url
+from mgr_util import build_url, verify_tls_files
 
 from . import mgr
 from .exceptions import ViewCacheNoDataException
@@ -24,6 +28,10 @@ try:
         Optional, Set, Tuple, Union
 except ImportError:
     pass  # For typing only
+
+
+_cert_tmp = None
+_key_tmp = None
 
 
 class RequestLoggingTool(cherrypy.Tool):
@@ -907,3 +915,67 @@ def cors_tool():
         if cherrypy.request.config.get('tools.sessions.on', False):
             cherrypy.session['token'] = True
         return True
+
+
+def configure_ssl_certs(restart_engine=False):
+    logger = logging.getLogger('dashboard.tools.ssl')
+    global _cert_tmp, _key_tmp
+
+    if _cert_tmp and os.path.exists(_cert_tmp):
+        os.remove(_cert_tmp)
+    if _key_tmp and os.path.exists(_key_tmp):
+        os.remove(_key_tmp)
+
+    # SSL initialization
+    config = {}
+    cert = mgr.get_localized_store("crt")  # type: ignore
+    if cert is not None:
+        cert_tmp = tempfile.NamedTemporaryFile(delete=False)
+        cert_tmp.write(cert.encode('utf-8'))
+        cert_tmp.close()
+        _cert_tmp = cert_tmp.name
+    else:
+        _cert_tmp = mgr.get_localized_module_option('crt_file')  # type: ignore
+
+    pkey = mgr.get_localized_store("key")  # type: ignore
+    if pkey is not None:
+        key_tmp = tempfile.NamedTemporaryFile(delete=False)
+        key_tmp.write(pkey.encode('utf-8'))
+        key_tmp.close()
+        _key_tmp = key_tmp.name
+    else:
+        _key_tmp = mgr.get_localized_module_option('key_file')  # type: ignore
+
+    verify_tls_files(_cert_tmp, _key_tmp)
+    # Create custom SSL context to disable TLS 1.0 and 1.1.
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    context.load_cert_chain(_cert_tmp, _key_tmp)
+    if sys.version_info >= (3, 7):
+        context.minimum_version = ssl.TLSVersion.TLSv1_3
+    else:
+        context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1 | ssl.OP_NO_TLSv1_2
+
+    config['server.ssl_module'] = 'builtin'
+    config['server.ssl_certificate'] = _cert_tmp
+    config['server.ssl_private_key'] = _key_tmp
+    config['server.ssl_context'] = context
+
+    cherrypy.config.update(config)
+
+    # trying to restart the ssl adapter without restarting
+    # the engine. this is to avoid dropping connections.
+    # incase it fails we fallback to restarting the engine.
+    if restart_engine:
+        try:
+            httpserver = cherrypy.server.httpserver
+
+            if hasattr(httpserver, 'ssl_adapter') and httpserver.ssl_adapter:
+                httpserver.ssl_adapter.context = context
+                httpserver.ssl_adapter.certificate = _cert_tmp
+                httpserver.ssl_adapter.private_key = _key_tmp
+            else:
+                cherrypy.engine.restart()
+
+        except Exception as e:
+            logger.error(f"Restarting SSL adapter failed: {e}. Restarting engine.")
+            cherrypy.engine.restart()

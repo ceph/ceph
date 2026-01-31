@@ -7,9 +7,7 @@ import errno
 import logging
 import os
 import socket
-import ssl
 import sys
-import tempfile
 import threading
 import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -26,8 +24,7 @@ if TYPE_CHECKING:
 from ceph.cryptotools.select import choose_crypto_caller
 from mgr_module import CLIReadCommand, CLIWriteCommand, HandleCommandResult, \
     MgrModule, MgrStandbyModule, NotifyType, Option, _get_localized_key
-from mgr_util import ServerConfigException, build_url, \
-    create_self_signed_cert, get_default_addr, verify_tls_files
+from mgr_util import ServerConfigException, build_url, create_self_signed_cert, get_default_addr
 
 from . import mgr
 from .controllers import nvmeof  # noqa # pylint: disable=unused-import
@@ -40,7 +37,7 @@ from .services.service import RgwServiceManager
 from .services.sso import SSO_COMMANDS, handle_sso_command
 from .settings import handle_option_command, options_command_list, options_schema_list
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
-    configure_cors, prepare_url_prefix, str_to_bool
+    configure_cors, configure_ssl_certs, prepare_url_prefix, str_to_bool
 
 try:
     import cherrypy
@@ -155,39 +152,7 @@ class CherryPyConfig(object):
         }
 
         if use_ssl:
-            # SSL initialization
-            cert = self.get_localized_store("crt")  # type: ignore
-            if cert is not None:
-                self.cert_tmp = tempfile.NamedTemporaryFile()
-                self.cert_tmp.write(cert.encode('utf-8'))
-                self.cert_tmp.flush()  # cert_tmp must not be gc'ed
-                cert_fname = self.cert_tmp.name
-            else:
-                cert_fname = self.get_localized_module_option('crt_file')  # type: ignore
-
-            pkey = self.get_localized_store("key")  # type: ignore
-            if pkey is not None:
-                self.pkey_tmp = tempfile.NamedTemporaryFile()
-                self.pkey_tmp.write(pkey.encode('utf-8'))
-                self.pkey_tmp.flush()  # pkey_tmp must not be gc'ed
-                pkey_fname = self.pkey_tmp.name
-            else:
-                pkey_fname = self.get_localized_module_option('key_file')  # type: ignore
-
-            verify_tls_files(cert_fname, pkey_fname)
-
-            # Create custom SSL context to disable TLS 1.0 and 1.1.
-            context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            context.load_cert_chain(cert_fname, pkey_fname)
-            if sys.version_info >= (3, 7):
-                context.minimum_version = ssl.TLSVersion.TLSv1_3
-            else:
-                context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1 | ssl.OP_NO_TLSv1_2
-
-            config['server.ssl_module'] = 'builtin'
-            config['server.ssl_certificate'] = cert_fname
-            config['server.ssl_private_key'] = pkey_fname
-            config['server.ssl_context'] = context
+            configure_ssl_certs()
 
         self.update_cherrypy_config(config)
 
@@ -501,6 +466,11 @@ class Module(MgrModule, CherryPyConfig):
         self.set_module_option('cross_origin_url', ','.join(cross_origin_urls_list))
         configure_cors()
         return 0, 'Cross-origin URL set', ''
+
+    @CLIWriteCommand("dashboard refresh-ssl-certificates")
+    def refresh_ssl_certificates(self):
+        configure_ssl_certs(restart_engine=True)
+        return 0, 'SSL certificates refreshed', ''
 
     @CLIReadCommand("dashboard get-cross-origin-url")
     def get_cross_origin_url(self):
