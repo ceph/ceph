@@ -572,6 +572,15 @@ void librados::ObjectWriteOperation::omap_rm_keys(
   o->omap_rm_keys(to_rm);
 }
 
+void librados::ObjectWriteOperation::omap_rm_range(
+  const std::string &start, 
+  const std::string &end) 
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->omap_rm_range(start, end);
+}
+
 void librados::ObjectWriteOperation::copy_from(const std::string& src,
 					       const IoCtx& src_ioctx,
 					       uint64_t src_version,
@@ -1514,6 +1523,15 @@ int librados::IoCtx::omap_rm_keys(const std::string& oid,
 {
   ObjectWriteOperation op;
   op.omap_rm_keys(keys);
+  return operate(oid, &op);
+}
+
+int librados::IoCtx::omap_rm_range(const std::string& oid,
+                                   const std::string &start,
+                                   const std::string &end)
+{
+  ObjectWriteOperation op;
+  op.omap_rm_range(start, end);
   return operate(oid, &op);
 }
 

@@ -507,7 +507,7 @@ TEST_F(LibRadosIoPP, CrcZeroWrite) {
   ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
 }
 
-TEST_F(LibRadosIoECPP, SimpleWritePP) {
+TEST_P(LibRadosIoECPP, SimpleWritePP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -518,7 +518,7 @@ TEST_F(LibRadosIoECPP, SimpleWritePP) {
   ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
 }
 
-TEST_F(LibRadosIoECPP, ReadOpPP) {
+TEST_P(LibRadosIoECPP, ReadOpPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -665,7 +665,7 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
   }
 }
 
-TEST_F(LibRadosIoECPP, SparseReadOpPP) {
+TEST_P(LibRadosIoECPP, SparseReadOpPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -685,7 +685,7 @@ TEST_F(LibRadosIoECPP, SparseReadOpPP) {
   }
 }
 
-TEST_F(LibRadosIoECPP, RoundTripPP) {
+TEST_P(LibRadosIoECPP, RoundTripPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   Rados cluster;
@@ -698,7 +698,7 @@ TEST_F(LibRadosIoECPP, RoundTripPP) {
   ASSERT_EQ(0, memcmp(buf, cl.c_str(), sizeof(buf)));
 }
 
-TEST_F(LibRadosIoECPP, RoundTripPP2)
+TEST_P(LibRadosIoECPP, RoundTripPP2)
 {
   SKIP_IF_CRIMSON();
   bufferlist bl;
@@ -715,7 +715,7 @@ TEST_F(LibRadosIoECPP, RoundTripPP2)
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
-TEST_F(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
+TEST_P(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
   SKIP_IF_CRIMSON();
   int bsize = alignment;
   int dbsize = bsize * 2;
@@ -740,7 +740,7 @@ TEST_F(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
   ASSERT_EQ(0, memcmp(bl3.c_str(), buf, dbsize));
 }
 
-TEST_F(LibRadosIoECPP, WriteFullRoundTripPP) {
+TEST_P(LibRadosIoECPP, WriteFullRoundTripPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   char buf2[64];
@@ -757,7 +757,7 @@ TEST_F(LibRadosIoECPP, WriteFullRoundTripPP) {
   ASSERT_EQ(0, memcmp(bl3.c_str(), buf2, sizeof(buf2)));
 }
 
-TEST_F(LibRadosIoECPP, WriteFullRoundTripPP2)
+TEST_P(LibRadosIoECPP, WriteFullRoundTripPP2)
 {
   SKIP_IF_CRIMSON();
   bufferlist bl;
@@ -774,7 +774,7 @@ TEST_F(LibRadosIoECPP, WriteFullRoundTripPP2)
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
-TEST_F(LibRadosIoECPP, AppendRoundTripPP) {
+TEST_P(LibRadosIoECPP, AppendRoundTripPP) {
   SKIP_IF_CRIMSON();
   char *buf = (char *)new char[alignment];
   char *buf2 = (char *)new char[alignment];
@@ -799,7 +799,7 @@ TEST_F(LibRadosIoECPP, AppendRoundTripPP) {
   ASSERT_EQ(0, memcmp(bl3_str + alignment, buf2, alignment));
 }
 
-TEST_F(LibRadosIoECPP, TruncTestPP) {
+TEST_P(LibRadosIoECPP, TruncTestPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xaa, sizeof(buf));
@@ -814,7 +814,7 @@ TEST_F(LibRadosIoECPP, TruncTestPP) {
   ASSERT_EQ(0, memcmp(bl2.c_str(), buf, sizeof(buf)));
 }
 
-TEST_F(LibRadosIoECPP, RemoveTestPP) {
+TEST_P(LibRadosIoECPP, RemoveTestPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xaa, sizeof(buf));
@@ -826,7 +826,7 @@ TEST_F(LibRadosIoECPP, RemoveTestPP) {
   ASSERT_EQ(-ENOENT, ioctx.read("foo", bl2, sizeof(buf), 0));
 }
 
-TEST_F(LibRadosIoECPP, XattrsRoundTripPP) {
+TEST_P(LibRadosIoECPP, XattrsRoundTripPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   char attr1[] = "attr1";
@@ -846,7 +846,7 @@ TEST_F(LibRadosIoECPP, XattrsRoundTripPP) {
   ASSERT_EQ(0, memcmp(bl4.c_str(), attr1_buf, sizeof(attr1_buf)));
 }
 
-TEST_F(LibRadosIoECPP, RmXattrPP) {
+TEST_P(LibRadosIoECPP, RmXattrPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   char attr1[] = "attr1";
@@ -877,7 +877,7 @@ TEST_F(LibRadosIoECPP, RmXattrPP) {
   ASSERT_EQ(-ENOENT, ioctx.rmxattr("foo_rmxattr", attr2));
 }
 
-TEST_F(LibRadosIoECPP, CrcZeroWrite) {
+TEST_P(LibRadosIoECPP, CrcZeroWrite) {
   SKIP_IF_CRIMSON();
   set_allow_ec_overwrites();
   char buf[128];
@@ -893,7 +893,7 @@ TEST_F(LibRadosIoECPP, CrcZeroWrite) {
   ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
 }
 
-TEST_F(LibRadosIoECPP, XattrListPP) {
+TEST_P(LibRadosIoECPP, XattrListPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   char attr1[] = "attr1";
@@ -986,7 +986,7 @@ TEST_F(LibRadosIoPP, CmpExtMismatchPP) {
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
-TEST_F(LibRadosIoECPP, CmpExtPP) {
+TEST_P(LibRadosIoECPP, CmpExtPP) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append("ceph");
@@ -1007,7 +1007,7 @@ TEST_F(LibRadosIoECPP, CmpExtPP) {
   ASSERT_EQ(0, memcmp(bl.c_str(), "CEPH", 4));
 }
 
-TEST_F(LibRadosIoECPP, CmpExtDNEPP) {
+TEST_P(LibRadosIoECPP, CmpExtDNEPP) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append(std::string(4, '\0'));
@@ -1025,7 +1025,7 @@ TEST_F(LibRadosIoECPP, CmpExtDNEPP) {
   ASSERT_EQ(0, memcmp(bl.c_str(), "CEPH", 4));
 }
 
-TEST_F(LibRadosIoECPP, CmpExtMismatchPP) {
+TEST_P(LibRadosIoECPP, CmpExtMismatchPP) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append("ceph");
@@ -1045,3 +1045,5 @@ TEST_F(LibRadosIoECPP, CmpExtMismatchPP) {
   ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
+
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosIoECPP);

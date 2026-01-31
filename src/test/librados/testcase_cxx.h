@@ -5,6 +5,9 @@
 
 #include "gtest/gtest.h"
 #include "include/rados/librados.hpp"
+#include "common/json/OSDStructures.h"
+
+using namespace std::literals::string_view_literals;
 
 class RadosTestPPNS : public ::testing::Test {
 public:
@@ -69,21 +72,28 @@ struct RadosTestECPPNSCleanup : public RadosTestECPPNS {
   RadosTestECPPNSCleanup() : RadosTestECPPNS(true) {}
 };
 
-class RadosTestPP : public ::testing::Test {
+class RadosTestPPBase {
 public:
-  RadosTestPP(bool c=false) : cluster(s_cluster), cleanup(c) {}
+  RadosTestPPBase() : cluster(s_cluster) {};
+  ~RadosTestPPBase() = default;
+protected:
+  static librados::Rados s_cluster;
+  librados::Rados &cluster;
+  static void cleanup_default_namespace(librados::IoCtx ioctx);
+  static void cleanup_namespace(librados::IoCtx ioctx, std::string ns);
+};
+
+class RadosTestPP : public RadosTestPPBase, public ::testing::Test {
+public:
+  RadosTestPP(bool c=false) : cleanup(c) {}
   ~RadosTestPP() override {}
 protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
-  static void cleanup_default_namespace(librados::IoCtx ioctx);
-  static void cleanup_namespace(librados::IoCtx ioctx, std::string ns);
-  static librados::Rados s_cluster;
   static std::string pool_name;
 
   void SetUp() override;
   void TearDown() override;
-  librados::Rados &cluster;
   librados::IoCtx ioctx;
   bool cleanup;
   std::string nspace;
@@ -110,7 +120,8 @@ protected:
   std::string nspace;
 };
 
-class RadosTestECPP : public RadosTestPP {
+class RadosTestECPP : public RadosTestPPBase,
+                      public ::testing::TestWithParam<bool> {
   bool ec_overwrites_set = false;
 public:
   RadosTestECPP(bool c=false) : cluster(s_cluster), cleanup(c) {}
@@ -118,10 +129,57 @@ public:
 protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
-  void set_allow_ec_overwrites();
   static librados::Rados s_cluster;
-  static std::string pool_name;
+  void set_allow_ec_overwrites();
+  std::vector<int> get_osd_ids();
+  void turn_balancing_off();
+  void turn_balancing_on();
+  void freeze_omap_journal();
+  void unfreeze_omap_journal();
+  void write_omap_keys(
+    std::string oid, 
+    int min_index, 
+    int max_index, 
+    std::set<std::string> &keys_written
+  );
+  void read_omap_keys(
+    std::string oid, 
+    std::set<std::string> &keys_read,
+    int max_keys = -1
+  );
+  int request_osd_map(
+    std::string oid,
+    ceph::messaging::osd::OSDMapReply* reply
+  );
+  int set_osd_upmap(
+    std::string pgid,
+    std::vector<int> up_osds
+  );
+  int wait_for_upmap(
+    std::string oid,
+    int desired_primary,
+    std::chrono::seconds timeout
+  );
+  void check_xattr_read(
+    std::string oid,
+    std::string xattr_key,
+    std::string xattr_value,
+    int expected_size,
+    int expected_ret,
+    int expected_err
+  );
+  void check_omap_read(
+    std::string oid,
+    std::string omap_key,
+    std::string omap_value,
+    int expected_size,
+    int expected_err
+  );
+  void print_osd_map(std::string message, std::vector<int> osd_vec);
+  static std::string pool_name_default;
+  static std::string pool_name_fast;
 
+  std::string pool_name;
   void SetUp() override;
   void TearDown() override;
   librados::Rados &cluster;

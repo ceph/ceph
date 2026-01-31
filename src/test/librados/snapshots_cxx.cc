@@ -592,7 +592,7 @@ TEST(LibRadosPoolIsInSelfmanagedSnapsMode, FreshInstance) {
 }
 
 // EC testing
-TEST_F(LibRadosSnapshotsECPP, SnapListPP) {
+TEST_P(LibRadosSnapshotsECPP, SnapListPP) {
   SKIP_IF_CRIMSON();
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
@@ -609,7 +609,7 @@ TEST_F(LibRadosSnapshotsECPP, SnapListPP) {
   EXPECT_EQ(0, ioctx.snap_remove("snap1"));
 }
 
-TEST_F(LibRadosSnapshotsECPP, SnapRemovePP) {
+TEST_P(LibRadosSnapshotsECPP, SnapRemovePP) {
   SKIP_IF_CRIMSON();
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
@@ -623,7 +623,7 @@ TEST_F(LibRadosSnapshotsECPP, SnapRemovePP) {
   ASSERT_EQ(-ENOENT, ioctx.snap_lookup("snap1", &rid));
 }
 
-TEST_F(LibRadosSnapshotsECPP, RollbackPP) {
+TEST_P(LibRadosSnapshotsECPP, RollbackPP) {
   SKIP_IF_CRIMSON();
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
@@ -643,7 +643,7 @@ TEST_F(LibRadosSnapshotsECPP, RollbackPP) {
   EXPECT_EQ(0, ioctx.snap_remove("snap1"));
 }
 
-TEST_F(LibRadosSnapshotsECPP, SnapGetNamePP) {
+TEST_P(LibRadosSnapshotsECPP, SnapGetNamePP) {
   SKIP_IF_CRIMSON();
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
@@ -662,7 +662,7 @@ TEST_F(LibRadosSnapshotsECPP, SnapGetNamePP) {
   EXPECT_EQ(0, ioctx.snap_remove("snapfoo"));
 }
 
-TEST_F(LibRadosSnapshotsSelfManagedECPP, SnapPP) {
+TEST_P(LibRadosSnapshotsSelfManagedECPP, SnapPP) {
   SKIP_IF_CRIMSON();
   std::vector<uint64_t> my_snaps;
   my_snaps.push_back(-2);
@@ -710,7 +710,7 @@ TEST_F(LibRadosSnapshotsSelfManagedECPP, SnapPP) {
   delete[] buf2;
 }
 
-TEST_F(LibRadosSnapshotsSelfManagedECPP, RollbackPP) {
+TEST_P(LibRadosSnapshotsSelfManagedECPP, RollbackPP) {
   SKIP_IF_CRIMSON();
   std::vector<uint64_t> my_snaps;
   IoCtx readioctx;
@@ -797,7 +797,7 @@ TEST_F(LibRadosSnapshotsSelfManagedECPP, RollbackPP) {
   delete[] buf2;
 }
 
-TEST_F(LibRadosSnapshotsSelfManagedECPP, Bug11677) {
+TEST_P(LibRadosSnapshotsSelfManagedECPP, Bug11677) {
   SKIP_IF_CRIMSON();
   std::vector<uint64_t> my_snaps;
   my_snaps.push_back(-2);
@@ -831,3 +831,6 @@ TEST_F(LibRadosSnapshotsSelfManagedECPP, Bug11677) {
   ioctx.snap_set_read(LIBRADOS_SNAP_HEAD);
   delete[] buf;
 }
+
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosSnapshotsECPP);
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosSnapshotsSelfManagedECPP);
