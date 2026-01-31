@@ -11230,6 +11230,83 @@ TEST_F(TestLibRBD, FlushCacheWithCopyupOnExternalSnapshot) {
   read_comp->release();
 }
 
+static void test_write_exclusive_lock(rbd_image_t image1, rbd_image_t image2,
+                                      char* buf, size_t buf_len) {
+  int lock_owner;
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(buf_len, rbd_write(image1, 0, buf_len, buf));
+
+  rbd_completion_t write_comp;
+  rbd_aio_create_completion(NULL, NULL, &write_comp);
+  ASSERT_EQ(0, rbd_aio_write(image2, 0, buf_len, buf, write_comp));
+
+  rbd_completion_t flush_comp;
+  rbd_aio_create_completion(NULL, NULL, &flush_comp);
+  ASSERT_EQ(0, rbd_aio_flush(image2, flush_comp));
+
+  for (int i = 0; i < 10 && !rbd_aio_is_complete(write_comp); i++) {
+    usleep(5 * 1000);
+  }
+  ASSERT_TRUE(rbd_aio_is_complete(write_comp));
+  ASSERT_EQ(-EROFS, rbd_aio_get_return_value(write_comp));
+  rbd_aio_release(write_comp);
+
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(flush_comp));
+  ASSERT_EQ(-EROFS, rbd_aio_get_return_value(flush_comp));
+  rbd_aio_release(flush_comp);
+
+  ASSERT_EQ(0, rbd_lock_release(image1));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(buf_len, rbd_write(image2, 0, buf_len, buf));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+}
+
+static void test_write_exclusive_lock_transient(rbd_image_t image1,
+                                                rbd_image_t image2,
+                                                char* buf, size_t buf_len) {
+  int lock_owner;
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(buf_len, rbd_write(image1, 0, buf_len, buf));
+
+  rbd_completion_t write_comp;
+  rbd_aio_create_completion(NULL, NULL, &write_comp);
+  ASSERT_EQ(0, rbd_aio_write(image2, 0, buf_len, buf, write_comp));
+
+  rbd_completion_t flush_comp;
+  rbd_aio_create_completion(NULL, NULL, &flush_comp);
+  ASSERT_EQ(0, rbd_aio_flush(image2, flush_comp));
+
+  for (int i = 0; i < 10 && !rbd_aio_is_complete(write_comp); i++) {
+    usleep(500 * 1000);
+  }
+  ASSERT_FALSE(rbd_aio_is_complete(write_comp));
+  ASSERT_FALSE(rbd_aio_is_complete(flush_comp));
+
+  ASSERT_EQ(0, rbd_lock_release(image1));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(write_comp));
+  ASSERT_EQ(0, rbd_aio_get_return_value(write_comp));
+  rbd_aio_release(write_comp);
+
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(flush_comp));
+  ASSERT_EQ(0, rbd_aio_get_return_value(flush_comp));
+  rbd_aio_release(flush_comp);
+
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+}
+
 TEST_F(TestLibRBD, ExclusiveLock)
 {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
@@ -11252,6 +11329,8 @@ TEST_F(TestLibRBD, ExclusiveLock)
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
   ASSERT_TRUE(lock_owner);
 
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image1, 0, sizeof(buf), buf));
+
   rbd_lock_mode_t lock_mode;
   char *lock_owners[1];
   size_t max_lock_owners = 0;
@@ -11267,11 +11346,12 @@ TEST_F(TestLibRBD, ExclusiveLock)
 
   rbd_image_t image2;
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image2, NULL));
-
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
   ASSERT_FALSE(lock_owner);
 
   ASSERT_EQ(-EOPNOTSUPP, rbd_lock_break(image1, RBD_LOCK_MODE_SHARED, ""));
+  ASSERT_EQ(-EOPNOTSUPP,
+            rbd_lock_break(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT, ""));
   ASSERT_EQ(-EBUSY, rbd_lock_break(image1, RBD_LOCK_MODE_EXCLUSIVE,
                                    "not the owner"));
 
@@ -11283,16 +11363,41 @@ TEST_F(TestLibRBD, ExclusiveLock)
                                     lock_owners[0]));
   rbd_lock_get_owners_cleanup(lock_owners, max_lock_owners);
 
+  // lock isn't held by anyone, image2 acquires automatically
   ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
   ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  test_write_exclusive_lock(image1, image2, buf, sizeof(buf));
+  test_write_exclusive_lock_transient(image1, image2, buf, sizeof(buf));
+
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  // EXCLUSIVE_TRANSIENT -> EXCLUSIVE without unlocking
+  test_write_exclusive_lock(image1, image2, buf, sizeof(buf));
+
+  // lock is held by image2
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
 
   ASSERT_EQ(0, rbd_lock_acquire(image2, RBD_LOCK_MODE_EXCLUSIVE));
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
   ASSERT_TRUE(lock_owner);
 
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));
+
   ASSERT_EQ(0, rbd_lock_release(image2));
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
   ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ(-EROFS, rbd_write(image2, 0, sizeof(buf), buf));
 
   ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE));
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
@@ -11366,6 +11471,171 @@ TEST_F(TestLibRBD, ExclusiveLock)
   ASSERT_EQ(0, rbd_close(image2));
 
   ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(0, rbd_close(image1));
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, ExclusiveLockTransient)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  static char buf[10];
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+
+  rbd_image_t image1;
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image1, NULL));
+
+  int lock_owner;
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image1, 0, sizeof(buf), buf));
+
+  rbd_lock_mode_t lock_mode;
+  char *lock_owners[1];
+  size_t max_lock_owners = 0;
+  ASSERT_EQ(-ERANGE, rbd_lock_get_owners(image1, &lock_mode, lock_owners,
+                                         &max_lock_owners));
+  ASSERT_EQ(1U, max_lock_owners);
+
+  ASSERT_EQ(0, rbd_lock_get_owners(image1, &lock_mode, lock_owners,
+                                   &max_lock_owners));
+  ASSERT_EQ(RBD_LOCK_MODE_EXCLUSIVE, lock_mode);
+  ASSERT_STRNE("", lock_owners[0]);
+  ASSERT_EQ(1U, max_lock_owners);
+
+  rbd_image_t image2;
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image2, NULL));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(-EOPNOTSUPP, rbd_lock_break(image1, RBD_LOCK_MODE_SHARED, ""));
+  ASSERT_EQ(-EOPNOTSUPP,
+            rbd_lock_break(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT, ""));
+  ASSERT_EQ(-EBUSY, rbd_lock_break(image1, RBD_LOCK_MODE_EXCLUSIVE,
+                                   "not the owner"));
+
+  ASSERT_EQ(0, rbd_lock_release(image1));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(-ENOENT, rbd_lock_break(image1, RBD_LOCK_MODE_EXCLUSIVE,
+                                    lock_owners[0]));
+  rbd_lock_get_owners_cleanup(lock_owners, max_lock_owners);
+
+  // lock isn't held by anyone, image2 acquires automatically
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  test_write_exclusive_lock_transient(image1, image2, buf, sizeof(buf));
+  test_write_exclusive_lock(image1, image2, buf, sizeof(buf));
+
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  // EXCLUSIVE -> EXCLUSIVE_TRANSIENT without unlocking
+  test_write_exclusive_lock_transient(image1, image2, buf, sizeof(buf));
+
+  // lock is held by image2
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(0, rbd_lock_acquire(image2, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));
+
+  ASSERT_EQ(0, rbd_lock_release(image2));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ(-EROFS, rbd_write(image2, 0, sizeof(buf), buf));
+
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ(-EROFS, rbd_write(image2, 0, sizeof(buf), buf));
+
+  ASSERT_EQ(0, rbd_lock_release(image1));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  int owner_id = -1;
+  std::mutex lock;
+  const auto pingpong = [&](int m_id, rbd_image_t &m_image) {
+      for (int i = 0; i < 10; i++) {
+        {
+          std::lock_guard<std::mutex> locker(lock);
+          if (owner_id == m_id) {
+            std::cout << m_id << ": releasing exclusive lock" << std::endl;
+            EXPECT_EQ(0, rbd_lock_release(m_image));
+            int lock_owner;
+            EXPECT_EQ(0, rbd_is_exclusive_lock_owner(m_image, &lock_owner));
+            EXPECT_FALSE(lock_owner);
+            owner_id = -1;
+            std::cout << m_id << ": exclusive lock released" << std::endl;
+            continue;
+          }
+        }
+
+        std::cout << m_id << ": acquiring exclusive lock" << std::endl;
+        EXPECT_EQ(0, rbd_lock_acquire(m_image,
+                                      RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+
+        int lock_owner;
+        EXPECT_EQ(0, rbd_is_exclusive_lock_owner(m_image, &lock_owner));
+        EXPECT_TRUE(lock_owner);
+        std::cout << m_id << ": exclusive lock acquired" << std::endl;
+        {
+          std::lock_guard<std::mutex> locker(lock);
+          owner_id = m_id;
+        }
+        usleep(rand() % 50000);
+      }
+
+      std::lock_guard<std::mutex> locker(lock);
+      if (owner_id == m_id) {
+        EXPECT_EQ(0, rbd_lock_release(m_image));
+        int lock_owner;
+        EXPECT_EQ(0, rbd_is_exclusive_lock_owner(m_image, &lock_owner));
+        EXPECT_FALSE(lock_owner);
+        owner_id = -1;
+      }
+  };
+  thread ping(bind(pingpong, 1, ref(image1)));
+  thread pong(bind(pingpong, 2, ref(image2)));
+
+  ping.join();
+  pong.join();
+
+  ASSERT_EQ(0, rbd_lock_acquire(image2, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(0, rbd_close(image2));
+
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
   ASSERT_TRUE(lock_owner);
 
