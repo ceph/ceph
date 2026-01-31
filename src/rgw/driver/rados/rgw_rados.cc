@@ -7667,7 +7667,8 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
 int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 				 RGWRados* store, RGWBucketInfo& bucket_info,
 				 RGWObjectCtx* rctx, RGWObjManifest* manifest,
-				 int part_num, int* parts_count, bool prefetch,
+				 int part_num, int* parts_count,
+				 uint64_t* part_offset, bool prefetch,
 				 RGWObjState** pstate, RGWObjManifest** pmanifest)
 {
   if (!manifest) {
@@ -7699,7 +7700,7 @@ int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y
         << " points to a tail object" << dendl;
     return -ERR_INVALID_PART;
   }
-  const auto part_offset = iter.get_ofs();
+  *part_offset = iter.get_ofs();
 
   // read the part's head object
   if (prefetch) {
@@ -7742,7 +7743,7 @@ int RGWRados::get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y
   // create_next() uses the starting offset of the next part
   do {
     ++iter;
-    gen.create_next(iter.get_ofs() - part_offset);
+    gen.create_next(iter.get_ofs() - *part_offset);
   } while (iter != end && iter.get_cur_part_id() == part_num);
 
   // update the object size
@@ -7798,6 +7799,7 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
   RGWBucketInfo& bucket_info = source->get_bucket_info();
 
   if (params.part_num) {
+    params.full_obj_size = astate->size;
     map<string, bufferlist> src_attrset;
     for (auto& iter : astate->attrset) {
       if (boost::algorithm::starts_with(iter.first, RGW_ATTR_CRYPT_PREFIX)) {
@@ -7809,9 +7811,10 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       }
     }
     int parts_count = 0;
+    uint64_t part_ofs = 0;
     // use the manifest to redirect to the requested part number
     r = get_part_obj_state(dpp, y, store, bucket_info, &source->get_ctx(),
-                           manifest, *params.part_num, &parts_count,
+                           manifest, *params.part_num, &parts_count, &part_ofs,
                            part_prefetch, &astate, &manifest);
     if (r == -ERR_INVALID_PART && *params.part_num == 1) {
       // for non-multipart uploads, treat requests for the first part as a
@@ -7829,6 +7832,7 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       return -ERR_INVALID_PART;
     } else {
       params.parts_count = parts_count;
+      params.part_ofs = part_ofs;
     }
 
     for (auto& iter : src_attrset) {
