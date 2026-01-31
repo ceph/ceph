@@ -63,7 +63,7 @@ def task(ctx, config):
             )
 
         # identify nvme_loops devices
-        old_scratch_by_remote[remote] = remote.read_file('/scratch_devs')
+        old_scratch_by_remote[remote] = '\n'.join(devs) + '\n'
 
         with contextutil.safe_while(sleep=1, tries=15) as proceed:
             while proceed():
