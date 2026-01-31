@@ -145,6 +145,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_ACLS_NOT_SUPPORTED, {400, "AccessControlListNotSupported"}},
     { ERR_INVALID_BUCKET_ACL, {400, "InvalidBucketAclWithObjectOwnership"}},
     { ERR_NO_SUCH_OWNERSHIP_CONTROLS, {404, "OwnershipControlsNotFoundError"}},
+    { ERR_EXPIRED_TOKEN, {400, "ExpiredToken"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({
