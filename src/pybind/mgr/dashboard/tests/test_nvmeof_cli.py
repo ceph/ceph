@@ -1,7 +1,7 @@
 import errno
 import json
 import unittest
-from typing import Annotated, List, NamedTuple
+from typing import Annotated, List, NamedTuple, Optional
 from unittest.mock import MagicMock
 
 import pytest
@@ -207,6 +207,514 @@ class TestNvmeofCLICommand:
         del NvmeofCLICommand.COMMANDS[test_alias]
         assert test_cmd not in NvmeofCLICommand.COMMANDS
         assert test_alias not in NvmeofCLICommand.COMMANDS
+
+
+class TestNvmeofCLICommandSuccessMessage:
+
+    def test_plain_output_uses_success_message_template(self):
+        test_cmd = "nvmeof set_log_level"
+
+        class Model(NamedTuple):
+            status: str
+
+        @NvmeofCLICommand(
+            test_cmd,
+            Model,
+            success_message_template="set log level to {log_level}"
+        )
+        def set_log_level(self, log_level: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):  # noqa
+            return {"status": 0}
+
+        result_default = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"log_level": "info"}
+        )
+        assert isinstance(result_default, HandleCommandResult)
+        assert result_default.retval == 0
+        assert result_default.stdout == "set log level to info"
+        assert result_default.stderr == ''
+
+        result_plain = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain", "log_level": "info"}
+        )
+        assert isinstance(result_plain, HandleCommandResult)
+        assert result_plain.retval == 0
+        assert result_plain.stdout == "set log level to info"
+        assert result_plain.stderr == ''
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
+    def test_plain_output_falls_back_when_template_unresolvable(self):
+        test_cmd = "nvmeof gateway set_log_level_fallback"
+
+        class Model(NamedTuple):
+            a: str
+
+        @NvmeofCLICommand(
+            test_cmd,
+            Model,
+            success_message_template="set log level to {log_level}"
+        )
+        def set_log_level(self, a: str):  # noqa
+            return {"a": "b"}
+
+        result_plain = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain"}
+        )
+        assert isinstance(result_plain, HandleCommandResult)
+        assert result_plain.retval == 0
+        assert result_plain.stdout == (
+            "+-+\n"
+            "|A|\n"
+            "+-+\n"
+            "|b|\n"
+            "+-+"
+        )
+        assert result_plain.stderr == ''
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
+    def test_default_output_falls_back_when_template_unresolvable(self):
+        test_cmd = "nvmeof gateway set_log_level_fallback_default"
+
+        class Model(NamedTuple):
+            a: str
+
+        @NvmeofCLICommand(
+            test_cmd,
+            Model,
+            success_message_template="set log level to {log_level}"
+        )
+        def set_log_level(self, a: str):  # noqa
+            return {"a": "b"}
+
+        result_default = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+        assert isinstance(result_default, HandleCommandResult)
+        assert result_default.retval == 0
+        assert result_default.stdout == (
+            "+-+\n"
+            "|A|\n"
+            "+-+\n"
+            "|b|\n"
+            "+-+"
+        )
+        assert result_default.stderr == ''
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
+    def test_alias_inherits_success_message_template(self):
+        test_cmd = "nvmeof gateway set_log_level_main"
+        test_alias = "nvmeof gw set_log_level_alias"
+
+        class Model(NamedTuple):
+            status: str
+
+        @NvmeofCLICommand(
+            test_cmd,
+            Model,
+            alias=test_alias,
+            success_message_template="set log level to {log_level}"
+        )
+        def set_log_level(self, log_level: str):  # noqa
+            return {"status": 0}
+
+        result_main = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain", "log_level": "debug"}
+        )
+        assert result_main.retval == 0
+        assert result_main.stdout == "set log level to debug"
+        assert result_main.stderr == ''
+
+        result_alias = NvmeofCLICommand.COMMANDS[test_alias].call(
+            MagicMock(),
+            {"format": "plain", "log_level": "warn"}
+        )
+        assert result_alias.retval == 0
+        assert result_alias.stdout == "set log level to warn"
+        assert result_alias.stderr == ''
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        del NvmeofCLICommand.COMMANDS[test_alias]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+        assert test_alias not in NvmeofCLICommand.COMMANDS
+
+    def test_plain_uses_success_message_map_callable(self):
+        test_cmd = "nvmeof gw set_log_level map callable"
+
+        class Model(NamedTuple):
+            status: str
+
+        @NvmeofCLICommand(
+            test_cmd,
+            Model,
+            success_message_template="set log level to {log_level}{suffix}",
+            success_message_map={
+                "suffix": lambda _v, f: " for all hosts" if f.get("all_hosts") else ""
+            }
+        )
+        def fn(self, log_level: str, all_hosts: bool = False):  # noqa
+            return {"status": 0}
+
+        res = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain", "log_level": "info", "all_hosts": True}
+        )
+        assert res.retval == 0
+        assert res.stdout == "set log level to info for all hosts"
+        assert res.stderr == ''
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
+    def test_success_message_map_dict_maps_exact_values(self):
+        test_cmd = "nvmeof ns change_visibility map dict"
+
+        class Model(NamedTuple):
+            status: str
+
+        @NvmeofCLICommand(
+            test_cmd,
+            Model,
+            success_message_template='visibility "{auto_visible}": Successful',
+            success_message_map={
+                "auto_visible": {
+                    True: "visible to all hosts",
+                    False: "visible to selected hosts",
+                }
+            }
+        )
+        def fn(self, auto_visible: bool):  # noqa
+            return {"status": 0}
+
+        res_true = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain", "auto_visible": True}
+        )
+        assert res_true.retval == 0
+        assert res_true.stdout == 'visibility "visible to all hosts": Successful'
+
+        res_false = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain", "auto_visible": False}
+        )
+        assert res_false.retval == 0
+        assert res_false.stdout == 'visibility "visible to selected hosts": Successful'
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
+    def test_success_message_map_dict_missing_key_leaves_raw_value(self):
+        test_cmd = "nvmeof map dict missing key"
+
+        class Model(NamedTuple):
+            status: str
+
+        @NvmeofCLICommand(
+            test_cmd,
+            Model,
+            success_message_template="val {x}",
+            success_message_map={
+                "x": {1: "one"}  # no mapping for 2
+            }
+        )
+        def fn(self, x: int):  # noqa
+            return {"status": 0}
+
+        res = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain", "x": 2}
+        )
+        assert res.retval == 0
+        assert res.stdout == "val 2"
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
+    def test_success_message_map_dict_value_callable(self):
+        test_cmd = "nvmeof map dict value callable"
+
+        class Model(NamedTuple):
+            status: str
+
+        @NvmeofCLICommand(
+            test_cmd,
+            Model,
+            success_message_template="host {host_name}",
+            success_message_map={
+                "host_name": {
+                    "*": "for all hosts",
+                    "h1": (lambda v, _f: f"for host {v}"),
+                }
+            }
+        )
+        def fn(self, host_name: str):  # noqa
+            return {"status": 0}
+
+        res_star = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain", "host_name": "*"}
+        )
+        assert res_star.stdout == "host for all hosts"
+
+        res_h1 = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain", "host_name": "h1"}
+        )
+        assert res_h1.stdout == "host for host h1"
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
+    def test_success_message_map_supports_derived_fields(self):
+        test_cmd = "nvmeof map derived field"
+
+        class Model(NamedTuple):
+            status: str
+
+        @NvmeofCLICommand(
+            test_cmd,
+            Model,
+            success_message_template="msg {derived}",
+            success_message_map={
+                "derived": lambda _v, f: f"nqn={f.get('nqn')}",
+            }
+        )
+        def fn(self, nqn: str):  # noqa
+            return {"status": 0}
+
+        res = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain", "nqn": "subsys1"}
+        )
+        assert res.retval == 0
+        assert res.stdout == "msg nqn=subsys1"
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
+    def test_alias_inherits_success_message_map(self):
+        test_cmd = "nvmeof map alias main"
+        test_alias = "nvmeof map alias alias"
+
+        class Model(NamedTuple):
+            status: str
+
+        @NvmeofCLICommand(
+            test_cmd,
+            Model,
+            alias=test_alias,
+            success_message_template="lvl {log_level}{suffix}",
+            success_message_map={
+                "suffix": lambda _v, f: "!" if f.get("urgent") else "."
+            }
+        )
+        def fn(self, log_level: str, urgent: bool = False):  # noqa
+            return {"status": 0}
+
+        res_main = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain", "log_level": "debug", "urgent": True}
+        )
+        assert isinstance(res_main, HandleCommandResult)
+        assert res_main.retval == 0
+        assert res_main.stdout == "lvl debug!"
+        assert res_main.stderr == ''
+
+        res_alias = NvmeofCLICommand.COMMANDS[test_alias].call(
+            MagicMock(),
+            {"format": "plain", "log_level": "warn", "urgent": False}
+        )
+        assert isinstance(res_alias, HandleCommandResult)
+        assert res_alias.retval == 0
+        assert res_alias.stdout == "lvl warn."
+        assert res_alias.stderr == ''
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        del NvmeofCLICommand.COMMANDS[test_alias]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+        assert test_alias not in NvmeofCLICommand.COMMANDS
+
+    def test_map_failure_falls_back_to_default_output(self):
+        test_cmd = "nvmeof map failure fallback"
+
+        class Model(NamedTuple):
+            a: str
+
+        @NvmeofCLICommand(
+            test_cmd,
+            Model,
+            success_message_template="value {a}",
+            success_message_map={
+                "a": lambda _v, _f: 1 / 0,  # force exception
+            }
+        )
+        def fn(self, a: str):  # noqa
+            return {"a": "b"}
+
+        res = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain", "a": "ignored"}
+        )
+        assert res.retval == 0
+        # falls back to default output formatter, same style as your other test
+        assert res.stdout == (
+            "+-+\n"
+            "|A|\n"
+            "+-+\n"
+            "|b|\n"
+            "+-+"
+        )
+        assert res.stderr == ''
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
+    def test_template_formats_int_and_list_without_failure(self):
+        class Model(NamedTuple):
+            status: str
+
+        @NvmeofCLICommand(
+            "nvmeof mixed params",
+            Model,
+            success_message_template="ns {nsid} hosts {host_nqn}"
+        )
+        def fn(self, nsid: int, host_nqn: list[str]):  # noqa
+            return {"status": 1}
+
+        res = NvmeofCLICommand.COMMANDS["nvmeof mixed params"].call(
+            MagicMock(),
+            {"format": "plain", "nsid": 42, "host_nqn": ["a", "b"]}
+        )
+        assert res.retval == 0
+        assert res.stdout == "ns 42 hosts a,b"
+
+        del NvmeofCLICommand.COMMANDS["nvmeof mixed params"]
+        assert "nvmeof mixed params" not in NvmeofCLICommand.COMMANDS
+
+    def test_success_message_uses_default_when_cli_omits_param(self):
+        class Model(NamedTuple):
+            status: str
+
+        def create(mgr, nqn: str, host_name: str, traddr: str,
+                   trsvcid: int = 4420, adrfam: int = 0, gw_group: Optional[str] = None):
+            return dict(status=1)
+
+        cmd = NvmeofCLICommand(
+            "nvmeof listener add",
+            model=Model,
+            success_message_template="Adding {nqn} listener at {traddr}:{trsvcid}: Successful"
+        )
+        cmd(create)
+
+        cmd_dict = {
+            "nqn": "nqn.2014-08.org.nvmexpress:uuid:1234",
+            "host_name": "nvme-host-1",
+            "traddr": "10.0.0.5",
+            # 'trsvcid' omitted
+            # 'adrfam' omitted
+        }
+
+        result = cmd.call(mgr=None, cmd_dict=cmd_dict, inbuf=None)
+        assert result.retval == 0
+        assert result.stderr == ""
+        assert result.stdout == (
+            "Adding nqn.2014-08.org.nvmexpress:uuid:1234 listener at 10.0.0.5:4420: Successful"
+        )
+
+    def test_success_message_cli_value_overrides_default(self):
+        class Model(NamedTuple):
+            status: str
+
+        def create(mgr, nqn: str, host_name: str, traddr: str,
+                   trsvcid: int = 4420, adrfam: int = 0, gw_group: Optional[str] = None):
+            return dict(status=1)
+
+        cmd = NvmeofCLICommand(
+            "nvmeof listener add",
+            model=Model,
+            success_message_template="Adding {nqn} listener at {traddr}:{trsvcid}: Successful"
+        )
+        cmd(create)
+
+        cmd_dict = {
+            "nqn": "nqn.2014-08.org.nvmexpress:uuid:abcd",
+            "host_name": "nvme-host-2",
+            "traddr": "192.168.1.10",
+            "trsvcid": 8009,  # override default 4420
+        }
+
+        result = cmd.call(mgr=None, cmd_dict=cmd_dict, inbuf=None)
+        assert result.retval == 0
+        assert result.stderr == ""
+        assert result.stdout == (
+            "Adding nqn.2014-08.org.nvmexpress:uuid:abcd listener at 192.168.1.10:8009: Successful"
+        )
+
+    def test_defaults_allow_none_and_template_does_not_crash(self):
+        class Model(NamedTuple):
+            status: str
+
+        def create_with_none(
+            mgr,
+            nqn: str,
+            traddr: str,
+            trsvcid: int = 4420,
+            gw_group: Optional[str] = None,  # None default intentionally used
+        ):
+            return dict(status=1)
+
+        cmd = NvmeofCLICommand(
+            "nvmeof listener add",
+            model=Model,
+            success_message_template="Adding {nqn} listener at {traddr}:{trsvcid} gw={gw_group}: Successful",
+        )
+        cmd(create_with_none)
+
+        cmd_dict = {
+            "nqn": "nqn.none.test",
+            "traddr": "127.0.0.1",
+            # 'gw_group' omitted; None default should be injected
+        }
+
+        result = cmd.call(mgr=None, cmd_dict=cmd_dict, inbuf=None)
+        assert result.retval == 0
+        assert result.stderr == ""
+        assert result.stdout == (
+            "Adding nqn.none.test listener at 127.0.0.1:4420 gw=None: Successful"
+        )
+
+    def test_template_can_use_response_fields(self):
+        test_cmd = "nvmeof show op status"
+
+        class Model(NamedTuple):
+            status: str
+            message: str
+
+        @NvmeofCLICommand(
+            test_cmd,
+            Model,
+            success_message_template="operation {op} finished with status {message}"
+        )
+        def op(self, op: str):
+            return {"status": 1, "message": "done"}
+
+        res = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(),
+            {"format": "plain", "op": "rebuild"}
+        )
+        assert res.retval == 0
+        assert res.stdout == "operation rebuild finished with status done"
+        assert res.stderr == ''
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
 
 
 class TestNVMeoFConfCLI(unittest.TestCase, CLICommandTestMixin):
