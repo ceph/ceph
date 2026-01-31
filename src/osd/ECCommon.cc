@@ -487,7 +487,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       ceph_assert(!shard_read.extents.empty());
       rop.debug_log.emplace_back(ECUtil::READ_REQUEST, shard_read.pg_shard,
                                    shard_read.extents);
-      for (auto &[start, len]: shard_read.extents) {
+      for (auto [start, len]: shard_read.extents) {
         messages[shard_read.pg_shard].to_read[hoid].emplace_back(
           boost::make_tuple(start, len, read_request.flags));
         reads_sent = true;

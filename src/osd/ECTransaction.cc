@@ -134,7 +134,8 @@ ECTransaction::WritePlanObj::WritePlanObj(
   orig_size(orig_size), // On-disk object sizes are rounded up to the next page.
   projected_size(soi?soi->size:(oi?oi->size:0))
 {
-  extent_set unaligned_ro_writes;
+  // Use legacy interval_set here since op.buffer_updates is interval_map
+  legacy_extent_set unaligned_ro_writes;
   hobject_t source;
   /* Certain transactions mean that the cache is invalid:
    * 1. Clone operations invalidate the *target*
@@ -146,9 +147,9 @@ ECTransaction::WritePlanObj::WritePlanObj(
   op.buffer_updates.to_interval_set(unaligned_ro_writes);
 
   /* Calculate any non-aligned pages. These need to be read and written */
-  extent_set aligned_ro_writes(unaligned_ro_writes);
+  legacy_extent_set aligned_ro_writes(unaligned_ro_writes);
   aligned_ro_writes.align(EC_ALIGN_SIZE);
-  extent_set partial_page_ro_writes(aligned_ro_writes);
+  legacy_extent_set partial_page_ro_writes(aligned_ro_writes);
   partial_page_ro_writes.subtract(unaligned_ro_writes);
   partial_page_ro_writes.align(EC_ALIGN_SIZE);
 
@@ -798,7 +799,7 @@ void ECTransaction::Generate::appends_and_clone_ranges() {
 
   shard_id_set touched;
 
-  for (auto &[start, len]: clone_ranges) {
+  for (auto [start, len]: clone_ranges) {
     shard_id_set to_clone_shards;
     uint64_t clone_end = 0;
 
