@@ -336,6 +336,11 @@ get_early_config(int argc, const char *argv[])
     if (!have_data && WIFEXITED(status) && WEXITSTATUS(status) == 0) {
       exit(0);
     }
+    if (WIFSIGNALED(status)) {
+      int signal = WTERMSIG(status);
+      std::cerr << "get_early_config: child signaled " << strsignal(signal) << std::endl;
+      return tl::unexpected(signal);
+    }
     if (r < 0) {
       std::cerr << "get_early_config: parent failed to read from pipe: "
 		<< r << std::endl;

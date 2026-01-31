@@ -1,10 +1,11 @@
 # leak suppressions needed to run vstart.sh with WITH_ASAN=ON
 # to enable, add this to the environment:
-# LSAN_OPTIONS="suppressions=../qa/lsan.supp"
+# export LSAN_OPTIONS="suppressions=../qa/lsan.supp"
 # export ASAN_OPTIONS="detect_odr_violation=0"
 
 # gperftools allocates a singleton of MallocExtension and never frees it
 leak:^MallocExtension::Initialize
+leak:^MallocExtension::Register
 
 # from perfglue/heap_profiler.cc
 # gperftools allocates a singleton and never frees it
@@ -27,6 +28,9 @@ leak:^PyMem_Calloc
 leak:^PyUnicode_New
 # python3.9, 3.10, 3.11
 leak:^PyMem_Malloc
+leak:^unicode_decode_utf8
+leak:^_PyObject_Malloc
+leak:^_PyObject_GC_NewVar
 # python3.12 doesn't leak anything
 # python3.13
 leak:^PyModule_ExecDef
