@@ -4,6 +4,9 @@ meta:
 tasks:
 - install:
     tag: v19.2.2
+    exclude_packages:
+      - ceph-osd-classic
+      - ceph-osd-crimson
 - print: "**** done installing squid v19.2.2"
 - install.upgrade:
     # upgrade the single ceph cluster node, which runs all
