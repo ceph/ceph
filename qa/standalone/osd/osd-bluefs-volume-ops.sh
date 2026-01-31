@@ -492,6 +492,87 @@ function TEST_bluestore_expand() {
     ceph-bluestore-tool --log-file $dir/bluestore_tool.log --path $dir/0 qfsck || return 1
 }
 
+function TEST_bluestore_expand_online() {
+    local dir=$1
+
+    local flimit=$(ulimit -n)
+    if [ $flimit -lt 1536 ]; then
+        echo "Low open file limit ($flimit), test may fail. Increase to 1536 or higher and retry if that happens."
+    fi
+    export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
+    export CEPH_ARGS
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--bluestore_block_size=2147483648 "
+    CEPH_ARGS+="--bluestore_block_db_create=true "
+    CEPH_ARGS+="--bluestore_block_db_size=536870912 "
+    CEPH_ARGS+="--bluestore_block_wal_create=true "
+    CEPH_ARGS+="--bluestore_block_wal_size=268435456 "
+    CEPH_ARGS+="--bluestore_fsck_on_mount=true "
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    osd_pid0=$(cat $dir/osd.0.pid)
+    run_osd $dir 1 || return 1
+    osd_pid1=$(cat $dir/osd.1.pid)
+    run_osd $dir 2 || return 1
+    osd_pid2=$(cat $dir/osd.2.pid)
+    run_osd $dir 3 || return 1
+    osd_pid3=$(cat $dir/osd.3.pid)
+
+    sleep 5
+    create_pool foo 16
+
+    timeout 60 rados bench -p foo 30 write -b 4096 --no-cleanup #|| return 1
+
+    # expand slow devices while OSDs are running
+    truncate $dir/0/block -s 4294967296 # 4GB
+    ceph tell osd.0 bluestore bluefs-bdev-expand || return 1
+
+    truncate $dir/1/block -s 11811160064 # 11GB
+    ceph tell osd.1 bluestore bluefs-bdev-expand || return 1
+
+    truncate $dir/2/block -s 4295099392 # 4GB + 129KB
+    ceph tell osd.2 bluestore bluefs-bdev-expand || return 1
+
+    truncate $dir/3/block -s 4293918720 # 4GB - 1MB
+    ceph tell osd.3 bluestore bluefs-bdev-expand || return 1
+
+    # expand DB devices while OSDs are running
+    truncate $dir/0/block.db -s 1073741824 # 1GB
+    ceph tell osd.0 bluestore bluefs-bdev-expand || return 1
+
+    truncate $dir/1/block.db -s 1073741824 # 1GB
+    ceph tell osd.1 bluestore bluefs-bdev-expand || return 1
+
+    # write more objects to use the new space
+    timeout 60 rados bench -p foo 30 write -b 4096 --no-cleanup #|| return 1
+
+    wait_for_clean || return 1
+
+    ceph tell osd.0 bluestore bluefs device info
+    ceph tell osd.1 bluestore bluefs device info
+    ceph tell osd.2 bluestore bluefs device info
+    ceph tell osd.3 bluestore bluefs device info
+
+    # kill and verify with fsck
+    while kill $osd_pid0; do sleep 1 ; done
+    ceph osd down 0
+    while kill $osd_pid1; do sleep 1 ; done
+    ceph osd down 1
+    while kill $osd_pid2; do sleep 1 ; done
+    ceph osd down 2
+    while kill $osd_pid3; do sleep 1 ; done
+    ceph osd down 3
+
+    ceph-bluestore-tool --path $dir/0 fsck || return 1
+    ceph-bluestore-tool --path $dir/1 fsck || return 1
+    ceph-bluestore-tool --path $dir/2 fsck || return 1
+    ceph-bluestore-tool --path $dir/3 fsck || return 1
+
+}
+
 main osd-bluefs-volume-ops "$@"
 
 # Local Variables:
