@@ -261,6 +261,67 @@ Create a read-only share at a custom path in the CephFS volume:
 
     ceph smb share create test1 plans cephfs \
         --path=/qbranch/top/secret/plans --readonly
+Update Share QoS
+++++++++++++++++
+
+.. prompt:: bash #
+
+   ceph smb share update cephfs qos <cluster_id> <share_id> [--read-iops-limit=<int>] [--write-iops-limit=<int>] [--read-bw-limit=<int>] [--write-bw-limit=<int>] [--read-delay-max=<int>] [--write-delay-max=<int>]
+
+Update Quality of Service (QoS) settings for a CephFS-backed share. This allows administrators to apply per-share rate limits on SMB input/output (I/O) operations, specifically limits on IOPS (Input/Output Operations per Second) and bandwidth (in bytes per second) for both read and write operations.
+
+Options:
+
+read_iops_limit
+    Optional integer. Maximum number of read operations per second (0 = disabled).
+    Valid range: ``0`` to ``1,000,000``. Values above this will be capped.
+write_iops_limit
+    Optional integer. Maximum number of write operations per second (0 = disabled).
+    Valid range: ``0`` to ``1,000,000``. Values above this will be capped.
+read_bw_limit
+    Optional integer. Maximum allowed bandwidth for read operations in bytes per second (0 = disabled).
+    Valid range: ``0`` to ``1 << 40`` (≈1 TB/s). Values above this will be capped.
+write_bw_limit
+    Optional integer. Maximum allowed bandwidth for write operations in bytes per second (0 = disabled).
+    Valid range: ``0`` to ``1 << 40`` (≈1 TB/s). Values above this will be capped.
+read_delay_max
+    Optional integer. Maximum allowed delay value in seconds for read operations (default: 30, max: 300).
+    This acts as an upper bound on how long a read request will be delayed if the defined IOPS or bandwidth limits are exceeded.
+write_delay_max
+    Optional integer. Maximum allowed delay value in seconds for write operations (default: 30, max: 300).
+    Similar to `read_delay_max`, but applies to write requests.
+
+Behavior:
+
+- All limits are optional
+- Setting a limit to ``0`` disables that specific QoS limit
+- Setting all four limits to ``0`` completely removes QoS configuration
+
+Examples:
+
+Set QoS limits for a share:
+
+.. prompt:: bash #
+
+   ceph smb share update cephfs qos foo bar \
+     --read-iops-limit=100 \
+     --write-iops-limit=200 \
+     --read-bw-limit=1048576 \
+     --write-bw-limit=2097152 \
+     --read-delay-max=5 \
+     --write-delay-max=5
+
+Disable QoS for a share:
+
+.. prompt:: bash #
+
+   ceph smb share update cephfs qos foo bar \
+     --read-iops-limit=0 \
+     --write-iops-limit=0 \
+     --read-bw-limit=0 \
+     --write-bw-limit=0 \
+     --read-delay-max=0 \
+     --write-delay-max=0
 
 
 Remove Share
@@ -789,6 +850,27 @@ cephfs
         based implementation, currently ``samba-vfs/proxied``. This option is
         suitable for the majority of use cases and can be left unspecified for most
         shares.
+    qos
+        Optional object. Quality of Service settings for the share. Fields:
+        
+        read_iops_limit
+            Optional integer. Maximum number of read operations per second (0 = disabled).
+            Valid range: ``0`` to ``1,000,000``. Values above this will be capped.
+        write_iops_limit
+            Optional integer. Maximum number of write operations per second (0 = disabled).
+            Valid range: ``0`` to ``1,000,000``. Values above this will be capped.
+        read_bw_limit
+            Optional integer. Maximum allowed bandwidth for read operations in bytes per second (0 = disabled).
+            Valid range: ``0`` to ``1 << 40`` (≈1 TB/s). Values above this will be capped.
+        write_bw_limit
+            Optional integer. Maximum allowed bandwidth for write operations in bytes per second (0 = disabled).
+            Valid range: ``0`` to ``1 << 40`` (≈1 TB/s). Values above this will be capped.
+        read_delay_max
+            Optional integer. Maximum allowed delay value in seconds for read operations (default: 30, max: 300).
+            This acts as an upper bound on how long a read request will be delayed if the defined IOPS or bandwidth limits are exceeded.
+        write_delay_max
+            Optional integer. Maximum allowed delay value in seconds for write operations (default: 30, max: 300).
+            Similar to `read_delay_max`, but applies to write requests.
 restrict_access
     Optional boolean, defaulting to false. If true the share will only permit
     access by users explicitly listed in ``login_control``.
@@ -836,7 +918,7 @@ custom_smb_share_options
     things in ways that the Ceph team can not help with. This special key will
     automatically be removed from the list of options passed to Samba.
 
-The following is an example of a share:
+The following is an example of a share with QoS settings:
 
 .. code-block:: yaml
 
@@ -849,9 +931,34 @@ The following is an example of a share:
       path: /pics
       subvolumegroup: smbshares
       subvolume: staff
+      qos:
+        read_iops_limit: 100    # Max 100 read operations per second
+        write_iops_limit: 50     # Max 50 write operations per second
+        read_bw_limit: 1048576   # 1 MiB/s read bandwidth limit
+        write_bw_limit: 524288   # 512 KiB/s write bandwidth limit
+        read_delay_max: 5        # Max 5 seconds delay for read operations
+        write_delay_max: 5       # Max 5 seconds delay for write operations
 
 
-Another example, this time of a share with an intent to be removed:
+Another example, this time of a share with QoS disabled:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.share
+    cluster_id: tango
+    share_id: sp2
+    cephfs:
+      volume: cephfs
+      path: /data
+      qos:
+        read_iops_limit: 0
+        write_iops_limit: 0
+        read_bw_limit: 0
+        write_bw_limit: 0
+        read_delay_max: 0
+        write_delay_max: 0
+
+And finally, a share with an intent to be removed:
 
 .. code-block:: yaml
 
