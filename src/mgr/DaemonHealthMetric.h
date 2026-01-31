@@ -4,10 +4,10 @@
 #pragma once
 
 #include <cstdint>
-#include <ostream>
-#include "common/Formatter.h"
+#include <iosfwd>
 #include "include/denc.h"
-#include "common/Formatter.h"
+
+namespace ceph { class Formatter; }
 
 enum class daemon_metric : uint8_t {
   SLOW_OPS,
@@ -68,26 +68,13 @@ public:
     denc(v.value.n, p);
     DENC_FINISH(p);
   }
-  void dump(Formatter *f) const {
-    f->dump_string("type", get_type_name());
-    f->dump_int("n", get_n());
-    f->dump_int("n1", get_n1());
-    f->dump_int("n2", get_n2());
-  }
-  static std::list<DaemonHealthMetric> generate_test_instances() {
-    std::list<DaemonHealthMetric> o;
-    o.push_back(DaemonHealthMetric(daemon_metric::SLOW_OPS, 1));
-    o.push_back(DaemonHealthMetric(daemon_metric::PENDING_CREATING_PGS, 1, 2));
-    return o;
-  }
+  void dump(Formatter *f) const;
+  static std::list<DaemonHealthMetric> generate_test_instances();
   std::string get_type_name() const {
     return daemon_metric_name(get_type());
   }
 
-  friend std::ostream& operator<<(std::ostream& out, const DaemonHealthMetric& m) {
-    return out << daemon_metric_name(m.get_type()) << "("
-	       << m.get_n() << "|(" << m.get_n1() << "," << m.get_n2() << "))";
-  }
+  friend std::ostream& operator<<(std::ostream& out, const DaemonHealthMetric& m);
 private:
   daemon_metric type = daemon_metric::NONE;
   daemon_metric_t value;
