@@ -517,7 +517,11 @@ const Filesystem& FSMap::commit_filesystem(fs_cluster_id_t fscid, Filesystem fs)
     legacy_client_fscid = fs.fscid;
   }
 
-  auto [it, inserted] = filesystems.emplace(std::piecewise_construct, std::forward_as_tuple(fs.fscid), std::forward_as_tuple(std::move(fs)));
+  auto fs_fscid = fs.fscid; // Avoid use of fs after its moved
+  // the use and move are unsequenced, i.e. there is no guarantee about the order in which they are evaluated
+  auto [it, inserted] = filesystems.emplace(
+      std::piecewise_construct, std::forward_as_tuple(fs_fscid),
+      std::forward_as_tuple(std::move(fs)));
   ceph_assert(inserted);
   return it->second;
 }
@@ -681,7 +685,11 @@ void FSMap::decode(bufferlist::const_iterator& p)
     for (__u32 i = 0; i < len; i++) {
       auto fs = Filesystem();
       decode(fs, p); /* need fscid to insert into map */
-      [[maybe_unused]] auto [it, inserted] = filesystems.emplace(std::piecewise_construct, std::forward_as_tuple(fs.fscid), std::forward_as_tuple(std::move(fs)));
+      auto fs_fscid = fs.fscid; // Avoid use of fs after its moved
+      // the use and move are unsequenced, i.e. there is no guarantee about the order in which they are evaluated
+      [[maybe_unused]] auto [it, inserted] = filesystems.emplace(
+          std::piecewise_construct, std::forward_as_tuple(fs_fscid),
+          std::forward_as_tuple(std::move(fs)));
       ceph_assert(inserted);
     }
   }
