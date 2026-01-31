@@ -1,0 +1,31 @@
+<cds-tile class="productive-card"
+          [ngClass]="{'productive-card--shadow': applyShadow}"
+          [cdsLayer]="0">
+  <header
+    cdsGrid
+    [useCssGrid]="true"
+    [narrow]="true"
+    class="productive-card-header">
+    <h2 cdsCol
+        [columnNumbers]="{md: headerActionTemplate ? 12 : 16, lg: headerActionTemplate ? 12 : 16}"
+        class="cds--type-heading-compact-02 productive-card-header-title">
+      {{title}}
+    </h2>
+  @if(headerActionTemplate) {
+  <div cdsCol
+       [columnNumbers]="{md: 4, lg: 4}"
+       class="productive-card-header-actions">
+    <ng-container *ngTemplateOutlet="headerActionTemplate"></ng-container>
+  </div>
+  }
+  </header>
+  <section class="productive-card-section cds--type-body-compact-01"
+           [ngClass]="{'productive-card-section--footer': footerTemplate}">
+    <ng-content></ng-content>
+  </section>
+  @if(footerTemplate) {
+  <footer class="productive-card-footer">
+    <ng-container *ngTemplateOutlet="footerTemplate"></ng-container>
+  </footer>
+  }
+</cds-tile>
