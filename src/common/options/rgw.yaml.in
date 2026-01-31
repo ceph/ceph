@@ -518,6 +518,21 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_read_through_timeout_ms
+  type: int
+  level: advanced
+  desc: Maximum time in milliseconds for read-through GET requests to wait for cloud
+    object restore completion
+  long_desc: When a GET request is made for a cloud-tiered object that must be restored,
+    the request will wait up to this many milliseconds for the restore to complete.
+    If the restore completes within this time, the GET request succeeds and returns the
+    object data. If the time is exceeded, the request fails with ERR_REQUEST_TIMEOUT.
+    Set to 0 to fail immediately without waiting.
+  default: 10000
+  min: 0
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_restore_max_objs
   type: int
   level: advanced
