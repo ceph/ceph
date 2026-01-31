@@ -1077,6 +1077,21 @@ extern "C" int ceph_rmsnap(struct ceph_mount_info *cmount, const char *path, con
   return cmount->get_client()->rmsnap(path, name, cmount->default_perms, true);
 }
 
+extern "C" int ceph_snap_metadata_update(struct ceph_mount_info* cmount,
+  const char* path, struct snap_metadata* snap_metadata,
+  size_t nr_snap_metadata)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+
+  std::map<std::string, std::string> snap_md;
+  for (size_t i = 0; i < nr_snap_metadata; ++i) {
+    snap_md.emplace(snap_metadata[i].key, snap_metadata[i].value);
+  }
+
+  return cmount->get_client()->snap_metadata_update(path, snap_md, cmount->default_perms);
+}
+
 extern "C" int ceph_mkdirs(struct ceph_mount_info *cmount, const char *path, mode_t mode)
 {
   if (!cmount->is_mounted())

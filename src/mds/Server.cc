@@ -268,6 +268,8 @@ void Server::create_logger()
                    "Request type remove snapshot latency");
   plb.add_time_avg(l_mdss_req_renamesnap_latency, "req_renamesnap_latency",
                    "Request type rename snapshot latency");
+  plb.add_time_avg(l_mdss_req_snap_metadata_update_latency, "req_snap_metadata_update_latency",
+                   "Request type snapshot metadata update latency");
   plb.add_time_avg(l_mdss_req_snapdiff_latency, "req_snapdiff_latency",
 		   "Request type snapshot difference latency");
     plb.add_time_avg(l_mdss_req_file_blockdiff_latency, "req_blockdiff_latency",
@@ -2271,6 +2273,9 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
   case CEPH_MDS_OP_RENAMESNAP:
     code = l_mdss_req_renamesnap_latency;
     break;
+  case CEPH_MDS_OP_SNAP_METADATA_UPDATE:
+    code = l_mdss_req_snap_metadata_update_latency;
+    break;
   case CEPH_MDS_OP_READDIR_SNAPDIFF:
     code = l_mdss_req_snapdiff_latency;
     break;
@@ -2940,6 +2945,9 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
     break;
   case CEPH_MDS_OP_FILE_BLOCKDIFF:
     handle_client_file_blockdiff(mdr);
+    break;
+  case CEPH_MDS_OP_SNAP_METADATA_UPDATE:
+    handle_client_snap_metadata_update(mdr);
     break;
 
   default:
@@ -12611,6 +12619,103 @@ void Server::handle_client_file_blockdiff(const MDRequestRef& mdr)
   }
 
   mdcache->file_blockdiff(in1, in2, &(ctx->block_diff), max_objects, ctx);
+}
+
+void Server::handle_client_snap_metadata_update(const MDRequestRef& mdr)
+{
+  const cref_t<MClientRequest> &req = mdr->client_request;
+
+  CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
+  if (!diri)
+    return;
+
+  if (!diri->is_dir()) {
+    respond_to_request(mdr, -ENOTDIR);
+    return;
+  }
+
+  std::string_view snapname = req->get_filepath().last_dentry();
+
+  if (req->get_caller_uid() < g_conf()->mds_snap_min_uid ||
+      req->get_caller_uid() > g_conf()->mds_snap_max_uid) {
+    dout(20) << "snap_metadata_update " << snapname << " on " << *diri <<
+                " denied to uid " << req->get_caller_uid() << dendl;
+    respond_to_request(mdr, -EPERM);
+    return;
+  }
+
+  dout(10) << "snap_metadata_update for " << snapname << " on " << *diri << dendl;
+  // does this snap exist?
+  if (snapname.length() == 0 || snapname[0] == '_') {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  if (!diri->snaprealm || !diri->snaprealm->exists(snapname)) {
+    respond_to_request(mdr, -ENOENT);
+    return;
+  }
+
+  SnapPayload payload;
+  if (req->get_data().length()) {
+    try {
+      auto iter = req->get_data().cbegin();
+      decode(payload, iter);
+    } catch (const ceph::buffer::error &e) {
+      dout(20) << ": no metadata in payload" << dendl;
+      // TODO: what should be return value in here?
+      // respond_to_request(mdr, );
+      // return;
+    }
+  }
+
+  snapid_t snapid = diri->snaprealm->resolve_snapname(snapname, diri->ino());
+  /*
+  snapid_t snapid;
+  auto iter = mdr->more()->snapidbl.cbegin();
+  if (iter != mdr->more()->snapidbl.end())
+    decode(snapid, iter);
+  */
+  dout(10) << "snapid " << snapid << dendl;
+
+  auto pi = diri->project_inode(mdr, false, true);
+  pi.inode->ctime = mdr->get_op_stamp();
+  if (mdr->get_op_stamp() > pi.inode->rstat.rctime)
+    pi.inode->rstat.rctime = mdr->get_op_stamp();
+  pi.inode->version = diri->pre_dirty();
+
+  // update snap metadata
+  auto& snapnode = *(pi.snapnode);
+  auto it = snapnode.snaps.find(snapid);
+  if (it == snapnode.snaps.end()) {
+    respond_to_request(mdr, -ENOENT);
+    return;
+  } else {
+    auto& snapinfo = (*it).second;
+    snapinfo.stamp = mdr->get_op_stamp();
+    snapinfo.update_metadata(payload.metadata);
+  }
+  snapnode.seq = snapid;
+  snapnode.last_created = snapid;
+  snapnode.last_modified = mdr->get_op_stamp();
+  snapnode.change_attr++;
+
+  // journal the inode changes
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "snap_metadata_update");
+
+  version_t stid = mdr->more()->stid;
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+  le->metablob.add_table_transaction(TABLE_SNAP, stid);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, diri);
+
+  // journal the snaprealm changes
+  submit_mdlog_entry(le, new C_MDS_renamesnap_finish(this, mdr, diri, snapid),
+                     mdr, __func__);
+  mdlog->flush();
+
+  respond_to_request(mdr, 0);
 }
 
 void Server::handle_file_blockdiff_finish(const MDRequestRef& mdr, CInode *in, const BlockDiff &block_diff,
