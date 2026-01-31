@@ -47,6 +47,7 @@ def get_amount_copied(src_path, dst_path, fs_handle):
 
     try:
         size_t = int(fs_handle.getxattr(src_path, rbytes))
+        log.info(f'rbytes on path src_path ({src_path}) = {size_t}')
     except ObjectNotFound:
         log.info(f'get_amount_copied(): source path "{src_path}" went missing, '
                   'couldn\'t run getxattr on it')
@@ -54,6 +55,7 @@ def get_amount_copied(src_path, dst_path, fs_handle):
 
     try:
         size_c = int(fs_handle.getxattr(dst_path, rbytes))
+        log.info(f'rbytes on path dst_path ({dst_path}) = {size_c}')
     except ObjectNotFound:
         log.info(f'get_amount_copied(): destination path "{dst_path}" went '
                   'missing, couldn\'t run getxattr on it')
@@ -210,8 +212,8 @@ class CloneProgressReporter:
                     # get clone in order in which they were launched, this
                     # should be same as the ctime on clone entry.
                     clone_index_entries = clone_index.list_entries_by_ctime_order()
-                    log.debug('finished collecting all clone index entries, '
-                              f'found {len(clones)} clone index entries')
+                    log.debug(f'found {len(clone_index_entries)} clone index '
+                               'entries')
 
                 # reset ongoing clone counter before iterating over all clone
                 # entries
@@ -248,8 +250,7 @@ class CloneProgressReporter:
 
                     clones.append(ci)
 
-        log.debug('finished collecting info on all clones, found '
-                  f'{len(clones)} clones out of which '
+        log.debug(f'found {len(clones)} clones, out of which '
                   f'{self.ongoing_clones_count} are ongoing clones')
         return clones
 
