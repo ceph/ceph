@@ -1190,7 +1190,7 @@ static PG::interruptible_future<hobject_t> pgls_filter(
   const PGBackend& backend,
   const hobject_t& sobj)
 {
-  if (const auto xattr = filter.get_xattr(); !xattr.empty()) {
+  if (std::string xattr = filter.get_xattr(); !xattr.empty()) {
     logger().debug("pgls_filter: filter is interested in xattr={} for obj={}",
                    xattr, sobj);
     return backend.getxattr(sobj, std::move(xattr)).safe_then_interruptible(
