@@ -1137,16 +1137,21 @@ public:
    */
   uint64_t get_up_osd_features() const;
 
+  int get_num_pg_upmap_primaries() const { return pg_upmap_primaries.size(); };
   void get_upmap_pgs(std::vector<pg_t> *upmap_pgs) const;
   bool check_pg_upmaps(
     CephContext *cct,
     const std::vector<pg_t>& to_check,
     std::vector<pg_t> *to_cancel,
+    std::vector<pg_t> *to_cancel_upmap_primary_only,
+    std::set<uint64_t> *affected_pools,
     std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>> *to_remap) const;
   void clean_pg_upmaps(
     CephContext *cct,
     Incremental *pending_inc,
     const std::vector<pg_t>& to_cancel,
+    const std::vector<pg_t>& to_cancel_upmap_primary_only,
+    const std::set<uint64_t>& affected_pools,
     const std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>>& to_remap) const;
   bool clean_pg_upmaps(CephContext *cct, Incremental *pending_inc) const;
 
@@ -1522,10 +1527,13 @@ public:
     OSDMap& tmp_osd_map,
     const std::optional<rb_policy>& rbp = std::nullopt) const;
 
-  void rm_all_upmap_prims(CephContext *cct, Incremental *pending_inc, uint64_t pid); // per pool
   void rm_all_upmap_prims(
     CephContext *cct,
-    OSDMap::Incremental *pending_inc); // total
+    Incremental *pending_inc,
+    uint64_t pid) const; // per pool
+  void rm_all_upmap_prims(
+    CephContext *cct,
+    OSDMap::Incremental *pending_inc) const; // total
 
   int calc_desired_primary_distribution(
     CephContext *cct,

@@ -2102,10 +2102,12 @@ void OSDMap::clean_temps(CephContext *cct,
 
 void OSDMap::get_upmap_pgs(vector<pg_t> *upmap_pgs) const
 {
-  upmap_pgs->reserve(pg_upmap.size() + pg_upmap_items.size());
+  upmap_pgs->reserve(pg_upmap.size() + pg_upmap_items.size() + pg_upmap_primaries.size());
   for (auto& p : pg_upmap)
     upmap_pgs->push_back(p.first);
   for (auto& p : pg_upmap_items)
+    upmap_pgs->push_back(p.first);
+  for (auto& p : pg_upmap_primaries)
     upmap_pgs->push_back(p.first);
 }
 
@@ -2113,6 +2115,8 @@ bool OSDMap::check_pg_upmaps(
   CephContext *cct,
   const vector<pg_t>& to_check,
   vector<pg_t> *to_cancel,
+  vector<pg_t> *to_cancel_upmap_primary_only,
+  set<uint64_t> *affected_pools,
   map<pg_t, mempool::osdmap::vector<pair<int,int>>> *to_remap) const
 {
   bool any_change = false;
@@ -2123,12 +2127,14 @@ bool OSDMap::check_pg_upmaps(
       ldout(cct, 0) << __func__ << " pg " << pg << " is gone or merge source"
 		    << dendl;
       to_cancel->push_back(pg);
+      affected_pools->emplace(pg.pool());
       continue;
     }
     if (pi->is_pending_merge(pg, nullptr)) {
       ldout(cct, 0) << __func__ << " pg " << pg << " is pending merge"
 		    << dendl;
       to_cancel->push_back(pg);
+      affected_pools->emplace(pg.pool());
       continue;
     }
     vector<int> raw, up;
@@ -2182,6 +2188,7 @@ bool OSDMap::check_pg_upmaps(
     }
     if (!to_cancel->empty() && to_cancel->back() == pg)
       continue;
+
     // okay, upmap is valid
     // continue to check if it is still necessary
     auto i = pg_upmap.find(pg);
@@ -2234,8 +2241,28 @@ bool OSDMap::check_pg_upmaps(
         any_change = true;
       }
     }
+    // Cancel any pg_upmap_primary mapping where the mapping is set
+    //   to an OSD outside the raw set, or if the mapping is redundant
+    auto k = pg_upmap_primaries.find(pg);
+    if (k != pg_upmap_primaries.end()) {
+      auto curr_prim = k->second;
+      bool valid_prim = false;
+      for (auto osd : raw) {
+        if ((curr_prim == osd) &&
+	    (curr_prim != raw.front())) {
+	  valid_prim = true;
+          break;
+	}
+      }
+      if (!valid_prim) {
+        ldout(cct, 10) << __func__ << " pg_upmap_primary (PG " << pg << " has an invalid or redundant primary: "
+		      << curr_prim << " -> " << raw << ")" << dendl;
+        to_cancel_upmap_primary_only->push_back(pg);
+        any_change = true;
+      }
+    }
   }
-  any_change = any_change || !to_cancel->empty();
+  any_change = any_change || !to_cancel->empty() || !to_cancel_upmap_primary_only->empty();
   return any_change;
 }
 
@@ -2243,6 +2270,8 @@ void OSDMap::clean_pg_upmaps(
   CephContext *cct,
   Incremental *pending_inc,
   const vector<pg_t>& to_cancel,
+  const vector<pg_t>& to_cancel_upmap_primary_only,
+  const set<uint64_t>& affected_pools,
   const map<pg_t, mempool::osdmap::vector<pair<int,int>>>& to_remap) const
 {
   for (auto &pg: to_cancel) {
@@ -2260,6 +2289,21 @@ void OSDMap::clean_pg_upmaps(
                      << j->first << "->" << j->second
                      << dendl;
       pending_inc->old_pg_upmap.insert(pg);
+    }
+    auto k = pending_inc->new_pg_upmap_primary.find(pg);
+    if (k != pending_inc->new_pg_upmap_primary.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pending "
+	             << "pg_upmap_primaries entry "
+		     << k->first << "->" << k->second
+		     << dendl;
+      pending_inc->new_pg_upmap_primary.erase(k);
+    }
+    auto l = pg_upmap_primaries.find(pg);
+    if (l != pg_upmap_primaries.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pg_upmap_primaries entry "
+	             << l->first << "->" << l->second
+		     << dendl;
+      pending_inc->old_pg_upmap_primary.insert(pg);
     }
     auto p = pending_inc->new_pg_upmap_items.find(pg);
     if (p != pending_inc->new_pg_upmap_items.end()) {
@@ -2280,6 +2324,36 @@ void OSDMap::clean_pg_upmaps(
   }
   for (auto& i : to_remap)
     pending_inc->new_pg_upmap_items[i.first] = i.second;
+
+  // Cancel mappings that are only invalid for pg_upmap_primary.
+  //   For example, if a selected primary OSD does not exist
+  //   in that PG's up set, it should be canceled. But this
+  //   could be valid for pg_upmap/pg_upmap_items.
+  for (auto &pg_prim: to_cancel_upmap_primary_only) {
+    auto k = pending_inc->new_pg_upmap_primary.find(pg_prim);
+    if (k != pending_inc->new_pg_upmap_primary.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pending "
+                     << "pg_upmap_primaries entry "
+                     << k->first << "->" << k->second
+                     << dendl;
+      pending_inc->new_pg_upmap_primary.erase(k);
+    }
+    auto l = pg_upmap_primaries.find(pg_prim);
+    if (l != pg_upmap_primaries.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pg_upmap_primaries entry "
+                     << l->first << "->" << l->second
+                     << dendl;
+      pending_inc->old_pg_upmap_primary.insert(pg_prim);
+    }
+  }
+
+  // Clean all pg_upmap_primary entries where the pool size was changed,
+  // as old records no longer make sense optimization-wise.
+  for (auto pid : affected_pools) {
+    ldout(cct, 10) << __func__ << " cancel all pg_upmap_primaries for pool " << pid
+	          << " since pg_num changed" << dendl;
+    rm_all_upmap_prims(cct, pending_inc, pid);
+  }
 }
 
 bool OSDMap::clean_pg_upmaps(
@@ -2289,14 +2363,14 @@ bool OSDMap::clean_pg_upmaps(
   ldout(cct, 10) << __func__ << dendl;
   vector<pg_t> to_check;
   vector<pg_t> to_cancel;
+  vector<pg_t> to_cancel_upmap_primary_only;
+  set<uint64_t> affected_pools;
   map<pg_t, mempool::osdmap::vector<pair<int,int>>> to_remap;
 
   get_upmap_pgs(&to_check);
-  auto any_change = check_pg_upmaps(cct, to_check, &to_cancel, &to_remap);
-  clean_pg_upmaps(cct, pending_inc, to_cancel, to_remap);
-  //TODO: Create these 3 functions for pg_upmap_primaries and so they can be checked 
-  //      and cleaned in the same way as pg_upmap. This is not critical since invalid
-  //      pg_upmap_primaries are never applied, (the final check is in _apply_upmap).
+  auto any_change = check_pg_upmaps(cct, to_check, &to_cancel, &to_cancel_upmap_primary_only,
+		                    &affected_pools, &to_remap);
+  clean_pg_upmaps(cct, pending_inc, to_cancel, to_cancel_upmap_primary_only, affected_pools, to_remap);
   return any_change;
 }
 
@@ -5347,17 +5421,21 @@ int OSDMap::balance_primaries(
   return num_changes;
 }
 
-void OSDMap::rm_all_upmap_prims(CephContext *cct, OSDMap::Incremental *pending_inc, uint64_t pid) {
+void OSDMap::rm_all_upmap_prims(
+  CephContext *cct,
+  OSDMap::Incremental *pending_inc,
+  uint64_t pid) const
+{
   map<uint64_t,set<pg_t>> prim_pgs_by_osd;
   get_pgs_by_osd(cct, pid, &prim_pgs_by_osd);
   for (auto &[_, pgs] : prim_pgs_by_osd) {
     for (auto &pg : pgs) {
       if (pending_inc->new_pg_upmap_primary.contains(pg)) {
-        ldout(cct,30) << __func__ << "Removing pending pg_upmap_prim for pg " << pg << dendl;
+        ldout(cct, 30) << __func__ << " Removing pending pg_upmap_prim for pg " << pg << dendl;
         pending_inc->new_pg_upmap_primary.erase(pg);
       }
       if (pg_upmap_primaries.contains(pg)) {
-        ldout(cct, 30) << __func__ << "Removing pg_upmap_prim for pg " << pg << dendl;
+        ldout(cct, 30) << __func__ << " Removing pg_upmap_prim for pg " << pg << dendl;
         pending_inc->old_pg_upmap_primary.insert(pg);
       }
     }
@@ -5366,7 +5444,7 @@ void OSDMap::rm_all_upmap_prims(CephContext *cct, OSDMap::Incremental *pending_i
 
 void OSDMap::rm_all_upmap_prims(
   CephContext *cct,
-  OSDMap::Incremental *pending_inc)
+  OSDMap::Incremental *pending_inc) const
 {
   for (const auto& [pg, _] : pg_upmap_primaries) {
     if (pending_inc->new_pg_upmap_primary.contains(pg)) {
@@ -6014,11 +6092,18 @@ map<uint64_t,set<pg_t>> OSDMap::get_pgs_by_osd(
   OSDMap tmp_osd_map;
   tmp_osd_map.deepish_copy_from(*this);
 
+  // Set up map to return
+  map<uint64_t,set<pg_t>> pgs_by_osd;
+
   // Get the pool from the provided pool id
   const pg_pool_t* pool = get_pg_pool(pid);
+  if (!pool) {
+    ldout(cct, 20) << __func__ << " pool " << pid
+	          << " does not exist" << dendl;
+    return pgs_by_osd;
+  }
 
   // build array of pgs from the pool
-  map<uint64_t,set<pg_t>> pgs_by_osd;
   for (unsigned ps = 0; ps < pool->get_pg_num(); ++ps) {
     pg_t pg(ps, pid);
     vector<int> up;
