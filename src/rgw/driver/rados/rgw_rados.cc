@@ -3477,7 +3477,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   tracepoint(rgw_rados, complete_enter, req_id.c_str());
   r = index_op->complete(rctx.dpp, poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type,
-                        storage_class, meta.owner,
+                        storage_class, meta.cksum_algo, meta.cksum_flags, meta.owner,
 			 meta.category, meta.remove_objs, rctx.y,
 			 meta.user_data, meta.appendable, log_op);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
@@ -4073,6 +4073,8 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
   bufferlist olh_info_bl;
   bool appendable { false };
   bufferlist part_num_bl;
+  bufferlist cksum_bl;
+  bool found_cksum { false };
 
   rgw::sal::Attrs& attr_set = head_state->attrset;
   read_attr(attr_set, RGW_ATTR_ETAG, etag);
@@ -4081,6 +4083,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
   read_attr(attr_set, RGW_ATTR_ACL, acl_bl, &found_acl);
   read_attr(attr_set, RGW_ATTR_OLH_INFO, olh_info_bl, &found_olh_info);
   read_attr(attr_set, RGW_ATTR_APPEND_PART_NUM, part_num_bl, &appendable);
+  read_attr(attr_set, RGW_ATTR_CKSUM, cksum_bl, &found_cksum);
 
   // check for a pure OLH object and if so exit early
   if (found_olh_info) {
@@ -4106,6 +4109,22 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
   ACLOwner owner;
   if (found_acl) {
     (void) decode_policy(dpp, acl_bl, &owner);
+  }
+
+  uint16_t cksum_algo = 0;
+  uint16_t cksum_flags = 0;
+  if (found_cksum) {
+    try {
+      rgw::cksum::Cksum cksum;
+      auto iter = cksum_bl.cbegin();
+      cksum.decode(iter);
+      cksum_algo = static_cast<uint16_t>(cksum.type);
+      cksum_flags = cksum.flags & rgw::cksum::Cksum::CKSUM_TYPE_MASK;
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+	": unable to decode Checksum for " << p(head_obj) << dendl;
+      return -EIO;
+    }
   }
 
   rgw_rados_ref bucket_ref;
@@ -4155,6 +4174,8 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
 			    etag,
 			    content_type,
 			    storage_class,
+			    cksum_algo,
+			    cksum_flags,
 			    owner,
 			    RGWObjCategory::Main, // RGWObjCategory category,
 			    nullptr, // remove_objs list
@@ -7587,6 +7608,19 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
                  iter != state->attrset.end()) {
         storage_class = rgw_bl_str(iter->second);
       }
+      uint16_t cksum_algo = 0;
+      uint16_t cksum_flags = 0;
+      if (iter = attrs.find(RGW_ATTR_CKSUM); iter != attrs.end()) {
+        try {
+          rgw::cksum::Cksum cksum;
+          decode(cksum, iter->second);
+          cksum_algo = static_cast<uint16_t>(cksum.type);
+          cksum_flags = cksum.flags & rgw::cksum::Cksum::CKSUM_TYPE_MASK;
+        } catch (buffer::error& err) {
+          ldpp_dout(dpp, 0) << "ERROR: failed to decode rgw::cksum::Cksum" << dendl;
+        }
+      }
+
       int64_t poolid = ioctx.get_id();
 
       // Retain Object category as CloudTiered while restore is in
@@ -7625,7 +7659,7 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
       }
 	    ldpp_dout(dpp, 20) << "Setting obj category:" << category << ", storage_class:" << storage_class << dendl;
       r = index_op.complete(dpp, poolid, epoch, state->size, state->accounted_size,
-                            mtime, etag, content_type, storage_class, owner,
+                            mtime, etag, content_type, storage_class, cksum_algo, cksum_flags, owner,
                             category, nullptr, y, nullptr, false, log_op);
     } else {
       int ret = index_op.cancel(dpp, nullptr, y, log_op);
@@ -8048,6 +8082,7 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
                                             uint64_t size, uint64_t accounted_size,
                                             const ceph::real_time& ut, const string& etag,
                                             const string& content_type, const string& storage_class,
+                                            const uint16_t cksum_algo, const uint16_t cksum_flags,
                                             const ACLOwner& owner,
                                             RGWObjCategory category,
                                             list<rgw_obj_index_key> *remove_objs,
@@ -8082,6 +8117,8 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
   ent.meta.owner_display_name = owner.display_name;
   ent.meta.content_type = content_type;
   ent.meta.appendable = appendable;
+  ent.meta.cksum_algo = cksum_algo;
+  ent.meta.cksum_flags = cksum_flags;
 
   bool add_log = log_op && store->svc.zone->need_to_log_data();
 

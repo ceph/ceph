@@ -2100,6 +2100,15 @@ void RGWListBucket_ObjStore_S3::send_response()
 	} else {
 	s->formatter->dump_string("Type", "Normal");
       }
+      rgw::cksum::Type cksum_algo{iter->meta.cksum_algo};
+      if (cksum_algo != rgw::cksum::Type::none) {
+        s->formatter->dump_string("ChecksumAlgorithm", rgw::cksum::to_uc_string(cksum_algo));
+        if (iter->meta.cksum_flags & rgw::cksum::Cksum::FLAG_COMPOSITE) {
+          s->formatter->dump_string("ChecksumType", "COMPOSITE");
+        } else {
+          s->formatter->dump_string("ChecksumType", "FULL_OBJECT");
+        }
+      }
       // JSON has one extra section per element
       s->formatter->close_section();
     } // foreach obj
@@ -2245,6 +2254,15 @@ void RGWListBucket_ObjStore_S3v2::send_response()
         s->formatter->dump_string("Type", "Appendable");
       } else {
         s->formatter->dump_string("Type", "Normal");
+      }
+      rgw::cksum::Type cksum_algo{iter->meta.cksum_algo};
+      if (cksum_algo != rgw::cksum::Type::none) {
+        s->formatter->dump_string("ChecksumAlgorithm", rgw::cksum::to_uc_string(cksum_algo));
+        if (iter->meta.cksum_flags & rgw::cksum::Cksum::FLAG_COMPOSITE) {
+          s->formatter->dump_string("ChecksumType", "COMPOSITE");
+        } else {
+          s->formatter->dump_string("ChecksumType", "FULL_OBJECT");
+        }
       }
       s->formatter->close_section();
     }
@@ -4663,6 +4681,11 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   }
   if (cksum_algo != rgw::cksum::Type::none) {
     dump_header(s, "x-amz-checksum-algorithm", to_uc_string(cksum_algo));
+    if (cksum_flags & rgw::cksum::Cksum::FLAG_COMPOSITE) {
+      dump_header(s, "x-amz-checksum-type", "COMPOSITE");
+    } else {
+      dump_header(s, "x-amz-checksum-type", "FULL_OBJECT");
+    }
   }
   end_header(s, this, to_mime_type(s->format));
   if (op_ret == 0) {
@@ -4815,8 +4838,13 @@ void RGWListMultipart_ObjStore_S3::send_response()
     /* TODO: missing initiator:
        Container element that identifies who initiated the multipart upload. If the initiator is an AWS account, this element provides the same information as the Owner element. If the initiator is an IAM User, this element provides the user ARN and display name, see https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html */
 
-    if (cksum && cksum->aws()) {
-      s->formatter->dump_string("ChecksumAlgorithm", cksum->uc_type_string());
+    if (upload->cksum_type != rgw::cksum::Type::none) {
+      s->formatter->dump_string("ChecksumAlgorithm", to_uc_string(upload->cksum_type));
+      if (upload->cksum_flags & rgw::cksum::Cksum::FLAG_COMPOSITE) {
+        s->formatter->dump_string("ChecksumType", "COMPOSITE");
+      } else {
+        s->formatter->dump_string("ChecksumType", "FULL_OBJECT");
+      }
     }
 
     for (; iter != upload->get_parts().end(); ++iter) {
