@@ -130,6 +130,7 @@ OSD::OSD(int id, uint32_t nonce,
     clog(log_client.create_channel())
 {
   LOG_PREFIX(OSD::OSD);
+  DEBUG("");
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr),
                     std::ref(hb_front_msgr), std::ref(hb_back_msgr)}) {
@@ -182,10 +183,13 @@ CompatSet get_osd_initial_compat_set()
 
 seastar::future<> OSD::open_meta_coll()
 {
+  LOG_PREFIX(OSD::open_meta_coll);
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+  DEBUG("opening metadata collection");   
   return store.get_sharded_store().open_collection(
     coll_t::meta()
-  ).then([this](auto ch) {
+  ).then([this, FNAME](auto ch) {
+    DEBUG("registering metadata collection");    
     pg_shard_manager.init_meta_coll(ch, store.get_sharded_store());
     return seastar::now();
   });
@@ -257,14 +261,18 @@ seastar::future<MetricPayload> OSD::get_perf_reports() {
 
 seastar::future<OSDMeta> OSD::open_or_create_meta_coll(FuturizedStore &store)
 {
-  return store.get_sharded_store().open_collection(coll_t::meta()).then([&store](auto ch) {
+  LOG_PREFIX(OSD::open_or_create_meta_coll); 
+  DEBUG("");
+  return store.get_sharded_store().open_collection(coll_t::meta()).then([&store, FNAME](auto ch) {
     if (!ch) {
+      DEBUG("creating new metadata collection");
       return store.get_sharded_store().create_new_collection(
 	coll_t::meta()
       ).then([&store](auto ch) {
 	return OSDMeta(ch, store.get_sharded_store());
       });
     } else {
+      DEBUG("meta collection already exists");
       return seastar::make_ready_future<OSDMeta>(ch, store.get_sharded_store());
     }
   });
@@ -278,15 +286,17 @@ seastar::future<> OSD::mkfs(
   std::string osdspec_affinity)
 {
   LOG_PREFIX(OSD::mkfs);
-
+  DEBUG("starting store mkfs");
   co_await store.start();
 
+  DEBUG("calling store mkfs");
   co_await store.mkfs(osd_uuid).handle_error(
     crimson::stateful_ec::assert_failure(fmt::format(
       "{} error creating empty object store in {}",
        FNAME, local_conf().get_val<std::string>("osd_data")).c_str())
   );
 
+  DEBUG("mounting store mkfs");
   co_await store.mount().handle_error(
     crimson::stateful_ec::assert_failure(fmt::format(
       "{} error mounting object store in {}",
@@ -336,6 +346,7 @@ seastar::future<> OSD::_write_superblock(
     std::move(meta_coll),
     std::move(superblock),
     [&store, FNAME](auto &meta_coll, auto &superblock) {
+      DEBUG("try loading existing superblock");
       return meta_coll.load_superblock(
       ).safe_then([&superblock, FNAME](OSDSuperblock&& sb) {
 	if (sb.cluster_fsid != superblock.cluster_fsid) {
@@ -352,19 +363,18 @@ seastar::future<> OSD::_write_superblock(
 	crimson::ct_error::enoent::handle([&store, &meta_coll, &superblock,
 					   FNAME] {
 	  // meta collection does not yet, create superblock
-	  INFO("{} writing superblock cluster_fsid {} osd_fsid {}",
-	       "_write_superblock",
+	  INFO("writing superblock cluster_fsid {} osd_fsid {}",
 	       superblock.cluster_fsid,
 	       superblock.osd_fsid);
 	  ceph::os::Transaction t;
 	  meta_coll.create(t);
 	  meta_coll.store_superblock(t, superblock);
-	  DEBUG("OSD::_write_superblock: do_transaction...");
+	  DEBUG("do_transaction: create meta collection and store superblock");
 	  return store.get_sharded_store().do_transaction(
 	    meta_coll.collection(),
 	    std::move(t));
 	}),
-	crimson::ct_error::assert_all("_write_superbock error")
+	crimson::ct_error::assert_all("_write_superblock error")
       );
     });
 }
@@ -451,6 +461,7 @@ seastar::future<> OSD::start()
   }
   startup_time = ceph::mono_clock::now();
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+  DEBUG("starting store");
   return store.start().then([this] {
     return pg_to_shard_mappings.start(0, seastar::smp::count
     ).then([this] {
@@ -475,6 +486,7 @@ seastar::future<> OSD::start()
     heartbeat.reset(new Heartbeat{
 	whoami, get_shard_services(),
 	*monc, *hb_front_msgr, *hb_back_msgr});
+    DEBUG("mounting store");
     return store.mount().handle_error(
       crimson::stateful_ec::assert_failure(fmt::format(
         "{} error mounting object store in {}",
@@ -511,8 +523,10 @@ seastar::future<> OSD::start()
       stats_timer.arm_periodic(std::chrono::seconds(stats_seconds));
     }
 
+    DEBUG("open metadata collection");
     return open_meta_coll();
-  }).then([this] {
+  }).then([this, FNAME] {
+    DEBUG("loading superblock"); 
     return pg_shard_manager.get_meta_coll().load_superblock(
     ).handle_error(
       crimson::ct_error::assert_all("open_meta_coll error")
@@ -532,8 +546,9 @@ seastar::future<> OSD::start()
     return shard_services.invoke_on_all([this](auto &local_service) {
       local_service.local_state.osdmap_gate.got_map(osdmap->get_epoch());
     });
-  }).then([this] {
+  }).then([this, FNAME] {
     bind_epoch = osdmap->get_epoch();
+    DEBUG("loading PGs");
     return pg_shard_manager.load_pgs(store);
   }).then([this, FNAME] {
     uint64_t osd_required =
@@ -574,10 +589,12 @@ seastar::future<> OSD::start()
             [FNAME] (const std::error_code& e) {
           ERROR("public messenger bind(): {}", e);
         })));
-  }).then_unpack([this] {
+  }).then_unpack([this, FNAME] {
+    DEBUG("starting mon and mgr clients");
     return seastar::when_all_succeed(monc->start(),
                                      mgrc->start());
-  }).then_unpack([this] {
+  }).then_unpack([this, FNAME] {    
+    DEBUG("adding to crush");
     return _add_me_to_crush();
   }).then([this] {
     return _add_device_class();
@@ -609,7 +626,8 @@ seastar::future<> OSD::start()
     return start_asok_admin();
   }).then([this] {
     return log_client.set_fsid(monc->get_fsid());
-  }).then([this] {
+  }).then([this, FNAME] {
+    DEBUG("starting boot");
     return start_boot();
   });
 }
