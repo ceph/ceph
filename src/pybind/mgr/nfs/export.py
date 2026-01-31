@@ -741,7 +741,8 @@ class ExportMgr:
                              clients: list = [],
                              sectype: Optional[List[str]] = None,
                              cmount_path: Optional[str] = "/",
-                             earmark_resolver: Optional[CephFSEarmarkResolver] = None
+                             earmark_resolver: Optional[CephFSEarmarkResolver] = None,
+                             kmip_key_id: Optional[str] = None
                              ) -> Dict[str, Any]:
 
         validate_cephfs_path(self.mgr, fs_name, path)
@@ -766,6 +767,7 @@ class ExportMgr:
                     },
                     "clients": clients,
                     "sectype": sectype,
+                    "kmip_key_id": kmip_key_id
                 },
                 earmark_resolver
             )
@@ -791,7 +793,8 @@ class ExportMgr:
                           bucket: Optional[str] = None,
                           user_id: Optional[str] = None,
                           clients: list = [],
-                          sectype: Optional[List[str]] = None) -> Dict[str, Any]:
+                          sectype: Optional[List[str]] = None,
+                          kmip_key_id: Optional[str] = None) -> Dict[str, Any]:
         pseudo_path = normalize_path(pseudo_path)
 
         if not bucket and not user_id:
@@ -812,6 +815,7 @@ class ExportMgr:
                     },
                     "clients": clients,
                     "sectype": sectype,
+                    "kmip_key_id": kmip_key_id
                 }
             )
             log.debug("creating rgw export %s", export)
