@@ -714,6 +714,27 @@ int RadosBucket::unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, o
                                              y, dpp, update_entrypoint);
 }
 
+static void chown_acl(const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      RGWAccessControlPolicy& policy)
+{
+  //Get the ACL from the policy
+  RGWAccessControlList& acl = policy.get_acl();
+  ACLOwner& owner = policy.get_owner();
+
+  //Remove grant that is set to old owner
+  acl.remove_canon_user_grant(owner.id);
+
+  //Create a grant and add grant
+  ACLGrant grant;
+  grant.set_canon(new_owner, new_owner_name, RGW_PERM_FULL_CONTROL);
+  acl.add_grant(grant);
+
+  //Update the ACL owner to the new user
+  owner.id = new_owner;
+  owner.display_name = new_owner_name;
+}
+
 int RadosBucket::chown(const DoutPrefixProvider* dpp,
                        const rgw_owner& new_owner,
                        const std::string& new_owner_name,
@@ -739,21 +760,8 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp,
 
       RGWAccessControlPolicy policy;
       decode(policy, p);
-      //Get the ACL from the policy
-      RGWAccessControlList& acl = policy.get_acl();
-      ACLOwner& owner = policy.get_owner();
 
-      //Remove grant that is set to old owner
-      acl.remove_canon_user_grant(owner.id);
-
-      //Create a grant and add grant
-      ACLGrant grant;
-      grant.set_canon(new_owner, new_owner_name, RGW_PERM_FULL_CONTROL);
-      acl.add_grant(grant);
-
-      //Update the ACL owner to the new user
-      owner.id = new_owner;
-      owner.display_name = new_owner_name;
+      chown_acl(new_owner, new_owner_name, policy);
 
       bufferlist bl;
       encode(policy, bl);
@@ -3135,7 +3143,10 @@ int RadosObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::s
   return sysobj.omap().set_must_exist(must_exist).set(dpp, key, val, y);
 }
 
-int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+int RadosObject::chown(const DoutPrefixProvider* dpp,
+                       const rgw_owner& new_owner,
+                       const std::string& new_owner_name,
+                       optional_yield y)
 {
   int r = get_obj_attrs(y, dpp);
   if (r < 0) {
@@ -3162,21 +3173,7 @@ int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_y
     return -EIO;
   }
 
-  //Get the ACL from the policy
-  RGWAccessControlList& acl = policy.get_acl();
-
-  //Remove grant that is set to old owner
-  acl.remove_canon_user_grant(owner.id);
-
-  //Create a grant and add grant
-  ACLGrant grant;
-  grant.set_canon(new_user.get_id(), new_user.get_display_name(), RGW_PERM_FULL_CONTROL);
-  acl.add_grant(grant);
-
-  //Update the ACL owner to the new user
-  owner.id = new_user.get_id();
-  owner.display_name = new_user.get_display_name();
-  policy.set_owner(owner);
+  chown_acl(new_owner, new_owner_name, policy);
 
   bl.clear();
   encode(policy, bl);
