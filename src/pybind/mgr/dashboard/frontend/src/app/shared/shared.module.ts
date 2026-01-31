@@ -17,6 +17,7 @@ import { FormlyObjectTypeComponent } from './forms/crud-form/formly-object-type/
 import { FormlyInputTypeComponent } from './forms/crud-form/formly-input-type/formly-input-type.component';
 import { FormlyTextareaTypeComponent } from './forms/crud-form/formly-textarea-type/formly-textarea-type.component';
 import { BlockUIModule, BlockUIService } from 'ng-block-ui';
+import { TilesModule } from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -39,7 +40,7 @@ import { BlockUIModule, BlockUIService } from 'ng-block-ui';
     BlockUIModule.forRoot()
   ],
   declarations: [FormlyTextareaTypeComponent],
-  exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule],
+  exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule, TilesModule],
   providers: [AuthStorageService, AuthGuardService, FormatterService, CssHelper, BlockUIService]
 })
 export class SharedModule {}
