@@ -252,7 +252,7 @@ as follows:
 :command:`zonegroup default`
   Set the default zone group.
 
-:command:`zonegroup rm`
+:command:`zonegroup delete`
   Remove a zone group info.
 
 :command:`zonegroup get`
