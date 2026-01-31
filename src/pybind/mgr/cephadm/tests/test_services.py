@@ -1,3 +1,4 @@
+import hashlib
 from textwrap import dedent
 import json
 import urllib.parse
@@ -7,6 +8,7 @@ from mgr_util import build_url
 import pytest
 
 from unittest.mock import Mock, MagicMock, call, patch, ANY
+
 
 from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
@@ -4988,7 +4990,49 @@ class TestSMB:
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_smb_tls(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
+        with with_host(cephadm_module, 'test', addr='1.2.3.7'):
+            cephadm_module.cache.update_host_networks(
+                'test',
+                {'1.2.3.0/24': {'if0': ['1.2.3.7']}}
+            )
+
+            smb_spec = SMBSpec(
+                cluster_id="foxtrot",
+                service_id="foo",
+                config_uri='rados://.smb/foxtrot/config2.json',
+                placement=PlacementSpec(hosts=['test']),
+                ssl=True,
+                ssl_cert=ceph_generated_cert,
+                ssl_key=ceph_generated_key,
+                ssl_ca_cert=cephadm_root_ca,
+                certificate_source='inline',
+                tls_min_version='TLSv1.3'
+            )
+
+            with with_service(cephadm_module, smb_spec):
+                smb_generated_conf, _ = service_registry.get_service('smb').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='test',
+                        daemon_id='foo.test.0',
+                        service_name=smb_spec.service_name()
+                    )
+                )
+                # ---- TLS assertions against dict keys ----
+                expected_cert_id = hashlib.md5(ceph_generated_cert.encode()).hexdigest()
+                assert smb_generated_conf['ssl_cert'] == expected_cert_id
+                expected_key = hashlib.md5(ceph_generated_key.encode()).hexdigest()
+                assert smb_generated_conf['ssl_key'] == expected_key
+                expected_root_ca = hashlib.md5(cephadm_root_ca.encode()).hexdigest()
+                assert smb_generated_conf['ssl_ca_cert'] == expected_root_ca
+
+                assert smb_generated_conf['tls_min_version'] == 'TLSv1.3'
+                assert smb_generated_conf['tls_ktls'] is False
+                assert smb_generated_conf['tls_debug'] is False
+                
 
 class TestMgmtGateway:
     @patch("cephadm.serve.CephadmServe._run_cephadm")

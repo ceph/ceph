@@ -30,6 +30,7 @@ from typing import (
     TypedDict,
     Literal
 )
+from venv import logger
 
 import yaml
 
@@ -867,6 +868,7 @@ class ServiceSpec(object):
         'mgmt-gateway': {'user_cert_allowed': True, 'scope': 'global', 'requires_ca_cert': False},
         'nvmeof': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': False},
         'nfs': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': True},
+        'smb': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': True},
 
         # Services that only support cephadm-signed certificates
         'agent': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
@@ -3745,6 +3747,15 @@ class SMBSpec(ServiceSpec):
         # not listed the default port will be used.
         custom_ports: Optional[Dict[str, int]] = None,
         bind_addrs: Optional[List[SMBClusterBindIPSpec]] = None,
+        ssl: bool = False,
+        ssl_cert: Optional[str] = None,
+        ssl_key: Optional[str] = None,
+        ssl_ca_cert: Optional[str] = None,
+        certificate_source: Optional[str] = None,
+        tls_ktls: bool = False,
+        tls_debug: bool = False,
+        tls_min_version: Optional[str] = None,
+        tls_ciphers: Optional[str] = None,
         # === remote control server ===
         remote_control_ssl_cert: Optional[str] = None,
         remote_control_ssl_key: Optional[str] = None,
@@ -3762,6 +3773,11 @@ class SMBSpec(ServiceSpec):
             placement=placement,
             count=count,
             config=config,
+            ssl=ssl,
+            ssl_cert=ssl_cert,
+            ssl_key=ssl_key,
+            ssl_ca_cert=ssl_ca_cert,
+            certificate_source=certificate_source,
             unmanaged=unmanaged,
             preview_only=preview_only,
             networks=networks,
@@ -3787,6 +3803,12 @@ class SMBSpec(ServiceSpec):
         self.remote_control_ssl_key = remote_control_ssl_key
         self.remote_control_ca_cert = remote_control_ca_cert
         self.validate()
+
+        #TLS fields
+        self.tls_ktls = tls_ktls
+        self.tls_debug = tls_debug
+        self.tls_min_version = tls_min_version
+        self.tls_ciphers = tls_ciphers
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -3825,6 +3847,21 @@ class SMBSpec(ServiceSpec):
         for key in self.custom_ports or {}:
             if key not in self._valid_service_names:
                 raise ValueError(f'{key} is not a valid service name')
+
+        # TLS certificate validation
+        if self.ssl and not self.certificate_source:
+            raise SpecValidationError('If SSL is enabled, a certificate source must be provided.')
+        if self.certificate_source == CertificateSource.INLINE.value:
+            tls_field_names = [
+                'ssl_cert',
+                'ssl_key',
+                'ssl_ca_cert',
+            ]
+            tls_fields = [getattr(self, tls_field) for tls_field in tls_field_names]
+            if any(tls_fields) and not all(tls_fields):
+                raise SpecValidationError(
+                    f'Either none or all of {tls_field_names} attributes must be set'
+                )
 
     def _derive_cluster_uri(self, uri: str, objname: str) -> str:
         if not uri.startswith('rados://'):

@@ -1,7 +1,7 @@
 import errno
 import ipaddress
 import logging
-from typing import Any, Dict, List, Tuple, cast, Optional, Iterable, Union
+from typing import Any, Dict, List, Tuple, cast, Optional, Iterable, Union, TYPE_CHECKING
 
 from mgr_module import HandleCommandResult
 
@@ -16,9 +16,11 @@ from .cephadmservice import (
     simplified_keyring,
 )
 from ..schedule import DaemonPlacement
-
+from cephadm.tlsobject_types import TLSObjectScope
 logger = logging.getLogger(__name__)
-
+from cephadm import utils
+#if TYPE_CHECKING:
+#    from ..module import CephadmOrchestrator
 
 def _add_cfg(cfg_dict: Dict[str, Any], key: str, value: Any) -> None:
     if value:
@@ -37,6 +39,49 @@ class SMBService(CephService):
     def config(self, spec: ServiceSpec) -> None:
         assert self.TYPE == spec.service_type
         smb_spec = cast(SMBSpec, spec)
+
+        # Inline TLS support via certmgr
+        if smb_spec.ssl:
+            if not (smb_spec.ssl_cert and smb_spec.ssl_key and smb_spec.ssl_ca_cert):
+                raise ValueError(
+                    "ssl enabled for smb but ssl_cert / ssl_key / ssl_ca_cert not provided"
+                )
+
+            service_name = smb_spec.service_name()
+
+            cert_name = "smb_ssl_cert"
+            key_name = "smb_ssl_key"
+            ca_cert_name = "smb_ssl_ca_cert"
+
+            self.mgr.cert_mgr.register_cert_key_pair(
+                consumer=self.TYPE,
+                cert_name=cert_name,
+                key_name=key_name,
+                ca_cert_name=ca_cert_name,
+                scope=TLSObjectScope.SERVICE,
+            )
+
+            self.mgr.cert_mgr.save_cert(
+                cert_name,
+                smb_spec.ssl_cert,
+                service_name=service_name,
+                user_made=True,
+                editable=True,
+            )
+            self.mgr.cert_mgr.save_key(
+                key_name,
+                smb_spec.ssl_key,
+                service_name=service_name,
+                user_made=True,
+                editable=True,
+            )
+            self.mgr.cert_mgr.save_cert(
+                ca_cert_name,
+                smb_spec.ssl_ca_cert,
+                service_name=service_name,
+                user_made=True,
+                editable=True,
+            )
         self._configure_cluster_meta(smb_spec)
 
     def ranked(self, spec: ServiceSpec) -> bool:
@@ -131,6 +176,7 @@ class SMBService(CephService):
     ) -> Tuple[Dict[str, Any], List[str]]:
         logger.debug('smb generate_config')
         assert self.TYPE == daemon_spec.daemon_type
+        super().register_for_certificates(daemon_spec)
         smb_spec = cast(
             SMBSpec, self.mgr.spec_store[daemon_spec.service_name].spec
         )
@@ -146,6 +192,15 @@ class SMBService(CephService):
         _add_cfg(config_blobs, 'cluster_lock_uri', smb_spec.cluster_lock_uri)
         cluster_public_addrs = smb_spec.strict_cluster_ip_specs()
         _add_cfg(config_blobs, 'cluster_public_addrs', cluster_public_addrs)
+        
+        if (smb_spec.ssl and smb_spec.ssl_cert and smb_spec.ssl_key and smb_spec.ssl_ca_cert):
+            config_blobs['ssl_cert'] = str(utils.md5_hash(smb_spec.ssl_cert))
+            config_blobs['ssl_key'] = str(utils.md5_hash(smb_spec.ssl_key))
+            config_blobs['ssl_ca_cert'] = str(utils.md5_hash(smb_spec.ssl_ca_cert))
+        config_blobs['tls_ktls'] = smb_spec.tls_ktls
+        config_blobs['tls_debug'] = smb_spec.tls_debug
+        _add_cfg(config_blobs, 'tls_min_version', smb_spec.tls_min_version)
+        _add_cfg(config_blobs, 'tls_ciphers', smb_spec.tls_ciphers)
         ceph_users = smb_spec.include_ceph_users or []
         config_blobs.update(
             self._ceph_config_and_keyring_for(
