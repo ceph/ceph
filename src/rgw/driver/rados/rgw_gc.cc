@@ -674,9 +674,9 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 	    ctx = new IoCtx;
 	    ret = rgw_init_ioctx(this, store->get_rados_handle(), obj.pool, *ctx);
 	    if (ret < 0) {
-        if (transitioned_objects_cache[index]) {
-          goto done;
-        }
+	      if (ret != -ENOENT && transitioned_objects_cache[index]) {
+		goto done;
+	      }
 	      last_pool = "";
 	      ldpp_dout(this, 0) << "ERROR: failed to create ioctx pool=" <<
 		obj.pool << dendl;
