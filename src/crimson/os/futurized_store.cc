@@ -33,4 +33,35 @@ FuturizedStore::create(const std::string& type,
   }
 }
 
+seastar::future<> with_store_do_transaction(
+  crimson::os::FuturizedStore::StoreShardRef store,
+  FuturizedStore::Shard::CollectionRef ch,
+  ceph::os::Transaction&& txn)
+{
+  std::unique_ptr<Context> on_commit(
+    ceph::os::Transaction::collect_all_contexts(txn));
+  const auto original_core = seastar::this_shard_id();
+  if (store.get_owner_shard() == seastar::this_shard_id()) {
+    return store->do_transaction_no_callbacks(
+      std::move(ch), std::move(txn)
+    ).then([on_commit=std::move(on_commit)]() mutable {
+      auto c = on_commit.release();
+      if (c) c->complete(0);
+      return seastar::now();
+    });
+  } else {
+    return seastar::smp::submit_to(
+      store.get_owner_shard(),
+      [f_store=store.get(), ch=std::move(ch), txn=std::move(txn)]() mutable {
+      return f_store->do_transaction_no_callbacks(
+        std::move(ch), std::move(txn));
+    }).then([original_core, on_commit=std::move(on_commit)]() mutable {
+      return seastar::smp::submit_to(original_core, [on_commit=std::move(on_commit)]() mutable {
+        auto c = on_commit.release();
+        if (c) c->complete(0);
+        return seastar::now();
+      });
+    });
+  }
+}
 }

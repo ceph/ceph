@@ -168,11 +168,11 @@ seastar::future<> PGAdvanceMap::split_pg(
     children_pgids.insert(child_pgid);
 
     // Map each child pg ID to a core
-    auto core = co_await shard_services.create_split_pg_mapping(child_pgid, seastar::this_shard_id());
+    auto core = co_await shard_services.create_split_pg_mapping(child_pgid, seastar::this_shard_id(), 0);
     DEBUG(" PG {} mapped to {}", child_pgid.pgid, core);
     DEBUG(" {} map epoch: {}", child_pgid.pgid, pg_epoch);
     auto map = next_map;
-    auto child_pg = co_await shard_services.make_pg(std::move(map), child_pgid, true);
+    auto child_pg = co_await shard_services.make_pg(std::move(map), child_pgid, 0, true);
 
     DEBUG(" Parent pgid: {}", pg->get_pgid());
     DEBUG(" Child pgid: {}", child_pg->get_pgid());

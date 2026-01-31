@@ -14,7 +14,7 @@ using std::string_view;
 // easily skip them
 using crimson::os::FuturizedStore;
 
-PGMeta::PGMeta(FuturizedStore::Shard& store, spg_t pgid)
+PGMeta::PGMeta(FuturizedStore::StoreShardRef store, spg_t pgid)
   : store{store},
     pgid{pgid}
 {}
@@ -37,11 +37,15 @@ namespace {
 
 seastar::future<epoch_t> PGMeta::get_epoch()
 {
-  return store.open_collection(coll_t{pgid}).then([this](auto ch) {
-    return store.omap_get_values(ch,
+  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::open_collection>(
+    store, coll_t{pgid}).then([this](auto ch) {
+    return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_get_values>(
+                                 store, ch,
                                  pgid.make_pgmeta_oid(),
-                                 {string{infover_key},
-                                  string{epoch_key}}).safe_then(
+                                 std::set<std::string>{
+                                  string{infover_key},
+                                  string{epoch_key}},
+                                 0).safe_then(
     [](auto&& values) {
       {
         // sanity check
@@ -65,13 +69,17 @@ seastar::future<epoch_t> PGMeta::get_epoch()
 
 seastar::future<std::tuple<pg_info_t, PastIntervals>> PGMeta::load()
 {
-  return store.open_collection(coll_t{pgid}).then([this](auto ch) {
-    return store.omap_get_values(ch,
+  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::open_collection>(
+    store, coll_t{pgid}).then([this](auto ch) {
+    return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_get_values>(
+                                 store, ch,
                                  pgid.make_pgmeta_oid(),
-                                 {string{infover_key},
+                                 std::set<std::string>{
+                                  string{infover_key},
                                   string{info_key},
                                   string{biginfo_key},
-                                  string{fastinfo_key}});
+                                  string{fastinfo_key}},
+                                  0);
   }).safe_then([](auto&& values) {
     {
       // sanity check

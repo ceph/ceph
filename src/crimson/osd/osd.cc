@@ -183,7 +183,7 @@ CompatSet get_osd_initial_compat_set()
 seastar::future<> OSD::open_meta_coll()
 {
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
-  return store.get_sharded_store().open_collection(
+  return store.get_sharded_store()->open_collection(
     coll_t::meta()
   ).then([this](auto ch) {
     pg_shard_manager.init_meta_coll(ch, store.get_sharded_store());
@@ -257,9 +257,9 @@ seastar::future<MetricPayload> OSD::get_perf_reports() {
 
 seastar::future<OSDMeta> OSD::open_or_create_meta_coll(FuturizedStore &store)
 {
-  return store.get_sharded_store().open_collection(coll_t::meta()).then([&store](auto ch) {
+  return store.get_sharded_store()->open_collection(coll_t::meta()).then([&store](auto ch) {
     if (!ch) {
-      return store.get_sharded_store().create_new_collection(
+      return store.get_sharded_store()->create_new_collection(
 	coll_t::meta()
       ).then([&store](auto ch) {
 	return OSDMeta(ch, store.get_sharded_store());
@@ -360,7 +360,7 @@ seastar::future<> OSD::_write_superblock(
 	  meta_coll.create(t);
 	  meta_coll.store_superblock(t, superblock);
 	  DEBUG("OSD::_write_superblock: do_transaction...");
-	  return store.get_sharded_store().do_transaction(
+	  return store.get_sharded_store()->do_transaction(
 	    meta_coll.collection(),
 	    std::move(t));
 	}),
@@ -451,25 +451,36 @@ seastar::future<> OSD::start()
   }
   startup_time = ceph::mono_clock::now();
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
-  return store.start().then([this] {
-    return pg_to_shard_mappings.start(0, seastar::smp::count
+  return store.start().then([this] (auto store_shard_nums) {
+    return pg_to_shard_mappings.start(0, seastar::smp::count, store_shard_nums
     ).then([this] {
       return osd_singleton_state.start_single(
         whoami, std::ref(*cluster_msgr), std::ref(*public_msgr),
         std::ref(*monc), std::ref(*mgrc));
     }).then([this] {
       return osd_states.start();
-    }).then([this] {
+    }).then([this, store_shard_nums] {
       ceph::mono_time startup_time = ceph::mono_clock::now();
       return shard_services.start(
         std::ref(osd_singleton_state),
         std::ref(pg_to_shard_mappings),
+        store_shard_nums,
         whoami,
         startup_time,
         osd_singleton_state.local().perf,
         osd_singleton_state.local().recoverystate_perf,
         std::ref(store),
         std::ref(osd_states));
+    }).then([this] {
+      return shard_services.invoke_on_all(
+      [this](auto& local_service) {
+        local_service.set_container(shard_services);
+      });
+    }).then([this] {
+      return shard_services.invoke_on_all(
+      [](auto& local_service) {
+        return local_service.get_remote_store();
+      });
     });
   }).then([this, FNAME] {
     heartbeat.reset(new Heartbeat{
@@ -822,6 +833,8 @@ seastar::future<> OSD::start_asok_admin()
 	std::as_const(get_shard_services().get_registry())));
     asok->register_command(
       make_asok_hook<DumpRecoveryReservationsHook>(get_shard_services()));
+    asok->register_command(
+      make_asok_hook<StoreShardNumsHook>(get_shard_services()));
   });
 }
 
@@ -1222,7 +1235,7 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
   co_await pg_shard_manager.set_superblock(superblock);
 
   DEBUG("submitting transaction");
-  co_await store.get_sharded_store().do_transaction(
+  co_await store.get_sharded_store()->do_transaction(
     pg_shard_manager.get_meta_coll().collection(), std::move(t));
 
   // TODO: write to superblock and commit the transaction
@@ -1596,7 +1609,7 @@ seastar::future<double> OSD::run_bench(int64_t count, int64_t bsize, int64_t osi
     std::vector<seastar::future<>> futures;
     std::vector<seastar::future<>> cleanup_futures;
     
-    auto collection_future = store.get_sharded_store().open_collection(
+    auto collection_future = store.get_sharded_store()->open_collection(
       coll_t::meta());
     auto collection_ref = co_await std::move(collection_future);
     ceph::os::Transaction cleanup_t;
@@ -1613,10 +1626,10 @@ seastar::future<double> OSD::run_bench(int64_t count, int64_t bsize, int64_t osi
                         ghobject_t::NO_GEN,
                         shard_id_t::NO_SHARD);
         t.write(coll_t::meta(), oid, 0, data.size(), bl);
-        futures.push_back(store.get_sharded_store().do_transaction(
+        futures.push_back(store.get_sharded_store()->do_transaction(
           collection_ref, std::move(t)));
         cleanup_t.remove(coll_t::meta(), oid);
-        cleanup_futures.push_back(store.get_sharded_store().do_transaction(
+        cleanup_futures.push_back(store.get_sharded_store()->do_transaction(
           collection_ref, std::move(cleanup_t)));
       }
     }
@@ -1650,12 +1663,12 @@ seastar::future<double> OSD::run_bench(int64_t count, int64_t bsize, int64_t osi
 
       t.write(coll_t::meta(), oid, offset, bsize, bl);
 
-      futures_bench.push_back(store.get_sharded_store().do_transaction(
+      futures_bench.push_back(store.get_sharded_store()->do_transaction(
         collection_ref, std::move(t)));
 
       if (!onum || !osize) {
         cleanup_t.remove(coll_t::meta(), oid);
-        cleanup_futures.push_back(store.get_sharded_store().do_transaction(
+        cleanup_futures.push_back(store.get_sharded_store()->do_transaction(
           collection_ref, std::move(cleanup_t)));
       }
     }

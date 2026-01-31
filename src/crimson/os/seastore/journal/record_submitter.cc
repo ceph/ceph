@@ -389,10 +389,10 @@ RecordSubmitter::submit(
 }
 
 RecordSubmitter::open_ret
-RecordSubmitter::open(bool is_mkfs)
+RecordSubmitter::open(unsigned int store_index, bool is_mkfs)
 {
   return journal_allocator.open(is_mkfs
-  ).safe_then([this](journal_seq_t ret) {
+  ).safe_then([this, store_index](journal_seq_t ret) {
     LOG_PREFIX(RecordSubmitter::open);
     DEBUG("{} register metrics", get_name());
     stats = {};
@@ -400,6 +400,8 @@ RecordSubmitter::open(bool is_mkfs)
     namespace sm = seastar::metrics;
     std::vector<sm::label_instance> label_instances;
     label_instances.push_back(sm::label_instance("submitter", get_name()));
+    label_instances.push_back(sm::label_instance("shard_store_index", std::to_string(store_index)));
+
     metrics.add_group(
       "journal",
       {

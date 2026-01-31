@@ -19,11 +19,11 @@ namespace crimson::osd {
 
 ReplicatedBackend::ReplicatedBackend(pg_t pgid,
                                      pg_shard_t whoami,
-				     crimson::osd::PG& pg,
+                                     crimson::osd::PG& pg,
                                      ReplicatedBackend::CollectionRef coll,
                                      crimson::osd::ShardServices& shard_services,
 				     DoutPrefixProvider &dpp)
-  : PGBackend{whoami.shard, coll, shard_services, dpp},
+  : PGBackend{whoami.shard, coll, shard_services, pg.get_store_index(), dpp},
     pgid{pgid},
     whoami{whoami},
     pg(pg),
@@ -44,7 +44,8 @@ ReplicatedBackend::_read(const hobject_t& hoid,
                          const uint64_t len,
                          const uint32_t flags)
 {
-  return store->read(coll, ghobject_t{hoid}, off, len, flags);
+  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::read>(
+    store, coll, ghobject_t{hoid}, off, len, flags);
 }
 
 MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
@@ -176,7 +177,9 @@ ReplicatedBackend::submit_transaction(
     false);
 
   auto all_completed = interruptor::make_interruptible(
-      shard_services.get_store().do_transaction(coll, std::move(txn))
+    crimson::os::with_store_do_transaction(
+      shard_services.get_store(pg.get_store_index()),
+      coll, std::move(txn))
    ).then_interruptible([FNAME, this,
 			peers=pending_txn->second.weak_from_this()] {
     if (!peers) {

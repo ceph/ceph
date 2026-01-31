@@ -1038,7 +1038,7 @@ BtreeLBAManager::complete_indirect_lba_mapping(
   });
 }
 
-void BtreeLBAManager::register_metrics()
+void BtreeLBAManager::register_metrics(unsigned int store_index)
 {
   LOG_PREFIX(BtreeLBAManager::register_metrics);
   DEBUG("start");
@@ -1050,12 +1050,14 @@ void BtreeLBAManager::register_metrics()
       sm::make_counter(
         "alloc_extents",
         stats.num_alloc_extents,
-        sm::description("total number of lba alloc_extent operations")
+        sm::description("total number of lba alloc_extent operations"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "alloc_extents_iter_nexts",
         stats.num_alloc_extents_iter_nexts,
-        sm::description("total number of iterator next operations during extent allocation")
+        sm::description("total number of iterator next operations during extent allocation"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
     }
   );

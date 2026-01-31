@@ -256,6 +256,134 @@ addresses with segment cleaning handled in the background.
 
 See crimson/os/seastore/transaction_manager.h
 
+MultiShardStores
+----------------
+In order to not restrict the number of store shards (SeaStore::Shard) to be equal to the number of reactors threads (seastar::smp::count) allocated to the OSD - MultiShardStores is introduced.
+With MultiShardStores, the number of OSD shards could be changed also after mkfs if the reactor count is changed and the OSD restarts.
+Each reactor thread can host multiple store shards. Alternatively, few reactors threads could now share the same store shard. Store shards can forward their I/O requests to another store shard running on a different reactor thread.
+
+For example, for an OSD that had 3 reactor threads (seastar::smp::count: 3) set during mkfs.
+After changing the reactor thread count to 5 and restarting the cluster, the mounted store shards will look like:
+
+Reactors thread 0 -> Store Shard: 0
+Reactors thread 1 -> Store Shard: 1
+Reactors thread 2 -> Store Shard: 2
+Reactors thread 3 -> Store Shard: 0 (forwarded)
+Reactors thread 4 -> Store Shard: 1 (forwarded)
+
+When changing to seastar::smp::count: 2:
+Reactors thread 0 -> Store Shard: 0, 2
+Reactors thread 1 -> Store Shard: 1
+
+using ./bin/ceph daemon osd.0 dump_store_shards to check store assignment.
+See the following example outputs from running dump_store_shards with the above scenarios:
+first start with 3 reactors:
+./bin/ceph daemon osd.0 dump_store_shards
+*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
+{
+    "this shard id": 0,
+    "osd shard nums": 3,
+    "store_shard_nums": 3,
+    "core_pgs": {
+        "core": 0,
+        "num_pgs": 43
+    },
+    "core_pgs": {
+        "core": 1,
+        "num_pgs": 43
+    },
+    "core_pgs": {
+        "core": 2,
+        "num_pgs": 43
+    }
+}
+
+second restart with 2 reactors:
+./bin/ceph daemon osd.0 dump_store_shards
+*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
+{
+    "this shard id": 0,
+    "osd shard nums": 2,
+    "store_shard_nums": 3,
+    "core_pgs": {
+        "core": 0,
+        "num_pgs": 86
+    },
+    "core_pgs": {
+        "core": 1,
+        "num_pgs": 43
+    },
+    "core_store": {
+        "core": 0,
+        "store": {
+            "store_index": 0,
+            "num_pgs": 43
+        },
+        "store": {
+            "store_index": 1,
+            "num_pgs": 43
+        }
+    },
+    "core_store": {
+        "core": 1,
+        "store": {
+            "store_index": 0,
+            "num_pgs": 43
+        }
+    }
+}
+
+third restart with 5 reactors:
+ ./bin/ceph daemon osd.0 dump_store_shards
+*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
+{
+    "this shard id": 0,
+    "osd shard nums": 5,
+    "store_shard_nums": 3,
+    "core_pgs": {
+        "core": 0,
+        "num_pgs": 43
+    },
+    "core_pgs": {
+        "core": 1,
+        "num_pgs": 43
+    },
+    "core_pgs": {
+        "core": 2,
+        "num_pgs": 43
+    },
+    "core_alien": {
+        "core": 0,
+        "alien_core": {
+            "alien_core_id": 0,
+            "num_pgs": 22
+        },
+        "alien_core": {
+            "alien_core_id": 3,
+            "num_pgs": 21
+        }
+    },
+    "core_alien": {
+        "core": 1,
+        "alien_core": {
+            "alien_core_id": 1,
+            "num_pgs": 22
+        },
+        "alien_core": {
+            "alien_core_id": 4,
+            "num_pgs": 21
+        }
+    },
+    "core_alien": {
+        "core": 2,
+        "alien_core": {
+            "alien_core_id": 2,
+            "num_pgs": 43
+        }
+    }
+}
+
+
 Next Steps
 ==========
 
