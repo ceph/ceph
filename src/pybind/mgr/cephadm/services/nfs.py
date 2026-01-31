@@ -28,6 +28,9 @@ class NFSService(CephService):
     TYPE = 'nfs'
     DEFAULT_EXPORTER_PORT = 9587
 
+    def allow_colo(self) -> bool:
+        return True
+
     @property
     def needs_monitoring(self) -> bool:
         return True
@@ -124,7 +127,7 @@ class NFSService(CephService):
         self.create_rados_config_obj(spec)
 
         port = daemon_spec.ports[0] if daemon_spec.ports else 2049
-        monitoring_ip, monitoring_port = self.get_monitoring_details(daemon_spec.service_name, host)
+        monitoring_ip, monitoring_port = self.get_monitoring_details(daemon_spec.service_name, host, daemon_spec)
 
         # create the RGW keyring
         rgw_user = f'{rados_user}-rgw'
@@ -421,9 +424,20 @@ class NFSService(CephService):
                     cluster_ips.append(addrs[0])
         return cluster_ips
 
-    def get_monitoring_details(self, service_name: str, host: str) -> Tuple[Optional[str], Optional[int]]:
+    def get_monitoring_details(
+        self,
+        service_name: str,
+        host: str,
+        daemon_spec: Optional['CephadmDaemonDeploySpec'] = None
+    ) -> Tuple[Optional[str], Optional[int]]:
         spec = cast(NFSServiceSpec, self.mgr.spec_store[service_name].spec)
-        monitoring_port = spec.monitoring_port if spec.monitoring_port else 9587
+
+        # For colocation, use the incremented monitoring port from daemon_spec.ports[1] if available
+        # Otherwise fall back to the spec's monitoring_port
+        if daemon_spec and daemon_spec.ports and len(daemon_spec.ports) > 1:
+            monitoring_port = daemon_spec.ports[1]
+        else:
+            monitoring_port = spec.monitoring_port if spec.monitoring_port else 9587
 
         # check if monitor needs to be bind on specific ip
         monitoring_addr = spec.monitoring_ip_addrs.get(host) if spec.monitoring_ip_addrs else None

@@ -169,9 +169,9 @@ class DaemonPlacement(NamedTuple):
         # new port/ips as part of the upgrade process
         if not upgrade_in_progress:
             if self.ports:
-                if self.ports != dd.ports and dd.ports:
+                if self.ports and dd.ports and self.ports != dd.ports:
                     return False
-                if self.ip != dd.ip and dd.ip:
+                if self.ip and dd.ip and self.ip != dd.ip:
                     return False
         return True
 
