@@ -1443,6 +1443,8 @@ public:
 
     void finish_write(TransContext* txc, uint32_t offset, uint32_t length);
 
+    int get_fragmentation_score();
+
     struct printer : public BlueStore::printer {
       const Onode &onode;
       uint16_t mode;
@@ -1645,6 +1647,26 @@ public:
   class OpSequencer;
   using OpSequencerRef = ceph::ref_t<OpSequencer>;
 
+  struct RuntimeFragTracker {
+    bool enabled;
+    bool has_prev = false;
+    uint64_t prev_end = 0;
+    uint64_t frag_score = 0;
+
+    explicit RuntimeFragTracker(bool enabled) : enabled(enabled) {}
+
+    inline void note(uint64_t offset, uint64_t length) {
+      if (!enabled)
+        return;
+
+      if (!has_prev || offset != prev_end) {
+        frag_score++;
+      }
+      has_prev = true;
+      prev_end = offset + length;
+    }
+  };
+
   struct Collection : public CollectionImpl {
     BlueStore *store;
     OpSequencerRef osr;
@@ -1672,6 +1694,8 @@ public:
 
     ContextQueue *commit_queue;
     std::unique_ptr<Estimator> estimator;
+
+    std::atomic<uint64_t> runtime_frag_score{0};
 
     OnodeCacheShard* get_onode_cache() const {
       return onode_space.cache;
@@ -3275,6 +3299,7 @@ private:
 
 
   int _prepare_read_ioc(
+    Collection *c,
     blobs2read_t& blobs2read,
     std::vector<ceph::buffer::list>* compressed_blob_bls,
     IOContext* ioc);
