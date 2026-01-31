@@ -182,7 +182,7 @@ class GhostEvent(Event):
 
 class GlobalRecoveryEvent(Event):
     """
-    An event whoese completion is determined by active+clean/total_pg_num
+    An event whose completion is determined by active+clean/total_pg_num
     """
 
     def __init__(self, message, refs, add_to_ceph_s, start_epoch, active_clean_num):
@@ -790,7 +790,6 @@ class Module(MgrModule):
             self._complete(ev)
         except KeyError:
             self.log.warning("complete: ev {0} does not exist".format(ev_id))
-            pass
 
     def fail(self, ev_id, message):
         """
