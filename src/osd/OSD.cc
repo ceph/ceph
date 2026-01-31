@@ -1009,7 +1009,7 @@ void OSDService::set_statfs(const struct store_statfs_t &stbuf,
 {
   uint64_t bytes = stbuf.total;
   uint64_t avail = stbuf.available;
-  uint64_t used = stbuf.get_used_raw();
+  uint64_t used = stbuf.get_used();
 
   // For testing fake statfs values so it doesn't matter if all
   // OSDs are using the same partition.
@@ -1086,29 +1086,29 @@ void OSDService::set_osd_stat_repaired(int64_t count)
 float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
 				         uint64_t adjust_used)
 {
-  *pratio =
-   ((float)new_stat.statfs.get_used_raw()) / ((float)new_stat.statfs.total);
-
-  if (adjust_used) {
-    dout(20) << __func__ << " Before kb_used() " << new_stat.statfs.kb_used()  << dendl;
-    if (new_stat.statfs.available > adjust_used)
-      new_stat.statfs.available -= adjust_used;
-    else
-      new_stat.statfs.available = 0;
-    dout(20) << __func__ << " After kb_used() " << new_stat.statfs.kb_used() << dendl;
-  }
+  uint64_t used = new_stat.statfs.get_used_raw();
+  uint64_t total = new_stat.statfs.total_raw;
+  *pratio = ((float)used) / ((float)total);
 
   // Check all pgs and adjust kb_used to include all pending backfill data
-  int backfill_adjusted = 0;
+  int64_t backfill_adjusted = 0;
   vector<PGRef> pgs;
   osd->_get_pgs(&pgs);
   for (auto p : pgs) {
-    backfill_adjusted += p->pg_stat_adjust(&new_stat);
+    backfill_adjusted += p->get_pg_stat_adjustment();
   }
-  if (backfill_adjusted) {
-    dout(20) << __func__ << " backfill adjusted " << new_stat << dendl;
-  }
-  return ((float)new_stat.statfs.get_used_raw()) / ((float)new_stat.statfs.total);
+  uint64_t avail = (float)new_stat.statfs.get_avail_raw();
+  uint64_t adjustment = adjust_used + backfill_adjusted;;
+  adjustment = avail < adjustment ? avail : adjustment;
+
+  dout(20) << __func__ << " adjust used:" << adjust_used
+                       << " backfill adjusted:" << backfill_adjusted
+                       << " avail raw:" << avail
+                       << " target adjustment: " << adjustment
+                       << dendl;
+  float ratio = ((float)(used + adjustment) / ((float)total));
+  dout(5) << __func__ << " ratio:" << ratio << " pratio: " << *pratio << dendl;
+  return ratio;
 }
 
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
