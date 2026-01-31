@@ -924,3 +924,39 @@ TEST_F(LibRadosMiscPP, Conf) {
   ASSERT_EQ(0, cluster.conf_get(option, actual));
   ASSERT_EQ(expected, actual);
 }
+
+TEST_F(LibRadosMiscPP, NoVer) {
+  bufferlist bl;
+  bl.append("ceph");
+  ObjectWriteOperation write, write2;
+  ObjectReadOperation read, read2;
+
+  write.write_full(bl);
+  ASSERT_EQ(0, ioctx.operate("foo", &write));
+  uint64_t version = ioctx.get_last_version();
+
+  ioctx.set_no_version_on_read(true);
+  bl.append("moreceph");
+  write2.write_full(bl);
+  ASSERT_EQ(0, ioctx.operate("foo", &write2));
+
+  // Write versioning should still work.
+  ASSERT_EQ(++version, ioctx.get_last_version());
+
+  // Asserting the version should still work.
+  read.assert_version(version);
+  read.read(0, bl.length(), NULL, NULL);
+  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+
+  // However, version read should be invalid.
+  ASSERT_EQ(std::numeric_limits<version_t>::max(), ioctx.get_last_version());
+
+  // Re-enable versioning and check we can re-establish the version on a read.
+  ioctx.set_no_version_on_read(false);
+  read2.read(0, bl.length(), NULL, NULL);
+  ASSERT_EQ(0, ioctx.operate("foo", &read2, &bl));
+  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
+
+  // last version should now have been corrected.
+  ASSERT_EQ(version, ioctx.get_last_version());
+}
