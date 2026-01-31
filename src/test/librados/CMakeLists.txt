@@ -18,7 +18,8 @@ add_library(radostest-cxx STATIC
   $<TARGET_OBJECTS:radostest_shared>)
 target_link_libraries(radostest-cxx PUBLIC
   GTest::GTest
-  ceph-common)
+  ceph-common
+  ec_consistency)
 
 add_executable(ceph_test_rados_api_cmd
   cmd.cc)
@@ -141,6 +142,11 @@ add_executable(ceph_test_rados_api_snapshots_stats_pp
 target_link_libraries(ceph_test_rados_api_snapshots_stats_pp
   librados ${UNITTEST_LIBS} radostest-cxx)
 
+add_executable(ceph_test_rados_api_split_op_pp
+        split_op_cxx.cc)
+target_link_libraries(ceph_test_rados_api_split_op_pp
+        librados ${UNITTEST_LIBS} radostest-cxx)
+
 install(TARGETS
   ceph_test_rados_api_aio
   ceph_test_rados_api_aio_pp
@@ -165,6 +171,7 @@ install(TARGETS
   ceph_test_rados_api_stat_pp
   ceph_test_rados_api_watch_notify
   ceph_test_rados_api_watch_notify_pp
+  ceph_test_rados_api_split_op_pp
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # unittest_librados

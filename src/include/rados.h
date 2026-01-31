@@ -265,7 +265,9 @@ extern const char *ceph_osd_state_name(int s);
 	f(LIST_WATCHERS, __CEPH_OSD_OP(RD, DATA, 9),	"list-watchers")    \
 									    \
 	f(LIST_SNAPS,	__CEPH_OSD_OP(RD, DATA, 10),	"list-snaps")	    \
-									    \
+										\
+	f(GET_INTERNAL_VERSIONS, __CEPH_OSD_OP(RD, DATA, 33), "get-internal-versions") \
+										\
 	/* sync */							    \
 	f(SYNC_READ,	__CEPH_OSD_OP(RD, DATA, 11),	"sync_read")	    \
 									    \
@@ -481,7 +483,9 @@ enum {
 	CEPH_OSD_FLAG_IGNORE_REDIRECT = 0x2000000,  /* ignore redirection */
 	CEPH_OSD_FLAG_RETURNVEC = 0x4000000, /* allow overall result >= 0, and return >= 0 and buffer for each op in opvec */
 	CEPH_OSD_FLAG_SUPPORTSPOOLEIO = 0x8000000,   /* client understands pool EIO flag */
-        CEPH_OSD_FLAG_EC_DIRECT_READ = 0x10000000,  /* Erasure code doing a partial read direct to OSD. */
+	CEPH_OSD_FLAG_EC_DIRECT_READ = 0x10000000,  /* Erasure code doing a partial read direct to OSD. */
+	CEPH_OSD_FLAG_FAIL_ON_EAGAIN = 0x20000000,  /* -EAGAIN will not retry, but fail IO. */
+	CEPH_OSD_FLAG_FORCE_OSD = 0x40000000,  /* osd field contains a forced target. */
 };
 
 // Indicates an IO which is direct-to-OSD and may not be on the primary.
@@ -606,6 +610,7 @@ struct ceph_osd_op {
 			__u8 method_len;
 			__u8 argc;
 			__le32 indata_len;
+		        __u8 flags;
 		} __attribute__ ((packed)) cls;
 		struct {
 			__le64 count;

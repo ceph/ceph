@@ -46,7 +46,7 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
                  const std::string& pool, const std::string& primary_oid, const std::string& secondary_oid,
                  uint64_t block_size, int seed, int threads, ceph::mutex& lock,
                  ceph::condition_variable& cond, bool is_replicated_pool,
-                 bool ec_optimizations)
+                 bool ec_optimizations, int balanced_read_percentage)
     : Model(primary_oid, secondary_oid, block_size),
       rados(rados),
       asio(asio),
@@ -57,7 +57,9 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
       threads(threads),
       lock(lock),
       cond(cond),
-      outstanding_io(0) {
+      outstanding_io(0),
+      rng(seed),
+      balanced_read_percentage(balanced_read_percentage) {
   int rc;
   rc = rados.ioctx_create(pool.c_str(), io);
   ceph_assert(rc == 0);
@@ -138,6 +140,7 @@ void RadosIo::applyIoOp(IoOp& op) {
       wop.write_full(op_info->bufferlist[0]);
       auto create_cb = [this](boost::system::error_code ec, version_t ver) {
         ceph_assert(ec == boost::system::errc::success);
+        std::cout << "Completed Create OP" << std::endl;
         finish_io();
       };
       librados::async_operate(asio.get_executor(), io, primary_oid,
@@ -257,10 +260,28 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
         ceph_assert(db->validate(op_info->bufferlist[i], op_info->offset[i],
                                  op_info->length[i]));
       }
+      std::cout << "Completed Read OP" << std::endl;
       finish_io();
     };
+    
+    int flags = 0;
+    if (readOp.balanced_read.has_value()) {
+      if (*readOp.balanced_read) {
+        flags = librados::OPERATION_BALANCE_READS;
+      }
+      // Else: keep flags == 0
+    } else {
+      ceph_assert(balanced_read_percentage >= 0);
+      ceph_assert(balanced_read_percentage <= 100);
+      uint64_t range = 100;
+      uint64_t rand_value = rng();
+      int index = rand_value % range;
+      if (index <= balanced_read_percentage) {
+        flags = librados::OPERATION_BALANCE_READS;
+      }
+    }
     librados::async_operate(asio.get_executor(), io, primary_oid,
-                            std::move(rop), 0, nullptr, read_cb);
+                            std::move(rop), flags, nullptr, read_cb);
     num_io++;
   };
 
@@ -277,6 +298,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
     }
     auto write_cb = [this](boost::system::error_code ec, version_t ver) {
       ceph_assert(ec == boost::system::errc::success);
+      std::cout << "Completed Write OP" << std::endl;
       finish_io();
     };
     librados::async_operate(asio.get_executor(), io, primary_oid,
@@ -419,6 +441,16 @@ void RadosIo::applyInjectOp(IoOp& op) {
                                   "InjectECErrorRequest", {},
                                   &inject_outbl, formatter.get());
         ceph_assert(rc == 0);
+      } else if (errorOp.type == 2) {
+        ceph::messaging::osd::InjectECErrorRequest<
+            InjectOpType::ReadDelayed>
+            injectErrorRequest{pool,         primary_oid,          errorOp.shard,
+                               errorOp.type, errorOp.when, errorOp.duration};
+        int rc = send_osd_command(osd, injectErrorRequest, rados,
+                                  "InjectECErrorRequest", {},
+                                  &inject_outbl, formatter.get());
+        std::cout << "InjectECErrorRequest output: " << inject_outbl.c_str() << std::endl;
+        ceph_assert(rc == 0);
       } else {
         ceph_abort_msg("Unsupported inject type");
       }
@@ -444,10 +476,6 @@ void RadosIo::applyInjectOp(IoOp& op) {
                                   "InjectECErrorRequest", {},
                                   &inject_outbl, formatter.get());
         ceph_assert(rc == 0);
-
-        // This inject is sent directly to the shard we want to inject the error
-        // on
-        osd = shard_order[errorOp.shard];
       } else {
         ceph_abort("Unsupported inject type");
       }
@@ -472,6 +500,15 @@ void RadosIo::applyInjectOp(IoOp& op) {
         int rc = send_osd_command(osd, clearErrorInject, rados,
                                   "InjectECClearErrorRequest", {},
                                   &inject_outbl, formatter.get());
+        ceph_assert(rc == 0);
+      } else if (errorOp.type == 2) {
+        ceph::messaging::osd::InjectECClearErrorRequest<
+            InjectOpType::ReadDelayed>
+            clearErrorInject{pool, primary_oid, errorOp.shard, errorOp.type};
+        int rc = send_osd_command(osd, clearErrorInject, rados,
+                                  "InjectECClearErrorRequest", {},
+                                  &inject_outbl, formatter.get());
+        std::cout << "InjectECClearErrorRequest output: " << inject_outbl.c_str() << std::endl;
         ceph_assert(rc == 0);
       } else {
         ceph_abort("Unsupported inject type");

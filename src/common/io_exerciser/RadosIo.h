@@ -5,6 +5,8 @@
 #include "librados/AioCompletionImpl.h"
 #include "common/ceph_mutex.h"
 
+#include <random>
+
 namespace boost::asio { class io_context; }
 
 /* Overview
@@ -37,6 +39,8 @@ class RadosIo : public Model {
   ceph::condition_variable& cond;
   librados::IoCtx io;
   int outstanding_io;
+  std::mt19937_64 rng;
+  int balanced_read_percentage;
 
   void start_io();
   void finish_io();
@@ -47,7 +51,7 @@ class RadosIo : public Model {
           const std::string& pool, const std::string& primary_oid, const std::string& secondary_oid,
           uint64_t block_size, int seed, int threads, ceph::mutex& lock,
           ceph::condition_variable& cond, bool is_replicated_pool,
-          bool ec_optimizations);
+          bool ec_optimizations, int balanced_read_percentage);
 
   ~RadosIo();
 

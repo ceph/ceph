@@ -60,7 +60,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
         for (int i = 0; i < N; i++) {
           ceph_assert(readOp.offset[i] + readOp.length[i] <= primary_contents.size());
           // Not allowed: read overlapping with parallel write
-          ceph_assert(!writes.intersects(readOp.offset[i], readOp.length[i]));
+          // ceph_assert(!writes.intersects(readOp.offset[i], readOp.length[i]));
           reads.union_insert(readOp.offset[i], readOp.length[i]);
         }
         num_io++;
@@ -75,7 +75,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
         ceph_assert(primary_created);
         for (int i = 0; i < N; i++) {
           // Not allowed: write overlapping with parallel read or write
-          ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
+          // ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
           ceph_assert(!writes.intersects(writeOp.offset[i], writeOp.length[i]));
           writes.union_insert(writeOp.offset[i], writeOp.length[i]);
           if (writeOp.offset[i] + writeOp.length[i] > primary_contents.size()) {

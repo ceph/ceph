@@ -48,6 +48,7 @@ enum class Sequence {
   SEQUENCE_SEQ13,
   SEQUENCE_SEQ14,
   SEQUENCE_SEQ15,
+  SEQUENCE_SEQ16,
 
   SEQUENCE_END,
   SEQUENCE_BEGIN = SEQUENCE_SEQ0
@@ -337,5 +338,21 @@ class Seq15 : public IoSequence {
   std::string get_name() const override;
   std::unique_ptr<IoOp> _next() override;
 };
+
+ class Seq16 : public IoSequence {
+ private:
+  uint64_t counter;
+  bool inject_sent;
+  bool write_sent;
+  bool read_sent;
+  bool clear_sent;
+
+ public:
+  Seq16(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
+
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+ };
 }  // namespace io_exerciser
 }  // namespace ceph

@@ -821,7 +821,7 @@ void PrimaryLogPG::maybe_force_recovery()
     return;
 
   // find the oldest missing object
-  version_t min_version = recovery_state.get_pg_log().get_log().head.version;
+  eversion_t min_version = recovery_state.get_pg_log().get_log().head;
   hobject_t soid;
   if (!recovery_state.get_pg_log().get_missing().get_rmissing().empty()) {
     min_version = recovery_state.get_pg_log().get_missing().get_rmissing().begin()->first;
@@ -2058,13 +2058,14 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // check for op with rwordered and rebalance or localize reads
   if (m->has_flag(CEPH_OSD_FLAGS_DIRECT_READ) && op->rwordered()) {
-    dout(4) << __func__ << ": rebelance or localized reads with rwordered not allowed "
+    dout(4) << __func__ << ": rebalance or localized reads with rwordered not allowed "
        << *m << dendl;
     osd->reply_op_error(op, -EINVAL);
     return;
   }
 
   if (m->get_flags() & CEPH_OSD_FLAG_EC_DIRECT_READ) {
+    // This means "is in acting set"
     if (is_primary() || is_nonprimary()) {
       op->set_ec_direct_read();
     } else {
@@ -2076,6 +2077,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
     // balanced reads; any replica will do
+    // This means "is in acting set"
     if (!(is_primary() || is_nonprimary())) {
       osd->handle_misdirected_op(this, op);
       return;
@@ -2237,6 +2239,14 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     } else {
       wait_for_unreadable_object(head, op);
     }
+    return;
+  }
+
+  // Missing direct read (EC version)
+  if (m->has_flag(CEPH_OSD_FLAG_EC_DIRECT_READ) &&
+      get_local_missing().is_missing(head)) {
+    dout(20) << __func__ << ": oid=" << head << " missing in direct read" << dendl;
+    osd->reply_op_error(op, -EAGAIN);
     return;
   }
 
@@ -5906,10 +5916,17 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       maybe_crc = oi.data_digest;
 
     if (ctx->op->ec_direct_read()) {
-      result = pgbackend->objects_read_sync(
+      int r = pgbackend->objects_read_sync(
         soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
-
-        dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
+      if (r >= 0) {
+        op.extent.length = r;
+      } else if (r == -EAGAIN) {
+        result = -EAGAIN;
+      } else {
+        result = r;
+        op.extent.length = 0;
+      }
+      dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
     } else {
     ctx->pending_async_reads.push_back(
       make_pair(
@@ -6571,6 +6588,15 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         }
       }
       break;
+
+    case CEPH_OSD_OP_GET_INTERNAL_VERSIONS: {
+      std::map<shard_id_t, eversion_t> out;
+      result = get_internal_versions(soid, &out);
+      if (result >= 0) {
+        encode(out, osd_op.outdata);
+      }
+    }
+    break;
 
     case CEPH_OSD_OP_LIST_WATCHERS:
       ++ctx->num_read;
@@ -13532,12 +13558,12 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
   int skipped = 0;
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-  map<version_t, hobject_t>::const_iterator p =
-    missing.get_rmissing().lower_bound(recovery_state.get_pg_log().get_log().last_requested);
+  map<eversion_t, hobject_t>::const_iterator p =
+    missing.get_rmissing().lower_bound(eversion_t(0, recovery_state.get_pg_log().get_log().last_requested));
   while (p != missing.get_rmissing().end()) {
     handle.reset_tp_timeout();
     hobject_t soid;
-    version_t v = p->first;
+    eversion_t v = p->first;
 
     auto it_objects = recovery_state.get_pg_log().get_log().objects.find(p->second);
     if (it_objects != recovery_state.get_pg_log().get_log().objects.end()) {
@@ -13671,7 +13697,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 
     // only advance last_requested if we haven't skipped anything
     if (!skipped)
-      recovery_state.set_last_requested(v);
+      recovery_state.set_last_requested(v.version);
   }
 
   pgbackend->run_recovery_op(h, recovery_state.get_recovery_op_priority());
@@ -13842,9 +13868,9 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 
     // oldest first!
     const pg_missing_t &m(pm->second);
-    for (map<version_t, hobject_t>::const_iterator p = m.get_rmissing().begin();
-	 p != m.get_rmissing().end() && started < max;
-	   ++p) {
+    for (map<eversion_t, hobject_t>::const_iterator p = m.get_rmissing().begin();
+  p != m.get_rmissing().end() && started < max;
+    ++p) {
       handle.reset_tp_timeout();
       const hobject_t soid(p->second);
 
@@ -16065,6 +16091,28 @@ int PrimaryLogPG::getattrs_maybe_cache(
   }
   tmp.swap(*out);
   return r;
+}
+
+int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
+                                        std::map<shard_id_t, eversion_t>* out) {
+  const std::set<pg_shard_t>& acting_shards = get_acting_shards();
+  ObjectContextRef obc = get_object_context(soid, false);
+
+  if (!obc->obs.exists) {
+    return -ENOENT;
+  }
+
+  if (is_primary()) {
+    for (const auto& shard : acting_shards) {
+      (*out)[shard.shard] = obc->obs.oi.version;
+    }
+    for (const auto& [shard, version] : obc->obs.oi.shard_versions) {
+      out->at(shard) = version;
+    }
+  } else {
+    (*out)[pg_whoami.shard] = obc->obs.oi.version;
+  }
+  return 0;
 }
 
 bool PrimaryLogPG::check_failsafe_full() {

@@ -1349,6 +1349,7 @@ struct pg_pool_t {
     case FLAG_BULK: return "bulk";
     case FLAG_CRIMSON: return "crimson";
     case FLAG_EC_OPTIMIZATIONS: return "ec_optimizations";
+    case FLAG_CLIENT_SPLIT_READS: return "split_reads";
     default: return "???";
     }
   }
@@ -1407,6 +1408,8 @@ struct pg_pool_t {
       return FLAG_CRIMSON;
     if (name == "ec_optimizations")
       return FLAG_EC_OPTIMIZATIONS;
+    if (name == "split_reads")
+      return FLAG_CLIENT_SPLIT_READS;
     return 0;
   }
 
@@ -1744,6 +1747,7 @@ public:
 
 private:
   std::vector<uint32_t> grade_table;
+  std::vector<shard_id_t> shard_mapping; // Used by EC direct reads.
 
 public:
   uint32_t get_grade(unsigned i) const {
@@ -1959,6 +1963,17 @@ public:
   /// EC partial writes: test if a shard is a non-primary
   bool is_nonprimary_shard(const shard_id_t shard) const {
     return !nonprimary_shards.empty() && nonprimary_shards.contains(shard);
+  }
+
+  void set_shard_mapping(std::vector<shard_id_t> && mapping) {
+    shard_mapping = mapping;
+  }
+
+  shard_id_t get_shard(raw_shard_id_t raw) const {
+    if (shard_mapping.size() == 0) {
+      return shard_id_t((int)raw);
+    }
+    return shard_mapping[(int)raw];
   }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
@@ -5013,7 +5028,7 @@ class pg_missing_const_i {
 public:
   virtual const std::map<hobject_t, pg_missing_item> &
     get_items() const = 0;
-  virtual const std::map<version_t, hobject_t> &get_rmissing() const = 0;
+  virtual const std::map<eversion_t, hobject_t> &get_rmissing() const = 0;
   virtual bool get_may_include_deletes() const = 0;
   virtual unsigned int num_missing() const = 0;
   virtual bool have_missing() const = 0;
@@ -5059,7 +5074,7 @@ template <bool TrackChanges>
 class pg_missing_set : public pg_missing_const_i {
   using item = pg_missing_item;
   std::map<hobject_t, item> missing;  // oid -> (need v, have v)
-  std::map<version_t, hobject_t> rmissing;  // v -> oid
+  std::map<eversion_t, hobject_t> rmissing;  // v -> oid
   ChangeTracker<TrackChanges> tracker;
 
 public:
@@ -5079,7 +5094,7 @@ public:
   const std::map<hobject_t, item> &get_items() const override {
     return missing;
   }
-  const std::map<version_t, hobject_t> &get_rmissing() const override {
+  const std::map<eversion_t, hobject_t> &get_rmissing() const override {
     return rmissing;
   }
   bool get_may_include_deletes() const override {
@@ -5147,7 +5162,8 @@ public:
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
       if (is_missing_divergent_item) {  // use iterator
-        rmissing.erase(missing_it->second.need.version);
+        auto erased = rmissing.erase(missing_it->second.need);
+        ceph_assert(erased == 1);  // Should always erase exactly one entry
         // .have = nil
         missing_it->second = item(e.version, eversion_t(), e.is_delete());
         missing_it->second.clean_regions.mark_fully_dirty();
@@ -5162,7 +5178,8 @@ public:
       }
     } else if (is_missing_divergent_item) {
       // already missing (prior).
-      rmissing.erase((missing_it->second).need.version);
+      auto erased = rmissing.erase((missing_it->second).need);
+      ceph_assert(erased == 1);  // Should always erase exactly one entry
       missing_it->second.need = e.version;  // leave .have unchanged.
       missing_it->second.set_delete(e.is_delete());
       if (e.is_lost_revert())
@@ -5182,7 +5199,11 @@ public:
         missing[e.soid].clean_regions = e.clean_regions;
     }
     if (!skipped) {
-      rmissing[e.version.version] = e.soid;
+      auto [it, inserted] = rmissing.insert({e.version, e.soid});
+      if (!inserted) {
+        // Duplicate eversion_t detected - this should never happen
+        ceph_assert(it->second == e.soid);  // Same object is OK (idempotent)
+      }
       tracker.changed(e.soid);
     }
   }
@@ -5190,7 +5211,8 @@ public:
   void revise_need(hobject_t oid, eversion_t need, bool is_delete) {
     auto p = missing.find(oid);
     if (p != missing.end()) {
-      rmissing.erase((p->second).need.version);
+      auto erased = rmissing.erase((p->second).need);
+      ceph_assert(erased == 1);  // Should always erase exactly one entry
       p->second.need = need;          // do not adjust .have
       p->second.set_delete(is_delete);
       p->second.clean_regions.mark_fully_dirty();
@@ -5198,7 +5220,10 @@ public:
       missing[oid] = item(need, eversion_t(), is_delete);
       missing[oid].clean_regions.mark_fully_dirty();
     }
-    rmissing[need.version] = oid;
+    auto [it, inserted] = rmissing.insert({need, oid});
+    if (!inserted) {
+      ceph_assert(it->second == oid);  // Same object is OK
+    }
 
     tracker.changed(oid);
   }
@@ -5220,14 +5245,20 @@ public:
   }
 
   void add(const hobject_t& oid, eversion_t need, eversion_t have,
-	   bool is_delete) {
+    bool is_delete) {
     missing[oid] = item(need, have, is_delete, true);
-    rmissing[need.version] = oid;
+    auto [it, inserted] = rmissing.insert({need, oid});
+    if (!inserted) {
+      ceph_assert(it->second == oid);  // Duplicate eversion_t for same object is OK
+    }
     tracker.changed(oid);
   }
 
   void add(const hobject_t& oid, pg_missing_item&& item) {
-    rmissing[item.need.version] = oid;
+    auto [it, inserted] = rmissing.insert({item.need, oid});
+    if (!inserted) {
+      ceph_assert(it->second == oid);  // Duplicate eversion_t for same object is OK
+    }
     missing.insert({oid, std::move(item)});
     tracker.changed(oid);
   }
@@ -5240,7 +5271,8 @@ public:
 
   void rm(std::map<hobject_t, item>::const_iterator m) {
     tracker.changed(m->first);
-    rmissing.erase(m->second.need.version);
+    auto erased = rmissing.erase(m->second.need);
+    ceph_assert(erased == 1);  // Should always erase exactly one entry
     missing.erase(m);
   }
 
@@ -5253,7 +5285,8 @@ public:
 
   void got(std::map<hobject_t, item>::const_iterator m) {
     tracker.changed(m->first);
-    rmissing.erase(m->second.need.version);
+    auto erased = rmissing.erase(m->second.need);
+    ceph_assert(erased == 1);  // Should always erase exactly one entry
     missing.erase(m);
   }
 
@@ -5319,10 +5352,15 @@ public:
     }
 
     for (std::map<hobject_t,item>::iterator it =
-	   missing.begin();
-	 it != missing.end();
-	 ++it)
-      rmissing[it->second.need.version] = it->first;
+    missing.begin();
+  it != missing.end();
+  ++it) {
+      auto [rit, inserted] = rmissing.insert({it->second.need, it->first});
+      if (!inserted) {
+        // Duplicate eversion_t in decoded data - this indicates corruption
+        ceph_assert(rit->second == it->first);
+      }
+    }
     for (auto const &i: missing)
       tracker.changed(i.first);
   }

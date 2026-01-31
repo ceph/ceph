@@ -59,6 +59,9 @@ std::ostream& ceph::io_exerciser::operator<<(std::ostream& os,
     case Sequence::SEQUENCE_SEQ15:
       os << "SEQUENCE_SEQ15";
       break;
+    case Sequence::SEQUENCE_SEQ16:
+      os << "SEQUENCE_SEQ16";
+      break;
     case Sequence::SEQUENCE_END:
       os << "SEQUENCE_END";
       break;
@@ -108,6 +111,8 @@ std::unique_ptr<IoSequence> IoSequence::generate_sequence(
       return std::make_unique<Seq14>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ15:
       return std::make_unique<Seq15>(obj_size_range, seed, check_consistency);
+    case Sequence::SEQUENCE_SEQ16:
+      return std::make_unique<Seq16>(obj_size_range, seed, check_consistency);
     default:
       break;
   }
@@ -859,4 +864,56 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq15::_next() {
   }
 
   return r;
+}
+
+ceph::io_exerciser::Seq16::Seq16(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency), counter(0) {
+  select_random_object_size();
+}
+
+Sequence ceph::io_exerciser::Seq16::get_id() const {
+  return Sequence::SEQUENCE_SEQ16;
+}
+
+std::string ceph::io_exerciser::Seq16::get_name() const {
+  return "Testing for torn writes";
+}
+
+std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq16::_next() {
+  if (!inject_sent) {
+    inject_sent = true;
+    barrier = true;
+    std::cout << "Sending inject" << std::endl;
+    return InjectReadErrorOp::generate(1, 2, 0, std::numeric_limits<int64_t>::max());
+  } else if (!read_sent) {
+    read_sent = true;
+    std::cout << "Sending read" << std::endl;
+    return SingleReadOp::generate(0, 4);
+  } else if (!write_sent) {
+    write_sent = true;
+    std::cout << "Sending write" << std::endl;
+    sleep(2);
+    return SingleWriteOp::generate(0, 4);
+  } else if (!clear_sent) {
+    clear_sent = true;
+    barrier = true;
+    std::cout << "Sending clear" << std::endl;
+    sleep(2);
+    return ClearReadErrorInjectOp::generate(1, 2);
+  } else {
+    inject_sent = false;
+    write_sent = false;
+    read_sent = false;
+    clear_sent = false;
+    counter++;
+    std::cout << "Counter incrementing to: " << counter << std::endl;
+    std::cout << "Beginning Barrier operation" << std::endl;
+    if (counter == 1000)
+    {
+      done = true;
+      barrier = true;
+      remove = true;
+    }
+    return BarrierOp::generate();
+  }
 }

@@ -191,6 +191,8 @@ enum {
   l_osdc_replica_read_bounced,
   l_osdc_replica_read_completed,
 
+  l_osdc_split_op_reads,
+
   l_osdc_last,
 };
 
@@ -246,6 +248,10 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("rados_osd_op_timeout")) {
     osd_timeout = conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+  }
+  if (changed.count("osd_min_split_replica_read_size")) {
+    min_split_replica_read_size
+      = conf.get_val<uint64_t>("osd_min_split_replica_read_size");
   }
 
   auto read_policy = conf.get_val<std::string>("rados_replica_read_policy");
@@ -400,6 +406,8 @@ void Objecter::init()
 			"Operations bounced by replica to be resent to primary");
     pcb.add_u64_counter(l_osdc_replica_read_completed, "replica_read_completed",
 			"Operations completed by replica");
+    pcb.add_u64_counter(l_osdc_split_op_reads, "split_op_reads",
+                    "Client read ops split by SplitOp");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -1616,9 +1624,13 @@ void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *s
       ldout(cct, 10) << "check_op_pool_dne tid " << op->tid
 		     << " concluding pool " << op->target.base_pgid.pool()
 		     << " dne" << dendl;
+      // If FORCE_OSD is set, the forced OSD doesn't exist in the current map.
+      // This may be transient (OSD temporarily down) or permanent (OSD removed).
+      // Return -EAGAIN instead of -ENOENT to allow caller to retry.
+      int rc = (op->target.flags & CEPH_OSD_FLAG_FORCE_OSD) ? -EAGAIN : -ENOENT;
       if (op->has_completion()) {
-	num_in_flight--;
-	op->complete(make_error_code(osdc_errc::pool_dne), -ENOENT, service.get_executor());
+ num_in_flight--;
+ op->complete(make_error_code(osdc_errc::pool_dne), rc, service.get_executor());
       }
 
       OSDSession *s = op->session;
@@ -2352,10 +2364,49 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
+void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
 
-void Objecter::op_post_submit(Op* op) {
-  boost::asio::post(service, [this, op]() {
-    op_submit(op);
+  // If the parent op was already removed from its session by a map change, then
+  // ignore the completion here.
+  if (!op->session) {
+    return;
+  }
+
+  // While the following post is scheduled, this op is considered "in flight".
+  // If a new osdmap is published, this op might be cancelled/redriven, etc..
+  // before the following post is executed. Normally, an op would be protected
+  // from this in the messaging layer. However, we don't have that protection
+  // here.  So we consider the following:
+  // 1. The op could be returned and freed (op->get() prevents this).
+  // 2. The op could be removed from its session but not yet resent.
+  // 3. The op could be redriven in the new epoch.
+  op->get();
+  auto epoch = op->target.epoch;
+
+  boost::asio::post(service, [this, op, ec, rc, epoch]() {
+
+    bool freed = op->get_nref() == 1;
+    op->put();
+    if (freed || !op->session || op->target.epoch != epoch) {
+      return;
+    }
+
+    shunique_lock rl(rwlock, ceph::acquire_shared);
+    ceph_assert(op->session);
+    unique_lock sl(op->session->lock);
+
+    if (rc != -EAGAIN) {
+      op->trace.event("post op complete");
+
+      // This function unlocks sl.
+      complete_op_reply(op, ec, op->session, sl, rc);
+    } else {
+      _session_op_remove(op->session, op);
+      sl.unlock();
+      op->split_op_tids.reset();
+      ceph_tid_t tid = 0;
+      _op_submit(op, rl, &tid);
+    }
   });
 }
 
@@ -2367,11 +2418,7 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
     ptid = &tid;
   op->trace.event("op submit");
 
-  bool was_split = SplitOp::create(op, *this, rl, ptid, ctx_budget, cct);
-
-  if (!was_split) {
-    _op_submit_with_budget(op, rl, ptid, ctx_budget);
-  }
+  _op_submit_with_budget(op, rl, ptid, ctx_budget);
 }
 
 void Objecter::_op_submit_with_budget(Op *op,
@@ -2405,7 +2452,28 @@ void Objecter::_op_submit_with_budget(Op *op,
 				      op_cancel(tid, -ETIMEDOUT); });
   }
 
-  _op_submit(op, sul, ptid);
+
+  bool was_split = SplitOp::create(op, *this, sul, cct);
+
+  if (was_split) {
+    // All the ops have been sent, but we need to track the op with a tid.
+    if (op->tid == 0) {
+      op->tid = ++last_tid;
+    }
+    *ptid = op->tid;
+    OSDSession *s;
+    int r = _get_session(op->target.osd, &s, sul);
+    // The lock has been held since the last calc_target, so it should not
+    // be possible for a new map to have appeared.
+    ceph_assert(r == 0);
+    unique_lock sl(s->lock);
+    _session_op_assign(s, op);
+    inflight_ops++;
+    sl.unlock();
+    put_session(s);
+  } else {
+    _op_submit(op, sul, ptid);
+  }
 }
 
 void Objecter::_send_op_account(Op *op)
@@ -2506,22 +2574,31 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
 
   ldout(cct, 10) << __func__ << " op " << op << dendl;
 
+  if (op->target.flags & CEPH_OSD_FLAG_FORCE_OSD) {
+    logger->inc(l_osdc_split_op_reads);
+  }
+
   // pick target
   ceph_assert(op->session == NULL);
   OSDSession *s = NULL;
 
   bool check_for_latest_map = false;
-  int r = _calc_target(&op->target);
-  switch(r) {
-  case RECALC_OP_TARGET_POOL_DNE:
-    check_for_latest_map = true;
-    break;
-  case RECALC_OP_TARGET_POOL_EIO:
-    if (op->has_completion()) {
-      op->complete(make_error_code(osdc_errc::pool_eio), -EIO,
-		   service.get_executor());
+  int r = 0;
+  // Avoid duplicating _calc_target for direct reads, where _calc_target has
+  // already been called.
+  if ((op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ) == 0) {
+    r = _calc_target(&op->target);
+    switch(r) {
+    case RECALC_OP_TARGET_POOL_DNE:
+      check_for_latest_map = true;
+      break;
+    case RECALC_OP_TARGET_POOL_EIO:
+      if (op->has_completion()) {
+        op->complete(make_error_code(osdc_errc::pool_eio), -EIO,
+                     service.get_executor());
+      }
+      return;
     }
-    return;
   }
 
   // Try to get a session, including a retry if we need to take write lock
@@ -2636,9 +2713,28 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r,
   }
 #endif
 
-  ldout(cct, 10) << __func__ << " tid " << tid << " in session " << s->osd
-		 << dendl;
   Op *op = p->second;
+  if (op->split_op_tids) {
+    auto tids = *op->split_op_tids; // intentional copy.
+    sl.unlock();
+
+    // An op with split ops is not actually active, but has child ops which
+    // need to be canceled.  This op should end up being canceled by the
+    // generated completions.
+    for (auto sub_tid : tids) {
+      ldout(cct, 10) << __func__ << " SplitOp:: cancel tid " << tid
+               << " sub_tid " << sub_tid
+               << " in session " << s->osd << dendl;
+      int ret = _op_cancel(sub_tid, r);
+      if (ret != 0) {
+        ldout(cct, 20) << __func__ << " unexpected error canceling sub_tid "
+                      << sub_tid << ": " << ret << dendl;
+      }
+    }
+    return 0;
+  }
+  ldout(cct, 10) << __func__ << " tid " << tid << " in session " << s->osd
+               << dendl;
   if (op->has_completion()) {
     num_in_flight--;
     op->complete(ec, r, service.get_executor());
@@ -3120,18 +3216,40 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->pg_num_mask = pg_num_mask;
     t->pg_num_pending = pg_num_pending;
     spg_t spgid(actual_pgid);
-    if (t->force_shard) {
-      t->osd = t->acting[int(*t->force_shard)];
-      // In some redrive scenarios, the acting set can change. Fail the IO
-      // and retry.
-      if (!osdmap->exists(t->osd)) {
-        t->osd = -1;
-        return RECALC_OP_TARGET_POOL_DNE;
+    if (t->flags & CEPH_OSD_FLAG_FORCE_OSD) {
+      // In some redrive scenarios, the acting set can change. If the forced
+      // OSD doesn't exist in the acting set (e.g., it disappeared from the
+      // upmap), we need to handle it appropriately.
+      bool osd_in_acting = false;
+      for (auto acting_osd : t->acting) {
+        if (acting_osd == t->osd) {
+          osd_in_acting = true;
+          break;
+        }
       }
-      if (pi->is_erasure()) {
-        spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, *t->force_shard));
+      if (!osd_in_acting) {
+        // If FAIL_ON_EAGAIN is set, we must not failover - the caller expects
+        // -EAGAIN to be returned. Otherwise, clear the direct read flags and
+        // redrive to the primary OSD (similar to what happens when we get -EAGAIN).
+        if (t->flags & CEPH_OSD_FLAG_FAIL_ON_EAGAIN) {
+          ldout(cct, 10) << __func__ << " forced osd." << t->osd
+                         << " not in acting set " << t->acting
+                         << ", FAIL_ON_EAGAIN set, returning POOL_DNE to trigger -EAGAIN"
+                         << dendl;
+          t->osd = -1;
+          return RECALC_OP_TARGET_POOL_DNE;
+        } else {
+          ldout(cct, 10) << __func__ << " forced osd." << t->osd
+                         << " not in acting set " << t->acting
+                         << ", clearing direct read flags and redriving to primary"
+                         << dendl;
+          // Clear all direct read flags (EC_DIRECT_READ, BALANCE_READS, LOCALIZE_READS)
+          t->flags &= ~CEPH_OSD_FLAGS_DIRECT_READ;
+          t->flags &= ~CEPH_OSD_FLAG_FORCE_OSD;
+        }
       }
-    } else if (pi->is_erasure()) {
+    }
+    if (pi->is_erasure()) {
       // Optimized EC pools need to be careful when calculating the shard
       // because an OSD may have multiple shards and the primary shard
       // might not be the first one in the acting set. The lookup
@@ -3160,7 +3278,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 		   << " acting " << t->acting
 		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
-    if (!t->force_shard && (t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
+    if (!(t->flags & CEPH_OSD_FLAG_FORCE_OSD) && (t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
                      CEPH_OSD_FLAG_LOCALIZE_READS)) &&
         !is_write && pi->is_replicated() && t->acting.size() > 1) {
       int osd;
@@ -3197,7 +3315,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 	osd = t->acting[best];
       }
       t->osd = osd;
-    } else if (!t->force_shard) {
+    } else if (!(t->flags & CEPH_OSD_FLAG_FORCE_OSD)) {
       t->osd = acting_primary;
     }
   }
@@ -3246,7 +3364,7 @@ void Objecter::_session_op_remove(OSDSession *from, Op *op)
     num_homeless_ops--;
   }
 
-  from->ops.erase(op->tid);
+  ceph_assert(from->ops.erase(op->tid));
   put_session(from);
   op->session = NULL;
 
@@ -3387,6 +3505,7 @@ void Objecter::_finish_op(Op *op, int r)
 
   ceph_assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
 
+  ceph_assert(inflight_ops > 0);
   inflight_ops--;
 
   op->put();
@@ -3548,6 +3667,7 @@ void Objecter::_throttle_op(Op *op,
 {
   ceph_assert(sul && sul.mutex() == &rwlock);
   bool locked_for_write = sul.owns_lock();
+  ldout(cct, 20) << __func__ << " " << dendl;
 
   if (!op_budget)
     op_budget = calc_op_budget(op->ops);
@@ -3574,7 +3694,7 @@ int Objecter::take_linger_budget(LingerOp *info)
   return 1;
 }
 
-bs::error_code Objecter::handle_osd_op_reply2(Op *op, vector<OSDOp> &out_ops) {
+bs::error_code Objecter::process_op_reply_handlers(Op *op, vector<OSDOp> &out_ops) {
 
   ceph_assert(op->ops.size() == op->out_bl.size());
   ceph_assert(op->ops.size() == op->out_rval.size());
@@ -3651,8 +3771,7 @@ bs::error_code Objecter::handle_osd_op_reply2(Op *op, vector<OSDOp> &out_ops) {
 
 
 /* This function DOES put the passed message before returning */
-void Objecter::handle_osd_op_reply(MOSDOpReply *m)
-{
+void Objecter::handle_osd_op_reply(MOSDOpReply *m) {
   ldout(cct, 10) << "in handle_osd_op_reply" << dendl;
 
   // get pio
@@ -3678,21 +3797,21 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   map<ceph_tid_t, Op *>::iterator iter = s->ops.find(tid);
   if (iter == s->ops.end()) {
     ldout(cct, 7) << "handle_osd_op_reply " << tid
-		  << (m->is_ondisk() ? " ondisk" : (m->is_onnvram() ?
-						    " onnvram" : " ack"))
-		  << " ... stray" << dendl;
+                  << (m->is_ondisk() ? " ondisk" : (m->is_onnvram() ?
+                                                    " onnvram" : " ack"))
+                  << " ... stray" << dendl;
     sl.unlock();
     m->put();
     return;
   }
 
   ldout(cct, 7) << "handle_osd_op_reply " << tid
-		<< (m->is_ondisk() ? " ondisk" :
-		    (m->is_onnvram() ? " onnvram" : " ack"))
-		<< " uv " << m->get_user_version()
-		<< " in " << m->get_pg()
-		<< " attempt " << m->get_retry_attempt()
-		<< dendl;
+                << (m->is_ondisk() ? " ondisk" :
+                    (m->is_onnvram() ? " onnvram" : " ack"))
+                << " uv " << m->get_user_version()
+                << " in " << m->get_pg()
+                << " attempt " << m->get_retry_attempt()
+                << dendl;
   Op *op = iter->second;
   op->trace.event("osd op reply");
 
@@ -3713,10 +3832,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (m->get_retry_attempt() >= 0) {
     if (m->get_retry_attempt() != (op->attempts - 1)) {
       ldout(cct, 7) << " ignoring reply from attempt "
-		    << m->get_retry_attempt()
-		    << " from " << m->get_source_inst()
-		    << "; last attempt " << (op->attempts - 1) << " sent to "
-		    << op->session->con->get_peer_addr() << dendl;
+                    << m->get_retry_attempt()
+                    << " from " << m->get_source_inst()
+                    << "; last attempt " << (op->attempts - 1) << " sent to "
+                    << op->session->con->get_peer_addr() << dendl;
       m->put();
       sl.unlock();
       return;
@@ -3726,8 +3845,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     // just accept this one.  we may do ACK callbacks we shouldn't
     // have, but that is better than doing callbacks out of order.
   }
-
-  decltype(op->onfinish) onfinish;
 
   int rc = m->get_result();
 
@@ -3742,25 +3859,25 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
     op->tid = 0;
     m->get_redirect().combine_with_locator(op->target.target_oloc,
-					   op->target.target_oid.name);
+                                           op->target.target_oid.name);
     op->target.flags |= (CEPH_OSD_FLAG_REDIRECTED |
-			 CEPH_OSD_FLAG_IGNORE_CACHE |
-			 CEPH_OSD_FLAG_IGNORE_OVERLAY);
+                         CEPH_OSD_FLAG_IGNORE_CACHE |
+                         CEPH_OSD_FLAG_IGNORE_OVERLAY);
     _op_submit(op, sul, NULL);
     m->put();
     return;
   }
 
   if (op->target.flags & (CEPH_OSD_FLAG_BALANCE_READS |
-			  CEPH_OSD_FLAG_LOCALIZE_READS)) {
+                          CEPH_OSD_FLAG_LOCALIZE_READS)) {
     if (rc == -EAGAIN) {
       logger->inc(l_osdc_replica_read_bounced);
     } else {
       logger->inc(l_osdc_replica_read_completed);
     }
-  }
+                          }
 
-  if (rc == -EAGAIN && !op->target.force_shard) {
+  if (rc == -EAGAIN && (op->target.flags & CEPH_OSD_FLAG_FAIL_ON_EAGAIN) == 0) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
     if (op->has_completion())
       num_in_flight--;
@@ -3768,8 +3885,12 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     sl.unlock();
 
     op->tid = 0;
-    op->target.flags &= ~(CEPH_OSD_FLAG_BALANCE_READS |
-			  CEPH_OSD_FLAG_LOCALIZE_READS);
+    op->target.flags &= ~CEPH_OSD_FLAGS_DIRECT_READ;
+
+    // If IGNORE_EAGAIN is not set and FORCE_OSD is set, the implication is
+    // that it is safe to redrive the IO to the primary, without any balanced
+    // read flag.
+    op->target.flags &= ~CEPH_OSD_FLAG_FORCE_OSD;
     op->target.pgid = pg_t();
     _op_submit(op, sul, NULL);
     m->put();
@@ -3793,21 +3914,21 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 #endif
     auto& bl = m->get_data();
     if (op->outbl->length() == bl.length() &&
-	bl.get_num_buffers() <= 1) {
+        bl.get_num_buffers() <= 1) {
       // this is here to keep previous users to *relied* on getting data
       // read into existing buffers happy.  Notably,
       // libradosstriper::RadosStriperImpl::aio_read().
       ldout(cct,10) << __func__ << " copying resulting " << bl.length()
-		    << " into existing ceph::buffer of length " << op->outbl->length()
-		    << dendl;
+                    << " into existing ceph::buffer of length " << op->outbl->length()
+                    << dendl;
       cb::list t;
       t = std::move(*op->outbl);
       t.invalidate_crc();  // we're overwriting the raw buffers via c_str()
       bl.begin().copy(bl.length(), t.c_str());
       op->outbl->substr_of(t, 0, bl.length());
-    } else {
-      m->claim_data(*op->outbl);
-    }
+        } else {
+          m->claim_data(*op->outbl);
+        }
     op->outbl = 0;
   }
 
@@ -3817,27 +3938,34 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   if (out_ops.size() != op->ops.size())
     ldout(cct, 0) << "WARNING: tid " << op->tid << " reply ops " << out_ops
-		  << " != request ops " << op->ops
-		  << " from " << m->get_source_inst() << dendl;
+                  << " != request ops " << op->ops
+                  << " from " << m->get_source_inst() << dendl;
 
-  bs::error_code handler_error = handle_osd_op_reply2(op, out_ops);
+  bs::error_code handler_error = process_op_reply_handlers(op, out_ops);
+
+  logger->inc(l_osdc_op_reply);
+  logger->tinc(l_osdc_op_latency, ceph::coarse_mono_time::clock::now() - op->stamp);
+  logger->set(l_osdc_op_inflight, num_in_flight);
+
+  // This function unlocks sl.
+  complete_op_reply(op, handler_error, s, sl, rc);
+  m->put();
+}
+
+void Objecter::complete_op_reply(Op *op, bs::error_code handler_error, OSDSession *s, unique_lock<std::shared_mutex> &sl, int rc) {
 
   // NOTE: we assume that since we only request ONDISK ever we will
   // only ever get back one (type of) ack ever.
-
+  decltype(op->onfinish) onfinish;
   if (op->has_completion()) {
     num_in_flight--;
     onfinish = std::move(op->onfinish);
     op->onfinish = nullptr;
   }
-  logger->inc(l_osdc_op_reply);
-  logger->tinc(l_osdc_op_latency, ceph::coarse_mono_time::clock::now() - op->stamp);
-  logger->set(l_osdc_op_inflight, num_in_flight);
-
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
 
-  ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
+  ldout(cct, 15) << "handle_osd_op_reply completed tid " << op->tid << dendl;
   _finish_op(op, 0);
 
   ldout(cct, 5) << num_in_flight << " in flight" << dendl;
@@ -3861,8 +3989,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (completion_lock.mutex()) {
     completion_lock.unlock();
   }
-
-  m->put();
 }
 
 void Objecter::handle_osd_backoff(MOSDBackoff *m)
@@ -5309,6 +5435,8 @@ Objecter::Objecter(CephContext *cct,
 {
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+  min_split_replica_read_size
+    = cct->_conf.get_val<uint64_t>("osd_min_split_replica_read_size");
 
   auto read_policy = cct->_conf.get_val<std::string>("rados_replica_read_policy");
   if (read_policy == "localize") {

@@ -148,6 +148,13 @@ add_executable(unittest_pg_transaction
   test_pg_transaction.cc
 )
 add_ceph_unittest(unittest_pg_transaction)
+
+# unittest_objectpack
+add_executable(unittest_objectpack
+  TestObjectPack.cc
+)
+add_ceph_unittest(unittest_objectpack)
+target_link_libraries(unittest_objectpack osd global ${BLKID_LIBRARIES})
 target_link_libraries(unittest_pg_transaction osd global ${BLKID_LIBRARIES})
 
 # unittest ECTransaction (Legacy)
