@@ -832,10 +832,11 @@ void ActivePyModules::_refresh_config_map()
     string value = p->second;
     string name;
     string who;
+    string dummy_annotation;
     config_map.parse_key(key, &name, &who);
 
     config_map.add_option(
-      g_ceph_context, name, who, value,
+      g_ceph_context, name, who, value, dummy_annotation,
       [&](const std::string& name) {
 	return  g_conf().find_option(name);
       });
