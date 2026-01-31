@@ -15,6 +15,7 @@ usr/bin/ceph-syn
 usr/bin/cephfs-data-scan
 usr/bin/cephfs-journal-tool
 usr/bin/cephfs-table-tool
+usr/bin/cephfs-tool
 usr/bin/crushdiff
 usr/bin/rados
 usr/bin/radosgw-admin
