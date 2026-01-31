@@ -1,6 +1,8 @@
 #include <charconv> // for std::to_chars()
 #include <string>
 #include <lua.hpp>
+#include <fmt/args.h>
+#include <fmt/core.h>
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "rgw_lua_utils.h"
@@ -16,6 +18,7 @@ namespace rgw::lua {
 // lua_push(lua_State* L, const ceph::real_time& tp)
 
 constexpr const char* RGWDebugLogAction{"RGWDebugLog"};
+constexpr const char* RGWDebugLogActionF{"RGWDebugLogF"};
 
 int RGWDebugLog(lua_State* L) 
 {
@@ -23,6 +26,68 @@ int RGWDebugLog(lua_State* L)
 
   auto message = luaL_checkstring(L, 1);
   ldout(cct, 20) << "Lua INFO: " << message << dendl;
+  return 0;
+
+}
+
+int RGWDebugLogF(lua_State* L)
+{
+  auto cct = reinterpret_cast<CephContext*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+
+  if (!ldlog_p1 (cct, dout_subsys, 20)) {
+    return 0;
+  }
+
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
+  std::string format = luaL_checkstring(L, 1);
+
+  int num_args = 0;
+  // Does not support escaping "{}" or positional arguments
+  for (std::string::size_type i = 0; i < format.length() - 1; i++) {
+    if (format[i] == '{') {
+      if (format[i+1] != '}') {
+        ldout(cct, 20) << "Lua ERROR: RGWDebugLogF: " << "Invalid format: '"
+                       << format << "'" << dendl;
+        return 0;
+      } else {
+        num_args++;
+      }
+    }
+  }
+
+  auto num_vals = lua_gettop(L);
+  if (num_vals <= num_args) {
+    ldout(cct, 20) << "Lua ERROR: RGWDebugLogF: " << "Not enough arguments. expected = "
+                   << num_args << ", available = " << num_vals - 1 << dendl;
+    return 0;
+  }
+
+  for (auto i = 1; i <= num_args; i++) {
+    switch (lua_type(L, i+1)) {
+      case LUA_TNUMBER:
+        store.push_back(lua_tonumber(L, i+1));
+        break;
+      case LUA_TSTRING:
+        store.push_back(lua_tostring(L, i+1));
+        break;
+      case LUA_TBOOLEAN:
+        store.push_back(lua_toboolean(L, i+1) ? "true" : "false");
+        break;
+      case LUA_TNIL:
+        store.push_back("nil");
+        break;
+      default:
+        ldout(cct, 20) << "Lua ERROR: RGWDebugLogF: " << "Invalid argument type: "
+                       << lua_typename(L, lua_type(L, i+1))  << dendl;
+        return 0;
+    }
+  }
+  try {
+    auto message = fmt::vformat(format, store);
+    ldout(cct, 20) << "Lua INFO: " << message << dendl;
+  } catch (const std::runtime_error& e){
+    ldout(cct, 20) << "Lua ERROR: RGWDebugLogF failed with '" << e.what() << "'"<< dendl;
+  }
   return 0;
 }
 
@@ -32,6 +97,11 @@ void create_debug_action(lua_State* L, CephContext* cct) {
   lua_setglobal(L, RGWDebugLogAction);
 }
 
+void create_debug_action_f(lua_State* L, CephContext* cct) {
+  lua_pushlightuserdata(L, cct);
+  lua_pushcclosure(L, RGWDebugLogF, ONE_UPVAL);
+  lua_setglobal(L, RGWDebugLogActionF);
+}
 
 void stack_dump(lua_State* L) {
   const auto top = lua_gettop(L);
