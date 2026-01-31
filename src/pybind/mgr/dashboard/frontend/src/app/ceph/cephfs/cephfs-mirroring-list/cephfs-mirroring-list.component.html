@@ -1,12 +1,17 @@
 <ng-container *ngIf="daemonStatus$ | async as daemonStatus">
+
   <cd-table
+    #table
     [data]="daemonStatus"
     [columns]="columns"
+    columnMode="flex"
     selectionType="single"
-    [hasDetails]="false"
-    (setExpandedRow)="setExpandedRow($event)"
-    (fetchData)="loadDaemonStatus($event)"
     (updateSelection)="updateSelection($event)"
-  >
+    (fetchData)="loadDaemonStatus()">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
   </cd-table>
 </ng-container>
