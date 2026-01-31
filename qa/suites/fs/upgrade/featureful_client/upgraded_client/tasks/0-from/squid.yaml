@@ -12,6 +12,8 @@ tasks:
       - ceph-mgr-cephadm
       - cephadm
       - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
     extra_packages: ['librados2']
 - print: "**** done installing squid"
 - ceph:
