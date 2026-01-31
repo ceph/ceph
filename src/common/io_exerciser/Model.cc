@@ -5,8 +5,11 @@
 
 using Model = ceph::io_exerciser::Model;
 
-Model::Model(const std::string& primary_oid, const std::string& secondary_oid, uint64_t block_size)
-    : num_io(0), primary_oid(primary_oid), secondary_oid(secondary_oid), block_size(block_size) {}
+Model::Model(const std::string& primary_oid, const std::string& secondary_oid,
+             uint64_t block_size, bool delete_objects)
+    : num_io(0), primary_oid_base(primary_oid), primary_oid(primary_oid), secondary_oid(secondary_oid),
+      block_size(block_size), delete_objects(delete_objects)
+{}
 
 const std::string Model::get_primary_oid() const { return primary_oid; }
 

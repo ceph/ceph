@@ -7,8 +7,9 @@
 
 using ObjectModel = ceph::io_exerciser::ObjectModel;
 
-ObjectModel::ObjectModel(const std::string& primary_oid, const std::string& secondary_oid, uint64_t block_size, int seed)
-    : Model(primary_oid, secondary_oid, block_size), primary_created(false), secondary_created(false) {
+ObjectModel::ObjectModel(const std::string& primary_oid, const std::string& secondary_oid,
+                         uint64_t block_size, int seed, bool delete_objects)
+    : Model(primary_oid, secondary_oid, block_size, delete_objects), primary_created(false), secondary_created(false) {
   rng.seed(seed);
 }
 
@@ -159,13 +160,17 @@ void ObjectModel::applyIoOp(IoOp& op) {
       }
     } break;
 
-    case OpType::Remove:
+    case OpType::Remove: {
       ceph_assert(primary_created);
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
+      if (!delete_objects) {
+        const std::string new_primary_oid = primary_oid_base + "_" + std::to_string(++num_objects);
+        set_primary_oid(new_primary_oid);
+      }
       primary_created = false;
       primary_contents.resize(0);
-      break;
+    } break;
       
     case OpType::Read: {
       SingleReadOp& readOp = static_cast<SingleReadOp&>(op);
