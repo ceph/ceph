@@ -190,7 +190,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
         size: new UntypedFormControl(''),
         erasureProfile: new UntypedFormControl(null),
         pgNum: new UntypedFormControl('', {
-          validators: [Validators.required]
+          validators: [Validators.required, Validators.min(1)]
         }),
         pgAutoscaleMode: new UntypedFormControl(null),
         ecOverwrites: new UntypedFormControl(false),
