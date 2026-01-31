@@ -25,6 +25,9 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
   // if the CPU supports it, *and* the fast version is compiled in,
   // use that.
 #if defined(__i386__) || defined(__x86_64__)
+  if (ceph_arch_intel_avx512_vpclmul && ceph_crc32c_intel_fast_avx512_vpclmul_exists()) {
+    return ceph_crc32c_intel_fast_avx512_vpclmul;
+  }
   if (ceph_arch_intel_sse42 && ceph_crc32c_intel_fast_exists()) {
     if (ceph_arch_intel_pclmul) {
       return ceph_crc32c_intel_fast_pclmul;

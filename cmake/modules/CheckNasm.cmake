@@ -1,4 +1,5 @@
-macro(check_nasm_support _object_format _support_x64 _support_x64_and_avx2 _support_x64_and_avx512)
+macro(check_nasm_support _object_format _support_x64 _support_x64_and_avx2 _support_x64_and_avx512
+  _support_x64_and_avx512_vpclmul)
   execute_process(
     COMMAND which nasm
     RESULT_VARIABLE no_nasm
@@ -37,6 +38,16 @@ macro(check_nasm_support _object_format _support_x64 _support_x64_and_avx2 _supp
         if(NOT rt)
           set(${_support_x64_and_avx512} TRUE)
         endif()
+	execute_process(COMMAND nasm -D AS_FEATURE_LEVEL=10 -f ${object_format}
+          -i ${CMAKE_SOURCE_DIR}/src/isa-l/include/
+          ${CMAKE_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_by16_10.asm
+          -o /dev/null
+          RESULT_VARIABLE rt
+          OUTPUT_QUIET
+          ERROR_QUIET)
+        if(NOT rt)
+          set(${_support_x64_and_avx512_vpclmul} TRUE)
+        endif()
       endif(${_support_x64})
     endif(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
   endif(NOT no_nasm)
@@ -44,6 +55,8 @@ macro(check_nasm_support _object_format _support_x64 _support_x64_and_avx2 _supp
     message(STATUS "Could NOT find nasm")
   elseif(NOT ${_support_x64})
     message(STATUS "Found nasm: but x86_64 with x32 ABI is not supported")
+  elseif(${_support_x64_and_avx512_vpclmul})
+    message(STATUS "Found nasm: best of best -- capable of assembling AVX512 & VPCLMUL")
   elseif(${_support_x64_and_avx512})
     message(STATUS "Found nasm: best -- capable of assembling AVX512")
   elseif(${_support_x64_and_avx2})
