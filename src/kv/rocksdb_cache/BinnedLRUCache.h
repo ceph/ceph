@@ -18,6 +18,7 @@
 #include "common/dout.h"
 #include "include/ceph_assert.h"
 #include "common/ceph_context.h"
+#include "common/admin_socket.h"
 
 namespace rocksdb_cache {
 
@@ -49,6 +50,7 @@ namespace rocksdb_cache {
 
 std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
     CephContext *c,
+    const std::string& name,
     size_t capacity,
     int num_shard_bits = -1,
     bool strict_capacity_limit = false,
@@ -169,11 +171,69 @@ class BinnedLRUHandleTable {
   uint32_t elems_;
 };
 
+enum stat_e : int {
+  l_capacity = 0, // capacity assigned to the shard
+  l_usage,        // current usage of the shard
+  l_pinned,       // size in elements currently referenced
+  l_elems,        // count of separate items in shard
+  l_inserts,      // increased when element inserted into the cache
+  l_lookups,      // increased when trying to find element in shard
+  l_hits,         // increased when lookup successful
+  l_misses,       // calculated from lookups - hits
+  stat_cnt
+};
+enum perf_e : int {
+  l_rebalance = stat_cnt + 1,
+  l_rebalance_free
+};
+
+struct ShardStats {
+  uint64_t val[stat_cnt] = {0};
+  uint64_t& operator[](int idx) {
+    return val[idx];
+  }
+
+  static constexpr char const* stat_name[stat_cnt] = {
+    "capacity",
+    "usage",
+    "pinned",
+    "elems",
+    "inserts",
+    "lookups",
+    "hits",
+    "misses",
+  };
+  static constexpr char const* stat_descr[stat_cnt] = {
+    "capacity assigned",
+    "current usage",
+    "currently pinned size (in use)",
+    "number of elems in shard",
+    "inserts into shard",
+    "lookups for an element",
+    "lookup successful",
+    "lookup failure",
+  };
+  void add(const ShardStats& other) {
+    for (int j = 0 ; j < stat_cnt; j++) {
+      val[j] += other.val[j];
+    }
+  }
+  void sub(const ShardStats& other) {
+    for (int j = 0 ; j < stat_cnt; j++) {
+      val[j] -= other.val[j];
+    }
+  }
+};
+
+class BinnedLRUCache;
+
 // A single shard of sharded cache.
 class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
  public:
-  BinnedLRUCacheShard(CephContext *c, size_t capacity, bool strict_capacity_limit,
-                double high_pri_pool_ratio);
+  BinnedLRUCacheShard(
+    BinnedLRUCache* cache,
+    CephContext *c, size_t capacity, bool strict_capacity_limit,
+    double high_pri_pool_ratio);
   virtual ~BinnedLRUCacheShard();
 
   // Separate from constructor so caller can easily make an array of BinnedLRUCache
@@ -243,7 +303,15 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // Get the byte counts for a range of age bins
   uint64_t sum_bins(uint32_t start, uint32_t end) const;
 
+  ShardStats GetStats();
+  void ClearStats();
+  void print_bins(std::stringstream& out) const;
+
  private:
+   // the cache shard is part of
+  friend class BinnedLRUCache;
+  BinnedLRUCache* cache;
+
   CephContext *cct;
   void LRU_Remove(BinnedLRUHandle* e);
   void LRU_Insert(BinnedLRUHandle* e);
@@ -262,13 +330,7 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // holding the mutex_
   void EvictFromLRU(size_t charge, BinnedLRUHandle*& deleted);
 
-  void FreeDeleted(BinnedLRUHandle* deleted) {
-    while (deleted) {
-      auto* entry = deleted;
-      deleted = deleted->next;
-      entry->Free();
-    }
-  }
+  int FreeDeleted(BinnedLRUHandle* deleted);
 
   // Initialized before use.
   size_t capacity_;
@@ -294,6 +356,8 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // Pointer to head of low-pri pool in LRU list.
   BinnedLRUHandle* lru_low_pri_;
 
+  // Info about the shard
+  ShardStats stats;
   // ------------^^^^^^^^^^^^^-----------
   // Not frequently modified data members
   // ------------------------------------
@@ -320,11 +384,24 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
 
   // Circular buffer of byte counters for age binning
   boost::circular_buffer<std::shared_ptr<uint64_t>> age_bins;
+
+  // Low mark of lru elements to trigger rebalance
+  size_t low_lru_count;
+
+  // High usage spike to trigger rebalance
+  size_t high_usage_spike;
+
+  // context used by rebalance
+  struct {
+    size_t new_item_count;
+    size_t new_capacity;
+    BinnedLRUHandle* lru_end; // element in lru waiting to be evicted
+  } reb_ctx;
 };
 
 class BinnedLRUCache : public ShardedCache {
  public:
-  BinnedLRUCache(CephContext *c, size_t capacity, int num_shard_bits,
+  BinnedLRUCache(CephContext *c, const std::string& name, size_t capacity, int num_shard_bits,
       bool strict_capacity_limit, double high_pri_pool_ratio);
   virtual ~BinnedLRUCache();
   virtual const char* Name() const override { return "BinnedLRUCache"; }
@@ -362,10 +439,24 @@ class BinnedLRUCache : public ShardedCache {
     return "RocksDB Binned LRU Cache";
   }
 
+  void rebalance(size_t new_capacity = 0);
+
+ private:
+  void SetupPerfCounters();
+  void UpdatePerfCounters();
+  void printshard(int shard_no, std::stringstream& out);
  private:
   CephContext *cct;
+  std::string name;
   BinnedLRUCacheShard* shards_;
   int num_shards_ = 0;
+  bool rebalance_enabled = false;
+  PerfCounters* perfstats = nullptr;
+  ShardStats prev_stats;
+  class SocketHook;
+  friend class SocketHook;
+  AdminSocketHook* asok_hook = nullptr;
+  friend BinnedLRUCacheShard;
 };
 
 }  // namespace rocksdb_cache

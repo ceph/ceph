@@ -3512,17 +3512,76 @@ options:
   level: advanced
   default: 4
   with_legacy: true
-# 'lru' or 'clock'
 - name: rocksdb_cache_type
   type: str
   level: advanced
   default: binned_lru
   with_legacy: true
+  enum_values:
+  - lru
+  - clock
+  - binned_lru
 - name: rocksdb_block_size
   type: size
   level: advanced
   default: 4_K
   with_legacy: true
+- name: rocksdb_cache_rebalance
+  type: bool
+  level: advanced
+  default: true
+  with_legacy: true
+  flags:
+  - startup
+  desc: Enables rebalancing of BinnedLruCache ('binned_lru').
+  long_desc: The default policy of binned_lru cache is to split available capacity evenly
+    between shards. This works very well when cached items are of similar size.
+    However, from time to time RocksDB puts into cache items that are significantly larger -
+    like 7MB or 1.5MB instead of usual 4200b. This causes huge evictions from affected shard.
+    In worst cases it can happen that 2 or 3 of those large items will not even fit in a shard,
+    causing constant eviction and refetch. Balancing counteracts the problem.
+    Instead of keeping same capacity per shard it tries to obtain same item count per shard.
+  see_also:
+  - rocksdb_cache_rebalance_max_steps
+  - rocksdb_cache_rebalance_capacity
+  - rocksdb_cache_rebalance_items
+- name: rocksdb_cache_rebalance_max_steps
+  type: uint
+  level: advanced
+  default: 10000
+  with_legacy: true
+  flags:
+  - runtime
+  desc: Maximum steps of rebalancing algorithm.
+  long_desc: Each step corresponds to capacity of one item moved from most used shard to
+    the least used shard. Special value "0" request to switch from precise moving capacity
+    to the faster one-shot guessing of what the perfect capacity will be.
+- name: rocksdb_cache_rebalance_capacity
+  type: float
+  level: advanced
+  default: 1.1
+  with_legacy: true
+  flags:
+  - runtime
+  desc: Capacity % overshoot that triggers immediate rebalancing.
+  long_desc: Sometimes very large item is inserted into a shard. This would cause massive
+    evictions from the shard immediately. The role of the setting is to perform rebalance
+    after usage spike caused by item insert and before item(s) eviction that will fix usage.
+  see_also:
+  - rocksdb_cache_rebalance_items
+- name: rocksdb_cache_rebalance_items
+  type: float
+  level: advanced
+  default: 0.9
+  with_legacy: true
+  flags:
+  - runtime
+  desc: Item count % reduction that triggers immediate rebalancing.
+  long_desc: When a specific shard is unlucky to get a stream of slighty larger items.
+    Each larger item will cause eviction of many small ones. The role of the setting is to
+    perform rebalance when count of items in shard goes significantly below expected count.
+  see_also:
+  - rocksdb_cache_rebalance_capacity
 # Enabling this will have 5-10% impact on performance for the stats collection
 - name: rocksdb_perf
   type: bool
