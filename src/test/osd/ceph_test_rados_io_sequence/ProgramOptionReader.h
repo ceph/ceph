@@ -2,6 +2,7 @@
 
 #include <boost/program_options.hpp>
 #include <optional>
+#include <random>
 #include <string>
 
 #include "include/ceph_assert.h"
@@ -86,7 +87,7 @@ template <typename option_type,
                             num_selections>& selections_array>
 class ProgramOptionSelector : public ProgramOptionReader<option_type> {
  public:
-  ProgramOptionSelector(ceph::util::random_number_generator<int>& rng,
+  ProgramOptionSelector(std::mt19937_64& rng,
                         po::variables_map& vm,
                         const std::string& option_name,
                         bool select_first)
@@ -105,12 +106,16 @@ class ProgramOptionSelector : public ProgramOptionReader<option_type> {
     } else if (first_value.has_value()) {
       return *std::exchange(first_value, std::nullopt);
     } else {
-      return selections_array[rng(num_selections - 1)];
+      uint64_t range = static_cast<uint64_t>(num_selections);
+      uint64_t rand_value = rng();
+      size_t index = static_cast<size_t>(rand_value % range);
+      return selections_array[index];
     }
   }
 
+
  protected:
-  ceph::util::random_number_generator<int>& rng;
+  std::mt19937_64& rng;
 
   std::optional<option_type> first_value;
 };
@@ -121,10 +126,10 @@ template <typename option_type,
                             num_selections>& selections_array,
           int num_selections_stable,
           const std::array< option_type,
-                            num_selections_stable>& elections_array_stable>
+                            num_selections_stable>& selections_array_stable>
 class StableOptionSelector : public ProgramOptionReader<option_type> {
 public:
-  StableOptionSelector(ceph::util::random_number_generator<int>& rng,
+  StableOptionSelector(std::mt19937_64& rng,
                         po::variables_map& vm,
                         const std::string& option_name,
                         bool select_first)
@@ -134,7 +139,7 @@ public:
     if (select_first) {
       if (stable) {
         ceph_assert(selections_array.size() > 0);
-        first_value = elections_array_stable[0];
+        first_value = selections_array_stable[0];
       } else {
         ceph_assert(selections_array.size() > 0);
         first_value = selections_array[0];
@@ -150,14 +155,20 @@ public:
     } else if (first_value.has_value()) {
       return *std::exchange(first_value, std::nullopt);
     } else if (stable) {
-      return elections_array_stable[rng(num_selections_stable - 1)];
+      uint64_t range = static_cast<uint64_t>(num_selections_stable);
+      uint64_t rand_value = rng();
+      size_t index = static_cast<size_t>(rand_value % range);
+      return selections_array_stable[index];
     } else {
-      return selections_array[rng(num_selections - 1)];
+      uint64_t range = static_cast<uint64_t>(num_selections);
+      uint64_t rand_value = rng();
+      size_t index = static_cast<size_t>(rand_value % range);
+      return selections_array[index];
     }
   }
 
 protected:
-  ceph::util::random_number_generator<int>& rng;
+  std::mt19937_64& rng;
   std::optional<option_type> first_value;
   bool stable;
 };
@@ -166,7 +177,7 @@ template <typename option_type>
 class ProgramOptionGeneratedSelector
     : public OptionalProgramOptionReader<option_type> {
  public:
-  ProgramOptionGeneratedSelector(ceph::util::random_number_generator<int>& rng,
+  ProgramOptionGeneratedSelector(std::mt19937_64& rng,
                                  po::variables_map& vm,
                                  const std::string& option_name,
                                  bool first_use)
@@ -196,16 +207,21 @@ class ProgramOptionGeneratedSelector
 
   virtual const std::optional<option_type> selectRandom() {
     std::vector<option_type> selection = generate_selections();
-    if (selection.size() > 0)
-      return selection[rng(selection.size() - 1)];
-    else
+
+    if (!selection.empty()) {
+      uint64_t range = static_cast<uint64_t>(selection.size());
+      uint64_t rand_value = rng();
+      size_t index = static_cast<size_t>(rand_value % range);
+      return selection[index];
+    } else {
       return std::nullopt;
+    }
   }
 
   bool is_first_use() { return first_use; }
 
  private:
-  ceph::util::random_number_generator<int>& rng;
+  std::mt19937_64& rng;
 
   bool first_use;
 };
