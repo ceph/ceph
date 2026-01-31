@@ -426,10 +426,11 @@ public:
     std::array<IOContext*,MAX_BDEV> iocv; ///< for each bdev
     std::array<bool, MAX_BDEV> dirty_devs;
 
-    FileWriter(FileRef f)
-      : file(std::move(f)),
-       buffer_appender(buffer.get_page_aligned_appender(
-                         g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)), envelope_head_filler() {
+    FileWriter(FileRef f, unsigned super_block_size)
+      : file(std::move(f))
+      , buffer_appender(buffer.get_page_aligned_appender(
+        std::max<uint64_t>(g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE, 2 * super_block_size)))
+      , envelope_head_filler() {
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
@@ -473,6 +474,10 @@ public:
     }
 
     bufferlist::contiguous_filler append_hole(uint64_t len) {
+      if (buffer.get_append_buffer_unused_tail_length() < len) {
+        ceph_assert(buffer.length() == 0);
+        buffer_appender.refill();
+      }
       return buffer.append_hole(len);
     }
 
