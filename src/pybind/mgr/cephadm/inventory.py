@@ -290,6 +290,30 @@ class SpecStore():
     def active_specs(self) -> Mapping[str, ServiceSpec]:
         return {k: v for k, v in self._specs.items() if k not in self.spec_deleted}
 
+    def remove_host_from_placements(self, hostname: str) -> None:
+        """
+        Remove the given host from any explicit placement.hosts entries
+        across all stored service specs.
+
+        This is used when a host is removed from the cluster so that
+        service specs no longer reference hosts that no longer exist.
+        """
+        # Make a copy of the items so saving the specs (which modifies self._specs)
+        # won't interfere with iterating over them.
+        for name, spec in list(self._specs.items()):
+            placement = getattr(spec, 'placement', None)
+            if not placement or not getattr(placement, 'hosts', None):
+                continue
+
+            # Filter out any HostPlacementSpec entries that reference the removed host.
+            new_hosts = [h for h in placement.hosts if h.hostname != hostname]
+            if len(new_hosts) == len(placement.hosts):
+                continue
+
+            placement.hosts = new_hosts
+            # Persist the updated spec without modifying the original creation timestamp.
+            self.save(spec, update_create=False)
+
     def load(self):
         # type: () -> None
         for k, v in self.mgr.get_store_prefix(SPEC_STORE_PREFIX).items():
