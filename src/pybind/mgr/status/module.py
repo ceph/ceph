@@ -333,9 +333,11 @@ class Module(MgrModule):
 
             if osd_id in osd_stats:
                 metadata = self.get_metadata('osd', str(osd_id), default=defaultdict(str))
+                if metadata:
+                    hostname = metadata['hostname']
+                else:
+                    self.log.debug("Metadata not found for osd.{}".format(osd_id))
                 stats = osd_stats[osd_id]
-                assert metadata
-                hostname = metadata['hostname']
                 kb_used = stats['kb_used'] * 1024
                 kb_avail = stats['kb_avail'] * 1024
 
