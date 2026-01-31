@@ -61,6 +61,10 @@ from mgr_module import (
     OptionLevel,
     NotifyType,
     MonCommandFailed,
+    MgrModuleRecoverDB,
+    CLIRequiresDB,
+    CLIReadCommand,
+    CLIWriteCommand,
 )
 from mgr_util import build_url
 import orchestrator
@@ -104,6 +108,7 @@ from .configchecks import CephadmConfigChecks
 from .offline_watcher import OfflineHostWatcher
 from .tuned_profiles import TunedProfileUtils
 from .ceph_volume import CephVolume
+from .version_tracker import VersionTracker, SCHEMA, SCHEMA_VERSIONED
 
 try:
     import asyncssh
@@ -155,6 +160,12 @@ def host_exists(hostname_position: int = 1) -> Callable:
 
 class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                           metaclass=CLICommandMeta):
+
+    SCHEMA = SCHEMA
+
+    SCHEMA_VERSIONED = SCHEMA_VERSIONED
+
+    bootstrap_version_stored = False
 
     _STORE_HOST_PREFIX = "host"
 
@@ -631,6 +642,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.ssh._reconfig_ssh()
 
         CephadmOrchestrator.instance = self
+
+        self.version_tracker = VersionTracker(self)
 
         self.upgrade = CephadmUpgrade(self)
 
@@ -4358,3 +4371,21 @@ Then run the following:
     def trigger_connect_dashboard_rgw(self) -> None:
         self.need_connect_dashboard_rgw = True
         self.event.set()
+
+    @CLIRequiresDB
+    @CLIReadCommand('cephadm get-cluster-version-history')
+    @MgrModuleRecoverDB
+    def do_get_cluster_version_history(self) -> Tuple[int, str, str]:
+        '''
+        Shows all previous and current cluster versions ordered chronologically
+        '''
+        return self.version_tracker.get_cluster_version_history()
+
+    @CLIRequiresDB
+    @CLIWriteCommand('cephadm remove-cluster-version-history')
+    @MgrModuleRecoverDB
+    def do_remove_cluster_version_history(self, all: Optional[bool] = False, before: Optional[str] = None, after: Optional[str] = None) -> Tuple[int, str, str]:
+        '''
+        Delete cluster versions stored in history
+        '''
+        return self.version_tracker.remove_cluster_version_history(all, before, after)

@@ -2784,6 +2784,12 @@ def command_bootstrap(ctx):
                 return False
         is_available(ctx, 'mgr epoch %d' % epoch, mgr_has_latest_epoch)
 
+    # store bootstrap version
+    cli(['config-key', 'set', 'mgr/cephadm/bootstrap_version', image_ver])
+
+    # store bootstrap time
+    cli(['config-key', 'set', 'mgr/cephadm/bootstrap_time', str(datetime.datetime.now(datetime.timezone.utc))])
+
     enable_cephadm_mgr_module(cli, wait_for_mgr_restart)
 
     # ssh
