@@ -5334,6 +5334,19 @@ options:
   desc: Remove allocation info from RocksDB and store the info in a new allocation file
   default: true
   with_legacy: true
+- name: bluestore_allocation_recovery_threads
+  type: uint
+  level: basic
+  desc: Amount of threads for allocation recovery after OSD crash.
+  long_desc: The optimal value varies. For NVMe DBs may be as large as 8.
+    Value of 0 means one wants to use legacy recovery procedure.
+    Value of 1 means singlethreaded recovery with new procedure.
+  default: 0
+  with_legacy: false
+  flags:
+    - startup
+  see_also:
+    - bluestore_allocation_from_file
 - name: bluestore_debug_inject_allocation_from_file_failure
   type: float
   level: dev

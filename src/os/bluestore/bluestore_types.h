@@ -561,8 +561,10 @@ public:
       denc(unused, p);
     }
   }
-
-  void decode(ceph::buffer::ptr::const_iterator& p, uint64_t struct_v) {
+  struct empty_context_t {};
+  template <bool decode_csum = true, typename context_t = empty_context_t>
+  void decode(ceph::buffer::ptr::const_iterator& p, uint64_t struct_v,
+    context_t context = empty_context_t()) {
     ceph_assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
@@ -577,8 +579,12 @@ public:
       denc(csum_chunk_order, p);
       int len;
       denc_varint(len, p);
-      csum_data = p.get_ptr(len);
-      csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+      if (decode_csum) {
+        csum_data = p.get_ptr(len);
+        csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+      } else {
+        p += len;
+      }
     }
     if (has_unused()) {
       denc(unused, p);
