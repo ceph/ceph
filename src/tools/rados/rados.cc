@@ -209,8 +209,9 @@ void usage(ostream& out)
 "        select target pool by name\n"
 "   --pgid PG id\n"
 "        select given PG id\n"
-"   -f [--format plain|json|json-pretty]\n"
-"   --format=[--format plain|json|json-pretty]\n"
+"   -f [plain|json|json-pretty]\n"
+"   --format=[plain|json|json-pretty]\n"
+"        specify the structured format for output data. Requires --output\n"
 "   -b op_size\n"
 "        set the block size for put/get ops and for write benchmarking\n"
 "   -O object_size\n"
@@ -225,6 +226,8 @@ void usage(ostream& out)
 "        set the filter_prefix parameter for OMAP list benchmarking\n"
 "   --omap-read-max-return\n"
 "        set the max number of entries for OMAP list benchmarking\n"
+"   --output=filename\n"
+"        specify the file path to which structured output should be written\n"
 "   -s name\n"
 "   --snap name\n"
 "        select given snap name for (read) IO\n"
@@ -3414,6 +3417,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!formatter && output) {
       cerr << "-o|--output option can only be used with '--format' option"
            << std::endl;
+      return 1;
+    }
+    if(formatter && !output) {
+      cerr << "When --format is given, --output is required but was not given. Please use --output to specify the file name to which formatted output should be written." << std::endl;
       return 1;
     }
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
