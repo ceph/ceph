@@ -61,13 +61,33 @@ class MgrModuleTest(MgrModuleTestCase):
         self.assertFalse(module_info['enabled'])
 
     def test_list_enabled_module(self):
-        self._ceph_cmd(['mgr', 'module', 'enable', 'iostat'], wait=3)
+        cmd_result = self._ceph_cmd(['mgr', 'module', 'enable', 'iostat'], wait=30)
+        logger.info(f"iostat enable command result: {cmd_result}")
+        self.assertIsNotNone(cmd_result, "Failed to execute iostat module enable command")
+
+        def _is_iostat_enabled():
+            try:
+                test_data = self._get('/api/mgr/module')
+                logger.info(f"Polling /api/mgr/module; status={self._resp.status_code}, data={test_data}")
+                if self._resp.status_code == 200:
+                    module_info = self.find_object_in_list('name', 'iostat', test_data)
+                    logger.info(f"module_info: {module_info}")
+                    return module_info and module_info.get('enabled', False)
+            except (MaxRetryError, requests.ConnectionError) as ex:
+                logger.warning(f"Connection error checking module enabled: {ex}")
+            return False
+        
+        # Wait until the module is actually enabled
+        self.wait_until_true(_is_iostat_enabled, timeout=60)
+
+        # Ensure api is accessible before main test
+        self.wait_until_rest_api_accessible()
+
         data = self._get(
             '/api/mgr/module',
-            retries=1,
-            wait_func=lambda:  # pylint: disable=unnecessary-lambda
-            self.wait_until_rest_api_accessible()
+            retries=3,
         )
+
         self.assertStatus(200)
         self.assertSchema(
             data,
