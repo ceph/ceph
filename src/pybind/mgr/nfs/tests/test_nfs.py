@@ -787,6 +787,7 @@ NFS_CORE_PARAM {
         assert info["export_id"] == 2
         assert info["path"] == "bucket"
         assert "sectype" not in info
+        assert 'XprtSec' not in info
 
         r = conf.apply_export(self.cluster_id, json.dumps({
             'export_id': 2,
@@ -803,7 +804,8 @@ NFS_CORE_PARAM {
                 'access_type': None,
                 'squash': None
             }],
-            'sectype': ["krb5p", "krb5i", "sys", "mtls", "tls"],
+            'sectype': ["krb5p", "krb5i", "sys"],
+            'XprtSec': 'tls',
             'fsal': {
                 'name': 'RGW',
                 'user_id': 'nfs.foo.bucket',
@@ -817,7 +819,8 @@ NFS_CORE_PARAM {
         info = conf._get_export_dict(self.cluster_id, "/rgw/bucket")
         assert info["export_id"] == 2
         assert info["path"] == "bucket"
-        assert info["sectype"] == ["krb5p", "krb5i", "sys", "mtls", "tls"]
+        assert info["sectype"] == ["krb5p", "krb5i", "sys"]
+        assert info['XprtSec'] == 'tls'
 
     def test_update_export_with_ganesha_conf(self):
         self._do_mock_test(self._do_test_update_export_with_ganesha_conf)
@@ -1004,7 +1007,8 @@ NFS_CORE_PARAM {
             pseudo_path='/mybucket',
             read_only=False,
             squash='root',
-            addr=["192.168.0.0/16"]
+            addr=["192.168.0.0/16"],
+            xprtsec='tls'
         )
         assert r["bind"] == "/mybucket"
 
@@ -1028,6 +1032,7 @@ NFS_CORE_PARAM {
         assert export.clients[0].access_type == 'rw'
         assert export.clients[0].addresses == ["192.168.0.0/16"]
         assert export.cluster_id == self.cluster_id
+        assert export.xprtsec == 'tls'
 
     def test_create_export_rgw_bucket_user(self):
         self._do_mock_test(self._do_test_create_export_rgw_bucket_user)
