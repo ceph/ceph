@@ -730,7 +730,7 @@ int block_device_get_metrics(const string& devname, int timeout,
 #include <sys/disk.h>
 
 const char *BlkDev::sysfsdir() const {
-  assert(false);  // Should never be called on Apple
+  abort();  // Should never be called on Apple
   return "";
 }
 
@@ -843,7 +843,7 @@ std::string get_device_path(const std::string& devname,
 #elif defined(__FreeBSD__)
 
 const char *BlkDev::sysfsdir() const {
-  assert(false);  // Should never be called on FreeBSD
+  abort();  // Should never be called on FreeBSD
   return "";
 }
 
@@ -1061,7 +1061,7 @@ int BlkDev::wholedisk(char *wd, size_t max) const
 #else
 
 const char *BlkDev::sysfsdir() const {
-  assert(false);  // Should never be called on non-Linux
+  abort();  // Should never be called on non-Linux
   return "";
 }
 
