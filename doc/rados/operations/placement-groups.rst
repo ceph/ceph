@@ -116,7 +116,7 @@ The output will resemble the following::
   among multiple pools.
 
 - **RATIO** is the ratio of (1) the storage consumed by the pool to (2) the
-  total raw storage capacity. In order words, RATIO is defined as 
+  total raw storage capacity. In other words, RATIO is defined as 
   (SIZE * RATE) / RAW CAPACITY and may be thought of as a fullness percentage.
 
 - **TARGET RATIO** (if present) is the ratio of the expected storage of this
