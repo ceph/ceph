@@ -2458,7 +2458,7 @@ void RGWGetObj::execute(optional_yield y)
 {
   bufferlist bl;
   gc_invalidate_time = ceph_clock_now();
-  gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
+  gc_invalidate_time += static_cast<double>(s->cct->_conf->rgw_gc_obj_min_wait) / 2.0;
 
   bool need_decompress = false;
   int64_t ofs_x = 0, end_x = 0;
@@ -5600,10 +5600,16 @@ void RGWDeleteObj::execute(optional_yield y)
     uint64_t obj_size = 0;
     std::string etag;
     bool null_verid;
+    std::string requested_instance;
     {
       int state_loaded = -1;
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
       null_verid = (s->object->get_instance() == "null");
+
+      if (null_verid) {
+        requested_instance = s->object->get_instance();
+        s->object->set_instance(std::string{});
+      }
 
       op_ret = state_loaded = s->object->load_obj_state(this, s->yield, true);
       if (op_ret < 0) {
@@ -5620,9 +5626,19 @@ void RGWDeleteObj::execute(optional_yield y)
             return;
           }
         }
+
+        /* for null version id, if object doesn't exist, treat as success but
+         * continue so we can remove any corresponding bucket index entry */
+        if (null_verid && op_ret == -ENOENT) {
+          op_ret = 0;
+        }
       } else {
         obj_size = s->object->get_size();
         etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+      }
+
+      if (null_verid) {
+        s->object->set_instance(requested_instance);
       }
 
       // ignore return value from get_obj_attrs in all other cases
@@ -5645,8 +5661,8 @@ void RGWDeleteObj::execute(optional_yield y)
           return;
         }
 
-	bufferlist slo_attr;
-	if (s->object->get_attr(RGW_ATTR_SLO_MANIFEST, slo_attr)) {
+        bufferlist slo_attr;
+        if (s->object->get_attr(RGW_ATTR_SLO_MANIFEST, slo_attr)) {
           op_ret = handle_slo_manifest(slo_attr, y);
           if (op_ret < 0) {
             ldpp_dout(this, 0) << "ERROR: failed to handle slo manifest ret=" << op_ret << dendl;
@@ -5667,7 +5683,7 @@ void RGWDeleteObj::execute(optional_yield y)
       rgw::notify::ObjectRemovedDelete;
     std::unique_ptr<rgw::sal::Notification> res
       = driver->get_notification(s->object.get(), s->src_object.get(), s,
-				event_type, y);
+                event_type, y);
     op_ret = res->publish_reserve(this);
     if (op_ret < 0) {
       return;
@@ -5690,7 +5706,7 @@ void RGWDeleteObj::execute(optional_yield y)
        * with the regular delete path. */
       op_ret = get_system_versioning_params(s, &epoch, &version_id);
       if (op_ret < 0) {
-	return;
+        return;
       }
 
       std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = s->object->get_delete_op();
@@ -5707,14 +5723,20 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.if_match = if_match;
 #ifdef WITH_RADOSGW_D4N
       if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-		dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
+        dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
       }
 #endif
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
-	delete_marker = del_op->result.delete_marker;
-	version_id = del_op->result.version_id;
+        delete_marker = del_op->result.delete_marker;
+        version_id = del_op->result.version_id;
+        if (null_verid) {
+          version_id = requested_instance;
+        }
+      }
+      if (null_verid && op_ret == -ENOENT) {
+        op_ret = 0;
       }
 
       /* Check whether the object has expired. Swift API documentation
@@ -7853,6 +7875,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.obj_owner = s->owner;
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
+  del_op->params.null_verid = (instance == "null");
   del_op->params.last_mod_time_match = object.get_last_mod_time();
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();

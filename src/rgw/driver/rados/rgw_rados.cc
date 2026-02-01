@@ -6503,19 +6503,17 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
 {
   RGWRados *store = target->get_store();
   const rgw_obj& src_obj = target->get_obj();
-  const string& instance = src_obj.key.instance;
   rgw_obj obj = target->get_obj();
 
-  if (instance == "null") {
+  if (obj.key.instance == "null") {
     obj.key.instance.clear();
   }
 
   bool explicit_marker_version = (!params.marker_version_id.empty());
-
-  if (params.versioning_status & BUCKET_VERSIONED || explicit_marker_version) {
+  if (params.versioning_status & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED) || explicit_marker_version) {
     bool add_log = log_op && store->svc.zone->need_to_log_data();
 
-    if (instance.empty() || explicit_marker_version) {
+    if ((obj.key.instance.empty() && !params.null_verid) || explicit_marker_version) {
       rgw_obj marker = obj;
       marker.key.instance.clear();
 
@@ -6614,7 +6612,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       if (r < 0) {
         return r;
       }
-      result.version_id = instance;
+      result.version_id = obj.key.instance;
     }
 
     BucketShard *bs = nullptr;
@@ -8986,7 +8984,7 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
 
   r = guard_reshard(dpp, &bs, obj_instance, bucket_info,
 		    [&](BucketShard *bs) -> int {
-		      cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), obj_instance.key.instance);
+		      cls_rgw_obj_key key(obj_instance.key.get_index_key_name(),obj_instance.key.instance == "null" ? std::string{} : obj_instance.key.instance);
 		      auto& ref = bs->bucket_obj;
 		      librados::ObjectWriteOperation op;
 		      op.assert_exists(); // bucket index shard must exist
@@ -9037,7 +9035,7 @@ int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
 
   BucketShard bs(this);
 
-  cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), obj_instance.key.instance);
+  cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), obj_instance.key.instance == "null" ? std::string{} : obj_instance.key.instance);
   r = guard_reshard(dpp, &bs, obj_instance, bucket_info,
 		    [&](BucketShard *bs) -> int {
 		      auto& ref = bs->bucket_obj;
@@ -9078,7 +9076,7 @@ int RGWRados::bucket_index_read_olh_log(const DoutPrefixProvider *dpp,
 
   string olh_tag(state.olh_tag.c_str(), state.olh_tag.length());
 
-  cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), string());
+  cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), obj_instance.key.instance == "null" ? std::string{} : obj_instance.key.instance);
 
   auto& shard_ref = bs.bucket_obj;
   ObjectReadOperation op;
@@ -10336,8 +10334,7 @@ int RGWRados::bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_
     return ret;
   }
 
-  cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
-
+  cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance == "null" ? std::string{} : obj.key.instance);
   auto& ref = bs.bucket_obj;
 
   return cls_rgw_bi_get(ref.ioctx, ref.obj.oid, index_type, key, entry);
@@ -10495,7 +10492,8 @@ int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs,
   ObjectWriteOperation o;
   o.assert_exists(); // bucket index shard must exist
 
-  cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
+  cls_rgw_obj_key key(obj.key.get_index_key_name(),
+                      obj.key.instance == "null" ? std::string{} : obj.key.instance);
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
   cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc());
   int ret = bs.bucket_obj.operate(dpp, std::move(o), y);
