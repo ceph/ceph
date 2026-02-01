@@ -1,7 +1,10 @@
+import contextlib
 import errno
 import hashlib
 import json
 import logging
+import time
+import uuid
 from typing import (
     List,
     Any,
@@ -11,13 +14,15 @@ from typing import (
     TypeVar,
     Callable,
     Set,
-    cast)
+    cast,
+    Iterator,
+)
 from os.path import normpath
 from ceph.fs.earmarking import EarmarkTopScope
 import cephfs
 
 from mgr_util import CephFSEarmarkResolver
-from rados import TimedOut, ObjectNotFound, Rados
+from rados import TimedOut, ObjectNotFound, Rados, Ioctx
 
 from object_format import ErrorResponse
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
@@ -38,7 +43,11 @@ from .utils import (
     conf_obj_name,
     available_clusters,
     check_fs,
-    restart_nfs_service, cephfs_path_is_dir)
+    restart_nfs_service,
+    cephfs_path_is_dir,
+    NFSRadosObjectType,
+    CONF_PREFIX,
+)
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -100,21 +109,55 @@ class NFSRados:
     def _create_url_block(self, obj_name: str) -> RawBlock:
         return RawBlock('%url', values={'value': self._make_rados_url(obj_name)})
 
-    def write_obj(self, conf_block: str, obj: str, config_obj: str = '') -> None:
-        with self.rados.open_ioctx(self.pool) as ioctx:
-            ioctx.set_namespace(self.namespace)
-            ioctx.write_full(obj, conf_block.encode('utf-8'))
-            if not config_obj:
-                # Return after creating empty common config object
-                return
-            log.debug("write configuration into rados object %s/%s/%s",
-                      self.pool, self.namespace, obj)
+    @contextlib.contextmanager
+    def _get_locked_obj(self, obj_name: str, obj_type: NFSRadosObjectType) -> Iterator[Ioctx]:
 
-            # Add created obj url to common config obj
+        def _acquire_lock(max_retry_attempts: int, ioctx: Ioctx, name: str, type: NFSRadosObjectType) -> str:
+            cookie = f'mgr:nfs:{uuid.uuid4()}'
+            for i in range(max_retry_attempts):
+                try:
+                    ioctx.lock_exclusive(
+                        name, type.value, cookie
+                    )
+                    break
+                except self.rados.ObjectBusy as err:
+                    log.debug("object busy: %r, %r, %r", name, self.namespace, cookie)
+                    time.sleep(2)
+                    if i == (max_retry_attempts - 1):
+                        raise err
+            return cookie
+
+        with self.rados.open_ioctx(self.pool) as ioctx_obj:
+            ioctx_obj.set_namespace(self.namespace)
+            cookie_str = _acquire_lock(3, ioctx_obj, obj_name, obj_type)
+            try:
+                yield ioctx_obj
+            finally:
+                ioctx_obj.unlock(obj_name, obj_type.value, cookie_str)
+
+    def write_obj(self, conf_block: str, obj: str, config_obj: str = '') -> None:
+        if obj.startswith(EXPORT_PREFIX):
+            obj_type = NFSRadosObjectType.export
+        elif obj.startswith(CONF_PREFIX) or obj.startswith(USER_CONF_PREFIX):
+            obj_type = NFSRadosObjectType.nfs_config
+        else:
+            obj_type = NFSRadosObjectType.common_config
+
+        with self._get_locked_obj(obj, obj_type) as ioctx:
+            ioctx.write_full(obj, conf_block.encode('utf-8'))
+
+        if not config_obj:
+            # Return after creating empty common config object
+            return
+        log.debug("write configuration into rados object %s/%s/%s",
+                  self.pool, self.namespace, obj)
+
+        # Add created obj url to common config obj
+        with self._get_locked_obj(obj, NFSRadosObjectType.common_config) as ioctx:
             ioctx.append(config_obj, format_block(
                          self._create_url_block(obj)).encode('utf-8'))
             _check_rados_notify(ioctx, config_obj)
-            log.debug("Added %s url to %s", obj, config_obj)
+        log.debug("Added %s url to %s", obj, config_obj)
 
     def read_obj(self, obj: str) -> Optional[str]:
         with self.rados.open_ioctx(self.pool) as ioctx:
@@ -126,25 +169,24 @@ class NFSRados:
 
     def update_obj(self, conf_block: str, obj: str, config_obj: str,
                    should_notify: Optional[bool] = True) -> None:
-        with self.rados.open_ioctx(self.pool) as ioctx:
-            ioctx.set_namespace(self.namespace)
+        with self._get_locked_obj(obj, NFSRadosObjectType.export) as ioctx:
             ioctx.write_full(obj, conf_block.encode('utf-8'))
-            log.debug("write configuration into rados object %s/%s/%s",
-                      self.pool, self.namespace, obj)
-            if should_notify:
-                _check_rados_notify(ioctx, config_obj)
-            log.debug("Update export %s in %s", obj, config_obj)
+        log.debug("write configuration into rados object %s/%s/%s",
+                  self.pool, self.namespace, obj)
+        if should_notify:
+            _check_rados_notify(ioctx, config_obj)
+        log.debug("Update export %s in %s", obj, config_obj)
 
     def remove_obj(self, obj: str, config_obj: str) -> None:
-        with self.rados.open_ioctx(self.pool) as ioctx:
-            ioctx.set_namespace(self.namespace)
+        with self._get_locked_obj(obj, NFSRadosObjectType.export) as ioctx:
             export_urls = ioctx.read(config_obj)
             url = '%url "{}"\n\n'.format(self._make_rados_url(obj))
             export_urls = export_urls.replace(url.encode('utf-8'), b'')
             ioctx.remove_object(obj)
+        with self._get_locked_obj(obj, NFSRadosObjectType.nfs_config) as ioctx:
             ioctx.write_full(config_obj, export_urls)
-            _check_rados_notify(ioctx, config_obj)
-            log.debug("Object deleted: %s", url)
+        _check_rados_notify(ioctx, config_obj)
+        log.debug("Object deleted: %s", url)
 
     def remove_all_obj(self) -> None:
         with self.rados.open_ioctx(self.pool) as ioctx:

@@ -18,7 +18,8 @@ from .utils import (
     available_clusters,
     conf_obj_name,
     restart_nfs_service,
-    user_conf_obj_name)
+    user_conf_obj_name,
+)
 from .export import NFSRados
 
 if TYPE_CHECKING:
@@ -148,7 +149,10 @@ class NFSCluster:
 
     def create_empty_rados_obj(self, cluster_id: str) -> None:
         common_conf = conf_obj_name(cluster_id)
-        self._rados(cluster_id).write_obj('', conf_obj_name(cluster_id))
+        self._rados(cluster_id).write_obj(
+            '',
+            conf_obj_name(cluster_id),
+        )
         log.info("Created empty object:%s", common_conf)
 
     def delete_config_obj(self, cluster_id: str) -> None:
