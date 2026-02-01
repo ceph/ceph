@@ -545,6 +545,7 @@ transports = tcp
 transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}
 enable_dsa_acceleration = False
 rbd_with_crc32c = True
+rbd_with_spdk_wq = False
 tgt_cmd_extra_args = {tgt_cmd_extra_args}
 qos_timeslice_in_usecs = 0
 notifications_interval = 60
