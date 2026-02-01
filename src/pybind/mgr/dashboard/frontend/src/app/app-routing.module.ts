@@ -60,6 +60,7 @@ import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb
 import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
 import { MultiClusterFormComponent } from './ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component';
 import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-list/cephfs-mirroring-list.component';
+import { CephfsMirroringPathsComponent } from './ceph/cephfs/cephfs-mirroring-paths/cephfs-mirroring-paths.component';
 import { NotificationsPageComponent } from './core/navigation/notification-panel/notifications-page/notifications-page.component';
 
 @Injectable()
@@ -428,6 +429,11 @@ const routes: Routes = [
             path: 'mirroring',
             component: CephfsMirroringListComponent,
             data: { breadcrumbs: 'File/Mirroring' }
+          },
+          {
+            path: 'mirroring/:fsName/paths',
+            component: CephfsMirroringPathsComponent,
+            data: { breadcrumbs: 'File/Mirroring paths' }
           },
           {
             path: 'nfs',

@@ -131,4 +131,8 @@ export class CephfsService {
   listDaemonStatus(): Observable<Daemon[]> {
     return this.http.get<Daemon[]>(`${this.baseURL}/mirror/daemon-status`);
   }
+
+  listSnapshotDirs(fsName: string): Observable<string[]> {
+    return this.http.get<string[]>(`${this.baseURL}/mirror/snapshot/ls/${fsName}`);
+  }
 }

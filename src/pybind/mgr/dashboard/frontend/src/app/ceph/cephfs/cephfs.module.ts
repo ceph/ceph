@@ -32,25 +32,8 @@ import { CephfsSnapshotscheduleFormComponent } from './cephfs-snapshotschedule-f
 import { CephfsMountDetailsComponent } from './cephfs-mount-details/cephfs-mount-details.component';
 import { CephfsAuthModalComponent } from './cephfs-auth-modal/cephfs-auth-modal.component';
 import { CephfsMirroringListComponent } from './cephfs-mirroring-list/cephfs-mirroring-list.component';
-import {
-  ButtonModule,
-  CheckboxModule,
-  ComboBoxModule,
-  DatePickerModule,
-  DropdownModule,
-  GridModule,
-  IconModule,
-  IconService,
-  InputModule,
-  LayoutModule,
-  ModalModule,
-  NumberModule,
-  PlaceholderModule,
-  SelectModule,
-  TimePickerModule,
-  TreeviewModule,
-  TabsModule
-} from 'carbon-components-angular';
+import { CephfsMirroringPathsComponent } from './cephfs-mirroring-paths/cephfs-mirroring-paths.component';
+import { ButtonModule, CheckboxModule, ComboBoxModule, DatePickerModule, DropdownModule, GridModule, IconModule, IconService, InputModule, LayoutModule, ModalModule, NumberModule, PlaceholderModule, SelectModule, TimePickerModule, TreeviewModule, TabsModule, TilesModule } from 'carbon-components-angular';
 
 import AddIcon from '@carbon/icons/es/add/32';
 import LaunchIcon from '@carbon/icons/es/launch/32';
@@ -87,8 +70,9 @@ import Trash from '@carbon/icons/es/trash-can/32';
     ComboBoxModule,
     IconModule,
     BaseChartDirective,
-    TabsModule
-  ],
+    TabsModule,
+    TilesModule
+],
   declarations: [
     CephfsDetailComponent,
     CephfsClientsComponent,
@@ -108,7 +92,8 @@ import Trash from '@carbon/icons/es/trash-can/32';
     CephfsSubvolumeSnapshotsFormComponent,
     CephfsMountDetailsComponent,
     CephfsAuthModalComponent,
-    CephfsMirroringListComponent
+    CephfsMirroringListComponent,
+    CephfsMirroringPathsComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
