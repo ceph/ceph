@@ -33,6 +33,7 @@ import { CephfsMountDetailsComponent } from './cephfs-mount-details/cephfs-mount
 import { CephfsAuthModalComponent } from './cephfs-auth-modal/cephfs-auth-modal.component';
 import { CephfsMirroringListComponent } from './cephfs-mirroring-list/cephfs-mirroring-list.component';
 import { CephfsMirroringErrorComponent } from './cephfs-mirroring-error/cephfs-mirroring-error.component';
+import { CephfsMirroringPathsComponent } from './cephfs-mirroring-paths/cephfs-mirroring-paths.component';
 import {
   ButtonModule,
   CheckboxModule,
@@ -44,15 +45,18 @@ import {
   IconService,
   InputModule,
   LayoutModule,
+  LayerModule,
   ModalModule,
   NumberModule,
   PlaceholderModule,
+  RadioModule,
   SelectModule,
+  ThemeModule,
   TimePickerModule,
   TreeviewModule,
   TabsModule,
-  RadioModule,
-  NotificationModule
+  NotificationModule,
+  TilesModule
 } from 'carbon-components-angular';
 
 import AddIcon from '@carbon/icons/es/add/32';
@@ -79,7 +83,10 @@ import { CephfsFilesystemSelectorComponent } from './cephfs-filesystem-selector/
     NgbTypeaheadModule,
     GridModule,
     InputModule,
+    LayerModule,
+    ThemeModule,
     CheckboxModule,
+    RadioModule,
     SelectModule,
     DropdownModule,
     ModalModule,
@@ -94,7 +101,8 @@ import { CephfsFilesystemSelectorComponent } from './cephfs-filesystem-selector/
     BaseChartDirective,
     TabsModule,
     RadioModule,
-    NotificationModule
+    NotificationModule,
+    TilesModule
   ],
   declarations: [
     CephfsDetailComponent,
@@ -118,7 +126,8 @@ import { CephfsFilesystemSelectorComponent } from './cephfs-filesystem-selector/
     CephfsMirroringListComponent,
     CephfsMirroringWizardComponent,
     CephfsFilesystemSelectorComponent,
-    CephfsMirroringErrorComponent
+    CephfsMirroringErrorComponent,
+    CephfsMirroringPathsComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
