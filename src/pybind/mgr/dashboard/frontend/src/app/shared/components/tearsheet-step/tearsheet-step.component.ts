@@ -12,4 +12,14 @@ export class TearsheetStepComponent {
 
   @ContentChild('tearsheetStep')
   stepComponent!: TearsheetStep;
+
+  get rightInfluencer(): TemplateRef<any> | null {
+    return this.stepComponent?.rightInfluencer ?? null;
+  }
+
+  get showRightInfluencer(): boolean {
+    return this.stepComponent?.showRightInfluencer
+      ? this.stepComponent.showRightInfluencer()
+      : false;
+  }
 }

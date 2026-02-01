@@ -8,7 +8,9 @@ import {
   QueryList,
   AfterViewInit,
   DestroyRef,
-  OnDestroy
+  OnDestroy,
+  ChangeDetectionStrategy,
+  TemplateRef
 } from '@angular/core';
 import { FormBuilder } from '@angular/forms';
 import { Step } from 'carbon-components-angular';
@@ -50,7 +52,8 @@ formgroup: CdFormGroup;
 @Component({
   selector: 'cd-tearsheet',
   templateUrl: './tearsheet.component.html',
-  styleUrls: ['./tearsheet.component.scss']
+  styleUrls: ['./tearsheet.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() title!: string;
@@ -68,6 +71,14 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
 
   get activeStepTemplate() {
     return this.stepContents?.toArray()[this.currentStep]?.template;
+  }
+
+  get rightInfluencerTemplate(): TemplateRef<any> | null {
+    return this.stepContents?.toArray()[this.currentStep]?.rightInfluencer ?? null;
+  }
+
+  get showRightInfluencer(): boolean {
+    return this.stepContents?.toArray()[this.currentStep]?.showRightInfluencer;
   }
 
   currentStep: number = 0;
@@ -121,6 +132,8 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onNext() {
+    const formEl = document.querySelector('form');
+    formEl?.dispatchEvent(new Event('submit', { bubbles: true }));
     if (this.currentStep !== this.lastStep && !this.steps[this.currentStep].invalid) {
       this.currentStep = this.currentStep + 1;
     }

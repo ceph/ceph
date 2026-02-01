@@ -64,3 +64,8 @@ export enum AUTHENTICATION {
   Unidirectional = 'unidirectional',
   Bidirectional = 'bidirectional'
 }
+
+export const HOST_TYPE = {
+  ALL: 'all',
+  SPECIFIC: 'specific'
+};

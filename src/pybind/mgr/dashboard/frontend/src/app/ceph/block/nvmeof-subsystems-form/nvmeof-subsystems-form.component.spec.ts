@@ -16,6 +16,9 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystem-step-1/nvmeof-subsystem-step-1.component';
 import { GridModule, InputModule, RadioModule, TagModule } from 'carbon-components-angular';
 import { NvmeofSubsystemsStepThreeComponent } from './nvmeof-subsystem-step-3/nvmeof-subsystem-step-3.component';
+import { HOST_TYPE } from '~/app/shared/models/nvmeof';
+import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystem-step-2/nvmeof-subsystem-step-2.component';
+import { of } from 'rxjs';
 
 describe('NvmeofSubsystemsFormComponent', () => {
   let component: NvmeofSubsystemsFormComponent;
@@ -26,7 +29,9 @@ describe('NvmeofSubsystemsFormComponent', () => {
   const mockPayload: SubsystemPayload = {
     nqn: '',
     gw_group: mockGroupName,
-    subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY='
+    subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY=',
+    addedHosts: [],
+    hostType: HOST_TYPE.ALL
   };
 
   beforeEach(async () => {
@@ -35,7 +40,8 @@ describe('NvmeofSubsystemsFormComponent', () => {
       declarations: [
         NvmeofSubsystemsFormComponent,
         NvmeofSubsystemsStepOneComponent,
-        NvmeofSubsystemsStepThreeComponent
+        NvmeofSubsystemsStepThreeComponent,
+        NvmeofSubsystemsStepTwoComponent
       ],
       providers: [NgbActiveModal],
       imports: [
@@ -66,7 +72,8 @@ describe('NvmeofSubsystemsFormComponent', () => {
   describe('should test form', () => {
     beforeEach(() => {
       nvmeofService = TestBed.inject(NvmeofService);
-      spyOn(nvmeofService, 'createSubsystem').and.stub();
+      spyOn(nvmeofService, 'createSubsystem').and.returnValue(of({}));
+      spyOn(nvmeofService, 'addInitiators').and.returnValue(of({}));
     });
 
     it('should be creating request correctly', () => {
@@ -78,6 +85,24 @@ describe('NvmeofSubsystemsFormComponent', () => {
         gw_group: mockGroupName,
         enable_ha: true,
         dhchap_key: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY='
+      });
+    });
+
+    it('should add initiators with wildcard when hostType is ALL', () => {
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY='
+      };
+
+      component.group = mockGroupName;
+      component.onSubmit(payload);
+
+      expect(nvmeofService.addInitiators).toHaveBeenCalledWith('test-nqn.default', {
+        host_nqn: '*',
+        gw_group: mockGroupName
       });
     });
   });

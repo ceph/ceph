@@ -1,0 +1,31 @@
+.cd-nvmeof-subsystem-step-two {
+  &-manual-hosts {
+    display: flex;
+    align-items: flex-start;
+  }
+
+  &-manual-hosts-input {
+    flex: 0.5;
+    margin-right: var(--cds-spacing-05);
+  }
+
+  &-added-hosts-text {
+    color: var(--cds-text-secondary);
+  }
+
+  &-specific-hosts-tag {
+    max-inline-size: 17rem;
+    margin: 0 var(--cds-spacing-01);
+  }
+
+  &-influencer {
+    .cds--contained-list-item__content {
+      max-inline-size: 18rem !important;
+      padding-left: 0 !important;
+    }
+
+    .cds--contained-list__header {
+      padding: 0 !important;
+    }
+  }
+}

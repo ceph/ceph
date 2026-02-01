@@ -1290,13 +1290,37 @@ else:
         @empty_response
         @handle_nvmeof_error
         @CreatePermission
-        def add(self, subsystem_nqn: str, gw_group: str, host_nqn: str = ""):
+        def add(self, subsystem_nqn: str, host_nqn: str, dhchap_key: Optional[str] = None,
+                psk: Optional[str] = None, gw_group: Optional[str] = None,
+                server_address: Optional[str] = None
+                ):
             response = None
-            all_host_nqns = host_nqn.split(',')
 
-            for nqn in all_host_nqns:
-                response = NVMeoFClient(gw_group=gw_group).stub.add_host(
-                    NVMeoFClient.pb2.add_host_req(subsystem_nqn=subsystem_nqn, host_nqn=nqn)
+            if host_nqn != '*':
+                all_host_nqns = host_nqn.split(',')
+                for nqn in all_host_nqns:
+                    response = NVMeoFClient(
+                        gw_group=gw_group,
+                        server_address=server_address
+                    ).stub.add_host(
+                        NVMeoFClient.pb2.add_host_req(
+                            subsystem_nqn=subsystem_nqn,
+                            host_nqn=nqn,
+                            dhchap_key=dhchap_key,
+                            psk=psk)
+                    )
+                    if response.status != 0:
+                        return response
+            else:
+                response = NVMeoFClient(
+                    gw_group=gw_group,
+                    server_address=server_address
+                ).stub.add_host(
+                    NVMeoFClient.pb2.add_host_req(
+                        subsystem_nqn=subsystem_nqn,
+                        host_nqn=host_nqn,
+                        dhchap_key=dhchap_key,
+                        psk=psk)
                 )
                 if response.status != 0:
                     return response

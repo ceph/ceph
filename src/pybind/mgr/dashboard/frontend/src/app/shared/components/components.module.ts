@@ -94,7 +94,14 @@ import CopyIcon from '@carbon/icons/es/copy/32';
 import { IconComponent } from './icon/icon.component';
 import downloadIcon from '@carbon/icons/es/download/16';
 import { ChartsModule } from '@carbon/charts-angular';
-import { ProductiveCardComponent } from './productive-card/productive-card.component';
+import CheckmarkFilledIcon from '@carbon/icons/es/checkmark--filled/16';
+import ErrorFilledIcon from '@carbon/icons/es/error--filled/16';
+import InformationFilledIcon from '@carbon/icons/es/information--filled/16';
+import WarningFilledIcon from '@carbon/icons/es/warning--filled/16';
+import NotificationFilledIcon from '@carbon/icons/es/notification--filled/16';
+import Warning16 from '@carbon/icons/es/warning/16';
+import Deploy16 from '@carbon/icons/es/deploy/16';
+import Close16 from '@carbon/icons/es/close/16';
 
 @NgModule({
   imports: [
@@ -186,7 +193,6 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     IconComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -229,11 +235,22 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     IconComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent
   ]
 })
 export class ComponentsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([InfoIcon, CopyIcon, downloadIcon]);
+    this.iconService.registerAll([
+      InfoIcon,
+      CopyIcon,
+      downloadIcon,
+      CheckmarkFilledIcon,
+      ErrorFilledIcon,
+      InformationFilledIcon,
+      WarningFilledIcon,
+      NotificationFilledIcon,
+      Close16,
+      Deploy16,
+      Warning16,
+    ]);
   }
 }

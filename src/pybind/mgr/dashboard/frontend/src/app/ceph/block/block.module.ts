@@ -50,6 +50,7 @@ import { NvmeofInitiatorsFormComponent } from './nvmeof-initiators-form/nvmeof-i
 import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group/nvmeof-gateway-group.component';
 import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystems-form/nvmeof-subsystem-step-1/nvmeof-subsystem-step-1.component';
 import { NvmeofSubsystemsStepThreeComponent } from './nvmeof-subsystems-form/nvmeof-subsystem-step-3/nvmeof-subsystem-step-3.component';
+import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystems-form/nvmeof-subsystem-step-2/nvmeof-subsystem-step-2.component';
 import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway-node.component';
 import { NvmeofGroupFormComponent } from './nvmeof-group-form/nvmeof-group-form.component';
 import {
@@ -69,6 +70,8 @@ import {
   TreeviewModule,
   TabsModule,
   TagModule,
+  LayoutModule,
+  ContainedListModule,
   LayerModule
 } from 'carbon-components-angular';
 
@@ -107,7 +110,9 @@ import Reset from '@carbon/icons/es/reset/32';
     TabsModule,
     TagModule,
     GridModule,
-    LayerModule
+    LayerModule,
+    LayoutModule,
+    ContainedListModule
   ],
   declarations: [
     RbdListComponent,
@@ -148,6 +153,7 @@ import Reset from '@carbon/icons/es/reset/32';
     NvmeofGatewayNodeComponent,
     NvmeofGroupFormComponent,
     NvmeofSubsystemsStepOneComponent,
+    NvmeofSubsystemsStepTwoComponent,
     NvmeofSubsystemsStepThreeComponent
   ],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
