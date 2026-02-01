@@ -1,4 +1,5 @@
-import { Component, ViewChild, OnInit } from '@angular/core';
+import { Component, TemplateRef, ViewChild, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -21,6 +22,7 @@ export const MIRRORING_PATH = 'cephfs/mirroring';
 })
 export class CephfsMirroringListComponent implements OnInit {
   @ViewChild('table', { static: true }) table: TableComponent;
+  @ViewChild('localFsLinkTpl', { static: true }) localFsLinkTpl: TemplateRef<any>;
 
   columns: CdTableColumn[];
   selection = new CdTableSelection();
@@ -29,7 +31,11 @@ export class CephfsMirroringListComponent implements OnInit {
   context: CdTableFetchDataContext;
   tableActions: CdTableAction[];
 
-  constructor(public actionLabels: ActionLabelsI18n, private cephfsService: CephfsService) {}
+  constructor(
+    public actionLabels: ActionLabelsI18n,
+    private cephfsService: CephfsService,
+    private router: Router
+  ) {}
 
   ngOnInit() {
     this.columns = [
@@ -38,7 +44,12 @@ export class CephfsMirroringListComponent implements OnInit {
         prop: 'remote_cluster_name',
         flexGrow: 2
       },
-      { name: $localize`Local filesystem`, prop: 'local_fs_name', flexGrow: 2 },
+      {
+        name: $localize`Local filesystem`,
+        prop: 'local_fs_name',
+        flexGrow: 2,
+        cellTemplate: this.localFsLinkTpl
+      },
       { name: $localize`Remote filesystem`, prop: 'fs_name', flexGrow: 2 },
       { name: $localize`Remote client`, prop: 'client_name', flexGrow: 2 },
       { name: $localize`Snapshot directories`, prop: 'directory_count', flexGrow: 1 }
@@ -53,7 +64,7 @@ export class CephfsMirroringListComponent implements OnInit {
             daemons.forEach((d) => {
               d.filesystems.forEach((fs) => {
                 if (!fs.peers || fs.peers.length === 0) {
-                  result.push({
+                  const row: MirroringRow = {
                     remote_cluster_name: '-',
                     local_fs_name: fs.name,
                     fs_name: fs.name,
@@ -61,17 +72,19 @@ export class CephfsMirroringListComponent implements OnInit {
                     directory_count: fs.directory_count,
                     peerId: '-',
                     id: `${d.daemon_id}-${fs.filesystem_id}`
-                  });
+                  };
+                  result.push(row);
                 } else {
                   fs.peers.forEach((peer) => {
-                    result.push({
+                    const row: MirroringRow = {
                       remote_cluster_name: peer.remote.cluster_name,
                       local_fs_name: fs.name,
                       fs_name: peer.remote.fs_name,
                       client_name: peer.remote.client_name,
                       directory_count: fs.directory_count,
                       id: `${d.daemon_id}-${fs.filesystem_id}`
-                    });
+                    };
+                    result.push(row);
                   });
                 }
               });
@@ -96,5 +109,15 @@ export class CephfsMirroringListComponent implements OnInit {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  navigateToPaths(row: MirroringRow) {
+    this.router.navigate([MIRRORING_PATH, row.local_fs_name, 'paths'], {
+      state: {
+        localFsName: row.local_fs_name,
+        remoteFsName: row.fs_name,
+        remoteClusterName: row.remote_cluster_name
+      }
+    });
   }
 }

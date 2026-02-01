@@ -60,6 +60,7 @@ import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb
 import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
 import { MultiClusterFormComponent } from './ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component';
 import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-list/cephfs-mirroring-list.component';
+import { CephfsMirroringPathsComponent } from './ceph/cephfs/cephfs-mirroring-paths/cephfs-mirroring-paths.component';
 import { NotificationsPageComponent } from './core/navigation/notification-panel/notifications-page/notifications-page.component';
 
 @Injectable()
@@ -91,6 +92,22 @@ export class StartCaseBreadcrumbsResolver extends BreadcrumbsResolver {
     const path = route.params.name;
     const text = _.startCase(path);
     return [{ text: `${text}/Edit`, path: path }];
+  }
+}
+
+@Injectable()
+export class CephfsMirroringPathsBreadcrumbsResolver extends BreadcrumbsResolver {
+  resolve(route: ActivatedRouteSnapshot): IBreadcrumb[] {
+    const fsName = route.params['fsName'] || '-';
+    const cephfsPath = this.getFullPath(route.parent);
+    const fsPath = `${cephfsPath}/fs`;
+    const mirroringPath = `${cephfsPath}/mirroring`;
+    return [
+      { text: 'File', path: fsPath },
+      { text: 'Mirroring', path: mirroringPath },
+      { text: fsName, path: null },
+      { text: 'paths', path: null }
+    ];
   }
 }
 
@@ -430,6 +447,11 @@ const routes: Routes = [
             data: { breadcrumbs: 'File/Mirroring' }
           },
           {
+            path: 'mirroring/:fsName',
+            component: CephfsMirroringPathsComponent,
+            data: { breadcrumbs: CephfsMirroringPathsBreadcrumbsResolver }
+          },
+          {
             path: 'nfs',
             canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
             data: {
@@ -611,6 +633,10 @@ const routes: Routes = [
     })
   ],
   exports: [RouterModule],
-  providers: [StartCaseBreadcrumbsResolver, PerformanceCounterBreadcrumbsResolver]
+  providers: [
+    StartCaseBreadcrumbsResolver,
+    PerformanceCounterBreadcrumbsResolver,
+    CephfsMirroringPathsBreadcrumbsResolver
+  ]
 })
 export class AppRoutingModule {}

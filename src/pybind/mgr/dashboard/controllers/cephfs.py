@@ -63,6 +63,8 @@ DAEMON_STATUS_SCHEMA = [{
     }], 'List of filesystems on daemon'),
 }]
 
+LIST_SNAPSHOT_DIRS_SCHEMA = [str]
+
 
 # pylint: disable=R0904
 @APIRouter('/cephfs', Scope.CEPHFS)
@@ -1323,6 +1325,23 @@ class CephFSMirror(RESTController):
         if error_code != 0:
             raise DashboardException(
                 msg=f'Failed to get Cephfs mirror daemon status: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out)
+
+    @EndpointDoc("List snapshot mirrored directories",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                 },
+                 responses={200: LIST_SNAPSHOT_DIRS_SCHEMA})
+    @Endpoint('GET', path='/snapshot/ls')
+    @ReadPermission
+    def snapshot_ls(self, fs_name: str):
+        error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_ls', fs_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to get Cephfs snapshot list: {err}',
                 code=error_code,
                 component='cephfs.mirror'
             )

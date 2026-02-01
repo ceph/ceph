@@ -2691,6 +2691,39 @@ paths:
       summary: Get mirror daemon and peers information
       tags:
       - CephfsMirror
+  /api/cephfs/mirror/snapshot/ls/{fs_name}:
+    get:
+      parameters:
+      - description: File system name
+        in: path
+        name: fs_name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                items:
+                  properties: {}
+                  type: object
+                type: array
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List snapshot mirrored directories
+      tags:
+      - CephfsMirror
   /api/cephfs/mirror/token:
     post:
       parameters: []
