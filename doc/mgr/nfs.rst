@@ -290,7 +290,7 @@ Create CephFS Export
 
 .. prompt:: bash #
 
-   ceph nfs export create cephfs --cluster-id <cluster_id> --pseudo-path <pseudo_path> --fsname <fsname> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>] [--sectype <value>...] [--cmount_path <value>] [--xprtsec <value>] [--transports <value>...]
+   ceph nfs export create cephfs --cluster-id <cluster_id> --pseudo-path <pseudo_path> --fsname <fsname> [--readonly] [--path=/path/in/cephfs] [--client_addr <value>...] [--squash <value>] [--sectype <value>...] [--cmount_path <value>] [--xprtsec <value>] [--transports <value>...] [--delegations <value>] [-i <client spec_file>]
 
 This creates export RADOS objects containing the export block, where
 
@@ -331,6 +331,10 @@ Valid values are ``tls``, ``mtls`` and ``none``.
 ``<cmount_path>`` specifies the path within the CephFS to mount this export on. It is
 allowed to be any complete path hierarchy between ``/`` and the ``EXPORT {path}``. (i.e. if ``EXPORT { Path }`` parameter is ``/foo/bar`` then cmount_path could be ``/``, ``/foo`` or ``/foo/bar``).
 
+``<delegations>`` specifies the NFSv4 delegations supported by the export. Valid values are "rw", "ro", "none".
+
+``<client spec_file> `` specifies the path to a file containing a client specification.
+
 .. note:: If this and the other ``EXPORT { FSAL {} }`` options are the same between multiple exports, those exports will share a single CephFS client.
           If not specified, the default is ``/``.
 
@@ -364,7 +368,7 @@ To export a *bucket*:
 
 .. prompt:: bash #
 
-   ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --bucket <bucket_name> [--user-id <user-id>] [--readonly] [--client_addr <value>...] [--squash <value>] [--sectype <value>...] [--xprtsec <value>] [--transports <value>...]
+   ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --bucket <bucket_name> [--user-id <user-id>] [--readonly] [--client_addr <value>...] [--squash <value>] [--sectype <value>...] [--xprtsec <value>] [--transports <value>...] [--delegations <value>] [-i <client spec_file>]
 
 For example, to export ``mybucket`` via NFS cluster ``mynfs`` at the
 pseudo-path ``/bucketdata`` to any host in the ``192.168.10.0/24`` network
@@ -412,6 +416,11 @@ client preferring the supplied methods left-to-right.
 Multiple values may be passed. If omitted, defaults apply (e.g. TCP and RDMA
 when the cluster has RDMA enabled).
 
+``<delegations>`` specifies the NFSv4 delegations supported by the export. Valid values are "rw", "ro", "none".
+
+``<client spec_file> `` specifies the path to a file containing a client specification.
+
+
 .. note:: Specifying values for sectype that require Kerberos will only
    function on servers that are configured to support Kerberos. Setting up
    NFS-Ganesha to support Kerberos is outside the scope of this document.
@@ -434,6 +443,63 @@ For example, to export *myuser* via NFS cluster *mynfs* at the pseudo-path */myu
 .. prompt:: bash #
 
    ceph nfs export create rgw --cluster-id mynfs --pseudo-path /bucketdata --user-id myuser --client_addr 192.168.10.0/24
+
+
+Update Export
+-------------
+
+.. prompt:: bash #
+
+   ceph nfs export update <cluster_id> <pseudo_path> [--delegations <value>] [-i client_spec]
+
+This updates the export delegations permissions in an NFS Ganesha cluster, where:
+
+``<cluster_id>`` is the NFS Ganesha cluster ID.
+
+``<pseudo_path>`` is the pseudo root path (must be an absolute path).
+
+``<delegations>`` is the delegation permissions.
+
+``<client_spec>`` is the client specification.
+
+
+A client block can be modified by importing a JSON description in the same format:
+
+.. prompt:: bash #
+
+   ceph nfs export update <cluster_id> <pseudo_path> -i <json_file>
+
+This imports a JSON description of a client block.
+
+For example:
+
+.. prompt:: bash #
+
+   ceph nfs export update mynfs /pseudo_path -i client_spec.json
+
+Set Cluster Export Default
+---------------------------
+
+.. prompt:: bash #
+
+   ceph nfs cluster set-export-default <cluster_id> [--delegations <value>]
+
+This sets the default export delegations permissions in an NFS Ganesha cluster, where:
+
+``<cluster_id>`` is the NFS Ganesha cluster ID.
+
+``<delegations>`` is the delegation permissions.
+
+Get Cluster Export Default
+---------------------------
+
+.. prompt:: bash #
+
+   ceph nfs cluster get-export-default <cluster_id>
+
+This gets the default export delegations permissions in an NFS Ganesha cluster, where:
+
+``<cluster_id>`` is the NFS Ganesha cluster ID.
 
 
 Delete Export
