@@ -324,7 +324,8 @@ BtreeLBAManager::reserve_region(
   Transaction &t,
   LBAMapping pos,
   laddr_t addr,
-  extent_len_t len)
+  extent_len_t len,
+  extent_types_t type)
 {
   LOG_PREFIX(BtreeLBAManager::reserve_region);
   DEBUGT("{} {}~{}", t, pos, addr, len);
@@ -333,15 +334,10 @@ BtreeLBAManager::reserve_region(
   return with_btree<LBABtree>(
     cache,
     c,
-    [pos=std::move(pos), c, addr, len](auto &btree) mutable {
+    [pos=std::move(pos), c, addr, len, type](auto &btree) mutable {
     auto &cursor = pos.get_effective_cursor();
     auto iter = btree.make_partial_iter(c, cursor);
-    lba_map_val_t val{
-      len,
-      pladdr_t{P_ADDR_ZERO},
-      EXTENT_DEFAULT_REF_COUNT,
-      0,
-      extent_types_t::NONE};
+    lba_map_val_t val{len, pladdr_t{P_ADDR_ZERO}, EXTENT_DEFAULT_REF_COUNT, 0, type};
     return btree.insert(c, iter, addr, val
     ).si_then([c](auto p) {
       auto &[iter, inserted] = p;
@@ -498,11 +494,8 @@ BtreeLBAManager::clone_mapping(
 	    btree.make_partial_iter(c, cursor),
 	    state.laddr,
             lba_map_val_t{
-              state.len,
-              pladdr_t{inter_key.get_local_clone_id()},
-              EXTENT_DEFAULT_REF_COUNT,
-              0,
-              extent_types_t::NONE});
+	      state.len, pladdr_t{inter_key.get_local_clone_id()},
+	      EXTENT_DEFAULT_REF_COUNT, 0, state.mapping.get_extent_type()});
 	}).si_then([c, &state](auto p) {
 	  auto &[iter, inserted] = p;
 	  auto &leaf_node = *iter.get_leaf_node();
@@ -1382,6 +1375,7 @@ BtreeLBAManager::remap_mappings(
 	  auto old_key = mapping.get_key();
 	  auto new_key = (old_key + remap.offset).checked_to_laddr();
 	  val.len = remap.len;
+	  val.type = mapping.get_extent_type();
 	  if (pladdr.is_laddr()) {
 	    val.pladdr = pladdr;
 	  } else {

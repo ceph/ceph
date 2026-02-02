@@ -93,6 +93,7 @@ std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
              << ", type=" << (extent_types_t)v.type
              << ", checksum=0x" << v.checksum
              << ", refcount=" << std::dec << v.refcount
+             << ", type=" << v.type
              << ")";
 }
 

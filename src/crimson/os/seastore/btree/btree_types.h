@@ -138,7 +138,7 @@ struct __attribute__((packed)) lba_map_val_le_t {
   pladdr_le_t pladdr;
   extent_ref_count_le_t refcount{0};
   checksum_le_t checksum{0};
-  extent_types_le_t type = 0;
+  extent_types_le_t type{EXTENT_TYPES_MAX};
 
   lba_map_val_le_t() = default;
   lba_map_val_le_t(const lba_map_val_le_t &) = default;
@@ -147,7 +147,7 @@ struct __attribute__((packed)) lba_map_val_le_t {
       pladdr(pladdr_le_t(val.pladdr)),
       refcount(val.refcount),
       checksum(val.checksum),
-      type((extent_types_le_t)val.type) {}
+      type(static_cast<extent_types_le_t>(val.type)) {}
 
   operator lba_map_val_t() const {
     return lba_map_val_t{
@@ -155,7 +155,7 @@ struct __attribute__((packed)) lba_map_val_le_t {
       pladdr,
       refcount,
       checksum,
-      (extent_types_t)type};
+      static_cast<extent_types_t>(type)};
   }
 };
 
@@ -260,6 +260,11 @@ struct BtreeCursor
     assert(!is_end());
     return val->len;
   }
+
+  extent_types_t get_extent_type() const {
+    assert(val->type != extent_types_t::NONE);
+    return val->type;
+  }
 };
 
 struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
@@ -333,7 +338,7 @@ std::ostream &operator<<(
   if (cursor.is_end()) {
     return out << "END)";
   }
-  return out << "," << cursor.key
+  return out << cursor.key
 	     << "~" << *cursor.val
 	     << ")";
 }
