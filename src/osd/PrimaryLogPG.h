@@ -1577,6 +1577,7 @@ protected:
   friend struct C_SetDedupChunks;
   friend struct C_SetManifestRefCountDone;
   friend struct SetManifestFinisher;
+  friend struct C_Migrate;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
@@ -1630,6 +1631,8 @@ public:
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
+
+  void pool_migration_delete(hobject_t oid);
 
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);

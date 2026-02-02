@@ -11476,6 +11476,7 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
   dout(10) << "op_applied version " << applied_version << dendl;
   ceph_assert(applied_version != eversion_t());
   ceph_assert(applied_version <= info.last_update);
+
   recovery_state.local_write_applied(applied_version);
 
   if (is_primary() && m_scrubber) {
@@ -14908,6 +14909,59 @@ void PrimaryLogPG::check_local()
 
 // ===========================
 // pool migration
+struct C_Migrate : public Context {
+  PrimaryLogPGRef pg;
+  hobject_t oid;
+  epoch_t last_peering_reset;
+  ceph_tid_t tid;
+  C_Migrate(PrimaryLogPG *p, hobject_t o, epoch_t lpr)
+    : pg(p), oid(o), last_peering_reset(lpr),
+    tid(0)
+  {}
+  void finish(int r) override {
+    if (r == -ECANCELED)
+      return;
+    std::scoped_lock l{*pg};
+    if (last_peering_reset == pg->get_last_peering_reset())
+      pg->pool_migration_delete(oid);
+  }
+};
+
+void PrimaryLogPG::pool_migration_delete(hobject_t oid)
+{
+    ObjectContextRef obc = get_object_context(oid, false);
+    ceph_assert(obc);
+    OpContextUPtr ctx = simple_opc_create(obc);
+
+    // FIXME: what if this fails? we return with no mechanism to retry the delete
+    if (!ctx->lock_manager.get_pool_migration_write(
+    oid,
+    obc)) {
+      close_op_ctx(ctx.release());
+      dout(20) << "pool migration delayed on " << oid
+         << "; could not get rw_manager lock" << dendl;
+      return;
+    }
+    ctx->register_on_finish(
+            [this, oid]() {
+                dout(20) << "pool migration finished migrating " << oid << dendl;
+                auto i = recovering.find(oid);
+                ceph_assert(i != recovering.end());
+                object_stat_sum_t stat_diff;
+                new_pool_migration_interval_in_flight = false;
+                on_global_recover(oid, stat_diff, false);
+            });
+    ctx->at_version = get_next_version();
+    ceph_assert(ctx->new_obs.exists);
+    int ret = _delete_oid(ctx.get(), false, false);
+    ceph_assert(ret == 0);
+    if (obc->obs.oi.is_omap()) {
+      ctx->delta_stats.num_objects_omap--;
+    }
+    dout(20) << "pool migration deleting " << oid << dendl;
+    finish_ctx(ctx.get(), pg_log_entry_t::DELETE);
+    simple_opc_submit(std::move(ctx));
+}
 
 /**
  * recover_pool_migration
@@ -14923,8 +14977,6 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 	   << (new_pool_migration_interval ? " new_pool_migration_interval":"")
 	   << dendl;
 
-  //BILL:FIXME: Currently we just delete the object from the source
-  //pool, we should be copying it to the target pool first!
   unsigned ops = 0;
   while (ops < max) {
 
@@ -14958,16 +15010,6 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     ceph_assert(obc);
     OpContextUPtr ctx = simple_opc_create(obc);
 
-    if (!ctx->lock_manager.get_pool_migration_write(
-            soid,
-            obc)) {
-      close_op_ctx(ctx.release());
-      dout(20) << "pool migration delayed on " << soid
-               << "; could not get rw_manager lock" << dendl;
-      *work_started = true;
-      break;
-    }
-
     if (!obc->obs.exists) {
       // Object was deleted after last_pool_migration_started was previously incremented
       close_op_ctx(ctx.release());
@@ -14997,24 +15039,23 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     pool_migrations_in_flight.insert(soid);
     last_pool_migration_started = next_pool_migration(last_pool_migration_started);
 
-    ctx->register_on_finish(
-            [this, soid]() {
-                dout(20) << "pool migration finished migrating " << soid << dendl;
-                auto i = recovering.find(soid);
-                ceph_assert(i != recovering.end());
-                object_stat_sum_t stat_diff;
-                new_pool_migration_interval_in_flight = false;
-                on_global_recover(soid, stat_diff, false);
-            });
+    ObjectOperation o;
+    object_locator_t oloc(soid);
+    o.copy_from(soid.oid.name, soid.snap, oloc, obc->obs.oi.user_version, 0, 0);
     ctx->at_version = get_next_version();
-    ceph_assert(ctx->new_obs.exists);
-    int r = _delete_oid(ctx.get(), false, false);
-    ceph_assert(r == 0);
-    if (obc->obs.oi.is_omap()) {
-      ctx->delta_stats.num_objects_omap--;
-    }
-    finish_ctx(ctx.get(), pg_log_entry_t::DELETE);
-    dout(20) << "pool migration deleting " << soid << dendl;
+    SnapContext snapc = ctx->snapc;
+    object_locator_t base_oloc(soid);
+    base_oloc.pool = *pool.info.migration_target;
+    C_Migrate *fin = new C_Migrate(this, soid, get_last_peering_reset());
+    ceph_tid_t tid = osd->objecter->mutate(
+      soid.oid, base_oloc, o, snapc,
+      ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
+      0,
+      new C_OnFinisher(fin,
+           osd->get_objecter_finisher(get_pg_shard())));
+    fin->tid = tid;
+    dout(20) << "pool migration copying " << soid << dendl;
+    finish_ctx(ctx.get(), pg_log_entry_t::CLONE);
     simple_opc_submit(std::move(ctx));
   }
 
