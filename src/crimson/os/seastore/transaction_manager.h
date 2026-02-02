@@ -643,13 +643,15 @@ public:
   reserve_extent_ret reserve_region(
     Transaction &t,
     laddr_hint_t hint,
-    extent_len_t len) {
+    extent_len_t len,
+    extent_types_t type) {
     LOG_PREFIX(TransactionManager::reserve_region);
-    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} {} ...", t, hint, len, type);
     auto pin = co_await lba_manager->reserve_region(
       t,
       hint,
-      len
+      len,
+      type
     );
     SUBDEBUGT(seastore_tm, "reserved {}", t, *pin);
     co_return LBAMapping::create_direct(std::move(pin));
@@ -659,15 +661,17 @@ public:
     Transaction &t,
     LBAMapping pos,
     laddr_t hint,
-    extent_len_t len) {
+    extent_len_t len,
+    extent_types_t type) {
     LOG_PREFIX(TransactionManager::reserve_region);
-    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} {} ...", t, hint, len, type);
     pos = co_await pos.refresh();
     auto pin = co_await lba_manager->reserve_region(
       t,
       pos.get_effective_cursor_ref(),
       hint,
-      len
+      len,
+      type
     );
     co_return LBAMapping::create_direct(std::move(pin));
   }
@@ -762,7 +766,8 @@ public:
 	  t,
 	  std::move(pos),
 	  (dst_base + cloned_to).checked_to_laddr(),
-	  clone_len
+	  clone_len,
+	  mapping.get_extent_type()
 	).handle_error_interruptible(
 	  clone_iertr::pass_further{},
 	  crimson::ct_error::assert_all{"unexpected error"}
@@ -1062,6 +1067,9 @@ public:
     if (!mapping.is_indirect() && mapping.is_zero_reserved()) {
       SUBDEBUGT(seastore_tm, "zero reserved, mapping {}, {} remaps",
 		t, mapping, remaps);
+      //TODO: drop this assert
+      assert(mapping.get_extent_type() == extent_types_t::OBJECT_DATA_BLOCK);
+      auto type = mapping.get_extent_type();
       std::vector<LBAMapping> ret;
       auto orig_laddr = mapping.get_key();
       auto pos = co_await remove(
@@ -1076,7 +1084,8 @@ public:
 	  t,
 	  std::move(pos),
 	  laddr,
-	  remap.len
+	  remap.len,
+          type
 	).handle_error_interruptible(
 	  remap_mappings_iertr::pass_further{},
 	  crimson::ct_error::assert_all{"unexpected error"}

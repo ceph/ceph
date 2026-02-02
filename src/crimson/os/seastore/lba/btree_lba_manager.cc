@@ -242,7 +242,8 @@ BtreeLBAManager::reserve_region(
   Transaction &t,
   LBACursorRef cursor,
   laddr_t addr,
-  extent_len_t len)
+  extent_len_t len,
+  extent_types_t type)
 {
   LOG_PREFIX(BtreeLBAManager::reserve_region);
   DEBUGT("{} {}~{}", t, *cursor, addr, len);
@@ -255,7 +256,7 @@ BtreeLBAManager::reserve_region(
     pladdr_t{P_ADDR_ZERO},
     EXTENT_DEFAULT_REF_COUNT,
     0,
-    extent_types_t::NONE};
+    type};
   auto p = co_await btree.insert(
     c, iter, addr, val,
     get_reserved_ptr<LBALeafNode, laddr_t>()
@@ -343,7 +344,7 @@ BtreeLBAManager::clone_mapping(
       pladdr_t{inter_key.get_local_clone_id()},
       EXTENT_DEFAULT_REF_COUNT,
       0,
-      extent_types_t::NONE},
+      mapping->get_extent_type()},
     get_reserved_ptr<LBALeafNode, laddr_t>());
   auto &[iter, inserted] = p;
   co_await mapping->refresh();
@@ -1075,6 +1076,7 @@ BtreeLBAManager::remap_mappings(
     val.refcount = EXTENT_DEFAULT_REF_COUNT;
     // Checksum will be updated when the committing the transaction
     val.checksum = CRC_NULL;
+    val.type = cursor->get_extent_type();
     // committing the transaction
     auto p = co_await btree.insert(
       c, iter, new_key, std::move(val),
