@@ -5,14 +5,13 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { Icons } from '~/app/shared/enum/icons.enum';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ActivatedRoute, Router } from '@angular/router';
 import { InitiatorRequest, NvmeofService } from '~/app/shared/api/nvmeof.service';
-
-import { Icons } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-nvmeof-initiators-form',

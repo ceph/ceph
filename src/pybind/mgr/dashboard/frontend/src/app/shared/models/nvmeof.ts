@@ -53,12 +53,14 @@ export interface NvmeofSubsystemNamespace {
   rbd_image_name: string;
   rbd_pool_name: string;
   load_balancing_group: number;
-  rbd_image_size: number;
+  rbd_image_size: number | string;
   block_size: number;
-  rw_ios_per_second: number;
-  rw_mbytes_per_second: number;
-  r_mbytes_per_second: number;
-  w_mbytes_per_second: number;
+  rw_ios_per_second: number | string;
+  rw_mbytes_per_second: number | string;
+  r_mbytes_per_second: number | string;
+  w_mbytes_per_second: number | string;
+  ns_subsystem_nqn?: string; // Field from JSON
+  subsystem_nqn?: string; // Keep for compatibility if needed, but JSON has ns_subsystem_nqn
 }
 
 export interface NvmeofGatewayGroup extends CephServiceSpec {

@@ -3,6 +3,7 @@ import { Component, Input, ViewEncapsulation } from '@angular/core';
 export interface SidebarItem {
   label: string;
   route: string[];
+  routeExtras?: any;
   routerLinkActiveOptions?: { exact: boolean };
 }
 

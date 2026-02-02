@@ -15,18 +15,20 @@
       <a ngbNavLink
          i18n>Listeners</a>
       <ng-template ngbNavContent>
-        <cd-nvmeof-listeners-list [subsystemNQN]="subsystemNQN"
-                                  [group]="group">
-        </cd-nvmeof-listeners-list>
+      <cd-nvmeof-listeners-list
+        [subsystemNQN]="subsystemNQN"
+        [group]="group">
+      </cd-nvmeof-listeners-list>
       </ng-template>
     </ng-container>
     <ng-container ngbNavItem="namespaces">
       <a ngbNavLink
          i18n>Namespaces</a>
       <ng-template ngbNavContent>
-        <cd-nvmeof-namespaces-list [subsystemNQN]="subsystemNQN"
-                                   [group]="group">
-        </cd-nvmeof-namespaces-list>
+    <cd-nvmeof-namespaces-list
+      [subsystemNQN]="subsystemNQN"
+      [group]="group">
+    </cd-nvmeof-namespaces-list>
       </ng-template>
     </ng-container>
     <ng-container ngbNavItem="initiators">

@@ -51,6 +51,17 @@
   </cd-table>
 </ng-container>
 
+<ng-template #customTableItemTemplate
+             let-value="data.value"
+             let-row="data.row">
+  <a cdsLink
+     [routerLink]="['/block/nvmeof/subsystems', value]"
+     [queryParams]="{ group: row.gw_group }"
+     (click)="$event.stopPropagation()">
+    {{ value }}
+  </a>
+</ng-template>
+
 <ng-template #authenticationTpl
              let-row="data.row">
   <div [cdsStack]="'horizontal'"

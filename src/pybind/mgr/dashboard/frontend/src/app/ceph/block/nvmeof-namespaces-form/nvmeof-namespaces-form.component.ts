@@ -86,7 +86,8 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       .getNamespace(this.subsystemNQN, this.nsid, this.group)
       .subscribe((res: NvmeofSubsystemNamespace) => {
         const convertedSize = this.dimlessBinaryPipe.transform(res.rbd_image_size).split(' ');
-        this.currentBytes = res.rbd_image_size;
+        this.currentBytes =
+          typeof res.rbd_image_size === 'string' ? Number(res.rbd_image_size) : res.rbd_image_size;
         this.nsForm.get('pool').setValue(res.rbd_pool_name);
         this.nsForm.get('unit').setValue(convertedSize[1]);
         this.nsForm.get('image_size').setValue(convertedSize[0]);

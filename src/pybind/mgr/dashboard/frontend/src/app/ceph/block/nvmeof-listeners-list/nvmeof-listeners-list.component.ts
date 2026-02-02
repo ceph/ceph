@@ -1,5 +1,5 @@
 import { Component, Input, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -39,15 +39,36 @@ export class NvmeofListenersListComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService,
     private nvmeofService: NvmeofService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
 
   ngOnInit() {
+    // If inputs are not provided, try to get from route params (when used as routed component)
+    if (!this.subsystemNQN || !this.group) {
+      this.route.parent?.params.subscribe((params) => {
+        if (params['subsystem_nqn']) {
+          this.subsystemNQN = params['subsystem_nqn'];
+        }
+        if (this.subsystemNQN && this.group) {
+          this.listListeners();
+        }
+      });
+      this.route.queryParams.subscribe((qp) => {
+        if (qp['group']) {
+          this.group = qp['group'];
+        }
+        if (this.subsystemNQN && this.group) {
+          this.listListeners();
+        }
+      });
+    }
+
     this.listenerColumns = [
       {
-        name: $localize`Host`,
+        name: $localize`Name`,
         prop: 'host_name'
       },
       {

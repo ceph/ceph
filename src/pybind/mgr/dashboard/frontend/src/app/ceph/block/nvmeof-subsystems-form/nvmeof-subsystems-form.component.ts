@@ -25,8 +25,6 @@ export type SubsystemPayload = {
 
 type StepResult = { step: string; success: boolean; error?: string };
 
-const PAGE_URL = 'block/nvmeof/subsystems';
-
 @Component({
   selector: 'cd-nvmeof-subsystems-form',
   templateUrl: './nvmeof-subsystems-form.component.html',
@@ -54,6 +52,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   title: string = $localize`Create Subsystem`;
   description: string = $localize`Subsytems define how hosts connect to NVMe namespaces and ensure secure access to storage.`;
   isSubmitLoading: boolean = false;
+  private lastCreatedNqn: string;
 
   @ViewChild(TearsheetComponent) tearsheet!: TearsheetComponent;
 
@@ -75,6 +74,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   }
   onSubmit(payload: SubsystemPayload) {
     this.isSubmitLoading = true;
+    this.lastCreatedNqn = payload.nqn;
     const stepResults: StepResult[] = [];
     const initiatorRequest: InitiatorRequest = {
       host_nqn: payload.hostType === HOST_TYPE.ALL ? '*' : payload.addedHosts.join(','),
@@ -113,7 +113,9 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
             errorMsg
           );
           this.isSubmitLoading = false;
-          this.router.navigate([PAGE_URL, { outlets: { modal: null } }]);
+          this.router.navigate(['block/nvmeof/gateways'], {
+            queryParams: { group: this.group, tab: 'subsystem' }
+          });
         }
       });
   }
@@ -157,6 +159,12 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
       : $localize`Subsystem created`;
 
     this.notificationService.show(type, title, sanitizedHtml);
-    this.router.navigate([PAGE_URL, { outlets: { modal: null } }]);
+    this.router.navigate(['block/nvmeof/gateways'], {
+      queryParams: {
+        group: this.group,
+        tab: 'subsystem',
+        nqn: stepResults[0]?.success ? this.lastCreatedNqn : null
+      }
+    });
   }
 }

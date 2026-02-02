@@ -1,10 +1,29 @@
-<legend>
-  <cd-help-text>
-    An initiator (or host) is the client that connects to the NVMe-oF target to access NVMe storage.
-    The NVMe/TCP protocol allows initiators, to send NVMe-oF commands to storage devices, which are known as targets.
-  </cd-help-text>
-</legend>
-<cd-table [data]="initiators"
+<cd-alert-panel
+  *ngIf="hasAllHostsAllowed()"
+  type="info"
+  [showTitle]="false">
+  <div cdsStack="horizontal"
+       gap="2">
+    <div cdsStack="vertical"
+         gap="2">
+      <strong i18n>Host access: All hosts allowed</strong>
+      <p
+        class="cds-mb-0 cds-mt-1"
+        i18n
+      >
+        Allowing all hosts grants access to every initiator on the network. Authentication is not supported in this mode, which may expose the subsystem to unauthorized access.
+      </p>
+    </div>
+    <span
+      class="text-nowrap cds-ml-3 text-muted"
+      i18n
+    >
+      Edit host access
+    </span>
+  </div>
+</cd-alert-panel>
+
+<cd-table [data]="hasAllHostsAllowed() ? [] : initiators"
           columnMode="flex"
           (fetchData)="listInitiators()"
           [columns]="initiatorColumns"
@@ -18,11 +37,9 @@
     </cd-table-actions>
   </div>
 </cd-table>
-<ng-template #hostTpl
-             let-value="data.value">
-  <span *ngIf="value === '*'"
-        i18n
-        class="font-monospace">Any host allowed (*)</span>
-  <span *ngIf="value !== '*'"
-        class="font-monospace">{{value}}</span>
+<ng-template #dhchapTpl>
+  <div cdsStack="horizontal"
+       gap="4">
+    {{ authStatus !== authType.NO_AUTH ? 'Yes' : 'No' }}
+  </div>
 </ng-template>
