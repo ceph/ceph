@@ -41,6 +41,9 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
   @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
 
+  @ViewChild('customTableItemTemplate', { static: true })
+  customTableItemTemplate: TemplateRef<any>;
+
   subsystems: (NvmeofSubsystem & { gw_group?: string; initiator_count?: number })[] = [];
   subsystemsColumns: any;
   permissions: Permissions;
@@ -78,7 +81,8 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
       {
         name: $localize`Subsystem NQN`,
         prop: 'nqn',
-        flexGrow: 2
+        flexGrow: 2,
+        cellTemplate: this.customTableItemTemplate
       },
       {
         name: $localize`Gateway group`,

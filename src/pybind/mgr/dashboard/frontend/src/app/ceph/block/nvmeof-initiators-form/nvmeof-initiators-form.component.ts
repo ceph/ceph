@@ -5,6 +5,7 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { Icons } from '~/app/shared/enum/icons.enum';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -28,6 +29,7 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
   subsystemNQN: string;
   removeHosts: { name: string; value: boolean; id: number }[] = [];
   group: string;
+  icons = Icons;
 
   constructor(
     private authStorageService: AuthStorageService,

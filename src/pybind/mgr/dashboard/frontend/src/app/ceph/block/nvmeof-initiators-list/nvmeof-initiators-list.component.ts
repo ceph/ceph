@@ -1,5 +1,5 @@
 import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -27,8 +27,8 @@ export class NvmeofInitiatorsListComponent implements OnInit {
   @Input()
   group: string;
 
-  @ViewChild('hostTpl', { static: true })
-  hostTpl: TemplateRef<any>;
+  @ViewChild('dhchapTpl', { static: true })
+  dhchapTpl: TemplateRef<any>;
 
   initiatorColumns: any;
   tableActions: CdTableAction[];
@@ -42,17 +42,36 @@ export class NvmeofInitiatorsListComponent implements OnInit {
     private nvmeofService: NvmeofService,
     private modalService: ModalCdsService,
     private router: Router,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private route: ActivatedRoute
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
 
   ngOnInit() {
+    if (!this.subsystemNQN || !this.group) {
+      this.route.parent?.params.subscribe((params) => {
+        if (params['subsystem_nqn']) {
+          this.subsystemNQN = params['subsystem_nqn'];
+        }
+        if (params['group']) {
+          this.group = params['group'];
+        }
+        if (this.subsystemNQN && this.group) {
+          this.listInitiators();
+        }
+      });
+    }
+
     this.initiatorColumns = [
       {
-        name: $localize`Initiator`,
-        prop: 'nqn',
-        cellTemplate: this.hostTpl
+        name: $localize`Host NQN`,
+        prop: 'nqn'
+      },
+      {
+        name: $localize`DHCHAP key`,
+        prop: 'use_dhchap',
+        cellTemplate: this.dhchapTpl
       }
     ];
     this.tableActions = [
@@ -65,7 +84,8 @@ export class NvmeofInitiatorsListComponent implements OnInit {
             [BASE_URL, { outlets: { modal: [URLVerbs.ADD, this.subsystemNQN, 'initiator'] } }],
             { queryParams: { group: this.group } }
           ),
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
+        disable: () => this.hasAllHostsAllowed()
       },
       {
         name: this.actionLabels.REMOVE,
@@ -80,6 +100,17 @@ export class NvmeofInitiatorsListComponent implements OnInit {
 
   getAllowAllHostIndex() {
     return this.selection.selected.findIndex((selected) => selected.nqn === '*');
+  }
+
+  hasAllHostsAllowed(): boolean {
+    return this.initiators.some((initiator) => initiator.nqn === '*');
+  }
+
+  editHostAccess() {
+    this.router.navigate(
+      [BASE_URL, { outlets: { modal: [URLVerbs.ADD, this.subsystemNQN, 'initiator'] } }],
+      { queryParams: { group: this.group } }
+    );
   }
 
   updateSelection(selection: CdTableSelection) {

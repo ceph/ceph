@@ -177,7 +177,23 @@ export class NvmeofService {
 
   // Namespaces
   listNamespaces(group: string) {
-    return this.http.get(`${API_PATH}/gateway_group/${group}/namespace`);
+    return this.http
+      .get(`${API_PATH}/gateway_group/${group}/namespace`, {
+        responseType: 'text'
+      })
+      .pipe(
+        map((res) => {
+          try {
+            const parsed = JSON.parse(res);
+            if (typeof parsed === 'string') {
+              return JSON.parse(parsed);
+            }
+            return parsed;
+          } catch {
+            return [];
+          }
+        })
+      );
   }
 
   getNamespace(subsystemNQN: string, nsid: string, group: string) {

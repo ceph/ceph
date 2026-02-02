@@ -1,5 +1,5 @@
 import { Component, Input, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -11,7 +11,6 @@ import { NvmeofSubsystemNamespace } from '~/app/shared/models/nvmeof';
 import { Permission } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { IopsPipe } from '~/app/shared/pipes/iops.pipe';
-import { MbpersecondPipe } from '~/app/shared/pipes/mbpersecond.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -29,6 +28,8 @@ export class NvmeofNamespacesListComponent implements OnInit {
   subsystemNQN: string;
   @Input()
   group: string;
+  @Input()
+  isSubsystemView: boolean = false; // When true, hides subsystem column and shows subsystem-specific columns
 
   namespacesColumns: any;
   tableActions: CdTableAction[];
@@ -44,24 +45,42 @@ export class NvmeofNamespacesListComponent implements OnInit {
     private taskWrapper: TaskWrapperService,
     private nvmeofService: NvmeofService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
-    private mbPerSecondPipe: MbpersecondPipe,
-    private iopsPipe: IopsPipe
+    private iopsPipe: IopsPipe,
+    private route: ActivatedRoute
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
 
   ngOnInit() {
-    this.namespacesColumns = [
+    // If inputs are not provided, try to get from route params (when used as routed component)
+    if (!this.subsystemNQN || !this.group) {
+      this.isSubsystemView = true; // When loaded via route, it's the subsystem view
+      this.route.parent?.params.subscribe((params) => {
+        if (params['subsystem_nqn']) {
+          this.subsystemNQN = params['subsystem_nqn'];
+        }
+        if (params['group']) {
+          this.group = params['group'];
+        }
+        if (this.subsystemNQN && this.group) {
+          this.listNamespaces();
+        }
+      });
+    }
+
+    this.setupColumns();
+    this.setupTableActions();
+  }
+
+  setupColumns() {
+    // Common columns for both views
+    const commonColumns = [
       {
         name: $localize`ID`,
         prop: 'nsid'
       },
       {
-        name: $localize`Bdev Name`,
-        prop: 'bdev_name'
-      },
-      {
-        name: $localize`Pool `,
+        name: $localize`Pool`,
         prop: 'rbd_pool_name',
         flexGrow: 2
       },
@@ -74,7 +93,11 @@ export class NvmeofNamespacesListComponent implements OnInit {
         name: $localize`Image Size`,
         prop: 'rbd_image_size',
         pipe: this.dimlessBinaryPipe
-      },
+      }
+    ];
+
+    // Subsystem view specific columns (inside subsystem resource page)
+    const subsystemViewColumns = [
       {
         name: $localize`Block Size`,
         prop: 'block_size',
@@ -86,34 +109,26 @@ export class NvmeofNamespacesListComponent implements OnInit {
         sortable: false,
         pipe: this.iopsPipe,
         flexGrow: 1.5
-      },
-      {
-        name: $localize`R/W Throughput`,
-        prop: 'rw_mbytes_per_second',
-        sortable: false,
-        pipe: this.mbPerSecondPipe,
-        flexGrow: 1.5
-      },
-      {
-        name: $localize`Read Throughput`,
-        prop: 'r_mbytes_per_second',
-        sortable: false,
-        pipe: this.mbPerSecondPipe,
-        flexGrow: 1.5
-      },
-      {
-        name: $localize`Write Throughput`,
-        prop: 'w_mbytes_per_second',
-        sortable: false,
-        pipe: this.mbPerSecondPipe,
-        flexGrow: 1.5
-      },
-      {
-        name: $localize`Load Balancing Group`,
-        prop: 'load_balancing_group',
-        flexGrow: 1.5
       }
     ];
+
+    // Namespaces tab specific columns (in main gateway page)
+    const namespacesTabColumns = [
+      {
+        name: $localize`Subsystem`,
+        prop: 'subsystem_nqn',
+        flexGrow: 2
+      }
+    ];
+
+    if (this.isSubsystemView) {
+      this.namespacesColumns = [...commonColumns, ...subsystemViewColumns];
+    } else {
+      this.namespacesColumns = [...commonColumns, ...namespacesTabColumns];
+    }
+  }
+
+  setupTableActions() {
     this.tableActions = [
       {
         name: this.actionLabels.CREATE,
@@ -162,9 +177,15 @@ export class NvmeofNamespacesListComponent implements OnInit {
   }
 
   listNamespaces() {
-    this.nvmeofService.listNamespaces(this.group).subscribe((res: NvmeofSubsystemNamespace[]) => {
-      this.namespaces = res;
-    });
+    if (this.group) {
+      this.nvmeofService
+        .listNamespaces(this.group)
+        .subscribe((res: { namespaces: NvmeofSubsystemNamespace[] }) => {
+          this.namespaces = res.namespaces || [];
+        });
+    } else {
+      this.namespaces = [];
+    }
   }
 
   deleteNamespaceModal() {
