@@ -17,6 +17,11 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { combineLatest, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
+<<<<<<< HEAD
+=======
+const BASE_URL = 'block/nvmeof/subsystems';
+
+>>>>>>> 50177830211 (mgr/dashboard: NVMe – Fix host,listeners namespace list display on Subsystem resource page)
 @Component({
   selector: 'cd-nvmeof-subsystem-namespaces-list',
   templateUrl: './nvmeof-subsystem-namespaces-list.component.html',
@@ -103,6 +108,7 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
   setupTableActions() {
     this.tableActions = [
       {
+<<<<<<< HEAD
         name: this.actionLabels.ADD,
         permission: 'create',
         icon: Icons.add,
@@ -137,6 +143,39 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
             }
           );
         }
+=======
+        name: this.actionLabels.CREATE,
+        permission: 'create',
+        icon: Icons.add,
+        click: () =>
+          this.router.navigate(
+            [BASE_URL, { outlets: { modal: [URLVerbs.CREATE, this.subsystemNQN, 'namespace'] } }],
+            { queryParams: { group: this.group } }
+          ),
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+      },
+      {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () =>
+          this.router.navigate(
+            [
+              BASE_URL,
+              {
+                outlets: {
+                  modal: [
+                    URLVerbs.EDIT,
+                    this.subsystemNQN,
+                    'namespace',
+                    this.selection.first().nsid
+                  ]
+                }
+              }
+            ],
+            { queryParams: { group: this.group } }
+          )
+>>>>>>> 50177830211 (mgr/dashboard: NVMe – Fix host,listeners namespace list display on Subsystem resource page)
       },
       {
         name: this.actionLabels.DELETE,

@@ -3,10 +3,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
-import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import {
@@ -19,7 +17,8 @@ import { NvmeofSubsystemAuthType } from '~/app/shared/enum/nvmeof.enum';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { NvmeofEditHostKeyModalComponent } from '../nvmeof-edit-host-key-modal/nvmeof-edit-host-key-modal.component';
+
+const BASE_URL = 'block/nvmeof/subsystems';
 
 @Component({
   selector: 'cd-nvmeof-initiators-list',
@@ -36,7 +35,7 @@ export class NvmeofInitiatorsListComponent implements OnInit {
   @ViewChild('dhchapTpl', { static: true })
   dhchapTpl: TemplateRef<any>;
 
-  initiatorColumns: CdTableColumn[];
+  initiatorColumns: any;
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
   permission: Permission;
@@ -92,20 +91,12 @@ export class NvmeofInitiatorsListComponent implements OnInit {
         permission: 'create',
         icon: Icons.add,
         click: () =>
-          this.router.navigate([{ outlets: { modal: [URLVerbs.ADD, 'initiator'] } }], {
-            queryParams: { group: this.group },
-            relativeTo: this.route.parent
-          }),
+          this.router.navigate(
+            [BASE_URL, { outlets: { modal: [URLVerbs.ADD, this.subsystemNQN, 'initiator'] } }],
+            { queryParams: { group: this.group } }
+          ),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
         disable: () => this.hasAllHostsAllowed()
-      },
-      {
-        name: $localize`Edit host key`,
-        permission: 'update',
-        icon: Icons.edit,
-        click: () => this.editHostKeyModal(),
-        disable: () => this.selection.selected.length !== 1,
-        canBePrimary: (selection: CdTableSelection) => selection.selected.length === 1
       },
       {
         name: this.actionLabels.REMOVE,
@@ -125,23 +116,19 @@ export class NvmeofInitiatorsListComponent implements OnInit {
     }
   }
 
-  editHostKeyModal() {
-    const selected = this.selection.selected[0];
-    if (!selected) return;
-    this.modalService.show(NvmeofEditHostKeyModalComponent, {
-      subsystemNQN: this.subsystemNQN,
-      hostNQN: selected.nqn,
-      group: this.group,
-      dhchapKey: selected.dhchap_key || ''
-    });
-  }
-
   getAllowAllHostIndex() {
     return this.selection.selected.findIndex((selected) => selected.nqn === '*');
   }
 
   hasAllHostsAllowed(): boolean {
     return this.initiators.some((initiator) => initiator.nqn === '*');
+  }
+
+  editHostAccess() {
+    this.router.navigate(
+      [BASE_URL, { outlets: { modal: [URLVerbs.ADD, this.subsystemNQN, 'initiator'] } }],
+      { queryParams: { group: this.group } }
+    );
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -151,8 +138,7 @@ export class NvmeofInitiatorsListComponent implements OnInit {
   listInitiators() {
     this.nvmeofService
       .getInitiators(this.subsystemNQN, this.group)
-      .subscribe((response: NvmeofSubsystemInitiator[] | { hosts: NvmeofSubsystemInitiator[] }) => {
-        const initiators = Array.isArray(response) ? response : response?.hosts || [];
+      .subscribe((initiators: NvmeofSubsystemInitiator[]) => {
         this.initiators = initiators;
         this.updateAuthStatus();
       });
@@ -184,22 +170,17 @@ export class NvmeofInitiatorsListComponent implements OnInit {
       hostNQNs.splice(allowAllHostIndex, 1);
       itemNames = [...hostNQNs, $localize`Allow any host(*)`];
     }
-    const hostName = itemNames[0];
     this.modalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: $localize`host`,
-      impact: DeletionImpact.high,
+      itemDescription: 'Initiator',
       itemNames,
       actionDescription: 'remove',
-      bodyContext: {
-        deletionMessage: $localize`Removing <strong>${hostName}</strong> will disconnect it and revoke its permissions for the <strong>${this.subsystemNQN}</strong> subsystem.`
-      },
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
           task: new FinishedTask('nvmeof/initiator/remove', {
             nqn: this.subsystemNQN,
             plural: itemNames.length > 1
           }),
-          call: this.nvmeofService.removeInitiators(this.subsystemNQN, {
+          call: this.nvmeofService.removeSubsystemInitiators(this.subsystemNQN, {
             host_nqn,
             gw_group: this.group
           })

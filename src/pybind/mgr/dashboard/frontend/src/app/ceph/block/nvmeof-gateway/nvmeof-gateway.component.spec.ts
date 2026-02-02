@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NvmeofGatewayComponent } from './nvmeof-gateway.component';
 
 import { HttpClientModule } from '@angular/common/http';
+import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ComboBoxModule, GridModule, TabsModule } from 'carbon-components-angular';
 
@@ -13,7 +14,14 @@ describe('NvmeofGatewayComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [NvmeofGatewayComponent],
-      imports: [HttpClientModule, SharedModule, ComboBoxModule, GridModule, TabsModule],
+      imports: [
+        HttpClientModule,
+        RouterTestingModule,
+        SharedModule,
+        ComboBoxModule,
+        GridModule,
+        TabsModule
+      ],
       providers: []
     }).compileComponents();
 

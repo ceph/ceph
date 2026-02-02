@@ -1,4 +1,11 @@
-import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import {
+  Component,
+  OnDestroy,
+  OnInit,
+  TemplateRef,
+  ViewChild,
+  ChangeDetectorRef
+} from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -19,13 +26,12 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofService, GroupsComboboxItem } from '~/app/shared/api/nvmeof.service';
-import { NotificationService } from '~/app/shared/services/notification.service';
-import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { BehaviorSubject, forkJoin, Observable, of, Subject } from 'rxjs';
-import { catchError, map, switchMap, takeUntil } from 'rxjs/operators';
+import { catchError, map, switchMap, takeUntil, tap } from 'rxjs/operators';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 
 const BASE_URL = 'block/nvmeof/subsystems';
 const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
@@ -46,6 +52,13 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
   @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
 
+  @ViewChild('customTableItemTemplate', { static: true })
+  customTableItemTemplate: TemplateRef<any>;
+
+  @ViewChild('table') table: TableComponent;
+
+  subsystems: (NvmeofSubsystem & { gw_group?: string; initiator_count?: number })[] = [];
+  pendingNqn: string = null;
   subsystemsColumns: any;
   permissions: Permissions;
   selection = new CdTableSelection();
@@ -70,7 +83,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     private route: ActivatedRoute,
     private modalService: ModalCdsService,
     private taskWrapper: TaskWrapperService,
-    private notificationService: NotificationService
+    private cdRef: ChangeDetectorRef
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -78,6 +91,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
 
   ngOnInit() {
     this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe((params) => {
+      if (params?.['nqn']) this.pendingNqn = params['nqn'];
       if (params?.['group']) this.onGroupSelection({ content: params?.['group'] });
     });
     this.setGatewayGroups();
@@ -85,7 +99,8 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
       {
         name: $localize`Subsystem NQN`,
         prop: 'nqn',
-        flexGrow: 2
+        flexGrow: 2,
+        cellTemplate: this.customTableItemTemplate
       },
       {
         name: $localize`Gateway group`,
@@ -144,15 +159,14 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
             return forkJoin(subs.map((sub) => this.enrichSubsystemWithInitiators(sub)));
           }),
           catchError((error) => {
-            this.notificationService.show(
-              NotificationType.error,
-              $localize`Unable to fetch Gateway group`,
-              $localize`Gateway group does not exist`
-            );
             this.handleError(error);
             return of([]);
           })
         );
+      }),
+      tap((subs) => {
+        this.subsystems = subs;
+        this.expandPendingSubsystem();
       }),
       takeUntil(this.destroy$)
     );
@@ -220,8 +234,15 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
   }
 
   updateGroupSelectionState() {
-    if (!this.group && this.gwGroups.length) {
-      this.onGroupSelection(this.gwGroups[0]);
+    if (this.gwGroups.length) {
+      if (!this.group) {
+        this.onGroupSelection(this.gwGroups[0]);
+      } else {
+        this.gwGroups = this.gwGroups.map((g) => ({
+          ...g,
+          selected: g.content === this.group
+        }));
+      }
       this.gwGroupsEmpty = false;
       this.gwGroupPlaceholder = DEFAULT_PLACEHOLDER;
     } else {
@@ -242,6 +263,19 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
       error?.preventDefault?.();
     }
     this.context?.error?.(error);
+  }
+
+  private expandPendingSubsystem() {
+    if (!this.pendingNqn) return;
+    const match = this.subsystems.find((s) => s.nqn === this.pendingNqn);
+    if (match && this.table) {
+      setTimeout(() => {
+        this.table.expanded = match;
+        this.table.toggleExpandRow();
+        this.cdRef.detectChanges();
+      });
+    }
+    this.pendingNqn = null;
   }
 
   private enrichSubsystemWithInitiators(sub: NvmeofSubsystem) {

@@ -91,6 +91,10 @@ import { NvmeofGatewaySubsystemComponent } from './nvmeof-gateway-subsystem/nvme
 import { NvmeGatewayViewComponent } from './nvme-gateway-view/nvme-gateway-view.component';
 import { NvmeGatewayViewBreadcrumbResolver } from './nvme-gateway-view/nvme-gateway-view-breadcrumb.resolver';
 import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
+import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node/nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
+import { NvmeofSubsystemNamespacesListComponent } from './nvmeof-subsystem-namespaces-list/nvmeof-subsystem-namespaces-list.component';
+import { NvmeSubsystemViewBreadcrumbResolver } from './nvme-subsystem-view/nvme-subsystem-view-breadcrumb.resolver';
+import { NvmeSubsystemViewComponent } from './nvme-subsystem-view/nvme-subsystem-view.component';
 
 @NgModule({
   imports: [
@@ -121,9 +125,9 @@ import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
     TagModule,
     GridModule,
     LayerModule,
-    LayoutModule,
     ContainedListModule,
     SideNavModule,
+    LayoutModule,
     ThemeModule
   ],
   declarations: [
@@ -159,6 +163,7 @@ import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
     NvmeofListenersFormComponent,
     NvmeofListenersListComponent,
     NvmeofNamespacesListComponent,
+    NvmeofSubsystemNamespacesListComponent,
     NvmeofNamespacesFormComponent,
     NvmeofInitiatorsListComponent,
     NvmeofInitiatorsFormComponent,
@@ -168,7 +173,9 @@ import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
     NvmeofSubsystemsStepTwoComponent,
     NvmeofSubsystemsStepThreeComponent,
     NvmeGatewayViewComponent,
-    NvmeofGatewaySubsystemComponent
+    NvmeofGatewaySubsystemComponent,
+    NvmeofGatewayNodeAddModalComponent,
+    NvmeSubsystemViewComponent
   ],
 
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
@@ -383,6 +390,26 @@ const routes: Routes = [
             path: `${URLVerbs.ADD}/:subsystem_nqn/initiator`,
             component: NvmeofInitiatorsFormComponent,
             outlet: 'modal'
+          }
+        ]
+      },
+      {
+        path: `subsystems/:subsystem_nqn`,
+        component: NvmeSubsystemViewComponent,
+        data: { breadcrumbs: NvmeSubsystemViewBreadcrumbResolver },
+        children: [
+          { path: '', redirectTo: 'namespaces', pathMatch: 'full' },
+          {
+            path: 'hosts',
+            component: NvmeofInitiatorsListComponent
+          },
+          {
+            path: 'namespaces',
+            component: NvmeofSubsystemNamespacesListComponent
+          },
+          {
+            path: 'listeners',
+            component: NvmeofListenersListComponent
           }
         ]
       }

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
@@ -6,10 +7,20 @@ import { of } from 'rxjs';
 
 import { NvmeSubsystemViewComponent } from './nvme-subsystem-view.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+=======
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
+import { RouterTestingModule } from '@angular/router/testing';
+import { SideNavModule, ThemeModule } from 'carbon-components-angular';
+
+import { NvmeSubsystemViewComponent } from './nvme-subsystem-view.component';
+
+>>>>>>> 50177830211 (mgr/dashboard: NVMe – Fix host,listeners namespace list display on Subsystem resource page)
 describe('NvmeSubsystemViewComponent', () => {
   let component: NvmeSubsystemViewComponent;
   let fixture: ComponentFixture<NvmeSubsystemViewComponent>;
 
+<<<<<<< HEAD
   const mockParamMap = {
     get: (key: string) => (key === 'subsystem_nqn' ? 'nqn.test' : null)
   };
@@ -28,6 +39,17 @@ describe('NvmeSubsystemViewComponent', () => {
       schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();
   }));
+=======
+  beforeEach(
+    waitForAsync(() => {
+      TestBed.configureTestingModule({
+        declarations: [NvmeSubsystemViewComponent],
+        imports: [RouterTestingModule, SideNavModule, ThemeModule],
+        schemas: [CUSTOM_ELEMENTS_SCHEMA]
+      }).compileComponents();
+    })
+  );
+>>>>>>> 50177830211 (mgr/dashboard: NVMe – Fix host,listeners namespace list display on Subsystem resource page)
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NvmeSubsystemViewComponent);
@@ -38,6 +60,7 @@ describe('NvmeSubsystemViewComponent', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+<<<<<<< HEAD
 
   it('should build sidebar items correctly', () => {
     expect(component.sidebarItems.length).toBe(5);
@@ -73,4 +96,6 @@ describe('NvmeSubsystemViewComponent', () => {
       'performance'
     ]);
   });
+=======
+>>>>>>> 50177830211 (mgr/dashboard: NVMe – Fix host,listeners namespace list display on Subsystem resource page)
 });
