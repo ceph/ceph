@@ -290,7 +290,7 @@ class NFSCluster:
                     ingress_mode = IngressType.haproxy_protocol
                 else:
                     ingress_mode = IngressType.haproxy_standard
-                r['ingress_mode'] = ingress_mode.value
+            r['ingress_mode'] = ingress_mode.value
 
         log.debug("Successfully fetched %s info: %s", cluster_id, r)
         return r

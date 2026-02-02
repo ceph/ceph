@@ -8,6 +8,8 @@ NFS_CORE_PARAM {
         NFS_Port = {{ port }};
 {% if monitoring_addr %}
         allow_set_io_flusher_fail = true;
+        Monitoring_Addr = {{ monitoring_addr }};
+        Monitoring_Port = {{ monitoring_port }};
 {% endif %}
 {% if bind_addr %}
         Bind_addr = {{ bind_addr }};
@@ -16,13 +18,6 @@ NFS_CORE_PARAM {
         HAProxy_Hosts = {{ haproxy_hosts|join(", ") }};
 {% endif %}
 }
-
-{% if monitoring_addr %}
-NFS_MONITORING {
-        Monitoring_Addr = {{ monitoring_addr }};
-        Monitoring_Port = {{ monitoring_port }};
-}
-{% endif %}
 
 NFSv4 {
         Delegations = false;
