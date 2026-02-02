@@ -324,7 +324,8 @@ BtreeLBAManager::reserve_region(
   Transaction &t,
   LBAMapping pos,
   laddr_t addr,
-  extent_len_t len)
+  extent_len_t len,
+  extent_types_t type)
 {
   LOG_PREFIX(BtreeLBAManager::reserve_region);
   DEBUGT("{} {}~{}", t, pos, addr, len);
@@ -333,7 +334,7 @@ BtreeLBAManager::reserve_region(
   return with_btree<LBABtree>(
     cache,
     c,
-    [pos=std::move(pos), c, addr, len](auto &btree) mutable {
+    [pos=std::move(pos), c, addr, len, type](auto &btree) mutable {
     auto &cursor = pos.get_effective_cursor();
     auto iter = btree.make_partial_iter(c, cursor);
     lba_map_val_t val{
@@ -341,7 +342,7 @@ BtreeLBAManager::reserve_region(
       pladdr_t{P_ADDR_ZERO},
       EXTENT_DEFAULT_REF_COUNT,
       0,
-      extent_types_t::NONE};
+      type};
     return btree.insert(
       c, iter, addr, val, get_reserved_ptr<LBALeafNode, laddr_t>()
     ).si_then([c](auto p) {
@@ -494,7 +495,7 @@ BtreeLBAManager::clone_mapping(
               pladdr_t{inter_key.get_local_clone_id()},
               EXTENT_DEFAULT_REF_COUNT,
               0,
-              extent_types_t::NONE},
+              state.mapping.get_extent_type()},
             get_reserved_ptr<LBALeafNode, laddr_t>());
 	}).si_then([c, &state](auto p) {
 	  auto &[iter, inserted] = p;
@@ -1361,22 +1362,24 @@ BtreeLBAManager::remap_mappings(
       auto old_key = mapping.get_key();
       auto old_length = mapping.get_length();
       auto old_indirect = mapping.is_indirect();
+      auto type = mapping.get_extent_type();
       return update_refcount(c.trans, &cursor, -1
       ).si_then([old_key, old_length, old_indirect,
 		&btree, &iter, c, &ret,	&remaps,
-		pladdr=val.pladdr](auto r) {
+		pladdr=val.pladdr, type](auto r) {
 	assert(r.refcount == 0);
 	auto &cursor = r.mapping.get_effective_cursor();
 	iter = btree.make_partial_iter(c, cursor);
 	return trans_intr::do_for_each(
 	  remaps,
 	  [old_key, old_length, old_indirect, &btree,
-	  &iter, c, &ret, pladdr](auto &remap) {
+	  &iter, c, &ret, pladdr, type](auto &remap) {
 	  assert(remap.offset + remap.len <= old_length);
 	  assert((bool)remap.extent == !old_indirect);
 	  lba_map_val_t val;
 	  auto new_key = (old_key + remap.offset).checked_to_laddr();
 	  val.len = remap.len;
+	  val.type = type;
 	  if (pladdr.is_laddr()) {
 	    val.pladdr = pladdr;
 	  } else {
