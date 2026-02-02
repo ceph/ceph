@@ -1,9 +1,15 @@
 import { Component, OnInit } from '@angular/core';
+import { FormControl, FormGroup } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-cephfs-mirroring-paths',
@@ -18,10 +24,27 @@ export class CephfsMirroringPathsComponent implements OnInit {
 
   columns: CdTableColumn[];
   mirroringPaths$: Observable<any[]>;
+  tableActions: CdTableAction[];
+  selection = new CdTableSelection();
+  permissions: Permissions;
+  icons = Icons;
+  addPathPanelExpanded = false;
+  addPathPanelTitle = $localize`Add mirroring path`;
+  addPathForm = new FormGroup({
+    selectedSubvolume: new FormControl(''),
+    snapshotScheduleOption: new FormControl('existing')
+  });
+  subvolumeOptions: string[] = [];
+  selectSubvolumeLabel = $localize`Select subvolume`;
 
-  constructor(private route: ActivatedRoute, private cephfsService: CephfsService) {}
+  constructor(
+    private route: ActivatedRoute,
+    private cephfsService: CephfsService,
+    private authStorageService: AuthStorageService
+  ) {}
 
   ngOnInit() {
+    this.permissions = this.authStorageService.getPermissions();
     const state = history.state;
     this.localFsName = this.route.snapshot.params['fsName'] || state?.localFsName || '-';
     this.remoteFsName = state?.remoteFsName ?? '-';
@@ -47,5 +70,30 @@ export class CephfsMirroringPathsComponent implements OnInit {
             ),
             catchError(() => of([]))
           );
+
+    this.tableActions = [
+      {
+        name: $localize`Add mirroring path`,
+        permission: 'create',
+        icon: this.icons.add,
+        click: () => this.openAddPathPanel()
+      }
+    ];
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
+  }
+
+  openAddPathPanel() {
+    this.addPathPanelExpanded = true;
+    this.addPathForm.reset({
+      selectedSubvolume: '',
+      snapshotScheduleOption: 'existing'
+    });
+  }
+
+  closeAddPathPanel() {
+    this.addPathPanelExpanded = false;
   }
 }
