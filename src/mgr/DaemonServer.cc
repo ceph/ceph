@@ -1009,7 +1009,7 @@ void DaemonServer::log_access_denied(
 }
 
 void DaemonServer::_check_offlines_pgs(
-  const std::set<int>& osds,
+  const ContainerType& osds,
   const OSDMap& osdmap,
   const PGMap& pgmap,
   offline_pg_report *report)
@@ -1027,20 +1027,36 @@ void DaemonServer::_check_offlines_pgs(
     }
     if (q.second.state & PG_STATE_DEGRADED) {
       for (auto& anm : q.second.avail_no_missing) {
-	if (osds.count(anm.osd)) {
-	  found = true;
-	  continue;
-	}
+        std::visit([anm, &found](auto& container) {
+          using T = std::decay_t<decltype(container)>;
+          if constexpr (std::is_same_v<T, std::set<int>>) {
+            found = container.count(anm.osd);
+          } else if constexpr (std::is_same_v<T, std::vector<int>>) {
+            auto it = std::find(container.begin(), container.end(), anm.osd);
+            found = (it != container.end());
+          }
+        }, osds);
+        if (found) {
+          continue;
+        }
 	if (anm.osd != CRUSH_ITEM_NONE) {
 	  pg_acting.insert(anm.osd);
 	}
       }
     } else {
       for (auto& a : q.second.acting) {
-	if (osds.count(a)) {
-	  found = true;
-	  continue;
-	}
+        std::visit([a, &found](auto& container) {
+          using T = std::decay_t<decltype(container)>;
+          if constexpr (std::is_same_v<T, std::set<int>>) {
+            found = container.count(a);
+          } else if constexpr (std::is_same_v<T, std::vector<int>>) {
+            auto it = std::find(container.begin(), container.end(), a);
+            found = (it != container.end());
+          }
+        }, osds);
+        if (found) {
+          continue;
+        }
 	if (a != CRUSH_ITEM_NONE) {
 	  pg_acting.insert(a);
 	}
@@ -1074,10 +1090,13 @@ void DaemonServer::_check_offlines_pgs(
       }
     }
   }
-  dout(20) << osds << " -> " << report->ok.size() << " ok, "
-	   << report->not_ok.size() << " not ok, "
-	   << report->unknown.size() << " unknown"
-	   << dendl;
+  CephContext *pcct = cct; // Resolve context outside lambda
+  std::visit([pcct, report](const auto& container) {
+    ldout(pcct, 20) << container << " -> " << report->ok.size() << " ok, "
+                    << report->not_ok.size() << " not ok, "
+                    << report->unknown.size() << " unknown"
+                    << dendl;
+  }, osds);
 }
 
 void DaemonServer::_maximize_ok_to_stop_set(

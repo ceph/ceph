@@ -53,7 +53,8 @@ struct MDSPerfMetricQuery;
 
 
 struct offline_pg_report {
-  std::set<int> osds;
+  using ContainerType = std::variant<std::vector<int>, std::set<int>>;
+  ContainerType osds;
   std::set<pg_t> ok, not_ok, unknown;
   std::set<pg_t> ok_become_degraded, ok_become_more_degraded;             // ok
   std::set<pg_t> bad_no_pool, bad_already_inactive, bad_become_inactive;  // not ok
@@ -65,9 +66,11 @@ struct offline_pg_report {
   void dump(Formatter *f) const {
     f->dump_bool("ok_to_stop", ok_to_stop());
     f->open_array_section("osds");
-    for (auto o : osds) {
-      f->dump_int("osd", o);
-    }
+    std::visit([&f](auto&& container) {
+      for (const auto& o : container) {
+        f->dump_int("osd", o);
+      }
+    }, osds);
     f->close_section();
     f->dump_unsigned("num_ok_pgs", ok.size());
     f->dump_unsigned("num_not_ok_pgs", not_ok.size());
@@ -172,6 +175,7 @@ protected:
   class DaemonServerHook *asok_hook;
 
 private:
+  using ContainerType = std::variant<std::vector<int>, std::set<int>>;
   friend class ReplyOnFinish;
   bool _reply(MCommand* m,
 	      int ret, const std::string& s, const bufferlist& payload);
@@ -179,7 +183,7 @@ private:
   void _prune_pending_service_map();
 
   void _check_offlines_pgs(
-    const std::set<int>& osds,
+    const ContainerType& osds,
     const OSDMap& osdmap,
     const PGMap& pgmap,
     offline_pg_report *report);
