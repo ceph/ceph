@@ -96,8 +96,12 @@ seastar::future<> PGAdvanceMap::start()
 	  [this, FNAME] (cached_map_t&& next_map) {
 	    DEBUG("{}: advancing map to {}",
 		  *this, next_map->get_epoch());
-	    pg->handle_advance_map(next_map, rctx);
-	    return check_for_splits(*from, next_map);
+        // Use the current OSDMap epoch to check for splits consecutively.
+        epoch_t current_epoch = pg->get_osdmap_epoch();
+        pg->handle_advance_map(next_map, rctx);
+        DEBUG("{}: checking for splits between {} and {}",
+              *this, current_epoch, next_map->get_epoch());
+        return check_for_splits(current_epoch, next_map);
 	  });
       }).then([this, FNAME] {
 	pg->handle_activate_map(rctx);
