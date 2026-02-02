@@ -294,7 +294,7 @@ class ScrubMachine : public ScrubFsmIf, public sc::state_machine<ScrubMachine, N
  public:
   friend class PgScrubber;
 
-  explicit ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub, jspn_ptr tracer);
+  explicit ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub, jspan_ptr tracer);
   virtual ~ScrubMachine();
 
   spg_t m_pg_id;

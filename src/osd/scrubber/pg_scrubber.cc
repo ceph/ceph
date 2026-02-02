@@ -2679,7 +2679,7 @@ PgScrubber::PgScrubber(PG* pg)
     , preemption_data{pg}
 {
   tracing::scrubber::tracer.init(m_osds->cct, "pg_scrubber");
-  auto scrubber_parent_span = tracing::scrubber::tracer.add_span("pg-scrubber-initialized");
+  auto scrubber_parent_span = tracing::scrubber::tracer.start_trace("pg-scrubber-initialized");
   m_fsm = std::make_unique<ScrubMachine>(m_pg, this, scrubber_parent_span);
   m_fsm->initiate();
   m_scrub_job.emplace(m_osds->cct, m_pg->pg_id, m_osds->get_nodeid());

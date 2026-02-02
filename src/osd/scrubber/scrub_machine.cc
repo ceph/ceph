@@ -751,7 +751,7 @@ sc::result WaitDigestUpdate::react(const ScrubFinished&)
 ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub, jspan_ptr parent_span)
     : m_pg_id{pg->pg_id}
     , m_scrbr{pg_scrub}
-    , m_tracer{tracer}
+    , m_tracer{parent_span}
 {}
 
 ScrubMachine::~ScrubMachine() = default;
