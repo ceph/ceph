@@ -7328,7 +7328,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   op_ret = serializer->try_lock(this, dur, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "failed to acquire lock" << dendl;
-    if (op_ret == -ENOENT && check_previously_completed(parts)) {
+    if (check_previously_completed(parts)) {
       ldpp_dout(this, 1) << "NOTICE: This multipart completion is already completed" << dendl;
       op_ret = 0;
       return;
@@ -7519,6 +7519,7 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
   }
   rgw::sal::Attrs sattrs = s->object->get_attrs();
   string oetag = sattrs[RGW_ATTR_ETAG].to_str();
+  const std::string oetag_unquoted = rgw_string_unquote(oetag);
 
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
@@ -7540,12 +7541,23 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
   snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2], sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
            "-%lld", (long long)parts->parts.size());
 
-  if (oetag.compare(final_etag_str) != 0) {
+  if (oetag_unquoted.compare(final_etag_str) != 0) {
+    if (parts->parts.size() == 1) {
+      const auto it = parts->parts.begin();
+      if (it != parts->parts.end()) {
+        const std::string partetag = rgw_string_unquote(it->second);
+        if (oetag_unquoted == partetag) {
+          ldpp_dout(this, 5) << __func__ << "() NOTICE: stored etag matches single part etag, etag: "
+                             << oetag_unquoted << dendl;
+          return true;
+        }
+      }
+    }
     ldpp_dout(this, 1) << __func__ << "() NOTICE: etag mismatch: object etag:"
-                                  << oetag << ", re-calculated etag:" << final_etag_str << dendl;
+                                  << oetag_unquoted << ", re-calculated etag:" << final_etag_str << dendl;
     return false;
   }
-  ldpp_dout(this, 5) << __func__ << "() object etag and re-calculated etag match, etag: " << oetag << dendl;
+  ldpp_dout(this, 5) << __func__ << "() object etag and re-calculated etag match, etag: " << oetag_unquoted << dendl;
   return true;
 }
 
