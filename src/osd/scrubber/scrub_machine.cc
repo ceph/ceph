@@ -13,6 +13,9 @@
 
 #include "ScrubStore.h"
 #include "common/debug.h"
+#include "scrubber_tracer.h"
+
+
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
@@ -28,7 +31,9 @@ using namespace std::chrono_literals;
   ScrubMachineListener* scrbr = machine.m_scrbr;		 \
   std::ignore = scrbr;                                           \
   auto pg_id = machine.m_pg_id;					 \
-  std::ignore = pg_id;
+  std::ignore = pg_id; \
+  auto trace = machine.m_tracer; \
+  std::ignore = trace;
 
 NamedSimply::NamedSimply(ScrubMachineListener* scrubber, const char* name)
 {
@@ -146,6 +151,10 @@ PrimaryActive::PrimaryActive(my_context ctx)
   dout(10) << "-- state -->> PrimaryActive" << dendl;
   // insert this PG into the OSD scrub queue. Calculate initial schedule
   scrbr->schedule_scrub_with_osd();
+  // TODO: Naveen: The "trace" should be part of pg_scrubber. That way we can maintain
+  // the information better. Maybe a function like "scrbr->get_current_span() ?"
+  tracing::scrubber::tracer.add_span("_primary_PrimaryActive", trace);
+  
 }
 
 PrimaryActive::~PrimaryActive()
@@ -739,9 +748,10 @@ sc::result WaitDigestUpdate::react(const ScrubFinished&)
   return transit<PrimaryIdle>();
 }
 
-ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub)
+ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub, jspan_ptr parent_span)
     : m_pg_id{pg->pg_id}
     , m_scrbr{pg_scrub}
+    , m_tracer{tracer}
 {}
 
 ScrubMachine::~ScrubMachine() = default;
