@@ -238,7 +238,9 @@ private:
   void handle_mirror_group_snapshot_unlink_peer(
       int r, const std::string &snap_id);
 
-  void get_replayers_by_image_id(std::unique_lock<ceph::mutex>* locker);
+  void prune_image_snapshot(ImageReplayer<ImageCtxT>* image_replayer,
+      uint64_t snap_id,
+      std::unique_lock<ceph::mutex>& locker);
   bool prune_all_image_snapshots_by_gsid(
       const std::string &group_snap_id,
       const std::vector<cls::rbd::GroupImageStatus>& local_images,
@@ -255,6 +257,11 @@ private:
       const std::vector<cls::rbd::GroupImageStatus>& local_images,
       const std::vector<cls::rbd::GroupSnapshot>& prune_group_snaps);
 
+  void get_replayers_by_image_id(std::unique_lock<ceph::mutex>* locker);
+  std::string get_global_image_id(ImageReplayer<ImageCtxT>* image_replayer,
+      std::unique_lock<ceph::mutex>& locker);
+  void set_image_replayer_end_limits(ImageReplayer<ImageCtxT>* image_replayer,
+      uint64_t snap_id, std::unique_lock<ceph::mutex>& locker);
   void set_image_replayer_limits(const std::string &image_id,
                                  const cls::rbd::GroupSnapshot *remote_snap,
                                  std::unique_lock<ceph::mutex>* locker);
