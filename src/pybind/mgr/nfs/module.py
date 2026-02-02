@@ -43,7 +43,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
-            cmount_path: Optional[str] = "/"
+            cmount_path: Optional[str] = "/",
+            delegations: Optional[str] = None,
+            inbuf: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create a CephFS export"""
         earmark_resolver = CephFSEarmarkResolver(self)
@@ -58,7 +60,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             addr=client_addr,
             sectype=sectype,
             cmount_path=cmount_path,
-            earmark_resolver=earmark_resolver
+            earmark_resolver=earmark_resolver,
+            delegation=delegations,
+            clients_config=inbuf
         )
 
     @NFSCLICommand('nfs export create rgw', perm='rw')
@@ -73,6 +77,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
+            delegations: Optional[str] = None,
+            inbuf: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create an RGW export"""
         return self.export_mgr.create_export(
@@ -85,6 +91,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             squash=squash,
             addr=client_addr,
             sectype=sectype,
+            delegation=delegations,
+            clients_config=inbuf
         )
 
     @NFSCLICommand('nfs export rm', perm='rw')
@@ -117,7 +125,22 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Fetch a export of a NFS cluster given the pseudo path/binding (DEPRECATED)"""
         return self.export_mgr.get_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
-    @NFSCLICommand('nfs export apply', perm='rw')
+    @CLICommand('nfs export update', perm='rw')
+    @object_format.Responder()
+    def _cmd_nfs_export_update(self, 
+                               cluster_id: str, 
+                               pseudo_path: str,
+                               delegations: Optional[str] = None,
+                               inbuf: Optional[str] = None) -> Dict[str, Any]:
+        """Update an existing NFS export configuration."""
+        return self.export_mgr.modify_export(
+            cluster_id=cluster_id,
+            pseudo_path=pseudo_path,
+            export_delegation=delegations,
+            clients_config=inbuf
+        )
+
+    @CLICommand('nfs export apply', perm='rw')
     @CLICheckNonemptyFileInput(desc='Export JSON or Ganesha EXPORT specification')
     @object_format.Responder()
     def _cmd_nfs_export_apply(self, cluster_id: str, inbuf: str) -> AppliedExportResults:
@@ -126,7 +149,22 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.apply_export(cluster_id, export_config=inbuf,
                                             earmark_resolver=earmark_resolver)
 
-    @NFSCLICommand('nfs cluster create', perm='rw')
+    @CLICommand('nfs cluster get-export-default', perm='r')
+    @object_format.Responder()
+    def _cmd_nfs_cluster_get_export_default(self,
+                                            cluster_id: str) -> Dict[str, Any]:
+        """Retrieve delegation configuration from EXPORT DEFAULT level."""
+        return self.export_mgr.get_export_default_delegation(cluster_id)
+
+    @CLICommand('nfs cluster set-export-default', perm='rw')
+    @object_format.Responder()
+    def _cmd_nfs_cluster_set_export_default(self,
+                                            cluster_id: str,
+                                            delegations: str) -> Dict[str, Any]:
+        """Update delegation at EXPORT DEFAULT level (global fallback)."""
+        return self.export_mgr.set_export_default_delegation(cluster_id, delegations)
+
+    @CLICommand('nfs cluster create', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_create(self,
                                 cluster_id: str,

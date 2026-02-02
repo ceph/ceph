@@ -53,6 +53,58 @@ def _validate_sec_type(sec_type: str) -> None:
             f"SecType {sec_type} invalid, valid types are {valid_sec_types}")
 
 
+def _map_delegation_value(delegation: str) -> str:
+    """Map delegation values to Ganesha format.
+    
+    Ganesha accepts: 'Read', 'Write', or 'None'
+    Input values: 'ro' (read-only), 'rw' (read-write), 'none' (no delegation)
+    """
+    delegation_map = {
+        'ro': 'Read',
+        'rw': 'Write',
+        'none': 'None',
+    }
+    if delegation.lower() not in delegation_map:
+        raise NFSInvalidOperation(
+            f"Invalid delegation value {delegation}. Valid values are: ro, rw, none")
+    return delegation_map[delegation.lower()]
+
+
+def _unmap_delegation_value(delegation: Optional[str]) -> Optional[str]:
+    """Convert Ganesha delegation format back to user format.
+    
+    Ganesha format: 'Read', 'Write', 'None'
+    Output format: 'ro' (read-only), 'rw' (read-write), 'none' (no delegation)
+    """
+    if not delegation:
+        return None
+    
+    reverse_map = {
+        'Read': 'ro',
+        'Write': 'rw',
+        'None': 'none',
+    }
+    
+    # Handle case-insensitive input
+    for ganesha_val, user_val in reverse_map.items():
+        if delegation.lower() == ganesha_val.lower():
+            return user_val
+    
+    # If already in user format, return as-is
+    if delegation.lower() in ['ro', 'rw', 'none']:
+        return delegation.lower()
+    
+    return delegation
+
+
+def _validate_delegation(delegation: str) -> None:
+    """Validate delegation value."""
+    valid_delegations = ['ro', 'rw', 'none']
+    if delegation.lower() not in valid_delegations:
+        raise NFSInvalidOperation(
+            f"Delegation {delegation} invalid, valid types are {valid_delegations}")
+
+
 class RawBlock():
     def __init__(self, block_name: str, blocks: List['RawBlock'] = [], values: Dict[str, Any] = {}):
         if not values:  # workaround mutable default argument
@@ -326,10 +378,12 @@ class Client:
     def __init__(self,
                  addresses: List[str],
                  access_type: str,
-                 squash: str):
+                 squash: str,
+                 delegation: Optional[str] = None):
         self.addresses = addresses
         self.access_type = access_type
         self.squash = squash
+        self.delegation = delegation
 
     @classmethod
     def from_client_block(cls, client_block: RawBlock) -> 'Client':
@@ -338,7 +392,8 @@ class Client:
             addresses = [addresses]
         return cls(addresses,
                    client_block.values.get('access_type', None),
-                   client_block.values.get('squash', None))
+                   client_block.values.get('squash', None),
+                   _unmap_delegation_value(client_block.values.get('delegation', None)))
 
     def to_client_block(self) -> RawBlock:
         result = RawBlock('CLIENT', values={'clients': self.addresses})
@@ -346,19 +401,24 @@ class Client:
             result.values['access_type'] = self.access_type
         if self.squash:
             result.values['squash'] = self.squash
+        if self.delegation:
+            result.values['Delegation'] = _map_delegation_value(self.delegation)
         return result
 
     @classmethod
     def from_dict(cls, client_dict: Dict[str, Any]) -> 'Client':
         return cls(client_dict['addresses'], client_dict['access_type'],
-                   client_dict['squash'])
+                   client_dict['squash'], client_dict.get('delegation'))
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             'addresses': self.addresses,
             'access_type': self.access_type,
             'squash': self.squash
         }
+        if self.delegation:
+            result['delegation'] = self.delegation
+        return result
 
 
 class Export:
@@ -375,7 +435,8 @@ class Export:
             transports: List[str],
             fsal: FSAL,
             clients: Optional[List[Client]] = None,
-            sectype: Optional[List[str]] = None) -> None:
+            sectype: Optional[List[str]] = None,
+            delegation: Optional[str] = None) -> None:
         self.export_id = export_id
         self.path = path
         self.fsal = fsal
@@ -389,6 +450,7 @@ class Export:
         self.transports = transports
         self.clients: List[Client] = clients or []
         self.sectype = sectype
+        self.delegation = delegation
 
     @classmethod
     def from_export_block(cls, export_block: RawBlock, cluster_id: str) -> 'Export':
@@ -430,7 +492,8 @@ class Export:
                    FSAL.from_fsal_block(fsal_blocks[0]),
                    [Client.from_client_block(client)
                     for client in client_blocks],
-                   sectype=sectype)
+                   sectype=sectype,
+                   delegation=_unmap_delegation_value(export_block.values.get('delegation', None)))
 
     def to_export_block(self) -> RawBlock:
         values = {
@@ -446,6 +509,8 @@ class Export:
         }
         if self.sectype:
             values['SecType'] = self.sectype
+        if self.delegation:
+            values['Delegation'] = _map_delegation_value(self.delegation)
         result = RawBlock("EXPORT", values=values)
         result.blocks = [
             self.fsal.to_fsal_block()
@@ -468,7 +533,8 @@ class Export:
                    ex_dict.get('transports', ['TCP']),
                    FSAL.from_dict(ex_dict.get('fsal', {})),
                    [Client.from_dict(client) for client in ex_dict.get('clients', [])],
-                   sectype=ex_dict.get("sectype"))
+                   sectype=ex_dict.get("sectype"),
+                   delegation=ex_dict.get('delegation'))
 
     def to_dict(self) -> Dict[str, Any]:
         values = {
@@ -486,6 +552,8 @@ class Export:
         }
         if self.sectype:
             values['sectype'] = self.sectype
+        if self.delegation:
+            values['delegation'] = self.delegation
         return values
 
     def validate(self, mgr: 'Module') -> None:
@@ -515,6 +583,11 @@ class Export:
                 _validate_squash(client.squash)
             if client.access_type:
                 _validate_access_type(client.access_type)
+            if client.delegation:
+                _validate_delegation(client.delegation)
+
+        if self.delegation:
+            _validate_delegation(self.delegation)
 
         if self.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
             fs = cast(CephFSFSAL, self.fsal)

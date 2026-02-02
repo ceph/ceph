@@ -28,6 +28,7 @@ from .ganesha_conf import (
     GaneshaConfParser,
     RGWFSAL,
     RawBlock,
+    _map_delegation_value,
     format_block)
 from .exception import NFSException, NFSInvalidOperation, FSNotFound, NFSObjectNotFound
 from .utils import (
@@ -35,6 +36,7 @@ from .utils import (
     NonFatalError,
     USER_CONF_PREFIX,
     export_obj_name,
+    export_default_obj_name,
     conf_obj_name,
     available_clusters,
     check_fs,
@@ -420,23 +422,57 @@ class ExportMgr:
 
     def create_export(self, addr: Optional[List[str]] = None, **kwargs: Any) -> Dict[str, Any]:
         self._validate_cluster_id(kwargs['cluster_id'])
-        # if addr(s) are provided, construct client list and adjust outer block
+        
+        # Check if clients_config is provided
+        clients_config = kwargs.pop('clients_config', None)
+        
         clients = []
+        
+        if clients_config:
+            try:
+                client_list = json.loads(clients_config)
+                if not isinstance(client_list, list):
+                    raise NFSException("clients_config must be a JSON list of client configurations", 
+                                     -errno.EINVAL)
+                
+                for client_conf in client_list:
+                    client_entry = {
+                        'addresses': client_conf.get('addresses', []),
+                        'access_type': client_conf.get('access_type', 
+                                                       'ro' if kwargs['read_only'] else 'rw'),
+                        'squash': client_conf.get('squash', kwargs['squash']),
+                    }
+                    # Add delegation if specified in the client config
+                    if 'delegation' in client_conf:
+                        client_entry['delegation'] = client_conf['delegation']
+                    clients.append(client_entry)
+                
+            except json.JSONDecodeError as e:
+                raise NFSException(f"Failed to parse clients_config (must be valid JSON): {e}", -errno.EINVAL)
+        
+        # Add client_addr as an additional CLIENT block if provided
         if addr:
-            clients = [{
+            client_entry = {
                 'addresses': addr,
                 'access_type': 'ro' if kwargs['read_only'] else 'rw',
                 'squash': kwargs['squash'],
-            }]
-            kwargs['squash'] = 'none'
-        kwargs['clients'] = clients
-
+            }
+            # Add delegation from CLI parameter if specified
+            if kwargs.get('delegation'):
+                client_entry['delegation'] = kwargs['delegation']
+            clients.append(client_entry)
+        
+        # When any client blocks are created, set export-level to 'none'
+        # so CLIENT blocks take precedence
         if clients:
-            kwargs['access_type'] = "none"
+            kwargs['squash'] = 'none'
+            kwargs['access_type'] = 'none'
         elif kwargs['read_only']:
             kwargs['access_type'] = "RO"
         else:
             kwargs['access_type'] = "RW"
+        
+        kwargs['clients'] = clients
 
         if kwargs['cluster_id'] not in self.exports:
             self.exports[kwargs['cluster_id']] = []
@@ -741,7 +777,8 @@ class ExportMgr:
                              clients: list = [],
                              sectype: Optional[List[str]] = None,
                              cmount_path: Optional[str] = "/",
-                             earmark_resolver: Optional[CephFSEarmarkResolver] = None
+                             earmark_resolver: Optional[CephFSEarmarkResolver] = None,
+                             delegation: Optional[str] = None,
                              ) -> Dict[str, Any]:
 
         validate_cephfs_path(self.mgr, fs_name, path)
@@ -751,22 +788,35 @@ class ExportMgr:
         pseudo_path = normalize_path(pseudo_path)
 
         if not self._fetch_export(cluster_id, pseudo_path):
+            # Build export dict with delegation support
+            export_dict = {
+                "pseudo": pseudo_path,
+                "path": path,
+                "access_type": access_type,
+                "squash": squash,
+                "fsal": {
+                    "name": NFS_GANESHA_SUPPORTED_FSALS[0],
+                    "cmount_path": cmount_path,
+                    "fs_name": fs_name,
+                },
+                "clients": clients,
+                "sectype": sectype,
+            }
+            
+            # Handle delegation with priority: client > export > EXPORT DEFAULT
+            if delegation:
+                if clients:
+                    # Add delegation to each client block (client-level - HIGHEST priority)
+                    for client in export_dict['clients']:
+                        client['delegation'] = delegation
+                else:
+                    # Add delegation to export block (export-level - MEDIUM priority)
+                    export_dict['delegation'] = delegation
+            
             export = self.create_export_from_dict(
                 cluster_id,
                 self._gen_export_id(cluster_id),
-                {
-                    "pseudo": pseudo_path,
-                    "path": path,
-                    "access_type": access_type,
-                    "squash": squash,
-                    "fsal": {
-                        "name": NFS_GANESHA_SUPPORTED_FSALS[0],
-                        "cmount_path": cmount_path,
-                        "fs_name": fs_name,
-                    },
-                    "clients": clients,
-                    "sectype": sectype,
-                },
+                export_dict,
                 earmark_resolver
             )
             log.debug("creating cephfs export %s", export)
@@ -779,6 +829,8 @@ class ExportMgr:
                 "cluster": cluster_id,
                 "mode": export.access_type,
             }
+            if delegation:
+                result["delegation"] = delegation
             return result
         raise NonFatalError("Export already exists")
 
@@ -791,28 +843,42 @@ class ExportMgr:
                           bucket: Optional[str] = None,
                           user_id: Optional[str] = None,
                           clients: list = [],
-                          sectype: Optional[List[str]] = None) -> Dict[str, Any]:
+                          sectype: Optional[List[str]] = None,
+                          delegation: Optional[str] = None) -> Dict[str, Any]:
         pseudo_path = normalize_path(pseudo_path)
 
         if not bucket and not user_id:
             raise ErrorResponse("Must specify either bucket or user_id")
 
         if not self._fetch_export(cluster_id, pseudo_path):
+            # Build export dict with delegation support
+            export_dict = {
+                "pseudo": pseudo_path,
+                "path": bucket or '/',
+                "access_type": access_type,
+                "squash": squash,
+                "fsal": {
+                    "name": NFS_GANESHA_SUPPORTED_FSALS[1],
+                    "user_id": user_id,
+                },
+                "clients": clients,
+                "sectype": sectype,
+            }
+            
+            # Handle delegation with priority: client > export > EXPORT DEFAULT
+            if delegation:
+                if clients:
+                    # Add delegation to each client block (client-level - HIGHEST priority)
+                    for client in export_dict['clients']:
+                        client['delegation'] = delegation
+                else:
+                    # Add delegation to export block (export-level - MEDIUM priority)
+                    export_dict['delegation'] = delegation
+            
             export = self.create_export_from_dict(
                 cluster_id,
                 self._gen_export_id(cluster_id),
-                {
-                    "pseudo": pseudo_path,
-                    "path": bucket or '/',
-                    "access_type": access_type,
-                    "squash": squash,
-                    "fsal": {
-                        "name": NFS_GANESHA_SUPPORTED_FSALS[1],
-                        "user_id": user_id,
-                    },
-                    "clients": clients,
-                    "sectype": sectype,
-                }
+                export_dict
             )
             log.debug("creating rgw export %s", export)
             self._create_rgw_export_user(export)
@@ -824,6 +890,8 @@ class ExportMgr:
                 "mode": export.access_type,
                 "squash": export.squash,
             }
+            if delegation:
+                result["delegation"] = delegation
             return result
         raise NonFatalError("Export already exists")
 
@@ -914,6 +982,244 @@ class ExportMgr:
 
         return {"pseudo": new_export.pseudo, "state": "updated"}
 
+    def modify_export(self, cluster_id: str, pseudo_path: str,
+                      export_delegation: Optional[str] = None,
+                      clients_config: Optional[str] = None) -> Dict[str, Any]:
+        #Update an existing export's configuration.
+        self._validate_cluster_id(cluster_id)
+        
+        export = self._fetch_export(cluster_id, pseudo_path)
+        if not export:
+            raise NonFatalError(f"Export {pseudo_path} does not exist")
+        
+        updates = []
+        
+        # Validate at least one update is specified
+        if not export_delegation and not clients_config:
+            raise NFSInvalidOperation("Must specify --delegation and/or -i clients.json")
+        
+        # Update export-level delegation if specified
+        if export_delegation:
+            export.delegation = export_delegation
+            updates.append(f"export-level delegation: {export_delegation}")
+        
+        # Replace all CLIENT blocks with new config if provided
+        if clients_config:
+            try:
+                client_list = json.loads(clients_config)
+                if not isinstance(client_list, list):
+                    raise NFSException("clients_config must be a JSON list of client configurations", 
+                                     -errno.EINVAL)
+                
+                # Import Client class
+                from .ganesha_conf import Client
+                
+                # Build new client list from JSON
+                new_clients = []
+                for client_conf in client_list:
+                    addresses = client_conf.get('addresses', [])
+                    if not addresses:
+                        raise NFSException("Each client must have at least one address", 
+                                         -errno.EINVAL)
+                    
+                    new_client = Client.from_dict(client_conf)
+                    new_clients.append(new_client)
+                
+                # Replace all existing clients with new ones
+                export.clients = new_clients
+                updates.append(f"replaced all CLIENT blocks with {len(new_clients)} new client(s)")
+                
+            except json.JSONDecodeError as e:
+                raise NFSException(f"Failed to parse clients_config (must be valid JSON): {e}", -errno.EINVAL)
+        
+        # Remove export from list before update
+        self.exports[cluster_id].remove(export)
+        
+        # SINGLE Rados update call
+        self._update_export(cluster_id, export, need_nfs_service_restart=False)
+        
+        return {
+            "pseudo": export.pseudo,
+            "updates": updates,
+            "state": "updated"
+        }
+
+    def get_export_default_delegation(self, cluster_id: str) -> Dict[str, Any]:
+        """Retrieve delegation configuration from EXPORT DEFAULT block.
+        Args:
+            cluster_id: Cluster ID
+        Returns:
+            Dict with EXPORT DEFAULT delegation info
+        """
+        self._validate_cluster_id(cluster_id)
+        
+        try:
+            rados_obj = self._rados(cluster_id)
+            # Read from separate export-default object
+            export_default_text = rados_obj.read_obj(export_default_obj_name(cluster_id))
+            
+            if not export_default_text:
+                return {
+                    "cluster": cluster_id,
+                    "level": "EXPORT DEFAULT",
+                    "delegations": None,
+                    "message": "No EXPORT DEFAULT block configured for this cluster"
+                }
+            
+            # Parse the EXPORT DEFAULT block
+            conf_parser = GaneshaConfParser(export_default_text)
+            blocks = conf_parser.parse()
+            
+            if blocks and isinstance(blocks[0], RawBlock):
+                # Note: GaneshaConfParser lowercases all parameter names
+                delegation_value = blocks[0].values.get('delegation')
+                from .ganesha_conf import _unmap_delegation_value
+                delegation_value = _unmap_delegation_value(delegation_value)
+                return {
+                    "cluster": cluster_id,
+                    "level": "EXPORT DEFAULT",
+                    "delegations": delegation_value,
+                    "message": "EXPORT DEFAULT delegation retrieved successfully"
+                }
+            
+            return {
+                "cluster": cluster_id,
+                "level": "EXPORT DEFAULT",
+                "delegations": None,
+                "message": "No EXPORT DEFAULT block configured for this cluster"
+            }
+            
+        except ObjectNotFound:
+            return {
+                "cluster": cluster_id,
+                "level": "EXPORT DEFAULT",
+                "delegations": None,
+                "message": "No EXPORT DEFAULT block configured for this cluster"
+            }
+        except Exception as e:
+            raise NonFatalError(f"Failed to retrieve EXPORT DEFAULT delegation: {e}")
+
+    def _create_export_default_object(self, cluster_id: str, 
+                                      delegation: Optional[str] = None) -> None:
+        """Create the export-default rados object for a cluster.
+    
+        Args:
+            cluster_id: Cluster ID
+            delegation: Optional initial delegation value (defaults to 'none')
+        """
+        rados_obj = self._rados(cluster_id)
+        
+        # Create EXPORT DEFAULT block with initial delegation
+        if delegation is None:
+            delegation = 'none'
+        
+        export_default_block = RawBlock("EXPORT DEFAULT", values={
+            'Delegation': _map_delegation_value(delegation)
+        })
+        export_default_text = format_block(export_default_block)
+        
+        # Write to separate export-default object (creates new file)
+        with rados_obj.rados.open_ioctx(rados_obj.pool) as ioctx:
+            ioctx.set_namespace(rados_obj.namespace)
+            
+            # Create the export-default object
+            ioctx.write_full(export_default_obj_name(cluster_id), 
+                           export_default_text.encode('utf-8'))
+            
+            # Add %url reference to main config
+            self._ensure_export_default_url_in_config(ioctx, cluster_id)
+            
+            log.info("Created export-default object for cluster %s with delegation %s",
+                     cluster_id, delegation)
+    
+    def set_export_default_delegation(self, cluster_id: str,
+                                      delegation: str) -> Dict[str, Any]:
+        """Update delegation at EXPORT DEFAULT level (global fallback for all exports).
+        Uses separate rados object for optimal performance with many exports.
+        Creates the export-default object if it doesn't exist.
+        Args:
+            cluster_id: Cluster ID
+            delegation: Delegation value ('ro', 'rw', or 'none')
+        """
+        self._validate_cluster_id(cluster_id)
+        
+        # Validate cluster exists
+        if cluster_id not in available_clusters(self.mgr):
+            raise NonFatalError(f"Cluster {cluster_id} does not exist")
+        
+        try:
+            rados_obj = self._rados(cluster_id)
+            
+            # Check if export-default object exists
+            existing_config = rados_obj.read_obj(export_default_obj_name(cluster_id))
+            
+            if not existing_config:
+                # Create new export-default object
+                log.info("Creating new export-default object for cluster %s", cluster_id)
+                self._create_export_default_object(cluster_id, delegation)
+                action = "created"
+            else:
+                # Update existing export-default object
+                export_default_block = RawBlock("EXPORT DEFAULT", values={
+                    'Delegation': _map_delegation_value(delegation)
+                })
+                export_default_text = format_block(export_default_block)
+                
+                # Write to separate export-default object (updates existing file)
+                with rados_obj.rados.open_ioctx(rados_obj.pool) as ioctx:
+                    ioctx.set_namespace(rados_obj.namespace)
+                    
+                    # Update export-default object
+                    ioctx.write_full(export_default_obj_name(cluster_id), 
+                                   export_default_text.encode('utf-8'))
+                    
+                    # Notify daemons
+                    _check_rados_notify(ioctx, conf_obj_name(cluster_id))
+                
+                log.info("Updated export-default object for cluster %s to delegation %s",
+                         cluster_id, delegation)
+                action = "updated"
+            
+            return {
+                "cluster": cluster_id,
+                "level": "EXPORT DEFAULT",
+                "delegations": delegation,
+                "state": action,
+                "message": f"EXPORT DEFAULT delegation {action} to {delegation}. "
+                          f"This applies to all exports without explicit client or export-level delegation."
+            }
+            
+        except Exception as e:
+            raise NonFatalError(f"Failed to update EXPORT DEFAULT delegation: {e}")
+
+    def _ensure_export_default_url_in_config(self, ioctx: Any, cluster_id: str) -> None:
+        """Ensure main config has %url reference to export-default object.
+        
+        This is called when setting EXPORT DEFAULT to ensure Ganesha can find it.
+        """
+        try:
+            # Read current config
+            conf_text = ioctx.read(conf_obj_name(cluster_id), 1048576).decode()
+        except ObjectNotFound:
+            conf_text = ""
+        
+        # Check if export-default URL already exists
+        export_default_url = self._rados(cluster_id)._make_rados_url(
+            export_default_obj_name(cluster_id)
+        )
+        url_line = f'%url "{export_default_url}"'
+        
+        if url_line not in conf_text:
+            # Add URL reference at the beginning (before other %url blocks)
+            if conf_text:
+                # Insert at the beginning
+                conf_text = url_line + "\n\n" + conf_text
+            else:
+                conf_text = url_line + "\n"
+            
+            ioctx.write_full(conf_obj_name(cluster_id), conf_text.encode('utf-8'))
+            log.debug("Added export-default URL reference to main config")
+    
     def _rados(self, cluster_id: str) -> NFSRados:
         """Return a new NFSRados object for the given cluster id."""
         return NFSRados(self.mgr.rados, cluster_id)
