@@ -388,8 +388,7 @@ if(WITH_JAEGER)
   include(BuildOpentelemetry)
   build_opentelemetry()
   add_library(jaeger_base INTERFACE)
-  target_link_libraries(jaeger_base INTERFACE opentelemetry::libopentelemetry
-    thrift::libthrift)
+  target_link_libraries(jaeger_base INTERFACE opentelemetry::libopentelemetry)
 endif()
 
 set(mds_files)
@@ -654,7 +653,7 @@ endif()
 
 if(WITH_BREAKPAD)
   list(APPEND ceph_common_deps Breakpad::client)
-endif() 
+endif()
 
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common

@@ -22,6 +22,7 @@ function(build_arrow)
   else()
     # build arrow with bundled thrift to work around missing boost dependency
     list(APPEND arrow_CMAKE_ARGS -DThrift_SOURCE=BUNDLED -DARROW_THRIFT_USE_SHARED=OFF)
+    list(APPEND arrow_INTERFACE_LINK_LIBRARIES thrift::libthrift)
   endif()
 
   if (NOT WITH_SYSTEM_UTF8PROC)
