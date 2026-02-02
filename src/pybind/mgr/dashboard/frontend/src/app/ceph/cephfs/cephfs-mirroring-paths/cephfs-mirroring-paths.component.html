@@ -28,6 +28,17 @@
           <div class="cds--type-body-02">{{ remoteClusterName }}</div>
         </cds-tile>
       </div>
+<div cdsGrid
+     [fullWidth]="true"
+     class="cds-mt-5 cds-mb-5">
+  <div cdsRow>
+    <div cdsCol
+         class="cds-mb-5"
+         [columnNumbers]="{lg: 5}">
+      <cds-tile>
+        <div class="cds--type-heading-compact-02">Local filesystem</div>
+        <div class="cds--type-body-02">{{ localFsName }}</div>
+      </cds-tile>
     </div>
 
     <div cdsRow
@@ -46,3 +57,97 @@
     </div>
   </div>
 </div>
+  <div cdsRow [narrow]="true">
+    <div cdsCol [columnNumbers]="{lg: 16}">
+      <h3 class="cds--type-expressive-heading-03 cds-mb-3" i18n>Mirroring paths</h3>
+      <cd-table
+        [data]="(mirroringPaths$ | async) || []"
+        [columns]="columns"
+        selectionType="single"
+        [hasDetails]="false"
+        (updateSelection)="updateSelection($event)">
+        <div class="table-actions">
+          <cd-table-actions
+            [permission]="permissions.cephfs"
+            [selection]="selection"
+            [tableActions]="tableActions">
+          </cd-table-actions>
+        </div>
+      </cd-table>
+    </div>
+  </div>
+</div>
+
+<cd-side-panel
+  [expanded]="addPathPanelExpanded"
+  [headerText]="addPathPanelTitle"
+  (closed)="closeAddPathPanel()">
+  <div class="panel-content cds--type-body-long-01">
+    <div cdsGrid [fullWidth]="true">
+      <div cdsRow>
+        <div cdsCol [columnNumbers]="{lg: 16}">
+          <p class="cds--type-heading-compact-02" i18n>Mirroring context</p>
+        </div>
+      </div>
+      <div cdsRow>
+        <div cdsCol [columnNumbers]="{lg: 5}">
+          <cds-tile cdsLayer="'light'">
+            <div class="cds--type-heading-compact-02">Local filesystem</div>
+            <div class="cds--type-body-02">{{ localFsName }}</div>
+          </cds-tile>
+        </div>
+        <div cdsCol [columnNumbers]="{lg: 5}">
+          <cds-tile cdsLayer="'light'">
+            <div class="cds--type-heading-compact-02">Remote cluster</div>
+            <div class="cds--type-body-02">{{ remoteClusterName }}</div>
+          </cds-tile>
+        </div>
+        <div cdsCol [columnNumbers]="{lg: 6}">
+          <cds-tile cdsLayer="'light'">
+            <div class="cds--type-heading-compact-02">Remote filesystem</div>
+            <div class="cds--type-body-02">{{ remoteFsName }}</div>
+          </cds-tile>
+        </div>
+      </div>
+      <div cdsRow>
+        <div cdsCol [columnNumbers]="{lg: 16}">
+          <p class="cds--type-heading-compact-02" i18n>Type</p>
+        </div>
+      </div>
+      <div cdsRow>
+        <div cdsCol [columnNumbers]="{lg: 16}">
+          <cds-tile cdsLayer="'light'">
+            <div class="cds--type-heading-compact-02">Subvolume</div>
+            <div class="cds--type-body-02">Only subvolumes are supported for mirroring</div>
+          </cds-tile>
+        </div>
+      </div>
+      <div cdsRow>
+        <div cdsCol [columnNumbers]="{lg: 16}">
+          <form [formGroup]="addPathForm"
+                novalidate>
+            <div class="form-item">
+              <cds-select [label]="selectSubvolumeLabel"
+                         id="selected_subvolume"
+                         for="selected_subvolume"
+                         formControlName="selectedSubvolume">
+                <option value=""
+                        i18n>-- Select subvolume --</option>
+                <option *ngFor="let opt of subvolumeOptions"
+                        [value]="opt">{{ opt }}</option>
+              </cds-select>
+            </div>
+            <div class="form-item">
+              <cds-radio-group formControlName="snapshotScheduleOption">
+                <cds-radio value="existing"
+                           i18n>Use existing snapshot schedule</cds-radio>
+                <cds-radio value="new"
+                           i18n>Create a new snapshot schedule</cds-radio>
+              </cds-radio-group>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</cd-side-panel>
