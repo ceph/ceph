@@ -106,6 +106,7 @@ public:
     std::map<std::string, ceph::buffer::list, std::less<>> attrs; // xattrs
     uint64_t truncate_seq;
     uint64_t truncate_size;
+    bool whiteout; ///< Source object is whiteout
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -120,7 +121,8 @@ public:
 	flags(0),
 	source_data_digest(-1), source_omap_digest(-1),
 	data_digest(-1), omap_digest(-1),
-	truncate_seq(0), truncate_size(0)
+	truncate_seq(0), truncate_size(0),
+        whiteout(false)
     {}
   };
 
@@ -750,8 +752,6 @@ public:
     mempool::osd_pglog::vector<std::pair<osd_reqid_t, version_t> > extra_reqids;
     mempool::osd_pglog::map<uint32_t, int> extra_reqid_return_codes;
 
-    hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
-
     std::list<std::function<void()>> on_applied;
     std::list<std::function<void()>> on_committed;
     std::list<std::function<void()>> on_finish;
@@ -1200,12 +1200,34 @@ protected:
   hobject_t pool_migration_watermark;
   /// currently migrating objects
   std::set<hobject_t> pool_migrations_in_flight;
+  /// new writes blocked by pool migration
+  std::set<hobject_t> pool_migration_blocked_writes;
+  /// count of snaps being migrated per head object
+  std::map<hobject_t,int> pool_migration_clones_in_flight;
+  /// Heads with a live C_Migrate callback. Distinct from a head whose own copy
+  /// has already completed and is waiting for its clones (no outstanding op).
+  /// Used by the NEW_INTERVAL quiesce to avoid discarding a head that still has a live op.
+  std::set<hobject_t> pool_migration_head_copy_in_flight;
+  /// objecter tids of in-flight migration copy-from ops. on_shutdown must
+  /// be able to cancel these tids.
+  std::map<hobject_t, ceph_tid_t> pool_migration_copy_tids;
   /// last pool migration operation started
   hobject_t last_pool_migration_started;
   /// set for 1st object migration after activate
   bool new_pool_migration_interval;
   /// set while migrating 1st object after activate
   bool new_pool_migration_interval_in_flight;
+
+  /// Reason for quiescing pool migration operations
+  enum class PoolMigrationQuiesceReason {
+    NONE,         // Not quiescing
+    FATAL_ERROR,  // Fatal error (ENOENT, EIO, etc.) - stop migration
+    RETRY_NEEDED  // Retryable error (EBUSY) - retry after drain
+  };
+  /// Current quiesce state for pool migration
+  PoolMigrationQuiesceReason pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
+  /// Error code that triggered quiesce (for logging and decision making)
+  int pool_migration_quiesce_error_code = 0;
 
   /// objects waiting for lock retry to delete source after successful copy_from
   std::set<hobject_t> pool_migration_source_delete_pending_lock;
@@ -1221,14 +1243,9 @@ protected:
   bool pool_migration_reservations_granted_target = false;
   /// current migration target pg
   std::optional<pg_t> pool_migration_target_pg;
-  /// list of all target pgs a particular source pg will migrate to
-  std::vector<pg_t> pool_migration_target_pgs;
-  /// index of current target pg in pool_migration_target_pgs
-  size_t pool_migration_current_target_index = 0;
   /// pending reservation requests for target to reply to
   std::vector<OpRequestRef> pending_pool_migration_reservation_ops;
 
-  void initialize_pool_migration_target_pg_list();
   hobject_t next_pool_migration(std::optional<hobject_t> start);
   hobject_t earliest_pool_migration()
   {
@@ -1490,6 +1507,7 @@ protected:
 		  object_locator_t oloc, version_t version, unsigned flags,
 		  bool mirror_snapset, unsigned src_obj_fadvise_flags,
 		  unsigned dest_obj_fadvise_flags);
+  void migration_copy_from_check(hobject_t soid);
   void process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, PGTransaction *t);
   uint64_t get_copy_chunk_size() const {
@@ -1507,6 +1525,7 @@ protected:
   void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_copy(CopyOpRef cop, bool requeue, std::vector<ceph_tid_t> *tids);
   void cancel_copy_ops(bool requeue, std::vector<ceph_tid_t> *tids);
+  void cancel_pool_migration_copy_ops(std::vector<ceph_tid_t> *tids);
 
   friend struct C_Copyfrom;
 
@@ -1693,6 +1712,9 @@ public:
 		       const char *cls, const char *method, bufferlist& inbl);
 
   void handle_pool_migration_copy_failure(hobject_t oid, int r);
+  void handle_pool_migration_quiesce_complete();
+  void pool_migration_source_start_delete_head(hobject_t oid);
+  void pool_migration_source_start_delete(hobject_t oid);
   bool pool_migration_source_delete(hobject_t oid);
   void pool_migration_target_delete(const pg_t& source_pg, const hobject_t& watermark);
 
@@ -1994,7 +2016,7 @@ private:
   // return true if we're creating a local object, false for a
   // whiteout or no change.
   void maybe_create_new_object(OpContext *ctx, bool ignore_transaction=false);
-  int _delete_oid(OpContext *ctx, bool no_whiteout, bool try_no_whiteout);
+  int _delete_oid(OpContext *ctx, bool no_whiteout, bool try_no_whiteout, bool pool_migration=false);
   int _rollback_to(OpContext *ctx, OSDOp& op);
   void _do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
 				    OSDOp& op);
