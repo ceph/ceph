@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 set -e
 
-source $(dirname $0)/../detect-build-env-vars.sh
 
 [ -z "$CEPH_ROOT" ] && CEPH_ROOT=..
 
-dir=$CEPH_ROOT/ceph-object-corpus
+# check if CORPUS_PATH is set then use it for dir, if not use $CEPH_ROOT/ceph-object-corpus
+if [ -n "$CORPUS_PATH" ]; then
+    dir=$CORPUS_PATH
+else
+    source $(dirname $0)/../detect-build-env-vars.sh
+    dir=$CEPH_ROOT/ceph-object-corpus
+fi
 
 failed=0
 numtests=0
