@@ -1589,6 +1589,10 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
 
   const RGWBucketInfo& bucket_info = bucket->get_info();
 
+  // buckets on a different zonegroup won't have a local bucket index for stats
+  const bool local_zonegroup = (site.get_zonegroup().id == bucket_info.zonegroup);
+  const bool has_index = local_zonegroup;
+
   const auto& index = bucket_info.get_current_index();
   if (is_layout_indexless(index)) {
     cerr << "error, indexless buckets do not maintain stats; bucket=" <<
@@ -1598,10 +1602,13 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
 
   std::string bucket_ver, master_ver;
   std::string max_marker;
-  ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
-  if (ret < 0) {
-    cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
-    return ret;
+
+  if (has_index) {
+    ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+    if (ret < 0) {
+      cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
+      return ret;
+    }
   }
 
   utime_t ut(bucket->get_modification_time());
@@ -1622,18 +1629,21 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   formatter->dump_string("marker", bucket->get_marker());
   formatter->dump_stream("index_type") << index.layout.type;
   formatter->dump_int("index_generation", index.gen);
-  formatter->dump_int("num_shards", index.layout.normal.num_shards);
   formatter->dump_string("reshard_status", to_string(bucket_info.layout.resharding));
   logrecord_ut.gmtime(formatter->dump_stream("judge_reshard_lock_time"));
   formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
   formatter->dump_bool("mfa_enabled", bucket_info.mfa_enabled());
   ::encode_json("owner", bucket_info.owner, formatter);
-  formatter->dump_string("ver", bucket_ver);
-  formatter->dump_string("master_ver", master_ver);
+
+  if (has_index) {
+    formatter->dump_int("num_shards", index.layout.normal.num_shards);
+    formatter->dump_string("ver", bucket_ver);
+    formatter->dump_string("master_ver", master_ver);
+    formatter->dump_string("max_marker", max_marker);
+    dump_bucket_usage(stats, formatter);
+  }
   ut.gmtime(formatter->dump_stream("mtime"));
   ctime_ut.gmtime(formatter->dump_stream("creation_time"));
-  formatter->dump_string("max_marker", max_marker);
-  dump_bucket_usage(stats, formatter);
   encode_json("bucket_quota", bucket_info.quota, formatter);
 
   // bucket tags
