@@ -1,32 +1,32 @@
 import logging
-import yaml
 import os
-import time
 import re
 import ssl
-import traceback
 import threading
+import time
+import traceback
 from tempfile import NamedTemporaryFile, _TemporaryFileWrapper
+from typing import Any, Callable, Dict, MutableMapping, Optional, Tuple, Union
 from urllib.error import HTTPError, URLError
-from urllib.request import urlopen, Request
-from typing import Dict, Callable, Any, Optional, MutableMapping, Tuple, Union
+from urllib.request import Request, urlopen
 
+import yaml
 
 DEFAULTS: Dict[str, Any] = {
-    'reporter': {
-        'check_interval': 5,
-        'push_data_max_retries': 30,
-        'endpoint': 'https://%(mgr_host):%(mgr_port)/node-proxy/data',
+    "reporter": {
+        "check_interval": 5,
+        "push_data_max_retries": 30,
+        "endpoint": "https://%(mgr_host):%(mgr_port)/node-proxy/data",
     },
-    'system': {
-        'refresh_interval': 5,
-        'vendor': 'generic',
+    "system": {
+        "refresh_interval": 5,
+        "vendor": "generic",
     },
-    'api': {
-        'port': 9456,
+    "api": {
+        "port": 9456,
     },
-    'logging': {
-        'level': logging.INFO,
+    "logging": {
+        "level": logging.INFO,
     },
 }
 
@@ -48,7 +48,7 @@ def load_config(
     defaults = defaults or {}
     if not os.path.exists(path):
         return _deep_merge({}, defaults)
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         loaded = yaml.safe_load(f) or {}
     return _deep_merge(defaults, loaded)
 
@@ -56,12 +56,12 @@ def load_config(
 def get_logger(name: str, level: Union[int, str] = logging.NOTSET) -> logging.Logger:
     log_level: Union[int, str] = level
     if log_level == logging.NOTSET:
-        log_level = DEFAULTS['logging']['level']
+        log_level = DEFAULTS["logging"]["level"]
     logger = logging.getLogger(name)
     logger.setLevel(log_level)
     handler = logging.StreamHandler()
     handler.setLevel(log_level)
-    fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fmt = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     handler.setFormatter(fmt)
     logger.handlers.clear()
     logger.addHandler(handler)
@@ -106,7 +106,7 @@ class BaseThread(threading.Thread):
         self.pending_shutdown: bool = False
 
     def run(self) -> None:
-        logger.info(f'Starting {self.name}')
+        logger.info(f"Starting {self.name}")
         try:
             self.main()
         except Exception as e:
@@ -118,13 +118,13 @@ class BaseThread(threading.Thread):
         self.pending_shutdown = True
 
     def check_status(self) -> bool:
-        logger.debug(f'Checking status of {self.name}')
+        logger.debug(f"Checking status of {self.name}")
         if self.exc:
             traceback.print_tb(self.exc.__traceback__)
-            logger.error(f'Caught exception: {self.exc.__class__.__name__}')
+            logger.error(f"Caught exception: {self.exc.__class__.__name__}")
             raise self.exc
         if not self.is_alive():
-            logger.info(f'{self.name} not alive')
+            logger.info(f"{self.name} not alive")
             self.start()
         return True
 
@@ -133,8 +133,8 @@ class BaseThread(threading.Thread):
 
 
 def to_snake_case(name: str) -> str:
-    name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
+    name = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()
 
 
 def normalize_dict(test_dict: Dict) -> Dict:
@@ -144,38 +144,44 @@ def normalize_dict(test_dict: Dict) -> Dict:
             res[key.lower()] = normalize_dict(test_dict[key])
         else:
             if test_dict[key] is None:
-                test_dict[key] = 'unknown'
+                test_dict[key] = "unknown"
             res[key.lower()] = test_dict[key]
     return res
 
 
-def retry(exceptions: Any = Exception, retries: int = 20, delay: int = 1) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def retry(
+    exceptions: Any = Exception, retries: int = 20, delay: int = 1
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         def _retry(*args: Any, **kwargs: Any) -> Any:
             _tries = retries
             while _tries > 1:
                 try:
-                    logger.debug('{} {} attempt(s) left.'.format(f, _tries - 1))
+                    logger.debug("{} {} attempt(s) left.".format(f, _tries - 1))
                     return f(*args, **kwargs)
                 except exceptions:
                     time.sleep(delay)
                     _tries -= 1
-            logger.warn('{} has failed after {} tries'.format(f, retries))
+            logger.warn("{} has failed after {} tries".format(f, retries))
             return f(*args, **kwargs)
+
         return _retry
+
     return decorator
 
 
-def http_req(hostname: str = '',
-             port: str = '443',
-             method: Optional[str] = None,
-             headers: MutableMapping[str, str] = {},
-             data: Optional[str] = None,
-             endpoint: str = '/',
-             scheme: str = 'https',
-             ssl_verify: bool = False,
-             timeout: Optional[int] = None,
-             ssl_ctx: Optional[Any] = None) -> Tuple[Any, Any, Any]:
+def http_req(
+    hostname: str = "",
+    port: str = "443",
+    method: Optional[str] = None,
+    headers: MutableMapping[str, str] = {},
+    data: Optional[str] = None,
+    endpoint: str = "/",
+    scheme: str = "https",
+    ssl_verify: bool = False,
+    timeout: Optional[int] = None,
+    ssl_ctx: Optional[Any] = None,
+) -> Tuple[Any, Any, Any]:
 
     if not ssl_ctx:
         ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -185,13 +191,13 @@ def http_req(hostname: str = '',
         else:
             ssl_ctx.verify_mode = ssl.CERT_REQUIRED
 
-    url: str = f'{scheme}://{hostname}:{port}{endpoint}'
-    _data = bytes(data, 'ascii') if data else None
+    url: str = f"{scheme}://{hostname}:{port}{endpoint}"
+    _data = bytes(data, "ascii") if data else None
     _headers = headers
     if data and not method:
-        method = 'POST'
-    if not _headers.get('Content-Type') and method in ['POST', 'PATCH']:
-        _headers['Content-Type'] = 'application/json'
+        method = "POST"
+    if not _headers.get("Content-Type") and method in ["POST", "PATCH"]:
+        _headers["Content-Type"] = "application/json"
     try:
         req = Request(url, _data, _headers, method=method)
         with urlopen(req, context=ssl_ctx, timeout=timeout) as response:
@@ -202,14 +208,16 @@ def http_req(hostname: str = '',
     except (HTTPError, URLError) as e:
         # Log level is debug only.
         # We let whatever calls `http_req()` catching and printing the error
-        logger.debug(f'url={url} err={e}')
+        logger.debug(f"url={url} err={e}")
         # handle error here if needed
         raise
 
 
-def write_tmp_file(data: str, prefix_name: str = 'node-proxy-') -> _TemporaryFileWrapper:
+def write_tmp_file(
+    data: str, prefix_name: str = "node-proxy-"
+) -> _TemporaryFileWrapper:
     f = NamedTemporaryFile(prefix=prefix_name)
     os.fchmod(f.fileno(), 0o600)
-    f.write(data.encode('utf-8'))
+    f.write(data.encode("utf-8"))
     f.flush()
     return f

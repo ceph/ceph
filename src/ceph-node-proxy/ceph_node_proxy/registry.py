@@ -1,16 +1,15 @@
 from typing import Dict, Type
 
-from ceph_node_proxy.baseredfishsystem import BaseRedfishSystem
-
 # Built-in implementations
 from ceph_node_proxy.atollon import AtollonSystem
+from ceph_node_proxy.baseredfishsystem import BaseRedfishSystem
 from ceph_node_proxy.redfishdellsystem import RedfishDellSystem
 from ceph_node_proxy.util import get_logger
 
 REDFISH_SYSTEM_CLASSES: Dict[str, Type[BaseRedfishSystem]] = {
-    'generic': BaseRedfishSystem,
-    'dell': RedfishDellSystem,
-    'atollon': AtollonSystem,
+    "generic": BaseRedfishSystem,
+    "dell": RedfishDellSystem,
+    "atollon": AtollonSystem,
 }
 
 logger = get_logger(__name__)

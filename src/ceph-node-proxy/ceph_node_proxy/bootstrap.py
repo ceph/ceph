@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from ceph_node_proxy.main import NodeProxyManager
 
 
-def create_node_proxy_manager(cephadm_config: CephadmConfig) -> 'NodeProxyManager':
+def create_node_proxy_manager(cephadm_config: CephadmConfig) -> "NodeProxyManager":
     """
     Build NodeProxyManager from cephadm bootstrap config.
     Creates temporary CA file and loads node-proxy YAML config.
@@ -16,7 +16,7 @@ def create_node_proxy_manager(cephadm_config: CephadmConfig) -> 'NodeProxyManage
 
     ca_file = write_tmp_file(
         cephadm_config.root_cert_pem,
-        prefix_name='cephadm-endpoint-root-cert-',
+        prefix_name="cephadm-endpoint-root-cert-",
     )
     config = get_node_proxy_config(
         path=cephadm_config.node_proxy_config_path,

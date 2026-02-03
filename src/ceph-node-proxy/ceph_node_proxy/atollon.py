@@ -1,6 +1,7 @@
+from typing import Any
+
 from ceph_node_proxy.baseredfishsystem import BaseRedfishSystem
 from ceph_node_proxy.util import get_logger
-from typing import Any
 
 
 class AtollonSystem(BaseRedfishSystem):
