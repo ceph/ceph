@@ -104,7 +104,7 @@ class RedFishClient(BaseClient):
             path = f'{self.PREFIX}{path}'
         try:
             _, result, _status_code = self.query(endpoint=path)
-            result_json = json.loads(result)
+            result_json: Dict[str, Any] = json.loads(result)
             return result_json
         except URLError as e:
             self.log.error(f"Can't get path {path}:\n{e}")

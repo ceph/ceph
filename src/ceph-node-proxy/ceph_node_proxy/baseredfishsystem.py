@@ -166,31 +166,31 @@ class BaseRedfishSystem(BaseSystem):
         self._system[update_service_members.id] = update_service_members.data
 
     def get_sn(self) -> str:
-        return self._sys.get('SKU', '')
+        return str(self._sys.get('SKU', ''))
 
     def get_status(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys.get('status', {})
+        return dict(self._sys.get('status', {}))
 
     def get_memory(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys.get('memory', {})
+        return dict(self._sys.get('memory', {}))
 
     def get_processors(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys.get('processors', {})
+        return dict(self._sys.get('processors', {}))
 
     def get_network(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys.get('network', {})
+        return dict(self._sys.get('network', {}))
 
     def get_storage(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys.get('storage', {})
+        return dict(self._sys.get('storage', {}))
 
     def get_firmwares(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys.get('firmwares', {})
+        return dict(self._sys.get('firmwares', {}))
 
     def get_power(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys.get('power', {})
+        return dict(self._sys.get('power', {}))
 
     def get_fans(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys.get('fans', {})
+        return dict(self._sys.get('fans', {}))
 
     def get_component_spec_overrides(self) -> Dict[str, Dict[str, Any]]:
         return {}

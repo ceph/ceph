@@ -58,6 +58,12 @@ class SystemBackend(Protocol):
     def flush(self) -> None:
         ...
 
+    def start(self) -> None:
+        ...
+
+    def shutdown(self) -> None:
+        ...
+
 
 @runtime_checkable
 class SystemForReporter(Protocol):

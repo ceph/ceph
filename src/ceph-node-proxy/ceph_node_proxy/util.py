@@ -149,9 +149,9 @@ def normalize_dict(test_dict: Dict) -> Dict:
     return res
 
 
-def retry(exceptions: Any = Exception, retries: int = 20, delay: int = 1) -> Callable:
-    def decorator(f: Callable) -> Callable:
-        def _retry(*args: str, **kwargs: Any) -> Callable:
+def retry(exceptions: Any = Exception, retries: int = 20, delay: int = 1) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
+        def _retry(*args: Any, **kwargs: Any) -> Any:
             _tries = retries
             while _tries > 1:
                 try:

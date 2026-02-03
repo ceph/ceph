@@ -4,6 +4,7 @@ from ceph_node_proxy.config import load_cephadm_config
 from ceph_node_proxy.registry import get_system_class
 from ceph_node_proxy.reporter import Reporter
 from ceph_node_proxy.util import Config, DEFAULTS, get_logger, http_req
+from tempfile import _TemporaryFileWrapper
 from urllib.error import HTTPError
 from typing import Dict, Any, Optional
 
@@ -59,6 +60,7 @@ class NodeProxyManager:
             self.config = Config(path, defaults=DEFAULTS)
         self.username: str = ''
         self.password: str = ''
+        self._ca_temp_file: Optional[_TemporaryFileWrapper[Any]] = None
 
     def run(self) -> None:
         self.init()
