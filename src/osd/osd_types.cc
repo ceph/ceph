@@ -2934,6 +2934,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("ondisk_log_start") << ondisk_log_start;
   f->dump_unsigned("created", created);
   f->dump_unsigned("last_epoch_clean", last_epoch_clean);
+  f->dump_unsigned("last_epoch_started", last_epoch_started);
   f->dump_stream("parent") << parent;
   f->dump_unsigned("parent_split_bits", parent_split_bits);
   f->dump_stream("last_scrub") << last_scrub;
@@ -3080,6 +3081,7 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(ondisk_log_start, bl);
   encode(created, bl);
   encode(last_epoch_clean, bl);
+  encode(last_epoch_started, bl);
   encode(parent, bl);
   encode(parent_split_bits, bl);
   encode(last_scrub, bl);
@@ -3151,6 +3153,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
   decode(ondisk_log_start, bl);
   decode(created, bl);
   decode(last_epoch_clean, bl);
+  decode(last_epoch_started, bl);
   decode(parent, bl);
   decode(parent_split_bits, bl);
   decode(last_scrub, bl);
@@ -3271,6 +3274,7 @@ list<pg_stat_t> pg_stat_t::generate_test_instances()
   a.ondisk_log_start = eversion_t(1, 5);
   a.created = 6;
   a.last_epoch_clean = 7;
+  a.last_epoch_started = 6;
   a.parent = pg_t(1, 2);
   a.parent_split_bits = 12;
   a.last_scrub = eversion_t(9, 10);

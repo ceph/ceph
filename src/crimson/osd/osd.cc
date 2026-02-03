@@ -1109,12 +1109,15 @@ seastar::future<MessageURef> OSD::get_stats()
   return pg_shard_manager.get_pg_stats(
   ).then([this, m=std::move(m)](auto &&stats) mutable {
     min_last_epoch_clean = osdmap->get_epoch();
-    min_last_epoch_clean_pgs.clear();
+    min_last_epoch_started = osdmap->get_epoch();
+    pgs_for_beacon.clear();
     std::set<int64_t> pool_set;
     for (auto [pgid, stat] : stats) {
       min_last_epoch_clean = std::min(min_last_epoch_clean,
                                       stat.get_effective_last_epoch_clean());
-      min_last_epoch_clean_pgs.push_back(pgid);
+      min_last_epoch_started = std::min(min_last_epoch_started,
+                                        stat.get_effective_last_epoch_started());
+      pgs_for_beacon.push_back(pgid);
       int64_t pool_id = pgid.pool();
       pool_set.emplace(pool_id);
     }
@@ -1603,9 +1606,10 @@ seastar::future<> OSD::send_beacon()
   }
   auto beacon = crimson::make_message<MOSDBeacon>(osdmap->get_epoch(),
                                     min_last_epoch_clean,
+                                    min_last_epoch_started,
                                     superblock.last_purged_snaps_scrub,
                                     local_conf()->osd_beacon_report_interval);
-  beacon->pgs = min_last_epoch_clean_pgs;
+  beacon->pgs = pgs_for_beacon;
   DEBUG("{}", *beacon);
   return monc->send_message(std::move(beacon));
 }
