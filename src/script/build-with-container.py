@@ -1020,12 +1020,30 @@ def bc_build_rpm(ctx):
         f'-D_topdir {topdir}',
     ] + list(ctx.cli.rpmbuild_arg or []) + [str(srpm_path)]
     rpmbuild_cmd = ' '.join(shlex.quote(cmd) for cmd in rpmbuild_args)
+
+    # Match the official layout found on download.ceph.com, minus the signatures and SRPMS
+    createrepo_cmd = (
+        "cd " + shlex.quote(str(topdir)) + " && "
+        "RPM_ARCH=$(rpm --eval '%{_target_cpu}') && "
+        "createrepo_c RPMS/$RPM_ARCH && "
+        "createrepo_c RPMS/noarch && "
+        'printf "'
+            "[ceph-local%s]\\n"
+            "name=Local Ceph RPM Repository%s\\n"
+            "baseurl=file://%s/RPMS/%s\\n"
+            "enabled=1\\n"
+            "gpgcheck=0\\n\\n"
+        '" '
+        '"" "" "$PWD" "$RPM_ARCH" "-noarch" " (noarch)" "$PWD" "noarch" '
+        "> ceph-local.repo"
+    )
+
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"set -x; mkdir -p {topdir} && {rpmbuild_cmd}",
+            f"set -x; mkdir -p {topdir} && {rpmbuild_cmd} && {createrepo_cmd}",
         ],
     )
     with ctx.user_command():
