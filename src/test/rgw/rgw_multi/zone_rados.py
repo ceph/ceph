@@ -72,7 +72,7 @@ class RadosZone(Zone):
                 return self.s3_resource.Bucket(name)
             except ClientError as e:
                 error_code = e.response['Error']['Code']
-                if error_codein ['404', 'NoSuchBucket']:
+                if error_code in ['404', 'NoSuchBucket']:
                     return None
                 raise
 

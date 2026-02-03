@@ -22,7 +22,6 @@ from nose.plugins.skip import SkipTest
 from .multisite import Zone, ZoneGroup, Credentials
 
 from .conn import get_gateway_connection
-from .tools import assert_raises
 
 class Config:
     """ test configuration """
@@ -621,8 +620,11 @@ def test_bucket_create_with_tenant():
         tenant_primary_conn.head_bucket(Bucket=bucket_name)
         log.info("bucket exists in tenant namespace")
 
-        e = assert_raises(ClientError, primary.s3_client.head_bucket, Bucket=bucket_name)
-        assert e.response['Error']['Code'] == '404'
+        try:
+            primary.s3_client.head_bucket(Bucket=bucket_name)
+            assert False, "Expected 404 error - bucket should not exist in default namespace"
+        except ClientError as e:
+            assert e.response['Error']['Code'] == '404'
         log.info("bucket does not exist in default user namespace")
     finally:
         cmd = ['user', 'rm', '--tenant', tenant, '--uid', uid, '--purge-data']
@@ -1363,25 +1365,28 @@ def test_multi_zone_redirect():
 
     zonegroup_meta_checkpoint(zonegroup)
 
-    # try to read object from second zone (should fail)
-    e = assert_raises(ClientError, zc2.s3_client.get_object, Bucket=bucket_name, Key=obj)
-    assert e.response['Error']['Code'] == 'NoSuchKey'
+    try:
+        # try to read object from second zone (should fail)
+        try:
+            zc2.s3_client.get_object(Bucket=bucket_name, Key=obj)
+            assert False, "Expected NoSuchKey error"
+        except ClientError as e:
+            assert e.response['Error']['Code'] == 'NoSuchKey'
 
-    set_redirect_zone(z2, z1)
+        set_redirect_zone(z2, z1)
 
-    # Should work now with redirect
-    response = zc2.s3_client.get_object(Bucket=bucket_name, Key=obj)
-    eq(data, response['Body'].read().decode('ascii'))
+        # verify redirect is configured by checking for 301 response
+        try:
+            zc2.s3_client.get_object(Bucket=bucket_name, Key=obj)
+            assert False, "expected 301 error (boto3 doesn't follow redirects \
+                        https://github.com/boto/botocore/issues/2571)"
+        except ClientError as e:
+            assert e.response['Error']['Code'] == '301', \
+                f"Expected 301 but got {e.response['Error']['Code']}"
 
-    # Test updates
-    for x in ['a', 'b', 'c', 'd']:
-        data = x * 512
-        zc1.s3_client.put_object(Bucket=bucket_name, Key=obj, Body=data)
-        response = zc2.s3_client.get_object(Bucket=bucket_name, Key=obj)
-        eq(data, response['Body'].read().decode('ascii'))
-
-    set_sync_from_all(z2, True)
-    set_redirect_zone(z2, None)
+    finally:
+        set_sync_from_all(z2, True)
+        set_redirect_zone(z2, None)
 
 def test_zonegroup_remove():
     zonegroup = realm.master_zonegroup()
@@ -2082,8 +2087,11 @@ def test_role_delete_sync():
 
     for zone in zonegroup_conns.zones:
         log.info(f'checking if zone: {zone.name} does not have role: {role_name}')
-        assert_raises(zone.iam_conn.exceptions.NoSuchEntityException,
-                      zone.iam_conn.get_role, RoleName=role_name)
+        try:
+            zone.iam_conn.get_role(RoleName=role_name)
+            assert False, "Expected NoSuchEntityException"
+        except zone.iam_conn.exceptions.NoSuchEntityException:
+            pass  # expected
         log.info(f'success, zone: {zone.name} does not have role: {role_name}')
 
 def test_replication_status():
@@ -3747,8 +3755,10 @@ def test_bucket_create_location_constraint():
                 assert_equal(response['LocationConstraint'], zg.name)
             else:
                 # other zonegroup should fail with 400
-                e = assert_raises(ClientError,
-                                  z.s3_client.create_bucket,
-                                    Bucket=bucket_name,
-                                    CreateBucketConfiguration={'LocationConstraint': zg.name})
-                assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400
+                try:
+                    z.s3_client.create_bucket(
+                        Bucket=bucket_name,
+                        CreateBucketConfiguration={'LocationConstraint': zg.name})
+                    assert False, "expected 400 error"
+                except ClientError as e:
+                    assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400
