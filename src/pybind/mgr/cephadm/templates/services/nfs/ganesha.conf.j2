@@ -36,6 +36,11 @@ RADOS_KV {
         namespace = "{{ namespace }}";
 }
 
+RADOS_URLS {
+        UserId = "{{ user }}";
+        watch_url = "{{ url }}";
+}
+
 {% if tls_add %}
 TLS_CONFIG{
         Enable_TLS = {{ tls_add }};
@@ -56,3 +61,5 @@ TLS_CONFIG{
 {% endif %}
 }
 {% endif %}
+
+%url    {{ url }}
