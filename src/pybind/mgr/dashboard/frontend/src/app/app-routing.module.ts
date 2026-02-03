@@ -111,8 +111,7 @@ export class CephfsMirroringPathsBreadcrumbsResolver extends BreadcrumbsResolver
     return [
       { text: 'File', path: fsPath },
       { text: 'Mirroring', path: mirroringPath },
-      { text: fsName, path: null },
-      { text: 'paths', path: null }
+      { text: fsName, path: null }
     ];
   }
 }
