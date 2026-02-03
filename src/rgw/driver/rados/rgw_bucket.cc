@@ -1588,17 +1588,14 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   }
 
   const RGWBucketInfo& bucket_info = bucket->get_info();
-
-  // buckets on a different zonegroup won't have a local bucket index for stats
-  const bool local_zonegroup = (site.get_zonegroup().id == bucket_info.zonegroup);
-  const bool has_index = local_zonegroup;
-
   const auto& index = bucket_info.get_current_index();
-  if (is_layout_indexless(index)) {
-    cerr << "error, indexless buckets do not maintain stats; bucket=" <<
-      bucket->get_name() << std::endl;
-    return -EINVAL;
-  }
+
+  // buckets won't have a local bucket index for stats unless they:
+  // - reside on the local zonegroup
+  // - are not indexless
+  const bool local_zonegroup = (site.get_zonegroup().id == bucket_info.zonegroup);
+  const bool has_index = local_zonegroup &&
+      index.layout.type == rgw::BucketIndexType::Normal;
 
   std::string bucket_ver, master_ver;
   std::string max_marker;
