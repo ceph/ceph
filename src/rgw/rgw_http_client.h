@@ -72,7 +72,7 @@ protected:
 
   int init_request(rgw_http_req_data *req_data);
 
-  virtual int receive_header(void *ptr, size_t len) {
+  virtual int receive_header(void *ptr, size_t len, bool *pause) {
     return 0;
   }
   virtual int receive_data(void *ptr, size_t len, bool *pause) {
@@ -228,7 +228,7 @@ public:
   }
 
 protected:
-  int receive_header(void *ptr, size_t len) override;
+  int receive_header(void *ptr, size_t len, bool *pause) override;
 
 private:
   const std::set<header_name_t, ltstr_nocase> relevant_headers;
