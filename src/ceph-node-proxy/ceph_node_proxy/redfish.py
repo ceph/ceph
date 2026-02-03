@@ -245,6 +245,15 @@ def build_data(
     return normalize_dict(result)
 
 
+def _resolve_path(endpoint: Endpoint, path: str) -> Endpoint:
+    """Resolve an endpoint by traversing path segments (example: 'PowerSubsystem/PowerSupplies')."""
+    parts = [p for p in path.split('/') if p]
+    current = endpoint
+    for part in parts:
+        current = current[part]
+    return current
+
+
 def update_component(
     endpoints: EndpointMgr,
     collection: str,
@@ -255,21 +264,25 @@ def update_component(
     log: Any,
     attribute: Optional[str] = None,
 ) -> None:
-    """Update _sys[component] from Redfish endpoints using the given spec."""
+    """Update _sys[component] from Redfish endpoints using the given spec.
+    path can be a single segment ('Memory') or multiple ('PowerSubsystem/PowerSupplies').
+    """
     members: List[str] = endpoints[collection].get_members_names()
     result: Dict[str, Any] = {}
     if not members:
-        data = endpoints[collection][path].get_members_data()
+        ep = _resolve_path(endpoints[collection], path)
+        data = ep.get_members_data()
         result = build_data(data=data, fields=fields, log=log, attribute=attribute)
     else:
         for member in members:
             try:
+                ep = _resolve_path(endpoints[collection][member], path)
                 if attribute is None:
-                    data = endpoints[collection][member][path].get_members_data()
+                    data = ep.get_members_data()
                 else:
-                    data = endpoints[collection][member][path].data
+                    data = ep.data
+                result[member] = build_data(data=data, fields=fields, log=log, attribute=attribute)
             except HTTPError as e:
                 log.error(f'Error while updating {component}: {e}')
                 continue
-            result[member] = build_data(data=data, fields=fields, log=log, attribute=attribute)
     _sys[component] = result

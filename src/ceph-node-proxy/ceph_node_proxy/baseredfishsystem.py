@@ -29,7 +29,8 @@ class BaseRedfishSystem(BaseSystem):
         'network': ComponentUpdateSpec('systems', 'EthernetInterfaces', NETWORK_FIELDS, None),
         'processors': ComponentUpdateSpec('systems', 'Processors', PROCESSORS_FIELDS, None),
         'memory': ComponentUpdateSpec('systems', 'Memory', MEMORY_FIELDS, None),
-        'power': ComponentUpdateSpec('chassis', 'Power', POWER_FIELDS, 'PowerSupplies'),
+        # Power supplies: Chassis/.../PowerSubsystem/PowerSupplies (not like other components: like Systems/.../Memory)
+        'power': ComponentUpdateSpec('chassis', 'PowerSubsystem/PowerSupplies', POWER_FIELDS, None),
         'fans': ComponentUpdateSpec('chassis', 'Thermal', FANS_FIELDS, 'Fans'),
         'firmwares': ComponentUpdateSpec('update_service', 'FirmwareInventory', FIRMWARES_FIELDS, None),
     }
