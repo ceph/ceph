@@ -773,6 +773,10 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   // dispatch this event to test a preempted reservation
   bool inject_keep_preempt = false;
 
+  // If inject_fail_reserve_recovery_space is true then reject backfill/pool
+  // migration requests with too full
+  bool inject_fail_reserve_recovery_space = false;
+
   MockPeeringListener(OSDMapRef osdmap, const pg_pool_t pi, DoutPrefixProvider *dpp, pg_shard_t pg_whoami) {
     backend_listener = make_unique<MockPGBackendListener>(osdmap, pi, dpp, pg_whoami);
     backend = make_unique<MockPGBackend>(g_ceph_context, backend_listener.get(), nullptr, coll, ch);
@@ -873,11 +877,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   void schedule_event_after(
     PGPeeringEventRef event,
     float delay) override {
-    if (inject_event_stall) {
-      stalled_events.push_back(std::move(event));
-    } else {
-      events.push_back(std::move(event));
-    }
+    stalled_events.push_back(std::move(event));
     events_scheduled++;
   }
 
@@ -1064,6 +1064,9 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     int64_t local_num_bytes,
     int64_t num_objects = 0) override {
     recovery_space_reserved = true;
+    if (inject_fail_reserve_recovery_space) {
+      return false;
+    }
     return true;
   }
 
@@ -1089,12 +1092,14 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   }
 
   void log_state_enter(const char *state) override {
+    last_state_entered = string(state);
     state_entered = true;
   }
 
   void log_state_exit(
     const char *state_name, utime_t enter_time,
     uint64_t events, utime_t event_dur) override {
+    last_state_exited = string(state_name);
     state_exited = true;
   }
 
@@ -1204,7 +1209,9 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   bool recovery_space_reserved = false;
   bool recovery_space_unreserved = false;
   bool missing_set_rebuilt = false;
+  string last_state_entered;
   bool state_entered = false;
+  string last_state_exited;
   bool state_exited = false;
   mutable bool recovery_info_dumped = false;
   epoch_t current_epoch = 1;
@@ -2864,6 +2871,172 @@ TEST_F(PeeringStateTest, PoolMigration) {
   test_event_initialize();
   // Full peering cycle
   test_peering();
+  // Verify pool migration started
+  verify_all_active_migrating(eversion_t(), eversion_t());
+  // Signal migration complete
+  test_event_migration_done();
+  // Verify that we got to active+clean
+  verify_all_active_clean(eversion_t(), eversion_t());
+  EXPECT_TRUE(get_listener(acting[0])->pg_migrated_pool_sent);
+}
+
+// Multi-OSD test of peering with pool migration too full
+TEST_F(PeeringStateTest, PoolMigrationTooFull) {
+  dout(0) << "== PoolMigration ==" << dendl;
+  // Configure pool migration to an EC pool
+  migrate_to_ec_pool();
+  // Init
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  // Fail reservation on OSD 1
+  get_listener(acting[1])->inject_fail_reserve_recovery_space = true;
+  // Full peering cycle
+  test_peering();
+  // Verify that pool migration is stalled with too full
+  EXPECT_EQ(get_listener(acting[0])->events_scheduled, 1);
+  EXPECT_TRUE(get_ps(acting[0])->state_test(PG_STATE_MIGRATION_TOOFULL));
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/NotMigrating");
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+  EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+  EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+
+  // Fail reservation on OSD 2 as well
+  get_listener(acting[2])->inject_fail_reserve_recovery_space = true;
+  dispatch_all_events(true); // run stalled schedule_after event to retry migration
+  dispatch_all();
+  // Verify that pool migration is stalled with too full
+  EXPECT_EQ(get_listener(acting[0])->events_scheduled, 2);
+  EXPECT_TRUE(get_ps(acting[0])->state_test(PG_STATE_MIGRATION_TOOFULL));
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/NotMigrating");
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+  EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+  EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+
+  // Clear injects
+  get_listener(acting[1])->inject_fail_reserve_recovery_space = false;
+  get_listener(acting[2])->inject_fail_reserve_recovery_space = false;
+  dispatch_all_events(true);  // run stalled schedule_after event to retry migration
+  dispatch_all();
+  // Verify pool migration started
+  verify_all_active_migrating(eversion_t(), eversion_t());
+  // Signal migration complete
+  test_event_migration_done();
+  // Verify that we got to active+clean
+  verify_all_active_clean(eversion_t(), eversion_t());
+  EXPECT_TRUE(get_listener(acting[0])->pg_migrated_pool_sent);
+}
+
+// Multi-OSD test of peering with pool migration reservtion preempt
+TEST_F(PeeringStateTest, PoolMigrationPrempt) {
+  dout(0) << "== PoolMigration ==" << dendl;
+  // Configure pool migration to an EC pool
+  migrate_to_ec_pool();
+  // Init
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  // Keep preempt reservation event on OSD 1
+  get_listener(acting[1])->inject_keep_preempt = true;
+  // Full peering cycle
+  test_peering();
+  // Verify pool migration started
+  verify_all_active_migrating(eversion_t(), eversion_t());
+  EXPECT_EQ(get_listener(acting[0])->io_reservations_requested, 1);
+  EXPECT_EQ(get_listener(acting[1])->remote_recovery_reservations_requested, 1);
+  EXPECT_EQ(get_listener(acting[2])->remote_recovery_reservations_requested, 1);
+  EXPECT_EQ(get_listener(acting[3])->remote_recovery_reservations_requested, 1);
+  EXPECT_EQ(get_listener(acting[0])->stalled_events.size(), 0);
+  EXPECT_EQ(get_listener(acting[1])->stalled_events.size(), 1); // captured preempt event
+  EXPECT_EQ(get_listener(acting[2])->stalled_events.size(), 0);
+  EXPECT_EQ(get_listener(acting[3])->stalled_events.size(), 0);
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingSource");
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  dout(0) << "= PoolMigration prempt reservation osd 1 =" << dendl;
+  dispatch_all_events(true); // preempt reservation on OSD 1
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingSource");
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+  EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  // Keep preempt reservation event on OSD 2 as well
+  get_listener(acting[2])->inject_keep_preempt = true;
+  dispatch_all();
+  verify_all_active_migrating(eversion_t(), eversion_t());
+  EXPECT_EQ(get_listener(acting[0])->io_reservations_requested, 2);
+  EXPECT_EQ(get_listener(acting[1])->remote_recovery_reservations_requested, 2);
+  EXPECT_EQ(get_listener(acting[2])->remote_recovery_reservations_requested, 2);
+  EXPECT_EQ(get_listener(acting[3])->remote_recovery_reservations_requested, 2);
+  EXPECT_EQ(get_listener(acting[0])->stalled_events.size(), 0);
+  EXPECT_EQ(get_listener(acting[1])->stalled_events.size(), 1); // captured preempt event
+  EXPECT_EQ(get_listener(acting[2])->stalled_events.size(), 1); // captured preempt event
+  EXPECT_EQ(get_listener(acting[3])->stalled_events.size(), 0);
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingSource");
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  dout(0) << "= PoolMigration prempt reservation osd 1 and 2 =" << dendl;
+  dispatch_all_events(true); // preempt reservation on OSD 1 and 2
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingSource");
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+  EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+  EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  // Keep preempt reservation event on OSD 0 (primary) as well
+  get_listener(acting[0])->inject_keep_preempt = true;
+  dispatch_all();
+  verify_all_active_migrating(eversion_t(), eversion_t());
+  EXPECT_EQ(get_listener(acting[0])->io_reservations_requested, 3);
+  EXPECT_EQ(get_listener(acting[1])->remote_recovery_reservations_requested, 3);
+  EXPECT_EQ(get_listener(acting[2])->remote_recovery_reservations_requested, 3);
+  EXPECT_EQ(get_listener(acting[3])->remote_recovery_reservations_requested, 3);
+  EXPECT_EQ(get_listener(acting[0])->stalled_events.size(), 1); // captured preempt event
+  EXPECT_EQ(get_listener(acting[1])->stalled_events.size(), 1); // captured preempt event
+  EXPECT_EQ(get_listener(acting[2])->stalled_events.size(), 1); // captured preempt event
+  EXPECT_EQ(get_listener(acting[3])->stalled_events.size(), 0);
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingSource");
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  dout(0) << "= PoolMigration prempt reservation osd 0, 1 and 2 =" << dendl;
+  // 0 Sends RELEASE first, then 1,2 send REVOKE
+  dispatch_events(0, true , 1);
+  dispatch_events(1, true , 1);
+  dispatch_events(2, true , 1);
+  dispatch_all();
+  dispatch_events(0, true , 1);
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/WaitLocalPoolMigrationReserved");
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+  EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+  EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+  dispatch_all();
+  // Verify pool migration started
+  verify_all_active_migrating(eversion_t(), eversion_t());
+  EXPECT_EQ(get_listener(acting[0])->io_reservations_requested, 4);
+  EXPECT_EQ(get_listener(acting[1])->remote_recovery_reservations_requested, 4);
+  EXPECT_EQ(get_listener(acting[2])->remote_recovery_reservations_requested, 4);
+  EXPECT_EQ(get_listener(acting[3])->remote_recovery_reservations_requested, 4);
+  EXPECT_EQ(get_listener(acting[0])->stalled_events.size(), 1); // captured preempt event
+  EXPECT_EQ(get_listener(acting[1])->stalled_events.size(), 1); // captured preempt event
+  EXPECT_EQ(get_listener(acting[2])->stalled_events.size(), 1); // captured preempt event
+  EXPECT_EQ(get_listener(acting[3])->stalled_events.size(), 0);
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingSource");
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
+  dout(0) << "= PoolMigration prempt reservation osd 0, 1 and 2 race hazard =" << dendl;
+  // 1,2 send REVOKE first, then 0 sends RELEASE
+  get_listener(acting[0])->inject_keep_preempt = false;
+  get_listener(acting[1])->inject_keep_preempt = false;
+  get_listener(acting[2])->inject_keep_preempt = false;
+  // 1 and 2 prempt reservation and send messages to osd 0
+  dispatch_events(1, true);
+  dispatch_events(2, true);
+  dispatch_cluster_messages(1);
+  dispatch_cluster_messages(2);
+  // 0 prempt reservation is slow
+  dispatch_events(0, true);
+  dispatch_all();
   // Verify pool migration started
   verify_all_active_migrating(eversion_t(), eversion_t());
   // Signal migration complete
