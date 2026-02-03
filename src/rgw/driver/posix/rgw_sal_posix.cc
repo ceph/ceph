@@ -3835,6 +3835,8 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   mp_obj.upload_info.cksum_type = cksum_type;
+  mp_obj.upload_info.cksum_flags = cksum_flags;
+
   if (obj_retention) {
     mp_obj.upload_info.obj_retention_exist = true;
     mp_obj.upload_info.obj_retention = *obj_retention;
@@ -3843,6 +3845,7 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
     mp_obj.upload_info.obj_legal_hold_exist = true;
     mp_obj.upload_info.obj_legal_hold = *obj_legal_hold;
   }
+
   mp_obj.upload_info.dest_placement = dest_placement;
   mp_obj.owner = owner;
 
@@ -4130,12 +4133,17 @@ int POSIXMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
       }
     }
     *rule = &mp_obj.upload_info.dest_placement;
+
     if (mp_obj.upload_info.obj_retention_exist) {
       obj_retention = mp_obj.upload_info.obj_retention;
     }
     if (mp_obj.upload_info.obj_legal_hold_exist) {
       obj_legal_hold = mp_obj.upload_info.obj_legal_hold;
     }
+
+    /* no te olvides los cksum */
+    cksum_type = mp_obj.upload_info.cksum_type;
+    cksum_flags = mp_obj.upload_info.cksum_flags;
   }
 
   return 0;
