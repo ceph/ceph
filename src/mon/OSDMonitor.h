@@ -105,24 +105,45 @@ struct failure_info_t {
 };
 
 
-class LastEpochClean {
-  struct Lec {
-    std::vector<epoch_t> epoch_by_pg;
-    ps_t next_missing = 0;
-    epoch_t floor = std::numeric_limits<epoch_t>::max();
-    void report(unsigned pg_num, ps_t pg, epoch_t last_epoch_clean);
+class LastEpochCleanStarted {
+  struct clean_started_epoch_t {
+    epoch_t last_epoch_clean = 0;
+    epoch_t last_epoch_started = 0;
   };
-  std::map<uint64_t, Lec> report_by_pool;
+  struct Lecs {
+    std::vector<clean_started_epoch_t> epoch_by_pg;
+    ps_t next_missing = 0;
+    epoch_t clean_floor = std::numeric_limits<epoch_t>::max();
+    epoch_t started_floor = std::numeric_limits<epoch_t>::max();
+    void report(
+      unsigned pg_num,
+      ps_t pg,
+      epoch_t last_epoch_clean,
+      epoch_t last_epoch_started);
+  };
+  std::map<uint64_t, Lecs> report_by_pool;
 public:
-  void report(unsigned pg_num, const pg_t& pg, epoch_t last_epoch_clean);
+  void report(
+    unsigned pg_num,
+    const pg_t& pg,
+    epoch_t last_epoch_clean,
+    epoch_t last_epoch_started);
   void remove_pool(uint64_t pool);
   /**
-   * get_lower_bound_by_pool
+   * get_clean_lower_bound_by_pool
    *
    * Returns epoch e such that e <= pg.last_epoch_clean for all pgs in cluster.
    * May return 0 if any pool does not have comprehensive values for all pgs.
   */
-  epoch_t get_lower_bound_by_pool(const OSDMap& latest) const;
+  epoch_t get_clean_lower_bound_by_pool(const OSDMap& latest) const;
+
+  /**
+   * get_started_lower_bound_by_pool
+   *
+   * The same as get_clean_lower_bound_by_pool with the only difference
+   * that it returns the lower bound of last_epoch_started
+   */
+  epoch_t get_started_lower_bound_by_pool(const OSDMap& latest) const;
 
   void dump(Formatter *f) const;
 };
@@ -664,10 +685,11 @@ protected:
     * need to upgrade from pre-luminous releases.
     */
   std::map<int,epoch_t> osd_epochs;
-  LastEpochClean last_epoch_clean;
+  LastEpochCleanStarted last_epoch_clean_started;
   bool preprocess_beacon(MonOpRequestRef op);
   bool prepare_beacon(MonOpRequestRef op);
   epoch_t get_min_last_epoch_clean() const;
+  epoch_t get_min_last_epoch_started() const;
 
   friend class C_UpdateCreatingPGs;
   std::map<int, std::map<epoch_t, std::set<spg_t>>> creating_pgs_by_osd_epoch;
