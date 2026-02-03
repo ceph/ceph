@@ -572,6 +572,13 @@ class Context:
         return None
 
     @property
+    def rpm_topdir(self):
+        topdir = pathlib.Path(self.cli.homedir) / "rpmbuild"
+        if self.cli.build_dir:
+            topdir = pathlib.Path(ctx.cli.homedir) / ctx.cli.build_dir / "rpmbuild"
+        return topdir
+
+    @property
     def map_user(self):
         # TODO: detect if uid mapping is needed
         return os.getuid() != 0
@@ -1006,11 +1013,7 @@ def bc_build_rpm(ctx):
         if not ctx.current_srpm:
             raise RuntimeError("unable to find source rpm(s)")
     srpm_path = pathlib.Path(ctx.cli.homedir) / ctx.current_srpm
-    topdir = pathlib.Path(ctx.cli.homedir) / "rpmbuild"
-    if ctx.cli.build_dir:
-        topdir = (
-            pathlib.Path(ctx.cli.homedir) / ctx.cli.build_dir / "rpmbuild"
-        )
+    topdir = ctx.rpm_topdir
     rpmbuild_args = [
         'rpmbuild',
         '--rebuild',
