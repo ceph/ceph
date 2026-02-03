@@ -10,7 +10,8 @@ $inline-min-size: 20rem;
 
   position: fixed;
   z-index: 2;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   background-color: var(--cds-layer-01);
   border-block-end: 1px solid var(--cds-border-subtle-02);
   border-inline-start: 1px solid var(--cds-border-subtle-02);
