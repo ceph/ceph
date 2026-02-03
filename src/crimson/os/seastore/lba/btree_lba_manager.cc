@@ -1266,7 +1266,7 @@ BtreeLBAManager::scan_mapped_space(
   DEBUGT("scan lba tree", t);
   auto c = get_context(t);
   auto scan_visitor = std::move(f);
-  auto btree = co_await get_btree<LBABtree>(c);
+  auto btree = co_await crimson::os::seastore::get_btree<LBABtree>(c);
   auto block_size = cache.get_block_size();
   auto pos = co_await btree.lower_bound(c, L_ADDR_MIN);
   while (!pos.is_end()) {
