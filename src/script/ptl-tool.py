@@ -576,14 +576,19 @@ class SplitCommaAppendAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         # 1. Get the list that's already stored in the namespace.
         #    'default=[]' in add_argument ensures this is always a list.
-        current_list = getattr(namespace, self.dest)
+        current = getattr(namespace, self.dest)
 
         # 2. Split the new value(s) by comma
         #    Use strip() to remove any whitespace around items
         new_items = [item.strip() for item in values.split(',')]
 
         # 3. Extend the existing list with the new items
-        current_list.extend(new_items)
+        if isinstance(current, list):
+            current.extend(new_items)
+        elif isinstance(current, set):
+            current.update(new_items)
+        else:
+            raise NotImplementedError("type not supported")
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
@@ -618,9 +623,9 @@ def main():
     group = parser.add_argument_group('Build Control Options')
     group.add_argument('--archs', dest='archs', action=SplitCommaAppendAction, default=[], help='add arch(s) to build. Specify one or more times. Comma separated values are split.')
     group.add_argument('--build-job', dest='build_job', action='store', help='add ceph build job to execute in CI')
-    group.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
-    group.add_argument('--distros', dest='distros', action=SplitCommaAppendAction, default=[], help='add distro(s) to build. Specify one or more times. Comma separated values are split.')
-    group.add_argument('--flavors', dest='flavors', action=SplitCommaAppendAction, default=[], help='add flavors(s) to build. Specify one or more times. Comma separated values are split.')
+    group.add_argument('--debug-build', dest='debug_build', action='store_true', help='add \'debug\' flavor (build with CMAKE_BUILD_TYPE=Debug)')
+    group.add_argument('--distros', dest='distros', action=SplitCommaAppendAction, default=set(), help='add distro(s) to build. Specify one or more times. Comma separated values are split.')
+    group.add_argument('--flavors', dest='flavors', action=SplitCommaAppendAction, default=set(), help='add flavors(s) to build. Specify one or more times. Comma separated values are split.')
 
     group = parser.add_argument_group('QA Control Options')
     group.add_argument('--create-qa', dest='create_qa', action='store_true', help='create QA run ticket')
@@ -644,6 +649,9 @@ def main():
 
     if args.debug:
         log.setLevel(logging.DEBUG)
+
+    if args.debug_build:
+        args.flavors.add('debug')
 
     if (args.create_qa or args.update_qa) and Redmine is None:
         log.error("redmine library is not available so cannot create qa tracker ticket")
