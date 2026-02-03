@@ -7363,9 +7363,10 @@ void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
       std::lock_guard l{min_last_epoch_clean_lock};
       beacon = new MOSDBeacon(get_osdmap_epoch(),
 			      min_last_epoch_clean,
+                              min_last_epoch_started,
 			      superblock.last_purged_snaps_scrub,
 			      cct->_conf->osd_beacon_report_interval);
-      beacon->pgs = min_last_epoch_clean_pgs;
+      beacon->pgs = pgs_for_beacon;
       last_sent_beacon = now;
     }
     monc->send_mon_message(beacon);
@@ -7893,7 +7894,8 @@ MPGStats* OSD::collect_pg_stats()
 
   std::lock_guard lec{min_last_epoch_clean_lock};
   min_last_epoch_clean = get_osdmap_epoch();
-  min_last_epoch_clean_pgs.clear();
+  min_last_epoch_started = get_osdmap_epoch();
+  pgs_for_beacon.clear();
 
   auto now_is = ceph::coarse_real_clock::now();
 
@@ -7906,10 +7908,13 @@ MPGStats* OSD::collect_pg_stats()
     if (!pg->is_primary()) {
       continue;
     }
-    pg->with_pg_stats(now_is, [&](const pg_stat_t& s, epoch_t lec) {
+    pg->with_pg_stats(
+      now_is,
+      [&](const pg_stat_t& s, epoch_t lec, epoch_t lea) {
 	m->pg_stat[pg->pg_id.pgid] = s;
 	min_last_epoch_clean = std::min(min_last_epoch_clean, lec);
-	min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
+	min_last_epoch_started = std::min(min_last_epoch_started, lea);
+	pgs_for_beacon.push_back(pg->pg_id.pgid);
       });
   }
   store_statfs_t st;

@@ -4035,6 +4035,7 @@ void PeeringState::update_calc_stats()
   info.stats.last_deep_scrub_stamp = info.history.last_deep_scrub_stamp;
   info.stats.last_clean_scrub_stamp = info.history.last_clean_scrub_stamp;
   info.stats.last_epoch_clean = info.history.last_epoch_clean;
+  info.stats.last_epoch_started = info.history.last_epoch_started;
 
   info.stats.log_size = pg_log.get_head().version - pg_log.get_tail().version;
   info.stats.log_dups_size = pg_log.get_log().dups.size();
