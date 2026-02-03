@@ -35,6 +35,7 @@ class BaseConfig:
         self.container_init: bool = CONTAINER_INIT
         # FIXME(refactor) : should be Optional[ContainerEngine]
         self.container_engine: Any = None
+        self.allow_ipv6_lo_routes: bool = False
 
     def set_from_args(self, args: argparse.Namespace) -> None:
         argdict: Dict[str, Any] = vars(args)

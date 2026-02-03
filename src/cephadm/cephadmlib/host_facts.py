@@ -905,11 +905,11 @@ def _list_ipv6_networks(
         [execstr, '-6', 'addr', 'ls'],
         verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
     )
-    return _parse_ipv6_route(routes, ips)
+    return _parse_ipv6_route(routes, ips, ctx.allow_ipv6_lo_routes)
 
 
 def _parse_ipv6_route(
-    routes: str, ips: str
+    routes: str, ips: str, allow_lo: bool = False
 ) -> Dict[str, Dict[str, Set[str]]]:
     r = {}  # type: Dict[str, Dict[str, Set[str]]]
     route_p = re.compile(
@@ -925,7 +925,7 @@ def _parse_ipv6_route(
         if '/' not in net:  # aggregate /128 mask for single host sub-networks
             net += '/128'
         iface = m[0][1]
-        if iface == 'lo':  # skip loopback devices
+        if not allow_lo and iface == 'lo':
             continue
         if net not in r:
             r[net] = {}
@@ -952,4 +952,9 @@ def _parse_ipv6_route(
             assert iface
             r[net[0]][iface].add(ip)
 
+    # Remove loopback networks with no IPs when allow_lo=True
+    if allow_lo:
+        return {
+            net: ifaces for net, ifaces in r.items() if any(ifaces.values())
+        }
     return r
