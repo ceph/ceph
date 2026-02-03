@@ -1393,10 +1393,9 @@ static int bucket_stats(rgw::sal::Driver* driver,
   ::encode_json("explicit_placement", bucket->get_key().explicit_placement, formatter);
   formatter->dump_string("id", bucket->get_bucket_id());
   formatter->dump_string("marker", bucket->get_marker());
-  formatter->dump_stream("index_type") << bucket->get_info().layout.current_index.layout.type;
-  formatter->dump_int("index_generation", bucket->get_info().layout.current_index.gen);
-  formatter->dump_int("num_shards",
-		      bucket->get_info().layout.current_index.layout.normal.num_shards);
+  formatter->dump_stream("index_type") << index.layout.type;
+  formatter->dump_int("index_generation", index.gen);
+  formatter->dump_int("num_shards", index.layout.normal.num_shards);
   formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
   formatter->dump_bool("mfa_enabled", bucket_info.mfa_enabled());
   ::encode_json("owner", bucket->get_info().owner, formatter);
