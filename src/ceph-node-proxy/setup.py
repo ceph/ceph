@@ -19,6 +19,7 @@ setup(
                                                        'python-common#egg=ceph-1.0.0')])],
     tests_require=[
         'pytest >=2.1.3',
+        'PyYAML',
         'tox',
         'ceph',
     ],
