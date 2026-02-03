@@ -41,6 +41,11 @@ RADOS_URLS {
         watch_url = "{{ url }}";
 }
 
+RGW {
+        cluster = "ceph";
+        name = "client.{{ rgw_user }}";
+}
+
 {% if tls_add %}
 TLS_CONFIG{
         Enable_TLS = {{ tls_add }};
