@@ -3771,7 +3771,19 @@ class TestIngressService:
             '        nodeid = 0;\n'
             '        pool = ".nfs";\n'
             '        namespace = "foo";\n'
-            '}'
+            '}\n'
+            '\n'
+            'RADOS_URLS {\n'
+            '        UserId = "nfs.foo.test.0.0";\n'
+            '        watch_url = "rados://.nfs/foo/conf-nfs.foo";\n'
+            '}\n'
+            '\n'
+            'RGW {\n'
+            '        cluster = "ceph";\n'
+            '        name = "client.nfs.foo.test.0.0-rgw";\n'
+            '}\n'
+            '\n'
+            '%url    rados://.nfs/foo/conf-nfs.foo'
         )
         nfs_expected_conf = {
             'files': {'ganesha.conf': nfs_ganesha_txt, 'idmap.conf': ''},
@@ -3783,6 +3795,14 @@ class TestIngressService:
             ),
             'namespace': 'foo',
             'pool': '.nfs',
+            'rgw': {
+                'cluster': 'ceph',
+                'keyring': (
+                    '[client.nfs.foo.test.0.0-rgw]\n'
+                    'key = None\n'
+                ),
+                'user': 'nfs.foo.test.0.0-rgw',
+            },
             'userid': 'nfs.foo.test.0.0',
         }
 
