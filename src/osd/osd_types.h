@@ -2314,6 +2314,7 @@ struct pg_stat_t {
 
   epoch_t created;
   epoch_t last_epoch_clean;
+  epoch_t last_epoch_started;
   pg_t parent;
   __u32 parent_split_bits;
 
@@ -2371,6 +2372,7 @@ struct pg_stat_t {
       reported_epoch(0),
       state(0),
       created(0), last_epoch_clean(0),
+      last_epoch_started(0),
       parent_split_bits(0),
       log_size(0), log_dups_size(0),
       ondisk_log_size(0),
@@ -2398,6 +2400,16 @@ struct pg_stat_t {
       return reported_epoch;
     } else {
       return last_epoch_clean;
+    }
+  }
+
+  epoch_t get_effective_last_epoch_started() const {
+    if (state & PG_STATE_ACTIVE) {
+      // we are clean as of this report, and should thus take the
+      // reported epoch
+      return reported_epoch;
+    } else {
+      return last_epoch_started;
     }
   }
 

@@ -107,8 +107,9 @@ class OSD final : public crimson::net::Dispatcher,
   // mgr::WithStats methods
   // pg statistics including osd ones
   epoch_t min_last_epoch_clean = 0;
+  epoch_t min_last_epoch_started = 0;
   // which pgs were scanned for min_lec
-  std::vector<pg_t> min_last_epoch_clean_pgs;
+  std::vector<pg_t> pgs_for_beacon;
   void update_stats();
   seastar::future<MessageURef> get_stats() final;
 

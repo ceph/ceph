@@ -2934,6 +2934,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("ondisk_log_start") << ondisk_log_start;
   f->dump_unsigned("created", created);
   f->dump_unsigned("last_epoch_clean", last_epoch_clean);
+  f->dump_unsigned("last_epoch_started", last_epoch_started);
   f->dump_stream("parent") << parent;
   f->dump_unsigned("parent_split_bits", parent_split_bits);
   f->dump_stream("last_scrub") << last_scrub;
@@ -3071,7 +3072,7 @@ bool operator==(const pg_scrubbing_status_t& l, const pg_scrubbing_status_t& r)
 
 void pg_stat_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(30, 22, bl);
+  ENCODE_START(31, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -3134,6 +3135,7 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(scrub_sched_status.m_osd_to_respond, bl);
   encode(scrub_sched_status.m_ordinal_of_requested_replica, bl);
   encode(scrub_sched_status.m_num_to_reserve, bl);
+  encode(last_epoch_started, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -3142,7 +3144,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(30, bl);
+  DECODE_START(31, bl);
   decode(version, bl);
   decode(reported_seq, bl);
   decode(reported_epoch, bl);
@@ -3244,6 +3246,9 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
     } else {
       scrub_sched_status.m_num_to_reserve = 0;
     }
+    if (struct_v >= 31) {
+      decode(last_epoch_started, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -3271,6 +3276,7 @@ list<pg_stat_t> pg_stat_t::generate_test_instances()
   a.ondisk_log_start = eversion_t(1, 5);
   a.created = 6;
   a.last_epoch_clean = 7;
+  a.last_epoch_started = 6;
   a.parent = pg_t(1, 2);
   a.parent_split_bits = 12;
   a.last_scrub = eversion_t(9, 10);
