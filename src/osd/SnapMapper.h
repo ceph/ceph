@@ -37,14 +37,15 @@
 
 class OSDriver : public MapCacher::StoreDriver<std::string, ceph::buffer::list> {
 #ifdef WITH_CRIMSON
-  using ObjectStoreT = crimson::os::FuturizedStore::Shard;
-  using CollectionHandleT = ObjectStoreT::CollectionRef;
+  using ObjectStoreT = crimson::os::BackendStore;
+  using CollectionHandleT = crimson::os::FuturizedStore::Shard::CollectionRef;
+  ObjectStoreT os;
 #else
   using ObjectStoreT = ObjectStore;
   using CollectionHandleT = ObjectStoreT::CollectionHandle;
+  ObjectStoreT *os;
 #endif
 
-  ObjectStoreT *os;
   CollectionHandleT ch;
   ghobject_t hoid;
 
@@ -83,10 +84,18 @@ public:
   OSDriver(ObjectStoreT *os, const coll_t& cid, const ghobject_t &hoid) :
     OSDriver(os, os->open_collection(cid), hoid) {}
 #endif
+
+#ifdef WITH_CRIMSON
+  OSDriver(ObjectStoreT os, CollectionHandleT ch, const ghobject_t &hoid) :
+    os(os),
+    ch(ch),
+    hoid(hoid) {}
+#else
   OSDriver(ObjectStoreT *os, CollectionHandleT ch, const ghobject_t &hoid) :
     os(os),
     ch(ch),
     hoid(hoid) {}
+#endif
 
   int get_keys(
     const std::set<std::string> &keys,
