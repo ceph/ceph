@@ -1298,7 +1298,7 @@ int D4NFilterObject::create_delete_marker(const DoutPrefixProvider* dpp, optiona
     ret = driver->get_cache_driver()->put(dpp, key, bl, 0, attrs, y);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): version stored in update method is: " << version << dendl;
-      driver->get_policy_driver()->get_cache_policy()->update(dpp, key, 0, bl.length(), version, true, rgw::d4n::RefCount::NOOP, y);
+      driver->get_policy_driver()->get_cache_policy()->update(dpp, key, 0, bl.length(), version, true, std::get<rgw_user>(this->get_bucket()->get_owner()), rgw::d4n::RefCount::NOOP, y);
       ret = this->set_head_block_dir_entry(dpp, y, attrs, true, true);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for head object, ret=" << ret << dendl;
@@ -2190,7 +2190,7 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
       if(!is_remote) {
         ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " calling update for offset: " << cur_ofs << " adjusted offset: " << ofs  << " length: " << len << " oid_in_cache: " << oid_in_cache << dendl;
         ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " version stored in update method is: " << version << " " << source->get_object_version() << dendl;
-        source->driver->get_policy_driver()->get_cache_policy()->update(dpp, oid_in_cache, ofs, len, version, std::nullopt, rgw::d4n::RefCount::DECR, y);
+        source->driver->get_policy_driver()->get_cache_policy()->update(dpp, oid_in_cache, ofs, len, version, std::nullopt, std::get<rgw_user>(source->get_bucket()->get_owner()), rgw::d4n::RefCount::DECR, y);
       }
       if ((source->dest_object && source->dest_bucket) || is_remote) {
         std::string dest_version;
@@ -2244,7 +2244,7 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
             // destination key is the same as key
             ret = source->driver->get_cache_driver()->put(dpp, key, bl, bl.length(), attrs, y);
             if (ret == 0) {
-              source->driver->get_policy_driver()->get_cache_policy()->update(dpp, key, ofs, bl.length(), dest_version, true, rgw::d4n::RefCount::NOOP, y);
+              source->driver->get_policy_driver()->get_cache_policy()->update(dpp, key, ofs, bl.length(), dest_version, true, std::get<rgw_user>(source->get_bucket()->get_owner()), rgw::d4n::RefCount::NOOP, y);
             }
             if (ret = source->driver->get_block_dir()->set(dpp, &dest_block, y); ret < 0){
               ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " BlockDirectory set failed with ret: " << ret << dendl;
@@ -2392,6 +2392,8 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
           ldpp_dout(dpp, 0) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to flush, ret=" << r << dendl;
           return r;
         }
+        //setting read_flag = 0
+		source->driver->get_policy_driver()->get_cache_policy()->set_read_flag(dpp, oid_in_cache, 0);
       } else { // else - if update_refcount_if_key_exists
         int r = -1;
         ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: Fetching from remote cache! " << dendl;
@@ -2703,7 +2705,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
           ret = cache_driver->put(dpp, oid, bl, bl.length(), attrs, *y);
           if (ret == 0) {
             std::string objEtag = "";
-            policy->update(dpp, oid, adjusted_start_ofs, bl.length(), version, dirty, rgw::d4n::RefCount::NOOP, *y);
+            policy->update(dpp, oid, adjusted_start_ofs, bl.length(), version, dirty, std::get<rgw_user>(source->get_bucket()->get_owner()), rgw::d4n::RefCount::NOOP, *y);
             blocks.emplace_back(block);
           } else {
             ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): put() to cache backend failed, ret=" << ret << dendl;
@@ -2720,7 +2722,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         if (ret == 0) {
           ret = cache_driver->put(dpp, dest_oid, bl, bl.length(), attrs, *y);
           if (ret == 0) {
-            policy->update(dpp, dest_oid, adjusted_start_ofs, bl.length(), dest_version, dirty, rgw::d4n::RefCount::NOOP, *y);
+            policy->update(dpp, dest_oid, adjusted_start_ofs, bl.length(), dest_version, dirty, std::get<rgw_user>(source->get_bucket()->get_owner()), rgw::d4n::RefCount::NOOP, *y);
             dest_blocks.emplace_back(dest_block);
           }
         }
@@ -2734,7 +2736,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         if (ret == 0) {
           ret = cache_driver->put(dpp, oid, bl, bl.length(), attrs, *y);
           if (ret == 0) {
-            policy->update(dpp, oid, adjusted_start_ofs, bl.length(), version, dirty, rgw::d4n::RefCount::NOOP, *y);
+            policy->update(dpp, oid, adjusted_start_ofs, bl.length(), version, dirty, std::get<rgw_user>(source->get_bucket()->get_owner()), rgw::d4n::RefCount::NOOP, *y);
             blocks.emplace_back(block);
           } else {
             ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): put() to cache backend failed, ret=" << ret << dendl;
@@ -2751,7 +2753,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         if (ret == 0) {
           ret = cache_driver->put(dpp, dest_oid, bl, bl.length(), attrs, *y);
           if (ret == 0) {
-            policy->update(dpp, dest_oid, adjusted_start_ofs, bl.length(), dest_version, dirty, rgw::d4n::RefCount::NOOP, *y);
+            policy->update(dpp, dest_oid, adjusted_start_ofs, bl.length(), dest_version, dirty, std::get<rgw_user>(source->get_bucket()->get_owner()), rgw::d4n::RefCount::NOOP, *y);
             dest_blocks.emplace_back(dest_block);
           }
         }
@@ -2775,7 +2777,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
           if (ret == 0) {
             ret = cache_driver->put(dpp, oid, bl_rem, bl_rem.length(), attrs, *y);
             if (ret == 0) {
-              policy->update(dpp, oid, adjusted_start_ofs, bl_rem.length(), version, dirty, rgw::d4n::RefCount::NOOP, *y);
+              policy->update(dpp, oid, adjusted_start_ofs, bl_rem.length(), version, dirty, std::get<rgw_user>(source->get_bucket()->get_owner()), rgw::d4n::RefCount::NOOP, *y);
               blocks.emplace_back(block);
             } else {
               ldpp_dout(dpp, 0) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): put() to cache backend failed, ret=" << ret << dendl;
@@ -2795,7 +2797,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
           if (ret == 0) {
             ret = cache_driver->put(dpp, dest_oid, bl_rem, bl_rem.length(), attrs, *y);
             if (ret == 0) {
-              policy->update(dpp, dest_oid, adjusted_start_ofs, bl_rem.length(), dest_version, dirty, rgw::d4n::RefCount::NOOP, *y);
+              policy->update(dpp, dest_oid, adjusted_start_ofs, bl_rem.length(), dest_version, dirty, std::get<rgw_user>(source->get_bucket()->get_owner()), rgw::d4n::RefCount::NOOP, *y);
               dest_blocks.emplace_back(dest_block);
             }
           }
@@ -3325,7 +3327,7 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
         attrs[RGW_CACHE_ATTR_OBJECT_NS] = std::move(bl_val);
         local_cache_ret = driver->get_cache_driver()->put(dpp, oid_in_cache, bl, bl.length(), attrs, y);
         if (local_cache_ret == 0) {
-          driver->get_policy_driver()->get_cache_policy()->update(dpp, oid_in_cache, ofs, bl.length(), version, dirty, rgw::d4n::RefCount::NOOP, y);
+          driver->get_policy_driver()->get_cache_policy()->update(dpp, oid_in_cache, ofs, bl.length(), version, dirty, std::get<rgw_user>(object->get_bucket()->get_owner()), rgw::d4n::RefCount::NOOP, y);
         }
       }
       if (local_cache_ret < 0) {

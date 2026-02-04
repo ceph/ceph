@@ -249,17 +249,33 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
 				    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key: " << key << dendl;
 
 				    uint64_t len = 0, offset = 0;
+				    rgw_user user;
+				    rgw::sal::Attrs attrs;
 				    if (parts.size() == 1) {
+					get_attrs(dpp, file_entry.path(), attrs, null_yield);
 					if (dirtyStr == "0") {
 					    //non-dirty or clean blocks - version in head block and offset, len in data blocks
 					    std::string localWeightStr;
-					    ret = get_attr(dpp, file_entry.path(), RGW_CACHE_ATTR_LOCAL_WEIGHT, localWeightStr, null_yield);
-					    if (ret < 0) {
-						ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): Failed to get attr: " << RGW_CACHE_ATTR_LOCAL_WEIGHT << dendl;
-					    } else {
+					    if (attrs.find(RGW_CACHE_ATTR_LOCAL_WEIGHT) != attrs.end()) {
+                                                localWeightStr = attrs[RGW_CACHE_ATTR_LOCAL_WEIGHT].to_str();
 						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): localWeightStr: " << localWeightStr << dendl;
+					    } else {
+						ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): Failed to get attr: " << RGW_CACHE_ATTR_LOCAL_WEIGHT << dendl;
+                                            }
+					    if (attrs.find(RGW_ATTR_ACL) != attrs.end()) {
+						bufferlist bl_acl = attrs[RGW_ATTR_ACL];
+						RGWAccessControlPolicy policy;
+						auto iter = bl_acl.cbegin();
+						try {
+						    policy.decode(iter);
+						} catch (buffer::error& err) {
+						    ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+						    continue;
+						}
+						user = std::get<rgw_user>(policy.get_owner().id);
+						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): rgw_user: " << user.to_str() << dendl;
 					    }
-					    block_func(dpp, key, offset, len, version, false, null_yield, localWeightStr);
+					    block_func(dpp, key, offset, len, version, false, user, null_yield, localWeightStr);
 					    parsed = true;
 				        } else if (dirtyStr == "1") {
                             //we still have parsing for a head block because we maintain a head block only for delete markers
@@ -296,10 +312,22 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
 						invalidStr = attrs[RGW_CACHE_ATTR_INVALID].to_str();
 						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): invalidStr: " << invalidStr << dendl;
 					    }
-
+					    if (attrs.find(RGW_ATTR_ACL) != attrs.end()) {
+						bufferlist bl_acl = attrs[RGW_ATTR_ACL];
+						RGWAccessControlPolicy policy;
+						auto iter = bl_acl.cbegin();
+						try {
+						    policy.decode(iter);
+						} catch (buffer::error& err) {
+						    ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+						    continue;
+						}
+						user = std::get<rgw_user>(policy.get_owner().id);
+						ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): rgw_user: " << user.to_str() << dendl;
+					    }
 					    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): calling func for: " << key << dendl;
 					    obj_func(dpp, key, version, deleteMarker, bucket_id, obj_key, instance, null_yield, invalidStr);
-					    block_func(dpp, key, offset, len, version, dirty, null_yield, localWeightStr);
+					    block_func(dpp, key, offset, len, version, dirty, user, null_yield, localWeightStr);
 					    parsed = true;
                                         } // end-if dirtyStr == "1"
 				    } else if (parts.size() == 3) { //end-if parts.size() == 1
@@ -346,7 +374,7 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
                         }
                     }
                     obj_func(dpp, key, version, deleteMarker, bucket_id, obj_key, instance, null_yield, invalidStr);
-					block_func(dpp, key, offset, len, version, dirty, null_yield, localWeightStr);
+					block_func(dpp, key, offset, len, version, dirty, user, null_yield, localWeightStr);
 					parsed = true;
 				    } 
 				    if (!parsed) {
