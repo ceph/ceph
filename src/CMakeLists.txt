@@ -1178,10 +1178,11 @@ if(WITH_RADOSGW)
     include(ExternalProject)
 
     # Determine the Rust target directory based on build type
+    set(LANCEDB_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/lancedb-c-prefix/src/lancedb-c-build")
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-      set(LANCEDB_RUST_TARGET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c/target/debug")
+      set(LANCEDB_RUST_TARGET_DIR "${LANCEDB_BUILD_DIR}/target/debug")
     else()
-      set(LANCEDB_RUST_TARGET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c/target/release")
+      set(LANCEDB_RUST_TARGET_DIR "${LANCEDB_BUILD_DIR}/target/release")
     endif()
 
     ExternalProject_Add(lancedb-c
