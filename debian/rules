@@ -19,6 +19,7 @@ ifneq ($(filter pkg.ceph.crimson,$(DEB_BUILD_PROFILES)),)
   extraopts += -DWITH_CRIMSON=ON
 endif
 
+extraopts += -DWITH_RADOSGW_LANCEDB=ON
 extraopts += -DWITH_JAEGER=ON
 extraopts += -DWITH_SYSTEM_JERASURE=ON
 extraopts += -DWITH_SYSTEM_UTF8PROC=ON
@@ -146,7 +147,7 @@ override_dh_strip:
 	dh_strip -ppython3-cephfs --dbg-package=python3-cephfs-dbg
 
 override_dh_shlibdeps:
-	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor --exclude=ceph_crypto
+	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor --exclude=ceph_crypto --exclude=liblancedb
 
 override_dh_python3:
 	@for binding in $(py3_bindings); do \
