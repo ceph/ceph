@@ -481,3 +481,15 @@ You may want to do this when an application expects the file system's ID to be
 stable after it has been recovered, e.g., after Monitor databases are lost and
 rebuilt. Consequently, file system IDs don't always keep increasing with newer
 file systems.
+
+::
+   ceph fs snapdiff <fs_name> <root_path> <rel_path> <snapshot1> <snapshot2>
+
+This command shows the difference between two snapshots. This is useful when using ``rsync``
+for mirroring snapshots manually.
+
+::
+   ceph fs blockdiff <fs_name> <root_path> <filename> <snapshot1> <snapshot2>
+
+This command shows the blockdiff of a file between two snapshots as ``numblocks``, ``offset`` and ``length``.
+This is useful when using ``rsync`` for mirroring snapshots manually.
