@@ -1,7 +1,14 @@
-<div class="row h-25"
+<div cdsGrid
+     [useCssGrid]="true"
+     [fullWidth]="true"
+     [narrow]="true"
+     >
+  <div cdsCol
+       [columnNumbers]="{ sm: 4, md: 8, lg: 16 }"
      *cdScope="'configOpt'">
   <ng-container *ngIf="healthData$ | async as healthData">
-    <cd-card class="col-sm-3 px-3 d-flex"
+    <div cdsRow>
+    <cd-card cdsCol
              cardTitle="New Version"
              i18n-cardTitle
              aria-label="New Version"
@@ -16,7 +23,7 @@
             Upgrade is paused {{executingTasks?.progress}}%</h5>
           <a class="mt-2 link-primary mb-2"
              routerLink="/upgrade/progress"
-             i18n>View Details...</a>
+             i18n>View Details...</a>`
         </div>
 
         <ng-template #inProgress>
@@ -28,7 +35,7 @@
       </ng-container>
     </cd-card>
 
-    <cd-card class="col-sm-3 px-3 d-flex"
+    <cd-card cdsCol
              cardTitle="Current Version"
              i18n-cardTitle
              aria-label="Current Version"
@@ -39,7 +46,7 @@
       </div>
     </cd-card>
 
-    <cd-card class="col-sm-3 px-3 d-flex"
+    <cd-card cdsCol
              cardTitle="Cluster Status"
              i18n-cardTitle
              aria-label="Cluster Status"
@@ -74,7 +81,7 @@
       </div>
     </cd-card>
 
-    <cd-card class="col-sm-3 px-3 d-flex"
+    <cd-card cdsCol
              cardTitle="MGR Count"
              i18n-cardTitle
              aria-label="MGR Count"
@@ -90,8 +97,8 @@
         </h5>
       </div>
     </cd-card>
-
-    <div class="d-flex mt-3">
+    </div>
+    <div cdsRow>
       <dl class="w-50"
           *ngIf="fsid$ | async as fsid">
         <dt class="bold mt-5"
@@ -155,7 +162,7 @@
     </ng-template>
   </ng-container>
 </div>
-
+</div>
 <ng-template #noUpgradesAvailable>
   <span class="mt-1"
         id="no-upgrades-available"
