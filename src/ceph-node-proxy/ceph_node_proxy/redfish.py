@@ -206,7 +206,7 @@ class Endpoint:
                     result[name] = self.data
             else:
                 for member, endpoint_url in members_endpoints.items():
-                    self.log.info(
+                    self.log.debug(
                         f"Fetching data for member: {member} at {endpoint_url}"
                     )
                     result[member] = self.query(endpoint_url)

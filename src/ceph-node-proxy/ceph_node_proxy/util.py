@@ -124,7 +124,7 @@ class BaseThread(threading.Thread):
             logger.error(f"Caught exception: {self.exc.__class__.__name__}")
             raise self.exc
         if not self.is_alive():
-            logger.info(f"{self.name} not alive")
+            logger.warning(f"{self.name} not alive")
             self.start()
         return True
 
@@ -162,7 +162,7 @@ def retry(
                 except exceptions:
                     time.sleep(delay)
                     _tries -= 1
-            logger.warn("{} has failed after {} tries".format(f, retries))
+            logger.warning("{} has failed after {} tries".format(f, retries))
             return f(*args, **kwargs)
 
         return _retry

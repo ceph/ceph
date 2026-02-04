@@ -139,7 +139,7 @@ class API(Server):
 
         if "force" not in data.keys():
             msg = "The key 'force' wasn't passed."
-            self.log.debug(msg)
+            self.log.warning(msg)
             raise cherrypy.HTTPError(400, msg)
         try:
             result: int = self.backend.shutdown_host(force=data["force"])
@@ -172,14 +172,14 @@ class API(Server):
 
         if not led_type:
             msg = "the led type must be provided (either 'chassis' or 'drive')."
-            self.log.debug(msg)
+            self.log.warning(msg)
             raise cherrypy.HTTPError(400, msg)
 
         if led_type == "drive":
             id_drive_required = not id_drive
             if id_drive_required or id_drive not in self.backend.get_storage():
                 msg = "A valid device ID must be provided."
-                self.log.debug(msg)
+                self.log.warning(msg)
                 raise cherrypy.HTTPError(400, msg)
 
         try:
@@ -188,7 +188,7 @@ class API(Server):
 
                 if "state" not in data or data["state"] not in ["on", "off"]:
                     msg = "Invalid data. 'state' must be provided and have a valid value (on|off)."
-                    self.log.error(msg)
+                    self.log.warning(msg)
                     raise cherrypy.HTTPError(400, msg)
 
                 func: Any = (

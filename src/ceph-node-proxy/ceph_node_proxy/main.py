@@ -82,7 +82,7 @@ class NodeProxyManager:
             )
         except HTTPError as e:
             msg = f"No out of band tool details could be loaded: {e.code}, {e.reason}"
-            self.log.debug(msg)
+            self.log.error(msg)
             raise
 
         result_json = json.loads(result)
@@ -174,7 +174,7 @@ class NodeProxyManager:
                 self.init_system()
                 self.init_reporter()
                 check_interval = min(int(check_interval * backoff_factor), max_interval)
-                self.log.debug("Next check in %ds (backoff).", check_interval)
+                self.log.info("Next check in %ds (backoff).", check_interval)
             time.sleep(check_interval)
 
     def shutdown(self) -> None:

@@ -43,7 +43,7 @@ class Reporter(BaseThread):
         """Send data to mgr. Returns True on success, False after max_retries failures."""
         for attempt in range(1, self.max_retries + 1):
             try:
-                self.log.info(
+                self.log.debug(
                     f"sending data to {self.reporter_url} (attempt {attempt}/{self.max_retries})"
                 )
                 http_req(
