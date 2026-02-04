@@ -1179,6 +1179,7 @@ if(WITH_RADOSGW)
 
     set(LANCEDB_BUILD_DIR "${CMAKE_BINARY_DIR}/src/lancedb-c-prefix/src/lancedb-c-build")
     # Determine the Rust target directory based on build type
+    set(LANCEDB_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/lancedb-c-prefix/src/lancedb-c-build")
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
       set(LANCEDB_RUST_TARGET_DIR "${LANCEDB_BUILD_DIR}/target/debug")
     else()
