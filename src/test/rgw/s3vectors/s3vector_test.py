@@ -17,6 +17,7 @@ from . import(
     configfile,
     get_config_host,
     get_config_port,
+    get_config_zonegroup,
     get_access_key,
     get_secret_key,
     get_config_host2,
@@ -72,6 +73,7 @@ def connection(service_name='s3vectors'):
             endpoint_url=scheme+hostname+':'+str(port_no),
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
+            region_name=get_config_zonegroup(),
             config=config)
 
     return client
@@ -101,6 +103,7 @@ def connection2(service_name='s3vectors'):
             endpoint_url=scheme+hostname+':'+str(port_no),
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
+            region_name=get_config_zonegroup(),
             config=config)
 
     return client
@@ -127,6 +130,7 @@ def another_user(tenant=None):
             endpoint_url=scheme+hostname+':'+str(port_no),
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
+            region_name=get_config_zonegroup(),
             config=Config(signature_version='s3'))
 
     return client
