@@ -559,6 +559,8 @@ if(WITH_RADOSGW_LANCEDB)
   if(WITH_RADOSGW_STANDALONE)
     target_link_libraries(rgw_common_standalone PUBLIC lancedb)
     add_dependencies(rgw_common_standalone lancedb-c)
+    install(FILES ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+      DESTINATION ${CMAKE_INSTALL_LIBDIR})
   endif()
 endif()
 
