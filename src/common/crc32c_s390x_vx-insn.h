@@ -491,4 +491,9 @@ name:
     MRXBOPC	0, 0x7D, v1, v2, v3
 .endm
 
+/* inform linker that this doesn't require executable stack */
+#if defined(__linux__) && defined(__ELF__)
+.section .note.GNU-stack,"",%progbits
+#endif
+
 #endif	/* __ASM_S390_VX_INSN_H */
