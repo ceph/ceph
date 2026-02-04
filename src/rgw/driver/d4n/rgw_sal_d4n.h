@@ -68,16 +68,50 @@ public:
   }
 };
 
+struct TaskGroup {
+  std::atomic<int> in_flight{0};
+  std::atomic<bool> timer_set{false};
+  boost::asio::steady_timer signal_timer;
+
+  TaskGroup(boost::asio::any_io_executor ex) : signal_timer(ex) {
+    signal_timer.expires_at(std::chrono::steady_clock::time_point::max());
+  }
+
+  void wait(const DoutPrefixProvider *dpp, boost::asio::yield_context yield) {
+    ldpp_dout(dpp, 0) << "DEBUG: wait() starting, in_flight=" << in_flight << dendl;
+    timer_set.store(true, std::memory_order_release);
+    while (in_flight.load(std::memory_order_acquire) > 0) {
+      signal_timer.expires_at(std::chrono::steady_clock::time_point::max());
+      boost::system::error_code ec;
+      signal_timer.async_wait(yield[ec]);
+
+      if (ec == boost::asio::error::operation_aborted) {
+        continue;
+      }
+
+      if (ec) {
+        throw boost::system::system_error(ec);
+      }
+    }
+    ldpp_dout(dpp, 0) << "DEBUG: wait() exiting, in_flight=" << in_flight << dendl;
+    timer_set.store(false, std::memory_order_release);
+  }
+};
+
 class CoroutinePool {
 public:
   using Task = std::function<void(boost::asio::yield_context)>;
 
-  CoroutinePool(boost::asio::any_io_executor executor, size_t pool_size)
+  CoroutinePool(boost::asio::any_io_executor executor, size_t pool_size, bool on_strand=false)
       : executor(executor),
         pool_size(pool_size),
         strand(boost::asio::make_strand(executor)),
-        running(false)
-  {}
+        running(false),
+        on_strand(on_strand),
+        work_notifier(executor)
+  { 
+    work_notifier.expires_at(std::chrono::steady_clock::time_point::max());
+  }
 
   void start(const DoutPrefixProvider *dpp) {
     running = true;
@@ -88,16 +122,16 @@ public:
 
   void stop() {
     running = false;
-    cv.notify_all();
+    work_notifier.cancel();
   }
 
   void submit(Task task) {
     {
-        std::lock_guard<std::mutex> lock(queue_mutex);
-        task_queue.push(std::move(task));
-        queued_tasks++;
+      std::lock_guard<std::mutex> lock(queue_mutex);
+      task_queue.push(std::move(task));
+      queued_tasks++;
     }
-    cv.notify_one();
+    work_notifier.cancel_one();
   }
 
   struct Stats {
@@ -121,8 +155,9 @@ public:
 
 private:
   void spawn_worker(const DoutPrefixProvider *dpp, size_t worker_id) {
+    auto context = on_strand ? strand : executor;
     boost::asio::spawn(
-      executor,
+      context,
       [this, dpp, worker_id](boost::asio::yield_context yield) {
         worker_loop(dpp, worker_id, yield);
       },
@@ -134,11 +169,13 @@ private:
       Task task;
       {
         std::unique_lock<std::mutex> lock(queue_mutex);
-
-        cv.wait(lock, [&] {
-          return !running || !task_queue.empty();
-        });
-
+        while (running && task_queue.empty()) {
+          lock.unlock();
+          boost::system::error_code ec;
+          ldpp_dout(dpp, 20) << "Worker " << worker_id << " yielding (queue empty)" << dendl;
+          work_notifier.async_wait(yield[ec]);
+          lock.lock();
+        }
         if (!running && task_queue.empty()) {
           return;
         }
@@ -169,10 +206,11 @@ private:
   boost::asio::strand<boost::asio::any_io_executor> strand;
   std::queue<Task> task_queue;
   mutable std::mutex queue_mutex;
-  std::condition_variable cv;
   std::atomic<bool> running;
   std::atomic<int> active_workers{0};
   std::atomic<int> queued_tasks{0};
+  bool on_strand{false};
+  boost::asio::steady_timer work_notifier;
 };
 
 class D4NFilterDriver : public FilterDriver {
@@ -187,6 +225,7 @@ class D4NFilterDriver : public FilterDriver {
     optional_yield y;
     std::unique_ptr<boost::asio::thread_pool> d4n_thread_pool;
     std::unique_ptr<CoroutinePool> d4n_coroutine_pool;
+    std::unique_ptr<CoroutinePool> d4n_coroutine_get_pool;
 
     // Redis connection pool
     std::shared_ptr<rgw::d4n::RedisPool> redis_pool;
@@ -200,10 +239,23 @@ class D4NFilterDriver : public FilterDriver {
         d4n_coroutine_pool->start(dpp);
       }
     }
+
+    void initialize_get_pool(const DoutPrefixProvider *dpp,
+                        boost::asio::any_io_executor executor,
+                               size_t pool_size = 32) {
+      if (!d4n_coroutine_get_pool) {
+        d4n_coroutine_get_pool = std::make_unique<CoroutinePool>(executor, pool_size);
+        d4n_coroutine_get_pool->start(dpp);
+      }
+    }
     void shutdown_pool() {
       if (d4n_coroutine_pool) {
         d4n_coroutine_pool->stop();
         d4n_coroutine_pool.reset();
+      }
+      if (d4n_coroutine_get_pool) {
+        d4n_coroutine_get_pool->stop();
+        d4n_coroutine_get_pool.reset();
       }
     }
     CoroutinePool::Stats get_pool_stats() {
@@ -215,6 +267,10 @@ class D4NFilterDriver : public FilterDriver {
 
     CoroutinePool* get_pool() {
       return d4n_coroutine_pool.get();
+    }
+
+    CoroutinePool* get_d4n_get_pool() {
+      return d4n_coroutine_get_pool.get();
     }
 
     D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context, bool admin);
@@ -291,6 +347,20 @@ class D4NFilterBucket : public FilterBucket {
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
     void set_cache_request() { cache_request = true; }
+};
+
+struct BlockMeta {
+  uint64_t id;
+  uint64_t offset;
+  uint64_t len;
+  uint64_t read_offset;
+  uint64_t read_len;
+  bool is_remote{false};
+};
+
+struct RemoteTaskResult {
+  std::vector<BlockMeta> blocks;
+  rgw::AioResultList result_list;
 };
 
 class D4NFilterObject : public FilterObject {
@@ -374,18 +444,17 @@ class D4NFilterObject : public FilterObject {
       private:
 	RGWGetDataCB* client_cb;
 	std::unique_ptr<D4NFilterGetCB> cb;
-        std::unique_ptr<rgw::Aio> aio;
+        std::shared_ptr<rgw::Aio> aio;
 	uint64_t offset = 0; // next offset to write to client
         rgw::AioResultList completed; // completed read results, sorted by offset
-	std::unordered_map<uint64_t, std::pair<uint64_t,uint64_t>> blocks_info;
-  std::map<off_t, std::tuple<off_t, bool, bufferlist>> read_data;
-  bool last_part_done = false;
-  uint64_t last_adjusted_ofs = -1;
-  bool first_block = true; //is it first_block
+        std::map<uint64_t, std::unique_ptr<rgw::AioResultEntry>> completed_map;
+	std::unordered_map<uint64_t, BlockMeta> blocks_info;
+  std::mutex data_mutex;
+  std::vector<std::shared_ptr<RemoteTaskResult>> remote_task_results;
 
-  void set_first_block(bool val) {first_block = val;}
 	int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results, optional_yield y);
 	void cancel();
+  int process_remote_results(const DoutPrefixProvider* dpp, std::shared_ptr<TaskGroup> group, optional_yield y);
 	int drain(const DoutPrefixProvider* dpp, optional_yield y);
     };
 
@@ -496,8 +565,9 @@ class D4NFilterObject : public FilterObject {
 
 class D4NFilterDPP : public DoutPrefixProvider {
   CephContext* cct;
+  std::string prefix;
 public:
-  explicit D4NFilterDPP(CephContext* c) : cct(c) {}
+  explicit D4NFilterDPP(CephContext* c, std::string& prefix) : cct(c), prefix(prefix) {}
   CephContext* get_cct() const override { return cct; }
   unsigned get_subsys() const override { return ceph_subsys_rgw; }
   std::ostream& gen_prefix(std::ostream& out) const override {

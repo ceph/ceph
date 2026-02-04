@@ -46,11 +46,11 @@ class RemoteCacheOp {
     virtual ~RemoteCacheOp() = default; 
 
     virtual int init(CephContext* cct, const DoutPrefixProvider* dpp);
-    virtual int send_request(const DoutPrefixProvider* dpp, bufferlist& bl, optional_yield& y) = 0;
+    virtual int send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl = nullptr) = 0;
     virtual int complete_request(const DoutPrefixProvider* dpp, optional_yield& y);
-    virtual int send_and_complete_request(const DoutPrefixProvider* dpp, bufferlist& bl, optional_yield& y) = 0;
+    virtual int send_and_complete_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl = nullptr);
 
-  private:
+  protected:
     rgw::sal::Driver* driver;
     RemoteCacheOpData op;
     std::unique_ptr<RGWRESTStreamRWRequest> sender;
@@ -58,7 +58,24 @@ class RemoteCacheOp {
     std::unique_ptr<RemoteGetCB> cb;
 };
 
+class RemoteCacheGetOp : public RemoteCacheOp {
+  public:
+    struct RemoteCacheGetOpData : RemoteCacheOpData {};
 
+    RemoteCacheGetOp(rgw::sal::Driver* driver, RemoteCacheGetOpData& op) : RemoteCacheOp(driver, op) {}
+    virtual ~RemoteCacheGetOp() = default;
+
+    using RemoteCacheOp::send_and_complete_request;
+    rgw::AioResultList send_request(const DoutPrefixProvider* dpp, rgw::Aio* aio, uint64_t cost, uint64_t id, optional_yield& y);
+    virtual int send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl = nullptr) override;
+    virtual int complete_request(const DoutPrefixProvider* dpp, optional_yield& y) override;
+    rgw::AioResultList send_and_complete_request(const DoutPrefixProvider* dpp, rgw::Aio* aio, uint64_t cost, uint64_t id, optional_yield& y);
+    ceph::bufferlist&& get_buffer() { return std::move(in_bl); }
+
+  private:
+    rgw::Aio* aio{nullptr};
+    rgw::AioResult* r{nullptr};
+};
 
 class RemoteCacheDeleteOp : public RemoteCacheOp {
   public:
@@ -67,15 +84,7 @@ class RemoteCacheDeleteOp : public RemoteCacheOp {
     RemoteCacheDeleteOp(rgw::sal::Driver* driver, RemoteCacheDeleteOpData& op) : RemoteCacheOp(driver, op) {}
     virtual ~RemoteCacheDeleteOp() = default; 
     
-	virtual int send_request(const DoutPrefixProvider* dpp, bufferlist& bl, optional_yield& y) override;
-    virtual int send_and_complete_request(const DoutPrefixProvider* dpp, bufferlist& bl, optional_yield& y) override;
-
-  private:
-    rgw::sal::Driver* driver;
-    RemoteCacheDeleteOpData op;
-    std::unique_ptr<RGWRESTStreamRWRequest> sender;
-    bufferlist in_bl;
-    std::unique_ptr<RemoteGetCB> cb;
+	virtual int send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl = nullptr) override;
 };
 
 class RemoteCachePutOp : public RemoteCacheOp {
@@ -85,15 +94,7 @@ class RemoteCachePutOp : public RemoteCacheOp {
     RemoteCachePutOp(rgw::sal::Driver* driver, RemoteCachePutOpData& op) : RemoteCacheOp(driver, op) {}
     virtual ~RemoteCachePutOp() = default;
  
-	virtual int send_request(const DoutPrefixProvider* dpp, bufferlist& bl, optional_yield& y) override;
-    virtual int send_and_complete_request(const DoutPrefixProvider* dpp, bufferlist& bl, optional_yield& y) override;
-
-  private:
-    rgw::sal::Driver* driver;
-    RemoteCachePutOpData op;
-    std::unique_ptr<RGWRESTStreamRWRequest> sender;
-    bufferlist in_bl;
-    std::unique_ptr<RemoteGetCB> cb;
+	virtual int send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl = nullptr) override;
 };
 
 class RemoteCachePutBatch {

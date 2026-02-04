@@ -4109,6 +4109,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_d4n_remote_async_get
+  type: bool
+  level: advanced
+  desc: debug option to enable/disable remote async get, disabled by default
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_backend_store
   type: str
   level: advanced

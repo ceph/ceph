@@ -448,7 +448,8 @@ int ObjectDirectory::set(const DoutPrefixProvider* dpp, CacheObj* object, option
   redisValues.push_back(object->user_id);
   redisValues.push_back("displayName");
   redisValues.push_back(object->display_name);
-
+  redisValues.push_back("acl");
+  redisValues.push_back(object->acl);
   try {
     boost::system::error_code ec;
     response<ignore_t> resp;
@@ -484,6 +485,7 @@ int ObjectDirectory::get(const DoutPrefixProvider* dpp, CacheObj* object, option
   fields.push_back("objSize");
   fields.push_back("userId");
   fields.push_back("displayName");
+  fields.push_back("acl");
 
   try {
     boost::system::error_code ec;
@@ -513,6 +515,7 @@ int ObjectDirectory::get(const DoutPrefixProvider* dpp, CacheObj* object, option
     object->size = std::stoull(std::get<0>(resp).value()[std::size_t(Fields::ObjSize)]);
     object->user_id = std::get<0>(resp).value()[std::size_t(Fields::UserID)];
     object->display_name = std::get<0>(resp).value()[std::size_t(Fields::DisplayName)];
+    object->acl = std::get<0>(resp).value()[std::size_t(Fields::Acl)];
   } catch (std::exception &e) {
     ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
     return -EINVAL;
@@ -972,6 +975,8 @@ int BlockDirectory::set_values(const DoutPrefixProvider* dpp, CacheBlock& block,
   redisValues.push_back(block.cacheObj.user_id);
   redisValues.push_back("displayName");
   redisValues.push_back(block.cacheObj.display_name);
+  redisValues.push_back("acl");
+  redisValues.push_back(block.cacheObj.acl);
 
   return 0;
 }
@@ -1125,6 +1130,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
     fields.push_back("objSize");
     fields.push_back("userId");
     fields.push_back("displayName");
+    fields.push_back("acl");
 
     try {
       req.push_range("HMGET", key, fields);
@@ -1173,6 +1179,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
     block->cacheObj.size = std::stoull(vec[std::size_t(Fields::ObjSize)]);
     block->cacheObj.user_id = vec[std::size_t(Fields::UserID)];
     block->cacheObj.display_name = vec[std::size_t(Fields::DisplayName)];
+    block->cacheObj.display_name = vec[std::size_t(Fields::Acl)];
   }
 
   return 0;
@@ -1199,6 +1206,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, option
   fields.push_back("objSize");
   fields.push_back("userId");
   fields.push_back("displayName");
+  fields.push_back("acl");
 
   try {
     boost::system::error_code ec;
@@ -1232,6 +1240,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, option
     block->cacheObj.size = std::stoull(std::get<0>(resp).value().value()[11]);
     block->cacheObj.user_id = std::get<0>(resp).value().value()[12];
     block->cacheObj.display_name = std::get<0>(resp).value().value()[13];
+    block->cacheObj.acl = std::get<0>(resp).value().value()[14];
   } catch (std::exception &e) {
     ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
     return -EINVAL;
@@ -1264,6 +1273,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
     fields.push_back("objSize");
     fields.push_back("userId");
     fields.push_back("displayName");
+    fields.push_back("acl");
 
     try {
       req.push("HGETALL", key);
@@ -1311,7 +1321,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
               element.value == "size" || element.value == "globalWeight" || element.value == "objName" ||
               element.value == "bucketName" || element.value == "creationTime" || element.value == "dirty" ||
               element.value == "hosts" || element.value == "etag" || element.value == "objSize" ||
-              element.value == "userId" || element.value == "displayName") {
+              element.value == "userId" || element.value == "displayName" || element.value == "acl") {
             prev_val = element.value;
             ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "() field key: " << prev_val << dendl;
             field_key = false;
@@ -1348,6 +1358,8 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
             block->cacheObj.user_id = element.value;
           } else if (prev_val == "displayName") {
             block->cacheObj.display_name = element.value;
+          } else if (prev_val == "acl") {
+            block->cacheObj.acl = element.value;
           }
           j++;
           field_key= true;
