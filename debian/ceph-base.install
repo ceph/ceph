@@ -21,3 +21,4 @@ usr/share/man/man8/monmaptool.8
 usr/share/man/man8/osdmaptool.8
 usr/share/man/man8/ceph-kvstore-tool.8
 etc/sudoers.d/ceph-smartctl
+usr/lib/liblancedb.so
