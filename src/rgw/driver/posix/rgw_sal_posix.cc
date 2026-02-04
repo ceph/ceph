@@ -35,6 +35,7 @@ const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_MPUPLOAD "POSIX-Multipart-Upload"
 #define RGW_POSIX_ATTR_OWNER "POSIX-Owner"
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
+#define RGW_POSIX_ATTR_MANIFEST "POSIX-Manifest"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
@@ -3496,6 +3497,20 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
     return -EINVAL;
   }
 
+  buffer::list manifest_bl;
+  if (source->get_attr(RGW_POSIX_ATTR_MANIFEST, manifest_bl)) {
+    POSIXManifest manifest;
+    auto iter = manifest_bl.cbegin();
+    try {
+      manifest.decode(iter);
+      if (manifest.multipart_part_count > 0) {
+        params.parts_count = manifest.multipart_part_count;
+      }
+    } catch (buffer::error& err) {
+      // pass
+    }
+  }
+
 #if 0 // WIP
   if (params.mod_ptr || params.unmod_ptr) {
     obj_time_weight src_weight;
@@ -4046,6 +4061,12 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     encode(cs_info, tmp);
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
+
+  POSIXManifest manifest;
+  manifest.multipart_part_count = total_parts;
+  buffer::list manifest_bl;
+  manifest.encode(manifest_bl);
+  attrs[RGW_POSIX_ATTR_MANIFEST] = manifest_bl;
 
   ret = shadow->merge_and_store_attrs(dpp, attrs, y);
   if (ret < 0) {
