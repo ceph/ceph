@@ -417,7 +417,9 @@ public:
     ceph::buffer::list buffer;      ///< new data to write (at end of file)
     uint32_t super_block_size;
     uint64_t buffer_pos = 0; ///< offset of the buffer in file
-  public:
+  private:
+  friend class FileWriter_get_write_data_Test; //used in unittest
+  friend class BlueFS;
     unsigned get_buffer_length() const {
       return buffer.length() - (pos - buffer_pos);
     }
@@ -503,6 +505,10 @@ public:
 
     uint64_t get_effective_write_pos() {
       return pos + buffer.length();
+    }
+
+    uint64_t get_file_size() {
+      return file->fnode.size + get_buffer_length();
     }
 
   };

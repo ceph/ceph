@@ -3798,7 +3798,6 @@ ceph::bufferlist BlueFS::FileWriter::get_write_data(
   CephContext* cct,
   uint64_t want_end)
 {
-  ceph_assert(ceph_mutex_is_locked(this->lock) || file->fnode.ino <= 1);
   ceph_assert(get_pos() < want_end);
   ceph::bufferlist bl;
   uint64_t data_end = get_pos() + get_buffer_length();

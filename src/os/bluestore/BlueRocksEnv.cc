@@ -255,7 +255,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
    * Get the size of valid data in the file.
    */
   uint64_t GetFileSize() override {
-    return h->file->fnode.size + h->get_buffer_length();;
+    return h->get_file_size();
   }
 
   // For documentation, refer to RandomAccessFile::GetUniqueId()
