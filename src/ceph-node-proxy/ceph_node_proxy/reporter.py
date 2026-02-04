@@ -4,7 +4,7 @@ from typing import Any, Dict
 from urllib.error import HTTPError, URLError
 
 from ceph_node_proxy.protocols import SystemForReporter
-from ceph_node_proxy.util import BaseThread, get_logger, http_req
+from ceph_node_proxy.util import BaseThread, _dict_diff, get_logger, http_req
 
 DEFAULT_MAX_RETRIES = 30
 RETRY_SLEEP_SEC = 5
@@ -65,6 +65,26 @@ class Reporter(BaseThread):
                     time.sleep(RETRY_SLEEP_SEC)
         return False
 
+    def _log_data_delta(
+        self,
+        new_data: Dict[str, Any],
+        max_log_len: int = 2048,
+    ) -> None:
+        """Compute diff between previous and new data, then log it (truncated if needed)."""
+        delta = _dict_diff(self.system.previous_data, new_data) or {}
+        delta_json = json.dumps(delta, indent=2, default=str)
+        if len(delta_json) > max_log_len:
+            delta_json = delta_json[:max_log_len] + "\n... (truncated)"
+        if self.system.previous_data:
+            self.log.info(
+                "data has changed since last iteration; delta:\n%s",
+                delta_json,
+            )
+        else:
+            # the first delta is the full data received from the system
+            # which is by definition big so we don't log it as it would be too verbose
+            self.log.info("first data received from the system.")
+
     def main(self) -> None:
         last_heartbeat = time.monotonic()
         while not self.stop:
@@ -75,10 +95,11 @@ class Reporter(BaseThread):
                     if self.system.data_ready:
                         self.log.debug("data ready to be sent to the mgr.")
                         if self.system.get_system() != self.system.previous_data:
-                            self.log.info("data has changed since last iteration.")
-                            self.data["patch"] = self.system.get_system()
+                            new_data = self.system.get_system()
+                            self._log_data_delta(new_data)
+                            self.data["patch"] = new_data
                             if self._send_with_retries():
-                                self.system.previous_data = self.system.get_system()
+                                self.system.previous_data = new_data
                             else:
                                 self.log.error(
                                     f"Failed to send data after {self.max_retries} retries; "

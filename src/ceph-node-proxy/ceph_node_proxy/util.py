@@ -221,3 +221,23 @@ def write_tmp_file(
     f.write(data.encode("utf-8"))
     f.flush()
     return f
+
+
+def _dict_diff(old: Any, new: Any) -> Any:
+    if old == new:
+        return None
+    if type(old) != type(new) or not isinstance(new, dict):
+        return new
+    if not isinstance(old, dict):
+        return new
+    delta: Dict[str, Any] = {}
+    for k in sorted(set(old) | set(new)):
+        if k not in old:
+            delta[k] = new[k]
+        elif k not in new:
+            delta[k] = None
+        else:
+            sub = _dict_diff(old[k], new[k])
+            if sub is not None:
+                delta[k] = sub
+    return delta if delta else None
