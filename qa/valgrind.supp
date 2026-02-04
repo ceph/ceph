@@ -1003,3 +1003,12 @@
    fun:__libc_start_main@@GLIBC_2.34
    fun:(below main)
 }
+{
+   lancedb opendal operator registry static init
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:*alloc
+   ...
+   fun:*opendal*register_default_operator_registry*
+   ...
+}

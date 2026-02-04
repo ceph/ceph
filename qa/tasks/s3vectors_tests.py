@@ -166,6 +166,7 @@ def toxvenv_sh(ctx, remote, args, **kwargs):
 
 
 @contextlib.contextmanager
+<<<<<<< HEAD
 def install_sdk_extras(ctx, config):
     """
     Copy the SDK extras file to ~/.aws/models so boto3 picks up
@@ -200,6 +201,8 @@ def install_sdk_extras(ctx, config):
 
 
 @contextlib.contextmanager
+=======
+>>>>>>> 0c786ddb6b5 (tests/rgw/s3vector: add s3vector tests to teuthology)
 def run_tests(ctx, config):
     """
     Run the s3vectors tests after everything is set up.

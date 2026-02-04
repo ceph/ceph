@@ -1217,10 +1217,19 @@ if(WITH_RADOSGW)
       set(LANCEDB_RUST_TARGET_DIR "${LANCEDB_BUILD_DIR}/target/release")
     endif()
 
+    get_filename_component(CARGO_BIN_DIR "${CARGO_EXECUTABLE}" DIRECTORY)
     ExternalProject_Add(lancedb-c
       SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c
-      CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-                 -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/lancedb-c-install
+      CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env "PATH=${CARGO_BIN_DIR}:$ENV{PATH}"
+                        "CARGO_HOME=${CMAKE_BINARY_DIR}/.cargo"
+                        "RUSTUP_HOME=${CMAKE_BINARY_DIR}/.rustup"
+                        ${CMAKE_COMMAND} ${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c
+                        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                        -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/lancedb-c-install
+      BUILD_COMMAND ${CMAKE_COMMAND} -E env "PATH=${CARGO_BIN_DIR}:$ENV{PATH}"
+                    "CARGO_HOME=${CMAKE_BINARY_DIR}/.cargo"
+                    "RUSTUP_HOME=${CMAKE_BINARY_DIR}/.rustup"
+                    ${CMAKE_COMMAND} --build <BINARY_DIR>
       BUILD_ALWAYS OFF
       BUILD_BYPRODUCTS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
       INSTALL_COMMAND ${CMAKE_COMMAND} -E copy
