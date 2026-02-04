@@ -170,6 +170,7 @@ packages that provide the ``cephadm`` command, run the following commands:
 
      /usr/sbin/cephadm
 
+.. _cephadm_bootstrap_a_new_cluster:
 
 Bootstrap a New Cluster
 =======================

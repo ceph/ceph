@@ -21,36 +21,66 @@ See :ref:`Crimson's Developer Guide <crimson_dev_doc>` for developer information
 
 .. highlight:: console
 
+.. note::
+   Cephadm SeaStore support is in `early stages <https://tracker.ceph.com/issues/71946>`_.
+
 Deploying Crimson with cephadm
 ==============================
 
 .. note::
-   Cephadm SeaStore support is in `early stages <https://tracker.ceph.com/issues/71946>`_.
+   Crimson is in a tech preview stage and is **not suitable for production use**.
 
-The Ceph CI/CD pipeline builds containers with ``crimson-osd`` replacing the standard ``ceph-osd``.
+The Ceph CI/CD pipeline builds containers with both ``ceph-osd-crimson`` and the standard ``ceph-osd``.
 
 Once a branch at commit <sha1> has been built and is available in
 Shaman / Quay, you can deploy it using the cephadm instructions outlined
 in :ref:`cephadm` with the following adaptations.
 
 The latest `main` branch is built `daily <https://shaman.ceph.com/builds/ceph/main>`_
-and the images are available in `quay <https://quay.ceph.io/repository/ceph-ci/ceph?tab=tags>`_
-(filter ``crimson-release``).
+and the images are available in `quay <https://quay.ceph.io/repository/ceph-ci/ceph?tab=tags>`_.
 We recommend using one of the latest available builds, as Crimson evolves rapidly.
 
-Use the ``--image`` flag to specify a Crimson build:
+Before deploying a crimson OSD ensure the :ref:`required flags <crimson-required-flags>` are set.
+
+The cephadm :ref:`bootstrap command <cephadm_bootstrap_a_new_cluster>` can be used as is, no further 
+changes are needed for crimson OSDs. You'll likely need to include the ``--allow-mismatched-release`` flag 
+to use a non-release branch.
 
 .. prompt:: bash #
 
-   cephadm --image quay.ceph.io/ceph-ci/ceph:<sha1>-crimson-release --allow-mismatched-release bootstrap ...
+   cephadm --image quay.ceph.io/ceph-ci/ceph:<sha1> --allow-mismatched-release bootstrap ...
 
+When :ref:`deploying OSDs <cephadm-deploy-osds>`, use ``--osd-type`` 
+flag to specify crimson OSDs. By default this value is set to ``classic``. To deploy a crimson OSD, 
+set this flag to ``crimson``.
 
-.. note::
-   Crimson builds are available in two variants: ``crimson-debug`` and ``crimson-release``.
-   For testing purposes the `release` variant should be used.
-   The `debug` variant is intended primarily for development.
+.. prompt:: bash #
 
-You'll likely need to include the ``--allow-mismatched-release`` flag to use a non-release branch.
+   ceph orch apply osd --osd-type crimson ...
+
+Alternatively, you can also set the `osd_type 
+<https://docs.ceph.com/en/latest/cephadm/services/osd/#ceph.deployment.drive_group.DriveGroupSpec.osd_type>`_ 
+to ``crimson`` in the :ref:`OSD Service Specification <drivegroups>` file
+like so: 
+
+.. code-block:: yaml 
+
+   service_type: osd
+   service_id: default_drive_group  
+   placement:
+     host_pattern: '*'              
+   spec:
+     data_devices:                 
+       all: true  
+     osd_type: crimson   # osd_type should be set to crimson                  
+
+If the above file is named ``osd-spec.yaml``, it can be used to deploy OSDs like so: 
+
+.. prompt:: bash #
+
+   ceph orch apply -i /path/to/osd_spec.yml
+
+.. _crimson-cpu-allocation:
 
 Crimson CPU allocation
 ======================
@@ -83,30 +113,29 @@ and is generally less recommended due to its complexity.
 
 .. _crimson-required-flags:
 
-Crimson Requried Flags
+Crimson Required Flags
 ======================
 
-.. note::
-   Crimson is in a tech preview stage and is **not suitable for production use**.
-
-After starting your cluster, prior to deploying OSDs, you'll need to configure the
-`Crimson CPU allocation`_ and enable Crimson to
-direct the default pools to be created as Crimson pools.  You can proceed by running the following after you have a running cluster:
+After starting your cluster, prior to deploying OSDs (in cephadm terms, 
+after bootstrap is done and hosts are added), enable Crimson by setting the following flags: 
 
 .. prompt:: bash #
 
    ceph config set global 'enable_experimental_unrecoverable_data_corrupting_features' crimson
    ceph osd set-allow-crimson --yes-i-really-mean-it
    ceph config set mon osd_pool_default_crimson true
+   ceph config set osd crimson_cpu_num <SUITABLE_INT>
 
 The first command enables the ``crimson`` experimental feature.  
 
 The second enables the ``allow_crimson`` OSDMap flag.  The monitor will
 not allow ``crimson-osd`` to boot without that flag.
 
-The last causes pools to be created by default with the ``crimson`` flag.
+The third causes pools to be created by default with the ``crimson`` flag.
 Crimson pools are restricted to operations supported by Crimson.
 ``crimson-osd`` won't instantiate PGs from non-Crimson pools.
+
+Lastly, ensure that `Crimson CPU allocation`_ flags were set appropriately.
 
 .. _crimson-bakends:
 
