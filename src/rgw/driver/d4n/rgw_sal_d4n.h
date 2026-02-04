@@ -451,9 +451,14 @@ class D4NFilterObject : public FilterObject {
         rgw::AioResultList completed; // completed read results, sorted by offset
         std::map<uint64_t, std::unique_ptr<rgw::AioResultEntry>> completed_map;
 	std::unordered_map<uint64_t, BlockMeta> blocks_info;
+	std::map<off_t, std::tuple<off_t, bool, bufferlist>> read_data;
+	bool last_part_done = false;
+	uint64_t last_adjusted_ofs = -1;
+	bool first_block = true; //is it first_block
   std::mutex data_mutex;
   std::vector<std::shared_ptr<RemoteTaskResult>> remote_task_results;
 
+	void set_first_block(bool val) {first_block = val;}
 	int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results, optional_yield y);
 	void cancel();
   int process_remote_results(const DoutPrefixProvider* dpp, std::shared_ptr<TaskGroup> group, optional_yield y);

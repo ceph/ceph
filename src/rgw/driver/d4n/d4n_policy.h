@@ -38,8 +38,10 @@ class CachePolicy {
       std::string version;
       bool dirty;
       uint64_t refcount{0};
-      Entry(const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint64_t refcount) : key(key), offset(offset), 
-											        len(len), version(version), dirty(dirty), refcount(refcount) {}
+      rgw_user user;
+      int read_flag = 0;
+      Entry(const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint64_t refcount, rgw_user user) : key(key), offset(offset), 
+											        len(len), version(version), dirty(dirty), refcount(refcount), user(user) {}
       };
    
     //The disposer object function
@@ -76,7 +78,7 @@ class CachePolicy {
     virtual int exist_key(const std::string& key) = 0;
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) = 0;
     virtual bool update_refcount_if_key_exists(const DoutPrefixProvider* dpp, const std::string& key, uint8_t op, optional_yield y) = 0;
-    virtual void update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, uint8_t op, optional_yield y, std::string& restore_val=empty) = 0;
+    virtual void update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, const rgw_user user, uint8_t op, optional_yield y, std::string& restore_val=empty) = 0;
     virtual void update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, 
 			    double creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
 			    const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val=empty) = 0;
@@ -84,6 +86,8 @@ class CachePolicy {
     virtual bool erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) = 0;
     virtual bool invalidate_dirty_object(const DoutPrefixProvider* dpp, const std::string& key) = 0;
     virtual void cleaning(const DoutPrefixProvider* dpp) = 0;
+    virtual void set_read_flag(const DoutPrefixProvider* dpp, std::string key, int value) = 0;
+    virtual int get_read_flag(const DoutPrefixProvider* dpp, std::string key) = 0;
 };
 
 class LFUDAPolicy : public CachePolicy {
@@ -121,8 +125,8 @@ class LFUDAPolicy : public CachePolicy {
       using handle_type = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>::handle_type;
       handle_type handle;
 
-      LFUDAEntry(const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint64_t refcount, int localWeight) : Entry(key, offset, len, version, dirty, refcount), 
-														       localWeight(localWeight) {}
+      LFUDAEntry(const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint64_t refcount, rgw_user user, int localWeight) : Entry(key, offset, len, 
+                                                                                                                                version, dirty, refcount, user), localWeight(localWeight) {}
       
       void set_handle(handle_type handle_) { handle = handle_; }
     };
@@ -203,9 +207,11 @@ class LFUDAPolicy : public CachePolicy {
 
     virtual int init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver *_driver);
     virtual int exist_key(const std::string& key) override;
+    int sendRemote(const DoutPrefixProvider* dpp, CacheBlock* victim, std::string remoteCacheAddress, std::string key, bufferlist* out_bl, optional_yield y);
+    int getMinAvgWeight(const DoutPrefixProvider* dpp, int* minAvgWeight, std::string* cache_address, optional_yield y);
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
     virtual bool update_refcount_if_key_exists(const DoutPrefixProvider* dpp, const std::string& key, uint8_t op, optional_yield y) override;
-    virtual void update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, uint8_t op, optional_yield y, std::string& restore_val=empty) override;
+    virtual void update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, const rgw_user user, uint8_t op, optional_yield y, std::string& restore_val=empty) override;
     virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
     virtual bool _erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y);
     virtual void update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, 
@@ -214,6 +220,8 @@ class LFUDAPolicy : public CachePolicy {
     virtual bool erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
     virtual bool invalidate_dirty_object(const DoutPrefixProvider* dpp, const std::string& key) override;
     virtual void cleaning(const DoutPrefixProvider* dpp) override;
+    virtual void set_read_flag(const DoutPrefixProvider* dpp, std::string key, int value) override;
+    virtual int get_read_flag(const DoutPrefixProvider* dpp, std::string key) override;
     LFUDAObjEntry* find_obj_entry(const std::string& key) {
       auto it = o_entries_map.find(key);
       if (it == o_entries_map.end()) {
@@ -243,7 +251,7 @@ class LRUPolicy : public CachePolicy {
     virtual int exist_key(const std::string& key) override;
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
     virtual bool update_refcount_if_key_exists(const DoutPrefixProvider* dpp, const std::string& key, uint8_t op, optional_yield y) override { return false; }
-    virtual void update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, uint8_t op, optional_yield y, std::string& restore_val=empty) override;
+    virtual void update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, std::optional<bool> dirty, const rgw_user user, uint8_t op, optional_yield y, std::string& restore_val=empty) override;
     virtual void update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, 
 			    double creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
     			    const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val=empty) override;
@@ -251,6 +259,8 @@ class LRUPolicy : public CachePolicy {
     virtual bool erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
     virtual bool invalidate_dirty_object(const DoutPrefixProvider* dpp, const std::string& key) override { return false; }
     virtual void cleaning(const DoutPrefixProvider* dpp) override {}
+    virtual void set_read_flag(const DoutPrefixProvider* dpp, std::string key, int value) override {}
+    virtual int get_read_flag(const DoutPrefixProvider* dpp, std::string key) override { return 0; }
 };
 
 class PolicyDriver {
