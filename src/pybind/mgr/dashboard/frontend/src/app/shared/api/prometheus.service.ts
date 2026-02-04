@@ -176,56 +176,6 @@ export class PrometheusService {
     return isFinite(value) ? value : null;
   }
 
-  // getRangeQueriesData(selectedTime: any, queries: any, queriesResults: any, checkNan?: boolean) {
-  //   this.ifPrometheusConfigured(() => {
-  //     if (this.timerGetPrometheusDataSub) {
-  //       this.timerGetPrometheusDataSub.unsubscribe();
-  //     }
-  //     this.timerGetPrometheusDataSub = timer(0, this.timerTime)
-  //       .pipe(
-  //         switchMap(() => {
-  //           selectedTime = this.updateTimeStamp(selectedTime);
-  //           const observables = [];
-  //           for (const queryName in queries) {
-  //             if (queries.hasOwnProperty(queryName)) {
-  //               const query = queries[queryName];
-  //               observables.push(
-  //                 this.getPrometheusData({
-  //                   params: encodeURIComponent(query),
-  //                   start: selectedTime['start'],
-  //                   end: selectedTime['end'],
-  //                   step: selectedTime['step']
-  //                 }).pipe(map((data: any) => ({ queryName, data })))
-  //               );
-  //             }
-  //           }
-  //           return forkJoin(observables);
-  //         })
-  //       )
-  //       .subscribe((results: any) => {
-  //         results.forEach(({ queryName, data }: any) => {
-  //           if (data.result.length) {
-  //             queriesResults[queryName] = data.result[0].values;
-  //           } else {
-  //             queriesResults[queryName] = [];
-  //           }
-  //           if (
-  //             queriesResults[queryName] !== undefined &&
-  //             queriesResults[queryName] !== '' &&
-  //             checkNan
-  //           ) {
-  //             queriesResults[queryName].forEach((valueArray: any[]) => {
-  //               if (isNaN(parseFloat(valueArray[1]))) {
-  //                 valueArray[1] = '0';
-  //               }
-  //             });
-  //           }
-  //         });
-  //       });
-  //   });
-  //   return queriesResults;
-  // }
-
   private updateTimeStamp(selectedTime: any): any {
     let formattedDate = {};
     let secondsAgo = selectedTime['end'] - selectedTime['start'];
@@ -328,12 +278,7 @@ export class PrometheusService {
     });
   }
 
-  getRangeQueriesData(
-    selectedTime: any,
-    queries: any,
-    queriesResults: any,
-    checkNan?: boolean
-  ) {
+  getRangeQueriesData(selectedTime: any, queries: any, queriesResults: any, checkNan?: boolean) {
     this.ifPrometheusConfigured(() => {
       if (this.timerGetPrometheusDataSub) {
         this.timerGetPrometheusDataSub.unsubscribe();
@@ -375,20 +320,14 @@ export class PrometheusService {
             if (checkNan && Array.isArray(queriesResults[queryName])) {
               queriesResults[queryName].forEach((valueArray: any[]) => {
                 if (isNaN(parseFloat(valueArray[1]))) {
-                  valueArray[1] = "0";
+                  valueArray[1] = '0';
                 }
               });
             }
           });
-
-          // console.log("RAW PROM RESULTS:", JSON.parse(JSON.stringify(queriesResults)));
-
-          // const chartData = this.convertPerformanceData(queriesResults);
-
-          // console.log("CARBON-READY DATA:", chartData);
+          // STEP 2: Emit updated results
           this.updatedChrtData.next(queriesResults);
         });
-      
     });
 
     return queriesResults;
@@ -397,18 +336,18 @@ export class PrometheusService {
   public convertPerformanceData(raw: any) {
     return {
       iops: this.mergeSeries(
-        this.toSeries(raw.READIOPS || [], "Read IOPS"),
-        this.toSeries(raw.WRITEIOPS || [], "Write IOPS")
+        this.toSeries(raw.READIOPS || [], 'Read IOPS'),
+        this.toSeries(raw.WRITEIOPS || [], 'Write IOPS')
       ),
 
       latency: this.mergeSeries(
-        this.toSeries(raw.READLATENCY || [], "Read Latency"),
-        this.toSeries(raw.WRITELATENCY || [], "Write Latency")
+        this.toSeries(raw.READLATENCY || [], 'Read Latency'),
+        this.toSeries(raw.WRITELATENCY || [], 'Write Latency')
       ),
 
       throughput: this.mergeSeries(
-        this.toSeries(raw.READCLIENTTHROUGHPUT || [], "Read Throughput"),
-        this.toSeries(raw.WRITECLIENTTHROUGHPUT || [], "Write Throughput")
+        this.toSeries(raw.READCLIENTTHROUGHPUT || [], 'Read Throughput'),
+        this.toSeries(raw.WRITECLIENTTHROUGHPUT || [], 'Write Throughput')
       )
     };
   }

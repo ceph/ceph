@@ -34,12 +34,12 @@
          class="cds-mb-5"
          [columnNumbers]="{lg: 16}">
       <cds-tile>Performance card
-            <app-area-chart
-              [chartKey]="performanceTypes?.Throughput"
-              chartTitle="Throughput"
-              [dataUnit]="metricUnitMap?.throughput"
-              [rawData]="chartData?.throughput">
-            </app-area-chart>
+        <cd-area-chart
+          [chartKey]="performanceTypes?.Throughput"
+          chartTitle="Throughput"
+          [dataUnit]="metricUnitMap?.throughput"
+          [rawData]="chartData?.throughput">
+        </cd-area-chart>
       </cds-tile>
     </div>
   </div>

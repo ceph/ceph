@@ -11,18 +11,23 @@ import {
 import {
   AreaChartOptions,
   ChartTabularData,
-  ToolbarControlTypes
+  ToolbarControlTypes,
+  ScaleTypes
 } from '@carbon/charts-angular';
-import { ScaleTypes } from '@carbon/charts-angular';
 import merge from 'lodash.merge';
 import { NumberFormatterService } from '../../services/number-formatter.service';
 import { DatePipe } from '@angular/common';
 import { ChartPoint } from '../../models/area-chart-point';
-import { DECIMAL, formatValues, getDisplayUnit, getDivisor, getLabels } from '../../helpers/chart-utils';
-
+import {
+  DECIMAL,
+  formatValues,
+  getDisplayUnit,
+  getDivisor,
+  getLabels
+} from '../../helpers/chart-utils';
 
 @Component({
-  selector: 'app-area-chart',
+  selector: 'cd-area-chart',
   standalone: false,
   templateUrl: './area-chart.component.html',
   styleUrl: './area-chart.component.scss'

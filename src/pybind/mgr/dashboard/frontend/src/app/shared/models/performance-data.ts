@@ -1,4 +1,4 @@
-import { ChartPoint } from "./area-chart-point";
+import { ChartPoint } from './area-chart-point';
 
 export interface PerformanceData {
   [PerformanceType.IOPS]: ChartPoint[];

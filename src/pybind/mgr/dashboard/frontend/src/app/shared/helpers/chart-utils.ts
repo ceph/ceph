@@ -1,4 +1,4 @@
-import { NumberFormatterService } from "../services/number-formatter.service";
+import { NumberFormatterService } from '../services/number-formatter.service';
 
 export const DECIMAL = 2;
 
