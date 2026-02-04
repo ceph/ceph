@@ -9,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import boto3
 import json
-from botocore.config import Config
 
 from . import(
     configfile,
@@ -163,11 +162,12 @@ def test_create_vector_bucket_bad_path():
     bucket_name = gen_bucket_name()
     db_path = '/tmp/lancedb/'
     os.makedirs(db_path, exist_ok=True)
+    original_mode = os.stat(db_path).st_mode
     os.chmod(db_path, 0o555)
     try:
         pytest.raises(conn.exceptions.ClientError, conn.create_vector_bucket, vectorBucketName=bucket_name)
     finally:
-        os.chmod(db_path, 0o755)
+        os.chmod(db_path, original_mode)
 
 
 @pytest.mark.vector_bucket_test

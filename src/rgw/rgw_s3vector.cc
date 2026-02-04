@@ -495,7 +495,6 @@ namespace rgw::s3vector {
   static constexpr const char* distance_field = "_distance";
   static const std::string distance_field_str{distance_field};;
   static constexpr const char* key_columns[] = {key_field};
-  static constexpr const char* data_columns[] = {data_field};
   static constexpr const char* table_columns[] = {key_field, data_field};
   static constexpr const char* table_columns_with_metadata[] = {key_field, data_field, metadata_field};
   static constexpr const char* key_and_metadata_columns[] = {key_field, metadata_field};
