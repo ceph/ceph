@@ -39,6 +39,8 @@ using std::vector;
 using ceph::Formatter;
 using ceph::make_message;
 
+using namespace std::literals;
+
 static int get_max_prio_for_base(int base) {
   static const std::map<int, int> max_prio_map = {
     {OSD_BACKFILL_PRIORITY_BASE, OSD_BACKFILL_DEGRADED_PRIORITY_BASE - 1},
@@ -1564,10 +1566,7 @@ bool PeeringState::needs_backfill() const
 bool PeeringState::can_serve_read(const hobject_t &hoid)
 {
   ceph_assert(!is_primary());
-  std::string_view storage_object = "replica";
-  if (pool.info.is_erasure()) {
-    storage_object = "shard";
-  }
+  const auto storage_object = pool.info.is_erasure() ? "shard"sv : "replica"sv;
   if (!pg_log.get_log().has_write_since(
       hoid, pg_committed_to)) {
     psdout(20) << "can be safely read on this " << storage_object << dendl;
