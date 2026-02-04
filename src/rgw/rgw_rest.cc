@@ -793,10 +793,8 @@ int dump_body(req_state* const s,
   if(s->op_type == RGW_OP_GET_HEALTH_CHECK)
     healthcheck = true;
   if(len > 0 && !healthcheck) {
-    const char *method = s->info.method;
-    s->ratelimit_data->decrease_bytes(method, s->ratelimit_user_name, len, &s->user_ratelimit);
-    if(!rgw::sal::Bucket::empty(s->bucket.get()))
-      s->ratelimit_data->decrease_bytes(method, s->ratelimit_bucket_marker, len, &s->bucket_ratelimit);
+    s->ratelimit_data->decrease_bytes(s->ratelimit_user_op, s->ratelimit_user_name, len, &s->user_ratelimit);
+    s->ratelimit_data->decrease_bytes(s->ratelimit_bucket_op, s->ratelimit_bucket_marker, len, &s->bucket_ratelimit);
   }
   try {
     return RESTFUL_IO(s)->send_body(buf, len);
@@ -830,10 +828,8 @@ int recv_body(req_state* const s,
   if(s->op_type ==  RGW_OP_GET_HEALTH_CHECK)
     healthcheck = true;
   if(len > 0 && !healthcheck) {
-    const char *method = s->info.method;
-    s->ratelimit_data->decrease_bytes(method, s->ratelimit_user_name, len, &s->user_ratelimit);
-    if(!rgw::sal::Bucket::empty(s->bucket.get()))
-      s->ratelimit_data->decrease_bytes(method, s->ratelimit_bucket_marker, len, &s->bucket_ratelimit);
+    s->ratelimit_data->decrease_bytes(s->ratelimit_user_op, s->ratelimit_user_name, len, &s->user_ratelimit);
+    s->ratelimit_data->decrease_bytes(s->ratelimit_bucket_op, s->ratelimit_bucket_marker, len, &s->bucket_ratelimit);
   }
   return len;
 

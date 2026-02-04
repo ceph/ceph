@@ -70,6 +70,7 @@
 #include "rgw_bucket_logging.h"
 #include "rgw_restore.h"
 #include "rgw_restore_waiter.h"
+#include "rgw_ratelimit.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -3506,6 +3507,10 @@ void RGWListBucket::execute(optional_yield y)
     objs = std::move(results.objs);
     common_prefixes = std::move(results.common_prefixes);
   }
+
+  int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(s->time_elapsed()).count();
+  s->ratelimit_data->decrease_time(s->ratelimit_user_op, s->ratelimit_user_name, ms, &s->user_ratelimit);
+  s->ratelimit_data->decrease_time(s->ratelimit_bucket_op, s->ratelimit_bucket_marker, ms, &s->bucket_ratelimit);
 
   auto counters = rgw::op_counters::get(s);
   rgw::op_counters::inc(counters, l_rgw_op_list_obj, 1);

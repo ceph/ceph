@@ -511,6 +511,7 @@ void usage()
   cout << "   --max-write-bytes             specify max bytes per accumulation interval for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited\n";
   cout << "   --max-list-ops                specify max requests per accumulation interval for bucket listing requests per RGW, 0 means unlimited\n";
   cout << "   --max-delete-ops              specify max requests per accumulation interval for DELETE ops per RGW (DELETE request methods), 0 means unlimited\n";
+  cout << "   --max-list-time               specify max time consumption per accumulation interval for bucket listing requests per RGW, 0 means unlimited\n";
   cout << "   --ratelimit-scope             scope of rate limiting: bucket, user, anonymous\n";
   cout << "                                 anonymous can be configured only with global rate limit\n";
   cout << "\nOrphans search options:\n";
@@ -1436,8 +1437,10 @@ static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
 
 bool set_ratelimit_info(RGWRateLimitInfo& ratelimit, OPT opt_cmd, int64_t max_read_ops, int64_t max_write_ops,
                     int64_t max_list_ops, int64_t max_delete_ops, int64_t max_read_bytes, int64_t max_write_bytes,
+                    int64_t max_list_time,
                     bool have_max_read_ops, bool have_max_write_ops, bool have_max_list_ops,
-                    bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes)
+                    bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes,
+                    bool have_max_list_time)
 {
   bool ratelimit_configured = true;
   switch (opt_cmd) {
@@ -1482,6 +1485,12 @@ bool set_ratelimit_info(RGWRateLimitInfo& ratelimit, OPT opt_cmd, int64_t max_re
       if (have_max_write_bytes) {
         if (max_write_bytes >= 0) {
           ratelimit.max_write_bytes = max_write_bytes;
+          ratelimit_configured = true;
+        }
+      }
+      if (have_max_list_time) {
+        if (max_list_time >= 0) {
+          ratelimit.max_list_time = max_list_time;
           ratelimit_configured = true;
         }
       }
@@ -1559,8 +1568,10 @@ int set_bucket_ratelimit(rgw::sal::Driver* driver, OPT opt_cmd,
                      const string& tenant_name, const string& bucket_name,
                      int64_t max_read_ops, int64_t max_write_ops, int64_t max_list_ops,
                      int64_t max_delete_ops, int64_t max_read_bytes, int64_t max_write_bytes,
+                     int64_t max_list_time,
                      bool have_max_read_ops, bool have_max_write_ops, bool have_max_list_ops,
-                     bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes)
+                     bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes,
+                     bool have_max_list_time)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   int r = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
@@ -1582,9 +1593,9 @@ int set_bucket_ratelimit(rgw::sal::Driver* driver, OPT opt_cmd,
     }
   }
   bool ratelimit_configured = set_ratelimit_info(ratelimit_info, opt_cmd, max_read_ops, max_write_ops, max_list_ops,
-                         max_delete_ops, max_read_bytes, max_write_bytes,
+                         max_delete_ops, max_read_bytes, max_write_bytes, max_list_time,
                          have_max_read_ops, have_max_write_ops, have_max_list_ops,
-                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
+                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes, have_max_list_time);
   if (!ratelimit_configured) {
     ldpp_dout(dpp(), 0) << "ERROR: no rate limit values have been specified" << dendl;
     return -EINVAL;
@@ -1604,8 +1615,10 @@ int set_bucket_ratelimit(rgw::sal::Driver* driver, OPT opt_cmd,
 int set_user_ratelimit(OPT opt_cmd, std::unique_ptr<rgw::sal::User>& user,
                      int64_t max_read_ops, int64_t max_write_ops, int64_t max_list_ops,
                      int64_t max_delete_ops, int64_t max_read_bytes, int64_t max_write_bytes,
+                     int64_t max_list_time,
                      bool have_max_read_ops, bool have_max_write_ops, bool have_max_list_ops,
-                     bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes)
+                     bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes,
+                     bool have_max_list_time)
 {
   RGWRateLimitInfo ratelimit_info;
   user->load_user(dpp(), null_yield);
@@ -1621,9 +1634,9 @@ int set_user_ratelimit(OPT opt_cmd, std::unique_ptr<rgw::sal::User>& user,
     }
   }
   bool ratelimit_configured = set_ratelimit_info(ratelimit_info, opt_cmd, max_read_ops, max_write_ops, max_list_ops,
-                         max_delete_ops, max_read_bytes, max_write_bytes,
+                         max_delete_ops, max_read_bytes, max_write_bytes, max_list_time,
                          have_max_read_ops, have_max_write_ops, have_max_list_ops,
-                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
+                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes, have_max_list_time);
   if (!ratelimit_configured) {
     ldpp_dout(dpp(), 0) << "ERROR: no rate limit values have been specified" << dendl;
     return -EINVAL;
@@ -3731,6 +3744,7 @@ int main(int argc, const char **argv)
   int64_t max_write_bytes = 0;
   uint32_t max_bucket_index_ops = 0;
   uint32_t max_metadata_ops = 0;
+  int64_t max_list_time = 0;
   bool have_max_objects = false;
   bool have_max_size = false;
   bool have_max_write_ops = false;
@@ -3741,6 +3755,7 @@ int main(int argc, const char **argv)
   bool have_max_read_bytes = false;
   bool have_max_bucket_index_ops = false;
   bool have_max_metadata_ops = false;
+  bool have_max_list_time = false;
   int include_all = false;
   int allow_unordered = false;
 
@@ -4079,6 +4094,13 @@ int main(int argc, const char **argv)
 	return EINVAL;
       }
       have_max_metadata_ops = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-list-time", (char*)NULL)) {
+      max_list_time = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max list time: " << err << std::endl;
+        return EINVAL;
+      }
+      have_max_list_time = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
       date = val;
       if (end_date.empty())
@@ -5038,23 +5060,26 @@ int main(int argc, const char **argv)
         if (ratelimit_scope == "bucket") {
           ratelimit_configured = set_ratelimit_info(period_config.bucket_ratelimit, opt_cmd,
                          max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
-                         max_read_bytes, max_write_bytes,
+                         max_read_bytes, max_write_bytes, max_list_time,
                          have_max_read_ops, have_max_write_ops, have_max_list_ops,
-                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
+                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes,
+                         have_max_list_time);
           encode_json("bucket_ratelimit", period_config.bucket_ratelimit, formatter.get());
         } else if (ratelimit_scope == "user") {
           ratelimit_configured = set_ratelimit_info(period_config.user_ratelimit, opt_cmd,
                          max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
-                         max_read_bytes, max_write_bytes,
+                         max_read_bytes, max_write_bytes, max_list_time,
                          have_max_read_ops, have_max_write_ops, have_max_list_ops,
-                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
+                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes,
+                         have_max_list_time);
           encode_json("user_ratelimit", period_config.user_ratelimit, formatter.get());
         } else if (ratelimit_scope == "anonymous") {
           ratelimit_configured = set_ratelimit_info(period_config.anon_ratelimit, opt_cmd,
                          max_read_ops, max_write_ops, max_list_ops,max_delete_ops,
-                         max_read_bytes, max_write_bytes,
+                         max_read_bytes, max_write_bytes, max_list_time,
                          have_max_read_ops, have_max_write_ops, have_max_list_ops,
-                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
+                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes,
+                         have_max_list_time);
           encode_json("anonymous_ratelimit", period_config.anon_ratelimit, formatter.get());
         } else if (ratelimit_scope.empty() && opt_cmd == OPT::GLOBAL_RATELIMIT_GET) {
           // if no scope is given for GET, print both
@@ -11457,15 +11482,15 @@ next:
       }
       return set_bucket_ratelimit(driver, opt_cmd, tenant, bucket_name,
                            max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
-                           max_read_bytes, max_write_bytes,
+                           max_read_bytes, max_write_bytes, max_list_time,
                            have_max_read_ops, have_max_write_ops, have_max_list_ops, have_max_delete_ops,
-                           have_max_read_bytes, have_max_write_bytes);
+                           have_max_read_bytes, have_max_write_bytes, have_max_list_time);
     } else if (!rgw::sal::User::empty(user)) {
       if (ratelimit_scope == "user") {
         return set_user_ratelimit(opt_cmd, user, max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
-                         max_read_bytes, max_write_bytes,
+                         max_read_bytes, max_write_bytes, max_list_time,
                          have_max_read_ops, have_max_write_ops, have_max_list_ops, have_max_delete_ops,
-                         have_max_read_bytes, have_max_write_bytes);
+                         have_max_read_bytes, have_max_write_bytes, have_max_list_time);
       } else {
         cerr << "ERROR: invalid ratelimit scope specification. Please specify either --ratelimit-scope=bucket, or --ratelimit-scope=user" << std::endl;
         return EINVAL;
