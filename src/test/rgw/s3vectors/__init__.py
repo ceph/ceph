@@ -26,7 +26,11 @@ def setup():
 
     global default_port
     default_port = int(defaults.get("port"))
-	# vars from the main section
+
+    global default_zonegroup
+    default_zonegroup = defaults.get("zonegroup")
+
+    # vars from the main section
     global main_access_key
     main_access_key = cfg.get('s3 main',"access_key")
 
@@ -52,6 +56,11 @@ def get_config_host():
 def get_config_port():
     global default_port
     return default_port
+
+
+def get_config_zonegroup():
+    global default_zonegroup
+    return default_zonegroup
 
 
 def get_access_key():

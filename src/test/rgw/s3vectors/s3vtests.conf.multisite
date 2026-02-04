@@ -1,6 +1,7 @@
 [DEFAULT]
 port = 8101
 host = localhost
+zonegroup = zg1
 
 [secondary]
 port = 8201
