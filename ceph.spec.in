@@ -164,6 +164,13 @@
 %global __requires_exclude ^liblancedb\\.so.*$
 %endif
 
+%if 0%{with lancedb}
+# liblancedb.so is a bundled Rust library without a SONAME, so RPM's
+# auto-provides won't detect it. Exclude it from auto-requires to avoid
+# an unsatisfiable dependency.
+%global __requires_exclude ^liblancedb\\.so.*$
+%endif
+
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
