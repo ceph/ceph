@@ -9,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import boto3
 import json
-from botocore.config import Config
 
 from . import(
     configfile,
