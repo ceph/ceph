@@ -111,8 +111,12 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   s->user->get_id().to_str(userfind);
   userfind = "u" + userfind;
   s->ratelimit_user_name = userfind;
+  s->ratelimit_user_op = RGWRateLimitOp::None;
   std::string bucketfind = !rgw::sal::Bucket::empty(s->bucket.get()) ? "b" + s->bucket->get_marker() : "";
   s->ratelimit_bucket_marker = bucketfind;
+  s->ratelimit_bucket_op = RGWRateLimitOp::None;
+  s->ratelimit_account_id = "";
+  s->ratelimit_account_op = RGWRateLimitOp::None;
   const char *method = s->info.method;
 
   const std::optional<RGWAccountInfo>& account = s->auth.identity->get_account();
@@ -138,6 +142,7 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
         return -EIO;
       }
     }
+    s->ratelimit_account_id = account->id;
     account_ratelimit = account_ratelimit_info;
   }
 
@@ -176,15 +181,17 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   int64_t limit_user = 0;
 
   if (account) {
-    limit_account = s->ratelimit_data->should_rate_limit(method, account->id, s->time, &account_ratelimit, s->info.request_params);
+    limit_account = s->ratelimit_data->should_rate_limit(method, s->ratelimit_account_id, s->time,
+      &account_ratelimit, s->info.request_params, s->ratelimit_account_op);
   }
 
   // Only check user/bucket limits if account limit allows
   if (!limit_account) {
-    limit_user = s->ratelimit_data->should_rate_limit(method, s->ratelimit_user_name, s->time, user_ratelimit, s->info.request_params);
+    limit_user = s->ratelimit_data->should_rate_limit(method, s->ratelimit_user_name, s->time,
+      user_ratelimit, s->info.request_params, s->ratelimit_user_op);
   }
 
-  if(!rgw::sal::Bucket::empty(s->bucket.get()))
+  if (!rgw::sal::Bucket::empty(s->bucket.get()))
   {
     iter = s->bucket->get_attrs().find(RGW_ATTR_RATELIMIT);
     if(iter != s->bucket->get_attrs().end()) {
@@ -202,19 +209,19 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
       }
     }
     if (!limit_user && !limit_account) {
-      limit_bucket = s->ratelimit_data->should_rate_limit(method, s->ratelimit_bucket_marker, s->time, bucket_ratelimit, s->info.request_params);
+      limit_bucket = s->ratelimit_data->should_rate_limit(method, s->ratelimit_bucket_marker, s->time,
+        bucket_ratelimit, s->info.request_params, s->ratelimit_bucket_op);
     }
   }
 
   // Token giveback logic: if a lower-level limit blocks, give back tokens to higher levels
   if (!limit_account && (limit_bucket || limit_user)) {
     // Give back account tokens
-    std::string account_key = account->id;
-    s->ratelimit_data->giveback_tokens(method, account_key, s->info.request_params, &account_ratelimit);
+    s->ratelimit_data->giveback_tokens(s->ratelimit_account_op, s->ratelimit_account_id, &account_ratelimit);
   }
   if (!limit_account && !limit_user && limit_bucket) {
     // Give back user tokens
-    s->ratelimit_data->giveback_tokens(method, s->ratelimit_user_name, s->info.request_params, user_ratelimit);
+    s->ratelimit_data->giveback_tokens(s->ratelimit_user_op, s->ratelimit_user_name, user_ratelimit);
   }
 
   s->account_ratelimit = account_ratelimit;
