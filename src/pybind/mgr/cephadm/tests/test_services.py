@@ -502,6 +502,7 @@ subsystem_cache_expiration = 30
 force_tls = False
 # This is a development flag, do not change it
 max_message_length_in_mb = 4
+io_stats_enabled = True
 
 [gateway-logs]
 log_level = INFO
