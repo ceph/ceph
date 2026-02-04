@@ -25,7 +25,7 @@ typedef std::function<void(const DoutPrefixProvider* dpp, const std::string& key
 			    const rgw_obj_key& obj_key, const std::string& instance, optional_yield y, std::string& restore_val)> ObjectDataCallback;
 
 typedef std::function<void(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version,
-        bool dirty, optional_yield y, std::string& restore_val)> BlockDataCallback;
+        bool dirty, const rgw_user user, optional_yield y, std::string& restore_val)> BlockDataCallback;
 
 struct Partition {
   std::string name;
