@@ -13,6 +13,10 @@
 #include "crimson_utils.h"
 #include "include/scope_guard.h"
 
+#include "common/json/OSDStructures.h"
+#include "common/ceph_context.h"
+#include "common/perf_counters_collection.h"
+
 using namespace librados;
 
 namespace {
@@ -28,6 +32,175 @@ void init_rand() {
 }
 
 } // anonymous namespace
+
+std::vector<int> RadosTestECPP::get_osd_ids() {
+  bufferlist inbl, outbl;
+  std::ostringstream oss;
+  oss << "{\"prefix\": \"osd ls\", \"format\": \"json\"}";
+  int rc = cluster.mon_command(oss.str(), std::move(inbl), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  std::vector<int> osd_ids;
+  std::string out_str = outbl.to_str();
+  if (rc == 0) {
+    JSONParser parser;
+    parser.parse(out_str.c_str(), out_str.size());
+    decode_json_obj(osd_ids, &parser);
+  }
+
+  return osd_ids;
+}
+
+void RadosTestECPP::turn_balancing_off()
+{
+  int rc;
+  std::ostringstream oss;
+  bufferlist outbl;
+
+  oss.str("");
+  bufferlist inbl_autoscaler;
+  oss << "{\"prefix\": \"osd set\", \"key\": \"noautoscale\"}";
+  rc = cluster.mon_command(oss.str(), std::move(inbl_autoscaler), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"balancer off\"}";
+  bufferlist inbl_balancer;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_balancer), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+}
+
+void RadosTestECPP::turn_balancing_on()
+{
+  int rc;
+  std::ostringstream oss;
+  bufferlist outbl;
+
+  oss.str("");
+  bufferlist inbl_autoscaler;
+  oss << "{\"prefix\": \"osd unset\", \"key\": \"noautoscale\"}";
+  rc = cluster.mon_command(oss.str(), std::move(inbl_autoscaler), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"balancer on\"}";
+  bufferlist inbl_balancer;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_balancer), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+}
+
+void RadosTestECPP::freeze_omap_journal() {
+  std::vector<int> osd_ids = get_osd_ids();
+
+  int rc;
+  std::ostringstream oss;
+  bufferlist inbl_tell, outbl;
+  oss << "{\"prefix\": \"freezeomapjournal\"}";
+  for (const auto &id : osd_ids) {
+    rc = cluster.osd_command(id, oss.str(), std::move(inbl_tell), &outbl, nullptr);
+    EXPECT_EQ(rc, 0);
+  }
+
+  oss.str("");
+  bufferlist inbl_autoscaler;
+  oss << "{\"prefix\": \"osd set\", \"key\": \"noautoscale\"}";
+  rc = cluster.mon_command(oss.str(), std::move(inbl_autoscaler), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"balancer off\"}";
+  bufferlist inbl_balancer; 
+  rc = cluster.mon_command(oss.str(), std::move(inbl_balancer), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"osd set\", \"key\": \"nodeep-scrub\"}";
+  bufferlist inbl_nodeep;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_nodeep), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"osd set\", \"key\": \"noscrub\"}";
+  bufferlist inbl_noscrub;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_noscrub), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+}
+
+void RadosTestECPP::unfreeze_omap_journal() {
+  std::vector<int> osd_ids = get_osd_ids();
+
+  int rc;
+  bufferlist inbl_tell, outbl;
+  std::ostringstream oss;
+  oss << "{\"prefix\": \"unfreezeomapjournal\"}";
+  for (const auto &id : osd_ids) {
+    rc = cluster.osd_command(id, oss.str(), std::move(inbl_tell), &outbl, nullptr);
+    EXPECT_EQ(rc, 0);
+  }
+
+  oss.str(""); 
+  bufferlist inbl_autoscaler;
+  oss << "{\"prefix\": \"osd unset\", \"key\": \"noautoscale\"}";
+  rc = cluster.mon_command(oss.str(), std::move(inbl_autoscaler), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"balancer on\"}";
+  bufferlist inbl_balancer;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_balancer), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"osd unset\", \"key\": \"nodeep-scrub\"}";
+  bufferlist inbl_nodeep;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_nodeep), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"osd unset\", \"key\": \"noscrub\"}";
+  bufferlist inbl_noscrub;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_noscrub), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+}
+
+void RadosTestECPP::write_omap_keys(std::string oid, int min_index, 
+  int max_index, std::set<std::string> &keys_written) 
+{
+  const std::string omap_value = "val";
+  bufferlist omap_val_bl;
+  encode(omap_value, omap_val_bl);
+  std::map<std::string, bufferlist> omap_map;
+
+  int width = std::to_string(max_index).length();
+  if (width < 3) {
+    width = 3;
+  }
+
+  for (int i = min_index; i <= max_index; i++) {
+    std::stringstream key_ss;
+    key_ss << "key_" << std::setw(width) << std::setfill('0') << i;
+    omap_map[key_ss.str()] = omap_val_bl;
+    keys_written.insert(key_ss.str());
+  }
+  
+  ObjectWriteOperation write;
+  write.omap_set(omap_map);
+  int ret = ioctx.operate(oid, &write);
+  EXPECT_EQ(ret, 0);
+}
+
+void RadosTestECPP::read_omap_keys(
+  std::string oid, 
+  std::set<std::string> &keys_read,
+  const int max_keys)
+{
+  ObjectReadOperation read;
+  int err = 0;
+  read.omap_get_keys2("", max_keys, &keys_read, nullptr, &err);
+  int ret = ioctx.operate(oid, &read, nullptr);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(0, err);
+}
 
 std::string RadosTestPPNS::pool_name;
 Rados RadosTestPPNS::s_cluster;
@@ -189,7 +362,7 @@ void RadosTestECPPNS::TearDown()
 }
 
 std::string RadosTestPP::pool_name;
-Rados RadosTestPP::s_cluster;
+Rados RadosTestPPBase::s_cluster;
 
 void RadosTestPP::SetUpTestCase()
 {
@@ -223,14 +396,14 @@ void RadosTestPP::TearDown()
   ioctx.close();
 }
 
-void RadosTestPP::cleanup_default_namespace(librados::IoCtx ioctx)
+void RadosTestPPBase::cleanup_default_namespace(librados::IoCtx ioctx)
 {
   // remove all objects from the default namespace to avoid polluting
   // other tests
   cleanup_namespace(ioctx, "");
 }
 
-void RadosTestPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
+void RadosTestPPBase::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
 {
   ioctx.snap_set_read(librados::SNAP_HEAD);
   ioctx.set_namespace(ns);
@@ -363,26 +536,39 @@ void RadosTestParamPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
   }
 }
 
-std::string RadosTestECPP::pool_name;
+std::string RadosTestECPP::pool_name_default;
+std::string RadosTestECPP::pool_name_fast;
 Rados RadosTestECPP::s_cluster;
 
 void RadosTestECPP::SetUpTestCase()
 {
   SKIP_IF_CRIMSON();
   auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
-  pool_name = get_temp_pool_name(pool_prefix);
-  ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
+  pool_name_default = get_temp_pool_name(pool_prefix);
+  pool_name_fast = get_temp_pool_name(pool_prefix);
+  ASSERT_EQ("", connect_cluster_pp(s_cluster));
+  ASSERT_EQ("", create_ec_pool_pp(pool_name_default, s_cluster, false));
+  ASSERT_EQ("", create_ec_pool_pp(pool_name_fast, s_cluster, true));
 }
 
 void RadosTestECPP::TearDownTestCase()
 {
   SKIP_IF_CRIMSON();
-  ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
+  ASSERT_EQ(0, destroy_ec_pool_pp(pool_name_default, s_cluster));
+  ASSERT_EQ(0, destroy_ec_pool_pp(pool_name_fast, s_cluster));
+  s_cluster.shutdown();
 }
 
 void RadosTestECPP::SetUp()
 {
   SKIP_IF_CRIMSON();
+  const bool& fast_ec = GetParam();
+  if (fast_ec) {
+    pool_name = pool_name_fast;
+  } else {
+    GTEST_SKIP() << "Skipping Legacy EC test for now";
+    pool_name = pool_name_default;
+  }
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
   nspace = get_temp_pool_name();
   ioctx.set_namespace(nspace);
@@ -428,4 +614,118 @@ void RadosTestECPP::set_allow_ec_overwrites()
     ASSERT_LT(std::chrono::steady_clock::now(), end);
     std::this_thread::sleep_for(std::chrono::seconds(2));
   }
+}
+
+int RadosTestECPP::request_osd_map(
+    std::string oid,
+    ceph::messaging::osd::OSDMapReply* reply) {
+  bufferlist inbl, outbl;
+  auto formatter = std::make_unique<JSONFormatter>(false);
+  ceph::messaging::osd::OSDMapRequest osdMapRequest{pool_name, oid, nspace};
+  encode_json("OSDMapRequest", osdMapRequest, formatter.get());
+
+  std::ostringstream oss;
+  formatter.get()->flush(oss);
+  int rc = cluster.mon_command(oss.str(), std::move(inbl), &outbl, nullptr);
+  if (rc != 0) {
+    return rc;
+  }
+
+  JSONParser p;
+  bool success = p.parse(outbl.c_str(), outbl.length());
+  if (!success) {
+    return -1;
+  }
+
+  reply->decode_json(&p);
+  return 0;
+}
+
+int RadosTestECPP::set_osd_upmap(
+    std::string pgid,
+    std::vector<int> up_osds) {
+  bufferlist inbl, outbl;
+  std::ostringstream oss;
+  oss << "{\"prefix\": \"osd pg-upmap\", \"pgid\": \"" << pgid << "\", \"id\": [";
+  for (size_t i = 0; i < up_osds.size(); i++) {
+    oss << up_osds[i];
+    if (i != up_osds.size() - 1) {
+      oss << ", ";
+    }
+  }
+  oss << "]}";
+  int rc = cluster.mon_command(oss.str(), std::move(inbl), &outbl, nullptr);
+  return rc;
+}
+
+int RadosTestECPP::wait_for_upmap(
+    std::string oid,
+    int desired_primary,
+    std::chrono::seconds timeout) {
+  bool upmap_in_effect = false;
+  auto start_time = std::chrono::steady_clock::now();
+  while (!upmap_in_effect && (std::chrono::steady_clock::now() - start_time < timeout)) {
+    ceph::messaging::osd::OSDMapReply reply;
+    int res = request_osd_map(oid, &reply);
+    EXPECT_TRUE(res == 0);
+    std::vector<int> acting_osds = reply.acting;
+    if (!acting_osds.empty() && acting_osds[0] == desired_primary) {
+      print_osd_map("New upmap in effect, acting set: ", acting_osds);
+      upmap_in_effect = true;
+    } else {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+  }
+  return upmap_in_effect ? 0 : -ETIMEDOUT;
+}
+
+void RadosTestECPP::check_xattr_read(
+    std::string oid,
+    std::string xattr_key,
+    std::string xattr_value,
+    int expected_size,
+    int expected_ret,
+    int expected_err) {
+  ObjectReadOperation read;
+  bufferlist xattr_read_bl, xattr_val_bl;
+  encode(xattr_value, xattr_val_bl);
+  int err = 0;
+  read.getxattr(xattr_key.c_str(), &xattr_read_bl, &err);
+  std::map<std::string, bufferlist> xattrs_read{ {"_", {}}, {xattr_key, {}}};
+  read.getxattrs(&xattrs_read, &err);
+  read.cmpxattr(xattr_key.c_str(), CEPH_OSD_CMPXATTR_OP_EQ, xattr_val_bl);
+  int ret = ioctx.operate(oid, &read, nullptr);
+  EXPECT_EQ(ret, expected_ret);
+  EXPECT_EQ(err, expected_err);
+  EXPECT_EQ(xattrs_read.size(), expected_size);
+}
+
+void RadosTestECPP::check_omap_read(
+    std::string oid,
+    std::string omap_key,
+    std::string omap_value,
+    int expected_size,
+    int expected_err) {
+  ObjectReadOperation read;
+  int err = 0;
+  std::map<std::string,bufferlist> vals_read{ {"_", {}} };
+  read.omap_get_vals2("", LONG_MAX, &vals_read, nullptr, &err);
+  int ret = ioctx.operate(oid, &read, nullptr);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(err, expected_err);
+  EXPECT_EQ(vals_read.size(), expected_size);
+  if (vals_read.find(omap_key) == vals_read.end()) {
+    ADD_FAILURE() << "Missing key " << omap_key;
+  } else {
+    bufferlist val_read_bl = vals_read[omap_key];
+    std::string val_read;
+    decode(val_read, val_read_bl);
+    EXPECT_EQ(omap_value, val_read);
+  }
+}
+
+void RadosTestECPP::print_osd_map(std::string message, std::vector<int> osd_vec) {
+  std::stringstream out_vec;
+  std::copy(osd_vec.begin(), osd_vec.end(), std::ostream_iterator<int>(out_vec, " "));
+  std::cout << message << out_vec.str().c_str() << std::endl;
 }
