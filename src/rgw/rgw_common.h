@@ -588,11 +588,12 @@ struct RGWRateLimitInfo {
   int64_t max_write_bytes;
   int64_t max_read_bytes;
   bool enabled = false;
+  int64_t max_list_time;
   RGWRateLimitInfo()
-    : max_write_ops(0), max_read_ops(0), max_list_ops(0), max_delete_ops(0), max_write_bytes(0), max_read_bytes(0)  {}
+    : max_write_ops(0), max_read_ops(0), max_list_ops(0), max_delete_ops(0), max_write_bytes(0), max_read_bytes(0), max_list_time(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(max_write_ops, bl);
     encode(max_read_ops, bl);
     encode(max_list_ops, bl);
@@ -600,10 +601,11 @@ struct RGWRateLimitInfo {
     encode(max_write_bytes, bl);
     encode(max_read_bytes, bl);
     encode(enabled, bl);
+    encode(max_list_time, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(max_write_ops, bl);
     decode(max_read_ops, bl);
     if (struct_v >= 2) {
@@ -619,6 +621,11 @@ struct RGWRateLimitInfo {
     decode(max_write_bytes, bl);
     decode(max_read_bytes, bl);
     decode(enabled, bl);
+    if (struct_v >= 3) {
+      decode(max_list_time, bl);
+    } else {
+      max_list_time = 0;
+    }
     DECODE_FINISH(bl);
   }
 
@@ -1308,6 +1315,8 @@ struct req_init_state {
 
 class RGWObjectCtx;
 
+enum class RGWRateLimitOp { None, Read, Write, List, Delete };
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state : DoutPrefixProvider {
   CephContext *cct;
@@ -1320,7 +1329,9 @@ struct req_state : DoutPrefixProvider {
   RGWRateLimitInfo bucket_ratelimit;
   int64_t ratelimit_retry_after{0};
   std::string ratelimit_bucket_marker;
+  RGWRateLimitOp ratelimit_bucket_op;
   std::string ratelimit_user_name;
+  RGWRateLimitOp ratelimit_user_op;
   bool content_started{false};
   RGWFormat format{RGWFormat::PLAIN};
   ceph::Formatter *formatter{nullptr};
