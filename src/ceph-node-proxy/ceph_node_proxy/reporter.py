@@ -8,6 +8,7 @@ from ceph_node_proxy.util import BaseThread, get_logger, http_req
 
 DEFAULT_MAX_RETRIES = 30
 RETRY_SLEEP_SEC = 5
+HEARTBEAT_INTERVAL_SEC = 300
 
 
 class Reporter(BaseThread):
@@ -65,6 +66,7 @@ class Reporter(BaseThread):
         return False
 
     def main(self) -> None:
+        last_heartbeat = time.monotonic()
         while not self.stop:
             self.log.debug("waiting for a lock in reporter loop.")
             with self.system.lock:
@@ -85,6 +87,13 @@ class Reporter(BaseThread):
                         else:
                             self.log.debug("no diff, not sending data to the mgr.")
             self.log.debug("lock released in reporter loop.")
+            now = time.monotonic()
+            if now - last_heartbeat >= HEARTBEAT_INTERVAL_SEC:
+                self.log.info(
+                    "Reporter running (heartbeat), next check in %ds.",
+                    HEARTBEAT_INTERVAL_SEC,
+                )
+                last_heartbeat = now
             time.sleep(5)
         self.log.debug("exiting reporter loop.")
         raise SystemExit(0)

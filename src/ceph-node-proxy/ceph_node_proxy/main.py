@@ -151,6 +151,8 @@ class NodeProxyManager:
         max_interval = 300
         backoff_factor = 1.5
         consecutive_failures = 0
+        heartbeat_interval = 300
+        last_heartbeat = time.monotonic()
 
         while not self.stop:
             try:
@@ -163,6 +165,13 @@ class NodeProxyManager:
                 self.log.debug(
                     "All threads are alive, next check in %ds.", check_interval
                 )
+                now = time.monotonic()
+                if now - last_heartbeat >= heartbeat_interval:
+                    self.log.info(
+                        "node-proxy running (heartbeat), next check in %ds.",
+                        heartbeat_interval,
+                    )
+                    last_heartbeat = now
             except Exception as e:
                 consecutive_failures += 1
                 self.log.error(
