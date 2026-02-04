@@ -1,9 +1,7 @@
-import time
-
-from .helper import DashboardTestCase, MgrModuleTestCase
+from .test_mgr_module import MgrModuleTestCase
 
 
-class FeedbackTest(DashboardTestCase, MgrModuleTestCase):
+class FeedbackTest(MgrModuleTestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -11,9 +9,9 @@ class FeedbackTest(DashboardTestCase, MgrModuleTestCase):
         cls._ceph_cmd(['mgr', 'module', 'enable', 'feedback'], wait=3)
         cls._get(
             '/api/mgr/module',
-            retries=2,
+            retries=5,
             wait_func=lambda:  # pylint: disable=unnecessary-lambda
-            cls.wait_until_rest_api_accessible()
+            MgrModuleTestCase.wait_until_rest_api_accessible(cls)
         )
 
     def test_create_api_key(self):
