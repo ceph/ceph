@@ -862,6 +862,7 @@ seastar::future<MURef<MOSDMap>> OSDSingletonState::build_incremental_map_msg(
                                                       auto &m) {
     m->cluster_osdmap_trim_lower_bound = superblock.cluster_osdmap_trim_lower_bound;
     m->newest_map = superblock.get_newest_map();
+    m->oldest_map = superblock.cluster_oldest_map;
     auto maybe_handle_mapgap = seastar::now();
     if (first < superblock.cluster_osdmap_trim_lower_bound) {
       INFO("cluster osdmap lower bound: {}  > first {}, starting with full map",

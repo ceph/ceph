@@ -2935,6 +2935,7 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
   }
   reply->cluster_osdmap_trim_lower_bound = cluster_osdmap_trim_lower_bound;
   reply->newest_map = last;
+  reply->oldest_map = first;
   mon.send_reply(op, reply);
   return true;
 }
@@ -4552,6 +4553,7 @@ MOSDMap *OSDMonitor::build_latest_full(uint64_t features)
   get_version_full(osdmap.get_epoch(), features, r->maps[osdmap.get_epoch()]);
   r->cluster_osdmap_trim_lower_bound = cluster_osdmap_trim_lower_bound;
   r->newest_map = osdmap.get_epoch();
+  r->oldest_map = get_first_committed();
   return r;
 }
 
@@ -4562,6 +4564,7 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to, uint64_t featur
   MOSDMap *m = new MOSDMap(mon.monmap->fsid, features);
   m->cluster_osdmap_trim_lower_bound = cluster_osdmap_trim_lower_bound;
   m->newest_map = osdmap.get_epoch();
+  m->oldest_map = get_first_committed();
 
   for (epoch_t e = to; e >= from && e > 0; e--) {
     bufferlist bl;
@@ -4640,6 +4643,7 @@ void OSDMonitor::send_incremental(epoch_t first,
     MOSDMap *m = new MOSDMap(osdmap.get_fsid(), features);
     m->cluster_osdmap_trim_lower_bound = cluster_osdmap_trim_lower_bound;
     m->newest_map = osdmap.get_epoch();
+    m->oldest_map = get_first_committed();
 
     first = get_first_committed();
     bufferlist bl;
