@@ -15,6 +15,8 @@ import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
+from cherrypy import _cptree
+
 from .controllers.multi_cluster import MultiCluster
 
 if TYPE_CHECKING:
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
         from typing_extensions import Literal
 
 from ceph.cryptotools.select import choose_crypto_caller
+from cherrypy_mgr import CherryPyMgr
 from mgr_module import HandleCommandResult, MgrModule, MgrStandbyModule, \
     NotifyType, Option, _get_localized_key
 from mgr_util import ServerConfigException, build_url, \
@@ -83,6 +86,7 @@ class CherryPyConfig(object):
 
         self.cert_tmp = None
         self.pkey_tmp = None
+        self.app_name = 'ceph-dashboard'
 
     def shutdown(self):
         self._stopping.set()
@@ -91,10 +95,42 @@ class CherryPyConfig(object):
     def url_prefix(self):
         return self._url_prefix
 
-    @staticmethod
-    def update_cherrypy_config(config):
-        PLUGIN_MANAGER.hook.configure_cherrypy(config=config)
-        cherrypy.config.update(config)
+    def update_cherrypy_config(self, config):
+        defaults = {
+            'response.headers.server': 'Ceph-Dashboard',
+            'response.headers.content-security-policy': "frame-ancestors 'self';",
+            'response.headers.x-content-type-options': 'nosniff',
+            'response.headers.strict-transport-security': 'max-age=63072000; includeSubDomains; preload',  # noqa
+            'engine.autoreload.on': False,
+            'tools.request_logging.on': True,
+            'tools.gzip.on': True,
+            'tools.gzip.mime_types': [
+                'text/html', 'text/plain', 'application/json',
+                'application/*+json', 'application/javascript', 'text/css'
+            ],
+            'tools.json_in.on': True,
+            'tools.json_in.force': True,
+            'tools.plugin_hooks_filter_request.on': True,
+            'error_page.default': json_error_page,
+            'tools.sessions.on': True
+        }
+
+        def _apply_config(target_conf, is_startup=False):
+            if is_startup:
+                for key, value in defaults.items():
+                    target_conf.setdefault(key, value)
+
+            PLUGIN_MANAGER.hook.configure_cherrypy(config=target_conf)
+
+        if '/' not in config:
+            config['/'] = {}
+        _apply_config(config['/'], is_startup=True)
+
+        app_config = CherryPyMgr.get_server_config(
+            name=self.app_name, mount_point='/'
+        )
+        if app_config and '/' in app_config:
+            _apply_config(app_config['/'])
 
     # pylint: disable=too-many-branches
     def _configure(self):
@@ -120,8 +156,9 @@ class CherryPyConfig(object):
                       server_addr, server_port)
 
         # Initialize custom handlers.
+        config: Dict[str, Dict[str, Any]] = {'/': {}}
+
         cherrypy.tools.authenticate = AuthManagerTool()
-        configure_cors()
         cherrypy.tools.plugin_hooks_filter_request = cherrypy.Tool(
             'before_handler',
             lambda: PLUGIN_MANAGER.hook.filter_request_before_handler(request=cherrypy.request),
@@ -130,31 +167,7 @@ class CherryPyConfig(object):
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
 
-        cherrypy.log.access_log.propagate = False
-        cherrypy.log.error_log.propagate = False
-
-        # Apply the 'global' CherryPy configuration.
-        config = {
-            'engine.autoreload.on': False,
-            'server.socket_host': server_addr,
-            'server.socket_port': int(server_port),
-            'error_page.default': json_error_page,
-            'tools.request_logging.on': True,
-            'tools.gzip.on': True,
-            'tools.gzip.mime_types': [
-                # text/html and text/plain are the default types to compress
-                'text/html', 'text/plain',
-                # We also want JSON and JavaScript to be compressed
-                'application/json',
-                'application/*+json',
-                'application/javascript',
-                'text/css',
-            ],
-            'tools.json_in.on': True,
-            'tools.json_in.force': True,
-            'tools.plugin_hooks_filter_request.on': True,
-        }
-
+        ssl_info = None
         if use_ssl:
             # SSL initialization
             cert = self.get_localized_store("crt")  # type: ignore
@@ -185,10 +198,11 @@ class CherryPyConfig(object):
             else:
                 context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1 | ssl.OP_NO_TLSv1_2
 
-            config['server.ssl_module'] = 'builtin'
-            config['server.ssl_certificate'] = cert_fname
-            config['server.ssl_private_key'] = pkey_fname
-            config['server.ssl_context'] = context
+            ssl_info = {
+                'cert': cert_fname,
+                'key': pkey_fname,
+                'context': context
+            }
 
         self.update_cherrypy_config(config)
 
@@ -203,7 +217,7 @@ class CherryPyConfig(object):
             port=server_port,
         )
         uri = f'{base_url}{self.url_prefix}/'
-        return uri
+        return uri, (server_addr, server_port), ssl_info, config
 
     def await_configuration(self):
         """
@@ -214,7 +228,7 @@ class CherryPyConfig(object):
         """
         while not self._stopping.is_set():
             try:
-                uri = self._configure()
+                uri, bind_addr, ssl_info, config = self._configure()
             except ServerConfigException as e:
                 self.log.info(  # type: ignore
                     "Config not ready to serve, waiting: {0}".format(e)
@@ -223,7 +237,7 @@ class CherryPyConfig(object):
                 self._stopping.wait(5)
             else:
                 self.log.info("Configured CherryPy, starting engine...")  # type: ignore
-                return uri
+                return uri, bind_addr, ssl_info, config
 
 
 if TYPE_CHECKING:
@@ -293,6 +307,8 @@ class Module(MgrModule, CherryPyConfig):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         CherryPyConfig.__init__(self)
+        self.server_adapter = None
+
         # configure the dashboard's crypto caller. by default it will
         # use the remote caller to avoid pyo3 conflicts
         choose_crypto_caller(str(self.get_module_option('crypto_caller', '')))
@@ -343,10 +359,10 @@ class Module(MgrModule, CherryPyConfig):
         AuthManager.initialize()
         load_sso_db()
 
-        uri = self.await_configuration()
-        if uri is None:
-            # We were shut down while waiting
+        conf_result = self.await_configuration()
+        if conf_result is None:
             return
+        uri, bind_addr, ssl_info, config = conf_result
 
         # Publish the URI that others may use to access the service we're
         # about to start serving
@@ -354,17 +370,27 @@ class Module(MgrModule, CherryPyConfig):
 
         mapper, parent_urls = Router.generate_routes(self.url_prefix)
 
-        config = {}
+        self.update_cherrypy_config(config)
+        configure_cors(startup_config=config)
         for purl in parent_urls:
-            config[purl] = {
-                'request.dispatch': mapper
-            }
+            # Ensure the key exists
+            if purl not in config:
+                config[purl] = {}
+            config[purl]['request.dispatch'] = mapper
 
-        cherrypy.tree.mount(None, config=config)
+        logger.info('Starting ceph dashboard server at %s', uri)
+
+        tree = _cptree.Tree()
+        tree.mount(None, '/', config=config)
+        self.server_adapter, _ = CherryPyMgr.mount(
+            tree,
+            self.app_name,
+            bind_addr,
+            ssl_info=ssl_info
+        )
 
         PLUGIN_MANAGER.hook.setup()
 
-        cherrypy.engine.start()
         NotificationQueue.start_queue()
         TaskManager.init()
         logger.info('Engine started.')
@@ -381,8 +407,8 @@ class Module(MgrModule, CherryPyConfig):
         # wait for the shutdown event
         self.shutdown_event.wait()
         self.shutdown_event.clear()
+        self.stop_adapter()
         NotificationQueue.stop()
-        cherrypy.engine.stop()
         logger.info('Engine stopped')
 
     def shutdown(self):
@@ -390,6 +416,13 @@ class Module(MgrModule, CherryPyConfig):
         CherryPyConfig.shutdown(self)
         logger.info('Stopping engine...')
         self.shutdown_event.set()
+
+    def stop_adapter(self):
+        if self.server_adapter is not None:
+            self.server_adapter.stop()
+            self.server_adapter.unsubscribe()
+            self.server_adapter = None
+            CherryPyMgr.unregister(self.app_name)
 
     def _set_ssl_item(self, item_label: str, item_key: 'SslConfigKey' = 'crt',
                       mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
@@ -493,8 +526,11 @@ class Module(MgrModule, CherryPyConfig):
     @DBCLICommand.Write("dashboard set-cross-origin-url")
     def set_cross_origin_url(self, value: str):
         cross_origin_urls = self.get_module_option('cross_origin_url', '')
-        cross_origin_urls_list = [url.strip()
-                                  for url in cross_origin_urls.split(',')]  # type: ignore
+        cross_origin_urls_list = [
+            url.strip()
+            for url in cross_origin_urls.split(',')  # type: ignore
+            if url.strip()
+        ]
         urls = [v.strip() for v in value.split(',')]
         for url in urls:
             if url in cross_origin_urls_list:
@@ -571,6 +607,7 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
         super(StandbyModule, self).__init__(*args, **kwargs)
         CherryPyConfig.__init__(self)
         self.shutdown_event = threading.Event()
+        self.standby_adapter = None
         # configure the dashboard's crypto caller. by default it will
         # use the remote caller to avoid pyo3 conflicts
         choose_crypto_caller(str(self.get_module_option('crypto_caller', '')))
@@ -580,10 +617,10 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
         mgr.init(self)
 
     def serve(self):
-        uri = self.await_configuration()
-        if uri is None:
-            # We were shut down while waiting
+        conf_result = self.await_configuration()
+        if conf_result is None:
             return
+        uri, bind_addr, ssl_info, config = conf_result
 
         module = self
 
@@ -631,19 +668,32 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
                     status = module.get_module_option('standby_error_status_code', 500)
                     raise cherrypy.HTTPError(status, message="Keep on looking")
 
-        cherrypy.tree.mount(Root(), "{}/".format(self.url_prefix), {})
+        self.update_cherrypy_config(config)
+
+        standby_tree = _cptree.Tree()
+        standby_tree.mount(Root(), f"{self.url_prefix}/", config=config)
         self.log.info("Starting engine...")
-        cherrypy.engine.start()
+        self.standby_adapter, _ = CherryPyMgr.mount(
+            standby_tree,
+            'ceph-dashboard-standby',
+            bind_addr,
+            ssl_info=ssl_info
+        )
         self.log.info("Engine started...")
         # Wait for shutdown event
         self.shutdown_event.wait()
         self.shutdown_event.clear()
-        cherrypy.engine.stop()
+        self.stop_adapter()
         self.log.info("Engine stopped.")
 
     def shutdown(self):
         CherryPyConfig.shutdown(self)
-
         self.log.info("Stopping engine...")
         self.shutdown_event.set()
-        self.log.info("Stopped engine...")
+
+    def stop_adapter(self):
+        if self.standby_adapter is not None:
+            self.standby_adapter.stop()
+            self.standby_adapter.unsubscribe()
+            self.standby_adapter = None
+            CherryPyMgr.unregister('ceph-dashboard-standby')

@@ -1,7 +1,10 @@
-import cherrypy
 import threading
-import logging
-from typing import TYPE_CHECKING
+import time
+import errno
+from typing import TYPE_CHECKING, Tuple, Any, Optional
+from cherrypy import _cptree
+from cherrypy.process.servers import ServerAdapter
+from cherrypy_mgr import CherryPyMgr
 
 from cephadm.agent import AgentEndpoint
 from cephadm.service_discovery import ServiceDiscovery
@@ -12,41 +15,19 @@ if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
 
 
-def cherrypy_filter(record: logging.LogRecord) -> bool:
-    blocked = [
-        'TLSV1_ALERT_DECRYPT_ERROR'
-    ]
-    msg = record.getMessage()
-    return not any([m for m in blocked if m in msg])
-
-
-logging.getLogger('cherrypy.error').addFilter(cherrypy_filter)
-cherrypy.log.access_log.propagate = False
-
-
 class CephadmHttpServer(threading.Thread):
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
         self.agent = AgentEndpoint(mgr)
         self.service_discovery = ServiceDiscovery(mgr)
         self.cherrypy_shutdown_event = threading.Event()
+        self.cherrypy_restart_event = threading.Event()
         self._service_discovery_port = self.mgr.service_discovery_port
         security_enabled, _, _ = self.mgr._get_security_config()
         self.security_enabled = security_enabled
+        self.agent_adapter = None
+        self.sd_adapter = None
         super().__init__(target=self.run)
-
-    def configure_cherrypy(self) -> None:
-        cherrypy.config.update({
-            'environment': 'production',
-            'engine.autoreload.on': False,
-        })
-
-    def configure(self) -> None:
-        self.configure_cherrypy()
-        self.agent.configure()
-        self.service_discovery.configure(self.mgr.service_discovery_port,
-                                         self.mgr.get_mgr_ip(),
-                                         self.security_enabled)
 
     def config_update(self) -> None:
         self.service_discovery_port = self.mgr.service_discovery_port
@@ -76,27 +57,121 @@ class CephadmHttpServer(threading.Thread):
         self.restart()
 
     def restart(self) -> None:
-        cherrypy.engine.stop()
-        cherrypy.server.httpserver = None
-        self.configure()
-        cherrypy.engine.start()
+        self.cherrypy_restart_event.set()
+
+    def _stop_adapters(self) -> None:
+        adapters_to_stop = {
+            'service-discovery': getattr(self, 'sd_adapter', None),
+            'cephadm-agent': getattr(self, 'agent_adapter', None)
+        }
+        for name, adapter in adapters_to_stop.items():
+            if adapter:
+                try:
+                    adapter.stop()
+                    adapter.unsubscribe()
+                    CherryPyMgr.unregister(name)
+                except Exception as e:
+                    self.mgr.log.error(f'Failed to stop {name} adapter: {e}')
+
+        self.sd_adapter = None
+        self.agent_adapter = None
 
     def run(self) -> None:
+        def _mount_server(
+            name: str,
+            bind_addr: Tuple[str, int],
+            main_app: Any,
+            main_path: str,
+            main_config: dict,
+            ssl_info: Optional[dict] = None,
+            extra_mounts: Optional[Any] = None,
+            logger: Optional[Any] = None
+        ) -> ServerAdapter:
+            if logger:
+                logger.info(f'Starting {name} server on {bind_addr[0]}:{bind_addr[1]}...')
+
+            tree = _cptree.Tree()
+            tree.mount(main_app, main_path, config=main_config)
+
+            for app, path, conf in extra_mounts or []:
+                tree.mount(app, path, config=conf)
+
+            adapter, _ = CherryPyMgr.mount(
+                tree,
+                name,
+                bind_addr,
+                ssl_info=ssl_info
+            )
+            return adapter
+
+        def start_servers() -> None:
+            # start service discovery server
+            sd_port = self._service_discovery_port
+            sd_ip = self.mgr.get_mgr_ip()
+            sd_config, sd_ssl_info = self.service_discovery.configure(
+                sd_port,
+                sd_ip,
+                self.security_enabled
+            )
+            self.sd_adapter = _mount_server(
+                name='service-discovery',
+                bind_addr=(sd_ip, sd_port),
+                main_app=self.service_discovery,
+                main_path='/sd',
+                main_config=sd_config,
+                ssl_info=sd_ssl_info,
+                logger=self.mgr.log
+            )
+
+            # start agent server
+            agent_config, agent_ssl_info, agent_mounts, bind_addr = self.agent.configure()
+            self.agent_adapter = _mount_server(
+                name='cephadm-agent',
+                bind_addr=bind_addr,
+                main_app=self.agent,
+                main_path='/',
+                main_config=agent_config,
+                ssl_info=agent_ssl_info,
+                extra_mounts=agent_mounts,
+                logger=self.mgr.log
+            )
+
         try:
-            self.mgr.log.debug('Starting cherrypy engine...')
-            self.configure()
-            cherrypy.server.unsubscribe()  # disable default server
-            cherrypy.engine.start()
-            self.mgr.log.debug('Cherrypy engine started.')
-            self.mgr._kick_serve_loop()
-            # wait for the shutdown event
-            self.cherrypy_shutdown_event.wait()
-            self.cherrypy_shutdown_event.clear()
-            cherrypy.engine.stop()
-            cherrypy.server.httpserver = None
-            self.mgr.log.debug('Cherrypy engine stopped.')
+            start_servers()
+            self.mgr.log.info('Cherrypy server started successfully.')
         except Exception as e:
-            self.mgr.log.error(f'Failed to run cephadm http server: {e}')
+            self.mgr.log.error(f'Failed to start cherrypy server: {e}')
+            self._stop_adapters()
+            return
+
+        while not self.cherrypy_shutdown_event.is_set():
+            if self.cherrypy_restart_event.wait(timeout=0.5):
+                self.cherrypy_restart_event.clear()
+                self.mgr.log.debug('Restarting cherrypy server...')
+                self._stop_adapters()
+
+                retries = 10
+                for attempt in range(retries):
+                    try:
+                        start_servers()
+                        self.mgr.log.debug('Cherrypy server restarted successfully.')
+                        break
+                    except OSError as e:
+                        if e.errno == errno.EADDRINUSE:
+                            self.mgr.log.warning(f'Port already in use when restarting cherrypy server (attempt {attempt + 1}/{retries}): {e}')
+                            time.sleep(1)
+                        else:
+                            self.mgr.log.error(f'Failed to restart cherrypy server (attempt {attempt + 1}/{retries}): {e}')
+                            self._stop_adapters()
+                            break
+                    except Exception as e:
+                        self.mgr.log.error(f'Failed to restart cherrypy server (attempt {attempt + 1}/{retries}): {e}')
+                        self._stop_adapters()
+                        break
+                else:
+                    self.mgr.log.error('Exceeded maximum retries to restart cherrypy server. Please check the server status and resolve any port conflicts.')
+                    continue
+        self._stop_adapters()
 
     def shutdown(self) -> None:
         self.mgr.log.debug('Stopping cherrypy engine...')
