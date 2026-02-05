@@ -85,6 +85,25 @@ class Reporter(BaseThread):
             # which is by definition big so we don't log it as it would be too verbose
             self.log.info("first data received from the system.")
 
+    def _try_send_update(self) -> None:
+        """Send data to mgr if system data has changed. Caller must hold system.lock."""
+        if not self.system.data_ready:
+            return
+        self.log.debug("data ready to be sent to the mgr.")
+        current = self.system.get_system()
+        if current == self.system.previous_data:
+            self.log.debug("no diff, not sending data to the mgr.")
+            return
+        self._log_data_delta(current)
+        self.data["patch"] = current
+        if self._send_with_retries():
+            self.system.previous_data = current
+        else:
+            self.log.error(
+                f"Failed to send data after {self.max_retries} retries; "
+                "will retry on next cycle."
+            )
+
     def main(self) -> None:
         last_heartbeat = time.monotonic()
         while not self.stop:
@@ -92,21 +111,7 @@ class Reporter(BaseThread):
             with self.system.lock:
                 if not self.system.pending_shutdown:
                     self.log.debug("lock acquired in reporter loop.")
-                    if self.system.data_ready:
-                        self.log.debug("data ready to be sent to the mgr.")
-                        if self.system.get_system() != self.system.previous_data:
-                            new_data = self.system.get_system()
-                            self._log_data_delta(new_data)
-                            self.data["patch"] = new_data
-                            if self._send_with_retries():
-                                self.system.previous_data = new_data
-                            else:
-                                self.log.error(
-                                    f"Failed to send data after {self.max_retries} retries; "
-                                    "will retry on next cycle."
-                                )
-                        else:
-                            self.log.debug("no diff, not sending data to the mgr.")
+                    self._try_send_update()
             self.log.debug("lock released in reporter loop.")
             now = time.monotonic()
             if now - last_heartbeat >= HEARTBEAT_INTERVAL_SEC:
