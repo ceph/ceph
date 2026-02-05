@@ -17,6 +17,8 @@
 
 
 namespace rgw {
+class AppMain; // forward declaration
+
 namespace signal {
 
 void sig_handler_noop(int signum);
@@ -27,6 +29,9 @@ void signal_fd_finalize();
 void handle_sigterm(int signum);
 void handle_sigterm(int signum);
 void sighup_handler(int signum);
+void handle_sigpause(int signum);
+void handle_sigresume(int signum);
+void set_app_main(rgw::AppMain* app_main);
 
 } // namespace signal
 } // namespace rgw

@@ -135,7 +135,16 @@ int main(int argc, char *argv[])
   register_async_signal_handler(SIGINT, rgw::signal::handle_sigterm);
   register_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
   register_async_signal_handler(SIGXFSZ, rgw::signal::sig_handler_noop);
+  // SIGUSR2 to pause frontend (stop accepting new TCP connections)
+  register_async_signal_handler(SIGUSR2, rgw::signal::handle_sigpause);
+#ifdef SIGCONT
+  // SIGCONT to resume frontend (start accepting TCP connections again)
+  register_async_signal_handler(SIGCONT, rgw::signal::handle_sigresume);
+#endif
   sighandler_alrm = signal(SIGALRM, godown_alarm);
+
+  // Set the app_main pointer for signal handlers to use
+  rgw::signal::set_app_main(&main);
 
   main.init_perfcounters();
   main.init_http_clients();
@@ -188,6 +197,10 @@ int main(int argc, char *argv[])
     unregister_async_signal_handler(SIGINT, rgw::signal::handle_sigterm);
     unregister_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
     unregister_async_signal_handler(SIGXFSZ, rgw::signal::sig_handler_noop);
+    unregister_async_signal_handler(SIGUSR2, rgw::signal::handle_sigpause);
+#ifdef SIGCONT
+    unregister_async_signal_handler(SIGCONT, rgw::signal::handle_sigresume);
+#endif
     shutdown_async_signal_handler();
   };
 

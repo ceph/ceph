@@ -129,6 +129,11 @@ public:
   void init_dedup();
 #endif
 
+  // Pause frontends to stop accepting new TCP connections
+  void pause_frontends();
+  // Unpause frontends to resume accepting TCP connections
+  void unpause_frontends();
+
   bool have_http() {
     return have_http_frontend;
   }

@@ -614,6 +614,26 @@ void rgw::AppMain::init_dedup()
 }
 #endif
 
+void rgw::AppMain::pause_frontends()
+{
+  ldpp_dout(dpp, 1)
+      << "Pausing all frontends to stop accepting new TCP connections" << dendl;
+  for (auto& fe : fes) {
+    fe->pause_for_new_config();
+  }
+  ldpp_dout(dpp, 1) << "All frontends paused" << dendl;
+}
+
+void rgw::AppMain::unpause_frontends()
+{
+  ldpp_dout(dpp, 1)
+      << "Unpausing all frontends to resume accepting TCP connections" << dendl;
+  for (auto& fe : fes) {
+    fe->unpause_with_new_config();
+  }
+  ldpp_dout(dpp, 1) << "All frontends unpaused" << dendl;
+}
+
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
   // stop the realm reloader

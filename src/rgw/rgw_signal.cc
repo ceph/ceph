@@ -14,11 +14,15 @@
  */
 
 #include "rgw_signal.h"
-#include "global/signal_handler.h"
-#include "common/safe_io.h"
+
+#include <atomic>
+
 #include "common/errno.h"
-#include "rgw_main.h"
+#include "common/safe_io.h"
+#include "global/signal_handler.h"
+
 #include "rgw_log.h"
+#include "rgw_main.h"
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -92,4 +96,53 @@ void handle_sigterm(int signum)
   }
 } /* handle_sigterm */
 
-}} /* namespace rgw::signal */
+static std::atomic<bool> frontend_paused{false};
+static rgw::AppMain* g_app_main{nullptr};
+
+void set_app_main(rgw::AppMain* app_main) { g_app_main = app_main; }
+
+void handle_sigpause(int signum)
+{
+  dout(1) << __func__ << " received signal " << signum << dendl;
+
+  if (!g_app_main) {
+    derr << "ERROR: " << __func__ << " app_main not set, cannot pause frontends"
+         << dendl;
+    return;
+  }
+
+  // Only pause if not already paused
+  bool expected = false;
+  if (frontend_paused.compare_exchange_strong(expected, true)) {
+    dout(1) << __func__ << " pausing TCP frontend listeners..." << dendl;
+    g_app_main->pause_frontends();
+    dout(1) << __func__ << " TCP frontend listeners paused" << dendl;
+  } else {
+    dout(1) << __func__ << " frontends already paused, ignoring" << dendl;
+  }
+} /* handle_sigpause */
+
+void handle_sigresume(int signum)
+{
+  dout(1) << __func__ << " received signal " << signum << dendl;
+
+  if (!g_app_main) {
+    derr << "ERROR: " << __func__
+         << " app_main not set, cannot resume frontends" << dendl;
+    return;
+  }
+
+  // Only unpause if currently paused
+  bool expected = true;
+  if (frontend_paused.compare_exchange_strong(expected, false)) {
+    dout(1) << __func__ << " resuming TCP frontend listeners..." << dendl;
+    g_app_main->unpause_frontends();
+    dout(1) << __func__ << " TCP frontend listeners resumed" << dendl;
+  } else {
+    dout(1) << __func__ << " frontends not paused, ignoring" << dendl;
+  }
+} /* handle_sigresume */
+
+
+} // namespace signal
+} // namespace rgw
