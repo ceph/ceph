@@ -2035,6 +2035,7 @@ public:
     uint64_t ontimeout = 0;
 
     ceph_tid_t tid = 0;
+    std::unique_ptr<std::vector<ceph_tid_t>> split_op_tids;
     int attempts = 0;
 
     version_t *objver;
