@@ -536,6 +536,9 @@ seastar::future<> OSD::start()
     if (!superblock.cluster_osdmap_trim_lower_bound) {
       superblock.cluster_osdmap_trim_lower_bound = superblock.get_oldest_map();
     }
+    if (!superblock.cluster_oldest_map) {
+      superblock.cluster_oldest_map = superblock.get_oldest_map();
+    }
     return pg_shard_manager.set_superblock(superblock);
   }).then([this] {
     return pg_shard_manager.get_local_map(superblock.current_epoch);
@@ -904,6 +907,7 @@ void OSD::dump_status(Formatter* f) const
   f->dump_stream("newest_map") << superblock.get_newest_map();
   f->dump_unsigned("cluster_osdmap_trim_lower_bound",
                    superblock.cluster_osdmap_trim_lower_bound);
+  f->dump_unsigned("cluster_oldest_map", superblock.cluster_oldest_map);
   f->dump_unsigned("num_pgs", pg_shard_manager.get_num_pgs());
 }
 
@@ -912,6 +916,7 @@ void OSD::print(std::ostream& out) const
   out << "{osd." << superblock.whoami << " "
       << superblock.osd_fsid << " maps " << superblock.get_maps()
       << " tlb:" << superblock.cluster_osdmap_trim_lower_bound
+      << " cluster_oldest_map:" << superblock.cluster_oldest_map
       << " pgs:" << pg_shard_manager.get_num_pgs()
       << "}";
 }

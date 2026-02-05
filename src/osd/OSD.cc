@@ -3838,6 +3838,9 @@ int OSD::init()
     if (!superblock.cluster_osdmap_trim_lower_bound) {
       superblock.cluster_osdmap_trim_lower_bound = superblock.get_oldest_map();
     }
+    if (!superblock.cluster_oldest_map) {
+      superblock.cluster_oldest_map = superblock.get_oldest_map();
+    }
 
     ObjectStore::Transaction t;
     write_superblock(cct, superblock, t);
