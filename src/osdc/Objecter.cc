@@ -191,6 +191,8 @@ enum {
   l_osdc_replica_read_bounced,
   l_osdc_replica_read_completed,
 
+  l_osdc_split_op_reads,
+
   l_osdc_last,
 };
 
@@ -404,6 +406,8 @@ void Objecter::init()
 			"Operations bounced by replica to be resent to primary");
     pcb.add_u64_counter(l_osdc_replica_read_completed, "replica_read_completed",
 			"Operations completed by replica");
+    pcb.add_u64_counter(l_osdc_split_op_reads, "split_op_reads",
+                    "Client read ops split by SplitOp");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2513,6 +2517,10 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   // rwlock is locked
 
   ldout(cct, 10) << __func__ << " op " << op << dendl;
+
+  if (op->target.flags & CEPH_OSD_FLAG_FORCE_OSD) {
+    logger->inc(l_osdc_split_op_reads);
+  }
 
   // pick target
   ceph_assert(op->session == NULL);
