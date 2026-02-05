@@ -16,6 +16,7 @@
 * RGW: Omap backing for the RGW Datalog is deprecated and support will be removed in a future version.
   - The `rgw default data log backing` option is removed and it is no longer
     possible to create clusters with an omap based datalog.
+  - `radosgw-admin datalog type` will only accept `--log_type=fifo`.
 * RGW: Bucket Logging suppports creating log buckets in EC pools.
   Implicit logging object commits are now performed asynchronously.
 * RGW: radosgw-admin bucket list now supports pagination for versioned buckets by using

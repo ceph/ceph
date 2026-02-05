@@ -311,7 +311,7 @@ void usage()
   cout << "  datalog list                     list data log\n";
   cout << "  datalog trim                     trim data log\n";
   cout << "  datalog status                   read data log status\n";
-  cout << "  datalog type                     change datalog type to --log_type={fifo,omap}\n";
+  cout << "  datalog type                     change datalog type to --log_type=fifo\n";
   cout << "  datalog semaphore list           List recovery semaphores\n";
   cout << "  datalog semaphore reset          Reset recovery semaphore (use marker)\n";
   cout << "  orphans find                     deprecated -- init and run search for leaked rados objects (use job-id, pool)\n";
@@ -11427,10 +11427,14 @@ next:
       std::cerr << "log-type not specified." << std::endl;
       return -EINVAL;
     }
+    if (opt_log_type == log_type::omap) {
+      std::cerr << "omap datalogs are deprecated. You cannot convert to them." << std::endl;
+      return -EINVAL;
+    }
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
     std::string errstr;
     ret = run_coro(dpp(), context_pool,
-		   datalog->change_format(dpp(), *opt_log_type),
+		   datalog->change_format(dpp(), log_type::fifo),
 		   &errstr);
     if (ret < 0) {
       cerr << "ERROR: change_format(): " << errstr << std::endl;
