@@ -1351,6 +1351,7 @@ struct pg_pool_t {
     case FLAG_BULK: return "bulk";
     case FLAG_CRIMSON: return "crimson";
     case FLAG_EC_OPTIMIZATIONS: return "ec_optimizations";
+    case FLAG_CLIENT_SPLIT_READS: return "split_reads";
     default: return "???";
     }
   }
@@ -1409,6 +1410,8 @@ struct pg_pool_t {
       return FLAG_CRIMSON;
     if (name == "ec_optimizations")
       return FLAG_EC_OPTIMIZATIONS;
+    if (name == "split_reads")
+      return FLAG_CLIENT_SPLIT_READS;
     return 0;
   }
 
@@ -1516,6 +1519,9 @@ private:
 public:
   std::map<std::string, std::string> properties;  ///< OBSOLETE
   std::string erasure_code_profile; ///< name of the erasure code profile in OSDMap
+  // Profile values stored in integer format to allow reading efficiently
+  // without parsing the erasure_code_profile string
+  std::optional<uint8_t> ec_data_shard_count, ec_coding_shard_count; ///< ec profile values
   epoch_t last_change = 0;      ///< most recent epoch changed, exclusing snapshot changes
   // If non-zero, require OSDs in at least this many different instances...
   uint32_t peering_crush_bucket_count = 0;
@@ -1746,6 +1752,7 @@ public:
 
 private:
   std::vector<uint32_t> grade_table;
+  std::vector<shard_id_t> shard_mapping; // Used by EC direct reads.
 
 public:
   uint32_t get_grade(unsigned i) const {
@@ -1800,6 +1807,10 @@ public:
   epoch_t get_snap_epoch() const { return snap_epoch; }
   snapid_t get_snap_seq() const { return snap_seq; }
   uint64_t get_auid() const { return auid; }
+
+  uint8_t get_ec_data_shard_count() const {
+    return ec_data_shard_count.value_or(nonprimary_shards.size() + 1);
+  }
 
   void set_snap_seq(snapid_t s) { snap_seq = s; }
   void set_snap_epoch(epoch_t e) { snap_epoch = e; }
@@ -1961,6 +1972,21 @@ public:
   /// EC partial writes: test if a shard is a non-primary
   bool is_nonprimary_shard(const shard_id_t shard) const {
     return !nonprimary_shards.empty() && nonprimary_shards.contains(shard);
+  }
+
+  void set_shard_mapping(std::vector<shard_id_t> && mapping) {
+    shard_mapping = mapping;
+  }
+
+  shard_id_t get_shard(raw_shard_id_t raw) const {
+    if (shard_mapping.empty()) {
+      return shard_id_t((int)raw);
+    }
+    if (std::cmp_less((int)raw, shard_mapping.size())) {
+      return shard_mapping[(int)raw];
+    } else {
+      return shard_id_t::NO_SHARD;
+    }
   }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
