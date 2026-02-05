@@ -546,7 +546,26 @@ void AdminSocket::execute_command(
     }
   }
 
-  Formatter* f;
+  auto [retval, hook] = find_matched_hook(prefix, cmdmap);
+  switch (retval) {
+  case ENOENT:
+    lderr(m_cct) << "AdminSocket: request '" << cmdvec
+		 << "' not defined" << dendl;
+    return on_finish(-EINVAL, "unknown command prefix "s + prefix, empty);
+  case EINVAL:
+    return on_finish(-EINVAL, "invalid command json", empty);
+  default:
+    assert(retval == 0);
+    ceph_assert(hook);
+  }
+
+  auto hook_sign_off = make_scope_guard([&] {
+    std::unique_lock l(lock);
+    in_hook = false;
+    in_hook_cond.notify_all();
+  });
+
+  Formatter* f = nullptr;
   if (!output.empty()) {
     if (!(format == "json" || format == "json-pretty")) {
       return on_finish(-EINVAL, "unsupported format for --output-file", empty);
@@ -561,24 +580,15 @@ void AdminSocket::execute_command(
     }
     f = jff;
   } else {
-    f = Formatter::create(format, "json-pretty", "json-pretty");
+    if (format.empty() && (hook->flags & AdminSocket::flag_t::accepts_null_formatter)) {
+      // Hook is ok with formatter null
+    } else {
+      // Rescue formatter for hooks that need formatter set (most of them)
+      f = Formatter::create(format, "json-pretty", "json-pretty");
+    }
   }
 
-  auto [retval, hook] = find_matched_hook(prefix, cmdmap);
-  switch (retval) {
-  case ENOENT:
-    lderr(m_cct) << "AdminSocket: request '" << cmdvec
-		 << "' not defined" << dendl;
-    delete f;
-    return on_finish(-EINVAL, "unknown command prefix "s + prefix, empty);
-  case EINVAL:
-    delete f;
-    return on_finish(-EINVAL, "invalid command json", empty);
-  default:
-    assert(retval == 0);
-  }
-
-  hook->call_async(
+  hook->hook->call_async(
     prefix, cmdmap, f, inbl,
     [f, output, on_finish, m_cct=m_cct](int r, std::string_view err, bufferlist& out) {
       // handle either existing output in bufferlist *or* via formatter
@@ -605,13 +615,9 @@ void AdminSocket::execute_command(
       delete f;
       on_finish(r, err, out);
     });
-
-  std::unique_lock l(lock);
-  in_hook = false;
-  in_hook_cond.notify_all();
 }
 
-std::pair<int, AdminSocketHook*>
+std::pair<int, const AdminSocket::hook_info*>
 AdminSocket::find_matched_hook(std::string& prefix,
 			       const cmdmap_t& cmdmap)
 {
@@ -629,7 +635,7 @@ AdminSocket::find_matched_hook(std::string& prefix,
   for (auto hook = hooks_begin; hook != hooks_end; ++hook) {
     if (validate_cmd(hook->second.desc, cmdmap, errss)) {
       in_hook = true;
-      return {0, hook->second.hook};
+      return {0, &hook->second};
     }
   }
   return {EINVAL, nullptr};
@@ -652,7 +658,8 @@ void AdminSocket::queue_tell_command(cref_t<MMonCommand> m)
 
 int AdminSocket::register_command(std::string_view cmddesc,
 				  AdminSocketHook *hook,
-				  std::string_view help)
+				  std::string_view help,
+                                  flag_t flags)
 {
   int ret;
   std::unique_lock l(lock);
@@ -670,7 +677,7 @@ int AdminSocket::register_command(std::string_view cmddesc,
     hooks.emplace_hint(i,
 		       std::piecewise_construct,
 		       std::forward_as_tuple(prefix),
-		       std::forward_as_tuple(hook, cmddesc, help));
+		       std::forward_as_tuple(hook, cmddesc, help, flags));
     ret = 0;
   }
   return ret;
