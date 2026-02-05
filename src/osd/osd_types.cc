@@ -6895,7 +6895,7 @@ void OSDSuperblock::GuardedMap::decode(ceph::buffer::list::const_iterator &bl)
 
 void OSDSuperblock::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(11, 5, bl);
+  ENCODE_START(12, 5, bl);
   encode(cluster_fsid, bl);
   encode(whoami, bl);
   encode(current_epoch, bl);
@@ -6912,12 +6912,13 @@ void OSDSuperblock::encode(ceph::buffer::list &bl) const
   encode(last_purged_snaps_scrub, bl);
   encode(cluster_osdmap_trim_lower_bound, bl);
   mapc.encode(bl);
+  encode(cluster_oldest_map, bl);
   ENCODE_FINISH(bl);
 }
 
 void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(11, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(12, 5, 5, bl);
   if (struct_v < 3) {
     string magic;
     decode(magic, bl);
@@ -6962,6 +6963,11 @@ void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     insert_osdmap_epochs(oldest_map, newest_map);
   }
+  if (struct_v >= 12) {
+    decode(cluster_oldest_map, bl);
+  } else {
+    cluster_oldest_map = cluster_osdmap_trim_lower_bound;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -6981,6 +6987,7 @@ void OSDSuperblock::dump(Formatter *f) const
   f->dump_stream("last_purged_snaps_scrub") << last_purged_snaps_scrub;
   f->dump_int("cluster_osdmap_trim_lower_bound",
               cluster_osdmap_trim_lower_bound);
+  f->dump_int("cluster_oldest_map", cluster_oldest_map);
   f->dump_stream("maps") << get_maps();
 }
 
@@ -7007,6 +7014,7 @@ std::ostream& operator<<(std::ostream& out, const OSDSuperblock& sb)
              << " osd." << sb.whoami
 	     << " " << sb.osd_fsid
              << " e" << sb.current_epoch
+             << " cluster_oldest_map e" << sb.cluster_oldest_map
              << " maps " << sb.get_maps()
 	     << " lci=[" << sb.mounted << "," << sb.clean_thru << "]"
              << " tlb=" << sb.cluster_osdmap_trim_lower_bound
