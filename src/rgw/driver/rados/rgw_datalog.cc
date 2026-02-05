@@ -494,10 +494,6 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
   down_flag = false;
   ran_background = (recovery || watch || renew);
 
-  auto defbacking = to_log_type(
-    cct->_conf.get_val<std::string>("rgw_default_data_log_backing"));
-  // Should be guaranteed by `set_enum_allowed`
-  ceph_assert(defbacking);
   try {
     loc = co_await rgw::init_iocontext(dpp, *rados, log_pool,
 				       rgw::create, asio::use_awaitable);
@@ -513,7 +509,7 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
       dpp, *rados, metadata_log_oid(), loc,
       [this](uint64_t gen_id, int shard) {
 	return get_oid(gen_id, shard);
-      }, num_shards, *defbacking, *this);
+      }, num_shards, log_type::fifo, *this);
   } catch (const std::exception& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		       << ": Error initializing backends: " << e.what()
