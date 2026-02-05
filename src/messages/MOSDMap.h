@@ -24,7 +24,7 @@
 
 class MOSDMap final : public Message {
 private:
-  static constexpr int HEAD_VERSION = 4;
+  static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 3;
 
 public:
@@ -51,6 +51,7 @@ public:
    */
   epoch_t cluster_osdmap_trim_lower_bound = 0;
   epoch_t newest_map = 0;
+  epoch_t oldest_map = 0;
 
   epoch_t get_first() const {
     epoch_t e = 0;
@@ -75,7 +76,8 @@ public:
   MOSDMap(const uuid_d &f, const uint64_t features)
     : Message{CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION},
       fsid(f), encode_features(features),
-      cluster_osdmap_trim_lower_bound(0), newest_map(0) { }
+      cluster_osdmap_trim_lower_bound(0),
+      newest_map(0), oldest_map(0) { }
 private:
   ~MOSDMap() final {}
 public:
@@ -97,6 +99,11 @@ public:
       // removed in octopus
       mempool::osdmap::map<int64_t,snap_interval_set_t> gap_removed_snaps;
       decode(gap_removed_snaps, p);
+    }
+    if (header.version >= 5) {
+      decode(oldest_map, p);
+    } else {
+      oldest_map = cluster_osdmap_trim_lower_bound;
     }
   }
   void encode_payload(uint64_t features) override {
@@ -162,14 +169,18 @@ public:
     if (header.version >= 4) {
       encode((uint32_t)0, payload);
     }
+    if (header.version >= 5) {
+      encode(oldest_map, payload);
+    }
   }
 
   std::string_view get_type_name() const override { return "osdmap"; }
   void print(std::ostream& out) const override {
     out << "osd_map(" << get_first() << ".." << get_last();
-    if (cluster_osdmap_trim_lower_bound || newest_map)
-      out << " src has " << cluster_osdmap_trim_lower_bound
-          << ".." << newest_map;
+    if (oldest_map || newest_map)
+      out << " src has " << oldest_map
+          << ".." << newest_map
+          << " tlb=" << cluster_osdmap_trim_lower_bound;
     out << ")";
   }
 private:

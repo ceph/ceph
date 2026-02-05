@@ -1192,9 +1192,10 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
 
   const auto first = m->get_first();
   const auto last = m->get_last();
-  INFO(" epochs [{}..{}], i have {}, src has [{}..{}]",
+  INFO(" epochs [{}..{}], i have {}, src has [{}..{}], trim_lower_bound {}",
        first, last, superblock.get_newest_map(),
-       m->cluster_osdmap_trim_lower_bound, m->newest_map);
+       m->oldest_map, m->newest_map,
+       m->cluster_osdmap_trim_lower_bound);
 
   if (superblock.cluster_osdmap_trim_lower_bound <
       m->cluster_osdmap_trim_lower_bound) {
@@ -1215,16 +1216,16 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
   if (first > start) {
     INFO("message skips epochs {}..{}",
 	 start, first - 1);
-    if (m->cluster_osdmap_trim_lower_bound <= start) {
+    if (m->oldest_map <= start) {
       co_return co_await get_shard_services().osdmap_subscribe(start, false);
     }
     // always try to get the full range of maps--as many as we can.  this
     //  1- is good to have
     //  2- is at present the only way to ensure that we get a *full* map as
     //     the first map!
-    if (m->cluster_osdmap_trim_lower_bound < first) {
+    if (m->oldest_map < first) {
       co_return co_await get_shard_services().osdmap_subscribe(
-        m->cluster_osdmap_trim_lower_bound - 1, true);
+        m->oldest_map - 1, true);
     }
   }
 
@@ -1240,6 +1241,7 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
 
   superblock.insert_osdmap_epochs(first, last);
   superblock.current_epoch = last;
+  superblock.cluster_oldest_map = m->oldest_map;
 
   // note in the superblock that we were clean thru the prior epoch
   if (boot_epoch && boot_epoch >= superblock.mounted) {

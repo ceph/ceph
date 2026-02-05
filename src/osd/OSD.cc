@@ -8246,8 +8246,9 @@ void OSD::handle_osd_map(MOSDMap *m)
   epoch_t last = m->get_last();
   dout(3) << "handle_osd_map epochs [" << first << "," << last << "], i have "
 	  << superblock.get_newest_map()
-	  << ", src has [" << m->cluster_osdmap_trim_lower_bound
+	  << ", src has [" << m->oldest_map
           << "," << m->newest_map << "]"
+          << ", trim_lower_bound " << m->cluster_osdmap_trim_lower_bound
 	  << dendl;
 
   logger->inc(l_osd_map);
@@ -8288,7 +8289,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (first > superblock.get_newest_map() + 1) {
     dout(10) << "handle_osd_map message skips epochs "
 	     << superblock.get_newest_map() + 1 << ".." << (first-1) << dendl;
-    if (m->cluster_osdmap_trim_lower_bound <= superblock.get_newest_map() + 1) {
+    if (m->oldest_map <= superblock.get_newest_map() + 1) {
       osdmap_subscribe(superblock.get_newest_map() + 1, false);
       m->put();
       return;
@@ -8297,8 +8298,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     //  1- is good to have
     //  2- is at present the only way to ensure that we get a *full* map as
     //     the first map!
-    if (m->cluster_osdmap_trim_lower_bound < first) {
-      osdmap_subscribe(m->cluster_osdmap_trim_lower_bound - 1, true);
+    if (m->oldest_map < first) {
+      osdmap_subscribe(m->oldest_map - 1, true);
       m->put();
       return;
     }
@@ -8421,6 +8422,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     rerequest_full_maps();
   }
 
+  superblock.cluster_oldest_map = m->oldest_map;
   track_pools_and_pg_num_changes(added_maps, t);
 
   if (!superblock.is_maps_empty()) {
@@ -8508,7 +8510,7 @@ void OSD::track_pools_and_pg_num_changes(
     lastmap = added_maps.at(first);
   } else {
     if (first > superblock.get_newest_map() + 1) {
-      ceph_assert(first == superblock.cluster_osdmap_trim_lower_bound);
+      ceph_assert(first == superblock.cluster_oldest_map);
       dout(20) << __func__ << " can't get previous map "
                << superblock.get_newest_map()
                << " first start of this osd after a map gap" << dendl;
@@ -8831,7 +8833,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
   }
   else if (is_preboot()) {
     if (m->get_source().is_mon())
-      _preboot(m->cluster_osdmap_trim_lower_bound, m->newest_map);
+      _preboot(m->oldest_map, m->newest_map);
     else
       start_boot();
   }
