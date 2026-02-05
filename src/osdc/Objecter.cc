@@ -538,6 +538,18 @@ void Objecter::shutdown()
     cop->put();
   }
 
+  // Split ops can only contain standard ops...
+  while(!splitop_session->ops.empty()) {
+    auto i = splitop_session->ops.begin();
+    ldout(cct, 10) << " op " << i->first << dendl;
+    auto op = i->second;
+    {
+      std::unique_lock swl(splitop_session->lock);
+      _session_op_remove(splitop_session, op);
+    }
+    op->put();
+  }
+
   if (tick_event) {
     if (timer.cancel_event(tick_event)) {
       ldout(cct, 10) <<  " successfully canceled tick" << dendl;
@@ -2365,40 +2377,26 @@ void Objecter::resend_mon_ops()
 // read | write ---------------------------
 
 void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
+  ceph_assert(op->session == splitop_session);
 
-  // If the parent op was already removed from its session by a map change, then
-  // ignore the completion here.
-  if (!op->session) {
-    return;
-  }
+  op->get();  // Keep alive during async operation
 
-  // While the following post is scheduled, this op is considered "in flight".
-  // If a new osdmap is published, this op might be cancelled/redriven, etc..
-  // before the following post is executed. Normally, an op would be protected
-  // from this in the messaging layer. However, we don't have that protection
-  // here.  So we consider the following:
-  // 1. The op could be returned and freed (op->get() prevents this).
-  // 2. The op could be removed from its session but not yet resent.
-  // 3. The op could be redriven in the new epoch.
-  op->get();
-  auto epoch = op->target.epoch;
-
-  boost::asio::post(service, [this, op, ec, rc, epoch]() {
+  boost::asio::post(service, [this, op, ec, rc]() {
+    shunique_lock rl(rwlock, ceph::acquire_shared);
 
     bool freed = op->get_nref() == 1;
     op->put();
-    if (freed || !op->session || op->target.epoch != epoch) {
+
+    if (freed || op->session != splitop_session) {
+      ceph_assert(!initialized); // Should only happen during shutdown.
       return;
     }
 
-    shunique_lock rl(rwlock, ceph::acquire_shared);
-    ceph_assert(op->session);
     unique_lock sl(op->session->lock);
 
     if (rc != -EAGAIN) {
       op->trace.event("post op complete");
-
-      // This function unlocks sl.
+      // This removes from session and unlocks sl.
       complete_op_reply(op, ec, op->session, sl, rc);
     } else {
       _session_op_remove(op->session, op);
@@ -2418,11 +2416,17 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
     ptid = &tid;
   op->trace.event("op submit");
 
-  bool was_split = SplitOp::create(op, *this, rl, ptid, ctx_budget, cct);
+  _op_submit_with_budget(op, rl, ptid, ctx_budget);
+}
 
-  if (!was_split) {
-    _op_submit_with_budget(op, rl, ptid, ctx_budget);
+void Objecter::add_op_to_splitop_session(Op *op) {
+  unique_lock sl(splitop_session->lock);
+  if (op->tid == 0) {
+    op->tid = ++last_tid;
   }
+  _session_op_assign(splitop_session, op);
+  inflight_ops++;
+  sl.unlock();
 }
 
 void Objecter::_op_submit_with_budget(Op *op,
@@ -2456,7 +2460,14 @@ void Objecter::_op_submit_with_budget(Op *op,
 				      op_cancel(tid, -ETIMEDOUT); });
   }
 
-  _op_submit(op, sul, ptid);
+
+  bool was_split = SplitOp::create(op, *this, sul, cct);
+
+  if (was_split) {
+    *ptid = op->tid;
+  } else {
+    _op_submit(op, sul, ptid);
+  }
 }
 
 void Objecter::_send_op_account(Op *op)
@@ -2744,17 +2755,32 @@ start:
     }
   }
 
-  // Handle case where the op is in homeless session
-  shared_lock sl(homeless_session->lock);
-  while (auto tid = next_subsystem_op(homeless_session->ops)) {
-    sl.unlock();
-    auto ret = op_cancel(homeless_session, *tid, ceph::from_error_code(ec), ec);
-    if (ret == -ENOENT) {
-      /* oh no! raced, maybe tid moved to another session, restarting */
-      goto start;
+  {
+    // Handle case where the op is in homeless session
+    shared_lock sl(homeless_session->lock);
+    while (auto tid = next_subsystem_op(homeless_session->ops)) {
+      sl.unlock();
+      auto ret = op_cancel(homeless_session, *tid, ceph::from_error_code(ec), ec);
+      if (ret == -ENOENT) {
+        /* oh no! raced, maybe tid moved to another session, restarting */
+        goto start;
+      }
     }
+    sl.unlock();
   }
-  sl.unlock();
+  {
+    // Handle case where the op is in splitop session
+    shared_lock sl(splitop_session->lock);
+    while (auto tid = next_subsystem_op(splitop_session->ops)) {
+      sl.unlock();
+      auto ret = op_cancel(splitop_session, *tid, ceph::from_error_code(ec), ec);
+      if (ret == -ENOENT) {
+        /* oh no! raced, maybe tid moved to another session, restarting */
+        goto start;
+      }
+    }
+    sl.unlock();
+  }
 }
 
 int Objecter::op_cancel(ceph_tid_t tid, int r)
@@ -2804,19 +2830,36 @@ start:
   ldout(cct, 5) << __func__ << ": tid " << tid
 		<< " not found in live sessions" << dendl;
 
-  // Handle case where the op is in homeless session
-  shared_lock sl(homeless_session->lock);
-  if (homeless_session->ops.find(tid) != homeless_session->ops.end()) {
-    sl.unlock();
-    ret = op_cancel(homeless_session, tid, r, osdcode(r));
-    if (ret == -ENOENT) {
-      /* oh no! raced, maybe tid moved to another session, restarting */
-      goto start;
+  {
+    // Handle case where the op is in homeless session
+    shared_lock sl(homeless_session->lock);
+    if (homeless_session->ops.find(tid) != homeless_session->ops.end()) {
+      sl.unlock();
+      ret = op_cancel(homeless_session, tid, r, osdcode(r));
+      if (ret == -ENOENT) {
+        /* oh no! raced, maybe tid moved to another session, restarting */
+        goto start;
+      } else {
+        return ret;
+      }
     } else {
-      return ret;
+      sl.unlock();
     }
-  } else {
-    sl.unlock();
+  }
+  {
+    shared_lock sl(splitop_session->lock);
+    if (splitop_session->ops.find(tid) != splitop_session->ops.end()) {
+      sl.unlock();
+      ret = op_cancel(splitop_session, tid, r, osdcode(r));
+      if (ret == -ENOENT) {
+        /* oh no! raced, maybe tid moved to another session, restarting */
+        goto start;
+      } else {
+        return ret;
+      }
+    } else {
+      sl.unlock();
+    }
   }
 
   ldout(cct, 5) << __func__ << ": tid " << tid
@@ -4910,6 +4953,7 @@ void Objecter::_dump_active()
     sl.unlock();
   }
   _dump_active(homeless_session);
+  _dump_active(splitop_session);
 }
 
 void Objecter::dump_active()
@@ -4969,6 +5013,7 @@ void Objecter::dump_ops(Formatter *fmt)
     sl.unlock();
   }
   _dump_ops(homeless_session, fmt);
+  _dump_ops(splitop_session, fmt);
   fmt->close_section(); // ops array
 }
 
@@ -4997,6 +5042,7 @@ void Objecter::dump_linger_ops(Formatter *fmt)
     sl.unlock();
   }
   _dump_linger_ops(homeless_session, fmt);
+  // No linger ops in splitop_session
   fmt->close_section(); // linger_ops array
 }
 
@@ -5031,6 +5077,7 @@ void Objecter::dump_command_ops(Formatter *fmt)
     sl.unlock();
   }
   _dump_command_ops(homeless_session, fmt);
+  // No command_ops for splitops session.
   fmt->close_section(); // command_ops array
 }
 
@@ -5406,8 +5453,10 @@ Objecter::Objecter(CephContext *cct,
 Objecter::~Objecter()
 {
   ceph_assert(homeless_session->get_nref() == 1);
+  ceph_assert(splitop_session->get_nref() == 1);
   ceph_assert(num_homeless_ops == 0);
   homeless_session->put();
+  splitop_session->put();
 
   ceph_assert(osd_sessions.empty());
   ceph_assert(poolstat_ops.empty());

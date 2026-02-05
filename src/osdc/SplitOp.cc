@@ -960,6 +960,8 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     return false;
   }
 
+  objecter.add_op_to_splitop_session(op);
+
   split_read->protect_torn_reads();
 
 
