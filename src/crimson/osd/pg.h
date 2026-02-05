@@ -575,6 +575,10 @@ public:
     return shard_services.get_osdmap_tlb();
   }
 
+  epoch_t cluster_oldest_map() final {
+    return shard_services.get_cluster_oldest_map();
+  }
+
   void on_backfill_reserved() final {
     recovery_handler->on_backfill_reserved();
   }
