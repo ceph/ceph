@@ -5748,6 +5748,7 @@ public:
   utime_t last_purged_snaps_scrub;
 
   epoch_t cluster_osdmap_trim_lower_bound = 0;
+  epoch_t cluster_oldest_map = 0;
 
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
