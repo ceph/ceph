@@ -2046,13 +2046,14 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 
   // check for op with rwordered and rebalance or localize reads
   if (m->has_flag(CEPH_OSD_FLAGS_DIRECT_READ) && op->rwordered()) {
-    dout(4) << __func__ << ": rebelance or localized reads with rwordered not allowed "
+    dout(4) << __func__ << ": rebalance or localized reads with rwordered not allowed "
        << *m << dendl;
     osd->reply_op_error(op, -EINVAL);
     return;
   }
 
   if (m->get_flags() & CEPH_OSD_FLAG_EC_DIRECT_READ) {
+    // This means "is in acting set"
     if (is_primary() || is_nonprimary()) {
       op->set_ec_direct_read();
     } else {
@@ -2064,6 +2065,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
     // balanced reads; any replica will do
+    // This means "is in acting set"
     if (!(is_primary() || is_nonprimary())) {
       osd->handle_misdirected_op(this, op);
       return;
@@ -6646,6 +6648,15 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         }
       }
       break;
+
+    case CEPH_OSD_OP_GET_INTERNAL_VERSIONS: {
+      std::map<shard_id_t, eversion_t> out;
+      result = get_internal_versions(soid, &out);
+      if (result >= 0) {
+        encode(out, osd_op.outdata);
+      }
+    }
+    break;
 
     case CEPH_OSD_OP_LIST_WATCHERS:
       ++ctx->num_read;
@@ -16166,6 +16177,27 @@ int PrimaryLogPG::getattrs_maybe_cache(
   }
   tmp.swap(*out);
   return r;
+}
+
+int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
+                                        std::map<shard_id_t, eversion_t>* out) {
+  ObjectContextRef obc = get_object_context(soid, false);
+
+  if (!obc || !obc->obs.exists) {
+    return -ENOENT;
+  }
+
+  if (is_primary() && pool.info.is_erasure()) {
+    for (unsigned int i = 0; i < pool.info.get_size(); ++i) {
+      (*out)[shard_id_t(i)] = obc->obs.oi.version;
+    }
+    for (const auto& [shard, version] : obc->obs.oi.shard_versions) {
+      out->at(shard) = version;
+    }
+  } else {
+    (*out)[pg_whoami.shard] = obc->obs.oi.version;
+  }
+  return 0;
 }
 
 bool PrimaryLogPG::check_failsafe_full() {
