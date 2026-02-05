@@ -1338,6 +1338,9 @@ void PG::on_new_interval()
 epoch_t PG::cluster_osdmap_trim_lower_bound() {
   return osd->get_superblock().cluster_osdmap_trim_lower_bound;
 }
+epoch_t PG::cluster_oldest_map() {
+  return osd->get_superblock().cluster_oldest_map;
+}
 
 OstreamTemp PG::get_clog_info() {
   return osd->clog->info();

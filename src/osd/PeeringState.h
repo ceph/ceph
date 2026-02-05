@@ -421,6 +421,7 @@ public:
     virtual void on_active_actmap() = 0;
     virtual void on_active_advmap(const OSDMapRef &osdmap) = 0;
     virtual epoch_t cluster_osdmap_trim_lower_bound() = 0;
+    virtual epoch_t cluster_oldest_map() = 0;
 
     // ============ recovery reservation notifications ==========
     virtual void on_backfill_reserved() = 0;
