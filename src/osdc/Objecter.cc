@@ -2708,9 +2708,28 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r,
   }
 #endif
 
+  Op *op = p->second;
+  if (op->split_op_tids) {
+    auto tids = *op->split_op_tids; // intentional copy.
+    sl.unlock();
+
+    // An op with split ops is not actually active, but has child ops which
+    // need to be canceled.  This op should end up being canceled by the
+    // generated completions.
+    for (auto sub_tid : tids) {
+      ldout(cct, 10) << __func__ << " SplitOp:: cancel tid " << tid
+               << " sub_tid " << sub_tid
+               << " in session " << s->osd << dendl;
+      int ret = _op_cancel(sub_tid, r);
+      if (ret != 0) {
+        ldout(cct, 20) << __func__ << " unexpected error canceling sub_tid "
+                      << sub_tid << ": " << ret << dendl;
+      }
+    }
+    return 0;
+  }
   ldout(cct, 10) << __func__ << " tid " << tid << " in session " << s->osd
 		 << dendl;
-  Op *op = p->second;
   if (op->has_completion()) {
     num_in_flight--;
     op->complete(ec, r, service.get_executor());
@@ -3340,7 +3359,7 @@ void Objecter::_session_op_remove(OSDSession *from, Op *op)
     num_homeless_ops--;
   }
 
-  from->ops.erase(op->tid);
+  ceph_assert(from->ops.erase(op->tid));
   put_session(from);
   op->session = NULL;
 
@@ -3481,6 +3500,7 @@ void Objecter::_finish_op(Op *op, int r)
 
   ceph_assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
 
+  ceph_assert(inflight_ops > 0);
   inflight_ops--;
 
   op->put();
