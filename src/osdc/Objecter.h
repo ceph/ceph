@@ -2847,7 +2847,7 @@ private:
 			      int *ctx_budget = NULL);
   // public interface
 public:
-  void op_post_submit(Op *op);
+  void op_post_split_op_complete(Op* op, boost::system::error_code ec, int rc);
   void op_submit(Op *op, ceph_tid_t *ptid = NULL, int *ctx_budget = NULL);
   bool is_active() {
     std::shared_lock l(rwlock);
