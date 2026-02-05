@@ -583,6 +583,7 @@ public:
   void clear_primary_state() override;
 
   epoch_t cluster_osdmap_trim_lower_bound() override;
+  epoch_t cluster_oldest_map() override;
   OstreamTemp get_clog_error() override;
   OstreamTemp get_clog_info() override;
   OstreamTemp get_clog_debug() override;
