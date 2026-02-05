@@ -1,2 +1,8 @@
 os_type: rocky
 os_version: "9.6"
+tasks:
+- pexec:
+    all:
+    # for https://tracker.ceph.com/issues/73823
+    - sudo dnf remove nvme-cli -y
+    - sudo dnf install nvmetcli nvme-cli -y
