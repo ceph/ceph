@@ -132,7 +132,7 @@ class WatchNotifyTestCtx2;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
-TEST_F(LibRadosWatchNotify, WatchNotify) {
+TEST_P(LibRadosWatchNotify, WatchNotify) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -160,7 +160,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify) {
   sem_destroy(&sem);
 }
 
-TEST_F(LibRadosWatchNotifyEC, WatchNotify) {
+TEST_P(LibRadosWatchNotifyEC, WatchNotify) {
   SKIP_IF_CRIMSON();
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
@@ -190,7 +190,7 @@ TEST_F(LibRadosWatchNotifyEC, WatchNotify) {
 
 // --
 
-TEST_F(LibRadosWatchNotify, Watch2Delete) {
+TEST_P(LibRadosWatchNotify, Watch2Delete) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_err = 0;
@@ -219,7 +219,7 @@ TEST_F(LibRadosWatchNotify, Watch2Delete) {
   rados_watch_flush(cluster);
 }
 
-TEST_F(LibRadosWatchNotify, AioWatchDelete) {
+TEST_P(LibRadosWatchNotify, AioWatchDelete) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_err = 0;
@@ -258,7 +258,7 @@ TEST_F(LibRadosWatchNotify, AioWatchDelete) {
 
 // --
 
-TEST_F(LibRadosWatchNotify, WatchNotify2) {
+TEST_P(LibRadosWatchNotify, WatchNotify2) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_cookies.clear();
@@ -305,7 +305,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   rados_watch_flush(cluster);
 }
 
-TEST_F(LibRadosWatchNotify, AioWatchNotify2) {
+TEST_P(LibRadosWatchNotify, AioWatchNotify2) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_cookies.clear();
@@ -359,7 +359,7 @@ TEST_F(LibRadosWatchNotify, AioWatchNotify2) {
   rados_aio_release(notify_comp);
 }
 
-TEST_F(LibRadosWatchNotify, AioNotify) {
+TEST_P(LibRadosWatchNotify, AioNotify) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_cookies.clear();
@@ -414,7 +414,7 @@ TEST_F(LibRadosWatchNotify, AioNotify) {
 
 // --
 
-TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
+TEST_P(LibRadosWatchNotify, WatchNotify2Multi) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_cookies.clear();
@@ -462,7 +462,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
 
 // --
 
-TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
+TEST_P(LibRadosWatchNotify, WatchNotify2Timeout) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_sleep = 3; // 3s
@@ -516,7 +516,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
 
 }
 
-TEST_F(LibRadosWatchNotify, Watch3Timeout) {
+TEST_P(LibRadosWatchNotify, Watch3Timeout) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_cookies.clear();
@@ -618,7 +618,7 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
   rados_watch_flush(cluster);
 }
 
-TEST_F(LibRadosWatchNotify, AioWatchDelete2) {
+TEST_P(LibRadosWatchNotify, AioWatchDelete2) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_err = 0;
@@ -655,3 +655,6 @@ TEST_F(LibRadosWatchNotify, AioWatchDelete2) {
   ASSERT_EQ(-ENOENT, rados_aio_get_return_value(comp));
   rados_aio_release(comp);
 }
+
+INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosWatchNotify);
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosWatchNotifyEC);
