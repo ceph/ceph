@@ -503,6 +503,10 @@ class AsioFrontend {
 
   std::atomic<bool> going_down{false};
 
+  // Socket options saved for reopening listeners after pause
+  bool reuse_port{false};
+  int max_connection_backlog{boost::asio::socket_base::max_listen_connections};
+
   RGWAsioBackoff backoff;
   CephContext* ctx() const { return cct.get(); }
   std::optional<dmc::ClientCounters> client_counters;
@@ -549,6 +553,11 @@ class AsioFrontend {
   void join();
   void pause();
   void unpause();
+
+private:
+  // Helper to open, bind, listen and start accept loop for a listener
+  // Returns 0 on success, negative error code on failure
+  int start_listener(Listener& l);
 };
 
 unsigned short parse_port(const char *input, boost::system::error_code& ec)
@@ -632,6 +641,72 @@ static int drop_privileges(CephContext *ctx)
     ldout(ctx, 0) << "set uid:gid to " << uid << ":" << gid
                   << " (" << uid_string << ":" << gid_string << ")" << dendl;
   }
+  return 0;
+}
+
+int AsioFrontend::start_listener(Listener& l)
+{
+  boost::system::error_code ec;
+
+  l.acceptor.open(l.endpoint.protocol(), ec);
+  if (ec) {
+    if (ec == boost::asio::error::address_family_not_supported) {
+      ldout(ctx(), 0) << "WARNING: cannot open socket for endpoint="
+                      << l.endpoint << ", " << ec.message() << dendl;
+      return -ec.value();
+    }
+    lderr(ctx()) << "failed to open socket: " << ec.message() << dendl;
+    return -ec.value();
+  }
+
+  if (l.endpoint.protocol() == tcp::v6()) {
+    l.acceptor.set_option(boost::asio::ip::v6_only(true), ec);
+    if (ec) {
+      lderr(ctx()) << "failed to set v6_only socket option: " << ec.message()
+                   << dendl;
+      return -ec.value();
+    }
+  }
+
+  if (reuse_port) {
+    int one = 1;
+    if (setsockopt(
+            l.acceptor.native_handle(), SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
+            &one, sizeof(one)) == -1) {
+      lderr(ctx()) << "setsockopt SO_REUSEADDR | SO_REUSEPORT failed" << dendl;
+      return -errno;
+    }
+  } else {
+    l.acceptor.set_option(tcp::acceptor::reuse_address(true), ec);
+    if (ec) {
+      lderr(ctx()) << "failed to set reuse_address socket option: "
+                   << ec.message() << dendl;
+      return -ec.value();
+    }
+  }
+
+  l.acceptor.bind(l.endpoint, ec);
+  if (ec) {
+    lderr(ctx()) << "failed to bind address " << l.endpoint << ": "
+                 << ec.message() << dendl;
+    return -ec.value();
+  }
+
+  l.acceptor.listen(max_connection_backlog, ec);
+  if (ec) {
+    lderr(ctx()) << "failed to listen on " << l.endpoint << ": " << ec.message()
+                 << dendl;
+    return -ec.value();
+  }
+
+  // spawn a cancellable coroutine to run the accept loop
+  boost::asio::spawn(
+      context,
+      [this, &l](boost::asio::yield_context yield) mutable { accept(l, yield); },
+      bind_cancellation_slot(
+          l.signal.slot(), bind_executor(context, boost::asio::detached)));
+
+  ldout(ctx(), 4) << "frontend listening on " << l.endpoint << dendl;
   return 0;
 }
 
@@ -724,78 +799,32 @@ int AsioFrontend::init()
     }
   }
 
-  bool reuse_port = false;
   auto reuse_port_it = config.find("so_reuseport");
   if (reuse_port_it != config.end()) {
     reuse_port = (reuse_port_it->second == "1");
   }
+
+  auto backlog_it = config.find("max_connection_backlog");
+  if (backlog_it != config.end()) {
+    string err;
+    max_connection_backlog = strict_strtol(backlog_it->second.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldout(ctx(), 0) << "WARNING: invalid value for max_connection_backlog="
+                      << backlog_it->second << dendl;
+      max_connection_backlog = boost::asio::socket_base::max_listen_connections;
+    }
+  }
+
   bool socket_bound = false;
   // start listeners
   for (auto& l : listeners) {
-    l.acceptor.open(l.endpoint.protocol(), ec);
-    if (ec) {
-      if (ec == boost::asio::error::address_family_not_supported) {
-	ldout(ctx(), 0) << "WARNING: cannot open socket for endpoint=" << l.endpoint
-			<< ", " << ec.message() << dendl;
-	continue;
-      }
-
-      lderr(ctx()) << "failed to open socket: " << ec.message() << dendl;
-      return -ec.value();
+    int r = start_listener(l);
+    if (r == 0) {
+      socket_bound = true;
+    } else if (r != -EAFNOSUPPORT) {
+      // address_family_not_supported is not fatal, but other errors are
+      return r;
     }
-
-    if (l.endpoint.protocol() == tcp::v6()) {
-      l.acceptor.set_option(boost::asio::ip::v6_only(true), ec);
-      if (ec) {
-        lderr(ctx()) << "failed to set v6_only socket option: "
-		     << ec.message() << dendl;
-	return -ec.value();
-      }
-    }
-
-    if (reuse_port) {
-      // setting option |SO_REUSEPORT| allows running of multiple rgw processes on
-      // the same port. Can read more about the implementation here.
-      // https://web.git.kernel.org/pub/scm/linux/kernel/git/netdev/net-next.git/commit/?id=c617f398edd4db2b8567a28e899a88f8f574798d
-      int one = 1;
-      if (setsockopt(l.acceptor.native_handle(), SOL_SOCKET,
-                     SO_REUSEADDR | SO_REUSEPORT, &one, sizeof(one)) == -1) {
-        lderr(ctx()) << "setsockopt SO_REUSEADDR | SO_REUSEPORT failed:" <<
- dendl;
-        return -1;
-      }
-    } else {
-      l.acceptor.set_option(tcp::acceptor::reuse_address(true));
-    }
-
-    l.acceptor.bind(l.endpoint, ec);
-    if (ec) {
-      lderr(ctx()) << "failed to bind address " << l.endpoint
-          << ": " << ec.message() << dendl;
-      return -ec.value();
-    }
-
-    auto it = config.find("max_connection_backlog");
-    auto max_connection_backlog = boost::asio::socket_base::max_listen_connections;
-    if (it != config.end()) {
-      string err;
-      max_connection_backlog = strict_strtol(it->second.c_str(), 10, &err);
-      if (!err.empty()) {
-        ldout(ctx(), 0) << "WARNING: invalid value for max_connection_backlog=" << it->second << dendl;
-        max_connection_backlog = boost::asio::socket_base::max_listen_connections;
-      }
-    }
-    l.acceptor.listen(max_connection_backlog);
-
-    // spawn a cancellable coroutine to the run the accept loop
-    boost::asio::spawn(context,
-      [this, &l] (boost::asio::yield_context yield) mutable {
-        accept(l, yield);
-      }, bind_cancellation_slot(l.signal.slot(),
-             bind_executor(context, boost::asio::detached)));
-
-    ldout(ctx(), 4) << "frontend listening on " << l.endpoint << dendl;
-    socket_bound = true;
   }
   if (!socket_bound) {
     lderr(ctx()) << "Unable to listen at any endpoints" << dendl;
@@ -1287,12 +1316,12 @@ void AsioFrontend::join()
 
 void AsioFrontend::pause()
 {
-  ldout(ctx(), 4) << "frontend pausing, closing connections..." << dendl;
+  ldout(ctx(), 4) << "frontend pausing, closing listener sockets..." << dendl;
 
-  // cancel pending calls to accept(), but don't close the sockets
   boost::system::error_code ec;
+  // close all listener sockets so new connections are refused immediately
   for (auto& l : listeners) {
-    l.acceptor.cancel(ec);
+    l.acceptor.close(ec);
     // signal cancellation of accept()
     l.signal.emit(boost::asio::cancellation_type::terminal);
   }
@@ -1309,23 +1338,25 @@ void AsioFrontend::pause()
   if (ec) {
     ldout(ctx(), 1) << "frontend failed to pause: " << ec.message() << dendl;
   } else {
-    ldout(ctx(), 4) << "frontend paused" << dendl;
+    ldout(ctx(), 4) << "frontend paused, listener sockets closed" << dendl;
   }
 }
 
-void AsioFrontend::unpause()
+void
+AsioFrontend::unpause()
 {
+  ldout(ctx(), 4) << "frontend unpausing, reopening listener sockets..."
+                  << dendl;
+
   // unpause to unblock connections
   pause_mutex.unlock();
 
-  // start accepting connections again
+  // reopen, rebind and start listening on all sockets
   for (auto& l : listeners) {
-    boost::asio::spawn(context,
-      [this, &l] (boost::asio::yield_context yield) mutable {
-        accept(l, yield);
-      }, bind_cancellation_slot(l.signal.slot(),
-             bind_executor(context, boost::asio::detached)));
-
+    int r = start_listener(l);
+    if (r < 0 && r != -EAFNOSUPPORT) {
+      lderr(ctx()) << "failed to start listener during unpause: " << r << dendl;
+    }
   }
 
   ldout(ctx(), 4) << "frontend unpaused" << dendl;
