@@ -75,9 +75,7 @@ def main():
     log.info(f"json_out has length of { len(json_out) }")
     idx_list = list(map(lambda v: v['idx'], json_out))
     log.info(f"json_out has idx's of { idx_list }")
-    assert(len(json_out) == 4,
-           "bucket index did not only contain entries for one version of one " \
-           "object; expecting two plain, one instance, and one OLH entry")
+    assert len(json_out) == 4, "bucket index did not only contain entries for one version of one object; expecting two plain, one instance, and one OLH entry"
 
     connection.ObjectVersion(bucket.name, key, version_id_1).delete()
     # bucket index should now be empty
