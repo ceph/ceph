@@ -541,6 +541,7 @@ bool is_non_s3_op(RGWOpType op_type)
   case RGW_OP_GET_POLICY:
   case RGW_OP_DELETE_POLICY:
   case RGW_OP_LIST_POLICIES:
+  case RGW_OP_CREATE_POLICY_VERSION:
     return true;
   default:
     return false;

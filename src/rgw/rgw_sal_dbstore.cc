@@ -1537,6 +1537,19 @@ int DBStore::list_customer_mananged_policies(const DoutPrefixProvider* dpp,
   return -ENOTSUP;
 }
 
+int DBStore::create_policy_version(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        const std::string_view policy_document,
+                        bool set_as_default,
+                        std::string &version_id,
+                        ceph::real_time &create_date,
+                        bool exclusive)
+{
+  return -ENOTSUP;
+}
+
   std::unique_ptr<Writer> DBStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,

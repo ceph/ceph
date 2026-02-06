@@ -40,6 +40,7 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
   {"GetPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetPolicy;}},
   {"DeletePolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWDeletePolicy;}},
   {"ListPolicies", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWListPolicies;}},
+  {"CreatePolicyVersion", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWCreatePolicyVersion;}},
   {"GetAccountSummary", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetAccountSummary;}},
   {"PutUserPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWPutUserPolicy(bl_post_body);}},
   {"GetUserPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetUserPolicy;}},
