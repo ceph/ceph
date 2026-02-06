@@ -2383,6 +2383,74 @@ Then run the following:
 
         return f"Ceph cluster {self._cluster_fsid} on {hostname} has exited maintenance mode"
 
+    def update_paused_host_healthcheck(self) -> None:
+        """Raise/update or clear the paused host health check as needed"""
+        paused_hosts = self.inventory.get_host_with_state("paused")
+        if not paused_hosts:
+            self.remove_health_warning('CEPHADM_HOST_PAUSED')
+        else:
+            s = "host is" if len(paused_hosts) == 1 else "hosts are"
+            self.set_health_warning("CEPHADM_HOST_PAUSED", f"{len(paused_hosts)} {s} paused", 1, [
+                                    f"{h} is paused" for h in paused_hosts])
+
+    @handle_orch_error
+    @host_exists()
+    def pause_host(self, hostname: str) -> str:
+        """
+        Pause orchestrator operations on a host.
+
+        This prevents the orchestrator from scheduling new daemons on the host
+        and marks it as unreachable for scheduling purposes, but does not stop
+        existing daemons like maintenance mode does.
+        """
+        tgt_host = self.inventory._inventory[hostname]
+        current_status = tgt_host.get("status", "").lower()
+
+        if current_status == "paused":
+            raise OrchestratorError(f"Host {hostname} is already paused")
+
+        if current_status == "maintenance":
+            raise OrchestratorError(f"Host {hostname} is in maintenance mode. Exit maintenance mode first")
+
+        # Update the host status in the inventory
+        tgt_host["status"] = "paused"
+        self.inventory._inventory[hostname] = tgt_host
+        self.inventory.save()
+
+        # Set health check for paused hosts
+        self.update_paused_host_healthcheck()
+
+        self.log.info(f'Host {hostname} paused')
+        return f'Host {hostname} paused. Orchestrator operations suspended on this host.'
+
+    @handle_orch_error
+    @host_exists()
+    def resume_host(self, hostname: str) -> str:
+        """
+        Resume orchestrator operations on a host.
+
+        This allows the orchestrator to schedule daemons on the host again.
+        """
+        tgt_host = self.inventory._inventory[hostname]
+        current_status = tgt_host.get("status", "").lower()
+
+        if current_status != "paused":
+            raise OrchestratorError(f"Host {hostname} is not paused")
+
+        # Clear the host status
+        tgt_host["status"] = ""
+        self.inventory._inventory[hostname] = tgt_host
+        self.inventory.save()
+
+        # Refresh host metadata since it's now available again
+        self._invalidate_all_host_metadata_and_kick_serve(hostname)
+
+        # Update health check for paused hosts
+        self.update_paused_host_healthcheck()
+
+        self.log.info(f'Host {hostname} resumed')
+        return f'Host {hostname} resumed. Orchestrator operations resumed on this host.'
+
     @handle_orch_error
     @host_exists()
     def rescan_host(self, hostname: str) -> str:

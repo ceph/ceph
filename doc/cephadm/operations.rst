@@ -117,10 +117,9 @@ Ceph daemons traditionally write logs to ``/var/log/ceph``. Ceph daemons log to
 journald by default and Ceph logs are captured by the container runtime
 environment. They are accessible via ``journalctl``.
 
-.. note:: Prior to Quincy, Ceph daemons logged to stderr.
+.. note:: Prior to Quincy, ceph daemons logged to stderr.
 
-
-Example of Logging to Journald
+Example of logging to journald
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For example, to view the logs for the daemon ``mon.foo`` for a cluster
@@ -225,10 +224,9 @@ For example:
   [mgr]
   mgr/cephadm/cephadm_log_destination = syslog
   EOF
-  # cephadm bootstrap --config /tmp/bootstrap.conf # ... other bootstrap arguments ...
+  cephadm bootstrap --config /tmp/bootstrap.conf # ... other bootstrap arguments ...
 
-
-Setting a Cephadm Log Destination on an Existing Cluster
+Setting a cephadm log destination on an existing cluster
 --------------------------------------------------------
 
 An existing Ceph cluster can be configured to use a specific cephadm log
@@ -313,6 +311,28 @@ Resume cephadm work by running the following command:
 
   ceph orch resume
 
+CEPHADM_HOST_PAUSED
+~~~~~~~~~~~~~~~~~~~
+
+This indicates that one or more hosts have been paused with
+``ceph orch host pause <hostname>``. When a host is paused, cephadm
+excludes it from all orchestrator operations and freezes
+any pending cephadm operations until the host is resumed. Existing
+daemons continue to run normally and serve client I/O operations.
+
+This feature is useful for temporarily isolating a host from cephadm's
+background management during troubleshooting or host-level work while
+keeping services operational. For example, ``ceph orch daemon restart osd.5``
+will not execute if the host containing ``osd.5`` is paused.
+
+This is similar to the ``ceph orch pause`` command but instead of pausing
+all orchestrator operations cluster-wide, it only affects the specific host.
+
+To resume orchestrator operations on a paused host:
+
+.. prompt:: bash #
+
+  ceph orch host resume <hostname>
 
 .. _cephadm-stray-host:
 
@@ -476,11 +496,9 @@ This command returns the status of the configuration checker as either "Enabled"
 
 To list all the configuration checks and their current states, run the following command:
 
-.. prompt:: bash #
-
-  ceph cephadm config-check ls
-
 .. code-block:: console
+
+  # ceph cephadm config-check ls
 
   NAME             HEALTHCHECK                      STATUS   DESCRIPTION
   kernel_security  CEPHADM_CHECK_KERNEL_LSM         enabled  check that SELINUX/Apparmor profiles are consistent across cluster hosts
@@ -622,11 +640,10 @@ To see the list of client keyrings are currently under management, run the follo
 
   ceph orch client-keyring ls
 
+Putting a Keyring Under Management
+----------------------------------
 
-Enabling Management of a Keyring File
--------------------------------------
-
-To enable management of a keyring file, run a command of the following form:
+To put a keyring under management, run a command of the following form: 
 
 .. prompt:: bash #
 

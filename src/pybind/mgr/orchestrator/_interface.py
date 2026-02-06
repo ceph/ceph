@@ -372,6 +372,20 @@ class Orchestrator(object):
     def resume(self) -> None:
         raise NotImplementedError()
 
+    def pause_host(self, hostname: str) -> OrchResult[str]:
+        """
+        Pause orchestrator operations on a host.
+        :param hostname: the name of the host to pause.
+        """
+        raise NotImplementedError()
+
+    def resume_host(self, hostname: str) -> OrchResult[str]:
+        """
+        Resume orchestrator operations on a host.
+        :param hostname: the name of the host to resume.
+        """
+        raise NotImplementedError()
+
     def add_host(self, host_spec: HostSpec) -> OrchResult[str]:
         """
         Add a host to the orchestrator inventory.
