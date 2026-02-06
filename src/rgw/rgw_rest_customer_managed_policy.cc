@@ -17,6 +17,8 @@ constexpr int MAX_TAG_SIZE = 50;
 constexpr int MAX_ENTRIES_SIZE = 1000;
 constexpr int MAX_POLICY_VERSIONS = 5;
 
+static const std::string oid_prefix = "customer-managed-policy.";
+
 static std::string get_name_key( const std::string_view& account_id, const std::string_view& policy_name)
 {
   std::string lower_name(policy_name);
@@ -607,6 +609,75 @@ void RGWCreatePolicyVersion::execute(optional_yield y)
     encode_json("CreateDate", create_date , s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
+int RGWDeletePolicyVersion::init_processing(optional_yield y)
+{
+  version_id = s->info.args.get("VersionId");
+  const std::regex pattern(R"(^v[1-9][0-9]*$)");
+
+  if(std::regex_match(version_id, pattern)) {
+    std::string_view account;
+    if (const auto& acc = s->auth.identity->get_account(); acc) {
+      account = acc->id;
+      std::string provider_arn = s->info.args.get("PolicyArn");
+      return validate_policy_arn(provider_arn, account, arn, s->err.message);
+    }
+  }
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+int RGWDeletePolicyVersion::delete_policy_version(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    std::string_view account,
+    std::string_view policy_name,
+    std::string_view version_id,
+    bool exclusive)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account, policy_name);
+  op_ret = driver->get_customer_managed_policy(this, y, arn.account, policy_name, info);
+    if(op_ret < 0){
+      return op_ret;
+    }
+
+  if(info.default_version == version_id) {
+    ldpp_dout(dpp, 20) << "failed to delete default version_id" << dendl;
+    return -EBUSY;
+  }
+
+  int key = ceph::parse<int>(version_id.substr(1)).value();
+  auto it = info.versions.find(key);
+
+  if(it != info.versions.end()) {
+    info.versions.erase(it);
+    op_ret = driver->create_customer_managed_policy(this, y, info, exclusive);
+      if(op_ret < 0) {
+        ldpp_dout(dpp, 20) << "failed to create_policy_version " << info.name << " with: " << cpp_strerror(op_ret) << dendl;
+        return op_ret;
+      }
+  } else {
+    ldpp_dout(dpp, 20) << "version_id does not exist" << dendl;
+    return -ENOENT;
+  }
+
+  return op_ret;
+}
+
+void RGWDeletePolicyVersion::execute(optional_yield y)
+{
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  constexpr bool exclusive = false;
+  op_ret = delete_policy_version(this, y, arn.account, policy_name, version_id, exclusive);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to delete policy version: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("DeletePolicyVersionResponse ", RGW_REST_IAM_XMLNS);
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();

@@ -94,3 +94,20 @@ public:
   const char* name() const override { return "create_policy_version"; }
   RGWOpType get_type() override { return RGW_OP_CREATE_POLICY_VERSION; }
 };
+
+class RGWDeletePolicyVersion : public RGWRestPolicy {
+  std::string policy_arn;
+  std::string version_id;
+  int delete_policy_version(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    std::string_view account,
+    std::string_view policy_name,
+    std::string_view version_id,
+    bool exclusive);
+public:
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  RGWDeletePolicyVersion() : RGWRestPolicy(rgw::IAM::iamDeletePolicyVersion, RGW_CAP_WRITE){ }
+  const char* name() const override { return "delete_policy_version"; }
+  RGWOpType get_type() override { return RGW_OP_DELETE_POLICY_VERSION; }
+};

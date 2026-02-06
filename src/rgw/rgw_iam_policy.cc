@@ -207,6 +207,7 @@ static const actpair actpairs[] =
  { "iam:DeletePolicy", iamDeletePolicy},
  { "iam:ListPolicies", iamListPolicies},
  { "iam:CreatePolicyVersion", iamCreatePolicyVersion},
+ { "iam:DeletePolicyVersion", iamDeletePolicyVersion},
  { "iam:GetAccountSummary", iamGetAccountSummary},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
@@ -1709,6 +1710,9 @@ const char* action_bit_string(uint64_t action) {
 
   case iamCreatePolicyVersion:
     return "iam:CreatePolicyVersion";
+
+  case iamDeletePolicyVersion:
+    return "iam:DeletePolicyVersion";
 
   case iamGetAccountSummary:
     return "iam:GetAccountSummary";
