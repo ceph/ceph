@@ -13,6 +13,7 @@
 namespace rgwrados::policy
 {
 static const int max_policy_versions = 5;
+static const int max_tags = 50;
 static const std::string oid_prefix = "customer-managed-policy.";
 static constexpr std::string_view policy_oid_prefix = "policies.";
 
@@ -457,6 +458,131 @@ int delete_policy_version(const DoutPrefixProvider *dpp,
   } else {
     ldpp_dout(dpp, 20) << "version_id does not exist" << dendl;
     return -ENOENT;
+  }
+
+  return ret;
+}
+
+int get_policy_version(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    RGWSI_SysObj &sysobj,
+    const RGWZoneParams &zone,
+    std::string_view account,
+    std::string_view policy_name,
+    std::string_view version_id,
+    rgw::IAM::PolicyVersion& policy_version)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account, policy_name);
+  int ret = get_policy(dpp, y, sysobj, zone, account, policy_name, info);
+  if(ret < 0){
+    return ret;
+  }
+
+  int key = ceph::parse<int>(version_id.substr(1)).value();
+  auto it = info.versions.find(key);
+
+  if(it != info.versions.end()) {
+    policy_version.document = it->second.document;
+    policy_version.version_id = it->second.version_id;
+    policy_version.is_default_version= it->second.is_default_version;
+    policy_version.create_date = it->second.create_date;
+  } else {
+    ldpp_dout(dpp, 20) << "version_id does not exist" << dendl;
+    return -ENOENT;
+  }
+
+  return ret;
+}
+
+int set_default_policy_version(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    RGWSI_SysObj &sysobj,
+    const RGWZoneParams &zone,
+    std::string_view account,
+    std::string_view policy_name,
+    std::string_view version_id)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account, policy_name);
+  int ret = get_policy(dpp, y, sysobj, zone, account, policy_name, info);
+  if(ret < 0){
+    return ret;
+  }
+
+  int key = ceph::parse<int>(version_id.substr(1)).value();
+  auto it = info.versions.find(key);
+
+  if(it != info.versions.end()) {
+    info.default_version = version_id;
+    info.is_attachable = false;
+    it->second.is_default_version = true;
+    ret = write_policy(dpp, y, rados, sysobj, zone, info, false);
+    if(ret < 0) {
+      ldpp_dout(dpp, 20) << "failed to set_default_policy_version " << policy_name << " with: " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+  } else {
+    ldpp_dout(dpp, 20) << "version_id does not exist" << dendl;
+    return -ENOENT;
+  }
+
+  return ret;
+}
+
+int list_policy_versions(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    RGWSI_SysObj &sysobj,
+    const RGWZoneParams &zone,
+    std::string_view account_id,
+    std::string_view policy_name,
+    std::string_view marker,
+    uint32_t max_items,
+    rgw::IAM::VersionList& listing)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account_id, policy_name);
+  int ret = get_policy(dpp, y, sysobj, zone, account_id, policy_name, info);
+  if(ret < 0){
+    return ret;
+  }
+
+  for(const auto &version : info.versions) {
+    listing.versions.push_back(std::move(version.second));
+  }
+
+  return ret;
+}
+
+int tag_policy(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    RGWSI_SysObj &sysobj,
+    const RGWZoneParams &zone,
+    std::string_view account,
+    std::string_view policy_name,
+    std::multimap<std::string, std::string>& tags)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account, policy_name);
+  int ret = get_policy(dpp, y, sysobj, zone, account, policy_name, info);
+  if(ret < 0){
+    return ret;
+  }
+
+  if(tags.size() + info.tags.size() > max_tags) {
+    return -ERR_LIMIT_EXCEEDED;
+  }
+
+  info.tags.insert(tags.begin(), tags.end());
+
+  ret = write_policy(dpp, y, rados, sysobj, zone, info, false);
+  if(ret < 0) {
+    ldpp_dout(dpp, 20) << "failed to tag policy " << policy_name << " with: " << cpp_strerror(ret) << dendl;
+    return ret;
   }
 
   return ret;

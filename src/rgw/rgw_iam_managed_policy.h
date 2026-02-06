@@ -170,6 +170,11 @@ struct PolicyList {
   std::string next_marker;
 };
 
+struct VersionList {
+  std::vector<PolicyVersion> versions;
+  std::string next_marker;
+};
+
 enum class Scope { All, AWS, Local };
 enum class PolicyUsageFilter { PermissionsPolicy, PermissionsBoundary };
 std::vector<ManagedPolicyInfo> list_aws_managed_policy();

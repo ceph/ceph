@@ -769,6 +769,45 @@ int FilterDriver::delete_policy_version(const DoutPrefixProvider* dpp,
   return next->delete_policy_version(dpp, y, account, policy_name, version_id, exclusive);
 }
 
+int FilterDriver::get_policy_version(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::string_view version_id,
+                        rgw::IAM::PolicyVersion& policy_version)
+{
+  return next->get_policy_version(dpp, y, account, policy_name, version_id, policy_version);
+}
+
+int FilterDriver::set_default_policy_version(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::string_view version_id)
+{
+  return next->set_default_policy_version(dpp, y, account, policy_name, version_id);
+}
+
+int FilterDriver::list_policy_versions(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account_id,
+                            std::string_view policy_name,
+                            std::string_view marker,
+                            uint32_t max_items,
+                            rgw::IAM::VersionList& listing)
+{
+  return next->list_policy_versions(dpp, y, account_id, policy_name, marker, max_items, listing);
+}
+
+int FilterDriver::tag_policy(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::multimap<std::string, std::string>& tags)
+{
+  return next->tag_policy(dpp, y, account, policy_name, tags);
+}
+
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,

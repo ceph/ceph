@@ -129,4 +129,44 @@ int delete_policy_version(const DoutPrefixProvider *dpp,
               std::string_view policy_name,
               std::string_view version_id,
               bool exclusive);
+
+int get_policy_version(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              librados::Rados& rados,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account,
+              std::string_view policy_name,
+              std::string_view version_id,
+              rgw::IAM::PolicyVersion& policy_version);
+
+int set_default_policy_version(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              librados::Rados& rados,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account,
+              std::string_view policy_name,
+              std::string_view version_id);
+
+int list_policy_versions(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              librados::Rados& rados,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account_id,
+              std::string_view policy_name,
+              std::string_view marker,
+              uint32_t max_items,
+              rgw::IAM::VersionList& listing);
+
+int tag_policy(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              librados::Rados& rados,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account,
+              std::string_view policy_name,
+              std::multimap<std::string, std::string>& tags);
+
 }
