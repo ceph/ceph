@@ -192,6 +192,7 @@ enum action_t {
   iamSimulatePrincipalPolicy,
   iamGetAccountSummary,
   iamCreatePolicy,
+  iamGetPolicy,
   iamAll,
 
 
