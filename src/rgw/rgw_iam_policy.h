@@ -189,6 +189,7 @@ enum {
   iamSimulatePrincipalPolicy,
   iamGetAccountSummary,
   iamCreatePolicy,
+  iamGetPolicy,
   iamAll,
 
 

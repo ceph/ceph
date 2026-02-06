@@ -37,6 +37,7 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
   {"DetachRolePolicy", make_iam_detach_role_policy_op},
   {"ListAttachedRolePolicies", make_iam_list_attached_role_policies_op},
   {"CreatePolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWCreatePolicy(bl_post_body);}},
+  {"GetPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetPolicy;}},
   {"GetAccountSummary", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetAccountSummary;}},
   {"PutUserPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWPutUserPolicy(bl_post_body);}},
   {"GetUserPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetUserPolicy;}},
