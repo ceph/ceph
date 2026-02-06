@@ -273,4 +273,34 @@ void ManagedPolicyInfo::generate_test_instances(std::list<ManagedPolicyInfo*>& o
   o.push_back(p);
 }
 
+std::vector<ManagedPolicyInfo> list_aws_managed_policy()
+{
+  std::vector<ManagedPolicyInfo> policies;
+
+  auto add = [&](std::string_view name,
+                std::string_view id,
+                std::string_view policy_doc,
+                std::string_view arn,
+                std::string_view desc,
+                std::string_view version) {
+    ManagedPolicyInfo info;
+    info.name = name;
+    info.policy_document = policy_doc;
+    info.arn = arn;
+    info.description = desc;
+    info.default_version = version;
+    info.id = id;
+    policies.push_back(info);
+  };
+
+  add("IAMFullAccess", "IAMFullAccess", IAMFullAccess, "arn:aws:iam::aws:policy/IAMFullAccess", "Full access to IAM", "v2");
+  add("IAMReadOnlyAccess", "IAMReadOnlyAccess", IAMReadOnlyAccess, "arn:aws:iam::aws:policy/IAMReadOnlyAccess", "Read-only access to IAM", "v4");
+  add("AmazonSNSFullAccess", "AmazonSNSFullAccess", AmazonSNSFullAccess, "arn:aws:iam::aws:policy/AmazonSNSFullAccess", "Full access to SNS", "v1");
+  add("AmazonSNSReadOnlyAccess", "AmazonSNSReadOnlyAccess", AmazonSNSReadOnlyAccess, "arn:aws:iam::aws:policy/AmazonSNSReadOnlyAccess", "Read-only access to SNS", "v1");
+  add("AmazonS3FullAccess", "AmazonS3FullAccess", AmazonS3FullAccess, "arn:aws:iam::aws:policy/AmazonS3FullAccess", "Full access to S3", "v2");
+  add("AmazonS3ReadOnlyAccess", "AmazonS3ReadOnlyAccess", AmazonS3ReadOnlyAccess, "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess", "Read-only access to S3", "v3");
+
+  return std::move(policies);
+}
+
 } // namespace rgw::IAM
