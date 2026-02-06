@@ -39,3 +39,12 @@ public:
   const char* name() const override { return "get_policy"; }
   RGWOpType get_type() override { return RGW_OP_GET_POLICY; }
 };
+
+class RGWDeletePolicy : public RGWRestPolicy {
+public:
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  RGWDeletePolicy() : RGWRestPolicy(rgw::IAM::iamDeletePolicy, RGW_CAP_WRITE){ }
+  const char* name() const override { return "delete_policy"; }
+  RGWOpType get_type() override { return RGW_OP_DELETE_POLICY; }
+};

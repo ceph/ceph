@@ -190,6 +190,7 @@ enum {
   iamGetAccountSummary,
   iamCreatePolicy,
   iamGetPolicy,
+  iamDeletePolicy,
   iamAll,
 
 
