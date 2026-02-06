@@ -437,6 +437,7 @@ class RadosStore : public StoreDriver {
                             std::string_view marker,
                             uint32_t max_items,
                             rgw::IAM::PolicyList& listing) override;
+
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,

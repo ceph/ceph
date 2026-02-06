@@ -2724,6 +2724,7 @@ int RadosStore::list_customer_mananged_policies(const DoutPrefixProvider* dpp,
                                          path_prefix, policy_usage_filter,
                                          marker, max_items, listing);
 }
+
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
