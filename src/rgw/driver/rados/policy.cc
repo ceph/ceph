@@ -220,4 +220,140 @@ int delete_policy(const DoutPrefixProvider *dpp,
 
   return ret;
 }
+
+static int list(const DoutPrefixProvider* dpp,
+         optional_yield y,
+         librados::Rados& rados,
+         const rgw_raw_obj& obj,
+         std::string_view marker,
+         std::string_view path_prefix,
+         uint32_t max_items,
+         std::vector<std::string>& names,
+         std::string& next_marker)
+{
+  rgw_rados_ref ref;
+  int r = rgw_get_rados_ref(dpp, &rados, obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectReadOperation op;
+  std::vector<cls_user_account_resource> entries;
+  bool truncated = false;
+  int ret = 0;
+  ::cls_user_account_resource_list(op, marker, path_prefix, max_items,
+                                   entries, &truncated, &next_marker, &ret);
+
+  r = ref.operate(dpp, std::move(op), nullptr, y);
+  if (r == -ENOENT) {
+    next_marker.clear();
+    return 0;
+  }
+  if (r < 0) {
+    return r;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (auto& resource : entries) {
+    resource_metadata meta;
+    try {
+      auto p = resource.metadata.cbegin();
+      decode(meta, p);
+    } catch (const buffer::error&) {
+      return -EIO;
+    }
+    names.push_back(std::move(meta.policy_name));
+  }
+
+  if (!truncated) {
+    next_marker.clear();
+  }
+  return 0;
+}
+
+static int get_aws_managed_policies(rgw::IAM::PolicyList& listing)
+{
+  auto aws_policies = rgw::IAM::list_aws_managed_policy();
+  listing.policies.insert(listing.policies.end(),
+                          aws_policies.begin(), aws_policies.end());
+  return 0;
+}
+
+static int get_customer_managed_policies(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              librados::Rados& rados,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account_id,
+              bool only_attached,
+              rgw::IAM::PolicyUsageFilter policy_usage_filter,
+              std::string_view path_prefix,
+              std::string_view marker,
+              uint32_t max_items,
+              rgw::IAM::PolicyList& listing)
+{
+  std::vector<std::string> names;
+  const rgw_raw_obj& obj = rgwrados::policy::get_policy_obj(zone, account_id);
+  int ret = list(dpp, y, rados, obj, marker, path_prefix, max_items, names, listing.next_marker);
+  if(ret < 0) {
+    return ret;
+  }
+
+  for(const auto &name : names) {
+    rgw::IAM::ManagedPolicyInfo info;
+    auto oid = get_name_key(account_id, name);
+    int ret = get_policy(dpp, y, sysobj, zone, account_id, name, info);
+    if(ret < 0){
+      return ret;
+    }
+
+    if(only_attached && info.attachment_count == 0) {
+      continue;
+    }
+    if(policy_usage_filter == rgw::IAM::PolicyUsageFilter::PermissionsBoundary 
+        && info.permissions_boundary_usage_count == 0) {
+      continue;
+    }
+    listing.policies.push_back(std::move(info));
+  }
+
+  return 0;
+}
+
+
+int list_policies(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              librados::Rados& rados,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account_id,
+              rgw::IAM::Scope scope,
+              bool only_attached,
+              std::string_view path_prefix,
+              rgw::IAM::PolicyUsageFilter policy_usage_filter,
+              std::string_view marker,
+              uint32_t max_items,
+              rgw::IAM::PolicyList& listing)
+{
+  int ret = -ENOENT;
+  switch(scope) {
+    case rgw::IAM::Scope::AWS:
+      ret = get_aws_managed_policies(listing);
+      break;
+    case rgw::IAM::Scope::Local:
+      ret = get_customer_managed_policies(dpp, y, rados, sysobj, zone, account_id,
+              only_attached, policy_usage_filter, path_prefix, marker, max_items, listing);
+      break;
+    case rgw::IAM::Scope::All:
+    default:
+      ret = get_aws_managed_policies(listing);
+      if(ret < 0) return ret;
+      ret = get_customer_managed_policies(dpp, y, rados, sysobj, zone, account_id,
+              only_attached, policy_usage_filter, path_prefix, marker, max_items, listing);
+  }
+
+  return ret;
+}
 }

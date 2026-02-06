@@ -162,5 +162,16 @@ struct ManagedPolicyInfo {
   static void generate_test_instances(std::list<ManagedPolicyInfo*>& ls);
 };
 WRITE_CLASS_ENCODER(ManagedPolicyInfo)
+// A list of policies
+struct PolicyList {
+  // The list of results, sorted by name
+  std::vector<ManagedPolicyInfo> policies;
+  // The next marker to resume listing, or empty
+  std::string next_marker;
+};
+
+enum class Scope { All, AWS, Local };
+enum class PolicyUsageFilter { PermissionsPolicy, PermissionsBoundary };
+std::vector<ManagedPolicyInfo> list_aws_managed_policy();
 
 } // namespace rgw::IAM
