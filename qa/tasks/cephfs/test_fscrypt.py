@@ -16,17 +16,10 @@ log = getLogger(__name__)
 
 class FSCryptTestCase(CephFSTestCase):
     CLIENTS_REQUIRED = 1
+    MDS_ALLOW_ALL = True
 
     def setUp(self):
         super().setUp()
-
-        self.get_ceph_cmd_result(
-                'auth', 'caps', "client.0",
-                'mds', 'allow *',
-                'mon', 'allow *',
-                 'osd', 'allow *')
-        self.mount_a.umount_wait()
-        self.mount_a.mount_wait()
 
         self.protector = ''.join(random.choice(string.ascii_letters) for _ in range(8))
         self.key_file = "/tmp/key"
@@ -372,17 +365,10 @@ class TestFSCryptRMW(FSCryptTestCase):
 
 class TestFSCryptVolumes(CephFSTestCase):
     MDSS_REQUIRED = 2
+    MDS_ALLOW_ALL = True
 
     def setUp(self):
         super().setUp()
-
-        self.get_ceph_cmd_result(
-                'auth', 'caps', "client.0",
-                'mds', 'allow *',
-                'mon', 'allow *',
-                 'osd', 'allow *')
-        self.mount_a.umount_wait()
-        self.mount_a.mount_wait()
 
         self.protector = ''.join(random.choice(string.ascii_letters) for _ in range(8))
         self.key_file = "/tmp/key_volume"
