@@ -124,6 +124,7 @@ using rgw::IAM::iamSetDefaultPolicyVersion;
 using rgw::IAM::iamListPolicyVersions;
 using rgw::IAM::iamTagPolicy;
 using rgw::IAM::iamUntagPolicy;
+using rgw::IAM::iamListPolicyTags;
 using rgw::IAM::snsGetTopicAttributes;
 using rgw::IAM::snsListTopics;
 using rgw::Service;
@@ -762,6 +763,7 @@ TEST_F(ManagedPolicyTest, IAMReadOnlyAccess)
   act[iamListPolicyVersions] = 1;
   act[iamTagPolicy] = 1;
   act[iamUntagPolicy] = 1;
+  act[iamListPolicyTags] = 1;
 
   EXPECT_EQ(act, p->statements[0].action);
 }
