@@ -175,10 +175,10 @@ class CephFSTestCase(CephTestCase):
             for client_id in client_mount_ids:
                 cmd = ['auth', 'caps', f'client.{client_id}', 'mon','allow r',
                        'osd', f'allow rw tag cephfs data={self.fs.name}',
-                       'mds', 'allow']
+                       'mds', 'allow all']
 
                 if self.get_ceph_cmd_result(*cmd) == 0:
-                    break
+                    continue
 
                 cmd[1] = 'add'
                 if self.get_ceph_cmd_result(*cmd) != 0:
