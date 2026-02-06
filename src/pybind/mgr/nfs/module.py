@@ -127,8 +127,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @CLICommand('nfs export update', perm='rw')
     @object_format.Responder()
-    def _cmd_nfs_export_update(self, 
-                               cluster_id: str, 
+    def _cmd_nfs_export_update(self,
+                               cluster_id: str,
                                pseudo_path: str,
                                delegations: Optional[str] = None,
                                inbuf: Optional[str] = None) -> Dict[str, Any]:

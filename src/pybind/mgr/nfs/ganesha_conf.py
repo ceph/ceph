@@ -55,7 +55,7 @@ def _validate_sec_type(sec_type: str) -> None:
 
 def _map_delegation_value(delegation: str) -> str:
     """Map delegation values to Ganesha format.
-    
+
     Ganesha accepts: 'Read', 'Write', or 'None'
     Input values: 'ro' (read-only), 'rw' (read-write), 'none' (no delegation)
     """
@@ -72,28 +72,28 @@ def _map_delegation_value(delegation: str) -> str:
 
 def _unmap_delegation_value(delegation: Optional[str]) -> Optional[str]:
     """Convert Ganesha delegation format back to user format.
-    
+
     Ganesha format: 'Read', 'Write', 'None'
     Output format: 'ro' (read-only), 'rw' (read-write), 'none' (no delegation)
     """
     if not delegation:
         return None
-    
+
     reverse_map = {
         'Read': 'ro',
         'Write': 'rw',
         'None': 'none',
     }
-    
+
     # Handle case-insensitive input
     for ganesha_val, user_val in reverse_map.items():
         if delegation.lower() == ganesha_val.lower():
             return user_val
-    
+
     # If already in user format, return as-is
     if delegation.lower() in ['ro', 'rw', 'none']:
         return delegation.lower()
-    
+
     return delegation
 
 
@@ -390,10 +390,13 @@ class Client:
         addresses = client_block.values.get('clients', [])
         if isinstance(addresses, str):
             addresses = [addresses]
+        # Handle both capitalized and lowercase delegations (like SecType/sectype)
+        delegation = (client_block.values.get('Delegations')
+                      or client_block.values.get('delegations') or None)
         return cls(addresses,
                    client_block.values.get('access_type', None),
                    client_block.values.get('squash', None),
-                   _unmap_delegation_value(client_block.values.get('delegation', None)))
+                   _unmap_delegation_value(delegation))
 
     def to_client_block(self) -> RawBlock:
         result = RawBlock('CLIENT', values={'clients': self.addresses})
@@ -402,13 +405,13 @@ class Client:
         if self.squash:
             result.values['squash'] = self.squash
         if self.delegation:
-            result.values['Delegation'] = _map_delegation_value(self.delegation)
+            result.values['Delegations'] = _map_delegation_value(self.delegation)
         return result
 
     @classmethod
     def from_dict(cls, client_dict: Dict[str, Any]) -> 'Client':
         return cls(client_dict['addresses'], client_dict['access_type'],
-                   client_dict['squash'], client_dict.get('delegation'))
+                   client_dict['squash'], client_dict.get('delegations'))
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -417,7 +420,7 @@ class Client:
             'squash': self.squash
         }
         if self.delegation:
-            result['delegation'] = self.delegation
+            result['delegations'] = self.delegation
         return result
 
 
@@ -480,6 +483,11 @@ class Export:
         # https://github.com/ceph/go-ceph/issues/1097
         if sectype is not None and not isinstance(sectype, list):
             sectype = [sectype]
+        # if this module wrote the ganesha conf the param is camelcase
+        # "Delegations".  but for compatibility with manually edited ganesha confs,
+        # accept "delegations" too.
+        delegation = (export_block.values.get("Delegations")
+                      or export_block.values.get("delegations") or None)
         return cls(export_block.values['export_id'],
                    export_block.values['path'],
                    cluster_id,
@@ -493,7 +501,7 @@ class Export:
                    [Client.from_client_block(client)
                     for client in client_blocks],
                    sectype=sectype,
-                   delegation=_unmap_delegation_value(export_block.values.get('delegation', None)))
+                   delegation=_unmap_delegation_value(delegation))
 
     def to_export_block(self) -> RawBlock:
         values = {
@@ -510,7 +518,7 @@ class Export:
         if self.sectype:
             values['SecType'] = self.sectype
         if self.delegation:
-            values['Delegation'] = _map_delegation_value(self.delegation)
+            values['Delegations'] = _map_delegation_value(self.delegation)
         result = RawBlock("EXPORT", values=values)
         result.blocks = [
             self.fsal.to_fsal_block()
@@ -534,7 +542,7 @@ class Export:
                    FSAL.from_dict(ex_dict.get('fsal', {})),
                    [Client.from_dict(client) for client in ex_dict.get('clients', [])],
                    sectype=ex_dict.get("sectype"),
-                   delegation=ex_dict.get('delegation'))
+                   delegation=ex_dict.get('delegations'))
 
     def to_dict(self) -> Dict[str, Any]:
         values = {
@@ -553,7 +561,7 @@ class Export:
         if self.sectype:
             values['sectype'] = self.sectype
         if self.delegation:
-            values['delegation'] = self.delegation
+            values['delegations'] = self.delegation
         return values
 
     def validate(self, mgr: 'Module') -> None:
