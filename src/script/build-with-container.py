@@ -367,6 +367,7 @@ class Steps(StrEnum):
     DEBS = "debs"
     PACKAGES = "packages"
     LOCAL_CONTAINER = "local-container"
+    LOCAL_OCI_IMAGE = "local-oci-image"
     INTERACTIVE = "interactive"
 
 
@@ -1136,6 +1137,31 @@ def bc_make_local_container(ctx):
         f"--label=org.opencontainers.image.authors=Unsupported Local Build",
         f"--volume={cwd}:{ctx.cli.homedir}:Z",
         "-f", "container/Containerfile",
+    ]
+    with ctx.user_command():
+        _run(cmd, check=True, ctx=ctx)
+
+
+@Builder.set(Steps.LOCAL_OCI_IMAGE)
+def bc_make_local_oci_image(ctx):
+    """Build an OCI-compliant tar container image export"""
+    if ctx.cli.distro not in DistroKind.uses_rpmbuild():
+        raise RuntimeError("Non-RPM container build is not supported")
+    if ctx.container_engine != "podman":
+         raise RuntimeError("Only podman is supported for building container images")
+
+    ctx.build.wants(Steps.LOCAL_CONTAINER, ctx)
+
+    # The container version follows the SRPM
+    ctx.build.wants(Steps.FIND_SRPM, ctx, force=True)
+
+    topdir_on_host = ctx.rpm_topdir.relative_to(ctx.cli.homedir)
+    cmd = [
+        ctx.container_engine,
+        "save",
+        f"ceph:{ctx.current_srpm_version}-local",
+        "--format=oci-archive",
+        "-o", f"{topdir_on_host}/ceph-container-{ctx.current_srpm_version}-local.oci.tar",
     ]
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
