@@ -29,6 +29,15 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+/**
+ * Ensure CryptoAccel GCM constants match RGW GCM constants.
+ * Prevents silent IV/tag size mismatches between acceleration layer and RGW.
+ */
+static_assert(CryptoAccel::AES_GCM_NONCE_SIZE == AES_256_GCM_NONCE_SIZE,
+              "CryptoAccel and RGW GCM nonce sizes must match");
+static_assert(CryptoAccel::AES_GCM_TAGSIZE == AEAD_TAG_SIZE,
+              "CryptoAccel and RGW GCM tag sizes must match");
+
 using namespace std;
 using namespace rgw;
 
@@ -898,13 +907,15 @@ public:
     aad[7] = chunk_index & 0xFF;
   }
 
-  bool gcm_encrypt_chunk(unsigned char* out,
-                         const unsigned char* in,
-                         size_t size,
-                         const unsigned char (&iv)[AES_256_IVSIZE],
-                         const unsigned char (&key)[AES_256_KEYSIZE],
-                         unsigned char* tag,
-                         uint64_t chunk_index)
+  // GCM transform using OpenSSL EVP (no acceleration)
+  bool gcm_transform(unsigned char* out,
+                     const unsigned char* in,
+                     size_t size,
+                     const unsigned char (&iv)[AES_256_IVSIZE],
+                     const unsigned char (&key)[AES_256_KEYSIZE],
+                     unsigned char* tag,
+                     uint64_t chunk_index,
+                     bool encrypt)
   {
     using pctx_t = std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;
     pctx_t pctx{ EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free };
@@ -914,122 +925,135 @@ public:
       return false;
     }
 
-    // 1st init: set cipher type
-    if (1 != EVP_EncryptInit_ex(pctx.get(), EVP_aes_256_gcm(),
-                                 nullptr, nullptr, nullptr)) {
-      ldpp_dout(dpp, 5) << "EVP: failed to initialize GCM" << dendl;
-      return false;
-    }
-
-    // Verify IV size (should be 12 bytes for GCM)
-    if (EVP_CIPHER_CTX_iv_length(pctx.get()) != AES_256_IVSIZE) {
-      ldpp_dout(dpp, 5) << "EVP: unexpected IV length "
-                        << EVP_CIPHER_CTX_iv_length(pctx.get())
-                        << " expected " << AES_256_IVSIZE << dendl;
-      return false;
-    }
-
-    // 2nd init: set key and IV
-    if (1 != EVP_EncryptInit_ex(pctx.get(), nullptr, nullptr, key, iv)) {
-      ldpp_dout(dpp, 5) << "EVP: failed to set key/IV" << dendl;
-      return false;
-    }
-
-    // Add AAD for chunk ordering protection
     uint8_t aad[8];
     encode_chunk_aad(aad, chunk_index);
-    int aad_len = 0;
-    if (1 != EVP_EncryptUpdate(pctx.get(), nullptr, &aad_len, aad, sizeof(aad))) {
-      ldpp_dout(dpp, 5) << "EVP: failed to set AAD" << dendl;
-      return false;
-    }
 
-    // Encrypt data (size is at most CHUNK_SIZE, well within int range for EVP API)
-    int written = 0;
-    ceph_assert(size <= CHUNK_SIZE);
-    if (1 != EVP_EncryptUpdate(pctx.get(), out, &written, in, size)) {
-      ldpp_dout(dpp, 5) << "EVP: EncryptUpdate failed" << dendl;
-      return false;
-    }
+    if (encrypt) {
+      if (1 != EVP_EncryptInit_ex(pctx.get(), EVP_aes_256_gcm(),
+                                   nullptr, nullptr, nullptr)) {
+        ldpp_dout(dpp, 5) << "EVP: failed to initialize GCM" << dendl;
+        return false;
+      }
 
-    // Finalize (GCM doesn't add padding, so finally_written should be 0)
-    int finally_written = 0;
-    if (1 != EVP_EncryptFinal_ex(pctx.get(), out + written, &finally_written)) {
-      ldpp_dout(dpp, 5) << "EVP: EncryptFinal_ex failed" << dendl;
-      return false;
-    }
+      if (1 != EVP_EncryptInit_ex(pctx.get(), nullptr, nullptr, key, iv)) {
+        ldpp_dout(dpp, 5) << "EVP: failed to set key/IV" << dendl;
+        return false;
+      }
 
-    // Get authentication tag
-    if (1 != EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_GET_TAG,
-                                  GCM_TAG_SIZE, tag)) {
-      ldpp_dout(dpp, 5) << "EVP: failed to get GCM tag" << dendl;
-      return false;
-    }
+      int aad_len = 0;
+      if (1 != EVP_EncryptUpdate(pctx.get(), nullptr, &aad_len, aad, sizeof(aad))) {
+        ldpp_dout(dpp, 5) << "EVP: failed to set AAD" << dendl;
+        return false;
+      }
 
-    return (written + finally_written) == static_cast<int>(size);
+      int written = 0;
+      ceph_assert(size <= CHUNK_SIZE);
+      if (1 != EVP_EncryptUpdate(pctx.get(), out, &written, in, size)) {
+        ldpp_dout(dpp, 5) << "EVP: EncryptUpdate failed" << dendl;
+        return false;
+      }
+
+      int finally_written = 0;
+      if (1 != EVP_EncryptFinal_ex(pctx.get(), out + written, &finally_written)) {
+        ldpp_dout(dpp, 5) << "EVP: EncryptFinal_ex failed" << dendl;
+        return false;
+      }
+
+      if (1 != EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_GET_TAG,
+                                    GCM_TAG_SIZE, tag)) {
+        ldpp_dout(dpp, 5) << "EVP: failed to get GCM tag" << dendl;
+        return false;
+      }
+
+      return (written + finally_written) == static_cast<int>(size);
+    } else {
+      if (1 != EVP_DecryptInit_ex(pctx.get(), EVP_aes_256_gcm(),
+                                   nullptr, nullptr, nullptr)) {
+        ldpp_dout(dpp, 5) << "EVP: failed to initialize GCM" << dendl;
+        return false;
+      }
+
+      if (1 != EVP_DecryptInit_ex(pctx.get(), nullptr, nullptr, key, iv)) {
+        ldpp_dout(dpp, 5) << "EVP: failed to set key/IV" << dendl;
+        return false;
+      }
+
+      int aad_len = 0;
+      if (1 != EVP_DecryptUpdate(pctx.get(), nullptr, &aad_len, aad, sizeof(aad))) {
+        ldpp_dout(dpp, 5) << "EVP: failed to set AAD" << dendl;
+        return false;
+      }
+
+      int written = 0;
+      ceph_assert(size <= CHUNK_SIZE);
+      if (1 != EVP_DecryptUpdate(pctx.get(), out, &written, in, size)) {
+        ldpp_dout(dpp, 5) << "EVP: DecryptUpdate failed" << dendl;
+        return false;
+      }
+
+      if (1 != EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_SET_TAG,
+                                    GCM_TAG_SIZE, const_cast<unsigned char*>(tag))) {
+        ldpp_dout(dpp, 5) << "EVP: failed to set GCM tag" << dendl;
+        return false;
+      }
+
+      int finally_written = 0;
+      if (1 != EVP_DecryptFinal_ex(pctx.get(), out + written, &finally_written)) {
+        ldpp_dout(dpp, 5) << "EVP: DecryptFinal_ex failed - authentication failure" << dendl;
+        memset(out, 0, size);
+        return false;
+      }
+
+      return (written + finally_written) == static_cast<int>(size);
+    }
   }
 
-  bool gcm_decrypt_chunk(unsigned char* out,
-                         const unsigned char* in,
-                         size_t size,
-                         const unsigned char (&iv)[AES_256_IVSIZE],
-                         const unsigned char (&key)[AES_256_KEYSIZE],
-                         const unsigned char* tag,
-                         uint64_t chunk_index)
+  /**
+   * GCM transform with hardware acceleration support.
+   *
+   * When a hardware accelerator is available, use it exclusively. If the
+   * accelerated operation fails, that indicates a real crypto error (e.g.,
+   * authentication tag mismatch on decrypt). Only fall back to the OpenSSL
+   * EVP path when no accelerator is available.
+   */
+  bool gcm_transform(unsigned char* out,
+                     const unsigned char* in,
+                     size_t size,
+                     const unsigned char (&iv)[AES_256_IVSIZE],
+                     const unsigned char (&key)[AES_256_KEYSIZE],
+                     unsigned char* tag,
+                     uint64_t chunk_index,
+                     bool encrypt,
+                     optional_yield y)
   {
-    using pctx_t = std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;
-    pctx_t pctx{ EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free };
-
-    if (!pctx) {
-      ldpp_dout(dpp, 5) << "EVP: failed to create cipher context" << dendl;
-      return false;
+    static std::atomic<bool> failed_to_get_crypto_gcm(false);
+    CryptoAccelRef crypto_accel;
+    if (!failed_to_get_crypto_gcm.load()) {
+      static size_t max_requests = g_ceph_context->_conf->rgw_thread_pool_size;
+      crypto_accel = get_crypto_accel(dpp, cct, CHUNK_SIZE, max_requests);
+      if (!crypto_accel)
+        failed_to_get_crypto_gcm = true;
     }
 
-    // 1st init: set cipher type
-    if (1 != EVP_DecryptInit_ex(pctx.get(), EVP_aes_256_gcm(),
-                                 nullptr, nullptr, nullptr)) {
-      ldpp_dout(dpp, 5) << "EVP: failed to initialize GCM" << dendl;
-      return false;
+    if (crypto_accel != nullptr) {
+      uint8_t aad[8];
+      encode_chunk_aad(aad, chunk_index);
+      unsigned char tag_buf[GCM_TAG_SIZE];
+
+      if (encrypt) {
+        bool result = crypto_accel->gcm_encrypt(out, in, size, iv, key,
+                                                 aad, sizeof(aad), tag_buf, y);
+        if (result) memcpy(tag, tag_buf, GCM_TAG_SIZE);
+        return result;
+      } else {
+        memcpy(tag_buf, tag, GCM_TAG_SIZE);
+        return crypto_accel->gcm_decrypt(out, in, size, iv, key,
+                                          aad, sizeof(aad), tag_buf, y);
+      }
     }
 
-    // 2nd init: set key and IV
-    if (1 != EVP_DecryptInit_ex(pctx.get(), nullptr, nullptr, key, iv)) {
-      ldpp_dout(dpp, 5) << "EVP: failed to set key/IV" << dendl;
-      return false;
-    }
-
-    // Add AAD for chunk ordering protection (must match encryption)
-    uint8_t aad[8];
-    encode_chunk_aad(aad, chunk_index);
-    int aad_len = 0;
-    if (1 != EVP_DecryptUpdate(pctx.get(), nullptr, &aad_len, aad, sizeof(aad))) {
-      ldpp_dout(dpp, 5) << "EVP: failed to set AAD" << dendl;
-      return false;
-    }
-
-    // Decrypt data (size is at most CHUNK_SIZE, well within int range for EVP API)
-    int written = 0;
-    ceph_assert(size <= CHUNK_SIZE);
-    if (1 != EVP_DecryptUpdate(pctx.get(), out, &written, in, size)) {
-      ldpp_dout(dpp, 5) << "EVP: DecryptUpdate failed" << dendl;
-      return false;
-    }
-
-    // Set expected tag for verification
-    if (1 != EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_SET_TAG,
-                                  GCM_TAG_SIZE, const_cast<unsigned char*>(tag))) {
-      ldpp_dout(dpp, 5) << "EVP: failed to set GCM tag" << dendl;
-      return false;
-    }
-
-    // Finalize - this verifies the tag
-    int finally_written = 0;
-    if (1 != EVP_DecryptFinal_ex(pctx.get(), out + written, &finally_written)) {
-      ldpp_dout(dpp, 5) << "EVP: DecryptFinal_ex failed - authentication failure" << dendl;
-      return false;  // Tag verification failed
-    }
-
-    return (written + finally_written) == static_cast<int>(size);
+    // No hardware accelerator available — use OpenSSL EVP fallback
+    return gcm_transform(out, in, size, iv, key, tag, chunk_index, encrypt);
   }
 
   bool encrypt(bufferlist& input,
@@ -1067,8 +1091,8 @@ public:
       unsigned char* ciphertext = buf_raw + out_pos;
       unsigned char* tag = buf_raw + out_pos + CHUNK_SIZE;
 
-      if (!gcm_encrypt_chunk(ciphertext, input_raw + offset, CHUNK_SIZE,
-                             iv, key, tag, chunk_index)) {
+      if (!gcm_transform(ciphertext, input_raw + offset, CHUNK_SIZE,
+                         iv, key, tag, chunk_index, true, y)) {
         ldpp_dout(dpp, 5) << "Failed to encrypt chunk at offset " << offset << dendl;
         return false;
       }
@@ -1087,8 +1111,8 @@ public:
       unsigned char* ciphertext = buf_raw + out_pos;
       unsigned char* tag = buf_raw + out_pos + remainder;
 
-      if (!gcm_encrypt_chunk(ciphertext, input_raw + num_full_chunks * CHUNK_SIZE,
-                             remainder, iv, key, tag, chunk_index)) {
+      if (!gcm_transform(ciphertext, input_raw + num_full_chunks * CHUNK_SIZE,
+                         remainder, iv, key, tag, chunk_index, true, y)) {
         ldpp_dout(dpp, 5) << "Failed to encrypt final chunk" << dendl;
         return false;
       }
@@ -1142,8 +1166,8 @@ public:
       unsigned char* ciphertext = input_raw + in_pos;
       unsigned char* tag = input_raw + in_pos + CHUNK_SIZE;
 
-      if (!gcm_decrypt_chunk(buf_raw + out_pos, ciphertext, CHUNK_SIZE,
-                             iv, key, tag, chunk_index)) {
+      if (!gcm_transform(buf_raw + out_pos, ciphertext, CHUNK_SIZE,
+                         iv, key, tag, chunk_index, false, y)) {
         ldpp_dout(dpp, 5) << "GCM: Failed to decrypt chunk " << i
                           << " - authentication failed" << dendl;
         return false;
@@ -1165,8 +1189,8 @@ public:
       unsigned char* ciphertext = input_raw + in_pos;
       unsigned char* tag = input_raw + in_pos + plaintext_size;
 
-      if (!gcm_decrypt_chunk(buf_raw + out_pos, ciphertext, plaintext_size,
-                             iv, key, tag, chunk_index)) {
+      if (!gcm_transform(buf_raw + out_pos, ciphertext, plaintext_size,
+                         iv, key, tag, chunk_index, false, y)) {
         ldpp_dout(dpp, 5) << "GCM: Failed to decrypt final chunk - authentication failed" << dendl;
         return false;
       }
