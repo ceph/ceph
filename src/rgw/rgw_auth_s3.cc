@@ -556,6 +556,7 @@ bool is_non_s3_op(RGWOpType op_type)
   case RGW_OP_S3VECTOR_QUERY_VECTORS:
   case RGW_OP_CREATE_POLICY:
   case RGW_OP_GET_POLICY:
+  case RGW_OP_DELETE_POLICY:
     return true;
   default:
     return false;
