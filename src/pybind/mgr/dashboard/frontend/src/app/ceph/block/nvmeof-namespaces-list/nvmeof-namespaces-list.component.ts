@@ -5,6 +5,7 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
+
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -14,6 +15,7 @@ import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
 import { catchError, map, switchMap, takeUntil } from 'rxjs/operators';
@@ -93,11 +95,14 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
         name: this.actionLabels.CREATE,
         permission: 'create',
         icon: Icons.add,
-        click: () =>
-          this.router.navigate(
-            [BASE_URL, { outlets: { modal: [URLVerbs.CREATE, this.subsystemNQN, 'namespace'] } }],
-            { queryParams: { group: this.group } }
-          ),
+        click: () => {
+          this.router.navigate(['block/nvmeof/namespaces/create'], {
+            queryParams: {
+              group: this.group,
+              subsystem_nqn: this.subsystemNQN
+            }
+          });
+        },
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
         disable: () => !this.group
       },
@@ -109,16 +114,10 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
           this.router.navigate(
             [
               BASE_URL,
-              {
-                outlets: {
-                  modal: [
-                    URLVerbs.EDIT,
-                    this.subsystemNQN,
-                    'namespace',
-                    this.selection.first().nsid
-                  ]
-                }
-              }
+              URLVerbs.EDIT,
+              this.selection.first().ns_subsystem_nqn,
+              'namespace',
+              this.selection.first().nsid
             ],
             { queryParams: { group: this.group } }
           )
@@ -138,7 +137,15 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
         }
         return this.nvmeofService.listNamespaces(this.group).pipe(
           map((res: NvmeofSubsystemNamespace[] | { namespaces: NvmeofSubsystemNamespace[] }) => {
-            return Array.isArray(res) ? res : res.namespaces || [];
+            const namespaces = Array.isArray(res) ? res : res.namespaces || [];
+            // Deduplicate by nsid + subsystem NQN (API with wildcard can return duplicates per gateway)
+            const seen = new Set<string>();
+            return namespaces.filter((ns) => {
+              const key = `${ns.nsid}_${ns['ns_subsystem_nqn']}`;
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            });
           }),
           catchError(() => of([]))
         );

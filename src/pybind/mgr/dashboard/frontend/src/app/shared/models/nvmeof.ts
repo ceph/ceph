@@ -114,3 +114,30 @@ export function getSubsystemAuthStatus(
 
   return NO_AUTH;
 }
+
+// Form control names for NvmeofNamespacesFormComponent
+export enum NsFormField {
+  POOL = 'pool',
+  SUBSYSTEM = 'subsystem',
+  IMAGE_SIZE = 'image_size',
+  NS_COUNT = 'nsCount',
+  RBD_IMAGE_CREATION = 'rbd_image_creation',
+  RBD_IMAGE_NAME = 'rbd_image_name',
+  NAMESPACE_SIZE = 'namespace_size',
+  HOST_ACCESS = 'host_access',
+  INITIATORS = 'initiators'
+}
+
+export enum RbdImageCreation {
+  GATEWAY_PROVISIONED = 'gateway_provisioned',
+  EXTERNALLY_MANAGED = 'externally_managed'
+}
+
+export type NvmeofNamespaceListResponse =
+  | NvmeofSubsystemNamespace[]
+  | { namespaces: NvmeofSubsystemNamespace[] };
+
+export type NvmeofInitiatorCandidate = {
+  content: string;
+  selected: boolean;
+};

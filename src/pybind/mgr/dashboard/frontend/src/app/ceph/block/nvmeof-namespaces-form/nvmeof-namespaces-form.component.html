@@ -1,115 +1,370 @@
-<cd-modal [pageURL]="pageURL"
-          [modalRef]="activeModal">
-  <span class="modal-title"
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
-  <ng-container class="modal-content">
-    <form name="nsForm"
-          #formDir="ngForm"
-          [formGroup]="nsForm"
-          novalidate>
-      <div class="modal-body">
-        <!-- Block Pool -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="pool">
-            <span [ngClass]="{'required': !edit}"
-                  i18n>Pool</span>
-          </label>
-          <div class="cd-col-form-input">
-            <input *ngIf="edit"
-                   class="form-control"
+<form
+  [formGroup]="nsForm"
+  novalidate>
+  <div cdsGrid
+       [useCssGrid]="true"
+       [narrow]="true"
+       [fullWidth]="true">
+
+    <div cdsCol
+         [columnNumbers]="{sm: 4, md: 8}">
+      <div cdsRow
+           class="form-heading form-item">
+        <h3>{{ action | titlecase }} {{ resource | titlecase }}</h3>
+        <cd-help-text [formAllFieldsRequired]="true">
+          <span i18n>
+            Namespaces define the storage volumes that subsystems present to hosts.
+          </span>
+        </cd-help-text>
+      </div>
+
+      <!-- Namespace Count (Create only) -->
+      @if (!edit) {
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-number
+            formControlName="nsCount"
+            cdValidate
+            #nsCountRef="cdValidate"
+            label="Number of namespaces"
+            helperText="No. of namespaces to generate. Value must be between 1 and 5."
+            [min]="MIN_NAMESPACE_CREATE"
+            [max]="MAX_NAMESPACE_CREATE"
+            [invalid]="nsCountRef.isInvalid"
+            [invalidText]="nsCountError"
+            i18n-label
+            i18n-helperText>
+          </cds-number>
+          <ng-template #nsCountError>
+            <ng-container *ngTemplateOutlet="validationErrors; context: { control: nsForm.get('nsCount') }"></ng-container>
+          </ng-template>
+        </div>
+      </div>
+      }
+
+      <!-- Namespace Size (sent as block_size) -->
+      @if (!edit) {
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-number
+            formControlName="namespace_size"
+            cdOptionalField="Namespace size (GiB)"
+            label="Namespace size (GiB)"
+            helperText="Specify the size to expose to hosts. Leave blank for full device/file."
+            placeholder="e.g. 100"
+            [min]="0"
+            [invalid]="nsForm.controls['namespace_size'].invalid && (nsForm.controls['namespace_size'].dirty || nsForm.controls['namespace_size'].touched)"
+            invalidText="Value must be greater than or equal to 0."
+            i18n-label
+            i18n-helperText
+            i18n-invalidText>
+          </cds-number>
+        </div>
+      </div>
+      }
+
+      <!-- Host Access (drives no_auto_visible in create request) -->
+      @if (!edit) {
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <legend
+            class="cds--type-label-01"
+            i18n>Host access (Initiators)</legend>
+          <div class="form-item">
+            <cds-radio-group
+              formControlName="host_access"
+              orientation="horizontal">
+              <cds-radio
+                value="all"
+                [checked]="true">
+                <div>
+                  <span
+                    class="cds--type-body-compact-01"
+                    i18n>All hosts on the subsystem</span>
+                  <span
+                    class="cds--type-helper-text-01 cds-ml-1 d-block"
+                    i18n>Allow all hosts associated with the selected subsystem to access the namespace.</span>
+                </div>
+              </cds-radio>
+              <cds-radio value="specific">
+                <div>
+                  <span
+                    class="cds--type-body-compact-01"
+                    i18n>Select specific hosts</span>
+                  <span
+                    class="cds--type-helper-text-01 cds-ml-1 d-block"
+                    i18n>Only the selected hosts will be able to access this namespace.</span>
+                </div>
+              </cds-radio>
+            </cds-radio-group>
+          </div>
+        </div>
+      </div>
+      }
+
+      <!-- Host Selection (Visible only when 'specific' is selected) -->
+      @if (!edit && nsForm.getValue('host_access') === 'specific') {
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <div class="form-item">
+            <cds-combo-box
+              type="multi"
+              selectionFeedback="top-after-reopen"
+              label="Select hosts"
+              i18n-label
+              placeholder="Select one or more hosts"
+              [appendInline]="true"
+              [items]="initiatorCandidates"
+              (selected)="onInitiatorSelection($event)"
+              [invalid]="nsForm.controls['initiators'].invalid && (nsForm.controls['initiators'].dirty || nsForm.controls['initiators'].touched)"
+              invalidText="This field is required."
+              i18n-invalidText
+              i18n-placeholder>
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+          </div>
+        </div>
+      </div>
+      }
+
+      <!-- Subsystem -->
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          @if (edit) {
+          <cds-text-label
+            label="Subsystem"
+            i18n-label>
+            <input cdsText
+                   readonly
+                   [value]="nsForm.get('subsystem').value" />
+          </cds-text-label>
+          } @else {
+          <cds-select
+            formControlName="subsystem"
+            cdValidate
+            #subsystemRef="cdValidate"
+            label="Select subsystem"
+            [invalid]="subsystemRef.isInvalid"
+            invalidText="This field is required."
+            i18n-label
+            i18n-invalidText>
+            @if (subsystems === undefined) {
+            <option
+              [ngValue]="null"
+              disabled>Loading...</option>
+            }
+            @if (subsystems && subsystems.length === 0) {
+            <option
+              [ngValue]="null"
+              disabled>-- No subsystems available --</option>
+            }
+            @if (subsystems && subsystems.length > 0) {
+            <option
+              value=""
+              selected>Select a subsystem</option>
+            }
+            @for (subsystem of subsystems; track subsystem.nqn) {
+            <option
+              [value]="subsystem.nqn">{{ subsystem.nqn }}</option>
+            }
+          </cds-select>
+          }
+        </div>
+      </div>
+
+      <!-- Pool -->
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          @if (edit) {
+          <cds-text-label
+            label="RBD image pool"
+            i18n-label>
+            <input cdsText
+                   readonly
+                   [value]="nsForm.get('pool').value" />
+          </cds-text-label>
+          } @else {
+          <cds-select
+            formControlName="pool"
+            cdValidate
+            #poolRef="cdValidate"
+            label="RBD image pool"
+            [invalid]="poolRef.isInvalid"
+            invalidText="This field is required."
+            helperText="Pool where the backing Ceph block device resides."
+            i18n-label
+            i18n-invalidText
+            i18n-helperText>
+            @if (rbdPools === null) {
+            <option
+              [ngValue]="null"
+              disabled>Loading...</option>
+            }
+            @if (rbdPools && rbdPools.length === 0) {
+            <option
+              [ngValue]="null"
+              disabled>-- No block pools available --</option>
+            }
+            @if (rbdPools && rbdPools.length > 0) {
+            <option
+              value=""
+              selected>Select a RBD image pool</option>
+            }
+            @for (pool of rbdPools; track pool.pool_name) {
+            <option
+              [value]="pool.pool_name">{{ pool.pool_name }}</option>
+            }
+          </cds-select>
+          }
+        </div>
+      </div>
+
+      <!-- RBD image creation (drives create_image flag in request) -->
+      @if (!edit) {
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <legend
+            class="cds--type-label-01"
+            i18n>RBD image creation</legend>
+          <cds-radio-group
+            formControlName="rbd_image_creation"
+            orientation="vertical">
+            <cds-radio
+              value="gateway_provisioned"
+              i18n>Gateway-provisioned image</cds-radio>
+            <cds-radio
+              value="externally_managed"
+              [disabled]="nsForm.getValue('nsCount') > 1"
+              [title]="nsForm.getValue('nsCount') > 1 ? 'Unavailable during bulk creation. RBD images are created automatically.' : ''"
+              i18n>Externally managed image</cds-radio>
+          </cds-radio-group>
+        </div>
+      </div>
+      }
+
+      <!-- Image Name (Visible when 'gateway_provisioned' and nsCount > 1) -->
+      @if (!edit && nsForm.getValue('rbd_image_creation') === 'gateway_provisioned' && nsForm.getValue('nsCount') > 1) {
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cd-alert-panel
+            type="info"
+            [dismissible]="false"
+            [showTitle]="false">
+            <strong i18n>For bulk namespace creation, RBD images are provisioned automatically.</strong>
+          </cd-alert-panel>
+
+          <div class="form-item"
+               cdOptionalField="Image name">
+            <label
+              class="cds--type-label-01 cds--label"
+              i18n>Image name</label>
+            <cds-text-label
+              helperText="Provide a name for the images. For bulk creation, this will be used as the base prefix with numeric suffixes (e.g., img-1, img-2). Leave blank to auto-generate."
+              [invalid]="rbdImageNameRef.isInvalid"
+              [invalidText]="rbdImageNameError"
+              i18n-helperText>
+              <input cdsText
+                     placeholder="Enter a name"
+                     formControlName="rbd_image_name"
+                     cdValidate
+                     #rbdImageNameRef="cdValidate"
+                     [invalid]="rbdImageNameRef.isInvalid" />
+            </cds-text-label>
+            <ng-template #rbdImageNameError>
+              <ng-container *ngTemplateOutlet="validationErrors; context: { control: nsForm.get('rbd_image_name') }"></ng-container>
+            </ng-template>
+          </div>
+        </div>
+      </div>
+      }
+
+      <!-- Image Selection (Visible only when 'externally_managed' is selected) -->
+      @if (!edit && nsForm.getValue('rbd_image_creation') === 'externally_managed') {
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-select
+            formControlName="rbd_image_name"
+            cdValidate
+            #rbdImageSelectRef="cdValidate"
+            label="RBD Image"
+            [invalid]="rbdImageSelectRef.isInvalid"
+            invalidText="This field is required."
+            helperText="Select an existing RBD image from the pool to expose as a namespace."
+            i18n-label
+            i18n-invalidText
+            i18n-helperText>
+            <option
+              [ngValue]="null"
+              disabled
+              selected>Select an image</option>
+            @for (img of rbdImages; track img.name) {
+            <option
+              [value]="img.name">{{ img.name }} ({{ img.size | dimlessBinary }})</option>
+            }
+          </cds-select>
+        </div>
+      </div>
+      }
+
+      <!-- Image Size -->
+      @if (!edit && nsForm.getValue('rbd_image_creation') !== 'externally_managed') {
+      <div cdsRow
+           class="form-item">
+        <div
+          cdsCol
+          [columnNumbers]="{md: 4}">
+          <cds-text-label
+            helperText="The size of the namespace image."
+            [invalid]="imageSizeRef.isInvalid"
+            [invalidText]="sizeError"
+            i18n-helperText>
+            Image Size
+            <input cdsText
                    type="text"
-                   id="pool-edit"
-                   formControlName="pool">
-            <select *ngIf="!edit"
-                    id="pool-create"
-                    class="form-select"
-                    formControlName="pool">
-              <option *ngIf="rbdPools === null"
-                      [ngValue]="null"
-                      i18n>Loading...</option>
-              <option *ngIf="rbdPools && rbdPools.length === 0"
-                      [ngValue]="null"
-                      i18n>-- No block pools available --</option>
-              <option *ngIf="rbdPools && rbdPools.length > 0"
-                      [ngValue]="null"
-                      i18n>-- Select a pool --</option>
-              <option *ngFor="let pool of rbdPools"
-                      [value]="pool.pool_name">{{ pool.pool_name }}</option>
-            </select>
-            <cd-help-text i18n>
-              An RBD application-enabled pool where the image will be created.
-            </cd-help-text>
-            <span class="invalid-feedback"
-                  *ngIf="nsForm.showError('pool', formDir, 'required')"
-                  i18n>This field is required.</span>
-          </div>
-        </div>
-        <!-- Namespace Count -->
-        <div *ngIf="!edit"
-             class="form-group row"
-             id="namespace-count">
-          <label class="cd-col-form-label"
-                 for="nsCount">
-            <span [ngClass]="{'required': !edit}"
-                  i18n>Namespace Count</span>
-          </label>
-          <div class="cd-col-form-input">
-            <cds-number
-              formControlName="nsCount"
-              helperText="The number of namespaces to create"
-              i18n-helperText
-              [min]="MIN_NAMESPACE_CREATE"
-              [max]="MAX_NAMESPACE_CREATE"
-              [invalid]="nsForm.showError('nsCount', formDir, 'max') || nsForm.showError('nsCount', formDir, 'min') || nsForm.showError('nsCount', formDir, 'required')"
-              [invalidText]="nsForm.get('nsCount').hasError('required') ? requiredInvalidText: nsCountInvalidText"
-              size="sm"></cds-number>
-          </div>
-        </div>
-        <!-- Image Size -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="image_size">
-            <span [ngClass]="{'required': edit}"
-                  i18n>Image Size</span>
-          </label>
-          <div class="cd-col-form-input">
-            <div class="input-group">
-              <input id="size"
-                     class="form-control"
-                     type="text"
-                     formControlName="image_size">
-              <select id="unit"
-                      class="form-input form-select"
-                      formControlName="unit">
-                <option *ngFor="let u of units"
-                        [value]="u"
-                        i18n>{{ u }}</option>
-              </select>
-              <span class="invalid-feedback"
-                    *ngIf="nsForm.showError('image_size', formDir, 'pattern')">
-                <ng-container i18n>Enter a positive integer.</ng-container>
-              </span>
-              <span class="invalid-feedback"
-                    *ngIf="edit && nsForm.showError('image_size', formDir, 'required')">
-                <ng-container i18n>This field is required</ng-container>
-              </span>
-              <span class="invalid-feedback"
-                    id="image-size-invalid"
-                    *ngIf="edit && invalidSizeError">
-                <ng-container i18n>Enter a value above than previous. A block device image can be expanded but not reduced.</ng-container>
-              </span>
-            </div>
-          </div>
+                   placeholder="e.g. 100 GiB"
+                   id="image_size"
+                   formControlName="image_size"
+                   cdValidate
+                   #imageSizeRef="cdValidate"
+                   [invalid]="imageSizeRef.isInvalid"
+                   defaultUnit="GiB"
+                   [min]="0"
+                   cdDimlessBinary>
+          </cds-text-label>
+          <ng-template #sizeError>
+            <ng-container *ngTemplateOutlet="validationErrors; context: { control: nsForm.get('image_size') }"></ng-container>
+          </ng-template>
         </div>
       </div>
-      <div class="modal-footer">
-        <div class="text-right">
-          <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                                [form]="nsForm"
-                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
-        </div>
+      }
+
+      <div cdsRow>
+        <cd-form-button-panel
+          (submitActionEvent)="onSubmit()"
+          [form]="nsForm"
+          [submitText]="(action | titlecase) + ' ' + (resource | titlecase)"
+          wrappingClass="text-right form-button">
+        </cd-form-button-panel>
       </div>
-    </form>
-  </ng-container>
-</cd-modal>
+
+    </div>
+  </div>
+</form>
+
+<ng-template #validationErrors
+             let-control="control">
+  @if (control.errors) {
+  @for (err of control.errors | keyvalue; track err.key) {
+  <span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
+  }
+  }
+</ng-template>

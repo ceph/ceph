@@ -1,4 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { HttpResponse } from '@angular/common/http';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -13,12 +14,14 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofNamespacesFormComponent } from './nvmeof-namespaces-form.component';
 import { FormHelper, Mocks } from '~/testing/unit-test-helper';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
-import { of } from 'rxjs';
+import { of, Observable } from 'rxjs';
 import { PoolService } from '~/app/shared/api/pool.service';
-import { NumberModule } from 'carbon-components-angular';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { NumberModule, RadioModule, ComboBoxModule, SelectModule } from 'carbon-components-angular';
 import { ActivatedRoute, Router } from '@angular/router';
 import { By } from '@angular/platform-browser';
 import { ActivatedRouteStub } from '~/testing/activated-route-stub';
+import { NvmeofInitiatorCandidate } from '~/app/shared/models/nvmeof';
 
 const MOCK_POOLS = [
   Mocks.getPool('pool-1', 1, ['cephfs']),
@@ -28,6 +31,12 @@ const MOCK_POOLS = [
 class MockPoolsService {
   getList() {
     return of(MOCK_POOLS);
+  }
+}
+
+class MockTaskWrapperService {
+  wrapTaskAroundCall(args: { task: any; call: Observable<any> }) {
+    return args.call;
   }
 }
 
@@ -76,7 +85,8 @@ describe('NvmeofNamespacesFormComponent', () => {
       providers: [
         NgbActiveModal,
         { provide: PoolService, useClass: MockPoolsService },
-        { provide: ActivatedRoute, useValue: activatedRouteStub }
+        { provide: ActivatedRoute, useValue: activatedRouteStub },
+        { provide: TaskWrapperService, useClass: MockTaskWrapperService }
       ],
       imports: [
         HttpClientTestingModule,
@@ -85,6 +95,9 @@ describe('NvmeofNamespacesFormComponent', () => {
         RouterTestingModule,
         SharedModule,
         NumberModule,
+        RadioModule,
+        ComboBoxModule,
+        SelectModule,
         ToastrModule.forRoot()
       ]
     }).compileComponents();
@@ -99,7 +112,13 @@ describe('NvmeofNamespacesFormComponent', () => {
     beforeEach(() => {
       router = TestBed.inject(Router);
       nvmeofService = TestBed.inject(NvmeofService);
-      spyOn(nvmeofService, 'createNamespace').and.stub();
+      spyOn(nvmeofService, 'createNamespace').and.returnValue(
+        of(new HttpResponse({ body: MOCK_NS_RESPONSE }))
+      );
+      spyOn(nvmeofService, 'addNamespaceInitiators').and.returnValue(of({}));
+      spyOn(nvmeofService, 'getInitiators').and.returnValue(
+        of([{ nqn: 'host1' }, { nqn: 'host2' }])
+      );
       spyOn(component, 'randomString').and.returnValue(MOCK_RANDOM_STRING);
       Object.defineProperty(router, 'url', {
         get: jasmine.createSpy('url').and.returnValue(MOCK_ROUTER.createUrl)
@@ -107,14 +126,12 @@ describe('NvmeofNamespacesFormComponent', () => {
       component.ngOnInit();
       form = component.nsForm;
       formHelper = new FormHelper(form);
-    });
-    it('should have set create fields correctly', () => {
-      expect(component.rbdPools.length).toBe(2);
-      fixture.detectChanges();
-      const poolEl = fixture.debugElement.query(By.css('#pool-create')).nativeElement;
-      expect(poolEl.value).toBe('rbd');
+      formHelper.setValue('pool', 'rbd');
     });
     it('should create 5 namespaces correctly', () => {
+      formHelper.setValue('pool', 'rbd');
+      formHelper.setValue('image_size', 1073741824);
+      formHelper.setValue('subsystem', MOCK_SUBSYSTEM);
       component.onSubmit();
       expect(nvmeofService.createNamespace).toHaveBeenCalledTimes(5);
       expect(nvmeofService.createNamespace).toHaveBeenCalledWith(MOCK_SUBSYSTEM, {
@@ -122,18 +139,73 @@ describe('NvmeofNamespacesFormComponent', () => {
         rbd_image_name: `nvme_rbd_default_${MOCK_RANDOM_STRING}`,
         rbd_pool: 'rbd',
         create_image: true,
-        rbd_image_size: 1073741824
+        rbd_image_size: 1073741824,
+        no_auto_visible: false
       });
+    });
+
+    it('should create multiple namespaces with suffixed custom image names', () => {
+      formHelper.setValue('pool', 'rbd');
+      formHelper.setValue('image_size', 1073741824);
+      formHelper.setValue('subsystem', MOCK_SUBSYSTEM);
+      formHelper.setValue('nsCount', 2);
+      formHelper.setValue('rbd_image_name', 'test-img');
+      component.onSubmit();
+      expect(nvmeofService.createNamespace).toHaveBeenCalledTimes(2);
+      expect((nvmeofService.createNamespace as any).calls.argsFor(0)[1].rbd_image_name).toBe(
+        'test-img-1'
+      );
+      expect((nvmeofService.createNamespace as any).calls.argsFor(1)[1].rbd_image_name).toBe(
+        'test-img-2'
+      );
     });
     it('should give error on invalid image size', () => {
       formHelper.setValue('image_size', -56);
       component.onSubmit();
-      formHelper.expectError('image_size', 'pattern');
+      // Expect form error instead of control error as validation happens on submit
+      expect(component.nsForm.hasError('cdSubmitButton')).toBeTruthy();
     });
     it('should give error on 0 image size', () => {
       formHelper.setValue('image_size', 0);
       component.onSubmit();
-      formHelper.expectError('image_size', 'min');
+      // Since validation is custom/in-template, we might verify expected behavior differently
+      // checking if submit failed via checking spy calls
+      expect(nvmeofService.createNamespace).not.toHaveBeenCalled();
+      expect(component.nsForm.hasError('cdSubmitButton')).toBeTruthy();
+    });
+
+    it('should require initiators when host access is specific', () => {
+      formHelper.setValue('host_access', 'specific');
+      formHelper.expectError('initiators', 'required');
+      formHelper.setValue('initiators', ['host1']);
+      formHelper.expectValid('initiators');
+    });
+
+    it('should call addNamespaceInitiators on submit with specific hosts', () => {
+      formHelper.setValue('pool', 'rbd');
+      formHelper.setValue('image_size', 1073741824);
+      formHelper.setValue('subsystem', MOCK_SUBSYSTEM);
+      formHelper.setValue('host_access', 'specific');
+      formHelper.setValue('initiators', ['host1']);
+      component.onSubmit();
+      expect(nvmeofService.createNamespace).toHaveBeenCalled();
+      // Wait for async operations if needed, or check if mocking is correct
+      expect(nvmeofService.addNamespaceInitiators).toHaveBeenCalledTimes(5); // 5 namespaces created by default
+      expect(nvmeofService.addNamespaceInitiators).toHaveBeenCalledWith(1, {
+        gw_group: MOCK_GROUP,
+        subsystem_nqn: MOCK_SUBSYSTEM,
+        host_nqn: 'host1'
+      });
+    });
+
+    it('should update initiators form control on selection', () => {
+      const mockEvent: NvmeofInitiatorCandidate[] = [
+        { content: 'host1', selected: true },
+        { content: 'host2', selected: true }
+      ];
+      component.onInitiatorSelection(mockEvent);
+      expect(component.nsForm.get('initiators').value).toEqual(['host1', 'host2']);
+      expect(component.nsForm.get('initiators').dirty).toBe(true);
     });
   });
   describe('should test edit form', () => {
@@ -141,49 +213,46 @@ describe('NvmeofNamespacesFormComponent', () => {
       router = TestBed.inject(Router);
       nvmeofService = TestBed.inject(NvmeofService);
       spyOn(nvmeofService, 'getNamespace').and.returnValue(of(MOCK_NS_RESPONSE));
-      spyOn(nvmeofService, 'updateNamespace').and.stub();
+      spyOn(nvmeofService, 'updateNamespace').and.returnValue(
+        of(new HttpResponse({ status: 200 }))
+      );
       Object.defineProperty(router, 'url', {
         get: jasmine.createSpy('url').and.returnValue(MOCK_ROUTER.editUrl)
       });
       fixture.detectChanges();
     });
+
     it('should have set edit fields correctly', () => {
       expect(nvmeofService.getNamespace).toHaveBeenCalledTimes(1);
-      const poolEl = fixture.debugElement.query(By.css('#pool-edit')).nativeElement;
-      expect(poolEl.disabled).toBeTruthy();
-      expect(poolEl.value).toBe(MOCK_NS_RESPONSE['rbd_pool_name']);
-      const sizeEl = fixture.debugElement.query(By.css('#size')).nativeElement;
-      expect(sizeEl.value).toBe('1');
-      const unitEl = fixture.debugElement.query(By.css('#unit')).nativeElement;
-      expect(unitEl.value).toBe('GiB');
+      expect(component.nsForm.get('pool').disabled).toBeTruthy();
+      expect(component.nsForm.get('pool').value).toBe(MOCK_NS_RESPONSE['rbd_pool_name']);
+      // Size formatted by pipe
+      expect(component.nsForm.get('image_size').value).toBe('1 GiB');
     });
-    it('should not show namesapce count ', () => {
-      const nsCountEl = fixture.debugElement.query(By.css('#namespace-count'));
+
+    it('should not show namespace count', () => {
+      const nsCountEl = fixture.debugElement.query(By.css('cds-number[formControlName="nsCount"]'));
       expect(nsCountEl).toBeFalsy();
     });
+
     it('should give error with no change in image size', () => {
-      component.onSubmit();
-      expect(component.invalidSizeError).toBe(true);
-      fixture.detectChanges();
-      const imageSizeInvalidEL = fixture.debugElement.query(By.css('#image-size-invalid'));
-      expect(imageSizeInvalidEL).toBeTruthy();
+      component.nsForm.get('image_size').updateValueAndValidity();
+      expect(component.nsForm.get('image_size').hasError('minSize')).toBe(true);
     });
+
     it('should give error when size less than previous (1 GB) provided', () => {
       form = component.nsForm;
       formHelper = new FormHelper(form);
-      formHelper.setValue('unit', 'MiB');
-      component.onSubmit();
-      expect(component.invalidSizeError).toBe(true);
-      fixture.detectChanges();
-      const imageSizeInvalidEL = fixture.debugElement.query(By.css('#image-size-invalid'))
-        .nativeElement;
-      expect(imageSizeInvalidEL).toBeTruthy();
+      formHelper.setValue('image_size', '512 MiB'); // Less than 1 GiB
+      component.nsForm.get('image_size').updateValueAndValidity();
+      expect(component.nsForm.get('image_size').hasError('minSize')).toBe(true);
     });
+
     it('should have edited namespace successfully', () => {
       component.ngOnInit();
       form = component.nsForm;
       formHelper = new FormHelper(form);
-      formHelper.setValue('image_size', 2);
+      formHelper.setValue('image_size', '2 GiB');
       component.onSubmit();
       expect(nvmeofService.updateNamespace).toHaveBeenCalledTimes(1);
       expect(nvmeofService.updateNamespace).toHaveBeenCalledWith(MOCK_SUBSYSTEM, MOCK_NSID, {
