@@ -2764,6 +2764,14 @@ int RadosStore::load_customer_managed_policy(const DoutPrefixProvider* dpp,
   return rgwrados::policy::get_policy(dpp, y, *svc()->sysobj, svc()->zone->get_zone_params(), account, name, info);
 }
 
+int RadosStore::delete_customer_managed_policy(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view name) 
+{
+  return rgwrados::policy::delete_policy(dpp, y, *getRados()->get_rados_handle(), *svc()->sysobj, svc()->zone->get_zone_params(), account, name);
+}
+
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
