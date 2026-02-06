@@ -3,6 +3,7 @@ import { UntypedFormArray, UntypedFormControl, Validators } from '@angular/forms
 
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { Permission } from '~/app/shared/models/permissions';
@@ -126,7 +127,7 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
         task: new FinishedTask(taskUrl, {
           nqn: this.subsystemNQN
         }),
-        call: this.nvmeofService.addInitiators(this.subsystemNQN, request)
+        call: this.nvmeofService.addSubsystemInitiators(this.subsystemNQN, request)
       })
       .subscribe({
         error() {

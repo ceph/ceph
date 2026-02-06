@@ -46,14 +46,14 @@ describe('NvmeofInitiatorsFormComponent', () => {
   describe('should test form', () => {
     beforeEach(() => {
       nvmeofService = TestBed.inject(NvmeofService);
-      spyOn(nvmeofService, 'addInitiators').and.stub();
+      spyOn(nvmeofService, 'addSubsystemInitiators').and.stub();
     });
 
     it('should be creating request correctly', () => {
       const subsystemNQN = 'nqn.2001-07.com.ceph:' + mockTimestamp;
       component.subsystemNQN = subsystemNQN;
       component.onSubmit();
-      expect(nvmeofService.addInitiators).toHaveBeenCalledWith(subsystemNQN, {
+      expect(nvmeofService.addSubsystemInitiators).toHaveBeenCalledWith(subsystemNQN, {
         host_nqn: ''
       });
     });

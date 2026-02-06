@@ -1,10 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ActivatedRoute } from '@angular/router';
 import { of } from 'rxjs';
 import { NvmeofGatewayComponent } from './nvmeof-gateway.component';
 import { NvmeofService } from '../../../shared/api/nvmeof.service';
 import { HttpClientModule } from '@angular/common/http';
 import { SharedModule } from '~/app/shared/shared.module';
-import { ComboBoxModule, GridModule } from 'carbon-components-angular';
+import { ComboBoxModule, GridModule, TabsModule } from 'carbon-components-angular';
 import { NvmeofTabsComponent } from '../nvmeof-tabs/nvmeof-tabs.component';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
@@ -116,10 +117,16 @@ describe('NvmeofGatewayComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [NvmeofGatewayComponent, NvmeofTabsComponent],
-      imports: [HttpClientModule, SharedModule, ComboBoxModule, GridModule],
+      imports: [HttpClientModule, SharedModule, ComboBoxModule, GridModule, TabsModule],
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },
-        { provide: CephServiceService, useClass: MockCephServiceService }
+        { provide: CephServiceService, useClass: MockCephServiceService },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            queryParams: of({})
+          }
+        }
       ]
     }).compileComponents();
 

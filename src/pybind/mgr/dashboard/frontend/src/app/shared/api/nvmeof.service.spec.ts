@@ -63,7 +63,8 @@ describe('NvmeofService', () => {
         nqn: mockNQN,
         enable_ha: true,
         initiators: '*',
-        gw_group: mockGroupName
+        gw_group: mockGroupName,
+        dhchap_key: ''
       };
       service.createSubsystem(request).subscribe();
       const req = httpTesting.expectOne(`${API_PATH}/subsystem`);
@@ -94,13 +95,13 @@ describe('NvmeofService', () => {
       );
       expect(req.request.method).toBe('GET');
     });
-    it('should call addInitiators', () => {
-      service.addInitiators(mockNQN, request).subscribe();
+    it('should call addSubsystemInitiators', () => {
+      service.addSubsystemInitiators(mockNQN, request).subscribe();
       const req = httpTesting.expectOne(`${UI_API_PATH}/subsystem/${mockNQN}/host`);
       expect(req.request.method).toBe('POST');
     });
-    it('should call removeInitiators', () => {
-      service.removeInitiators(mockNQN, request).subscribe();
+    it('should call removeSubsystemInitiators', () => {
+      service.removeSubsystemInitiators(mockNQN, request).subscribe();
       const req = httpTesting.expectOne(
         `${UI_API_PATH}/subsystem/${mockNQN}/host/${request.host_nqn}/${mockGroupName}`
       );

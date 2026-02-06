@@ -4,6 +4,7 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
+
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -14,6 +15,7 @@ import { IopsPipe } from '~/app/shared/pipes/iops.pipe';
 import { MbpersecondPipe } from '~/app/shared/pipes/mbpersecond.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 const BASE_URL = 'block/nvmeof/subsystems';
@@ -118,12 +120,16 @@ export class NvmeofNamespacesListComponent implements OnInit {
         name: this.actionLabels.CREATE,
         permission: 'create',
         icon: Icons.add,
-        click: () =>
-          this.router.navigate(
-            [BASE_URL, { outlets: { modal: [URLVerbs.CREATE, this.subsystemNQN, 'namespace'] } }],
-            { queryParams: { group: this.group } }
-          ),
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+        click: () => {
+          this.router.navigate(['block/nvmeof/namespaces/create'], {
+            queryParams: {
+              group: this.group,
+              subsystem_nqn: this.subsystemNQN
+            }
+          });
+        },
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
+        disable: () => !this.group
       },
       {
         name: this.actionLabels.EDIT,
@@ -133,16 +139,10 @@ export class NvmeofNamespacesListComponent implements OnInit {
           this.router.navigate(
             [
               BASE_URL,
-              {
-                outlets: {
-                  modal: [
-                    URLVerbs.EDIT,
-                    this.subsystemNQN,
-                    'namespace',
-                    this.selection.first().nsid
-                  ]
-                }
-              }
+              URLVerbs.EDIT,
+              this.selection.first().ns_subsystem_nqn,
+              'namespace',
+              this.selection.first().nsid
             ],
             { queryParams: { group: this.group } }
           )
@@ -154,6 +154,7 @@ export class NvmeofNamespacesListComponent implements OnInit {
         click: () => this.deleteNamespaceModal()
       }
     ];
+
   }
 
   updateSelection(selection: CdTableSelection) {
