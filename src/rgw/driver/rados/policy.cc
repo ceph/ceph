@@ -12,6 +12,7 @@
 
 namespace rgwrados::policy
 {
+static const int max_policy_versions = 5;
 static const std::string oid_prefix = "customer-managed-policy.";
 static constexpr std::string_view policy_oid_prefix = "policies.";
 
@@ -128,7 +129,7 @@ int write_policy(const DoutPrefixProvider *dpp, optional_yield y, librados::Rado
 {
   int r = -EINVAL;
   IndexObj iObj;
-  if(!info.name.empty()) {
+  if(exclusive && !info.name.empty()) {
     iObj.obj = get_name_obj(zone, info);
     iObj.objv.generate_new_write_ver(dpp->get_cct());
 
@@ -140,15 +141,25 @@ int write_policy(const DoutPrefixProvider *dpp, optional_yield y, librados::Rado
       ldpp_dout(dpp, 20) << "failed to write policy obj " << iObj.obj << " with: " << cpp_strerror(r) << dendl;
       return r;
     }
-  }
 
-  PolicyIndex policy_index;
-  r = write_path(dpp, y, rados, sysobj, zone, info, policy_index);
-  if (r < 0) {
-    // roll back new policy object
-    ldpp_dout(dpp, 20) << "failed to write path obj " << iObj.obj << " with: " << cpp_strerror(r) << dendl;
-    std::ignore = remove_index(dpp, y, sysobj, iObj);
-    return r;
+    PolicyIndex policy_index;
+    r = write_path(dpp, y, rados, sysobj, zone, info, policy_index);
+    if (r < 0) {
+      // roll back new policy object
+      ldpp_dout(dpp, 20) << "failed to write path obj " << iObj.obj << " with: " << cpp_strerror(r) << dendl;
+      std::ignore = remove_index(dpp, y, sysobj, iObj);
+      return r;
+    }
+  } else {
+    bufferlist data;
+    encode(info, data);
+    iObj.obj = get_name_obj(zone, info);
+
+    r = rgw_put_system_obj(dpp, &sysobj, iObj.obj.pool, iObj.obj.oid, data, exclusive, &iObj.objv, info.update_date, y, nullptr);
+    if(r < 0) {
+      ldpp_dout(dpp, 20) << "failed to modify policy obj " << iObj.obj.oid << " with: " << cpp_strerror(r) << dendl;
+      return r;
+    }
   }
 
   return r;
@@ -356,4 +367,5 @@ int list_policies(const DoutPrefixProvider *dpp,
 
   return ret;
 }
+
 }

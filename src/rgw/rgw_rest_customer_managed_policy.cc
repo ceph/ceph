@@ -8,12 +8,21 @@
 #include <string>
 #include "rgw_process_env.h"
 #include <errno.h>
+#include "common/errno.h"
 
 
 #define dout_subsys ceph_subsys_rgw
 
 constexpr int MAX_TAG_SIZE = 50;
 constexpr int MAX_ENTRIES_SIZE = 1000;
+constexpr int MAX_POLICY_VERSIONS = 5;
+
+static std::string get_name_key( const std::string_view& account_id, const std::string_view& policy_name)
+{
+  std::string lower_name(policy_name);
+  boost::algorithm::to_lower(lower_name);
+  return string_cat_reserve(oid_prefix, account_id, ".", lower_name);
+}
 
 int RGWRestPolicy::verify_permission(optional_yield y)
 {
@@ -510,5 +519,97 @@ void RGWListPolicies::send_response()
 {
   if (!started_response) {
     start_response();
+  }
+}
+
+int RGWCreatePolicyVersion::init_processing(optional_yield y)
+{
+  s->info.args.get_bool("SetAsDefault", &set_as_default, false);
+  policy_document = s->info.args.get("PolicyDocument");
+
+  if(!policy_document.empty()) {
+    std::string_view account;
+    if (const auto& acc = s->auth.identity->get_account(); acc) {
+      account = acc->id;
+      std::string provider_arn = s->info.args.get("PolicyArn");
+      return validate_policy_arn(provider_arn, account, arn, s->err.message);
+    }
+  }
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+int RGWCreatePolicyVersion::create_policy_version(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    std::string_view account,
+    std::string_view policy_name,
+    std::string_view policy_document,
+    bool set_as_default,
+    std::string &version_id,
+    ceph::real_time &create_date,
+    bool exclusive)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  rgw::IAM::PolicyVersion policy_version;
+  auto oid = get_name_key(account, policy_name);
+  op_ret = driver->get_customer_managed_policy(this, y, arn.account, policy_name, info);
+  if(op_ret < 0){
+    return op_ret;
+  }
+
+  if(info.versions.size() >= MAX_POLICY_VERSIONS) {
+    ldpp_dout(dpp, 20) << "Error: max_policy_versions reached" << dendl;
+    return -ENOMEM;
+  }
+
+  int version = 1;
+  if (!info.versions.empty()) {
+      version = info.versions.rbegin()->first + 1;
+  }
+
+  version_id = "v" + std::to_string(version);
+  policy_version.document = policy_document;
+  policy_version.version_id = version_id;
+  policy_version.create_date = real_clock::now();
+  policy_version.is_default_version = set_as_default;
+  create_date = policy_version.create_date;
+
+  info.update_date = create_date;
+  info.versions[version] = policy_version;
+  if(set_as_default) {
+    info.default_version = policy_version.version_id;
+    info.is_attachable = false;
+  }
+
+  
+  op_ret = driver->create_customer_managed_policy(this, y, info, exclusive);
+  if(op_ret < 0) {
+    ldpp_dout(dpp, 20) << "failed to create_policy_version " << info.name << " with: " << cpp_strerror(op_ret) << dendl;
+    return op_ret;
+  }
+
+  return op_ret;
+}
+
+void RGWCreatePolicyVersion::execute(optional_yield y)
+{
+  std::string version_id;
+  ceph::real_time create_date;
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  constexpr bool exclusive = false;
+  op_ret = create_policy_version(this, y, arn.account, policy_name, policy_document, set_as_default, version_id, create_date, exclusive);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to create policy version: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("CreatePolicyVersionResponse ", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("CreatePolicyVersionResult");
+    s->formatter->open_object_section("PolicyVersion");
+    encode_json("IsDefaultVersion", set_as_default , s->formatter);
+    encode_json("VersionId", version_id , s->formatter);
+    encode_json("CreateDate", create_date , s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
   }
 }
