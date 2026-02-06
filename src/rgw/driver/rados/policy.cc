@@ -73,6 +73,22 @@ static int add(const DoutPrefixProvider* dpp,
   return ref.operate(dpp, std::move(op), y);
 }
 
+static int remove(const DoutPrefixProvider* dpp,
+           optional_yield y,
+           librados::Rados& rados,
+           PolicyObj& policy)
+{
+  rgw_rados_ref ref;
+  int r = rgw_get_rados_ref(dpp, &rados, policy.obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  ::cls_user_account_resource_rm(op, policy.name);
+  return ref.operate(dpp, std::move(op), y);
+}
+
 static int remove_index(const DoutPrefixProvider* dpp, optional_yield y,
                         RGWSI_SysObj& sysobj, IndexObj& index)
 {
@@ -164,5 +180,44 @@ int get_policy(const DoutPrefixProvider *dpp,
   }
 
   return 0;
+}
+
+int delete_policy(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              librados::Rados& rados,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account,
+              std::string_view name)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account, name);
+  int ret = get_policy(dpp, y, sysobj, zone, account, name, info);
+  if(ret < 0){
+    return ret;
+  }
+  ret = rgw_delete_system_obj(dpp, &sysobj, zone.policy_pool, oid, nullptr, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: deleting iam policy from pool: " << zone.policy_pool.name << ": "
+                  << name << ": " << cpp_strerror(ret) << dendl;
+  }
+
+  // delete the path object
+  if (!info.account_id.empty()) {
+    PolicyObj policy;
+    policy.obj = get_policy_obj(zone, info.account_id);
+    policy.name = info.name;
+    std::ignore = remove(dpp, y, rados, policy);
+
+    uint32_t count = 0;
+    rgwrados::account::resource_count(dpp, y, rados, policy.obj, count);
+    if (!count) {
+      IndexObj iObj;
+      iObj.obj = get_policy_obj(zone, info.account_id);
+      std::ignore = remove_index(dpp, y, sysobj, iObj);
+    }
+  }
+
+  return ret;
 }
 }

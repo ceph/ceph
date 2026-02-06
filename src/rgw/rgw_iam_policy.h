@@ -193,6 +193,7 @@ enum action_t {
   iamGetAccountSummary,
   iamCreatePolicy,
   iamGetPolicy,
+  iamDeletePolicy,
   iamAll,
 
 
