@@ -550,3 +550,35 @@ void RGWCreatePolicyVersion::execute(optional_yield y)
     s->formatter->close_section();
   }
 }
+
+int RGWDeletePolicyVersion::init_processing(optional_yield y)
+{
+  version_id = s->info.args.get("VersionId");
+  const std::regex pattern(R"(^v[1-9][0-9]*$)");
+
+  if(std::regex_match(version_id, pattern)) {
+    std::string_view account;
+    if (const auto& acc = s->auth.identity->get_account(); acc) {
+      account = acc->id;
+      std::string provider_arn = s->info.args.get("PolicyArn");
+      return validate_policy_arn(provider_arn, account, arn, s->err.message);
+    }
+  }
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+void RGWDeletePolicyVersion::execute(optional_yield y)
+{
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  constexpr bool exclusive = false;
+  op_ret = driver->delete_policy_version(this, y, arn.account, policy_name, version_id, exclusive);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to delete policy version: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("DeletePolicyVersionResponse ", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}

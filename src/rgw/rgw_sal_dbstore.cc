@@ -1550,6 +1550,16 @@ int DBStore::create_policy_version(const DoutPrefixProvider* dpp,
   return -ENOTSUP;
 }
 
+int DBStore::delete_policy_version(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::string_view version_id,
+                        bool exclusive)
+{
+  return -ENOTSUP;
+}
+
   std::unique_ptr<Writer> DBStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
