@@ -1059,6 +1059,11 @@ class DaosStore : public StoreDriver {
                          std::vector<RGWOIDCProviderInfo>& providers) override;
 int create_customer_managed_policy(const DoutPrefixProvider* dpp,
       optional_yield y, const rgw::IAM::ManagedPolicyInfo& info, bool exclusive) override;
+int get_customer_managed_policy(const DoutPrefixProvider* dpp,
+                optional_yield y,
+                std::string_view account,
+                std::string_view name,
+                rgw::IAM::ManagedPolicyInfo& info) override;
   virtual std::unique_ptr<Writer> get_append_writer(
       const DoutPrefixProvider* dpp, optional_yield y,
       rgw::sal::Object* obj, const ACLOwner& owner,
