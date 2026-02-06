@@ -191,6 +191,7 @@ enum {
   iamCreatePolicy,
   iamGetPolicy,
   iamDeletePolicy,
+  iamListPolicies,
   iamAll,
 
 
