@@ -366,5 +366,4 @@ int list_policies(const DoutPrefixProvider *dpp,
 
   return ret;
 }
-
 }
