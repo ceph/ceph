@@ -739,6 +739,7 @@ class MockPGLogEntryHandler : public PGLog::LogEntryHandler {
 // for testing purposes.
 class MockPeeringListener : public PeeringState::PeeringListener {
  public:
+  pg_shard_t pg_whoami;
   MockLog logger;
   PeeringState *ps;
   unique_ptr<MockPGBackendListener> backend_listener;
@@ -777,7 +778,10 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   // migration requests with too full
   bool inject_fail_reserve_recovery_space = false;
 
-  MockPeeringListener(OSDMapRef osdmap, const pg_pool_t pi, DoutPrefixProvider *dpp, pg_shard_t pg_whoami) {
+  MockPeeringListener(OSDMapRef osdmap,
+                      const pg_pool_t pi,
+                      DoutPrefixProvider *dpp,
+                      pg_shard_t pg_whoami) : pg_whoami(pg_whoami) {
     backend_listener = make_unique<MockPGBackendListener>(osdmap, pi, dpp, pg_whoami);
     backend = make_unique<MockPGBackend>(g_ceph_context, backend_listener.get(), nullptr, coll, ch);
     recoverystate_perf = build_recoverystate_perf(g_ceph_context);
@@ -1010,6 +1014,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   }
 
   void on_change(ObjectStore::Transaction &t) override {
+    next_write_must_be_full = true;
     change_called = true;
   }
 
@@ -1246,6 +1251,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   int io_reservations_requested = 0;
   int remote_recovery_reservations_requested = 0;
   int events_on_commit_scheduled = 0;
+  bool next_write_must_be_full = false;
 };
 
 // Test fixture for PeeringState tests
@@ -1393,10 +1399,32 @@ protected:
     return true;
   }
 
+  // Note: Currently the acting and up set are being maintained separatly from
+  // the OSDMap which gives the test harness a little more control over choice
+  // of OSDs and shards than using CRUSH. It would probably be better to use
+  // pg_upmap and pg_temp in the OSDMap to control this
+  // Unlike OSDMap, the test harness requires both up and acting to be set
+  // even if they are the same.
+
+  // Helper to configure up set and acting set
+  void setup_up_acting()
+  {
+    // Simple configuration - up set = acting set = {0, 1, 2, ... }
+    up.clear();
+    acting.clear();
+    up_acting.clear();
+    for (int osd = 0; osd < pool_size; osd++) {
+      up.push_back(osd);
+      acting.push_back(osd);
+      up_acting.push_back(osd);
+    }
+    up_primary = 0;
+    acting_primary = 0;
+  }
+
   // Helper to create an EC Pool
   void create_ec_pool(int k = 2, int m = 2, bool fast_ec = true)
   {
-    // Create a EC pool
     pool_size = k + m;
     OSDMap::Incremental new_pool_inc(osdmap->get_epoch() + 1);
     new_pool_inc.new_pool_max = osdmap->get_pool_max();
@@ -1436,6 +1464,30 @@ protected:
       p->set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
     }
     apply_incremental(new_pool_inc);
+    setup_up_acting();
+  }
+
+  // Helper to create a Replica Pool
+  void create_rep_pool(int n = 3)
+  {
+    // Create a replica pool
+    pool_size = n;
+    OSDMap::Incremental new_pool_inc(osdmap->get_epoch() + 1);
+    new_pool_inc.new_pool_max = osdmap->get_pool_max();
+    new_pool_inc.fsid = osdmap->get_fsid();
+    pool_id = ++new_pool_inc.new_pool_max;
+    pg_pool_t empty;
+    auto p = new_pool_inc.get_new_pool(pool_id, &empty);
+    p->size = pool_size;
+    p->min_size = 1; // lower than normal to allow more error-injects
+    p->set_pg_num(1);
+    p->set_pgp_num(1);
+    p->type = pg_pool_t::TYPE_REPLICATED;
+    p->crush_rule = 0;
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    new_pool_inc.new_pool_names[pool_id] = "pool";
+    apply_incremental(new_pool_inc);
+    setup_up_acting();
   }
 
   // Create a 2nd pool as an EC pool and set up migration from the old pool
@@ -1459,28 +1511,7 @@ protected:
     // Reset to the source pool
     pool_id = old_pool_id;
     pool_size = old_pool_size;
-  }
-
-  // Note: Currently the acting and up set are being maintained separatly from
-  // the OSDMap which gives the test harness a little more control over choice
-  // of OSDs and shards than using CRUSH. It would probably be better to use
-  // pg_upmap and pg_temp in the OSDMap to control this
-  // Unlike OSDMap, the test harness requires both up and acting to be set
-  // even if they are the same.
-
-  // Helper to configure up set and acting set
-  void setup_up_acting()
-  {
-    // Simple configuration - up set = acting set = {0, 1, 2, ... }
-    up.clear();
-    acting.clear();
-    for (int osd = 0; osd < pool_size; osd++) {
-      up.push_back(osd);
-      acting.push_back(osd);
-      up_acting.push_back(osd);
-    }
-    up_primary = 0;
-    acting_primary = 0;
+    setup_up_acting();
   }
 
   // Helper to swap an OSD in the up and acting set
@@ -1704,11 +1735,11 @@ protected:
   PeeringState *create_peering_state(int osd, int shard)
   {
     dout(0) << "= create_peering_state osd." << osd << "(" << shard <<") =" << dendl;
-    pg_shard_t pg_whoami(osd, shard_id_t(shard));
     const pg_pool_t pi = *osdmap->get_pg_pool(pool_id);
+    pg_shard_t pg_whoami(osd, pi.is_erasure() ? shard_id_t(shard) : shard_id_t::NO_SHARD);
     PGPool pool(osdmap, pool_id, pi, osdmap->get_pool_name(pool_id));
     dpp[osd] = make_unique<DppHelper>(g_ceph_context, dout_subsys, this, osd, shard);
-    spg_t spgid = spg_t(pg_t(0, pool_id), shard_id_t(shard));
+    spg_t spgid = spg_t(pg_t(0, pool_id), pg_whoami.shard);
     listeners[osd] = make_unique<MockPeeringListener>(osdmap, pi, get_dpp(osd), pg_whoami);
     get_listener(osd)->current_epoch = osdmap->get_epoch();
     unique_ptr<PeeringState> ps = make_unique<PeeringState>(
@@ -1821,8 +1852,7 @@ protected:
       if (toosd != -1 && toosd != osd) {
         continue;
       }
-      get_ps(osd)->advance_map(osdmap, osdmap, up, 0, acting, 0, *(get_ctx(osd)));
-      get_ps(osd)->activate_map(*(get_ctx(osd)));
+      get_ps(osd)->advance_map(osdmap, osdmap, up, up_primary, acting, acting_primary, *(get_ctx(osd)));
     }
   }
 
@@ -1837,6 +1867,16 @@ protected:
       get_ps(osd)->activate_map(*(get_ctx(osd)));
     }
   }
+
+  // Helper - construct a shard_id_set from a vector of integers
+  shard_id_set ss(vector<int> v) {
+    shard_id_set s;
+    for (auto e : v) {
+      s.insert(shard_id_t(e));
+    }
+    return s;
+  }
+  const shard_id_set ss_all;
 
   // Helper - construct a pg_log_entry and call append_log for specified osds
   // By default create a full write and append the log entry to all the OSDs
@@ -1861,7 +1901,14 @@ protected:
       }
     }
     dout(0) << "= test_append_log_entry written=" << written << " osds=" << osds << " =" << dendl;
-
+    if (get_listener(acting_primary)->next_write_must_be_full) {
+      // Fix for issue 73891
+      if (!written.empty()) {
+        dout(0) << "First write in new interval is promoted to a full write" << dendl;
+        written.clear();
+        get_listener(acting_primary)->next_write_must_be_full = false;
+      }
+    }
     object_t oid("foo");
     hobject_t soid(oid, oid.name, 0, 1234, pool_id, "");
     ++reqid.tid;
@@ -2121,6 +2168,54 @@ protected:
     EXPECT_EQ(ps->get_pg_log().get_tail(), expected_tail);
   }
 
+  // Helper - verify logs
+  // identical - if identical is true, all logs should be identical
+  //            if identical is false, all logs should be equivalent
+  //            with differences only because of partial writes
+  void verify_logs(bool identical = false)
+  {
+    auto logp = get_ps(acting_primary)->get_pg_log();
+    int shard = 0;
+    for (auto osd: acting) {
+      if (osd == acting_primary || osd == pg_pool_t::pg_CRUSH_ITEM_NONE) {
+        ++shard;
+        continue;
+      }
+      dout(0) << "Verifying log for osd " << osd << dendl;
+      auto log = get_ps(osd)->get_pg_log();
+      // Head and tail should match
+      EXPECT_EQ(log.get_head(), logp.get_head());
+      EXPECT_EQ(log.get_tail(), logp.get_tail());
+      auto pi = logp.get_log().log.begin();
+      auto pe = logp.get_log().log.end();
+      auto i = log.get_log().log.begin();
+      auto e = log.get_log().log.end();
+      while (pi != pe && i != e) {
+        if (pi->version < i->version && !pi->is_written_shard(shard_id_t(shard))) {
+          // Primary may have partial write log entries that this
+          // shard does not have because it was not written to
+          ++pi;
+          continue;
+        }
+        // Log entries should match (not a perfect check, but good enough for peering)
+        EXPECT_EQ(pi->version, i->version);
+        EXPECT_EQ(pi->soid, i->soid);
+        EXPECT_EQ(pi->op, i->op);
+        ++pi;
+        ++i;
+      }
+      while (pi != pe && !pi->is_written_shard(shard_id_t(shard))) {
+        // Primary may have partial write log entries that this
+        // shard does not have because it was not written to
+        ++pi;
+      }
+      // No extra entries in either log
+      EXPECT_EQ(pi, pe);
+      EXPECT_EQ(i, e);
+      ++shard;
+    }
+  }
+
   // Helper - verify that there are no missing or unfound objects
   void verify_no_missing_or_unfound(int osd, int shard, bool check_missing_loc = true)
   {
@@ -2132,8 +2227,9 @@ protected:
     }
     // Primary shard peer missing state should agree with the shard
     if (osd != up_primary) {
+      pg_shard_t pg_whoami = get_listener(osd)->pg_whoami;
       ps = get_ps(up_primary);
-      EXPECT_EQ(ps->get_peer_missing(pg_shard_t(osd, shard_id_t(shard))).num_missing(), 0);
+      EXPECT_EQ(ps->get_peer_missing(pg_whoami).num_missing(), 0);
     }
   }
 
@@ -2145,8 +2241,9 @@ protected:
     EXPECT_FALSE(ps->have_unfound());
     // Primary shard peer missing state should agree with the shard
     if (osd != up_primary) {
+      pg_shard_t pg_whoami = get_listener(osd)->pg_whoami;
       auto pps = get_ps(up_primary);
-      EXPECT_EQ(pps->get_peer_missing(pg_shard_t(osd, shard_id_t(shard))).num_missing(),
+      EXPECT_EQ(pps->get_peer_missing(pg_whoami).num_missing(),
                 ps->get_num_missing());
     }
   }
@@ -2168,6 +2265,7 @@ protected:
       verify_log_state(osd, expected_update, expected_update, expected_update, expected_tail);
       ++shard;
     }
+    verify_logs();
   }
 
   // Helper - verify all OSDs in active+recovering state with optional log checks
@@ -2198,6 +2296,7 @@ protected:
         expected_tail);
       ++shard;
     }
+    verify_logs();
   }
 
   // Helper - verify all OSDs in active+backfilling state with log checks
@@ -2217,6 +2316,7 @@ protected:
       verify_log_state(osd, expected_update, expected_update, expected_update, expected_tail);
       ++shard;
     }
+    verify_logs();
   }
 
   // Helper - verify all OSDs in active+migrating state with optional log checks
@@ -2236,6 +2336,7 @@ protected:
       verify_log_state(osd, expected_update, expected_update, expected_update, expected_tail);
       ++shard;
     }
+    verify_logs();
   }
 
   // Helper - verify PWLC state
@@ -2245,6 +2346,7 @@ protected:
       if (toosd != -1 && toosd != osd) {
         continue;
       }
+      dout(0) << "Verifying PWLC for osd " << osd << dendl;
       auto ps = get_ps(osd);
       auto info = ps->get_info();
       EXPECT_EQ(info.partial_writes_last_complete_epoch, e);
@@ -2264,8 +2366,8 @@ protected:
 
     // Create a basic OSDMap
     osdmap = setup_osdmap(10);
+    // By default tests use a fast EC 2+2 pool
     create_ec_pool();
-    setup_up_acting();
   }
 
   // GTest TearDown function - called after each test
@@ -2638,14 +2740,8 @@ TEST_F(PeeringStateTest, IncompleteWritePeeringToActiveClean) {
   test_init();
   test_event_initialize();
   // Append 2 log entries one to just shard 0,1 and one to just shard 0
-  shard_id_set written;
-  shard_id_set osds1;
-  osds1.insert(shard_id_t(0));
-  osds1.insert(shard_id_t(1));
-  test_append_log_entry(written, osds1);
-  shard_id_set osds2;
-  osds2.insert(shard_id_t(0));
-  test_append_log_entry(written, osds2);
+  test_append_log_entry(ss_all, ss({0, 1}));
+  test_append_log_entry(ss_all, ss({0}));
   // Full peering cycle
   test_event_advance_map();
   dispatch_all();
@@ -2660,6 +2756,32 @@ TEST_F(PeeringStateTest, IncompleteWritePeeringToActiveClean) {
   verify_all_active_clean(eversion_t(), eversion_t());
 }
 
+// Multi-OSD test of a replica pool peering for PG with 2 log entries that are incomplete
+// all the way to active+recovering. Unlike EC pools the log entries get rolled forward
+TEST_F(PeeringStateTest, RepIncompleteWritePeeringToActiveRecovering) {
+  dout(0) << "== RepIncompleteWritePeeringToActiveRecovering ==" << dendl;
+  // Init
+  create_rep_pool();
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  // Append 2 log entries to shard 0,1
+  eversion_t previous = test_append_log_entry(ss_all, ss({0, 1}));
+  eversion_t expected = test_append_log_entry(ss_all, ss({0 ,1}));
+  // Full peering cycle
+  test_event_advance_map();
+  dispatch_all();
+  test_event_activate_map();
+  dispatch_all();
+  new_epoch(); // for wait_upthru
+  test_event_advance_map();
+  dispatch_all();
+  test_event_activate_map();
+  dispatch_all();
+  // Verify that we got to active+recovering
+  verify_all_active_recovering(expected, expected, previous, 2, eversion_t());
+}
+
 // Multi-OSD test of peering for PG with 1 partial write log entry all the way to active+clean
 TEST_F(PeeringStateTest, PartialWritePeeringToActiveClean) {
   dout(0) << "== PartialWritePeeringToActiveClean ==" << dendl;
@@ -2668,11 +2790,7 @@ TEST_F(PeeringStateTest, PartialWritePeeringToActiveClean) {
   test_init();
   test_event_initialize();
   // Append 1 log entry to a partial set of shards
-  shard_id_set written;
-  written.insert(shard_id_t(0));
-  written.insert(shard_id_t(2));
-  written.insert(shard_id_t(3));
-  eversion_t expected = test_append_log_entry(written, written);
+  eversion_t expected = test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}));
   // Verify that shard 1 has no PWLC and shards 0,2,3 have PWLC saying shard 1 missed writes 0'0-2'1
   {
     std::map<shard_id_t,std::pair<eversion_t, eversion_t>> expected_pwlc;
@@ -2713,11 +2831,7 @@ TEST_F(PeeringStateTest, PartialWriteNotCompletePeeringToActiveClean) {
   test_init();
   test_event_initialize();
   // Append 1 log entry to a partial set of shards but do not advance last_complete
-  shard_id_set written;
-  written.insert(shard_id_t(0));
-  written.insert(shard_id_t(2));
-  written.insert(shard_id_t(3));
-  eversion_t expected = test_append_log_entry(written, written, true);
+  eversion_t expected = test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}), true);
   // Verify no shards have PWLC as the write has not been completed
   {
     std::map<shard_id_t,std::pair<eversion_t, eversion_t>> expected_pwlc;
@@ -3064,11 +3178,7 @@ TEST_F(PeeringStateTest, Issue74218) {
   test_init();
   test_event_initialize();
   // Partial write to OSDs 0,2,3 but do not advance last_complete
-  shard_id_set written;
-  written.insert(shard_id_t(0));
-  written.insert(shard_id_t(2));
-  written.insert(shard_id_t(3));
-  eversion_t expected1 = test_append_log_entry(written, written, true);
+  eversion_t expected1 = test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}), true);
   // Verify no shards have PWLC as the write has not been completed
   {
     std::map<shard_id_t,std::pair<eversion_t, eversion_t>> expected_pwlc;
@@ -3081,10 +3191,7 @@ TEST_F(PeeringStateTest, Issue74218) {
   osd_down(1, 1);
   test_peering();
   // Partial write to OSDs 0,[2],3
-  shard_id_set osds;
-  osds.insert(shard_id_t(0));
-  osds.insert(shard_id_t(3));
-  eversion_t expected2 = test_append_log_entry(written, osds);
+  eversion_t expected2 = test_append_log_entry(ss({0, 2, 3}), ss({0, 3}));
   // OSD 2 up, run peering
   osd_up(2, 2);
   test_peering();
@@ -3104,7 +3211,54 @@ TEST_F(PeeringStateTest, Issue74218) {
   test_event_activate_map();
   dispatch_all();
   // Verify that we got to active+recovering
-  verify_all_active_recovering(expected2, expected2, expected1, 2, eversion_t());
+  // Prior to fix for issue 73891 the last write would not modify OSD 1 so it would
+  // not need recovery. With this fix the write becomes a full-write and OSD 1
+  // ends up with a missing object
+  // verify_all_active_recovering(expected2, expected2, expected1, 2, eversion_t());
+  verify_primary_active_recovering(acting[0]);
+  verify_no_missing_or_unfound(acting[0], 0, false);
+  verify_active_and_peered(acting[0]);
+  verify_log_state(acting[0], expected2, expected2, expected2, eversion_t());
+  verify_replica_activated(acting[1]);
+  verify_missing(acting[1], 1);
+  verify_log_state(acting[1], expected2, expected1, expected2, eversion_t());
+  verify_replica_activated(acting[2]);
+  verify_missing(acting[2], 2);
+  verify_log_state(acting[2], expected2, expected1, expected2, eversion_t());
+  verify_replica_activated(acting[3]);
+  verify_no_missing_or_unfound(acting[3], 3, true);
+  verify_log_state(acting[3], expected2, expected2, expected2, eversion_t());
+  verify_logs();
+}
+
+// Multi-OSD test of peering for fix for https://tracker.ceph.com/issues/73891
+TEST_F(PeeringStateTest, Issue73891) {
+  // Scenario: 3+2 EC pool [0,1,2,3,4]
+  // Partial write A to OSDs 0,3,4 completes
+  // Partial write B to OSDs 0,1,3,4 only updates 0, 1 before interuption
+  // OSD 1 down, peering runs and rolls-backward the partial write B
+  // Partial write C to OSDs 0,3,4 that is completed
+  // OSD 1 up, peering runs
+  //   Without fix OSD 3 doesn't roll back write B
+  dout(0) << "== Issue73891 ==" << dendl;
+  // Init
+  create_ec_pool(3,2);
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  // Partial Write A to OSDs 0,3,4
+  test_append_log_entry(ss({0, 3, 4}), ss({0, 3, 4}));
+  // Partial Write B to OSDs 0,1,3,4 only updates 0, 1
+  test_append_log_entry(ss({0, 1, 3, 4}), ss({0, 1}), true);
+  // OSD 1 down, run peering
+  osd_down(1, 1);
+  test_peering();
+  // Partial Write C to 0,3,4
+  test_append_log_entry(ss({0, 3, 4}), ss({0, 3, 4}));
+  // OSD 1 up, run peering
+  osd_up(1, 1);
+  test_peering();
+  verify_logs(); // Without fix will fail
 }
 
 // ============================================================================
