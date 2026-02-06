@@ -137,4 +137,32 @@ int write_policy(const DoutPrefixProvider *dpp, optional_yield y, librados::Rado
 
   return r;
 }
+
+int get_policy(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account,
+              std::string_view name,
+              rgw::IAM::ManagedPolicyInfo &info)
+{
+  bufferlist bl; 
+  auto oid = get_name_key(account, name);
+  int ret = rgw_get_system_obj(&sysobj, zone.policy_pool, oid, bl, nullptr, nullptr, y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  try {
+    using ceph::decode;
+    auto iter = bl.cbegin();
+    decode(info, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode info from pool: " << zone.policy_pool <<
+                  ": " << name << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
 }
