@@ -588,4 +588,34 @@ int tag_policy(const DoutPrefixProvider *dpp,
   return ret;
 }
 
+int untag_policy(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    RGWSI_SysObj &sysobj,
+    const RGWZoneParams &zone,
+    std::string_view account,
+    std::string_view policy_name,
+    std::vector<std::string>& keys)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account, policy_name);
+  int ret = get_policy(dpp, y, sysobj, zone, account, policy_name, info);
+  if(ret < 0){
+    return ret;
+  }
+
+  for (const auto& key : keys) {
+    auto range = info.tags.equal_range(key);
+    info.tags.erase(range.first, range.second);
+  }
+
+  ret = write_policy(dpp, y, rados, sysobj, zone, info, false);
+  if(ret < 0) {
+    ldpp_dout(dpp, 20) << "failed to untag policy " << policy_name << " with: " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  return ret;
+}
+
 }

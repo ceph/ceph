@@ -533,6 +533,11 @@ public:
                         std::string_view account,
                         std::string_view policy_name,
                         std::multimap<std::string, std::string>& tags) override;
+  int untag_policy(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::vector<std::string>& keys) override;
 
   virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,

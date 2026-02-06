@@ -150,3 +150,15 @@ public:
   const char* name() const override { return "tag_policy"; }
   RGWOpType get_type() override { return RGW_OP_TAG_POLICY; }
 };
+
+class RGWUntagPolicy : public RGWRestPolicy {
+  std::string policy_arn;
+  std::vector<std::string> keys;
+
+public:
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  RGWUntagPolicy() : RGWRestPolicy(rgw::IAM::iamUntagPolicy, RGW_CAP_WRITE){ }
+  const char* name() const override { return "untag_policy"; }
+  RGWOpType get_type() override { return RGW_OP_UNTAG_POLICY; }
+};
