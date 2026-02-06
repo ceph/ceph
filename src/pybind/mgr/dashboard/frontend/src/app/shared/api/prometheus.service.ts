@@ -12,6 +12,7 @@ import {
   PrometheusRuleGroup
 } from '../models/prometheus-alerts';
 import moment from 'moment';
+import { StorageType, STORAGE_QUERY_MAP } from '../models/performance-data';
 
 export type PromethuesGaugeMetricResult = {
   metric: Record<string, string>; // metric metadata
@@ -378,5 +379,9 @@ export class PrometheusService {
     }
 
     return [...map.values()].sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  public getQueriesForStorage(type: StorageType) {
+    return STORAGE_QUERY_MAP[type];
   }
 }

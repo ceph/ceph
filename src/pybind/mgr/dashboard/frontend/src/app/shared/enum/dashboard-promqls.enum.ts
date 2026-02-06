@@ -56,3 +56,80 @@ export enum MultiClusterPromqlsForPoolUtilization {
   POOL_IOPS_UTILIZATION = 'topk(5, (rate(ceph_pool_rd[1m]) + rate(ceph_pool_wr[1m])) * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata )',
   POOL_THROUGHPUT_UTILIZATION = 'topk(5, (irate(ceph_pool_rd_bytes[1m]) + irate(ceph_pool_wr_bytes[1m])) * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata )'
 }
+
+export const FilesystemQueries = {
+  READIOPS: `sum(rate(ceph_pool_rd[1m])
+              * on (pool_id, cluster)
+                group_left(application)
+                  ceph_pool_metadata{application="Filesystem"}) OR vector(0)`,
+
+  WRITEIOPS: `sum(rate(ceph_pool_wr[1m])
+              * on (pool_id, cluster)
+                group_left(application)
+                  ceph_pool_metadata{application="Filesystem"}) OR vector(0)`,
+
+  READLATENCY: `avg_over_time(ceph_osd_apply_latency_ms[1m])`,
+
+  WRITELATENCY: `avg_over_time(ceph_osd_commit_latency_ms[1m])`,
+
+  READCLIENTTHROUGHPUT: `sum(rate(ceph_pool_rd_bytes[1m])
+              * on (pool_id, cluster)
+                group_left(application)
+                  ceph_pool_metadata{application="Filesystem"}) OR vector(0)`,
+
+  WRITECLIENTTHROUGHPUT: `sum(rate(ceph_pool_wr_bytes[1m])
+              * on (pool_id, cluster)
+                group_left(application)
+                  ceph_pool_metadata{application="Filesystem"}) OR vector(0)`
+};
+
+export const BlockQueries = {
+  READIOPS: `sum(rate(ceph_pool_rd[1m])
+              * on (pool_id, cluster)
+                group_left(application)
+                  ceph_pool_metadata{application="Block"}) OR vector(0)`,
+
+  WRITEIOPS: `sum(rate(ceph_pool_wr[1m])
+              * on (pool_id, cluster)
+                group_left(application)
+                  ceph_pool_metadata{application="Block"}) OR vector(0)`,
+
+  READLATENCY: `avg_over_time(ceph_osd_apply_latency_ms[1m])`,
+  WRITELATENCY: `avg_over_time(ceph_osd_commit_latency_ms[1m])`,
+
+  READCLIENTTHROUGHPUT: `sum(rate(ceph_pool_rd_bytes[1m])
+              * on (pool_id, cluster)
+                group_left(application)
+                  ceph_pool_metadata{application="Block"}) OR vector(0)`,
+
+  WRITECLIENTTHROUGHPUT: `sum(rate(ceph_pool_wr_bytes[1m])
+              * on (pool_id, cluster)
+                group_left(application)
+                  ceph_pool_metadata{application="Block"}) OR vector(0)`
+};
+
+export const ObjectQueries = {
+  READIOPS: `sum(rate(ceph_pool_rd[1m])
+              * on (pool_id, cluster)
+                group_left(application)
+                  ceph_pool_metadata{application="Object"}) OR vector(0)`,
+
+  WRITEIOPS: `sum(rate(ceph_pool_wr[1m])
+              * on (pool_id, cluster)
+                group_left(application)
+                  ceph_pool_metadata{application="Object"}) OR vector(0)`,
+
+  READLATENCY: `avg_over_time(ceph_osd_apply_latency_ms[1m])`,
+  WRITELATENCY: `avg_over_time(ceph_osd_commit_latency_ms[1m])`,
+
+  READCLIENTTHROUGHPUT: `sum(rate(ceph_pool_rd_bytes[1m])
+              * on (pool_id, cluster)
+                group_left(application)
+                  ceph_pool_metadata{application="Object"}) OR vector(0)`,
+
+  WRITECLIENTTHROUGHPUT: `sum(rate(ceph_pool_wr_bytes[1m])
+              * on (pool_id, cluster)
+                group_left(application)
+                  ceph_pool_metadata{application="Object"}) OR vector(0)`
+};
+

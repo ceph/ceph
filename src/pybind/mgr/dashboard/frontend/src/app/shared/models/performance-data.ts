@@ -1,3 +1,4 @@
+import { FilesystemQueries, BlockQueries, ObjectQueries } from '../enum/dashboard-promqls.enum';
 import { ChartPoint } from './area-chart-point';
 
 export interface PerformanceData {
@@ -58,4 +59,10 @@ export const METRIC_UNIT_MAP: Record<PerformanceType, string> = {
   [PerformanceType.Latency]: Units.Latency,
   [PerformanceType.Throughput]: Units.Throughput,
   [PerformanceType.IOPS]: Units.IOPS
+};
+
+export const STORAGE_QUERY_MAP = {
+  [StorageType.Filesystem]: FilesystemQueries,
+  [StorageType.Block]: BlockQueries,
+  [StorageType.Object]: ObjectQueries
 };

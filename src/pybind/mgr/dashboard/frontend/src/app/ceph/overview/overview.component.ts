@@ -1,53 +1,83 @@
-import { Component, inject, OnInit } from '@angular/core';
-import { ComponentsModule } from '~/app/shared/components/components.module';
-import { GridModule, TilesModule } from 'carbon-components-angular';
-import { PrometheusService } from '~/app/shared/api/prometheus.service';
-import { UtilizationCardQueries } from '~/app/shared/enum/dashboard-promqls.enum';
-import { METRIC_UNIT_MAP, PerformanceType } from '~/app/shared/models/performance-data';
+import {
+  Component,
+  inject,
+  OnInit
+} from '@angular/core';
+
+import {
+  GridModule,
+  TilesModule,
+  LayoutModule,
+  DropdownModule,
+  ListItem
+} from 'carbon-components-angular';
 import { take } from 'rxjs/operators';
+
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { METRIC_UNIT_MAP, PerformanceType, STORAGE_QUERY_MAP, StorageType } from '~/app/shared/models/performance-data';
+import { ComponentsModule } from "~/app/shared/components/components.module";
+import { CommonModule } from '@angular/common';
+import { TimePickerComponent } from '~/app/shared/components/time-picker/time-picker.component';
 
 @Component({
   selector: 'cd-overview',
-  imports: [GridModule, TilesModule, ComponentsModule],
   standalone: true,
+  imports: [GridModule, TilesModule, LayoutModule, DropdownModule, ComponentsModule, CommonModule, TimePickerComponent],
   templateUrl: './overview.component.html',
   styleUrl: './overview.component.scss'
 })
 export class OverviewComponent implements OnInit {
-  queriesResults: { [key: string]: [] } = {
-    USEDCAPACITY: [],
-    IPS: [],
-    OPS: [],
-    READLATENCY: [],
-    WRITELATENCY: [],
-    READCLIENTTHROUGHPUT: [],
-    WRITECLIENTTHROUGHPUT: [],
-    RECOVERYBYTES: [],
-    READIOPS: [],
-    WRITEIOPS: []
-  };
+  
   chartData: any;
   performanceTypes = PerformanceType;
   metricUnitMap = METRIC_UNIT_MAP;
 
-  private prometheusService = inject(PrometheusService);
+  storageTypes: ListItem[] = [
+    {
+      content: "Filesystem", value: StorageType.Filesystem,
+      selected: false
+    },
+    {
+      content: "Block", value: StorageType.Block,
+      selected: false
+    },
+    {
+      content: "Object", value: StorageType.Object,
+      selected: false
+    }
+  ];
 
-  ngOnInit(): void {
-    this.getPrometheusData(this.prometheusService.lastHourDateObject);
+  selectedStorageType = StorageType.Filesystem;
+
+  private prometheusService = inject(PrometheusService);
+  time: { start: number; end: number; step: number; };
+
+  ngOnInit() {
+    this.loadCharts(this.prometheusService.lastHourDateObject);
   }
 
-  public getPrometheusData(selectedTime: any) {
-    this.prometheusService.getRangeQueriesData(
-      selectedTime,
-      UtilizationCardQueries,
-      this.queriesResults,
-      true
-    );
+  queriesResults = {};
 
-    this.prometheusService.updatedChrtData.pipe(take(1)).subscribe((updated) => {
-      this.queriesResults = updated;
+loadCharts(time: { start: number; end: number; step: number; }) {
+  this.time = time;
+  const queries = STORAGE_QUERY_MAP[this.selectedStorageType];
 
+  this.prometheusService.getRangeQueriesData(
+    time,
+    queries,
+    this.queriesResults,
+    true
+  );
+
+  this.prometheusService.updatedChrtData
+    .pipe(take(1))
+    .subscribe(updated => {
       this.chartData = this.prometheusService.convertPerformanceData(updated);
     });
+}
+
+  onStorageTypeSelection(event: any) {    
+    this.selectedStorageType = event.item.value;    
+    this.loadCharts(this.time);
   }
 }

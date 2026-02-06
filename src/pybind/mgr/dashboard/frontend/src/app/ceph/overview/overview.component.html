@@ -29,18 +29,56 @@
       <cds-tile>Docs card</cds-tile>
     </div>
   </div>
-  <div cdsRow>
-    <div cdsCol
-         class="cds-mb-5"
-         [columnNumbers]="{lg: 16}">
-      <cds-tile>Performance card
-        <cd-area-chart
-          [chartKey]="performanceTypes?.Throughput"
-          chartTitle="Throughput"
-          [dataUnit]="metricUnitMap?.throughput"
-          [rawData]="chartData?.throughput">
-        </cd-area-chart>
-      </cds-tile>
-    </div>
+ <div cdsRow>
+  <div cdsCol class="cds-mb-5" [columnNumbers]="{ lg: 16 }">
+
+    <cd-productive-card title="Performance" [applyShadow]="true">
+
+      <ng-template #headerAction>
+        <div cdsStack="horizontal" gap="2">
+          <cds-dropdown placeholder="Storage Type" (selected)="onStorageTypeSelection($event)">
+            <cds-dropdown-list [items]="storageTypes"></cds-dropdown-list>
+          </cds-dropdown>
+
+          <app-time-picker (selectedTime)="loadCharts($event)"></app-time-picker>
+        </div>
+      </ng-template>
+
+      <div *ngIf="chartData" cdsGrid [narrow]="true">
+        <div cdsRow>
+
+          <div cdsCol [columnNumbers]="{ lg: 5, md: 8, sm: 16 }">
+            <cd-area-chart chartTitle="IOPS"
+                [chartKey]="performanceTypes.Iops"
+                [dataUnit]="metricUnitMap.iops"
+                [rawData]="chartData.iops">
+            </cd-area-chart>
+          </div>
+
+          <div cdsCol [columnNumbers]="{ lg: 5, md: 8, sm: 16 }">
+            <cd-area-chart chartTitle="Latency"
+                [chartKey]="performanceTypes.Latency"
+                [dataUnit]="metricUnitMap.latency"
+                [rawData]="chartData.latency">
+            </cd-area-chart>
+          </div>
+
+          <div cdsCol [columnNumbers]="{ lg: 6, md: 16, sm: 16 }">
+            <cd-area-chart chartTitle="Throughput"
+                [chartKey]="performanceTypes.Throughput"
+                [dataUnit]="metricUnitMap.throughput"
+                [rawData]="chartData.throughput">
+            </cd-area-chart>
+          </div>
+
+        </div>
+      </div>
+
+    </cd-productive-card>
+
   </div>
+</div>
+
+
+
 </div>

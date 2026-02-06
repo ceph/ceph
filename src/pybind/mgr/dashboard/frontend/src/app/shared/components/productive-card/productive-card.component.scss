@@ -1,5 +1,12 @@
 @use '@carbon/colors';
 
+.productive-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--cds-spacing-05);
+}
+
 .productive-card {
   margin: 0;
   padding: 0;
