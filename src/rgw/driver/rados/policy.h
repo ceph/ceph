@@ -85,4 +85,11 @@ int get_policy(const DoutPrefixProvider *dpp,
               std::string_view account,
               std::string_view name,
               rgw::IAM::ManagedPolicyInfo &info);
+int delete_policy(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              librados::Rados& rados,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account,
+              std::string_view name);
 }
