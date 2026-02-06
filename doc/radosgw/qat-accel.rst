@@ -63,6 +63,11 @@ which means that Ceph will not be able to utilize QAT hardware features for
 crypto operations based on the OpenSSL crypto plugin. As a result, one QAT plugin
 based on native QAT API is added into the crypto framework.
 
+.. note:: QAT acceleration currently supports only AES-256-CBC encryption mode.
+   The AES-256-GCM encryption mode (see :ref:`radosgw-encryption`) uses ISA-L
+   or OpenSSL acceleration instead. QAT support for GCM may be added in a
+   future release.
+
 2. QAT Support for Compression
 
 As mentioned above, QAT support for compression is based on the QATzip library

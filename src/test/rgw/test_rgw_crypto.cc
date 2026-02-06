@@ -1039,11 +1039,12 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_tag_verification)
 
 TEST(TestRGWCrypto, verify_AES_256_GCM_nonce_uniqueness)
 {
-  // This test verifies the MinIO-style per-object random nonce mechanism:
-  // 1. Each GCM instance gets a unique random nonce
-  // 2. Decryption with wrong nonce fails
-  // 3. Decryption with correct nonce succeeds
-
+  /**
+   * Verify per-object random nonce mechanism:
+   *   1. Each GCM instance gets a unique random nonce
+   *   2. Decryption with wrong nonce fails
+   *   3. Decryption with correct nonce succeeds
+   */
   const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   uint8_t key[32];
   for(size_t i=0;i<sizeof(key);i++)
@@ -1085,12 +1086,13 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_nonce_uniqueness)
 
 TEST(TestRGWCrypto, verify_AES_256_GCM_nonce_restore)
 {
-  // This test simulates the encrypt/decrypt flow with stored nonce:
-  // 1. Encrypt with auto-generated nonce
-  // 2. Extract nonce (would be stored in RGW_ATTR_CRYPT_NONCE)
-  // 3. Create new instance with restored nonce
-  // 4. Decrypt successfully
-
+  /**
+   * Simulate the encrypt/decrypt flow with stored nonce:
+   *   1. Encrypt with auto-generated nonce
+   *   2. Extract nonce (would be stored in RGW_ATTR_CRYPT_NONCE)
+   *   3. Create new instance with restored nonce
+   *   4. Decrypt successfully
+   */
   const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   uint8_t key[32];
   for(size_t i=0;i<sizeof(key);i++)
