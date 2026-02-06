@@ -469,7 +469,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     PGTransaction::ObjectOperation &op,
     WritePlanObj &plan,
     DoutPrefixProvider *dpp,
-    pg_log_entry_t *entry)
+    pg_log_entry_t *entry,
+    bool &first_write_in_interval)
   : t(t),
     ec_impl(ec_impl),
     pgid(pgid),
@@ -585,8 +586,9 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     }
   }
 
-  if (size_change || clear_whiteout) {
+  if (size_change || clear_whiteout || first_write_in_interval) {
     all_shards_written();
+    first_write_in_interval = false;
   } else {
     // All primary shards must always be written, regardless of the write plan.
     shards_written(sinfo.get_parity_shards());
@@ -1008,7 +1010,8 @@ void ECTransaction::generate_transactions(
     set<hobject_t> *temp_added,
     set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
-    const OSDMapRef &osdmap) {
+    const OSDMapRef &osdmap,
+    bool &first_write_in_interval) {
   ceph_assert(written_map);
   ceph_assert(transactions);
   ceph_assert(temp_added);
@@ -1041,7 +1044,7 @@ void ECTransaction::generate_transactions(
       ceph_assert(plan.hoid == oid);
 
       Generate generate(t, ec_impl, pgid, sinfo, partial_extents, written_map,
-        *transactions, osdmap, oid, op, plan, dpp, entry);
+        *transactions, osdmap, oid, op, plan, dpp, entry, first_write_in_interval);
 
       plans.plans.pop_front();
   });

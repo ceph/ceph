@@ -121,7 +121,8 @@ class Generate {
     const hobject_t &oid, PGTransaction::ObjectOperation &op,
     WritePlanObj &plan,
     DoutPrefixProvider *dpp,
-    pg_log_entry_t *entry);
+    pg_log_entry_t *entry,
+    bool &first_write_in_interval);
 };
 
 void generate_transactions(
@@ -137,6 +138,7 @@ void generate_transactions(
     std::set<hobject_t> *temp_added,
     std::set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
-    const OSDMapRef &osdmap
+    const OSDMapRef &osdmap,
+    bool &first_write_in_interval
   );
 }
