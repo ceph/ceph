@@ -2909,6 +2909,22 @@ int RadosStore::untag_policy(const DoutPrefixProvider* dpp,
                       keys);
 }
 
+int RadosStore::list_policy_tags(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          std::string_view policy_name,
+                          std::string_view marker,
+                          uint32_t max_items,
+                          rgw::IAM::PolicyTagList& listing)
+{
+  return rgwrados::policy::list_policy_tags(dpp, y,
+                                         *getRados()->get_rados_handle(),
+                                         *svc()->sysobj,
+                                         svc()->zone->get_zone_params(),
+                                         account_id, policy_name,
+                                         marker, max_items, listing);
+}
+
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,

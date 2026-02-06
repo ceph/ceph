@@ -178,4 +178,15 @@ int untag_policy(const DoutPrefixProvider *dpp,
               std::string_view policy_name,
               std::vector<std::string>& keys);
 
+int list_policy_tags(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              librados::Rados& rados,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account_id,
+              std::string_view policy_name,
+              std::string_view marker,
+              uint32_t max_items,
+              rgw::IAM::PolicyTagList& listing);
+
 }

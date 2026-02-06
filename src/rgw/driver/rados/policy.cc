@@ -618,4 +618,27 @@ int untag_policy(const DoutPrefixProvider *dpp,
   return ret;
 }
 
+int list_policy_tags(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    RGWSI_SysObj &sysobj,
+    const RGWZoneParams &zone,
+    std::string_view account_id,
+    std::string_view policy_name,
+    std::string_view marker,
+    uint32_t max_items,
+    rgw::IAM::PolicyTagList& listing)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account_id, policy_name);
+  int ret = get_policy(dpp, y, sysobj, zone, account_id, policy_name, info);
+  if(ret < 0){
+    return ret;
+  }
+
+  listing.tags.insert(info.tags.begin(), info.tags.end());
+
+  return ret;
+}
+
 }

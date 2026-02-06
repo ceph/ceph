@@ -197,6 +197,7 @@ enum {
   iamListPolicyVersions,
   iamTagPolicy,
   iamUntagPolicy,
+  iamListPolicyTags,
   iamAll,
 
 
