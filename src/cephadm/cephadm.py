@@ -2321,15 +2321,18 @@ def prepare_dashboard(
         if cert_key:
             cert_file = write_tmp(cert_key['cert'], uid, gid)
             key_file = write_tmp(cert_key['key'], uid, gid)
+            root_ca_file = write_tmp(cert_key['root_ca'], uid, gid)
             mounts = {
                 cert_file.name: '/tmp/dashboard.crt:z',
-                key_file.name: '/tmp/dashboard.key:z'
+                key_file.name: '/tmp/dashboard.key:z',
+                root_ca_file.name: '/tmp/root_ca.crt:z'
             }
         else:
             logger.error('Cannot generate certificates for Ceph dashboard.')
 
     cli(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
     cli(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
+    cli(['dashboard', 'set-ssl-root-ca-cert', '-i', '/tmp/root_ca.crt'], extra_mounts=mounts)
 
     logger.info('Creating initial admin user...')
     password = ctx.initial_dashboard_password or generate_password()
