@@ -69,27 +69,57 @@ struct ResolvedEndpoint {
   std::string url;                // e.g., "https://s3.abc.com:8443"
   std::string scheme;             // e.g., "https"
   std::string host;               // e.g., "s3.abc.com"
-  int port = -1;                  // e.g., 443
+  int port = -1;                  // e.g., 8443
   std::vector<entity_addr_t> ips; // the IPs the endpoint resolves to
   std::vector<std::string> connect_to_strings;  // Pre-computed full connect_to strings for each IP
   size_t rr_index = 0;            // round-robin index for IPs
+
+  /* endpoint health state: the endpoint is not able to connect if the timestamp is not real_clock::zero */
+  std::atomic<ceph::real_time> status;
+
+  ResolvedEndpoint() = default;
+
+  // Custom move constructor (required because std::atomic is not movable)
+  ResolvedEndpoint(ResolvedEndpoint&& other) noexcept
+    : url(std::move(other.url)),
+      scheme(std::move(other.scheme)),
+      host(std::move(other.host)),
+      port(other.port),
+      ips(std::move(other.ips)),
+      connect_to_strings(std::move(other.connect_to_strings)),
+      rr_index(other.rr_index),
+      status(other.status.load())
+  {}
+
+  // Custom move assignment (required because std::atomic is not movable)
+  ResolvedEndpoint& operator=(ResolvedEndpoint&& other) noexcept {
+    url = std::move(other.url);
+    scheme = std::move(other.scheme);
+    host = std::move(other.host);
+    port = other.port;
+    ips = std::move(other.ips);
+    connect_to_strings = std::move(other.connect_to_strings);
+    rr_index = other.rr_index;
+    status.store(other.status.load());
+    return *this;
+  }
+
+  // Delete copy operations (std::atomic is not copyable)
+  ResolvedEndpoint(const ResolvedEndpoint&) = delete;
+  ResolvedEndpoint& operator=(const ResolvedEndpoint&) = delete;
 };
 
 class RGWRESTConn
 {
-  /* the endpoint is not able to connect if the timestamp is not real_clock::zero */
-  using endpoint_status_map = std::unordered_map<std::string, std::atomic<ceph::real_time>>;
-
   CephContext *cct;
-  std::vector<std::string> endpoints;
+  std::vector<std::string> endpoint_urls;             // For ordered round-robin
+  std::atomic<int64_t> endpoint_urls_counter = { 0 }; // Round-robin counter for endpoint_urls
   std::unordered_map<std::string, ResolvedEndpoint> resolved_endpoints;
-  endpoint_status_map endpoints_status;
   RGWAccessKey key;
   std::string self_zone_group;
   std::string remote_id;
   std::optional<std::string> api_name;
   HostStyle host_style;
-  std::atomic<int64_t> counter = { 0 };
 
   void resolve_endpoints(void);
 
@@ -139,7 +169,7 @@ public:
   CephContext *get_ctx() {
     return cct;
   }
-  size_t get_endpoint_count() const { return endpoints.size(); }
+  size_t get_endpoint_count() const { return endpoint_urls.size(); }
 
   virtual void populate_params(param_vec_t& params, const rgw_owner* uid, const std::string& zonegroup);
 

@@ -75,6 +75,7 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_single_ipv4) {
   EXPECT_EQ(res_ep.ips.size(), 1u);
   ASSERT_EQ(res_ep.connect_to_strings.size(), 1u);
   EXPECT_EQ(res_ep.connect_to_strings[0], "example.com:8080:192.168.1.100:8080");
+  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep.status.load()));
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_ips) {
@@ -213,7 +214,11 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_invalid_url) {
   RGWRESTConn conn(cct.get(), nullptr, "remote-zone", endpoints, std::nullopt);
 
   const auto& resolved = conn.get_resolved_endpoints();
-  EXPECT_TRUE(resolved.empty());
+  EXPECT_EQ(resolved.size(), 1u);
+
+  auto it = resolved.find("not-a-valid-url");
+  ASSERT_NE(it, resolved.end());
+  EXPECT_TRUE(it->second.ips.empty());
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_empty_host) {
@@ -224,7 +229,11 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_empty_host) {
   RGWRESTConn conn(cct.get(), nullptr, "remote-zone", endpoints, std::nullopt);
 
   const auto& resolved = conn.get_resolved_endpoints();
-  EXPECT_TRUE(resolved.empty());
+  EXPECT_EQ(resolved.size(), 1u);
+
+  auto it = resolved.find("http://:8080/path");
+  ASSERT_NE(it, resolved.end());
+  EXPECT_TRUE(it->second.ips.empty());
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_endpoints) {
@@ -257,6 +266,7 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_endpoints) {
   EXPECT_EQ(it1->second.ips.size(), 1u);
   ASSERT_EQ(it1->second.connect_to_strings.size(), 1u);
   EXPECT_EQ(it1->second.connect_to_strings[0], "host1.example.com:8080:192.168.1.1:8080");
+  EXPECT_TRUE(ceph::real_clock::is_zero(it1->second.status.load()));
 
   // Check second endpoint
   auto it2 = resolved.find("https://host2.example.com/rgw");
@@ -267,6 +277,7 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_endpoints) {
   EXPECT_EQ(it2->second.ips.size(), 1u);
   ASSERT_EQ(it2->second.connect_to_strings.size(), 1u);
   EXPECT_EQ(it2->second.connect_to_strings[0], "host2.example.com:443:192.168.1.2:443");
+  EXPECT_TRUE(ceph::real_clock::is_zero(it2->second.status.load()));
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_with_path) {
