@@ -101,7 +101,7 @@ public:
   void set_policy(const RGWAccessControlPolicy& policy);
   int sign(const DoutPrefixProvider *dpp, RGWAccessKey& key, const bufferlist *opt_content);
 
-  const RGWEndpoint& get_endpoint() { return endpoint; }
+  const RGWEndpoint& get_endpoint() const { return endpoint; }
 };
 
 class RGWHTTPStreamRWRequest : public RGWHTTPSimpleRequest {

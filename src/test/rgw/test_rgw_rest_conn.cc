@@ -358,3 +358,122 @@ TEST_F(RGWRESTConnTest, get_connect_to_mapping_unknown_url) {
   // Should set connect_to to empty string since URL not found
   EXPECT_EQ(ep.get_connect_to(), "");
 }
+
+TEST_F(RGWRESTConnTest, endpoint_constructor_sets_original_url) {
+  RGWEndpoint ep("http://example.com:8080");
+  EXPECT_EQ(ep.get_url(), "http://example.com:8080");
+  EXPECT_EQ(ep.get_original_url(), "http://example.com:8080");
+}
+
+TEST_F(RGWRESTConnTest, endpoint_set_url_on_default_constructed_sets_original) {
+  RGWEndpoint ep;
+  EXPECT_TRUE(ep.get_original_url().empty());
+
+  ep.set_url("http://first.example.com");
+  EXPECT_EQ(ep.get_url(), "http://first.example.com");
+  EXPECT_EQ(ep.get_original_url(), "http://first.example.com");
+
+  // Second set_url should NOT change original_url
+  ep.set_url("http://second.example.com");
+  EXPECT_EQ(ep.get_url(), "http://second.example.com");
+  EXPECT_EQ(ep.get_original_url(), "http://first.example.com");
+}
+
+TEST_F(RGWRESTConnTest, endpoint_with_url_preserves_original) {
+  RGWEndpoint ep("http://original.example.com");
+  RGWEndpoint ep2 = ep.with_url("http://modified.example.com");
+
+  EXPECT_EQ(ep2.get_url(), "http://modified.example.com");
+  EXPECT_EQ(ep2.get_original_url(), "http://original.example.com");
+}
+
+TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_uses_original_url) {
+  entity_addr_t addr;
+  addr.parse("192.168.1.1");
+  std::vector<entity_addr_t> mock_addrs = {addr};
+
+  EXPECT_CALL(*mock_resolver, resolve_all_addrs("example.com", _))
+       .WillOnce(DoAll(SetArgPointee<1>(mock_addrs), Return(0)));
+
+  std::list<std::string> endpoints = {"http://example.com:8080"};
+  RGWRESTConn conn(cct.get(), nullptr, "remote-zone", endpoints, std::nullopt);
+
+  // Get endpoint and verify it's initially connectable
+  RGWEndpoint ep;
+  int ret = conn.get_endpoint(ep);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(ep.get_original_url(), "http://example.com:8080");
+
+  // Mark it unconnectable
+  conn.set_endpoint_unconnectable(ep);
+
+  // Verify status was updated (endpoint should now be skipped initially)
+  const auto& resolved = conn.get_resolved_endpoints();
+  auto it = resolved.find("http://example.com:8080");
+  ASSERT_NE(it, resolved.end());
+  EXPECT_FALSE(ceph::real_clock::is_zero(it->second.status.load()));
+}
+
+TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_after_url_modification) {
+  entity_addr_t addr;
+  addr.parse("192.168.1.1");
+  std::vector<entity_addr_t> mock_addrs = {addr};
+
+  EXPECT_CALL(*mock_resolver, resolve_all_addrs("example.com", _))
+       .WillOnce(DoAll(SetArgPointee<1>(mock_addrs), Return(0)));
+
+  std::list<std::string> endpoints = {"http://example.com:8080"};
+  RGWRESTConn conn(cct.get(), nullptr, "remote-zone", endpoints, std::nullopt);
+
+  // Get endpoint
+  RGWEndpoint ep;
+  int ret = conn.get_endpoint(ep);
+  ASSERT_EQ(ret, 0);
+
+  // Simulate URL modification (e.g., connect_to mapping changed the effective URL)
+  ep.set_url("http://192.168.1.1:8080");
+
+  // original_url should still be the original
+  EXPECT_EQ(ep.get_original_url(), "http://example.com:8080");
+  EXPECT_EQ(ep.get_url(), "http://192.168.1.1:8080");
+
+  // Mark unconnectable - should use original_url for lookup
+  conn.set_endpoint_unconnectable(ep);
+
+  // Verify the ORIGINAL endpoint was marked (not the modified URL)
+  const auto& resolved = conn.get_resolved_endpoints();
+
+  // Should find by original URL
+  auto it = resolved.find("http://example.com:8080");
+  ASSERT_NE(it, resolved.end());
+  EXPECT_FALSE(ceph::real_clock::is_zero(it->second.status.load()));
+
+  // Should NOT have created entry for modified URL
+  auto it2 = resolved.find("http://192.168.1.1:8080");
+  EXPECT_EQ(it2, resolved.end());
+}
+
+TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_with_unknown_original_url) {
+  entity_addr_t addr;
+  addr.parse("192.168.1.1");
+  std::vector<entity_addr_t> mock_addrs = {addr};
+
+  EXPECT_CALL(*mock_resolver, resolve_all_addrs("known.example.com", _))
+       .WillOnce(DoAll(SetArgPointee<1>(mock_addrs), Return(0)));
+
+  std::list<std::string> endpoints = {"http://known.example.com:8080"};
+  RGWRESTConn conn(cct.get(), nullptr, "remote-zone", endpoints, std::nullopt);
+
+  // Create an endpoint with URL not in resolved_endpoints
+  RGWEndpoint ep;
+  ep.set_url("http://unknown.example.com:8080");
+
+  // This should safely do nothing (log error, but not crash)
+  conn.set_endpoint_unconnectable(ep);
+
+  // Verify original endpoint status unchanged
+  const auto& resolved = conn.get_resolved_endpoints();
+  auto it = resolved.find("http://known.example.com:8080");
+  ASSERT_NE(it, resolved.end());
+  EXPECT_TRUE(ceph::real_clock::is_zero(it->second.status.load()));
+}
