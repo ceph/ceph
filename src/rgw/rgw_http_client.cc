@@ -310,7 +310,6 @@ RGWHTTPClient::RGWHTTPClient(CephContext *cct,
       verify_ssl(cct->_conf->rgw_verify_ssl),
       cct(cct),
       method(_method),
-      endpoint_orig(_endpoint),
       endpoint(_endpoint) {
   init();
 }
