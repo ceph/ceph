@@ -405,7 +405,7 @@ public:
     int ret = req.wait(dpp, y);
     if (ret < 0) {
       if (ret == -ERR_INTERNAL_ERROR) {
-        conn->set_endpoint_unconnectable(req.get_endpoint_orig());
+        conn->set_endpoint_unconnectable(req.get_endpoint());
       }
       return ret;
     }
@@ -461,7 +461,7 @@ int RGWRESTReadResource::wait(const DoutPrefixProvider* dpp, T *dest,
   int ret = req.wait(dpp, y);
   if (ret < 0) {
     if (ret == -ERR_INTERNAL_ERROR) {
-      conn->set_endpoint_unconnectable(req.get_endpoint_orig());
+      conn->set_endpoint_unconnectable(req.get_endpoint());
     }
     return ret;
   }
@@ -536,7 +536,7 @@ public:
     *pbl = bl;
 
     if (ret == -ERR_INTERNAL_ERROR) {
-      conn->set_endpoint_unconnectable(req.get_endpoint_orig());
+      conn->set_endpoint_unconnectable(req.get_endpoint());
     }
 
     if (ret < 0 && err_result ) {
@@ -557,7 +557,7 @@ int RGWRESTSendResource::wait(const DoutPrefixProvider* dpp, T *dest,
 {
   int ret = req.wait(dpp, y);
   if (ret == -ERR_INTERNAL_ERROR) {
-    conn->set_endpoint_unconnectable(req.get_endpoint_orig());
+    conn->set_endpoint_unconnectable(req.get_endpoint());
   }
 
   if (ret >= 0) {

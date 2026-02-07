@@ -242,17 +242,17 @@ RGWEndpoint RGWRESTConn::get_endpoint()
 
 void RGWRESTConn::set_endpoint_unconnectable(const RGWEndpoint& endpoint)
 {
-  const string& url = endpoint.get_url();
+  const string& orig_url = endpoint.get_original_url();
 
-  if (url.empty() || resolved_endpoints.find(url) == resolved_endpoints.end()) {
-    ldout(cct, 0) << "ERROR: endpoint is not a valid or doesn't have status. endpoint="
-                  << url << dendl;
+  if (orig_url.empty() || resolved_endpoints.find(orig_url) == resolved_endpoints.end()) {
+    ldout(cct, 0) << "ERROR: endpoint is not a valid or doesn't have status. "
+                  << " original_url=" << orig_url << " current_url=" << endpoint.get_url() << dendl;
     return;
   }
 
-  resolved_endpoints[url].status.store(ceph::real_clock::now());
+  resolved_endpoints[orig_url].status.store(ceph::real_clock::now());
 
-  ldout(cct, 10) << "set endpoint unconnectable. url=" << url << dendl;
+  ldout(cct, 10) << "set endpoint unconnectable. url=" << orig_url << dendl;
 }
 
 void RGWRESTConn::populate_params(param_vec_t& params, const rgw_owner* uid, const string& zonegroup)
@@ -368,7 +368,7 @@ int RGWRESTConn::complete_request(const DoutPrefixProvider* dpp,
   int ret = req->complete_request(dpp, y, &etag, mtime);
   if (ret == -EIO) {
     ldout(cct, 5) << __func__ << ": complete_request() returned ret=" << ret << dendl;
-    set_endpoint_unconnectable(req->get_endpoint_orig());
+    set_endpoint_unconnectable(req->get_endpoint());
   }
 
   delete req;
@@ -531,7 +531,7 @@ int RGWRESTConn::complete_request(const DoutPrefixProvider* dpp,
   int ret = req->complete_request(dpp, y, etag, mtime, psize, pattrs, pheaders);
   if (ret == -EIO) {
     ldout(cct, 5) << __func__ << ": complete_request() returned ret=" << ret << dendl;
-    set_endpoint_unconnectable(req->get_endpoint_orig());
+    set_endpoint_unconnectable(req->get_endpoint());
   }
   delete req;
 
@@ -694,7 +694,7 @@ int RGWRESTReadResource::read(const DoutPrefixProvider *dpp, optional_yield y)
 
   ret = req.complete_request(dpp, y);
   if (ret == -EIO) {
-    conn->set_endpoint_unconnectable(req.get_endpoint_orig());
+    conn->set_endpoint_unconnectable(req.get_endpoint());
     ldpp_dout(dpp, 20) << __func__ << ": complete_request() returned ret=" << ret << dendl;
   }
 
@@ -761,7 +761,7 @@ int RGWRESTSendResource::send(const DoutPrefixProvider *dpp, bufferlist& outbl, 
 
   ret = req.complete_request(dpp, y);
   if (ret == -EIO) {
-    conn->set_endpoint_unconnectable(req.get_endpoint_orig());
+    conn->set_endpoint_unconnectable(req.get_endpoint());
     ldpp_dout(dpp, 20) << __func__ << ": complete_request() returned ret=" << ret << dendl;
   }
 
