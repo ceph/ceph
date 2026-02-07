@@ -470,6 +470,54 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def cluster_shutdown(self, force: bool = False, pause_io: bool = False, dry_run: bool = False) -> OrchResult[str]:
+        """
+        Safely shut down the entire Ceph cluster.
+
+        This will:
+        1. Optionally pause all client I/O (if pause_io=True)
+        2. Fail all CephFS filesystems
+        3. Put all hosts into maintenance mode in the correct order
+           (gateways first, then OSD, then MON/MGR last)
+
+        Note: No cluster-wide OSD flags (noout, nobackfill, etc.) are set by
+        default. The enter_host_maintenance() already sets per-host noout for
+        each host with OSDs, and other flags are either redundant or could
+        interfere with recovery operations.
+
+        The cluster can be restarted with cluster_start().
+
+        :param force: Continue even if some operations fail
+        :param pause_io: If True, set the 'pause' flag to stop all client I/O
+        :param dry_run: If True, show the shutdown order without performing the shutdown
+        :return: Status message describing the shutdown progress
+        """
+        raise NotImplementedError()
+
+    def cluster_start(self) -> OrchResult[str]:
+        """
+        Start the Ceph cluster after a shutdown.
+
+        This will:
+        1. Exit maintenance mode on the local host (if cluster is down)
+        2. Wait for MON/MGR to become available
+        3. Exit maintenance mode on all remaining hosts (MON first, gateways last)
+        4. Unset OSD safety flags
+        5. Set CephFS filesystems back to joinable
+
+        :return: Status message describing the startup progress
+        """
+        raise NotImplementedError()
+
+    def cluster_status(self) -> OrchResult[Dict[str, Any]]:
+        """
+        Get the current cluster shutdown/start status.
+
+        :return: Dictionary containing shutdown state information, or empty dict
+                 if cluster is in normal operating state
+        """
+        raise NotImplementedError()
+
     def rescan_host(self, hostname: str) -> OrchResult:
         """Use cephadm to issue a disk rescan on each HBA
 

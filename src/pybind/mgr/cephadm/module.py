@@ -9,6 +9,7 @@ import shlex
 from collections import defaultdict
 from configparser import ConfigParser
 from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import wraps
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 from urllib.error import HTTPError
@@ -68,7 +69,7 @@ from orchestrator.module import to_format, Format
 
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
     DaemonDescription, DaemonDescriptionStatus, handle_orch_error, \
-    service_to_daemon_types
+    service_to_daemon_types, raise_if_exception
 from orchestrator._interface import GenericSpec
 from orchestrator._interface import daemon_type_to_service
 
@@ -99,8 +100,8 @@ from .inventory import (
 )
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
-from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
-    cephadmNoImage, SpecialHostLabels
+from .utils import CEPH_IMAGE_TYPES, GATEWAY_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, \
+    forall_hosts, cephadmNoImage, SpecialHostLabels
 from .configchecks import CephadmConfigChecks
 from .offline_watcher import OfflineHostWatcher
 from .tuned_profiles import TunedProfileUtils
@@ -115,6 +116,14 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 
 T = TypeVar('T')
+
+
+@dataclass
+class ClusterOperationResult:
+    """Result of a cluster operation with success status and messages."""
+    success: bool
+    messages: List[str]
+
 
 DEFAULT_SSH_CONFIG = """
 Host *
@@ -2382,6 +2391,967 @@ Then run the following:
         self.update_maintenance_healthcheck()
 
         return f"Ceph cluster {self._cluster_fsid} on {hostname} has exited maintenance mode"
+
+    # =========================================================================
+    # CLUSTER SHUTDOWN / START
+    # =========================================================================
+    #
+    # Implement the cluster-wide shutdown and start functionality.
+    #
+    # Note on OSD flags during cluster shutdown:
+    #
+    # OSD flags like noout, nobackfill, norecover, or norebalance are not set
+    # by default although the IBM/RH documentation suggests they should be.
+    # Here's why:
+    #
+    # - 'noout': Already handled per-host by enter_host_maintenance() which sets
+    #   'osd set-group noout <crush_node>' for each host with OSDs.
+    #
+    # - 'nobackfill', 'norebalance': These are redundant because backfill and
+    #   rebalance only trigger when OSDs are marked "out". Since noout prevents
+    #   that, these flags have no effect.
+    #
+    # - 'norecover': Could be counterproductive - as recovery should complete
+    #   before continuing shutdown, and definitely want it during startup.
+    #
+    # The only optional flag is 'pause' (via --pause-io) which immediately stops
+    # all client I/O. This is aggressive and usually not needed.
+
+    # Key used to store shutdown state in the MGR's persistent store
+    CLUSTER_SHUTDOWN_STORE_KEY = 'cluster_shutdown_state'
+
+    def _cluster_set_osd_flags(self, flags: List[str], action: str = 'set') -> ClusterOperationResult:
+        """
+        Set or unset OSD flags for safe cluster shutdown/start.
+
+        Args:
+            flags: List of flag names (e.g., ['noout', 'pause'])
+            action: Either 'set' to enable flags or 'unset' to disable them
+
+        Returns:
+            ClusterOperationResult with success status and messages
+
+        The flags are set via 'ceph osd set <flag>' or 'ceph osd unset <flag>'.
+        This affects the entire cluster, not individual OSDs.
+        """
+        messages = []
+        success = True
+
+        for flag in flags:
+            # Build the mon command to set/unset the flag
+            # 'prefix' is the command name, 'key' is the flag name
+            ret, out, err = self.mon_command({
+                'prefix': f'osd {action}',
+                'key': flag,
+            })
+
+            if ret != 0:
+                # Command failed - log error but continue with other flags
+                messages.append(f'Failed to {action} flag "{flag}": {err}')
+                success = False
+            else:
+                messages.append(f'Successfully {action} flag: {flag}')
+
+        return ClusterOperationResult(success=success, messages=messages)
+
+    def _cluster_foreach_filesystem(
+        self,
+        operation: Callable[[str], Tuple[Dict[str, Any], str, str]],
+        empty_msg: str
+    ) -> ClusterOperationResult:
+        """
+        Execute an operation on all CephFS filesystems.
+
+        This helper handles:
+        1. Listing all filesystems
+        2. Executing an operation on each one
+        3. Collecting success/failure messages
+
+        Args:
+            operation: Function that takes fs_name and returns a tuple of:
+                       (mon_command_dict, success_message, failure_message_prefix)
+            empty_msg: Message to return when no filesystems exist
+
+        Returns:
+            ClusterOperationResult with overall success status and per-filesystem messages
+        """
+        # Get list of all filesystems in JSON format
+        ret, out, err = self.mon_command({
+            'prefix': 'fs ls',
+            'format': 'json',
+        })
+
+        if ret != 0:
+            return ClusterOperationResult(success=False, messages=[f'Failed to list filesystems: {err}'])
+
+        # Parse the JSON response
+        try:
+            filesystems = json.loads(out) if out else []
+        except (json.JSONDecodeError, ValueError) as e:
+            return ClusterOperationResult(success=False, messages=[f'Failed to parse filesystem list: {e}'])
+
+        if not filesystems:
+            return ClusterOperationResult(success=True, messages=[empty_msg])
+
+        # Execute the operation on each filesystem
+        messages = []
+        all_success = True
+        for fs in filesystems:
+            fs_name = fs.get('name')
+            if not fs_name:
+                continue
+
+            # Get the command and messages for this filesystem
+            cmd, success_msg, fail_msg_prefix = operation(fs_name)
+            ret, out, err = self.mon_command(cmd)
+
+            if ret != 0:
+                messages.append(f'{fail_msg_prefix}: {err}')
+                all_success = False
+            else:
+                messages.append(success_msg)
+
+        return ClusterOperationResult(success=all_success, messages=messages)
+
+    def _cluster_fail_all_filesystems(self) -> ClusterOperationResult:
+        """
+        Fail all CephFS filesystems for safe MDS shutdown.
+
+        When a filesystem is "failed", all MDS daemons stop serving it and
+        clients are disconnected. This is necessary before stopping MDS
+        daemons to ensure clean shutdown.
+
+        Returns:
+            ClusterOperationResult with success status and messages
+        """
+        def fail_operation(fs_name: str) -> Tuple[Dict[str, Any], str, str]:
+            return (
+                {'prefix': 'fs fail', 'fs_name': fs_name},
+                f'Failed filesystem: {fs_name}',
+                f'Failed to fail filesystem "{fs_name}"'
+            )
+
+        return self._cluster_foreach_filesystem(
+            fail_operation,
+            'No filesystems found - nothing to fail'
+        )
+
+    def _cluster_set_filesystems_joinable(self) -> ClusterOperationResult:
+        """
+        Set all CephFS filesystems back to joinable state after cluster start.
+
+        When a filesystem is set to joinable=true, MDS daemons can start
+        serving it again and clients can reconnect.
+
+        Returns:
+            ClusterOperationResult with success status and messages
+        """
+        def joinable_operation(fs_name: str) -> Tuple[Dict[str, Any], str, str]:
+            return (
+                {'prefix': 'fs set', 'fs_name': fs_name, 'var': 'joinable', 'val': 'true'},
+                f'Set filesystem joinable: {fs_name}',
+                f'Failed to set filesystem "{fs_name}" joinable'
+            )
+
+        return self._cluster_foreach_filesystem(
+            joinable_operation,
+            'No filesystems found - nothing to set joinable'
+        )
+
+    def _cluster_get_shutdown_state(self) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve the saved cluster shutdown state from persistent storage.
+
+        Returns:
+            Dictionary with shutdown state, or None if no state is saved.
+            State includes: admin_host, started_at, osd_flags_set
+        """
+        state_json = self.get_store(self.CLUSTER_SHUTDOWN_STORE_KEY)
+        if not state_json:
+            return None
+
+        try:
+            return json.loads(state_json)
+        except (json.JSONDecodeError, ValueError):
+            # Corrupted state - treat as no state
+            self.log.warning('Found corrupted cluster shutdown state, ignoring')
+            return None
+
+    def _cluster_set_shutdown_state(self, state: Optional[Dict[str, Any]]) -> None:
+        """
+        Save or clear the cluster shutdown state in persistent storage.
+
+        Args:
+            state: Dictionary with shutdown state to save, or None to clear.
+        """
+        if state is None:
+            # Clear the stored state
+            self.set_store(self.CLUSTER_SHUTDOWN_STORE_KEY, None)
+        else:
+            # Save state as JSON
+            self.set_store(self.CLUSTER_SHUTDOWN_STORE_KEY, json.dumps(state))
+
+    def _cluster_get_admin_host(self) -> Optional[str]:
+        """
+        Get the hostname of the admin host (running the active MGR).
+
+        The admin host is special because:
+        1. It must be shut down LAST (so we can still run commands)
+        2. It must be started FIRST (so we can run 'cluster start')
+
+        Returns:
+            Hostname of the admin host, or None if it cannot be determined.
+        """
+        try:
+            active_mgr = self.get_active_mgr()
+            return active_mgr.hostname
+        except Exception as e:
+            self.log.warning(f'Failed to get admin host: {e}')
+            return None
+
+    def _cluster_get_hosts_by_daemon_types(self) -> Dict[str, Set[str]]:
+        """
+        Get a mapping of hostnames to the daemon types running on them.
+
+        This is used to determine the order in which hosts should be
+        put into maintenance mode or brought out of it.
+
+        Returns:
+            Dictionary mapping hostname -> set of daemon types
+            Example: {'node1': {'mon', 'mgr', 'osd'}, 'node2': {'osd'}}
+        """
+        hosts_daemons: Dict[str, Set[str]] = {}
+
+        for hostname in self.cache.get_hosts():
+            daemon_types = self.cache.get_daemon_types(hostname)
+            if daemon_types:
+                hosts_daemons[hostname] = daemon_types
+
+        return hosts_daemons
+
+    def _cluster_order_hosts_for_shutdown(self, hosts_daemons: Dict[str, Set[str]], admin_host: Optional[str]) -> List[str]:
+        """
+        Order hosts for shutdown based on the daemons they run.
+
+        Hosts running client-facing services are shut down first.
+        Hosts running MON/MGR are shut down last.
+        The admin host (active MGR) is always absolute last.
+
+        Args:
+            hosts_daemons: Mapping of hostname -> set of daemon types
+            admin_host: Hostname of the admin host (active MGR)
+
+        Returns:
+            List of hostnames in shutdown order (first to last)
+        """
+        # Assign each host a priority based on the "most critical"
+        # daemon type it runs. Lower priority = shut down first.
+        #
+        # Priority levels (higher = shut down later):
+        # 0: Monitoring only (grafana, prometheus, etc.)
+        # 1: Gateways only (rgw, nfs, smb, nvmeof, iscsi)
+        # 2: MDS or mirrors
+        # 3: OSD only
+        # 4: Has MON but not admin
+        # 5: Admin host (active MGR) - always last
+
+        def get_host_priority(hostname: str, daemon_types: Set[str]) -> int:
+            """Calculate shutdown priority for a host."""
+            # Admin host is always last
+            if hostname == admin_host:
+                return 5
+
+            # Check for MON - these are critical cluster components
+            if 'mon' in daemon_types or 'mgr' in daemon_types:
+                return 4
+
+            # Check for OSD - storage nodes
+            if 'osd' in daemon_types:
+                return 3
+
+            # Check for MDS or mirrors - filesystem/replication
+            if 'mds' in daemon_types or 'rbd-mirror' in daemon_types or 'cephfs-mirror' in daemon_types:
+                return 2
+
+            # Check for gateways - client-facing
+            # Use GATEWAY_TYPES from cephadm/utils.py, plus 'rgw' and 'ingress'
+            gateway_set = set(GATEWAY_TYPES) | {'rgw', 'ingress'}
+            if daemon_types & gateway_set:  # Set intersection
+                return 1
+
+            # Everything else (monitoring services, crash, etc.)
+            return 0
+
+        # Sort hosts by priority (ascending = lower priority first)
+        sorted_hosts = sorted(
+            hosts_daemons.keys(),
+            key=lambda h: (get_host_priority(h, hosts_daemons[h]), h)  # Secondary sort by hostname for consistency
+        )
+
+        return sorted_hosts
+
+    def _cluster_order_hosts_for_startup(self, hosts_daemons: Dict[str, Set[str]], admin_host: Optional[str]) -> List[str]:
+        """
+        Order hosts for startup - reverse of shutdown order.
+
+        Admin host is first (already up when this runs), then MON hosts,
+        then OSD hosts, then MDS/mirrors, then gateways, then monitoring.
+
+        Args:
+            hosts_daemons: Mapping of hostname -> set of daemon types
+            admin_host: Hostname of the admin host (already running)
+
+        Returns:
+            List of hostnames in startup order (first to last)
+        """
+        # Get shutdown order and reverse it
+        shutdown_order = self._cluster_order_hosts_for_shutdown(hosts_daemons, admin_host)
+        return list(reversed(shutdown_order))
+
+    def _cluster_get_mon_hosts(self) -> List[str]:
+        """
+        Get list of hostnames that currently have MON daemons.
+
+        Returns:
+            List of hostnames with MON daemons
+        """
+        mon_hosts = []
+        for hostname in self.cache.get_hosts():
+            daemon_types = self.cache.get_daemon_types(hostname)
+            if 'mon' in daemon_types:
+                mon_hosts.append(hostname)
+        return mon_hosts
+
+    def _cluster_get_final_mon_hosts(self, shutdown_order: List[str], admin_host: str) -> List[str]:
+        """
+        Get the last 2 MON hosts in shutdown order (these need manual shutdown).
+
+        These are the hosts that will keep MONs running until the very end
+        to maintain quorum. They must be shut down manually.
+
+        Args:
+            shutdown_order: List of hosts in shutdown order
+            admin_host: The admin host (must be included)
+
+        Returns:
+            List of 2 hostnames that should keep MONs (admin + one other MON host)
+        """
+        # Find MON hosts in shutdown order (later = shut down later)
+        mon_hosts_ordered = []
+        for hostname in shutdown_order:
+            daemon_types = self.cache.get_daemon_types(hostname)
+            if 'mon' in daemon_types:
+                mon_hosts_ordered.append(hostname)
+
+        # Need at least 2 MONs for quorum during shutdown
+        # Take the last 2 MON hosts (including admin which should be last)
+        if len(mon_hosts_ordered) >= 2:
+            final_mon_hosts = mon_hosts_ordered[-2:]
+        else:
+            final_mon_hosts = mon_hosts_ordered
+
+        # Ensure admin host is included
+        if admin_host and admin_host not in final_mon_hosts:
+            if len(final_mon_hosts) >= 2:
+                final_mon_hosts[-1] = admin_host
+            else:
+                final_mon_hosts.append(admin_host)
+
+        return final_mon_hosts
+
+    def _cluster_reduce_mons(self, mon_hosts: List[str]) -> ClusterOperationResult:
+        """
+        Reduce MON count to specified hosts only.
+
+        This allows shutting down other hosts while keeping MON quorum.
+        The original MON placement should be saved before calling this.
+
+        Args:
+            mon_hosts: List of hosts to keep MONs on (typically 2)
+
+        Returns:
+            ClusterOperationResult with success status and messages
+        """
+        messages = []
+
+        try:
+            from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+
+            new_spec = ServiceSpec(
+                service_type='mon',
+                placement=PlacementSpec(hosts=mon_hosts)
+            )
+
+            self.log.info(f'Reducing MONs to {len(mon_hosts)} hosts: {mon_hosts}')
+            messages.append(f'Reducing MONs to: {", ".join(mon_hosts)}')
+
+            # Apply the new spec
+            result = self._apply(new_spec)
+            messages.append(f'MON spec applied: {result}')
+
+            return ClusterOperationResult(success=True, messages=messages)
+
+        except Exception as e:
+            messages.append(f'Failed to reduce MONs: {e}')
+            self.log.error(f'Failed to reduce MONs: {e}')
+            return ClusterOperationResult(success=False, messages=messages)
+
+    def _cluster_restore_mon_placement(self, mon_hosts: List[str]) -> ClusterOperationResult:
+        """
+        Restore MON daemons to their original hosts.
+
+        Args:
+            mon_hosts: List of hostnames to restore MONs to
+
+        Returns:
+            ClusterOperationResult with success status and messages
+        """
+        messages = []
+
+        if not mon_hosts:
+            messages.append('No MON hosts to restore')
+            return ClusterOperationResult(success=True, messages=messages)
+
+        try:
+            from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+
+            new_spec = ServiceSpec(
+                service_type='mon',
+                placement=PlacementSpec(hosts=mon_hosts)
+            )
+
+            self.log.info(f'Restoring MONs to hosts: {mon_hosts}')
+            messages.append(f'Restoring MONs to: {", ".join(mon_hosts)}')
+
+            # Apply the spec to restore MONs
+            result = self._apply(new_spec)
+            messages.append(f'MON spec applied: {result}')
+
+            return ClusterOperationResult(success=True, messages=messages)
+
+        except Exception as e:
+            messages.append(f'Failed to restore MONs: {e}')
+            self.log.error(f'Failed to restore MONs: {e}')
+            return ClusterOperationResult(success=False, messages=messages)
+
+    def _cluster_wait_for_mon_count(self, target_count: int, timeout: int = 300) -> bool:
+        """
+        Wait for MON count to reach target.
+
+        Args:
+            target_count: Expected number of MON daemons
+            timeout: Maximum seconds to wait
+
+        Returns:
+            True if target reached, False if timeout
+        """
+        import time
+        start = time.time()
+
+        while time.time() - start < timeout:
+            current_mons = self.cache.get_daemons_by_type('mon')
+            current_count = len(current_mons)
+
+            self.log.info(f'Waiting for MON count: {current_count}/{target_count}')
+
+            if current_count == target_count:
+                return True
+
+            time.sleep(5)
+
+        self.log.warning(f'Timeout waiting for MON count to reach {target_count}')
+        return False
+
+    def _cluster_shutdown_dry_run(self, pause_io: bool = False) -> str:
+        """
+        Show a summary of what the cluster shutdown would do without performing it.
+
+        Args:
+            pause_io: If True, indicates pause flag would be set
+
+        Returns:
+            Formatted summary of the shutdown plan
+        """
+        output_lines = []
+        output_lines.append('=' * 60)
+        output_lines.append('CLUSTER SHUTDOWN DRY-RUN')
+        output_lines.append('=' * 60)
+        output_lines.append('')
+
+        # Get admin host
+        admin_host = self._cluster_get_admin_host()
+        output_lines.append(f'Admin host: {admin_host}')
+        output_lines.append('')
+
+        # Get current MON hosts
+        mon_hosts = self._cluster_get_mon_hosts()
+        output_lines.append(f'Current MON hosts ({len(mon_hosts)}): {", ".join(mon_hosts)}')
+        output_lines.append('')
+
+        # Get hosts and shutdown order
+        hosts_daemons = self._cluster_get_hosts_by_daemon_types()
+        if not hosts_daemons:
+            output_lines.append('ERROR: No hosts found in the cluster!')
+            return '\n'.join(output_lines)
+
+        shutdown_order = self._cluster_order_hosts_for_shutdown(hosts_daemons, admin_host)
+
+        # Get final MON hosts (last 2 in order - these need manual shutdown)
+        final_mon_hosts = self._cluster_get_final_mon_hosts(shutdown_order, admin_host)
+
+        # Automated = all except final MON hosts
+        automated_hosts = [h for h in shutdown_order if h not in final_mon_hosts]
+
+        # Show what actions would be performed
+        output_lines.append('Actions that would be performed:')
+        step = 1
+        if pause_io:
+            output_lines.append(f'  {step}. Set OSD pause flag (--pause-io specified)')
+        else:
+            output_lines.append(f'  {step}. No OSD flags (--pause-io not specified)')
+        step += 1
+
+        if self.cache.get_daemons_by_type('mds'):
+            output_lines.append(f'  {step}. Fail all CephFS filesystems')
+        else:
+            output_lines.append(f'  {step}. Skip CephFS (no MDS daemons found)')
+        step += 1
+
+        if len(mon_hosts) > 2:
+            output_lines.append(f'  {step}. Reduce MONs from {len(mon_hosts)} to 2: {", ".join(final_mon_hosts)}')
+            step += 1
+
+        output_lines.append(f'  {step}. Put {len(automated_hosts)} hosts into maintenance mode (automated)')
+        step += 1
+        output_lines.append(f'  {step}. {len(final_mon_hosts)} final MON hosts require manual shutdown')
+        output_lines.append('')
+
+        output_lines.append(f'Shutdown order ({len(shutdown_order)} hosts):')
+        output_lines.append('')
+        output_lines.append(f'AUTOMATED ({len(automated_hosts)} hosts):')
+        for i, hostname in enumerate(automated_hosts, 1):
+            daemon_types = hosts_daemons.get(hostname, set())
+            daemons_str = ', '.join(sorted(daemon_types)) if daemon_types else 'none'
+            output_lines.append(f'  {i:2}. {hostname}')
+            output_lines.append(f'      Daemons: {daemons_str}')
+        output_lines.append('')
+
+        output_lines.append(f'MANUAL ({len(final_mon_hosts)} hosts - final MONs):')
+        for hostname in final_mon_hosts:
+            daemon_types = hosts_daemons.get(hostname, set())
+            daemons_str = ', '.join(sorted(daemon_types)) if daemon_types else 'none'
+            output_lines.append(f'      {hostname}')
+            output_lines.append(f'      Daemons: {daemons_str}')
+
+        output_lines.append('')
+        output_lines.append('=' * 60)
+        output_lines.append('')
+        output_lines.append('To perform the actual shutdown, run:')
+        output_lines.append('  ceph orch cluster shutdown --yes-i-really-mean-it')
+        output_lines.append('')
+        output_lines.append('After automated shutdown completes, shut down manual hosts:')
+        for hostname in final_mon_hosts:
+            output_lines.append(f'  ssh {hostname} cephadm host-maintenance enter --yes-i-really-mean-it')
+        output_lines.append('')
+        output_lines.append('To restart the cluster later:')
+        output_lines.append(f'  1. Exit maintenance on the 2 manual hosts:')
+        for hostname in final_mon_hosts:
+            output_lines.append(f'     ssh {hostname} cephadm host-maintenance exit')
+        output_lines.append(f'  2. ceph orch cluster start --yes-i-really-mean-it')
+        output_lines.append('     (This will restore MONs to original hosts)')
+        output_lines.append('')
+
+        return '\n'.join(output_lines)
+
+    def continue_cluster_operation(self) -> bool:
+        """
+        Continue any pending cluster shutdown or startup operation.
+
+        Called from the serve loop to process cluster operations asynchronously.
+        Dispatches to the appropriate handler based on the current state.
+
+        Returns True if work was done, False if nothing to do.
+        """
+        state = self._cluster_get_shutdown_state()
+        if not state:
+            return False
+
+        status = state.get('status')
+
+        # Dispatch based on status
+        if status == 'reducing_mons':
+            return self._continue_reducing_mons(state)
+        elif status == 'in_progress':
+            return self._continue_shutdown_hosts(state)
+        elif status == 'starting':
+            return self._continue_startup_hosts(state)
+        else:
+            return False
+
+    def _continue_reducing_mons(self, state: Dict[str, Any]) -> bool:
+        """Wait for MON reduction to complete (target: 2 MONs)."""
+        current_mons = self.cache.get_daemons_by_type('mon')
+        current_count = len(current_mons)
+        final_mon_hosts = state.get('final_mon_hosts', [])
+        target_count = len(final_mon_hosts) if final_mon_hosts else 2
+        self.log.debug(f'MON reduction in progress: {current_count}/{target_count} MONs')
+
+        if current_count <= target_count:
+            # MON reduction complete, proceed to host maintenance
+            self.log.info(f'MON reduction complete ({current_count} MONs), proceeding with host maintenance')
+            state['status'] = 'in_progress'
+            self._cluster_set_shutdown_state(state)
+        return True
+
+    def _continue_shutdown_hosts(self, state: Dict[str, Any]) -> bool:
+        """Process hosts one at a time for shutdown (enter maintenance)."""
+        automated_hosts = state.get('automated_hosts', [])
+        if not automated_hosts:
+            # All automated hosts done - only final MON hosts remain
+            state['status'] = 'pending_manual'
+            state['completed_at'] = datetime.datetime.utcnow().isoformat() + 'Z'
+            self._cluster_set_shutdown_state(state)
+            final_mon_hosts = state.get('final_mon_hosts', [])
+            self.log.info(f'Cluster shutdown: automated hosts done. Manual hosts remain: {final_mon_hosts}')
+            return True
+
+        # Process the first host in the list
+        hostname = automated_hosts[0]
+        force = state.get('force', False)
+
+        self.log.info(f'Entering maintenance: {hostname}')
+        try:
+            completion = self.enter_host_maintenance(hostname, force=True, yes_i_really_mean_it=True)
+            raise_if_exception(completion)
+
+            # Success - remove from list
+            automated_hosts.pop(0)
+            state['automated_hosts'] = automated_hosts
+            successful = state.get('successful_hosts', [])
+            successful.append(hostname)
+            state['successful_hosts'] = successful
+            self._cluster_set_shutdown_state(state)
+            self.log.info(f'{hostname} is now in maintenance mode')
+
+        except Exception as e:
+            error_msg = str(e)
+            self.log.error(f'Failed to put {hostname} into maintenance: {error_msg}')
+
+            if not force:
+                state['status'] = 'failed'
+                state['failed_at_host'] = hostname
+                state['error'] = error_msg
+                self._cluster_set_shutdown_state(state)
+                return True
+
+            # Force mode - record failure and continue
+            automated_hosts.pop(0)
+            state['automated_hosts'] = automated_hosts
+            failed = state.get('failed_hosts', [])
+            failed.append(hostname)
+            state['failed_hosts'] = failed
+            self._cluster_set_shutdown_state(state)
+
+        return True
+
+    def _continue_startup_hosts(self, state: Dict[str, Any]) -> bool:
+        """Process hosts one at a time for startup (exit maintenance)."""
+        startup_hosts = state.get('startup_hosts', [])
+        if not startup_hosts:
+            # All hosts processed - finalize startup
+            self.log.info('All hosts exited maintenance - finalizing startup')
+
+            # Set filesystems to joinable (only if MDS daemons exist)
+            if self.cache.get_daemons_by_type('mds'):
+                self.log.info('Setting CephFS filesystems to joinable')
+                result = self._cluster_set_filesystems_joinable()
+                for msg in result.messages:
+                    self.log.info(msg)
+
+            # Clear shutdown state
+            self._cluster_set_shutdown_state(None)
+            self.log.info('Cluster startup complete - state cleared')
+            return True
+
+        # Process the first host in the list
+        hostname = startup_hosts[0]
+
+        self.log.info(f'Exiting maintenance: {hostname}')
+        try:
+            self.exit_host_maintenance(hostname)
+
+            # Success - remove from list
+            startup_hosts.pop(0)
+            state['startup_hosts'] = startup_hosts
+            successful = state.get('startup_successful', [])
+            successful.append(hostname)
+            state['startup_successful'] = successful
+            self._cluster_set_shutdown_state(state)
+            self.log.info(f'{hostname} exited maintenance mode')
+
+        except Exception as e:
+            error_msg = str(e)
+            self.log.error(f'Failed to exit maintenance on {hostname}: {error_msg}')
+
+            # Record failure and continue
+            startup_hosts.pop(0)
+            state['startup_hosts'] = startup_hosts
+            failed = state.get('startup_failed', [])
+            failed.append(hostname)
+            state['startup_failed'] = failed
+            self._cluster_set_shutdown_state(state)
+
+        return True
+
+    @handle_orch_error
+    def cluster_shutdown(self, force: bool = False, pause_io: bool = False, dry_run: bool = False) -> str:
+        """
+        Safely shut down the entire Ceph cluster.
+
+        This method initiates the shutdown process which runs asynchronously
+        in the background. Use 'ceph orch cluster status' to monitor progress.
+
+        The shutdown:
+        1. Optionally pauses all client I/O (if pause_io=True)
+        2. Fails all CephFS filesystems for clean MDS shutdown
+        3. Puts all hosts into maintenance mode in the correct order
+           (processed one at a time in the background)
+
+        Args:
+            force: Continue even if some operations fail
+            pause_io: If True, set the 'pause' flag to stop all client I/O
+            dry_run: If True, show the shutdown order without performing the shutdown
+
+        Returns:
+            Status message describing the shutdown initiation
+        """
+        # Handle dry-run mode - just show the shutdown order
+        if dry_run:
+            return self._cluster_shutdown_dry_run(pause_io)
+
+        self.log.info('Cluster shutdown initiated')
+
+        # Check if there's already a shutdown in progress
+        existing_state = self._cluster_get_shutdown_state()
+        if existing_state and not force:
+            status = existing_state.get('status', 'unknown')
+            if status == 'in_progress':
+                pending = len(existing_state.get('pending_hosts', []))
+                done = len(existing_state.get('successful_hosts', []))
+                raise OrchestratorError(
+                    f'Cluster shutdown already in progress ({done} done, {pending} pending). '
+                    'Use "ceph orch cluster status" to check progress.',
+                    errno=errno.EINPROGRESS
+                )
+            raise OrchestratorError(
+                f'A cluster shutdown was already initiated at {existing_state.get("started_at", "unknown")} '
+                f'(status: {status}). '
+                'Use --force to override or "ceph orch cluster start" to bring cluster back up.',
+                errno=errno.EINPROGRESS
+            )
+
+        # Get admin host first
+        admin_host = self._cluster_get_admin_host()
+        if not admin_host:
+            raise OrchestratorError('Cannot determine admin host!', errno=errno.ENOENT)
+        self.log.info(f'Admin host: {admin_host}')
+
+        # Set pause flag if requested (this is quick, do it synchronously)
+        osd_flags_to_set = []
+        if pause_io:
+            osd_flags_to_set.append('pause')
+            self.log.info('Setting OSD pause flag')
+            result = self._cluster_set_osd_flags(osd_flags_to_set, 'set')
+            for msg in result.messages:
+                self.log.info(msg)
+            if not result.success and not force:
+                raise OrchestratorError('Failed to set pause flag', errno=errno.EIO)
+
+        # Fail all CephFS filesystems (only if MDS daemons exist) - also quick
+        if self.cache.get_daemons_by_type('mds'):
+            self.log.info('Failing CephFS filesystems')
+            result = self._cluster_fail_all_filesystems()
+            for msg in result.messages:
+                self.log.info(msg)
+        else:
+            self.log.info('No MDS daemons found - skipping filesystem fail')
+
+        # Save current MON hosts for later restoration
+        original_mon_hosts = self._cluster_get_mon_hosts()
+        self.log.info(f'Original MON hosts: {original_mon_hosts}')
+
+        # Get shutdown order
+        hosts_daemons = self._cluster_get_hosts_by_daemon_types()
+        if not hosts_daemons:
+            raise OrchestratorError('No hosts found in the cluster!', errno=errno.ENOENT)
+
+        shutdown_order = self._cluster_order_hosts_for_shutdown(hosts_daemons, admin_host)
+        self.log.info(f'Shutdown order: {shutdown_order}')
+
+        # Get the last 2 MON hosts (these need manual shutdown to maintain quorum)
+        final_mon_hosts = self._cluster_get_final_mon_hosts(shutdown_order, admin_host)
+        self.log.info(f'Final MON hosts (manual): {final_mon_hosts}')
+
+        # Automated hosts = all except final MON hosts
+        automated_hosts = [h for h in shutdown_order if h not in final_mon_hosts]
+        self.log.info(f'Automated hosts: {automated_hosts}')
+
+        # Determine initial status based on MON count
+        if len(original_mon_hosts) > 2:
+            # Need to reduce MONs to 2 first - initiate it now
+            self.log.info(f'Initiating MON reduction to 2 hosts: {final_mon_hosts}')
+            result = self._cluster_reduce_mons(final_mon_hosts)
+            for msg in result.messages:
+                self.log.info(msg)
+            initial_status = 'reducing_mons'
+        else:
+            # 2 or fewer MONs, can proceed directly to host maintenance
+            initial_status = 'in_progress'
+
+        # Save shutdown state - the serve loop will handle the rest
+        shutdown_state = {
+            'started_at': datetime.datetime.utcnow().isoformat() + 'Z',
+            'admin_host': admin_host,
+            'osd_flags_set': osd_flags_to_set,
+            'original_mon_hosts': original_mon_hosts,
+            'final_mon_hosts': final_mon_hosts,
+            'hosts_order': shutdown_order,
+            'automated_hosts': automated_hosts,
+            'successful_hosts': [],
+            'failed_hosts': [],
+            'force': force,
+            'status': initial_status
+        }
+        self._cluster_set_shutdown_state(shutdown_state)
+
+        self.log.info('Cluster shutdown initiated - background processing started')
+
+        result_lines = [
+            f'Cluster shutdown initiated.',
+        ]
+        if len(original_mon_hosts) > 2:
+            result_lines.append(f'  Reducing MONs from {len(original_mon_hosts)} to 2')
+        result_lines.extend([
+            f'  Automated hosts: {len(automated_hosts)}',
+            f'  Manual hosts (final MONs): {len(final_mon_hosts)}',
+            '',
+            'Use "ceph orch cluster status" to monitor progress.',
+        ])
+
+        return '\n'.join(result_lines)
+
+    @handle_orch_error
+    def cluster_start(self) -> str:
+        """
+        Start the Ceph cluster after a shutdown.
+
+        This method initiates the startup process which runs asynchronously
+        in the background. Use 'ceph orch cluster status' to monitor progress.
+
+        The startup:
+        1. Restores MON placement (if reduced during shutdown)
+        2. Unsets OSD safety flags (if any were set)
+        3. Exits maintenance mode on all hosts (processed one at a time)
+        4. Sets CephFS filesystems back to joinable
+
+        Returns:
+            Status message indicating startup has begun
+        """
+        self.log.info('Cluster start initiated')
+
+        # Read saved shutdown state
+        shutdown_state = self._cluster_get_shutdown_state()
+        if not shutdown_state:
+            # No shutdown state - check if any hosts are in maintenance
+            hosts = list(self.inventory.all_specs())
+            maintenance_hosts = [h for h in hosts if h.status and 'maintenance' in h.status.lower()]
+            if not maintenance_hosts:
+                return 'No hosts in maintenance mode. Cluster appears to be running normally.'
+            # Create a minimal state for startup
+            shutdown_state = {
+                'osd_flags_set': [],
+                'original_mon_hosts': []
+            }
+
+        # Check if already starting
+        if shutdown_state.get('status') == 'starting':
+            return 'Cluster startup already in progress. Use "ceph orch cluster status" to monitor.'
+
+        self.log.info(f'Found shutdown state from {shutdown_state.get("started_at", "unknown")}')
+
+        # Get admin host
+        admin_host = self._cluster_get_admin_host()
+        self.log.info(f'Admin host: {admin_host}')
+
+        # Restore MON placement first (quick - just applies spec)
+        original_mon_hosts = shutdown_state.get('original_mon_hosts', [])
+        if original_mon_hosts and len(original_mon_hosts) > 2:
+            self.log.info(f'Restoring MONs to original hosts: {original_mon_hosts}')
+            result = self._cluster_restore_mon_placement(original_mon_hosts)
+            for msg in result.messages:
+                self.log.info(msg)
+
+        # Unset OSD flags (quick operation)
+        osd_flags = shutdown_state.get('osd_flags_set', [])
+        if osd_flags:
+            self.log.info(f'Unsetting OSD flags: {osd_flags}')
+            flags_to_unset = list(reversed(osd_flags))
+            result = self._cluster_set_osd_flags(flags_to_unset, 'unset')
+            for msg in result.messages:
+                self.log.info(msg)
+
+        # Get hosts in maintenance
+        hosts = list(self.inventory.all_specs())
+        maintenance_hosts = [h.hostname for h in hosts if h.status and 'maintenance' in h.status.lower()]
+        self.log.info(f'Hosts in maintenance: {maintenance_hosts}')
+
+        if maintenance_hosts:
+            # Calculate startup order
+            hosts_daemons = self._cluster_get_hosts_by_daemon_types()
+            for hostname in maintenance_hosts:
+                if hostname not in hosts_daemons:
+                    hosts_daemons[hostname] = set()
+
+            startup_order = self._cluster_order_hosts_for_startup(hosts_daemons, admin_host)
+            startup_order = [h for h in startup_order if h in maintenance_hosts]
+            self.log.info(f'Startup order: {startup_order}')
+
+            # Update state for async processing
+            shutdown_state['status'] = 'starting'
+            shutdown_state['startup_hosts'] = startup_order
+            shutdown_state['startup_successful'] = []
+            shutdown_state['startup_failed'] = []
+            shutdown_state['startup_started_at'] = datetime.datetime.utcnow().isoformat() + 'Z'
+            self._cluster_set_shutdown_state(shutdown_state)
+
+            self.log.info('Cluster startup initiated - background processing started')
+
+            result_lines = [
+                'Cluster startup initiated.',
+                f'  Hosts to process: {len(startup_order)}',
+            ]
+            if original_mon_hosts and len(original_mon_hosts) > 2:
+                result_lines.append(f'  MON spec restored to {len(original_mon_hosts)} hosts')
+            result_lines.append('')
+            result_lines.append('Use "ceph orch cluster status" to monitor progress.')
+            return '\n'.join(result_lines)
+        else:
+            # No hosts in maintenance - just clear state
+            self._cluster_set_shutdown_state(None)
+            self.log.info('No hosts in maintenance - startup complete')
+            return 'No hosts in maintenance mode. Shutdown state cleared.'
+
+    @handle_orch_error
+    def cluster_status(self) -> Dict[str, Any]:
+        """
+        Get the current cluster shutdown/start status.
+
+        Returns:
+            Dictionary containing shutdown state information, or empty dict
+            if cluster is in normal operating state.
+        """
+        state = self._cluster_get_shutdown_state()
+        return state if state else {}
 
     @handle_orch_error
     @host_exists()

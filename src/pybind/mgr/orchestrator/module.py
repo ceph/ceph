@@ -2605,3 +2605,259 @@ Usage:
         completion = self.update_service(service_type.value, service_type.name, image)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
+
+    # =========================================================================
+    # CLUSTER SHUTDOWN / START CLI COMMANDS
+    # =========================================================================
+    # These are thin wrappers that call the orchestrator backend implementation.
+    # The actual implementation is in cephadm/module.py (CephadmOrchestrator).
+    # =========================================================================
+
+    @OrchestratorCLICommand.Write('orch cluster shutdown')
+    def _cluster_shutdown(self,
+                          force: bool = False,
+                          pause_io: bool = False,
+                          dry_run: bool = False,
+                          yes_i_really_mean_it: bool = False) -> HandleCommandResult:
+        """
+        Safely shut down the entire Ceph cluster.
+
+        This command performs a complete cluster shutdown by:
+        1. Optionally pausing all client I/O (with --pause-io)
+        2. Failing all CephFS filesystems for clean MDS shutdown
+        3. Putting all hosts into maintenance mode in the correct order
+
+        Each host's maintenance mode automatically sets per-host noout flags
+        for OSDs. No additional cluster-wide flags are set by default.
+
+        After shutdown, the cluster can be restarted with:
+            ceph orch cluster start --yes-i-really-mean-it
+
+        Use --force to continue even if some operations fail.
+        Use --pause-io to immediately stop all client I/O before shutdown.
+        Use --dry-run to see the shutdown order without performing the shutdown.
+        """
+        # Dry-run doesn't require confirmation
+        if dry_run:
+            completion = self.cluster_shutdown(force=force, pause_io=pause_io, dry_run=True)
+            raise_if_exception(completion)
+            return HandleCommandResult(stdout=completion.result_str())
+
+        # Safety check - this is a dangerous operation!
+        if not yes_i_really_mean_it:
+            return HandleCommandResult(
+                retval=-errno.EPERM,
+                stderr=(
+                    'WARNING: This will shut down the ENTIRE Ceph cluster!\n'
+                    '\n'
+                    'All data will be inaccessible until the cluster is restarted.\n'
+                    '\n'
+                    'Options:\n'
+                    '  --dry-run     Show the shutdown order without performing shutdown\n'
+                    '  --pause-io    Immediately pause all client I/O before shutdown\n'
+                    '  --force       Continue even if some operations fail\n'
+                    '\n'
+                    'To restart the cluster after shutdown, run:\n'
+                    '    ceph orch cluster start --yes-i-really-mean-it\n'
+                    '\n'
+                    'If you are sure you want to proceed, add --yes-i-really-mean-it'
+                )
+            )
+
+        # Call the orchestrator backend implementation
+        completion = self.cluster_shutdown(force=force, pause_io=pause_io, dry_run=False)
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @OrchestratorCLICommand.Write('orch cluster start')
+    def _cluster_start(self,
+                       yes_i_really_mean_it: bool = False) -> HandleCommandResult:
+        """
+        Start the Ceph cluster after a shutdown.
+
+        This command brings the cluster back online by:
+        1. Exiting maintenance mode on the local host (if cluster is down)
+        2. Waiting for MON/MGR to become available
+        3. Exiting maintenance mode on all remaining hosts
+        4. Unsetting OSD safety flags
+        5. Setting CephFS filesystems back to joinable
+
+        Run this command from any cluster host after 'orch cluster shutdown'.
+        """
+        # Safety check
+        if not yes_i_really_mean_it:
+            return HandleCommandResult(
+                retval=-errno.EPERM,
+                stderr=(
+                    'This will start the Ceph cluster.\n'
+                    '\n'
+                    'If you are sure, add --yes-i-really-mean-it to proceed.'
+                )
+            )
+
+        # Call the orchestrator backend implementation
+        completion = self.cluster_start()
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @OrchestratorCLICommand.Read('orch cluster status')
+    def _cluster_shutdown_status(self) -> HandleCommandResult:
+        """
+        Show the current cluster shutdown/start status.
+
+        Displays whether a shutdown is in progress, completed, or if the
+        cluster is in normal operating state.
+        """
+        # Call the orchestrator backend implementation
+        completion = self.cluster_status()
+        result = raise_if_exception(completion)
+
+        # Format the result for display
+        if not result:
+            return HandleCommandResult(
+                stdout=(
+                    'Cluster Status: NORMAL\n'
+                    '\n'
+                    'No shutdown state recorded. The cluster is in normal operating mode.\n'
+                    '\n'
+                    'To shut down the cluster:\n'
+                    '  ceph orch cluster shutdown --yes-i-really-mean-it'
+                )
+            )
+
+        status = result.get('status', 'unknown')
+        output_lines = []
+
+        # Handle startup status separately
+        if status == 'starting':
+            output_lines.append('=' * 60)
+            output_lines.append('CLUSTER STARTUP IN PROGRESS')
+            output_lines.append('=' * 60)
+            output_lines.append('')
+            output_lines.append(f'Status: STARTING')
+            output_lines.append(f'Startup initiated: {result.get("startup_started_at", "unknown")}')
+            output_lines.append('')
+
+            startup_hosts = result.get('startup_hosts', [])
+            startup_successful = result.get('startup_successful', [])
+            startup_failed = result.get('startup_failed', [])
+            total = len(startup_hosts) + len(startup_successful) + len(startup_failed)
+
+            done = len(startup_successful) + len(startup_failed)
+            output_lines.append(f'Progress: {done}/{total} hosts')
+            output_lines.append(f'  Exited maintenance: {len(startup_successful)}')
+            if startup_failed:
+                output_lines.append(f'  Failed: {len(startup_failed)}')
+            output_lines.append(f'  Remaining: {len(startup_hosts)}')
+            output_lines.append('')
+
+            if startup_hosts:
+                output_lines.append('Next host to process:')
+                output_lines.append(f'  - {startup_hosts[0]}')
+                output_lines.append('')
+
+            if startup_successful:
+                output_lines.append(f'Hosts started ({len(startup_successful)}):')
+                for hostname in startup_successful:
+                    output_lines.append(f'  - {hostname}')
+                output_lines.append('')
+
+            output_lines.append('=' * 60)
+            output_lines.append('')
+            output_lines.append('Monitor cluster health with "ceph -s"')
+            output_lines.append('')
+
+            return HandleCommandResult(stdout='\n'.join(output_lines))
+
+        # Format shutdown state for display
+        output_lines.append('=' * 60)
+        output_lines.append('CLUSTER SHUTDOWN STATE')
+        output_lines.append('=' * 60)
+        output_lines.append('')
+
+        output_lines.append(f'Status: {status.upper()}')
+        output_lines.append(f'Shutdown initiated: {result.get("started_at", "unknown")}')
+
+        if result.get('completed_at'):
+            output_lines.append(f'Shutdown completed: {result.get("completed_at")}')
+
+        admin_host = result.get('admin_host', 'ADMIN_HOST')
+        output_lines.append(f'Admin host: {admin_host}')
+        output_lines.append('')
+
+        # Show progress information
+        automated_hosts = result.get('automated_hosts', [])
+        successful = result.get('successful_hosts', [])
+        failed = result.get('failed_hosts', [])
+        original_mon_hosts = result.get('original_mon_hosts', [])
+        total_automated = len(automated_hosts) + len(successful) + len(failed)
+
+        final_mon_hosts = result.get('final_mon_hosts', [])
+
+        if status == 'reducing_mons':
+            output_lines.append('Waiting for MON reduction to complete...')
+            output_lines.append(f'  Original MON hosts: {len(original_mon_hosts)}')
+            output_lines.append(f'  Target: 2 MONs')
+            output_lines.append('')
+        elif original_mon_hosts and len(original_mon_hosts) > 2:
+            output_lines.append(f'MONs reduced to 2 (original: {len(original_mon_hosts)} hosts)')
+            output_lines.append('')
+
+        if status == 'in_progress':
+            done = len(successful) + len(failed)
+            output_lines.append(f'Progress: {done}/{total_automated} hosts')
+            output_lines.append(f'  Successful: {len(successful)}')
+            if failed:
+                output_lines.append(f'  Failed: {len(failed)}')
+            output_lines.append(f'  Remaining: {len(automated_hosts)}')
+            output_lines.append('')
+            if automated_hosts:
+                output_lines.append('Next host to process:')
+                output_lines.append(f'  - {automated_hosts[0]}')
+                output_lines.append('')
+
+        if result.get('osd_flags_set'):
+            output_lines.append('OSD flags set:')
+            for flag in result.get('osd_flags_set', []):
+                output_lines.append(f'  - {flag}')
+            output_lines.append('')
+
+        if successful:
+            output_lines.append(f'Hosts in maintenance ({len(successful)}):')
+            for hostname in successful:
+                output_lines.append(f'  - {hostname}')
+            output_lines.append('')
+
+        if failed:
+            output_lines.append(f'Failed hosts ({len(failed)}):')
+            for hostname in failed:
+                output_lines.append(f'  - {hostname}')
+            output_lines.append('')
+
+        if status == 'failed':
+            output_lines.append('FAILURE INFORMATION:')
+            output_lines.append(f'  Failed at host: {result.get("failed_at_host", "unknown")}')
+            output_lines.append(f'  Error: {result.get("error", "unknown")}')
+            output_lines.append('')
+
+        output_lines.append('=' * 60)
+
+        if status == 'pending_manual':
+            output_lines.append('')
+            output_lines.append('Automated shutdown complete.')
+            output_lines.append('')
+            output_lines.append(f'Shut down {len(final_mon_hosts)} final MON hosts manually:')
+            for hostname in final_mon_hosts:
+                output_lines.append(f'  ssh {hostname} cephadm host-maintenance enter --yes-i-really-mean-it')
+
+        output_lines.append('')
+        output_lines.append('To start the cluster:')
+        output_lines.append(f'  1. Exit maintenance on final MON hosts:')
+        for hostname in (final_mon_hosts if final_mon_hosts else [admin_host]):
+            output_lines.append(f'     ssh {hostname} cephadm host-maintenance exit')
+        output_lines.append(f'  2. ceph orch cluster start --yes-i-really-mean-it')
+        if original_mon_hosts and len(original_mon_hosts) > 2:
+            output_lines.append(f'     (This will restore MONs to {len(original_mon_hosts)} hosts)')
+        output_lines.append('')
+
+        return HandleCommandResult(stdout='\n'.join(output_lines))

@@ -129,6 +129,10 @@ class CephadmServe:
                     if self.mgr.upgrade.continue_upgrade():
                         continue
 
+                    # Process cluster shutdown/startup if in progress
+                    if self.mgr.continue_cluster_operation():
+                        continue
+
                     # refresh node-proxy cache
                     self.mgr.node_proxy_cache.load()
 
