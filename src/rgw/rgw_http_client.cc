@@ -586,8 +586,7 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
 
   CURL *easy_handle = req_data->get_easy_handle();
 
-  dout(20) << "sending request to url=" << endpoint.get_url()
-    << " connect_to=" << endpoint.get_connect_to() << dendl;
+  dout(20) << "sending request to " << endpoint << dendl;
 
   curl_slist *h = headers_to_slist(headers);
 
@@ -605,9 +604,9 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
 
     req_data->connect_to_slist = curl_slist_append(req_data->connect_to_slist, endpoint.get_connect_to().c_str());
     if (! req_data->connect_to_slist) {
-      dout(0) << "ERROR: RGWHTTPClient::init_request failed to allocate connect_to_slist" << dendl;
+      dout(0) << "ERROR: RGWHTTPClient::init_request failed to allocate connect_to_slist: " << endpoint << dendl;
     } else {
-      dout(20) << "applying CURLOPT_CONNECT_TO=" << endpoint.get_connect_to() << " for url=" << endpoint.get_url() << dendl;
+      dout(20) << "applying CURLOPT_CONNECT_TO " << endpoint << dendl;
       curl_easy_setopt(easy_handle, CURLOPT_CONNECT_TO, req_data->connect_to_slist);
     }
   }
