@@ -1,0 +1,33 @@
+.overview-storage-card {
+  // Hiding the native chart title
+  &-chart {
+    .meter-title {
+      height: 0 !important;
+      display: none !important;
+    }
+
+    .spacer {
+      height: 0 !important;
+      display: none !important;
+    }
+  }
+
+  &-chart-header {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  &-dropdown {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-end;
+
+    .cds--label {
+      padding-right: var(--cds-spacing-03);
+    }
+
+    .cds--dropdown {
+      flex: 0 0 35%;
+    }
+  }
+}
