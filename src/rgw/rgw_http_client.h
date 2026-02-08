@@ -73,6 +73,17 @@ public:
   void append_to_url(const std::string& suffix) {
     url.append(suffix);
   }
+
+  friend std::ostream& operator<<(std::ostream& os, const RGWEndpoint& ep) {
+    os << "RGWEndpoint: url=" << ep.url;
+    if (!ep.original_url.empty() && ep.original_url != ep.url) {
+      os << " original_url=" << ep.original_url;
+    }
+    if (!ep.connect_to.empty()) {
+      os << " connect_to=" << ep.connect_to;
+    }
+    return os;
+  }
 };
 
 class RGWHTTPClient : public RGWIOProvider,
