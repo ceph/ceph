@@ -215,7 +215,7 @@ int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
     static constexpr uint32_t CONN_STATUS_EXPIRE_SECS = 2;
     if (diff >= CONN_STATUS_EXPIRE_SECS) {
       resolved_endpoints[ep_url].status.store(ceph::real_clock::zero());
-      ldout(cct, 10) << "endpoint " << endpoint.get_url() << " unconnectable status expired. mark it connectable" << dendl;
+      ldout(cct, 10) << endpoint << " unconnectable status expired. mark it connectable" << dendl;
       break;
     }
     num++;
@@ -227,8 +227,7 @@ int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
   }
 
   get_connect_to_mapping_for_url(endpoint);
-  ldout(cct, 20) << "get_endpoint picked endpoint url=" << endpoint.get_url()
-    << " connect_to=" << endpoint.get_connect_to() << dendl;
+  ldout(cct, 20) << "get_endpoint picked " << endpoint << dendl;
 
   return 0;
 }
@@ -245,8 +244,8 @@ void RGWRESTConn::set_endpoint_unconnectable(const RGWEndpoint& endpoint)
   const string& orig_url = endpoint.get_original_url();
 
   if (orig_url.empty() || resolved_endpoints.find(orig_url) == resolved_endpoints.end()) {
-    ldout(cct, 0) << "ERROR: endpoint is not a valid or doesn't have status. "
-                  << " original_url=" << orig_url << " current_url=" << endpoint.get_url() << dendl;
+    ldout(cct, 0) << "ERROR: endpoint is not a valid or doesn't have status: "
+                  << endpoint << dendl;
     return;
   }
 
