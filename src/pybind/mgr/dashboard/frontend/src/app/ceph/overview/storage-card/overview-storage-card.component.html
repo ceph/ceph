@@ -1,0 +1,43 @@
+<cd-productive-card
+  title="Storage overview"
+  i18n-title>
+  <ng-template #headerAction>
+    <cds-dropdown
+      label="Storage type"
+      class="overview-storage-card-dropdown"
+      i18n-label
+      size="sm"
+      [placeholder]="selectedStorageType"
+      (selected)="onStorageTypeSelect($event)">
+      <cds-dropdown-list [items]="dropdownItems"></cds-dropdown-list>
+    </cds-dropdown>
+  </ng-template>
+  <div class="overview-storage-card-chart-header">
+    <h5>
+      <span
+        class="cds--type-heading-05"
+        i18n>200{{' '}}</span>
+      <span
+        class="cds--type-body-02"
+        i18n>TB of 1300 TB used</span>
+    </h5>
+    <cds-tooltip
+      [autoAlign]="true"
+      class="cds-mt-5 "
+      title=""
+      [caret]="true"
+      description="An info tip about raw capacity"
+      i18n-description>
+      <cds-checkbox
+        [checked]="isRawCapacity"
+        (checkedChange)="toggleRawCapacity($event)"
+        i18n>
+        Raw capacity
+      </cds-checkbox>
+    </cds-tooltip>
+  </div>
+  <ibm-meter-chart
+    [options]="options"
+    [data]="displayData"
+    class="overview-storage-card-chart"></ibm-meter-chart>
+</cd-productive-card>

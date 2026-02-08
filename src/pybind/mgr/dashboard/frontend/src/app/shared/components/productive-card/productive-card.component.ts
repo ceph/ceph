@@ -1,4 +1,6 @@
+import { CommonModule } from '@angular/common';
 import { Component, ContentChild, Input, TemplateRef } from '@angular/core';
+import { GridModule, LayerModule, TilesModule } from 'carbon-components-angular';
 
 /**
  * A generic productive card component.
@@ -13,7 +15,8 @@ import { Component, ContentChild, Input, TemplateRef } from '@angular/core';
  */
 @Component({
   selector: 'cd-productive-card',
-  standalone: false,
+  imports: [GridModule, TilesModule, CommonModule, LayerModule],
+  standalone: true,
   templateUrl: './productive-card.component.html',
   styleUrl: './productive-card.component.scss'
 })

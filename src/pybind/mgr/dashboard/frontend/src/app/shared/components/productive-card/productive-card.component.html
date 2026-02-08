@@ -3,27 +3,27 @@
           [cdsLayer]="0">
   <header
     cdsGrid
-    [useCssGrid]="true"
-    [narrow]="true"
     class="productive-card-header">
-    <h2 cdsCol
-        [columnNumbers]="{md: headerActionTemplate ? 12 : 16, lg: headerActionTemplate ? 12 : 16}"
-        class="cds--type-heading-compact-02 productive-card-header-title">
-      {{title}}
-    </h2>
-  @if(headerActionTemplate) {
-  <div cdsCol
-       [columnNumbers]="{md: 4, lg: 4}"
-       class="productive-card-header-actions">
-    <ng-container *ngTemplateOutlet="headerActionTemplate"></ng-container>
-  </div>
-  }
+    <div cdsRow
+         class="productive-card-header-row">
+      <div cdsCol
+           [columnNumbers]="{sm: headerActionTemplate ? 12 : 16, md: headerActionTemplate ? 12 : 16, lg: headerActionTemplate ? 12 : 16}">
+        <h2 class="cds--type-heading-compact-02">{{title}}</h2>
+      </div>
+      @if(!!headerActionTemplate) {
+      <div cdsCol
+           [columnNumbers]="{sm: 4, md: 4, lg: 4}"
+           class="productive-card-header-actions">
+        <ng-container *ngTemplateOutlet="headerActionTemplate"></ng-container>
+      </div>
+      }
+    </div>
   </header>
   <section class="productive-card-section cds--type-body-compact-01"
            [ngClass]="{'productive-card-section--footer': footerTemplate}">
     <ng-content></ng-content>
   </section>
-  @if(footerTemplate) {
+  @if(!!footerTemplate) {
   <footer class="productive-card-footer">
     <ng-container *ngTemplateOutlet="footerTemplate"></ng-container>
   </footer>
