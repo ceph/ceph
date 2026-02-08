@@ -15,4 +15,4 @@ tasks:
     basedir: qa/standalone
     clients:
       all:
-        - tracing
+        - ceph-bpf

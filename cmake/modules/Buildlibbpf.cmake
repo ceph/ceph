@@ -3,7 +3,7 @@
 function(build_libbpf)
   include(ExternalProject)
 
-  set(libbpf_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/tracing/CephBPF/libbpf")
+  set(libbpf_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/tools/CephBPF/libbpf")
   set(libbpf_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/libbpf")
   set(libbpf_INSTALL_DIR "${libbpf_BINARY_DIR}/install")
   set(libbpf_LIBRARY "${libbpf_INSTALL_DIR}/libbpf.a")
