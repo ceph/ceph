@@ -2,7 +2,7 @@
 function(build_bpftool)
   include(ExternalProject)
 
-  set(bpftool_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/tracing/CephBPF/bpftool")
+  set(bpftool_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/tools/CephBPF/bpftool")
   set(bpftool_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/bpftool")
   set(bpftool_EXECUTABLE "${bpftool_BINARY_DIR}/bootstrap/bpftool")
 
