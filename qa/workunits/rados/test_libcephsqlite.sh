@@ -71,7 +71,7 @@ striper rm baz.db
 date
 sqlite b <<EOF
 CREATE TABLE foo (a BLOB);
-INSERT INTO foo VALUES (RANDOMBLOB(1<<20));
+INSERT INTO foo (a) VALUES (RANDOMBLOB(1<<20));
 WITH RECURSIVE c(x) AS
   (
    VALUES(1)
@@ -104,7 +104,7 @@ striper rm baz.db
 date
 sqlite b <<EOF
 CREATE TABLE foo (a BLOB);
-INSERT INTO foo VALUES (RANDOMBLOB(1<<20));
+INSERT INTO foo (a) VALUES (RANDOMBLOB(1<<20));
 WITH RECURSIVE c(x) AS
   (
    VALUES(1)
