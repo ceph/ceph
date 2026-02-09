@@ -1,22 +1,4 @@
 .overview-storage-card {
-  // Hiding the native chart title
-  &-chart {
-    .meter-title {
-      height: 0 !important;
-      display: none !important;
-    }
-
-    .spacer {
-      height: 0 !important;
-      display: none !important;
-    }
-  }
-
-  &-chart-header {
-    display: flex;
-    justify-content: space-between;
-  }
-
   &-dropdown {
     display: flex;
     justify-content: flex-end;
@@ -28,6 +10,24 @@
 
     .cds--dropdown {
       flex: 0 0 40%;
+    }
+  }
+
+  &-usage-text {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  // Hiding the native chart title
+  &-chart {
+    .meter-title {
+      height: 0 !important;
+      display: none !important;
+    }
+
+    .spacer {
+      height: 0 !important;
+      display: none !important;
     }
   }
 }
