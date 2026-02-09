@@ -1,3 +1,11 @@
+// Full page gray background (from layout), white tiles
+@use './src/styles/vendor/variables' as vv;
+
+// White tiles on gray page background
+cds-tile {
+  background-color: vv.$white !important;
+}
+
 .cds--grid {
   padding-inline: 0;
 }

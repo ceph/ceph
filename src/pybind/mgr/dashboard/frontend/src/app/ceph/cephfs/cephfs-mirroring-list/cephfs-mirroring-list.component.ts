@@ -112,7 +112,7 @@ export class CephfsMirroringListComponent implements OnInit {
   }
 
   navigateToPaths(row: MirroringRow) {
-    this.router.navigate([MIRRORING_PATH, row.local_fs_name, 'paths'], {
+    this.router.navigate([MIRRORING_PATH, row.local_fs_name], {
       state: {
         localFsName: row.local_fs_name,
         remoteFsName: row.fs_name,

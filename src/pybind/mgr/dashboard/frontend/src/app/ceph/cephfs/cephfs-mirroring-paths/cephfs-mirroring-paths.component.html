@@ -29,20 +29,21 @@
         </cds-tile>
       </div>
     </div>
-
     <div cdsRow
-         class="cds-mt-5">
-      <div cdsCol
-           [columnNumbers]="{lg: 16}">
-        <cds-tile [cdsLayer]="1">
-          <h3 class="cds--type-expressive-heading-03 cds-mb-3"
-              i18n>Mirroring paths</h3>
-          <cd-table
-            [data]="(mirroringPaths$ | async) || []"
-            [columns]="columns">
-          </cd-table>
-        </cds-tile>
-      </div>
-    </div>
+    class="cds-mt-5">
+ <div cdsCol
+      [columnNumbers]="{lg: 16}">
+   <cds-tile [cdsLayer]="1">
+     <h3 class="cds--type-expressive-heading-03 cds-mb-3"
+         i18n>Mirroring paths</h3>
+      <cd-table
+         [data]="(mirroringPaths$ | async) || []"
+         [columns]="columns"
+         selectionType="single"
+         [toolHeader]="false">
+       </cd-table>
+   </cds-tile>
+ </div>
+</div>
   </div>
 </div>

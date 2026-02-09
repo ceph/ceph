@@ -4,6 +4,8 @@ import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-cephfs-mirroring-paths',
@@ -18,14 +20,17 @@ export class CephfsMirroringPathsComponent implements OnInit {
 
   columns: CdTableColumn[];
   mirroringPaths$: Observable<any[]>;
+  permissions: Permissions;
 
   private navigationState: Record<string, string> | null = null;
 
   constructor(
     private route: ActivatedRoute,
     private router: Router,
-    private cephfsService: CephfsService
+    private cephfsService: CephfsService,
+    private authStorageService: AuthStorageService
   ) {
+    this.permissions = this.authStorageService.getPermissions();
     const nav = this.router.getCurrentNavigation();
     if (nav?.extras?.state) {
       this.navigationState = nav.extras.state as Record<string, string>;

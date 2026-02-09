@@ -110,8 +110,7 @@ export class CephfsMirroringPathsBreadcrumbsResolver extends BreadcrumbsResolver
     return [
       { text: 'File', path: fsPath },
       { text: 'Mirroring', path: mirroringPath },
-      { text: fsName, path: null },
-      { text: 'paths', path: null }
+      { text: fsName, path: null }
     ];
   }
 }
@@ -473,7 +472,8 @@ const routes: Routes = [
           {
             path: 'mirroring/:fsName',
             component: CephfsMirroringPathsComponent,
-            data: { breadcrumbs: CephfsMirroringPathsBreadcrumbsResolver }
+            data: { breadcrumbs: CephfsMirroringPathsBreadcrumbsResolver,               pageHeader: CEPHFS_MIRRORING_PAGE_HEADER
+            }
           },
           {
             path: 'nfs',
