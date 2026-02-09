@@ -30,7 +30,7 @@ function TEST_bluestore() {
     CEPH_ARGS+="--bluestore_block_size=2147483648 "
     CEPH_ARGS+="--bluestore_block_db_create=true "
     CEPH_ARGS+="--bluestore_block_db_size=1073741824 "
-    CEPH_ARGS+="--bluestore_block_wal_size=536870912 "
+    CEPH_ARGS+="--bluestore_block_wal_size=1073741824 "
     CEPH_ARGS+="--bluestore_block_wal_create=true "
     CEPH_ARGS+="--bluestore_fsck_on_mount=true "
     #choosing randomly allocation from file
@@ -167,7 +167,7 @@ function TEST_bluestore() {
     # slow, DB -> slow, DB, WAL
     ceph-bluestore-tool --path $dir/0 fsck || return 1
 
-    dd if=/dev/zero  of=$dir/0/wal count=512 bs=1M
+    dd if=/dev/zero  of=$dir/0/wal count=1024 bs=1M
     ceph-bluestore-tool --path $dir/0 \
       --dev-target $dir/0/wal \
       --command bluefs-bdev-new-wal || return 1
@@ -253,7 +253,7 @@ function TEST_bluestore() {
 
     # slow, DB, WAL1 -> slow, DB, WAL2
 
-    dd if=/dev/zero  of=$dir/0/wal2 count=512 bs=1M
+    dd if=/dev/zero  of=$dir/0/wal2 count=1024 bs=1M
     ceph-bluestore-tool --path $dir/0 \
       --devs-source $dir/0/block.wal \
       --dev-target $dir/0/wal2 \
