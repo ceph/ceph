@@ -21,7 +21,9 @@
     <div cdsCol
          class="cds-mb-5"
          [columnNumbers]="{lg: 16}">
-      <cd-overview-storage-card></cd-overview-storage-card>
+      <cd-overview-storage-card
+        [total]="totalCapacity"
+        [used]="usedCapacity"></cd-overview-storage-card>
     </div>
   </div>
   <div cdsRow>
