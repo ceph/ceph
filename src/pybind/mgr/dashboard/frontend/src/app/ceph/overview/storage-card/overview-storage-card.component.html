@@ -21,20 +21,22 @@
         class="cds--type-body-02"
         i18n>{{usedRawUnit}} of {{totalRaw}} {{totalRawUnit}} used</span>
     </h5>
-    <cds-tooltip
-      [autoAlign]="true"
-      class="cds-mt-5 "
-      title=""
-      [caret]="true"
-      description="An info tip about raw capacity"
-      i18n-description>
-      <cds-checkbox
-        [checked]="isRawCapacity"
-        (checkedChange)="toggleRawCapacity($event)"
+    <cds-checkbox
+      [checked]="isRawCapacity"
+      (checkedChange)="toggleRawCapacity($event)">
+      <cds-tooltip-definition
+        [autoAlign]="true"
+        [highContrast]="true"
+        [openOnHover]="false"
+        [dropShadow]="true"
+        title=""
+        [caret]="true"
+        description="Raw capacity includes all physical storage before replication or overhead."
+        i18n-description
         i18n>
         Raw capacity
-      </cds-checkbox>
-    </cds-tooltip>
+      </cds-tooltip-definition>
+    </cds-checkbox>
   </div>
   <ibm-meter-chart
     [options]="options"
