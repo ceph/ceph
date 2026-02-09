@@ -41,7 +41,7 @@
             </span>
             <ng-container *ngTemplateOutlet="statusTemplate; context: { status: certificate?.status }"></ng-container>
           </div>
-          <!-- icon -->
+          @if (SERVICES_SUPPORTING_CERT_EDIT.includes(serviceType)) {
           <cds-icon-button kind="ghost"
                            size="sm"
                            (click)="onEdit()"
@@ -49,6 +49,7 @@
             <cd-icon type="edit">
             </cd-icon>
           </cds-icon-button>
+          }
 
         </div>
         <div cdsStack="vertical"

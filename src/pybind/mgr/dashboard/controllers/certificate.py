@@ -130,7 +130,7 @@ class Certificate(RESTController):
         cert_scope = CertificateScope(cert_config.get('scope', CertificateScope.SERVICE.value))
 
         cert_ls_data = CertificateService.fetch_certificates_for_service(
-            orch, service_type, user_cert_name, cephadm_cert_name
+            orch, service_type, user_cert_name, cephadm_cert_name, service_name_full
         )
 
         daemon_hostnames, _ = CertificateService.get_daemon_hostnames(orch, service_name_full)
