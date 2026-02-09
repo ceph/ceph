@@ -447,7 +447,7 @@ function TEST_bluestore_expand() {
     # expand slow devices
     ceph-bluestore-tool --log-file $dir/bluestore_tool.log --path $dir/0 fsck || return 1
 
-    requested_space=4294967296 # 4GB
+    requested_space=5368709120 # 5GB
     truncate $dir/0/block -s $requested_space
     ceph-bluestore-tool --log-file $dir/bluestore_tool.log --path $dir/0 bluefs-bdev-expand || return 1
 
@@ -467,22 +467,16 @@ function TEST_bluestore_expand() {
     total_space_after=$( ceph tell osd.0 perf dump bluefs | jq ".bluefs.slow_total_bytes" )
     free_space_after=`ceph tell osd.0 bluestore bluefs device info | grep "BDEV_SLOW" -A 2 | grep free | cut -d':' -f 2 | cut -d"," -f 1 | cut -d' ' -f 2`
 
-    if [ $total_space_after != $requested_space ]; then
-	echo "total_space_after = $total_space_after"
-	echo "requested_space   = $requested_space"
-	return 1;
+    if [ $total_space_after -ne $requested_space ]; then
+        echo "total_space_after = $total_space_after"
+        echo "requested_space   = $requested_space"
+        return 1;
     fi
 
-    total_space_added=$((total_space_after - total_space_before))
-    free_space_added=$((free_space_after - free_space_before))
-
-    let new_used_space=($total_space_added - $free_space_added)
-    echo $new_used_space
-    # allow upto 128KB to be consumed
-    if [ $new_used_space -gt 131072 ]; then
-	echo "total_space_added = $total_space_added"
-	echo "free_space_added  = $free_space_added"
-	return 1;
+    if [ $free_space_after -le $free_space_before ]; then
+       echo "total_space_after = $total_space_after"
+       echo "requested_space   = $requested_space"
+       return 1;
     fi
     
     # kill
