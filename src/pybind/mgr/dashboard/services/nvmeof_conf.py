@@ -216,3 +216,12 @@ def is_mtls_enabled(service_name: str):
         return orch.services.get(service_name)[0].spec.enable_auth
     except OrchestratorError:
         return False
+
+
+def get_pool_group_name(service_name: str):
+    try:
+        orch = OrchClient.instance()
+        spec = orch.services.get(service_name)[0].spec
+        return (spec.pool, spec.group)
+    except OrchestratorError:
+        return None
