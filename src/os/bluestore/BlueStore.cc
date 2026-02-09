@@ -8727,6 +8727,13 @@ int BlueStore::mkfs()
   if (r < 0)
     goto out_close_fm;
 
+  {
+    size_t vault_size = cct->_conf.get_val<Option::size_t>("bluestore_vault_size");
+    if (vault_size > 0 && get_bluefs()) {
+      get_bluefs()->vault_add(vault_size);
+    }
+  }
+
   if (fsid != old_fsid) {
     r = _write_fsid();
     if (r < 0) {

@@ -173,13 +173,20 @@ Commands
    Changes WAL files from envelope mode to the legacy plain mode.
    Useful for downgrades, or if you might want to disable this new feature (bluefs_wal_envelope_mode).
 
-:command:`create-bdev-labels` --path *osd path* --dev *device*
+:command: `create-bdev-labels` --path *osd path* --dev *device*
 
    Writes a bdev label to BlueStore devices that originally did not support labeling.
    Reads metadata (e.g., fsid, ceph version) from --path and writes it to the device at --dev.
    Only the main device (block) gets full metadata; block.db or block.wal do not.
    The --dev path must be inside the --path directory, as its name determines the device role.
    Use --yes-i-really-really-mean-it to recreate corrupted labels.
+
+:command: `vault-add`     --path *osd path* --size *vault operation size*
+:command: `vault-release` --path *osd path* --size *vault operation size*
+
+   Adds or releases space from vault. Having some extra space in vault allows to recover OSD
+   from -ENOSPC in less intrusive prevents most cases than redeploying.
+   Most useful for compressing drives.
 
 Options
 =======
@@ -270,7 +277,7 @@ BlueFS log rescue
 =====================
 
 Some versions of BlueStore were susceptible to BlueFS log growing extremely large -
-beyond the point of making booting OSD impossible. This state is indicated by
+beyond the point of making booting OSD possible. This state is indicated by
 booting that takes very long and fails in _replay function.
 
 This can be fixed by::
@@ -281,6 +288,30 @@ It is advised to first check if rescue process would be successful::
   --bluefs_replay_recovery=true --bluefs_replay_recovery_disable_compact=true
 
 If above fsck is successful fix procedure can be applied.
+
+BlueStore extra disk space vault
+================================
+
+OSD running out of disk space (-ENOSPC error) is a critical failure.
+As a general rule OSD tires to avoid it. There are config safeguards that disable
+disk hungry operations: 'mon_osd_backfillfull_ratio', 'mon_osd_nearfull_ratio',
+'mon_osd_full_ratio', and 'osd_failsafe_full_ratio'.
+However, there are actions that cannot be disabled. Unsupervised OSD that has engaged
+backoffs due to '_full_ratio' can still walk into -ENOSPC.
+It is usually impossible to revive such OSD. One needs to redeploy an OSD;
+sometimes also to recover PG using ceph-objectstore-tool.
+Vault is a solution that reserves some disk space upfront to release it when support/recovery
+team is recovering from -ENOSPC failure. Vault is always fed from BlueStore main (slow) device;
+this disk space can be used by both BlueStore and BlueFS. Vault is most useful for compressing
+drives; -ENOSPC makes them unable to overwrite data in place.
+
+Reserve space::
+  ceph-bluestore-tool --path *osd path* --size *size* vault-add
+
+Release space::
+  ceph-bluestore-tool --path *osd path* --size *size* vault-release
+
+Above commands are also available via admin socket: 'bluefs vault add' and 'bluefs vault release'.
 
 Availability
 ============

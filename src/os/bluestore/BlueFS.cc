@@ -105,6 +105,14 @@ public:
 	r = admin_socket->register_command("bluefs files list", hook,
 					   "print files in bluefs");
 	ceph_assert(r == 0);
+        r = admin_socket->register_command(
+          "bluefs vault add name=size,type=CephString,req=false", hook,
+          "Expand disk space reserve in emergency vault. Size accepts K,M,.. suffixes.");
+        ceph_assert(r == 0);
+        r = admin_socket->register_command(
+          "bluefs vault release name=size,type=CephString,req=false", hook,
+          "Release space from the vault. Size accepts K,M,.. suffixes.");
+        ceph_assert(r == 0);
 	r = admin_socket->register_command("bluefs debug_inject_read_zeros", hook,
 					   "Injects 8K zeros into next BlueFS read. Debug only.");
 	ceph_assert(r == 0);
@@ -195,7 +203,35 @@ private:
       f->flush(out);
     } else if (command == "bluefs debug_inject_read_zeros") {
       bluefs->inject_read_zeros++;
-    } else {
+    }
+    else if (command == "bluefs vault add" || command == "bluefs vault release") {
+      std::string size_str;
+      uint64_t size_val = 0;
+      cmd_getval(cmdmap, "size", size_str);
+      if (!size_str.empty()) {
+        std::string err;
+        size_val = strict_iecstrtoll(size_str, &err);
+        if (!err.empty()) {
+          errss << "Invalid 'size':" << err << std::endl;
+          return -EINVAL;
+        }
+      }
+      size_t before = bluefs->vault_getsize();
+      std::string action;
+      if (command == "bluefs vault add") {
+        action = "Added";
+        bluefs->vault_add(size_val);
+      } else {
+        action = "Released";
+        bluefs->vault_release(size_val);
+      }
+      size_t after = bluefs->vault_getsize();
+      std::ostringstream ss;
+      ss << action << " 0x" << std::hex << size_val << "; vault: 0x"
+         << before << "->0x" << after << std::dec << std::endl;
+      out.append(ss.str());
+    }
+    else {
       errss << "Invalid command" << std::endl;
       return -ENOSYS;
     }
@@ -1172,6 +1208,10 @@ int BlueFS::mount()
            << dendl;
   // update log size
   logger->set(l_bluefs_log_bytes, log.writer->file->fnode.size);
+
+  // update vault size
+  int last_file;
+  vault_inspect(vault_size, last_file);
   return 0;
 
  out:
@@ -3727,6 +3767,21 @@ void BlueFS::_release_pending_allocations(vector<interval_set<uint64_t>>& to_rel
     }
   }
 }
+// Special, it breaks BlueFS consistency requirements.
+// Definitely not for use except in controlled conditions.
+void BlueFS::discard_dirty_pending_release() {
+  vector<interval_set<uint64_t>> to_release;
+  std::swap(dirty.pending_release, to_release);
+  for (unsigned i = 0; i < to_release.size(); ++i) {
+    if (!to_release[i].empty()) {
+      bdev[i]->try_discard(to_release[i], false, true);
+      alloc[i]->release(to_release[i]);
+      if (is_shared_alloc(i)) {
+        shared_alloc->bluefs_used -= to_release[i].size();
+      }
+    }
+  }
+}
 
 int BlueFS::_flush_and_sync_log_LD(uint64_t want_seq)
 {
@@ -4559,6 +4614,37 @@ int BlueFS::preallocate(FileRef f, uint64_t off, uint64_t len)/*_LF*/
     log.t.op_file_update_inc(f->fnode);
     f->is_dirty = true;
   }
+  return 0;
+}
+
+int BlueFS::reserve_on_main(FileRef f, uint64_t size_to_allocate, bool update_file_size)
+{
+  std::lock_guard ll(log.lock);
+  std::lock_guard fl(f->lock);
+  dout(10) << __func__ << " file " << f->fnode << " 0x"
+           << std::hex << size_to_allocate << std::dec << dendl;
+  if (f->deleted) {
+    dout(10) << __func__ << " deleted, no-op" << dendl;
+    return 0;
+  }
+  if (size_to_allocate == 0) {
+    return 0;
+  }
+  ceph_assert(f->fnode.ino > 1);
+  uint64_t allocated = f->fnode.get_allocated();
+  uint8_t dev = bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
+  int r = _allocate(dev, size_to_allocate, 0, &f->fnode,
+    [&](const bluefs_extent_t& e) {
+      allocated += e.length;
+      vselector->add_usage(f->vselector_hint, e);
+    });
+  if (r < 0)
+    return r;
+  if (update_file_size) {
+    f->fnode.size = allocated;
+  }
+  log.t.op_file_update(f->fnode);
+  f->is_dirty = true;
   return 0;
 }
 

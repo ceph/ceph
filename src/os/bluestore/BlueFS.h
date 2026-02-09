@@ -917,6 +917,18 @@ public:
 
   size_t probe_alloc_avail(int dev, uint64_t alloc_size);
 
+  /// ENOSPC vault methods
+  int vault_add(size_t reserve);
+  int vault_release(size_t to_release, bool safe_mode = true);
+  size_t vault_getsize() {
+    return vault_size;
+  }
+private:
+  size_t vault_size = 0;
+  int vault_inspect(size_t& reserve_size, int& last_file);
+  int reserve_on_main(FileRef f, uint64_t size_to_allocate, bool update_file_size);
+  void discard_dirty_pending_release();
+public:
   /// test purpose methods
   const PerfCounters* get_perf_counters() const {
     return logger;
