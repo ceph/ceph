@@ -134,9 +134,6 @@ protected:
     do_on_replace_prior();
   }
   virtual void do_on_replace_prior() {}
-  void on_data_commit() final {
-    ceph_abort("impossible");
-  }
 };
 using LogicalChildNodeRef = TCachedExtentRef<LogicalChildNode>;
 } // namespace crimson::os::seastore
