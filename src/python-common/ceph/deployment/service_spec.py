@@ -1666,7 +1666,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  abort_on_update_error: Optional[bool] = True,
                  omap_file_ignore_unlock_errors: Optional[bool] = False,
                  omap_file_lock_on_read: Optional[bool] = True,
-                 omap_file_lock_duration: Optional[int] = 20,
+                 omap_file_lock_duration: Optional[int] = 40,
                  omap_file_lock_retries: Optional[int] = 30,
                  omap_file_lock_retry_sleep_interval: Optional[float] = 1.0,
                  omap_file_update_reloads: Optional[int] = 10,

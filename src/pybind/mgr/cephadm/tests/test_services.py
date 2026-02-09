@@ -482,7 +482,7 @@ abort_on_update_error = True
 omap_file_ignore_unlock_errors = False
 # This is a development flag, do not change it
 omap_file_lock_on_read = True
-omap_file_lock_duration = 20
+omap_file_lock_duration = 40
 omap_file_lock_retries = 30
 omap_file_lock_retry_sleep_interval = 1.0
 omap_file_update_reloads = 10
