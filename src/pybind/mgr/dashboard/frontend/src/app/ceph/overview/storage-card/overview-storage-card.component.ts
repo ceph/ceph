@@ -33,9 +33,6 @@ const StorageType = {
 // }
 
 /**
- * 1. Fetch snapshot query -> [pass total and used raw]
- * 2. Show the usage title -> always fixed
- * 3. The chart total -> raw total always fixed
  * 4. Set data for block, file , object, all -> raw, sep queries
  * 5. Set data for block, file object + replicated -> usable
  * 6. Dont show what is 0
@@ -69,7 +66,7 @@ export class OverviewStorageCardComponent implements OnChanges {
     meter: {
       proportional: {
         total: null,
-        unit: 'GB',
+        unit: '',
         breakdownFormatter: (_e) => null,
         totalFormatter: (_e) => null
       }
@@ -89,7 +86,7 @@ export class OverviewStorageCardComponent implements OnChanges {
   allData = [
     {
       group: StorageType.BLOCK,
-      value: 100,
+      value: 100
     },
     {
       group: StorageType.FILE,
@@ -97,7 +94,8 @@ export class OverviewStorageCardComponent implements OnChanges {
     },
     {
       group: StorageType.OBJECT,
-      value: 60    }
+      value: 60
+    }
   ];
   dropdownItems = [
     { content: StorageType.ALL },
@@ -111,37 +109,37 @@ export class OverviewStorageCardComponent implements OnChanges {
 
   constructor(private dimlessBinaryPipe: DimlessBinaryPipe) {}
 
-ngOnChanges(): void {
-  if (this.total == null || this.used == null) return;
+  ngOnChanges(): void {
+    if (this.total == null || this.used == null) return;
 
-  const totalRaw = this.dimlessBinaryPipe.transform(this.total);
-  const usedRaw = this.dimlessBinaryPipe.transform(this.used);
+    const totalRaw = this.dimlessBinaryPipe.transform(this.total);
+    const usedRaw = this.dimlessBinaryPipe.transform(this.used);
 
-  const [totalValue, totalUnit] = totalRaw.split(/\s+/);
-  const [usedValue, usedUnit] = usedRaw.split(/\s+/);
+    const [totalValue, totalUnit] = totalRaw.split(/\s+/);
+    const [usedValue, usedUnit] = usedRaw.split(/\s+/);
 
-  const cleanedTotal = Number(totalValue.replace(/,/g, '').trim());
+    const cleanedTotal = Number(totalValue.replace(/,/g, '').trim());
 
-  if (Number.isNaN(cleanedTotal)) return;
+    if (Number.isNaN(cleanedTotal)) return;
 
-  this.totalRaw = totalValue;
-  this.totalRawUnit = totalUnit;
-  this.usedRaw = usedValue;
-  this.usedRawUnit = usedUnit;
+    this.totalRaw = totalValue;
+    this.totalRawUnit = totalUnit;
+    this.usedRaw = usedValue;
+    this.usedRawUnit = usedUnit;
 
-  // chart reacts to 'options' and 'data' changes only, hence mandatory to replace whole object
-  this.options = {
-    ...this.options,
-    meter: {
-      ...this.options.meter,
-      proportional: {
-        ...this.options.meter.proportional,
-        total: cleanedTotal,
-        unit: totalUnit
+    // chart reacts to 'options' and 'data' object changes only, hence mandatory to replace whole object
+    this.options = {
+      ...this.options,
+      meter: {
+        ...this.options.meter,
+        proportional: {
+          ...this.options.meter.proportional,
+          total: cleanedTotal,
+          unit: totalUnit
+        }
       }
-    }
-  };
-}
+    };
+  }
 
   toggleRawCapacity(isChecked: boolean) {
     this.isRawCapacity = isChecked;
