@@ -54,10 +54,6 @@ public:
     assert(cursor);
     return cursor->get_type();
   }
-
-  void renew_cursor(Transaction &t) {
-    cursor.reset(cursor->renew_cursor(t));
-  }
 };
 
 using backref_mapping_list_t = std::list<BackrefMapping>;
