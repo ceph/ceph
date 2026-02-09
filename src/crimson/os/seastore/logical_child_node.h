@@ -128,14 +128,12 @@ public:
     return (get_laddr() + get_length()).checked_to_laddr();
   }
 protected:
-  void on_replace_prior(Transaction &t) final {
+  void on_replace_prior() final {
     assert(is_seen_by_users());
-    if (!is_rewrite_transaction(t.get_src())) {
-      lba_child_node_t::on_replace_prior();
-    }
-    do_on_replace_prior(t);
+    lba_child_node_t::on_replace_prior();
+    do_on_replace_prior();
   }
-  virtual void do_on_replace_prior(Transaction &t) {}
+  virtual void do_on_replace_prior() {}
   void on_data_commit() final {
     ceph_abort("impossible");
   }

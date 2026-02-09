@@ -80,10 +80,7 @@ struct OMapInnerNode
     }
   }
 
-  void prepare_commit(Transaction &t) final {
-    if (is_rewrite_transaction(t.get_src())) {
-      return;
-    }
+  void prepare_commit() final {
     if (unlikely(!is_seen_by_users())) {
       ceph_assert(is_rewrite());
       auto &prior = *get_prior_instance()->template cast<OMapInnerNode>();
@@ -114,10 +111,7 @@ struct OMapInnerNode
     }
   }
 
-  void do_on_replace_prior(Transaction &t) final {
-    if (is_rewrite_transaction(t.get_src())) {
-      return;
-    }
+  void do_on_replace_prior() final {
     this->parent_node_t::on_replace_prior();
     if (!this->is_btree_root()) {
       auto &prior = *get_prior_instance()->template cast<OMapInnerNode>();
@@ -343,10 +337,7 @@ struct OMapLeafNode
     this->child_node_t::on_invalidated();
   }
 
-  void prepare_commit(Transaction &t) final {
-    if (is_rewrite_transaction(t.get_src())) {
-      return;
-    }
+  void prepare_commit() final {
     if (unlikely(!is_seen_by_users())) {
       ceph_assert(is_rewrite());
       auto &prior = *get_prior_instance()->template cast<OMapLeafNode>();
@@ -376,9 +367,9 @@ struct OMapLeafNode
     }
   }
 
-  void do_on_replace_prior(Transaction &t) final {
+  void do_on_replace_prior() final {
     ceph_assert(!this->is_rewrite());
-    if (!this->is_btree_root() && !is_rewrite_transaction(t.get_src())) {
+    if (!this->is_btree_root()) {
       auto &prior = *get_prior_instance()->template cast<OMapLeafNode>();
       assert(prior.base_child_t::has_parent_tracker());
       this->child_node_t::on_replace_prior();

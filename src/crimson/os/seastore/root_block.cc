@@ -8,11 +8,8 @@
 
 namespace crimson::os::seastore {
 
-void RootBlock::on_replace_prior(Transaction &t) {
-  if (!lba_root_node ||
-      // for rewrite transactions, we keep the prior extents instead of
-      // the new ones.
-      is_rewrite_transaction(t.get_src())) {
+void RootBlock::on_replace_prior() {
+  if (!lba_root_node) {
     auto &prior = static_cast<RootBlock&>(*get_prior_instance());
     if (prior.lba_root_node) {
       RootBlockRef this_ref = this;
@@ -32,10 +29,7 @@ void RootBlock::on_replace_prior(Transaction &t) {
       }
     }
   }
-  if (!backref_root_node ||
-      // for rewrite transactions, we keep the prior extents instead of
-      // the new ones.
-      is_rewrite_transaction(t.get_src())) {
+  if (!backref_root_node) {
     auto &prior = static_cast<RootBlock&>(*get_prior_instance());
     if (prior.backref_root_node) {
       RootBlockRef this_ref = this;
