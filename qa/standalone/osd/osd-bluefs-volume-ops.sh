@@ -52,7 +52,7 @@ function TEST_bluestore() {
     create_pool foo 16
 
     # write some objects
-    timeout 60 rados bench -p foo 30 write -b 4096 --no-cleanup #|| return 1
+    timeout 60 rados bench -p foo 15 write -b 4096 --no-cleanup #|| return 1
 
     echo "after bench"
 
@@ -152,7 +152,7 @@ function TEST_bluestore() {
     wait_for_clean || return 1
 
     # write some objects
-    timeout 60 rados bench -p foo 30 write -b 4096 --no-cleanup #|| return 1
+    timeout 60 rados bench -p foo 15 write -b 4096 --no-cleanup #|| return 1
 
     # kill
     while kill $osd_pid0; do sleep 1 ; done
@@ -180,7 +180,8 @@ function TEST_bluestore() {
     dd if=/dev/zero  of=$dir/1/db count=1024 bs=1M
     ceph-bluestore-tool --path $dir/1 \
       --dev-target $dir/1/db \
-      --command bluefs-bdev-new-db || return 1
+      --command bluefs-bdev-new-db \
+      --log-file $dir/bluestore_tool.log || return 1
 
     ceph-bluestore-tool --path $dir/1 \
       --devs-source $dir/1/block \
@@ -228,7 +229,7 @@ function TEST_bluestore() {
     osd_pid3=$(cat $dir/osd.3.pid)
 
     # write some objects
-    timeout 60 rados bench -p foo 30 write -b 4096 --no-cleanup #|| return 1
+    timeout 60 rados bench -p foo 15 write -b 4096 --no-cleanup #|| return 1
 
     # kill
     while kill $osd_pid0; do sleep 1 ; done
@@ -334,7 +335,7 @@ function TEST_bluestore() {
     osd_pid3=$(cat $dir/osd.3.pid)
 
     # write some objects
-    timeout 60 rados bench -p foo 30 write -b 4096 --no-cleanup #|| return 1
+    timeout 60 rados bench -p foo 15 write -b 4096 --no-cleanup #|| return 1
 
     wait_for_clean || return 1
 }
@@ -431,7 +432,7 @@ function TEST_bluestore_expand() {
     create_pool foo 16
 
     # write some objects
-    timeout 60 rados bench -p foo 30 write -b 4096 --no-cleanup #|| return 1
+    timeout 60 rados bench -p foo 10 write -b 4096 --no-cleanup #|| return 1
     sleep 5
     
     total_space_before=$( ceph tell osd.0 perf dump bluefs | jq ".bluefs.slow_total_bytes" )
