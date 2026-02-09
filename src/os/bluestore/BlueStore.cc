@@ -19268,8 +19268,7 @@ void BlueStore::_record_onode(OnodeRef& o, KeyValueDB::Transaction &txn)
 void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 {
   std::lock_guard l(qlock);
-  size_t used = bluefs && bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW ?
-    bluefs->get_used(BlueFS::BDEV_SLOW) : 0;
+  size_t used = bluefs ? bluefs->get_spillover_size() : 0;
   if (used > 0) {
       auto db_used = bluefs->get_used(BlueFS::BDEV_DB);
       auto db_total = bluefs->get_block_device_size(BlueFS::BDEV_DB);

@@ -661,6 +661,22 @@ uint64_t BlueFS::get_used(unsigned id)
   return _get_used(id);
 }
 
+// Returns spillover size to main (SLOW) device.
+// This only reports BlueFS files that could be placed on DB or WAL.
+// ENOSPC_vault is not reported here, since it is always on SLOW.
+uint64_t BlueFS::get_spillover_size()
+{
+  uint64_t s;
+  if (bdev[BDEV_SLOW]) {
+    // vault does not count towards used by bluefs
+    s = _get_used(BDEV_SLOW) - vault_size;
+  } else {
+    // no slow, no spillover
+    s = 0;
+  }
+  return s;
+}
+
 uint64_t BlueFS::_get_block_device_size(unsigned id) const
 {
   ceph_assert(id < bdev.size());
@@ -738,6 +754,8 @@ void BlueFS::dump_block_extents(ostream& out)
             << "(" << byte_u_t(total - free) << ")"
           << " : bluefs used 0x" << bluefs_used
             << "(" << byte_u_t(bluefs_used) << ")"
+          << " : vault 0x" << vault_size
+            << "(" << byte_u_t(vault_size) << ")"
           << " : non-bluefs used 0x" << non_bluefs_used
             << "(" << byte_u_t(non_bluefs_used) << ")"
           << std::dec << std::endl;

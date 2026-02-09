@@ -816,6 +816,7 @@ public:
   uint64_t get_block_device_size(unsigned id);
   uint64_t get_free(unsigned id);
   uint64_t get_used(unsigned id);
+  uint64_t get_spillover_size();
   uint64_t get_full_reserved(unsigned id);
   void dump_perf_counters(ceph::Formatter *f);
 
