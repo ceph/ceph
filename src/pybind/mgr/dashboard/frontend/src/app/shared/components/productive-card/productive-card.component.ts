@@ -22,7 +22,7 @@ import { GridModule, LayerModule, TilesModule } from 'carbon-components-angular'
 })
 export class ProductiveCardComponent {
   /* Card Title */
-  @Input() title!: string;
+  @Input() headerTitle!: string;
 
   /* Optional: Applies a tinted-colored background to card */
   @Input() applyShadow: boolean = false;

@@ -21,9 +21,12 @@
     <div cdsCol
          class="cds-mb-5"
          [columnNumbers]="{lg: 16}">
+      @if (healthData$ | async; as healthData) {
       <cd-overview-storage-card
-        [total]="totalCapacity"
-        [used]="usedCapacity"></cd-overview-storage-card>
+        [total]="healthData?.pgmap.bytes_total"
+        [used]="healthData?.pgmap.bytes_used">
+      </cd-overview-storage-card>
+      }
     </div>
   </div>
   <div cdsRow>

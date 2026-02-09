@@ -3,6 +3,8 @@ import { AbstractControl, ValidationErrors } from '@angular/forms';
 import _ from 'lodash';
 import { isEmptyInputValue } from '../forms/cd-validators';
 
+const binaryUnits = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+
 @Injectable({
   providedIn: 'root'
 })
@@ -178,5 +180,39 @@ export class FormatterService {
       return { rateOpsMaxSize: true };
     }
     return control.value.toString()?.length > 18 ? { rateOpsMaxSize: true } : null;
+  }
+
+  formatToBinary(num: any, split: false, decimals?: number): string;
+  formatToBinary(num: any, split: true, decimals?: number): [number, string];
+  formatToBinary(
+    num: any,
+    split: boolean = false,
+    decimals: number = 1
+  ): string | [number, string] {
+    const conversionFactor = 1024;
+    const convertedString = this.format_number(num, conversionFactor, binaryUnits, decimals);
+    if (split) {
+      const [value, unit] = convertedString.split(/\s+/);
+      return [this.convertToNumber(value), unit];
+    }
+    return convertedString;
+  }
+
+  convertToUnit(value: string, fromUnit: string, toUnit: string, decimals: number = 1): number {
+    if (!value) return 0;
+    const conversionFactor = 1024;
+    const convertedString = this.formatNumberFromTo(
+      value,
+      fromUnit,
+      toUnit,
+      conversionFactor,
+      binaryUnits,
+      decimals
+    );
+    return this.convertToNumber(convertedString.split(/\s+/)[0]);
+  }
+
+  convertToNumber(num: string) {
+    return Number(num.replace(/,/g, '').trim());
   }
 }
