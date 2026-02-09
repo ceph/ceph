@@ -73,7 +73,7 @@ describe('NvmeofSubsystemsFormComponent', () => {
     beforeEach(() => {
       nvmeofService = TestBed.inject(NvmeofService);
       spyOn(nvmeofService, 'createSubsystem').and.returnValue(of({}));
-      spyOn(nvmeofService, 'addInitiators').and.returnValue(of({}));
+      spyOn(nvmeofService, 'addSubsystemInitiators').and.returnValue(of({}));
     });
 
     it('should be creating request correctly', () => {
@@ -100,7 +100,7 @@ describe('NvmeofSubsystemsFormComponent', () => {
       component.group = mockGroupName;
       component.onSubmit(payload);
 
-      expect(nvmeofService.addInitiators).toHaveBeenCalledWith('test-nqn.default', {
+      expect(nvmeofService.addSubsystemInitiators).toHaveBeenCalledWith('test-nqn.default', {
         host_nqn: '*',
         gw_group: mockGroupName
       });

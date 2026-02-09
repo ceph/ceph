@@ -410,27 +410,6 @@ else:
                 )
             )
 
-    @APIRouter("/nvmeof/gateway_group/{gw_group}/namespace", Scope.NVME_OF)
-    @APIDoc("NVMe-oF Gateway Management API", "NVMe-oF Gateway")
-    class NVMeoFGatewayGroup(RESTController):
-        @Endpoint('GET')
-        @EndpointDoc(
-            "List all NVMeoF namespaces in a gateway group",
-            parameters={
-                "gw_group": Param(str, "NVMeoF gateway group", True, None),
-                "traddr": Param(str, "NVMeoF gateway address", True, None),
-            },
-        )
-        @convert_to_model(model.NamespaceList)
-        @handle_nvmeof_error
-        def list(self, gw_group: str, traddr: Optional[str] = None):
-            return NVMeoFClient(
-                gw_group=gw_group,
-                traddr=traddr
-            ).stub.list_namespaces(
-                NVMeoFClient.pb2.list_namespaces_req()
-            )
-
     @APIRouter("/nvmeof/subsystem/{nqn}/namespace", Scope.NVME_OF)
     @APIDoc("NVMe-oF Subsystem Namespace Management API", "NVMe-oF Subsystem Namespace")
     class NVMeoFNamespace(RESTController):
@@ -1292,6 +1271,7 @@ else:
                     status["available"] = False
                     status["message"] = 'An NVMe/TCP service must be created.'
             return status
+        # UI API for adding one or more than one hosts to subsystem
 
         @Endpoint('POST', "/subsystem/{subsystem_nqn}/host")
         @EndpointDoc("Add one or more initiator hosts to an NVMeoF subsystem",
@@ -1303,41 +1283,22 @@ else:
         @empty_response
         @handle_nvmeof_error
         @CreatePermission
-        def add(self, subsystem_nqn: str, host_nqn: str, dhchap_key: Optional[str] = None,
-                psk: Optional[str] = None, gw_group: Optional[str] = None,
-                server_address: Optional[str] = None
-                ):
+        def add(self, subsystem_nqn: str,
+                gw_group: str,
+                host_nqn: str = "",
+                server_address: Optional[str] = None):
             response = None
+            all_host_nqns = host_nqn.split(',')
 
-            if host_nqn != '*':
-                all_host_nqns = host_nqn.split(',')
-                for nqn in all_host_nqns:
-                    response = NVMeoFClient(
-                        gw_group=gw_group,
-                        server_address=server_address
-                    ).stub.add_host(
-                        NVMeoFClient.pb2.add_host_req(
-                            subsystem_nqn=subsystem_nqn,
-                            host_nqn=nqn,
-                            dhchap_key=dhchap_key,
-                            psk=psk)
-                    )
-                    if response.status != 0:
-                        return response
-            else:
-                response = NVMeoFClient(
-                    gw_group=gw_group,
-                    server_address=server_address
-                ).stub.add_host(
-                    NVMeoFClient.pb2.add_host_req(
-                        subsystem_nqn=subsystem_nqn,
-                        host_nqn=host_nqn,
-                        dhchap_key=dhchap_key,
-                        psk=psk)
+            for nqn in all_host_nqns:
+                response = NVMeoFClient(gw_group=gw_group,
+                                        server_address=server_address).stub.add_host(
+                    NVMeoFClient.pb2.add_host_req(subsystem_nqn=subsystem_nqn, host_nqn=nqn)
                 )
                 if response.status != 0:
                     return response
             return response
+        # UI API for deleting one or more than one hosts to subsystem
 
         @Endpoint(method='DELETE', path="/subsystem/{subsystem_nqn}/host/{host_nqn}")
         @EndpointDoc("Remove on or more initiator hosts from an NVMeoF subsystem",
@@ -1349,16 +1310,97 @@ else:
         @empty_response
         @handle_nvmeof_error
         @DeletePermission
-        def remove(self, subsystem_nqn: str, host_nqn: str, gw_group: str):
+        def remove(self, subsystem_nqn: str,
+                   host_nqn: str,
+                   gw_group: str,
+                   server_address: Optional[str] = None):
             response = None
             to_delete_nqns = host_nqn.split(',')
 
             for del_nqn in to_delete_nqns:
-                response = NVMeoFClient(gw_group=gw_group).stub.remove_host(
+                response = NVMeoFClient(gw_group=gw_group,
+                                        server_address=server_address).stub.remove_host(
                     NVMeoFClient.pb2.remove_host_req(subsystem_nqn=subsystem_nqn, host_nqn=del_nqn)
                 )
                 if response.status != 0:
                     return response
                 logger.info("removed host %s from subsystem %s", del_nqn, subsystem_nqn)
+
+            return response
+        # UI API for adding one or more than one hosts to namespace
+
+        @Endpoint('POST', "/namespace/{nsid}/host")
+        @EndpointDoc("Add one or more initiator hosts to an NVMeoF subsystem",
+                     parameters={
+                         "subsystem_nqn": Param(str, "NVMeoF subsystem NQN"),
+                         "nsid": Param(str, "NVMeoF Namespace ID"),
+                         "host_nqn": Param(str, 'Comma separated list of NVMeoF host NQN.'),
+                         "force": Param(
+                             bool,
+                             "Allow adding the host to the namespace even if the host "
+                             "has no access to the subsystem"
+                         ),
+                         "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                         "server_address": Param(str, "NVMeoF gateway address", True, None),
+                     })
+        @empty_response
+        @handle_nvmeof_error
+        @CreatePermission
+        def add_namesapce_initiator(self, nsid: str,
+                                    subsystem_nqn: str,
+                                    gw_group: str,
+                                    host_nqn: str = "",
+                                    force: Optional[bool] = None,
+                                    server_address: Optional[str] = None):
+            response = None
+            all_host_nqns = host_nqn.split(',')
+            force = str_to_bool(force) if force else None
+
+            for nqn in all_host_nqns:
+                response = NVMeoFClient(gw_group=gw_group,
+                                        server_address=server_address).stub.namespace_add_host(
+                    NVMeoFClient.pb2.namespace_add_host_req(subsystem_nqn=subsystem_nqn,
+                                                            nsid=int(nsid),
+                                                            host_nqn=nqn,
+                                                            force=force)
+                )
+                if response.status != 0:
+                    return response
+            return response
+        # UI API for deleting one or more than one hosts to namespace
+
+        @Endpoint(method='DELETE', path="/namespace/{nsid}/host")
+        @EndpointDoc("Remove on or more initiator hosts from an NVMeoF subsystem",
+                     parameters={
+                         "subsystem_nqn": Param(str, "NVMeoF subsystem NQN"),
+                         "nsid": Param(str, "NVMeoF Namespace ID"),
+                         "host_nqn": Param(str, 'Comma separated list of NVMeoF host NQN.'),
+                         "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                         "server_address": Param(str, "NVMeoF gateway address", True, None),
+                     })
+        @empty_response
+        @handle_nvmeof_error
+        @DeletePermission
+        def remove_namespace_initiator(self,
+                                       nsid: str,
+                                       subsystem_nqn: str,
+                                       host_nqn: str,
+                                       gw_group: str,
+                                       server_address: Optional[str] = None):
+            response = None
+            to_delete_nqns = host_nqn.split(',')
+
+            for del_nqn in to_delete_nqns:
+                response = NVMeoFClient(gw_group=gw_group,
+                                        server_address=server_address).stub.namespace_delete_host(
+                    NVMeoFClient.pb2.namespace_delete_host_req(
+                        subsystem_nqn=subsystem_nqn,
+                        nsid=int(nsid),
+                        host_nqn=del_nqn,
+                    )
+                )
+                if response.status != 0:
+                    return response
+                logger.info("removed host %s from namespace %s", del_nqn, nsid)
 
             return response

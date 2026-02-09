@@ -128,7 +128,7 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
         task: new FinishedTask(taskUrl, {
           nqn: this.subsystemNQN
         }),
-        call: this.nvmeofService.addInitiators(this.subsystemNQN, request)
+        call: this.nvmeofService.addSubsystemInitiators(this.subsystemNQN, request)
       })
       .subscribe({
         error() {

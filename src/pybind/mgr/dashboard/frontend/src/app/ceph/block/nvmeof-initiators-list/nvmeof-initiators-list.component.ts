@@ -199,7 +199,7 @@ export class NvmeofInitiatorsListComponent implements OnInit {
             nqn: this.subsystemNQN,
             plural: itemNames.length > 1
           }),
-          call: this.nvmeofService.removeInitiators(this.subsystemNQN, {
+          call: this.nvmeofService.removeSubsystemInitiators(this.subsystemNQN, {
             host_nqn,
             gw_group: this.group
           })

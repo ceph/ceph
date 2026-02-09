@@ -35,6 +35,7 @@ export type NamespaceCreateRequest = NvmeofRequest & {
   rbd_image_name: string;
   rbd_pool: string;
   rbd_image_size?: number;
+  no_auto_visible?: boolean;
   create_image: boolean;
 };
 
@@ -45,6 +46,10 @@ export type NamespaceUpdateRequest = NvmeofRequest & {
 export type InitiatorRequest = NvmeofRequest & {
   host_nqn: string;
   dhchap_key?: string;
+};
+
+export type NamespaceInitiatorRequest = InitiatorRequest & {
+  subsystem_nqn: string;
 };
 
 const API_PATH = 'api/nvmeof';
@@ -175,7 +180,7 @@ export class NvmeofService {
     return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/host?gw_group=${group}`);
   }
 
-  addInitiators(subsystemNQN: string, request: InitiatorRequest) {
+  addSubsystemInitiators(subsystemNQN: string, request: InitiatorRequest) {
     return this.http.post(`${UI_API_PATH}/subsystem/${subsystemNQN}/host`, request, {
       observe: 'response'
     });
@@ -200,6 +205,15 @@ export class NvmeofService {
   removeSubsystemInitiators(subsystemNQN: string, request: InitiatorRequest) {
     return this.http.delete(
       `${UI_API_PATH}/subsystem/${subsystemNQN}/host/${request.host_nqn}/${request.gw_group}`,
+      {
+        observe: 'response'
+      }
+    );
+  }
+
+  removeNamespaceInitiators(nsid: string, request: NamespaceInitiatorRequest) {
+    return this.http.delete(
+      `${UI_API_PATH}/namespace/${nsid}/host/${request.subsystem_nqn}/${request.host_nqn}/${request.gw_group}`,
       {
         observe: 'response'
       }
@@ -238,8 +252,8 @@ export class NvmeofService {
   }
 
   // Namespaces
-  listNamespaces(group: string) {
-    return this.http.get(`${API_PATH}/gateway_group/${group}/namespace`);
+  listNamespaces(group: string, subsystemNQN: string = '*') {
+    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/namespace?gw_group=${group}`);
   }
 
   getNamespace(subsystemNQN: string, nsid: string, group: string) {

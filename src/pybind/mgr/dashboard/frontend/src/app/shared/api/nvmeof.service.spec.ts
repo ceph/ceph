@@ -199,12 +199,12 @@ describe('NvmeofService', () => {
       expect(req.request.method).toBe('GET');
     });
     it('should call addInitiators', () => {
-      service.addInitiators(mockNQN, request).subscribe();
+      service.addSubsystemInitiators(mockNQN, request).subscribe();
       const req = httpTesting.expectOne(`${UI_API_PATH}/subsystem/${mockNQN}/host`);
       expect(req.request.method).toBe('POST');
     });
     it('should call removeInitiators', () => {
-      service.removeInitiators(mockNQN, request).subscribe();
+      service.removeSubsystemInitiators(mockNQN, request).subscribe();
       const req = httpTesting.expectOne(
         `${UI_API_PATH}/subsystem/${mockNQN}/host/${request.host_nqn}/${mockGroupName}`
       );
@@ -247,7 +247,9 @@ describe('NvmeofService', () => {
     const mockNsid = '1';
     it('should call listNamespaces', () => {
       service.listNamespaces(mockGroupName).subscribe();
-      const req = httpTesting.expectOne(`${API_PATH}/gateway_group/${mockGroupName}/namespace`);
+      const req = httpTesting.expectOne(
+        `${API_PATH}/subsystem/*/namespace?gw_group=${mockGroupName}`
+      );
       expect(req.request.method).toBe('GET');
     });
     it('should call getNamespace', () => {
