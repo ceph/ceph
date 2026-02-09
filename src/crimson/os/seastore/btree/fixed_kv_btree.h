@@ -289,7 +289,9 @@ public:
         ctx,
 	leaf.node,
         leaf.node->modifications,
-        typename leaf_node_t::iterator(leaf.node.get(), leaf.pos));
+        is_end() ? min_max_t<node_key_t>::max : get_key(),
+        is_end() ? std::nullopt : std::make_optional(get_val()),
+        leaf.pos);
     }
 
     typename leaf_node_t::Ref get_leaf_node() {
@@ -491,8 +493,8 @@ public:
     return make_partial_iter(
       c,
       cursor.parent->template cast<leaf_node_t>(),
-      cursor.get_key(),
-      cursor.get_pos());
+      cursor.key,
+      cursor.pos);
   }
 
   boost::intrusive_ptr<cursor_t> get_cursor(
@@ -504,7 +506,7 @@ public:
     assert(it != leaf->end());
     return new cursor_t(
       c, leaf, leaf->modifications,
-      typename leaf_node_t::iterator(leaf.get(), it.get_offset()));
+      key, it.get_val(), it.get_offset());
   }
 
   boost::intrusive_ptr<cursor_t> get_cursor(
@@ -1380,7 +1382,9 @@ private:
 #endif
     ret.leaf.node = leaf;
     ret.leaf.pos = pos;
-    if (!ret.is_end()) {
+    if (ret.is_end()) {
+      ceph_assert(key == min_max_t<node_key_t>::max);
+    } else {
       ceph_assert(key == ret.get_key());
     }
     return ret;
