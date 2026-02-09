@@ -47,3 +47,55 @@ export interface NvmeofSubsystemNamespace {
   r_mbytes_per_second: number;
   w_mbytes_per_second: number;
 }
+
+export interface NvmeofGatewayGroup {
+  name: string;
+  gatewayCount: {
+    running: number;
+    error: number;
+  };
+  subSystemCount: number;
+  nodeCount: number;
+}
+
+export enum AUTHENTICATION {
+  Unidirectional = 'unidirectional',
+  Bidirectional = 'bidirectional'
+}
+
+export const HOST_TYPE = {
+  ALL: 'all',
+  SPECIFIC: 'specific'
+};
+
+/**
+ * Determines the authentication status of a subsystem based on PSK and initiators.
+ * Can be reused across subsystem pages.
+ */
+export function getSubsystemAuthStatus(
+  subsystem: NvmeofSubsystem,
+  _initiators: NvmeofSubsystemInitiator[] | { hosts?: NvmeofSubsystemInitiator[] }
+): string {
+  // Import enum value strings to avoid circular dependency
+  const NO_AUTH = 'No authentication';
+  const UNIDIRECTIONAL = 'Unidirectional';
+  const BIDIRECTIONAL = 'Bi-directional';
+
+  if ((subsystem as any).psk) {
+    return BIDIRECTIONAL;
+  }
+
+  let hostsList: NvmeofSubsystemInitiator[] = [];
+  if (_initiators && 'hosts' in _initiators && Array.isArray(_initiators.hosts)) {
+    hostsList = _initiators.hosts;
+  } else if (Array.isArray(_initiators)) {
+    hostsList = _initiators as NvmeofSubsystemInitiator[];
+  }
+
+  const hasDhchapKey = hostsList.some((host) => !!(host as any).dhchap_key);
+  if (hasDhchapKey) {
+    return UNIDIRECTIONAL;
+  }
+
+  return NO_AUTH;
+}
