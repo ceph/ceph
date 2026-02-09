@@ -1431,8 +1431,7 @@ record_t Cache::prepare_record(
   for (auto &i: t.mutated_block_list) {
     if (i->is_valid()) {
       if (i->is_mutation_pending()) {
-        i->set_io_wait(CachedExtent::extent_state_t::DIRTY,
-                       is_rewrite_transaction(t.get_src()));
+        i->set_io_wait(CachedExtent::extent_state_t::DIRTY);
         commit_replace_extent(t, i, i->prior_instance);
       } // else, is_exist_mutation_pending():
         // - it doesn't have prior_instance to replace
@@ -1575,8 +1574,7 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
-    i->set_io_wait(CachedExtent::extent_state_t::CLEAN,
-                   is_rewrite_transaction(t.get_src()));
+    i->set_io_wait(CachedExtent::extent_state_t::CLEAN);
     // Note, paddr is known until complete_commit(),
     // so add_extent() later.
     if (is_rewrite_transaction(t.get_src())) {
@@ -1592,7 +1590,7 @@ record_t Cache::prepare_record(
         committer.sync_checksum();
       }
       i->get_prior_instance()->set_io_wait(
-        CachedExtent::extent_state_t::CLEAN, true);
+        CachedExtent::extent_state_t::CLEAN);
     }
   }
 
@@ -1617,6 +1615,9 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
+    i->set_io_wait(CachedExtent::extent_state_t::CLEAN);
+    // Note, paddr is (can be) known until complete_commit(),
+    // so add_extent() later.
     if (is_rewrite_transaction(t.get_src())) {
       assert(i->get_prior_instance());
       assert(!i->committer);
@@ -1630,15 +1631,9 @@ record_t Cache::prepare_record(
       if (is_lba_backref_node(i->get_type())) {
         committer.sync_checksum();
       }
-      committer.block_trans(t);
       i->get_prior_instance()->set_io_wait(
         CachedExtent::extent_state_t::CLEAN, true);
     }
-    i->set_io_wait(CachedExtent::extent_state_t::CLEAN,
-                   is_rewrite_transaction(t.get_src()));
-    // Note, paddr is (can be) known until complete_commit(),
-    // so add_extent() later.
-
   }
 
   for (auto &i: t.inplace_ool_block_list) {
@@ -1684,8 +1679,7 @@ record_t Cache::prepare_record(
       i->state = CachedExtent::extent_state_t::CLEAN;
     } else {
       assert(i->is_exist_mutation_pending());
-      i->set_io_wait(CachedExtent::extent_state_t::DIRTY,
-                     is_rewrite_transaction(t.get_src()));
+      i->set_io_wait(CachedExtent::extent_state_t::DIRTY);
     }
 
     // exist mutation pending extents must be in t.mutated_block_list
