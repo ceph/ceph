@@ -4,17 +4,34 @@
 
 .sidebar-layout-container {
   min-height: calc(100vh - (vv.$navbar-height + layout.rem(55px)));
-  background-color: var(--cds-background);
   padding-right: var(--cds-spacing-07);
+  background-color: var(--cds-background);
 }
 
 .sidebar-layout-shell {
   transform: translate(0);
   position: relative;
+  height: 100vh;
+}
+
+.sidebar-layout-nav {
+  background-color: var(--cds-layer-03);
 }
 
 .sidebar-layout-main {
   margin-left: layout.rem(272px);
+
+  .cds--table-toolbar {
+    background-color: var(--cds-layer-03);
+  }
+
+  .cds--data-table tbody {
+    background-color: var(--cds-layer-03);
+  }
+
+  .cds--pagination {
+    background-color: var(--cds-layer-03);
+  }
 }
 
 .sidebar-header {

@@ -6,7 +6,8 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import {
   NvmeofSubsystem,
   NvmeofSubsystemData,
-  NvmeofSubsystemInitiator
+  NvmeofSubsystemInitiator,
+  getSubsystemAuthStatus
 } from '~/app/shared/models/nvmeof';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -86,33 +87,9 @@ export class NvmeofGatewaySubsystemComponent implements OnInit {
                       count = initiators.hosts.length;
                     }
 
-                    let authStatus = NvmeofSubsystemAuthType.NO_AUTH;
-                    if (sub.psk) {
-                      authStatus = NvmeofSubsystemAuthType.BIDIRECTIONAL;
-                    } else if (
-                      initiators &&
-                      'hosts' in initiators &&
-                      Array.isArray(initiators.hosts)
-                    ) {
-                      const hasDhchapKey = initiators.hosts.some(
-                        (host: NvmeofSubsystemInitiator) => !!host.dhchap_key
-                      );
-                      if (hasDhchapKey) {
-                        authStatus = NvmeofSubsystemAuthType.UNIDIRECTIONAL;
-                      }
-                    } else if (Array.isArray(initiators)) {
-                      // Fallback for unexpected structure, though getInitiators usually returns {hosts: []}
-                      const hasDhchapKey = (initiators as NvmeofSubsystemInitiator[]).some(
-                        (host: NvmeofSubsystemInitiator) => !!host.dhchap_key
-                      );
-                      if (hasDhchapKey) {
-                        authStatus = NvmeofSubsystemAuthType.UNIDIRECTIONAL;
-                      }
-                    }
-
                     return {
                       ...sub,
-                      auth: authStatus,
+                      auth: getSubsystemAuthStatus(sub, initiators),
                       hosts: count
                     };
                   }

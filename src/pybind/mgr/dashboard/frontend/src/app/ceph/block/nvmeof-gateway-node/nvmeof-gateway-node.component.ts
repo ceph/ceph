@@ -15,6 +15,7 @@ import { finalize } from 'rxjs/operators';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -55,7 +56,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   @Output() hostsLoaded = new EventEmitter<number>();
 
   @Input() groupName: string | undefined;
-  @Input() mode: 'selector' | 'details' = 'selector';
+  @Input() mode: 'selector' | 'details' = NvmeofGatewayNodeMode.SELECTOR;
 
   usedHostnames: Set<string> = new Set();
   serviceSpec: CephServiceSpec | undefined;
@@ -92,9 +93,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
       this.mode = routeData['mode'];
     }
 
-    this.selectionType = this.mode === 'selector' ? 'multiClick' : 'single';
+    this.selectionType = this.mode === NvmeofGatewayNodeMode.SELECTOR ? 'multiClick' : 'single';
 
-    if (this.mode === 'details') {
+    if (this.mode === NvmeofGatewayNodeMode.DETAILS) {
       this.route.parent?.params.subscribe((params: any) => {
         this.groupName = params.group;
       });
@@ -195,7 +196,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     }
 
     const fetchData$: Observable<any> =
-      this.mode === 'details'
+      this.mode === NvmeofGatewayNodeMode.DETAILS
         ? this.nvmeofService.fetchHostsAndGroups()
         : this.nvmeofService.getAvailableHosts(this.tableContext?.toParams());
 
@@ -207,7 +208,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: (result: any) => {
-          if (this.mode === 'details') {
+          if (this.mode === NvmeofGatewayNodeMode.DETAILS) {
             this.processDetailsData(result.groups, result.hosts);
           } else {
             this.hosts = result;

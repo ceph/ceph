@@ -5,7 +5,9 @@
 }
 <div class="sidebar-layout-container">
   <div class="sidebar-layout-shell">
-    <cds-sidenav [expanded]="true">
+    <cds-sidenav
+      [expanded]="true"
+      class="sidebar-layout-nav">
       @for (item of items; track item.label) {
       <cds-sidenav-item
         [route]="item.route"

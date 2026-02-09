@@ -46,19 +46,12 @@
              let-row="data.row">
   <div [cdsStack]="'horizontal'"
        gap="4">
-  @if (row.enable_ha === false) {
+  @if (row.auth === authType.NO_AUTH) {
     <cd-icon type="warning"></cd-icon>
-    <span class="cds-ml-3"
-          i18n>No authentication</span>
-  } @else if (row.allow_any_host) {
-    <cd-icon type="success"></cd-icon>
-    <span class="cds-ml-3"
-          i18n>Unidirectional</span>
   } @else {
     <cd-icon type="success"></cd-icon>
-    <span class="cds-ml-3"
-          i18n>Bidirectional</span>
   }
+  <span class="cds-ml-3">{{ row.auth }}</span>
   </div>
 </ng-template>
 

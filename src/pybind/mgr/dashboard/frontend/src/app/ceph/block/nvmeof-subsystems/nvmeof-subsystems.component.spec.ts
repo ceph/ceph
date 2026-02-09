@@ -118,6 +118,7 @@ describe('NvmeofSubsystemsComponent', () => {
     const expected = mockSubsystems.map((s) => ({
       ...s,
       gw_group: component.group,
+      auth: 'No authentication',
       initiator_count: 0
     }));
     expect(component.subsystems).toEqual(expected);
