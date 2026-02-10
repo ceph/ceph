@@ -71,6 +71,9 @@ public:
   bool prepare_update(MonOpRequestRef op) override;
 
   bool preprocess_command(MonOpRequestRef op);
+  bool nvme_gw_show_command(ceph::Formatter* f,
+       bufferlist &rdata, const std::string  &pool,
+       const std::string &group);
   bool prepare_command(MonOpRequestRef op);
 
   void encode_full(MonitorDBStore::TransactionRef t) override {}
