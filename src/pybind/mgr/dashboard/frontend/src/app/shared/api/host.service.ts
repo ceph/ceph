@@ -14,7 +14,7 @@ import { CdDevice } from '../models/devices';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
 import { Host } from '../models/host.interface';
-import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
+import { OrchestratorStatus } from '../models/orchestrator.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -170,10 +170,9 @@ export class HostService extends ApiClient {
     return this.http.get<Host[]>(`${this.baseUIURL}/list`);
   }
 
-  checkHostsFactsAvailable(orchStatus?: OrchestratorStatus): boolean {
-    const orchFeatures = orchStatus?.features;
-    if (!_.isEmpty(orchFeatures)) {
-      return !!orchFeatures.get_facts?.available;
+  checkHostsFactsAvailable(orchStatus: OrchestratorStatus) {
+    if (orchStatus?.available) {
+      return true;
     }
     return false;
   }

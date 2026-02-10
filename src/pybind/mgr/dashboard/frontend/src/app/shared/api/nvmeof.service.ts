@@ -2,9 +2,10 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 
 import _ from 'lodash';
-import { Observable, of as observableOf } from 'rxjs';
+import { Observable, forkJoin, of as observableOf } from 'rxjs';
 import { catchError, map, mapTo } from 'rxjs/operators';
 import { CephServiceSpec } from '../models/service.interface';
+import { HostService } from './host.service';
 
 export const DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM = 512;
 
@@ -48,7 +49,14 @@ const UI_API_PATH = 'ui-api/nvmeof';
   providedIn: 'root'
 })
 export class NvmeofService {
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private hostService: HostService) {}
+
+  fetchHostsAndGroups() {
+    return forkJoin({
+      groups: this.listGatewayGroups(),
+      hosts: this.hostService.getAllHosts()
+    });
+  }
 
   // formats the gateway groups to be consumed for combobox item
   formatGwGroupsList(

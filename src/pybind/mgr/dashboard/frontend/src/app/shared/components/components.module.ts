@@ -110,6 +110,7 @@ import { Close16 } from '@carbon/icons';
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { ProductiveCardComponent } from './productive-card/productive-card.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
+import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
 
 @NgModule({
   imports: [
@@ -208,7 +209,8 @@ import { PageHeaderComponent } from './page-header/page-header.component';
     TearsheetComponent,
     TearsheetStepComponent,
     ProductiveCardComponent,
-    PageHeaderComponent
+    PageHeaderComponent,
+    SidebarLayoutComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -255,7 +257,8 @@ import { PageHeaderComponent } from './page-header/page-header.component';
     TearsheetComponent,
     TearsheetStepComponent,
     ProductiveCardComponent,
-    PageHeaderComponent
+    PageHeaderComponent,
+    SidebarLayoutComponent
   ]
 })
 export class ComponentsModule {

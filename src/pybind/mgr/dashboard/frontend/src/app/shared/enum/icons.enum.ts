@@ -104,7 +104,8 @@ export enum Icons {
   notification = 'notification',
   error = 'error--filled',
   notificationOff = 'notification--off',
-  notificationNew = 'notification--new'
+  notificationNew = 'notification--new',
+  emptySearch = 'search'
 }
 
 export enum IconSize {
@@ -127,5 +128,6 @@ export const ICON_TYPE = {
   notificationNew: 'notification--new',
   success: 'success',
   warning: 'warning',
-  add: 'add'
+  add: 'add',
+  emptySearch: 'emptySearch'
 } as const;
