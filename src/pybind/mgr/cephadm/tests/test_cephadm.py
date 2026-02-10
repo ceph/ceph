@@ -2920,87 +2920,53 @@ Traceback (most recent call last):
 
 
 class TestCephadmBinaryLoggingLevel:
-    """Test that host-status / cephadm binary logs are suppressed or shown based on
-    mgr/cephadm/cephadm_binary_logging_level (info vs debug).
+    """Test that host-status / cephadm binary logs are suppressed based on
+    mgr/cephadm/cephadm_binary_logging_level.
     """
+    @pytest.mark.parametrize("logging_level", ['info', 'debug', 'error', 'warning'])
     @mock.patch("cephadm.ssh.SSHManager._remote_connection")
     @mock.patch("cephadm.ssh.SSHManager._execute_command")
     @mock.patch("cephadm.ssh.SSHManager._check_execute_command")
-    def test_check_host_invokes_cephadm_with_logging_level_info(
-        self, check_execute_command, execute_command, remote_connection, cephadm_module
+    def test_check_host_invokes_cephadm_with_logging_level(
+        self, check_execute_command, execute_command, remote_connection, cephadm_module, logging_level
     ):
-        """When cephadm_binary_logging_level is info, check-host must be invoked with
-        --logging-level info so host-status DEBUG logs are suppressed in cephadm.log.
+        """Cephadm binary must be invoked with --logging-level matching
+        mgr/cephadm/cephadm_binary_logging_level (info, debug, error, warning).
+        Check that mgr builds the cephadm command with appropriate --logging-level flag
+        Use check-host as a sample command although all cephadm commands receive the flag.
         """
         remote_connection.side_effect = async_side_effect(mock.Mock())
+        check_execute_command.side_effect = async_side_effect('/usr/bin/python3')
         captured_commands = []
 
         async def capture_execute(host, cmd, *args, **kwargs):
-            if hasattr(cmd, 'args') and 'check-host' in cmd.args:
-                captured_commands.append(cmd)
+            if hasattr(cmd, 'args'):
+                if 'check-host' in cmd.args:
+                    captured_commands.append(cmd)
+                # Return valid JSON for commands that use _run_cephadm_json
+                if 'ls' in cmd.args:
+                    return ('[]', '', 0)
+                if 'gather-facts' in cmd.args:
+                    return ('{}', '', 0)
+                if 'list-networks' in cmd.args:
+                    return ('[]', '', 0)
             return ('', '', 0)
 
         execute_command.side_effect = capture_execute
 
-        orig_get = cephadm_module.get_module_option
-
-        def get_opt(key, default=None):
-            if key == 'cephadm_binary_logging_level':
-                return 'info'
-            return orig_get(key, default)
-
-        with mock.patch.object(cephadm_module, 'get_module_option', side_effect=get_opt):
-            with with_host(cephadm_module, 'test'):
-                pass
+        cephadm_module.cephadm_binary_logging_level = logging_level
+        with with_host(cephadm_module, 'test'):
+            pass
 
         check_host_cmds = [c for c in captured_commands if 'check-host' in c.args]
-        assert len(check_host_cmds) >= 1, 'expected at least one check-host invocation'
+        assert len(check_host_cmds) >= 1, (
+            f'expected at least one check-host invocation for level {logging_level!r}'
+        )
         cmd = check_host_cmds[0]
         assert '--logging-level' in cmd.args, (
-            'cephadm should be called with --logging-level when level is info'
+            f'cephadm should be called with --logging-level when level is {logging_level!r}'
         )
         idx = cmd.args.index('--logging-level')
-        assert cmd.args[idx + 1] == 'info', (
-            'host-status logs should be suppressed with logging-level info'
-        )
-
-    @mock.patch("cephadm.ssh.SSHManager._remote_connection")
-    @mock.patch("cephadm.ssh.SSHManager._execute_command")
-    @mock.patch("cephadm.ssh.SSHManager._check_execute_command")
-    def test_check_host_invokes_cephadm_with_logging_level_debug(
-        self, check_execute_command, execute_command, remote_connection, cephadm_module
-    ):
-        """When cephadm_binary_logging_level is debug, check-host must be invoked with
-        --logging-level debug so current (verbose) host-status logging continues.
-        """
-        remote_connection.side_effect = async_side_effect(mock.Mock())
-        captured_commands = []
-
-        async def capture_execute(host, cmd, *args, **kwargs):
-            if hasattr(cmd, 'args') and 'check-host' in cmd.args:
-                captured_commands.append(cmd)
-            return ('', '', 0)
-
-        execute_command.side_effect = capture_execute
-
-        orig_get = cephadm_module.get_module_option
-
-        def get_opt(key, default=None):
-            if key == 'cephadm_binary_logging_level':
-                return 'debug'
-            return orig_get(key, default)
-
-        with mock.patch.object(cephadm_module, 'get_module_option', side_effect=get_opt):
-            with with_host(cephadm_module, 'test'):
-                pass
-
-        check_host_cmds = [c for c in captured_commands if 'check-host' in c.args]
-        assert len(check_host_cmds) >= 1, 'expected at least one check-host invocation'
-        cmd = check_host_cmds[0]
-        assert '--logging-level' in cmd.args, (
-            'cephadm should be called with --logging-level when level is debug'
-        )
-        idx = cmd.args.index('--logging-level')
-        assert cmd.args[idx + 1] == 'debug', (
-            'host-status logs should not be suppressed with logging-level debug'
+        assert cmd.args[idx + 1] == logging_level, (
+            f'cephadm should be called with --logging-level {logging_level!r}'
         )
