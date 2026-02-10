@@ -3,7 +3,10 @@ import { Component, Input, ViewEncapsulation } from '@angular/core';
 export interface SidebarItem {
   label: string;
   route: string[];
+<<<<<<< HEAD
   routeExtras?: any;
+=======
+>>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
   routerLinkActiveOptions?: { exact: boolean };
 }
 

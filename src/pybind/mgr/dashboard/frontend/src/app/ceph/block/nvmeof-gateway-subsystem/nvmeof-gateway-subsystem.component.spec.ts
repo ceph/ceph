@@ -27,8 +27,12 @@ describe('NvmeofGatewaySubsystemComponent', () => {
       max_namespaces: 256,
       namespace_count: 0,
       subtype: 'NVMe',
+<<<<<<< HEAD
       namespaces: [],
       has_dhchap_key: true
+=======
+      namespaces: []
+>>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
     } as NvmeofSubsystem,
     {
       nqn: 'nqn.2014-08.org.nvmexpress:uuid:2222',
@@ -42,8 +46,12 @@ describe('NvmeofGatewaySubsystemComponent', () => {
       max_namespaces: 256,
       namespace_count: 0,
       subtype: 'NVMe',
+<<<<<<< HEAD
       namespaces: [],
       has_dhchap_key: true
+=======
+      namespaces: []
+>>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
     } as NvmeofSubsystem
   ];
 
