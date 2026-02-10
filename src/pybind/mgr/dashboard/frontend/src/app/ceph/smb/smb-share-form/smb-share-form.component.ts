@@ -18,10 +18,28 @@ import { CephfsSubvolume } from '~/app/shared/models/cephfs-subvolume.model';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { FormatterService } from '~/app/shared/services/formatter.service';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
 import { CLUSTER_PATH } from '../smb-cluster-list/smb-cluster-list.component';
 import { SHARE_PATH } from '../smb-share-list/smb-share-list.component';
+
+const QOS_IOPS_MAX = 1_000_000;
+const QOS_BW_MAX_BYTES = 2 ** 40;
+const UNIT_TO_BYTES: Record<string, number> = {
+  KiB: 2 ** 10,
+  MiB: 2 ** 20,
+  GiB: 2 ** 30,
+  TiB: 2 ** 40
+};
+const QOS_DELAY_MAX = 300;
+const QOS_DELAY_DEFAULT = 30;
+const QOS_BW_UNITS = ['KiB', 'MiB', 'GiB', 'TiB'];
+
+function getBwMaxForUnit(unit: string): number {
+  return Math.floor(QOS_BW_MAX_BYTES / UNIT_TO_BYTES[unit]);
+}
 
 @Component({
   selector: 'cd-smb-share-form',
@@ -40,6 +58,9 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
   isEdit = false;
   share_id: string;
   shareResponse: SMBShare;
+  qosBwUnits = QOS_BW_UNITS;
+  readBwMax = getBwMaxForUnit(QOS_BW_UNITS[1]);
+  writeBwMax = getBwMaxForUnit(QOS_BW_UNITS[1]);
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -50,7 +71,9 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
     private subvolService: CephfsSubvolumeService,
     private taskWrapperService: TaskWrapperService,
     private router: Router,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private formatter: FormatterService,
+    private dimlessBinaryPipe: DimlessBinaryPipe
   ) {
     super();
     this.resource = $localize`Share`;
@@ -69,26 +92,43 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
     if (this.isEdit) {
       this.smbService.getShare(this.clusterId, this.share_id).subscribe((resp: SMBShare) => {
         this.shareResponse = resp;
-        this.smbShareForm.get('share_id').setValue(this.shareResponse.share_id);
-        this.smbShareForm.get('share_id').disable();
-        this.smbShareForm.get('name').setValue(this.shareResponse.name);
-        this.smbShareForm.get('name').disable();
-        this.smbShareForm.get('volume').setValue(this.shareResponse?.cephfs?.volume);
-        this.smbShareForm
-          .get('subvolume_group')
-          .setValue(this.shareResponse?.cephfs?.subvolumegroup);
-        this.smbShareForm.get('subvolume').setValue(this.shareResponse?.cephfs?.subvolume);
-        this.smbShareForm.get('inputPath').setValue(this.shareResponse?.cephfs?.path);
-        if (this.shareResponse.readonly) {
-          this.smbShareForm.get('readonly').setValue(this.shareResponse.readonly);
-        }
-        if (this.shareResponse.browseable) {
-          this.smbShareForm.get('browseable').setValue(this.shareResponse.browseable);
-        }
+        const cephfs = this.shareResponse?.cephfs;
+        const qos = cephfs?.qos;
 
-        this.getSubVolGrp(this.shareResponse?.cephfs?.volume);
+        this.smbShareForm.patchValue({
+          share_id: this.shareResponse.share_id,
+          name: this.shareResponse.name,
+          volume: cephfs?.volume,
+          subvolume_group: cephfs?.subvolumegroup,
+          subvolume: cephfs?.subvolume,
+          inputPath: cephfs?.path,
+          readonly: this.shareResponse.readonly ?? false,
+          browseable: this.shareResponse.browseable ?? true,
+          read_iops_limit: qos?.read_iops_limit,
+          write_iops_limit: qos?.write_iops_limit,
+          read_delay_max: qos?.read_delay_max,
+          write_delay_max: qos?.write_delay_max
+        });
+        this.smbShareForm.get('share_id').disable();
+        this.smbShareForm.get('name').disable();
+        this.setBwLimitFromBytes('read_bw_limit', qos?.read_bw_limit);
+        this.setBwLimitFromBytes('write_bw_limit', qos?.write_bw_limit);
+
+        this.getSubVolGrp(cephfs?.volume);
       });
     }
+    this.smbShareForm.get('read_bw_limit_unit').valueChanges.subscribe((unit: string) => {
+      this.readBwMax = getBwMaxForUnit(unit);
+      const ctrl = this.smbShareForm.get('read_bw_limit');
+      ctrl.setValidators([Validators.min(0), Validators.max(this.readBwMax)]);
+      ctrl.updateValueAndValidity();
+    });
+    this.smbShareForm.get('write_bw_limit_unit').valueChanges.subscribe((unit: string) => {
+      this.writeBwMax = getBwMaxForUnit(unit);
+      const ctrl = this.smbShareForm.get('write_bw_limit');
+      ctrl.setValidators([Validators.min(0), Validators.max(this.writeBwMax)]);
+      ctrl.updateValueAndValidity();
+    });
     this.smbShareForm.get('share_id')?.valueChanges.subscribe((value) => {
       const shareName = this.smbShareForm.get('name');
       if (shareName && !shareName.dirty) {
@@ -96,6 +136,12 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
       }
     });
     this.loadingReady();
+  }
+
+  private setBwLimitFromBytes(prefix: string, bytes: number) {
+    const parts = this.dimlessBinaryPipe.transform(bytes).split(' ');
+    this.smbShareForm.get(prefix).setValue(parts[0] || 0);
+    this.smbShareForm.get(prefix + '_unit').setValue(parts[1] || QOS_BW_UNITS[1]);
   }
 
   createForm() {
@@ -114,7 +160,21 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
         validators: [Validators.required]
       }),
       browseable: new FormControl(true),
-      readonly: new FormControl(false)
+      readonly: new FormControl(false),
+      read_iops_limit: new FormControl(0, [Validators.min(0), Validators.max(QOS_IOPS_MAX)]),
+      write_iops_limit: new FormControl(0, [Validators.min(0), Validators.max(QOS_IOPS_MAX)]),
+      read_bw_limit: new FormControl(0, [Validators.min(0), Validators.max(this.readBwMax)]),
+      read_bw_limit_unit: new FormControl(QOS_BW_UNITS[1]),
+      write_bw_limit: new FormControl(0, [Validators.min(0), Validators.max(this.writeBwMax)]),
+      write_bw_limit_unit: new FormControl(QOS_BW_UNITS[1]),
+      read_delay_max: new FormControl(QOS_DELAY_DEFAULT, [
+        Validators.min(0),
+        Validators.max(QOS_DELAY_MAX)
+      ]),
+      write_delay_max: new FormControl(QOS_DELAY_DEFAULT, [
+        Validators.min(0),
+        Validators.max(QOS_DELAY_MAX)
+      ])
     });
   }
 
@@ -219,7 +279,23 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
           path: correctedPath,
           subvolumegroup: rawFormValue.subvolume_group,
           subvolume: rawFormValue.subvolume,
-          provider: PROVIDER
+          provider: PROVIDER,
+          qos: {
+            read_iops_limit: rawFormValue.read_iops_limit,
+            write_iops_limit: rawFormValue.write_iops_limit,
+            read_bw_limit: this.formatter.toBytes(
+              String(this.smbShareForm.get('read_bw_limit').value) +
+                ' ' +
+                this.smbShareForm.get('read_bw_limit_unit').value
+            ),
+            write_bw_limit: this.formatter.toBytes(
+              String(this.smbShareForm.get('write_bw_limit').value) +
+                ' ' +
+                this.smbShareForm.get('write_bw_limit_unit').value
+            ),
+            read_delay_max: rawFormValue.read_delay_max,
+            write_delay_max: rawFormValue.write_delay_max
+          }
         },
         browseable: rawFormValue.browseable,
         readonly: rawFormValue.readonly

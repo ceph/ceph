@@ -125,6 +125,7 @@ import CheckMarkOutline16 from '@carbon/icons/es/checkmark--outline/16';
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
+import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.component';
 
 @NgModule({
   imports: [
@@ -223,7 +224,8 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     TearsheetComponent,
     TearsheetStepComponent,
     PageHeaderComponent,
-    SidebarLayoutComponent
+    SidebarLayoutComponent,
+    NumberWithUnitComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -270,7 +272,8 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     TearsheetComponent,
     TearsheetStepComponent,
     PageHeaderComponent,
-    SidebarLayoutComponent
+    SidebarLayoutComponent,
+    NumberWithUnitComponent
   ]
 })
 export class ComponentsModule {
