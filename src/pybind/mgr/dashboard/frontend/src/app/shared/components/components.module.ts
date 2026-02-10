@@ -123,6 +123,7 @@ import ArrowDown16 from '@carbon/icons/es/arrow--down/16';
 import Warning16 from '@carbon/icons/es/warning/16';
 import Deploy16 from '@carbon/icons/es/deploy/16';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
+import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.component';
 
 @NgModule({
   imports: [
@@ -216,7 +217,8 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     TearsheetComponent,
     TearsheetStepComponent,
     SidePanelComponent,
-    SidebarLayoutComponent
+    SidebarLayoutComponent,
+    NumberWithUnitComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -260,7 +262,8 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     TearsheetComponent,
     TearsheetStepComponent,
     SidePanelComponent,
-    SidebarLayoutComponent
+    SidebarLayoutComponent,
+    NumberWithUnitComponent
   ]
 })
 export class ComponentsModule {

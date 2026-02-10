@@ -225,6 +225,112 @@
           <cd-help-text>If selected no clients are permitted to write to the share.</cd-help-text>
         </cds-checkbox>
       </div>
+
+      <!-- QoS rate limiting -->
+      <div class="form-header"
+           i18n>Rate limiting</div>
+      <div class="form-item form-item-append"
+           cdsRow>
+        <div cdsCol>
+          <cds-number formControlName="read_iops_limit"
+                      cdValidate
+                      #readIopsRef="cdValidate"
+                      label="Read IOPS limit"
+                      i18n-label
+                      [min]="0"
+                      [max]="1000000"
+                      helperText="Max read operations per second (0 = disabled)"
+                      i18n-helperText
+                      [invalid]="readIopsRef.isInvalid"
+                      invalidText="Value must be between 0 and 1,000,000"
+                      i18n-invalidText>
+          </cds-number>
+        </div>
+        <div cdsCol>
+          <cds-number formControlName="write_iops_limit"
+                      cdValidate
+                      #writeIopsRef="cdValidate"
+                      label="Write IOPS limit"
+                      i18n-label
+                      [min]="0"
+                      [max]="1000000"
+                      helperText="Max write operations per second (0 = disabled)"
+                      i18n-helperText
+                      [invalid]="writeIopsRef.isInvalid"
+                      invalidText="Value must be between 0 and 1,000,000"
+                      i18n-invalidText>
+          </cds-number>
+        </div>
+      </div>
+      <div class="form-item form-item-append"
+           cdsRow>
+        <div cdsCol>
+          <cd-number-with-unit
+            [form]="smbShareForm"
+            valueControlName="read_bw_limit"
+            unitControlName="read_bw_limit_unit"
+            label="Read bandwidth limit"
+            i18n-label
+            helperText="Max read bandwidth (0 = disabled)"
+            i18n-helperText
+            [units]="qosBwUnits"
+            [min]="0"
+            [max]="readBwMax"
+            invalidText="Value must be between 0 and {{ readBwMax | number }}"
+            i18n-invalidText
+          ></cd-number-with-unit>
+        </div>
+        <div cdsCol>
+          <cd-number-with-unit
+            [form]="smbShareForm"
+            valueControlName="write_bw_limit"
+            unitControlName="write_bw_limit_unit"
+            label="Write bandwidth limit"
+            i18n-label
+            helperText="Max write bandwidth (0 = disabled)"
+            i18n-helperText
+            [units]="qosBwUnits"
+            [min]="0"
+            [max]="writeBwMax"
+            invalidText="Value must be between 0 and {{ writeBwMax | number }}"
+            i18n-invalidText
+          ></cd-number-with-unit>
+        </div>
+      </div>
+      <div class="form-item form-item-append"
+           cdsRow>
+        <div cdsCol>
+          <cds-number formControlName="read_delay_max"
+                      cdValidate
+                      #readDelayRef="cdValidate"
+                      label="Read delay max (s)"
+                      i18n-label
+                      [min]="0"
+                      [max]="300"
+                      helperText="Max allowed delay for read operations in seconds"
+                      i18n-helperText
+                      [invalid]="readDelayRef.isInvalid"
+                      invalidText="Value must be between 0 and 300"
+                      i18n-invalidText>
+          </cds-number>
+        </div>
+        <div cdsCol>
+          <cds-number formControlName="write_delay_max"
+                      cdValidate
+                      #writeDelayRef="cdValidate"
+                      label="Write delay max (s)"
+                      i18n-label
+                      [min]="0"
+                      [max]="300"
+                      helperText="Max allowed delay for write operations in seconds"
+                      i18n-helperText
+                      [invalid]="writeDelayRef.isInvalid"
+                      invalidText="Value must be between 0 and 300"
+                      i18n-invalidText>
+          </cds-number>
+        </div>
+      </div>
+
       <cd-form-button-panel
         (submitActionEvent)="submitAction()"
         [form]="smbShareForm"

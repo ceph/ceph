@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, ViewChild } from '@angular/core';
+import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Observable, BehaviorSubject, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -31,6 +31,12 @@ export class SmbShareListComponent implements OnInit {
   clusterId: string;
   @ViewChild('table', { static: true })
   table: TableComponent;
+  @ViewChild('iopsLimitTpl', { static: true })
+  iopsLimitTpl: TemplateRef<any>;
+  @ViewChild('bwLimitTpl', { static: true })
+  bwLimitTpl: TemplateRef<any>;
+  @ViewChild('delayMaxTpl', { static: true })
+  delayMaxTpl: TemplateRef<any>;
   columns: CdTableColumn[];
   permission: Permission;
   selection = new CdTableSelection();
@@ -87,6 +93,24 @@ export class SmbShareListComponent implements OnInit {
       {
         name: $localize`Provider`,
         prop: 'cephfs.provider',
+        flexGrow: 2
+      },
+      {
+        name: $localize`IOPS Limit`,
+        prop: 'cephfs.qos',
+        cellTemplate: this.iopsLimitTpl,
+        flexGrow: 2
+      },
+      {
+        name: $localize`Bandwidth Limit`,
+        prop: 'cephfs.qos',
+        cellTemplate: this.bwLimitTpl,
+        flexGrow: 2
+      },
+      {
+        name: $localize`Delay Max`,
+        prop: 'cephfs.qos',
+        cellTemplate: this.delayMaxTpl,
         flexGrow: 2
       }
     ];
