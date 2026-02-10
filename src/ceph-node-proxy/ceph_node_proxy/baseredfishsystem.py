@@ -290,7 +290,9 @@ class BaseRedfishSystem(BaseSystem):
                     for field in fields:
                         result[member][drive_id][to_snake_case(field)] = data.get(field)
                         result[member][drive_id]["entity"] = entity
-            self._sys["storage"] = normalize_dict(result)
+            # do not normalize the first level of the dictionary
+            result[member] = normalize_dict(result[member])
+            self._sys["storage"] = result
 
     def _update_sn(self) -> None:
         serials: List[str] = []
