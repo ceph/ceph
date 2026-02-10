@@ -16,19 +16,53 @@
       <cds-tile>Alerts card</cds-tile>
     </div>
   </div>
-  <div cdsRow
-       [narrow]="true">
-    <div cdsCol
-         class="cds-mb-5"
-         [columnNumbers]="{lg: 11}">
-      <cds-tile>Storage card</cds-tile>
-    </div>
-    <div cdsCol
-         class="cds-mb-5"
-         [columnNumbers]="{lg: 5}">
-      <cds-tile>Docs card</cds-tile>
-    </div>
+  <div cdsRow>
+  <div cdsCol class="cds-mb-5" [columnNumbers]="{ lg: 16 }">
+
+    <cd-productive-card title="Storage overview" [applyShadow]="true">
+
+      <ng-template #headerAction>
+        <div cdsStack="horizontal" gap="2">
+          <cds-dropdown placeholder="Storage Type" (selected)="onStorageTypeSelection($event)">
+            <cds-dropdown-list [items]="storageTypes"></cds-dropdown-list>
+          </cds-dropdown>
+
+          <app-time-picker (selectedTime)="loadConsumptionChart($event)"></app-time-picker>
+        </div>
+      </ng-template>
+
+      <div *ngIf="consumptionChartData" cdsGrid [narrow]="true">
+        <div cdsRow class="align-items-center">
+
+          <div cdsCol [columnNumbers]="{ lg: 14, md: 10, sm: 16 }">
+            <cd-area-chart chartTitle="Consumption"
+                [chartKey]="'Consumption trend'"
+                [dataUnit]="'B'"
+                [legendEnabled]="false"
+                [rawData]="consumptionChartData">
+            </cd-area-chart>
+          </div>
+
+          <div cdsCol [columnNumbers]="{ lg: 2, md: 8, sm: 8 }">
+            <div cdsStack="vertical" gap="4">
+              <div cdsStack="vertical" gap="1">
+                <span class="cds--type-heading-03">{{ timeUntilFull }}</span>
+                <span class="cds--type-label-01">Estimated days until full</span>
+              </div>
+              <div cdsStack="vertical" gap="1">
+                <span class="cds--type-heading-03">{{ averageConsumption }}</span>
+                <span class="cds--type-label-01">Average consumption</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </cd-productive-card>
+
   </div>
+</div>
  <div cdsRow>
   <div cdsCol class="cds-mb-5" [columnNumbers]="{ lg: 16 }">
 
@@ -40,18 +74,18 @@
             <cds-dropdown-list [items]="storageTypes"></cds-dropdown-list>
           </cds-dropdown>
 
-          <app-time-picker (selectedTime)="loadCharts($event)"></app-time-picker>
+          <app-time-picker (selectedTime)="loadPerformanceCharts($event)"></app-time-picker>
         </div>
       </ng-template>
 
-      <div *ngIf="chartData" cdsGrid [narrow]="true">
+      <div *ngIf="performancechartData" cdsGrid [narrow]="true">
         <div cdsRow>
 
           <div cdsCol [columnNumbers]="{ lg: 5, md: 8, sm: 16 }">
             <cd-area-chart chartTitle="IOPS"
                 [chartKey]="performanceTypes.Iops"
                 [dataUnit]="metricUnitMap.iops"
-                [rawData]="chartData.iops">
+                [rawData]="performancechartData.iops">
             </cd-area-chart>
           </div>
 
@@ -59,7 +93,7 @@
             <cd-area-chart chartTitle="Latency"
                 [chartKey]="performanceTypes.Latency"
                 [dataUnit]="metricUnitMap.latency"
-                [rawData]="chartData.latency">
+                [rawData]="performancechartData.latency">
             </cd-area-chart>
           </div>
 
@@ -67,7 +101,7 @@
             <cd-area-chart chartTitle="Throughput"
                 [chartKey]="performanceTypes.Throughput"
                 [dataUnit]="metricUnitMap.throughput"
-                [rawData]="chartData.throughput">
+                [rawData]="performancechartData.throughput">
             </cd-area-chart>
           </div>
 

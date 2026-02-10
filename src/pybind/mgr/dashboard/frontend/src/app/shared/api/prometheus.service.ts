@@ -45,6 +45,8 @@ export class PrometheusService {
   };
   private settings: { [url: string]: string } = {};
   updatedChrtData = new Subject<any>();
+  updatedconsumptionChrtData = new Subject<any>();
+  averageConsumptionChrtData = new Subject<any>();
 
   constructor(private http: HttpClient) {}
 
@@ -328,6 +330,12 @@ export class PrometheusService {
           });
           // STEP 2: Emit updated results
           this.updatedChrtData.next(queriesResults);
+          if (Object.keys(queries).includes("CONSUMPTION")) {
+              this.updatedconsumptionChrtData.next(queriesResults);
+          }
+          if (Object.keys(queries).includes("average")) {
+              this.averageConsumptionChrtData.next(queriesResults);
+          }
         });
     });
 
@@ -353,7 +361,8 @@ export class PrometheusService {
     };
   }
 
-  private toSeries(metric: [number, string][], label: string) {
+  public toSeries(metric: [number, string][], label: string) {
+    
     return metric.map(([ts, val]) => ({
       timestamp: new Date(ts * 1000),
       values: { [label]: Number(val) }

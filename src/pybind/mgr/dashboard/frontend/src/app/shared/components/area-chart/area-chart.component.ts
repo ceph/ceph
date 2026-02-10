@@ -12,7 +12,8 @@ import {
   AreaChartOptions,
   ChartTabularData,
   ToolbarControlTypes,
-  ScaleTypes
+  ScaleTypes,
+  LineChartOptions
 } from '@carbon/charts-angular';
 import merge from 'lodash.merge';
 import { NumberFormatterService } from '../../services/number-formatter.service';
@@ -40,6 +41,7 @@ export class AreaChartComponent implements OnChanges {
   @Input() chartKey = '';
   @Input() decimals = DECIMAL;
   @Input() customOptions?: Partial<AreaChartOptions>;
+  @Input() legendEnabled = true;
 
   @Output() currentFormattedValues = new EventEmitter<{
     key: string;
@@ -123,9 +125,12 @@ export class AreaChartComponent implements OnChanges {
     this.lastEmittedRawValues = { ...latestEntry.values };
   }
 
-  private getChartOptions(max: number, labels: string[], divisor: number): AreaChartOptions {
+  private getChartOptions(max: number, labels: string[], divisor: number): LineChartOptions {
     return {
       title: this.chartTitle,
+      legend: {
+        enabled: this.legendEnabled
+      },
       axes: {
         bottom: {
           title: 'Time',

@@ -1,3 +1,5 @@
+
+
 export enum UtilizationCardQueries {
   USEDCAPACITY = 'ceph_cluster_total_used_bytes',
   WRITEIOPS = 'sum(rate(ceph_pool_wr[1m]))',
@@ -131,5 +133,65 @@ export const ObjectQueries = {
               * on (pool_id, cluster)
                 group_left(application)
                   ceph_pool_metadata{application="Object"}) OR vector(0)`
+};
+
+export const CONSUMPTION_QUERY_MAPS = {
+  'filesystem': {
+    CONSUMPTION: `sum(ceph_pool_bytes_used * on(pool_id) group_left(application) ceph_pool_metadata{application="Filesystem"})`,
+  },
+  'block': {
+    CONSUMPTION: `sum(ceph_pool_bytes_used * on(pool_id) group_left(application) ceph_pool_metadata{application="Block"})`,
+  },
+  'object': {
+    CONSUMPTION: `sum(ceph_pool_bytes_used * on(pool_id) group_left(application) ceph_pool_metadata{application="Object"})`,
+  }
+};
+
+export const AVERAGE_CONSUMPTION_QUERY_MAP = {
+  'filesystem': {
+    AVERAGE: `avg_over_time((sum(ceph_pool_bytes_used * on(pool_id) group_left(application) ceph_pool_metadata{application="Filesystem"}))[6h:])`,
+  },
+  'block': {
+    AVERAGE: `avg_over_time((sum(ceph_pool_bytes_used * on(pool_id) group_left(application) ceph_pool_metadata{application="Block"}))[6h:])`,
+  },
+  'object': {
+    AVERAGE: `avg_over_time((sum(ceph_pool_bytes_used * on(pool_id) group_left(application) ceph_pool_metadata{application="Object"}))[6h:])`,
+  }
+};
+
+export const TIME_UNTIL_FULL_QUERY_MAP = {
+  'filesystem': {
+    TUF: `
+(
+  sum(ceph_pool_avail_raw * on(pool_id) group_left(application) ceph_pool_metadata{application="Filesystem"})
+)
+/
+(
+  deriv(sum(ceph_pool_bytes_used * on(pool_id) group_left(application) ceph_pool_metadata{application="Filesystem"})[6h:])
+)
+`
+  },
+  'block': {
+    TUF: `
+(
+  sum(ceph_pool_avail_raw * on(pool_id) group_left(application) ceph_pool_metadata{application="Block"})
+)
+/
+(
+  deriv(sum(ceph_pool_bytes_used * on(pool_id) group_left(application) ceph_pool_metadata{application="Block"})[6h:])
+)
+`
+  },
+  'object': {
+    TUF: `
+(
+  sum(ceph_pool_avail_raw * on(pool_id) group_left(application) ceph_pool_metadata{application="Object"})
+)
+/
+(
+  deriv(sum(ceph_pool_bytes_used * on(pool_id) group_left(application) ceph_pool_metadata{application="Object"})[6h:])
+)
+`
+  }
 };
 

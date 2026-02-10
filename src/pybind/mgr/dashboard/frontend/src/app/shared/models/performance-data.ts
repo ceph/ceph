@@ -66,3 +66,4 @@ export const STORAGE_QUERY_MAP = {
   [StorageType.Block]: BlockQueries,
   [StorageType.Object]: ObjectQueries
 };
+
