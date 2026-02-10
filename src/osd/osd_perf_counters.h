@@ -257,7 +257,12 @@ enum {
   rs_getmissing_latency,
   rs_waitupthru_latency,
   rs_notrecovering_latency,
-  rs_stats_invalidated,
+  rs_process_log_stats_invalidated,
+  rs_pg_split_parent_stats_invalidated,
+  rs_pg_split_child_stats_invalidated,
+  rs_update_stats_invalidated,
+  rs_append_log_stats_invalidated,
+  rs_merge_log_stats_invalidated,
   rs_last,
 };
 

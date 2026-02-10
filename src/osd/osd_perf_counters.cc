@@ -536,7 +536,12 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
   rs_perf.add_time_avg(rs_getmissing_latency, "getmissing_latency", "Getmissing recovery state latency");
   rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency", "Waitupthru recovery state latency");
   rs_perf.add_time_avg(rs_notrecovering_latency, "notrecovering_latency", "Notrecovering recovery state latency");
-  rs_perf.add_u64_counter(rs_stats_invalidated, "stats_invalidated", "Number of times pg stats received invalidations");
+  rs_perf.add_u64_counter(rs_process_log_stats_invalidated, "process_log_stats_invalidated", "Number of times pg stats received invalidations during log processing");
+  rs_perf.add_u64_counter(rs_pg_split_parent_stats_invalidated, "pg_split_parent_stats_invalidated", "Number of times parent pg stats received invalidations during pg splitting");
+  rs_perf.add_u64_counter(rs_pg_split_child_stats_invalidated, "pg_split_child_stats_invalidated", "Number of times child pg stats received invalidations during pg splitting");
+  rs_perf.add_u64_counter(rs_update_stats_invalidated, "update_stats_invalidated", "Number of times pg stats received invalidations during stats updates");
+  rs_perf.add_u64_counter(rs_append_log_stats_invalidated, "append_log_stats_invalidated", "Number of times pg stats received invalidations when appending new log entries");
+  rs_perf.add_u64_counter(rs_merge_log_stats_invalidated, "merge_log_stats_invalidated", "Number of times pg stats received invalidations during merging of log entries");
 
   return rs_perf.create_perf_counters();
 }
