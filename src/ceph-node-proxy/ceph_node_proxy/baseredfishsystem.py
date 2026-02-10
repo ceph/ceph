@@ -11,7 +11,7 @@ from ceph_node_proxy.redfish import (
     update_component,
 )
 from ceph_node_proxy.redfish_client import RedFishClient
-from ceph_node_proxy.util import get_logger, normalize_dict, to_snake_case
+from ceph_node_proxy.util import DEFAULTS, get_logger, normalize_dict, to_snake_case
 
 
 class BaseRedfishSystem(BaseSystem):
@@ -105,6 +105,10 @@ class BaseRedfishSystem(BaseSystem):
             if hasattr(self, func):
                 f = getattr(self, func)
                 self.update_funcs.append(f)
+        config = kw.get("config") or {}
+        self.refresh_interval: int = config.get("system", {}).get(
+            "refresh_interval", DEFAULTS["system"]["refresh_interval"]
+        )
 
     def update(
         self,
@@ -150,7 +154,7 @@ class BaseRedfishSystem(BaseSystem):
                         )
                         self.client.logout()
                         raise
-                    sleep(5)
+                    sleep(self.refresh_interval)
             self.log.debug("lock released in the update loop.")
         self.log.debug("exiting update loop.")
         raise SystemExit(0)
