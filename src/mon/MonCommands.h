@@ -1451,6 +1451,10 @@ COMMAND("nvme-gw show"
    " show nvmeof gateways within (pool, group)",
    "mon", "r")
 
+COMMAND("nvme-gw show-all",
+  " Dump nvmeof gateways for all pools and groups",
+  "mon", "r")
+
 COMMAND("nvme-gw listeners"
 	" name=pool,type=CephString"
 	" name=group,type=CephString",
