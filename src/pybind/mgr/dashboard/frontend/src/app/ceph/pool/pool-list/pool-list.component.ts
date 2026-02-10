@@ -13,7 +13,7 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -82,20 +82,20 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     this.tableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         routerLink: () => this.urlBuilder.getCreate(),
         name: this.actionLabels.CREATE
       },
       {
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         routerLink: () =>
           this.urlBuilder.getEdit(encodeURIComponent(this.selection.first().pool_name)),
         name: this.actionLabels.EDIT
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         click: () => this.deletePoolModal(),
         name: this.actionLabels.DELETE,
         disable: this.getDisableDesc.bind(this)

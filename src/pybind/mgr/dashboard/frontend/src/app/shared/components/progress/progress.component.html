@@ -3,6 +3,7 @@
     <h3 class="text-center"
         [ngClass]="{ 'mt-3': status === 'in-progress' && isPaused }"
         *ngIf="!value || actionName === 'upgrading'">
+      <!-- TODO: update to loading component-->
       <i *ngIf="status === 'in-progress' && isPaused; else spinningIcon"
          [ngClass]="[icons.large, icons.spinner]"></i>
       <ng-template #spinningIcon>

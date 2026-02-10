@@ -6,6 +6,7 @@
       <div class="card-body">
         <div class="row">
           <div class="col-sm-6 col-lg-6 tree-container">
+            <!-- TODO: update to loading component-->
             <i *ngIf="loadingIndicator"
                [ngClass]="[icons.large, icons.spinner, icons.spin]"></i>
             <cds-tree-view #tree

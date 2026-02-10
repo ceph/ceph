@@ -28,9 +28,8 @@
         </ng-template>
         <li><b i18n>Status:</b></li>
         <li *ngIf="metadataSyncInfo.syncstatus?.includes('failed') || metadataSyncInfo.syncstatus?.includes('error'); else showMetadataStatus">
-          <svg  [cdsIcon]="icons.danger"
-                [size]="icons.size16"
-                class="cds-danger-color"></svg>
+          <cd-icon type="danger"
+                   class="cds-danger-color"></cd-icon>
           <a class="lead text-danger"
              i18n>Error</a>
         </li>

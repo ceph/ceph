@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/c
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -69,28 +69,28 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
     this.tableActions = [
       {
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         name: this.actionLabels.CONNECT,
         disable: (selection: CdTableSelection) => this.getDisable('Connect', selection),
         routerLink: () => this.urlBuilder.getConnect()
       },
       {
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         name: this.actionLabels.EDIT,
         disable: (selection: CdTableSelection) => this.getDisable('edit', selection),
         routerLink: () => this.urlBuilder.getEdit(this.selection.first().name)
       },
       {
         permission: 'update',
-        icon: Icons.refresh,
+        icon: ICON_TYPE.refresh,
         name: this.actionLabels.RECONNECT,
         disable: (selection: CdTableSelection) => this.getDisable('reconnect', selection),
         routerLink: () => this.urlBuilder.getReconnect(this.selection.first().name)
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         name: this.actionLabels.DISCONNECT,
         disable: (selection: CdTableSelection) => this.getDisable('disconnect', selection),
         click: () => this.openDeleteClusterModal()

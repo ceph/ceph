@@ -11,7 +11,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Account } from '../models/rgw-user-accounts';
 import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { Router } from '@angular/router';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
@@ -135,20 +135,20 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
     };
     const addAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: ICON_TYPE.add,
       click: () => this.router.navigate([`${BASE_URL}/${URLVerbs.CREATE}`]),
       name: this.actionLabels.CREATE,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       click: () => this.router.navigate([`${BASE_URL}/${getEditURL()}`]),
       name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: ICON_TYPE.destroy,
       click: () => this.deleteAction(),
       name: this.actionLabels.DELETE
     };

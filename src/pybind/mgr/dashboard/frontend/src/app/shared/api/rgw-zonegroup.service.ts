@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { RgwRealm, RgwZonegroup } from '~/app/ceph/rgw/models/rgw-multisite';
-import { Icons } from '../enum/icons.enum';
+import { ICON_TYPE } from '../enum/icons.enum';
 
 @Injectable({
   providedIn: 'root'
@@ -80,7 +80,7 @@ export class RgwZonegroupService {
     nodes['id'] = zonegroup.id;
     nodes['name'] = zonegroup.name;
     nodes['info'] = zonegroup;
-    nodes['icon'] = Icons.cubes;
+    nodes['icon'] = ICON_TYPE.cube;
     nodes['is_master'] = zonegroup.is_master;
     nodes['parent'] = realm ? realm.name : '';
     nodes['is_default'] = zonegroup.id === defaultZonegroupId ? true : false;

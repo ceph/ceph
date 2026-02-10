@@ -22,9 +22,8 @@
             [disabled]="disablePurgeBtn"
             *ngIf="permission.delete">
       <ng-container i18n>Purge Trash</ng-container>
-      <svg class="cds--btn__icon"
-           cdsIcon="close"
-           size="16"></svg>
+      <cd-icon class="cds--btn__icon"
+               type="close"></cd-icon>
     </button>
   </div>
 </cd-table>

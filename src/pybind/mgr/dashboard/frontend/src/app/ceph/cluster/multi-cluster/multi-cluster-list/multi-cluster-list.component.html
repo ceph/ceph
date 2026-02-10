@@ -3,9 +3,10 @@
                 *ngIf="managedByConfig$ | async as managedByConfig">
     <div class="row h-100 justify-content-center align-items-center">
       <div class="blank-page">
-        <i class="mx-auto d-block"
-           [ngClass]="[icons.large, icons.wrench]">
-        </i>
+        <cd-icon type="tools"
+                 [size]="iconSize.size24"
+                 class="mx-auto d-block">
+      </cd-icon>
       <div class="mt-4 text-center">
         <h4 class="mt-3">This cluster is already managed by cluster -
           <a target="_blank"
@@ -80,9 +81,9 @@
     <span title="{{ row.expiryDate }}">{{ row.remainingTimeWithoutSeconds / 1000 | duration }}</span>
   </span>
   <span *ngIf="row.remainingTimeWithoutSeconds <= 0 && row.remainingDays <=0 && row.cluster_alias !== 'local-cluster'">
-    <i i18n-title
+    <cd-icon type="danger"
        title="Cluster's token has expired"
-       class="{{ icons.danger }}"></i>
+       ></cd-icon>
     <span class="text-danger">Token expired</span>
   </span>
   <span *ngIf="row.cluster_alias === 'local-cluster'">N/A</span>

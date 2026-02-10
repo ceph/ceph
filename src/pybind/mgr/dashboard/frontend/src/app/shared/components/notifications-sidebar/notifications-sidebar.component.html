@@ -5,9 +5,7 @@
       <div class="row no-gutters">
         <div class="col-md-2 text-center">
           <span class="text-info">
-            <svg [cdsIcon]="icons.circle"
-                 [size]="icons.size16"
-                 ></svg>
+            <cd-icon type="circle"></cd-icon>
           </span>
         </div>
         <div class="col-md-9">
@@ -43,9 +41,7 @@
     <button type="button"
             class="btn btn-light btn-block"
             (click)="removeAll(); $event.stopPropagation()">
-      <svg [cdsIcon]="icons.trash"
-           [size]="icons.size16"
-           ></svg>
+      <cd-icon type="trash"></cd-icon>
       &nbsp;
       <ng-container i18n>Clear notifications</ng-container>
     </button>
@@ -57,10 +53,9 @@
       <div class="card tc_notification border-0">
         <div class="row no-gutters">
           <div class="col-md-2 text-center">
-            <span [ngClass]="[icons.stack, icons.large,  notification.textClass]">
-              <i [ngClass]="[icons.circle, icons.stack2x]"></i>
-              <i [ngClass]="[icons.stack1x, icons.inverse, notification.iconClass]"></i>
-            </span>
+            <cd-icon [type]="notificationIconTypes[notification.type]"
+                     [size]="iconSize.size24"
+                     [ngClass]="notification.textClass"></cd-icon>
           </div>
           <div class="col-md-10">
             <div class="card-body p-1">
@@ -68,27 +63,21 @@
                       title="Remove notification"
                       i18n-title
                       (click)="remove(i); $event.stopPropagation()">
-                <svg [cdsIcon]="icons.trash"
-                     [size]="icons.size16"
-                     ></svg>
+                <cd-icon type="trash"></cd-icon>
               </button>
               <button *ngIf="notification.application === 'Prometheus' && notification.type !== 2 && !notification.alertSilenced"
                       class="btn btn-link float-end text-muted mute m-0 p-0"
                       title="Silence Alert"
                       i18n-title
                       (click)="silence(notification)">
-                <svg [cdsIcon]="icons.mute"
-                     [size]="icons.size16"
-                     ></svg>
+                <cd-icon type="mute"></cd-icon>
               </button>
               <button *ngIf="notification.application === 'Prometheus' && notification.type !== 2 && notification.alertSilenced"
                       class="btn btn-link float-end text-muted mute m-0 p-0"
                       title="Expire Silence"
                       i18n-title
                       (click)="expire(notification)">
-                <svg [cdsIcon]="icons.bell"
-                     [size]="icons.size16"
-                     ></svg>
+                <cd-icon type="bell"></cd-icon>
               </button>
 
 

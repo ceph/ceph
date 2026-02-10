@@ -3,7 +3,7 @@ import { Router } from '@angular/router';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -118,7 +118,7 @@ export class NvmeofNamespacesListComponent implements OnInit {
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () =>
           this.router.navigate(
             [BASE_URL, { outlets: { modal: [URLVerbs.CREATE, this.subsystemNQN, 'namespace'] } }],
@@ -129,7 +129,7 @@ export class NvmeofNamespacesListComponent implements OnInit {
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () =>
           this.router.navigate(
             [
@@ -151,7 +151,7 @@ export class NvmeofNamespacesListComponent implements OnInit {
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         click: () => this.deleteNamespaceModal()
       }
     ];

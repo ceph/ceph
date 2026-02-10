@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { RgwRealm } from '~/app/ceph/rgw/models/rgw-multisite';
-import { Icons } from '../enum/icons.enum';
+import { ICON_TYPE } from '../enum/icons.enum';
 import { RgwDaemonService } from './rgw-daemon.service';
 
 @Injectable({
@@ -64,7 +64,7 @@ export class RgwRealmService {
     nodes['name'] = realm.name;
     nodes['info'] = realm;
     nodes['is_default'] = realm.id === defaultRealmId ? true : false;
-    nodes['icon'] = Icons.reweight;
+    nodes['icon'] = ICON_TYPE.scales;
     nodes['type'] = 'realm';
     return {
       nodes: nodes,

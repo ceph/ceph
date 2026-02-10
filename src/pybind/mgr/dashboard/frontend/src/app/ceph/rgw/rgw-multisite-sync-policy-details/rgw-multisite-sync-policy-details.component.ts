@@ -1,7 +1,7 @@
 import { Component, Input, OnChanges, SimpleChanges, TemplateRef, ViewChild } from '@angular/core';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -116,20 +116,20 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
     ];
     const symAddAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: ICON_TYPE.add,
       name: this.actionLabels.CREATE,
       click: () => this.openModal(FlowType.symmetrical),
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
     const symEditAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       name: this.actionLabels.EDIT,
       click: () => this.openModal(FlowType.symmetrical, true)
     };
     const symDeleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: ICON_TYPE.destroy,
       disable: () => !this.symFlowSelection.hasSelection,
       name: this.actionLabels.DELETE,
       click: () => this.deleteFlow(FlowType.symmetrical),
@@ -138,14 +138,14 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
     this.symFlowTableActions = [symAddAction, symEditAction, symDeleteAction];
     const dirAddAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: ICON_TYPE.add,
       name: this.actionLabels.CREATE,
       click: () => this.openModal(FlowType.directional),
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
     const dirDeleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: ICON_TYPE.destroy,
       // TODO: disabling 'delete' as we are not getting flow_id from backend which is needed for deletion
       disable: () =>
         'Deleting the directional flow is disabled in the UI. Please use CLI to delete the directional flow',
@@ -156,20 +156,20 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
     this.dirFlowTableActions = [dirAddAction, dirDeleteAction];
     const pipeAddAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: ICON_TYPE.add,
       name: this.actionLabels.CREATE,
       click: () => this.openPipeModal(),
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
     const pipeEditAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       name: this.actionLabels.EDIT,
       click: () => this.openPipeModal(true)
     };
     const pipeDeleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: ICON_TYPE.destroy,
       disable: () => !this.pipeSelection.hasSelection,
       name: this.actionLabels.DELETE,
       click: () => this.deletePipe(),

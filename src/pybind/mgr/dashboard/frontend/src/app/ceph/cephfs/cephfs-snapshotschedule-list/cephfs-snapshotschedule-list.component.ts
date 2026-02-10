@@ -19,7 +19,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permissions } from '~/app/shared/models/permissions';
 import { SnapshotSchedule } from '~/app/shared/models/snapshot-schedule';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -62,7 +62,7 @@ export class CephfsSnapshotscheduleListComponent
   modalRef!: NgbModalRef;
   errorMessage: string = '';
   selectedName: string = '';
-  icons = Icons;
+  iconSize = IconSize;
   tableActions!: CdTableAction[];
 
   MODULE_NAME = 'snap_schedule';
@@ -91,19 +91,19 @@ export class CephfsSnapshotscheduleListComponent
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () => this.openModal(false)
       },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () => this.openModal(true)
       },
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
-        icon: Icons.trash,
+        icon: ICON_TYPE.trash,
         click: () => this.deleteSnapshotSchedule()
       }
     ];
@@ -172,7 +172,7 @@ export class CephfsSnapshotscheduleListComponent
       {
         name: isActive ? this.actionLabels.DEACTIVATE : this.actionLabels.ACTIVATE,
         permission: 'update',
-        icon: isActive ? Icons.warning : Icons.success,
+        icon: isActive ? ICON_TYPE.warning : ICON_TYPE.success,
         click: () =>
           isActive ? this.deactivateSnapshotSchedule() : this.activateSnapshotSchedule()
       }

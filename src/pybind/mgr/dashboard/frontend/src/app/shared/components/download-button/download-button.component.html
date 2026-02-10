@@ -4,25 +4,22 @@
           [title]="title"
           class="btn btn-light dropdown-toggle-split"
           ngbDropdownToggle>
-    <svg [cdsIcon]="icons.download"
-         size="16"
-         ></svg>&nbsp;
+    <cd-icon type="download"
+></cd-icon>&nbsp;
   </button>
   <div ngbDropdownMenu>
     <button ngbDropdownItem
             (click)="download('json')"
             *ngIf="objectItem">
-      <svg [cdsIcon]="icons.code"
-           size="16"
-           ></svg>
+      <cd-icon type="code"
+  ></cd-icon>
       <span>&nbsp;JSON</span>
     </button>
     <button ngbDropdownItem
             (click)="download()"
             *ngIf="textItem">
-      <svg [cdsIcon]="icons.document"
-           size="16"
-           ></svg>
+      <cd-icon type="document"
+  ></cd-icon>
       <span>&nbsp;Text</span>
     </button>
   </div>

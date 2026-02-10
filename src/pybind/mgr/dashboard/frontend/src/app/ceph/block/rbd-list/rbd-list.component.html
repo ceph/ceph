@@ -102,6 +102,7 @@
              let-column="data.column"
              let-value="data.value"
              let-row="data.row">
+  <!-- TODO: update to loading component-->
   <i [ngClass]="[icons.spinner, icons.spin]"
      *ngIf="row.cdExecuting"></i>
     <span [ngClass]="column?.customTemplateConfig?.valueClass">
@@ -113,12 +114,11 @@
         'text-muted italic'">
     ({{ row.cdExecuting }})
   </span>
-  <svg  *ngIf="row.source && row.source === 'REMOVING'"
+  <cd-icon *ngIf="row.source && row.source === 'REMOVING'"
         i18n-title
         title="RBD in status 'Removing'"
-        [cdsIcon]="icons.warning"
-        [size]="icons.size16"
-        class="cds-warning-color"></svg>
+        type="warning"
+        class="cds-warning-color"></cd-icon>
 </ng-template>
 
 <ng-template #forcePromoteConfirmation>

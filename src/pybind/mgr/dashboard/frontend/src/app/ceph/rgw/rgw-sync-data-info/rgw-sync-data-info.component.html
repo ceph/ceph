@@ -18,9 +18,8 @@
     </ng-template>
     <li><b>Status:</b></li>
     <li *ngIf="zone.syncstatus?.includes('failed') || zone.syncstatus?.includes('error'); else showStatus">
-      <svg  [cdsIcon]="icons.danger"
-            [size]="icons.size16"
-            class="cds-danger-color"></svg>
+      <cd-icon type="danger"
+               class="cds-danger-color"></cd-icon>
       <a  class="lead text-danger"
           i18n>Error</a>
     </li>

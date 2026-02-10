@@ -5,7 +5,7 @@
 import { Component, OnInit } from '@angular/core';
 import { FieldArrayType } from '@ngx-formly/core';
 import { forEach } from 'lodash';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-formly-array-type',
@@ -14,7 +14,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
   standalone: false
 })
 export class FormlyArrayTypeComponent extends FieldArrayType implements OnInit {
-  icons = Icons;
+  iconSize = IconSize;
 
   ngOnInit(): void {
     this.propagateTemplateOptions();

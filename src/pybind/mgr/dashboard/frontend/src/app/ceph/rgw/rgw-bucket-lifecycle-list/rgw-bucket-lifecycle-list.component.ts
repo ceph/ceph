@@ -2,7 +2,7 @@ import { Component, EventEmitter, Input, OnInit, Output, ViewChild } from '@angu
 import { Bucket } from '../models/rgw-bucket';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -72,20 +72,20 @@ export class RgwBucketLifecycleListComponent implements OnInit {
     ];
     const createAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: ICON_TYPE.add,
       click: () => this.openTieringModal(this.actionLabels.CREATE),
       name: this.actionLabels.CREATE
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       disable: () => this.selection.hasMultiSelection,
       click: () => this.openTieringModal(this.actionLabels.EDIT),
       name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: ICON_TYPE.destroy,
       click: () => this.deleteAction(),
       disable: () => !this.selection.hasSelection,
       name: this.actionLabels.DELETE,

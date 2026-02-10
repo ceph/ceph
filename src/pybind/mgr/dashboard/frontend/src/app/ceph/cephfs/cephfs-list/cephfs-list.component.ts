@@ -9,7 +9,7 @@ import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, Icons } from '~/app/shared/enum/icons.enum';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -91,33 +91,33 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () => this.router.navigate([this.urlBuilder.getCreate()]),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () =>
           this.router.navigate([this.urlBuilder.getEdit(String(this.selection.first().id))])
       },
       {
         name: this.actionLabels.AUTHORIZE,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () => this.authorizeModal()
       },
       {
         name: this.actionLabels.ATTACH,
         permission: 'read',
-        icon: Icons.bars,
+        icon: ICON_TYPE.dataCards,
         disable: () => !this.selection?.hasSelection,
         click: () => this.showAttachInfo()
       },
       {
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         click: () => this.removeVolumeModal(),
         name: this.actionLabels.REMOVE,
         disable: this.getDisableDesc.bind(this)

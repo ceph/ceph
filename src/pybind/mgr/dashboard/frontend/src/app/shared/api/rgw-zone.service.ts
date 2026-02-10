@@ -7,7 +7,7 @@ import {
   RgwZonegroup,
   RgwZoneTreeNode
 } from '~/app/ceph/rgw/models/rgw-multisite';
-import { Icons } from '../enum/icons.enum';
+import { ICON_TYPE } from '../enum/icons.enum';
 import { USER } from '~/app/shared/constants/app.constants';
 
 @Injectable({
@@ -120,7 +120,7 @@ export class RgwZoneService {
     nodes['type'] = 'zone';
     nodes['name'] = zone.name;
     nodes['info'] = zone;
-    nodes['icon'] = Icons.deploy;
+    nodes['icon'] = ICON_TYPE.deploy;
     nodes['zone_zonegroup'] = zonegroup;
     nodes['parent'] = zonegroup ? zonegroup.name : '';
     nodes['second_parent'] = realm ? realm.name : '';

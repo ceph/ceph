@@ -2,7 +2,7 @@ import { Component, Input, OnChanges, OnInit } from '@angular/core';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 
 import { SettingsService } from '~/app/shared/api/settings.service';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-grafana',
@@ -27,7 +27,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
   showMessage = false;
   time: string;
   grafanaTimes: any;
-  icons = Icons;
+  iconSize = IconSize;
   readonly DEFAULT_TIME: string = 'from=now-1h&to=now';
 
   @Input()

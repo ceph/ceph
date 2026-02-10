@@ -4,7 +4,7 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -65,7 +65,7 @@ export class NvmeofListenersListComponent implements OnInit {
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () =>
           this.router.navigate(
             [BASE_URL, { outlets: { modal: [URLVerbs.CREATE, this.subsystemNQN, 'listener'] } }],
@@ -76,7 +76,7 @@ export class NvmeofListenersListComponent implements OnInit {
       {
         name: this.actionLabels.DELETE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         click: () => this.deleteListenerModal()
       }
     ];

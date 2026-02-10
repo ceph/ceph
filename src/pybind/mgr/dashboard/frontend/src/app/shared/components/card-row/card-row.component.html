@@ -104,9 +104,9 @@
     <span *ngIf="data.categoryPgAmount?.working">
       {{ data.categoryPgAmount?.working }}
     </span>
-    <i class="text-warning"
-       [ngClass]="[icons.spinner, icons.spin]">
-    </i>
+    <cd-icon type="warning"
+             class="text-warning">
+    </cd-icon>
   </span>
   }
 </ng-template>

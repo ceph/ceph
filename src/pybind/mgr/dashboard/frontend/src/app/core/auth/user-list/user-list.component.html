@@ -41,6 +41,6 @@
      title="User's password is about to expire"
      [class.icon-danger-color]="row.remainingDays < expirationDangerAlert"
      [class.icon-warning-color]="row.remainingDays < expirationWarningAlert && row.remainingDays >= expirationDangerAlert"
-     class="{{ icons.warning }}"></i>
+     class="{{ ICON_TYPE.warning }}"></i>
   <span title="{{ value | cdDate }}">{{ row.remainingTimeWithoutSeconds / 1000 | duration }}</span>
 </ng-template>

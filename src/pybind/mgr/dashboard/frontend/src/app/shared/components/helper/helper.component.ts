@@ -1,5 +1,5 @@
 import { Component, Input } from '@angular/core';
-import { Icons } from '../../enum/icons.enum';
+import { ICON_TYPE, IconSize } from '../../enum/icons.enum';
 import { HelperType } from '../../enum/cd-helper.enum';
 
 @Component({
@@ -10,7 +10,6 @@ import { HelperType } from '../../enum/cd-helper.enum';
 })
 export class HelperComponent {
   private static nextId = 0;
-  icons = Icons;
   isPopoverOpen = false;
   helperType = HelperType;
   // Generating unique ID for tooltip to avoid duplicate-id accessibility violations
@@ -21,8 +20,8 @@ export class HelperComponent {
   @Input() type: HelperType.tooltip | HelperType.popover = HelperType.tooltip; // Default to tooltip for backward compatibility
   @Input() class: string;
   @Input() html: any;
-  @Input() iconSize = this.icons.size16;
-  @Input() iconType = this.icons.info;
+  @Input() iconSize = IconSize.size16;
+  @Input() iconType = ICON_TYPE.info;
 
   togglePopover() {
     this.isPopoverOpen = !this.isPopoverOpen;

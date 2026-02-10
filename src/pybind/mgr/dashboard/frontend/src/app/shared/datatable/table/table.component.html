@@ -53,8 +53,8 @@
       <!-- column filters -->
       <ng-container *ngIf="columnFilters.length !== 0">
         <div class="d-inline-flex position-relative">
-        <svg [cdsIcon]="icons.filter"
-             [size]="icons.size16"></svg>
+        <cd-icon type="filter"
+></cd-icon>
         </div>
         <cds-select (valueChange)="onSelectFilter($event)"
                     display="inline"
@@ -88,9 +88,8 @@
               class="toolbar-action"
               placement="bottom"
               *ngIf="fetchData?.observers?.length > 0">
-        <svg [cdsIcon]="icons.refresh"
-             [size]="icons.size16"
-             [ngClass]="{ 'cds--toolbar-action__icon': true, 'reload': loadingIndicator }"></svg>
+        <cd-icon type="refresh"
+                 [ngClass]="{ 'cds--toolbar-action__icon': true, 'reload': loadingIndicator }"></cd-icon>
       </cds-icon-button>
       <!-- end refresh button -->
       <!-- show hide columns -->
@@ -100,9 +99,8 @@
               placement="bottom"
               [flip]="true"
               [offset]="{ x: 3, y: 0 }">
-        <svg [cdsIcon]="icons.dataTable"
-             [size]="icons.size16"
-             class="cds--toolbar-action__icon"></svg>
+        <cd-icon type="dataTable"
+                 class="cds--toolbar-action__icon"></cd-icon>
       </button>
       <ng-template #showHideColumnsRef>
         <div class="vstack gap-3 p-3"
@@ -135,8 +133,7 @@
         <span class="me-2">{{ filter.column.name }}: {{ filter.value.formatted }}</span>
         <button class="cds--tag__close-icon"
                 (click)="onChangeFilter(filter)">
-          <svg [cdsIcon]="icons.destroy"
-               [size]="icons.size16"></svg>
+          <cd-icon type="close"></cd-icon>
         </button>
       </cds-tag>
     </ng-container>
@@ -335,6 +332,7 @@
              let-column="data.column"
              let-row="data.row"
              let-value="data.value">
+  <!-- TODO: update to loading component-->
   <i [ngClass]="[icons.spinner, icons.spin]"
      *ngIf="row.cdExecuting"></i>
   <span [ngClass]="column?.customTemplateConfig?.valueClass">

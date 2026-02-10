@@ -4,7 +4,7 @@ import { catchError, shareReplay, switchMap } from 'rxjs/operators';
 
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -52,7 +52,6 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
   tableActions: CdTableAction[];
   context: CdTableFetchDataContext;
   selection = new CdTableSelection();
-  icons = Icons;
   permissions: Permissions;
 
   subvolumeGroup$: Observable<CephfsSubvolumeGroup[]>;
@@ -113,27 +112,27 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
       {
         name: this.actionLabels.CREATE,
         permission: 'create',
-        icon: Icons.add,
+        icon: ICON_TYPE.add,
         click: () => this.openModal(),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
-        icon: Icons.edit,
+        icon: ICON_TYPE.edit,
         click: () => this.openModal(true)
       },
       {
         name: this.actionLabels.NFS_EXPORT,
         permission: 'create',
-        icon: Icons.nfsExport,
+        icon: ICON_TYPE.bareMetalServer,
         routerLink: () => ['/cephfs/nfs/create', this.fsName, this.selection?.first()?.name],
         disable: () => !this.selection.hasSingleSelection
       },
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
-        icon: Icons.destroy,
+        icon: ICON_TYPE.destroy,
         click: () => this.removeSubVolumeModal()
       }
     ];

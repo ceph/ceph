@@ -10,7 +10,7 @@ import { ConfirmationModalComponent } from '~/app/shared/components/confirmation
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, IconSize, Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -80,7 +80,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   retries: number;
   tableStatus = new TableStatus('ghost');
   selection = new CdTableSelection();
-  icons = Icons;
+  icons = Icons; // Keep for FontAwesome spinner icons
+  iconSize = IconSize;
   count = 0;
   private tableContext: CdTableFetchDataContext = null;
   errorMessage: string;
@@ -141,14 +142,14 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       ).toStringEncoded();
     const addAction: CdTableAction = {
       permission: 'create',
-      icon: Icons.add,
+      icon: ICON_TYPE.add,
       routerLink: () => this.urlBuilder.getCreate(),
       canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
       name: this.actionLabels.CREATE
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       routerLink: () => this.urlBuilder.getEdit(getImageUri()),
       name: this.actionLabels.EDIT,
       disable: (selection: CdTableSelection) =>
@@ -156,7 +157,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.destroy,
+      icon: ICON_TYPE.destroy,
       click: () => this.deleteRbdModal(),
       name: this.actionLabels.DELETE,
       title: RBDActionHelpers.delete,
@@ -164,7 +165,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     };
     const moveAction: CdTableAction = {
       permission: 'delete',
-      icon: Icons.trash,
+      icon: ICON_TYPE.trash,
       title: RBDActionHelpers.moveToTrash,
       click: () => this.trashRbdModal(),
       name: this.actionLabels.TRASH,
@@ -175,7 +176,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     };
     const resyncAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.refresh,
+      icon: ICON_TYPE.refresh,
       click: () => this.resyncRbdModal(),
       name: this.actionLabels.RESYNC,
       disable: (selection: CdTableSelection) => this.getResyncDisableDesc(selection)
@@ -187,7 +188,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         this.getRemovingStatusDesc(selection) ||
         this.getInvalidNameDisable(selection) ||
         !!selection.first().cdExecuting,
-      icon: Icons.copy,
+      icon: ICON_TYPE.copy,
       routerLink: () => `/block/rbd/copy/${getImageUri()}`,
       name: this.actionLabels.COPY,
       title: RBDActionHelpers.copy
@@ -199,7 +200,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         this.getInvalidNameDisable(selection) ||
         selection.first().cdExecuting ||
         !selection.first().parent,
-      icon: Icons.flatten,
+      icon: ICON_TYPE.unlink,
       click: () => this.flattenRbdModal(),
       name: this.actionLabels.FLATTEN,
       title: RBDActionHelpers.flatten
@@ -207,7 +208,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
 
     const removeSchedulingAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       click: () => this.removeSchedulingModal(),
       name: this.actionLabels.REMOVE_SCHEDULING,
       disable: (selection: CdTableSelection) =>
@@ -217,7 +218,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     };
     const promoteAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       click: () => this.actionPrimary(true),
       name: this.actionLabels.PROMOTE,
       visible: () => this.selection.first() != null && !this.selection.first().primary,
@@ -226,7 +227,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     };
     const demoteAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       click: () => this.actionPrimary(false),
       name: this.actionLabels.DEMOTE,
       visible: () => this.selection.first() != null && this.selection.first().primary,

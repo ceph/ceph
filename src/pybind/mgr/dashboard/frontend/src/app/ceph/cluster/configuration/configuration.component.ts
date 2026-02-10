@@ -4,7 +4,7 @@ import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -24,7 +24,6 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
   permission: Permission;
   tableActions: CdTableAction[];
   data: any[] = [];
-  icons = Icons;
   columns: CdTableColumn[];
   selection = new CdTableSelection();
   filters: CdTableColumn[] = [
@@ -98,7 +97,7 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
       this.selection.first() && `${encodeURIComponent(this.selection.first().name)}`;
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.edit,
+      icon: ICON_TYPE.edit,
       routerLink: () => `/configuration/edit/${getConfigOptUri()}`,
       name: this.actionLabels.EDIT,
       disable: () => !this.isEditable(this.selection)

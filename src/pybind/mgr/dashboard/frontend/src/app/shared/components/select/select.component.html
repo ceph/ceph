@@ -23,9 +23,9 @@
        [ngClass]="{'help-block disabled': (data.length === selectionLimit || !option.enabled) && !option.selected}"
        (click)="triggerSelection(option)">
     <div class="select-menu-item-icon">
-      <i [ngClass]="[icons.check]"
-         aria-hidden="true"
-         *ngIf="option.selected"></i>
+      <cd-icon type="check"
+               *ngIf="option.selected"
+               aria-hidden="true"></cd-icon>
       &nbsp;
     </div>
     <div class="select-menu-item-content">
@@ -42,8 +42,8 @@
        class="select-menu-item"
        (click)="addCustomOption()">
     <div class="select-menu-item-icon">
-      <i [ngClass]="[icons.tag]"
-         aria-hidden="true"></i>
+      <cd-icon type="tag"
+               aria-hidden="true"></cd-icon>
       &nbsp;
     </div>
     <div class="select-menu-item-content">

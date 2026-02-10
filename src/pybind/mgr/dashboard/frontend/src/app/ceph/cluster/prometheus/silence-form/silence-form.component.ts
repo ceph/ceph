@@ -8,7 +8,7 @@ import moment from 'moment';
 import { DashboardNotFoundError } from '~/app/core/error/error';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { ActionLabelsI18n, SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -34,7 +34,7 @@ import { SilenceMatcherModalComponent } from '../silence-matcher-modal/silence-m
   standalone: false
 })
 export class SilenceFormComponent {
-  icons = Icons;
+  iconSize = IconSize;
   permission: Permission;
   form: CdFormGroup;
   rules: PrometheusRule[];

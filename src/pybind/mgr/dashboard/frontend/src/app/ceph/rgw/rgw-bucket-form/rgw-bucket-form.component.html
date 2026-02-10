@@ -413,9 +413,8 @@
                     [disabled]="tags.length > 19"
                     (click)="showTagModal()">
               <ng-container i18n>Add tag</ng-container>
-              <svg [cdsIcon]="icons.add"
-                   [size]="icons.size16"
-                   class="cds--btn__icon"></svg>
+              <cd-icon type="add"
+                       class="cds--btn__icon"></cd-icon>
             </button>
           </cds-tooltip>
         </div>
@@ -454,17 +453,15 @@
                       id="example-generator-button"
                       (click)="openUrl('https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html?icmpid=docs_amazons3_console')"
                       i18n>Policy examples
-                <svg [cdsIcon]="icons.launch"
-                     [size]="icons.size16"
-                     class="cds--btn__icon"></svg>
+                <cd-icon type="launch"
+                         class="cds--btn__icon"></cd-icon>
               </button>
               <button cdsButton="tertiary"
                       id="example-generator-button"
                       (click)="openUrl('https://awspolicygen.s3.amazonaws.com/policygen.html')"
                       i18n>Policy generator
-                <svg [cdsIcon]="icons.launch"
-                     [size]="icons.size16"
-                     class="cds--btn__icon"></svg>
+                <cd-icon type="launch"
+                         class="cds--btn__icon"></cd-icon>
               </button>
             </cds-button-set>
           </div>
@@ -474,9 +471,8 @@
                       id="clear-bucket-policy"
                       (click)="clearTextArea('bucket_policy', '{}')"
                       i18n>Clear
-                <svg [cdsIcon]="icons.destroy"
-                     [size]="icons.size16"
-                     class="cds--btn__icon"></svg>
+                <cd-icon type="destroy"
+                         class="cds--btn__icon"></cd-icon>
               </button>
             </cds-button-set>
           </div>
@@ -514,9 +510,8 @@
                       id="lifecycle-examples-button"
                       (click)="openUrl('https://docs.aws.amazon.com/cli/latest/reference/s3api/put-bucket-lifecycle.html#examples')"
                       i18n>Policy examples
-                <svg [cdsIcon]="icons.launch"
-                     [size]="icons.size16"
-                     class="cds--btn__icon"></svg>
+                <cd-icon type="launch"
+                         class="cds--btn__icon"></cd-icon>
               </button>
             </cds-button-set>
           </div>
@@ -526,9 +521,8 @@
                       id="clear-lifecycle"
                       (click)="clearTextArea('lifecycle', '{}')"
                       i18n>Clear
-                <svg [cdsIcon]="icons.destroy"
-                     [size]="icons.size16"
-                     class="cds--btn__icon"></svg>
+                <cd-icon type="destroy"
+                         class="cds--btn__icon"></cd-icon>
               </button>
             </cds-button-set>
           </div>
@@ -639,16 +633,14 @@
     <cds-icon-button kind="tertiary"
                      size="md"
                      (click)="showTagModal(index)">
-      <svg [cdsIcon]="icons.edit"
-           [size]="icons.size16"
-           class="cds-info-color cds--btn__icon"></svg>
+      <cd-icon type="edit"
+               class="cds-info-color cds--btn__icon"></cd-icon>
     </cds-icon-button>
     <cds-icon-button kind="danger"
                      size="md"
                      (click)="deleteTag(index)">
-      <svg [cdsIcon]="icons.trash"
-           [size]="icons.size16"
-           class="cds-info-color cds--btn__icon"></svg>
+      <cd-icon type="trash"
+               class="cds-info-color cds--btn__icon"></cd-icon>
     </cds-icon-button>
   </div>
 </ng-template>
