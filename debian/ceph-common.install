@@ -18,6 +18,7 @@ usr/bin/cephfs-table-tool
 usr/bin/cephfs-tool
 usr/bin/crushdiff
 usr/bin/rados
+usr/bin/radostrace
 usr/bin/radosgw-admin
 usr/bin/rgw-gap-list
 usr/bin/rgw-gap-list-comparator
