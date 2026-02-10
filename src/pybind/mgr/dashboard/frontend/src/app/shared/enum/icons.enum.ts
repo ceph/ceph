@@ -96,7 +96,12 @@ export enum Icons {
   stack2x = 'fa fa-stack-2x', // To stack regularly sized icon
   pulse = 'fa fa-pulse', // To have spinner rotate with 8 steps
   spin = 'fa fa-spin', //  To get any icon to rotate
-  inverse = 'fa fa-inverse' // To get an alternative icon color
+  inverse = 'fa fa-inverse', // To get an alternative icon color
+  notification = 'notification',
+  error = 'error--filled',
+  notificationOff = 'notification--off',
+  notificationNew = 'notification--new',
+  emptySearch = 'search'
 }
 
 export enum IconSize {
@@ -115,5 +120,9 @@ export const ICON_TYPE = {
   deploy: 'deploy',
   edit: 'edit',
   error: 'error--filled',
-  notification: 'notification'
+  notification: 'notification',
+  notificationOff: 'notification--off',
+  notificationNew: 'notification--new',
+  add: 'add',
+  emptySearch: 'emptySearch'
 } as const;

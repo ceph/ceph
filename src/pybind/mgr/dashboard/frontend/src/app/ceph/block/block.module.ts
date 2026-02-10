@@ -48,6 +48,7 @@ import { NvmeofNamespacesListComponent } from './nvmeof-namespaces-list/nvmeof-n
 import { NvmeofNamespacesFormComponent } from './nvmeof-namespaces-form/nvmeof-namespaces-form.component';
 import { NvmeofInitiatorsListComponent } from './nvmeof-initiators-list/nvmeof-initiators-list.component';
 import { NvmeofInitiatorsFormComponent } from './nvmeof-initiators-form/nvmeof-initiators-form.component';
+import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway-node.component';
 
 import {
   ButtonModule,
@@ -64,8 +65,13 @@ import {
   SelectModule,
   UIShellModule,
   TreeviewModule,
+  SideNavModule,
   TabsModule,
-  TagModule
+  TagModule,
+  LayoutModule,
+  ContainedListModule,
+  LayerModule,
+  ThemeModule
 } from 'carbon-components-angular';
 
 // Icons
@@ -74,6 +80,13 @@ import Close from '@carbon/icons/es/close/32';
 import AddFilled from '@carbon/icons/es/add--filled/32';
 import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
 import Reset from '@carbon/icons/es/reset/32';
+import SubtractAlt from '@carbon/icons/es/subtract--alt/20';
+import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
+import Search from '@carbon/icons/es/search/32';
+import { NvmeofGatewaySubsystemComponent } from './nvmeof-gateway-subsystem/nvmeof-gateway-subsystem.component';
+import { NvmeGatewayViewComponent } from './nvme-gateway-view/nvme-gateway-view.component';
+import { NvmeGatewayViewBreadcrumbResolver } from './nvme-gateway-view/nvme-gateway-view-breadcrumb.resolver';
+import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
 
 @NgModule({
   imports: [
@@ -90,8 +103,8 @@ import Reset from '@carbon/icons/es/reset/32';
     TreeviewModule,
     UIShellModule,
     InputModule,
-    GridModule,
     ButtonModule,
+    GridModule,
     IconModule,
     CheckboxModule,
     RadioModule,
@@ -101,7 +114,13 @@ import Reset from '@carbon/icons/es/reset/32';
     DatePickerModule,
     ComboBoxModule,
     TabsModule,
-    TagModule
+    TagModule,
+    GridModule,
+    LayerModule,
+    LayoutModule,
+    ContainedListModule,
+    SideNavModule,
+    ThemeModule
   ],
   declarations: [
     RbdListComponent,
@@ -138,13 +157,26 @@ import Reset from '@carbon/icons/es/reset/32';
     NvmeofNamespacesListComponent,
     NvmeofNamespacesFormComponent,
     NvmeofInitiatorsListComponent,
-    NvmeofInitiatorsFormComponent
+    NvmeofInitiatorsFormComponent,
+    NvmeofGatewayNodeComponent,
+    NvmeGatewayViewComponent,
+    NvmeofGatewaySubsystemComponent
   ],
+
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
 export class BlockModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([ChevronDown, Close, AddFilled, SubtractFilled, Reset]);
+    this.iconService.registerAll([
+      ChevronDown,
+      Close,
+      AddFilled,
+      SubtractFilled,
+      Reset,
+      ProgressBarRound,
+      SubtractAlt,
+      Search
+    ]);
   }
 }
 
@@ -283,7 +315,28 @@ const routes: Routes = [
       }
     },
     children: [
-      { path: '', redirectTo: 'subsystems', pathMatch: 'full' },
+      { path: '', redirectTo: 'gateways', pathMatch: 'full' },
+      { path: 'gateways', component: NvmeofGatewayComponent, data: { breadcrumbs: 'Gateways' } },
+
+
+      {
+        path: `gateways/${URLVerbs.VIEW}/:group`,
+        component: NvmeGatewayViewComponent,
+        data: { breadcrumbs: NvmeGatewayViewBreadcrumbResolver }, // Use resolver here
+        children: [
+          { path: '', redirectTo: 'nodes', pathMatch: 'full' },
+          {
+            path: 'nodes',
+            component: NvmeofGatewayNodeComponent,
+            data: { breadcrumbs: $localize`Gateway nodes`, mode: NvmeofGatewayNodeMode.DETAILS }
+          },
+          {
+            path: 'subsystems',
+            component: NvmeofGatewaySubsystemComponent,
+            data: { breadcrumbs: $localize`Subsystems` }
+          }
+        ]
+      },
       {
         path: 'subsystems',
         component: NvmeofSubsystemsComponent,

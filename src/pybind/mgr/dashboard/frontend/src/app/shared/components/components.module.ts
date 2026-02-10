@@ -96,6 +96,8 @@ import downloadIcon from '@carbon/icons/es/download/16';
 import { ChartsModule } from '@carbon/charts-angular';
 import { ProductiveCardComponent } from './productive-card/productive-card.component';
 
+import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
+
 @NgModule({
   imports: [
     CommonModule,
@@ -186,7 +188,9 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     IconComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent
+    ProductiveCardComponent,
+
+    SidebarLayoutComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -229,7 +233,9 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     IconComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent
+    ProductiveCardComponent,
+
+    SidebarLayoutComponent
   ]
 })
 export class ComponentsModule {

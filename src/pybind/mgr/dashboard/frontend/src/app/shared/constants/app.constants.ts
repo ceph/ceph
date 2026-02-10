@@ -33,13 +33,19 @@ export enum URLVerbs {
   /* Non-standard verbs */
   COPY = 'copy',
   CLONE = 'clone',
+  VIEW = 'view',
 
   /* Prometheus wording */
   RECREATE = 'recreate',
   EXPIRE = 'expire',
 
+
   /* Daemons */
-  RESTART = 'Restart'
+  RESTART = 'Restart',
+
+  /* Multi-cluster */
+  CONNECT = 'connect',
+  RECONNECT = 'reconnect'
 }
 
 export enum ActionLabels {
@@ -78,7 +84,12 @@ export enum ActionLabels {
   START = 'Start',
   STOP = 'Stop',
   REDEPLOY = 'Redeploy',
-  RESTART = 'Restart'
+  RESTART = 'Restart',
+
+  /* Multi-cluster */
+  CONNECT = 'connect',
+  RECONNECT = 'reconnect',
+  VIEW = 'View'
 }
 
 @Injectable({
@@ -153,7 +164,7 @@ export class ActionLabelsI18n {
   EXPAND_CLUSTER: string;
   SETUP_MULTISITE_REPLICATION: string;
   NFS_EXPORT: string;
-
+  VIEW: string;
   constructor() {
     /* Create a new item */
     this.CREATE = $localize`Create`;
@@ -245,6 +256,7 @@ export class ActionLabelsI18n {
     this.EXPAND_CLUSTER = $localize`Expand Cluster`;
 
     this.NFS_EXPORT = $localize`Create NFS Export`;
+    this.VIEW = $localize`View`;
   }
 }
 
