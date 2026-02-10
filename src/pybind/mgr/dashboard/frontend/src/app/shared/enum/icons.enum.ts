@@ -117,7 +117,8 @@ export const ICON_TYPE = {
   edit: 'edit',
   error: 'error--filled',
   notification: 'notification',
+  notificationOff: 'notification--off',
+  notificationNew: 'notification--new',
   add: 'add',
-  destroy: 'destroy',
-  close: 'close'
+  emptySearch: 'emptySearch'
 } as const;

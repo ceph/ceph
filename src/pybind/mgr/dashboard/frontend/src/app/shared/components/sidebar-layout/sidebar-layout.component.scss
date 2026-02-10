@@ -1,0 +1,22 @@
+@use './src/styles/vendor/variables' as vv;
+@use '@carbon/colors';
+@use '@carbon/layout';
+
+.sidebar-layout-container {
+  min-height: calc(100vh - (vv.$navbar-height + layout.rem(55px)));
+  background-color: var(--cds-background);
+  padding-right: var(--cds-spacing-07);
+}
+
+.sidebar-layout-shell {
+  transform: translate(0);
+  position: relative;
+}
+
+.sidebar-layout-main {
+  margin-left: layout.rem(272px);
+}
+
+.sidebar-header {
+  padding-left: var(--cds-spacing-05);
+}

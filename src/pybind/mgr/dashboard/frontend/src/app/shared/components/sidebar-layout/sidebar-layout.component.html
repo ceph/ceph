@@ -1,0 +1,23 @@
+@if (title) {
+<header class="sidebar-header">
+  <h2 class="cds--type-heading-05">{{ title }}</h2>
+</header>
+}
+<div class="sidebar-layout-container">
+  <div class="sidebar-layout-shell">
+    <cds-sidenav [expanded]="true">
+      @for (item of items; track item.label) {
+      <cds-sidenav-item
+        [route]="item.route"
+        [useRouter]="true"
+        [routerLinkActiveOptions]="item.routerLinkActiveOptions || { exact: false }">
+        <span class="cds--type-heading-compact-01">{{ item.label }}</span>
+      </cds-sidenav-item>
+      }
+    </cds-sidenav>
+
+    <main class="sidebar-layout-main">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+</div>

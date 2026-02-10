@@ -68,11 +68,13 @@ import {
   SelectModule,
   UIShellModule,
   TreeviewModule,
+  SideNavModule,
   TabsModule,
   TagModule,
   LayoutModule,
   ContainedListModule,
-  LayerModule
+  LayerModule,
+  ThemeModule
 } from 'carbon-components-angular';
 
 // Icons
@@ -81,6 +83,13 @@ import Close from '@carbon/icons/es/close/32';
 import AddFilled from '@carbon/icons/es/add--filled/32';
 import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
 import Reset from '@carbon/icons/es/reset/32';
+import SubtractAlt from '@carbon/icons/es/subtract--alt/20';
+import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
+import Search from '@carbon/icons/es/search/32';
+import { NvmeofGatewaySubsystemComponent } from './nvmeof-gateway-subsystem/nvmeof-gateway-subsystem.component';
+import { NvmeGatewayViewComponent } from './nvme-gateway-view/nvme-gateway-view.component';
+import { NvmeGatewayViewBreadcrumbResolver } from './nvme-gateway-view/nvme-gateway-view-breadcrumb.resolver';
+import { NvmeofGatewayNodeMode } from '~/app/shared/enum/nvmeof.enum';
 
 @NgModule({
   imports: [
@@ -97,8 +106,8 @@ import Reset from '@carbon/icons/es/reset/32';
     TreeviewModule,
     UIShellModule,
     InputModule,
-    GridModule,
     ButtonModule,
+    GridModule,
     IconModule,
     CheckboxModule,
     RadioModule,
@@ -112,7 +121,9 @@ import Reset from '@carbon/icons/es/reset/32';
     GridModule,
     LayerModule,
     LayoutModule,
-    ContainedListModule
+    ContainedListModule,
+    SideNavModule,
+    ThemeModule
   ],
   declarations: [
     RbdListComponent,
@@ -154,13 +165,25 @@ import Reset from '@carbon/icons/es/reset/32';
     NvmeofGroupFormComponent,
     NvmeofSubsystemsStepOneComponent,
     NvmeofSubsystemsStepTwoComponent,
-    NvmeofSubsystemsStepThreeComponent
+    NvmeofSubsystemsStepThreeComponent,
+    NvmeGatewayViewComponent,
+    NvmeofGatewaySubsystemComponent
   ],
+
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
 export class BlockModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([ChevronDown, Close, AddFilled, SubtractFilled, Reset]);
+    this.iconService.registerAll([
+      ChevronDown,
+      Close,
+      AddFilled,
+      SubtractFilled,
+      Reset,
+      ProgressBarRound,
+      SubtractAlt,
+      Search
+    ]);
   }
 }
 
@@ -305,6 +328,25 @@ const routes: Routes = [
         path: `gateways/${URLVerbs.CREATE}`,
         component: NvmeofGroupFormComponent,
         data: { breadcrumbs: `${ActionLabels.CREATE}${URLVerbs.GATEWAY_GROUP}` }
+      },
+
+      {
+        path: `gateways/${URLVerbs.VIEW}/:group`,
+        component: NvmeGatewayViewComponent,
+        data: { breadcrumbs: NvmeGatewayViewBreadcrumbResolver }, // Use resolver here
+        children: [
+          { path: '', redirectTo: 'nodes', pathMatch: 'full' },
+          {
+            path: 'nodes',
+            component: NvmeofGatewayNodeComponent,
+            data: { breadcrumbs: $localize`Gateway nodes`, mode: NvmeofGatewayNodeMode.DETAILS }
+          },
+          {
+            path: 'subsystems',
+            component: NvmeofGatewaySubsystemComponent,
+            data: { breadcrumbs: $localize`Subsystems` }
+          }
+        ]
       },
       {
         path: 'subsystems',
