@@ -2,12 +2,14 @@
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
+ * modify it under the terms of the GNU Lesser General Public License
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  */
 #ifndef CEPH_COMMON_CRC32C_RISCV_H
 #define CEPH_COMMON_CRC32C_RISCV_H
+
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {

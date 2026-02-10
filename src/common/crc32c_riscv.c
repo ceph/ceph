@@ -2,15 +2,14 @@
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
+ * modify it under the terms of the GNU Lesser General Public License
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  */
-#include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "acconfig.h"
 #include "include/int_types.h"
+#include "common/sctp_crc32.h"
 
 // CRC32C  polynomial constants
 #define CRC32C_CONST_0     0xdd45aab8U
@@ -29,13 +28,14 @@ static const uint64_t crc32c_fold_const[4] __attribute__((aligned(16))) = {
  * This uses the reflected polynomial version compatible with standard CRC32C.
  */
 uint32_t ceph_crc32c_riscv(uint32_t crc, unsigned char const *buf, unsigned len) {
-    if (unlikely(len < 64)) {
+    if (unlikely(len < 64) || unlikely(!buf)) {
         // Fall back to table-based implementation for small buffers
         return ceph_crc32c_sctp(crc, buf, len);
     }
 
     uint32_t result;
     const uint64_t *fold_consts = crc32c_fold_const;
+    uint64_t tmp_buf[2] __attribute__((aligned(16)));
 
     __asm__ __volatile__(
         // Initialize CRC
@@ -142,11 +142,9 @@ uint32_t ceph_crc32c_riscv(uint32_t crc, unsigned char const *buf, unsigned len)
         "vxor.vv        v0, v6, v3\n\t"
 
         // Extract 128-bit result from vector register
-        "addi           sp, sp, -16\n\t"
-        "vse64.v        v0, (sp)\n\t"
-        "ld             t0, 0(sp)\n\t"
-        "ld             t1, 8(sp)\n\t"
-        "addi           sp, sp, 16\n\t"
+        "vse64.v        v0, (%[tmp_ptr])\n\t"
+        "ld             t0, 0(%[tmp_ptr])\n\t"
+        "ld             t1, 8(%[tmp_ptr])\n\t"
 
         // Barrett reduction
         "li             t2, %[const0]\n\t"
@@ -177,12 +175,13 @@ uint32_t ceph_crc32c_riscv(uint32_t crc, unsigned char const *buf, unsigned len)
         : [result] "=r" (result)
         : [buf] "r" (buf), [len] "r" (len), [crc] "r" (crc), [consts] "r" (fold_consts),
           [const0] "i" (CRC32C_CONST_0), [const1] "i" (CRC32C_CONST_1),
-          [quo] "i" (CRC32C_CONST_QUO), [poly] "i" (CRC32C_CONST_POLY)
+          [quo] "i" (CRC32C_CONST_QUO), [poly] "i" (CRC32C_CONST_POLY),
+          [tmp_ptr] "r" (tmp_buf)
         : "a3", "a4", "a5", "t0", "t1", "t2", "t3", "t4", "t5", "v0", "v1", "v2", "v3",
           "v4", "v5", "v6", "v7", "v8", "memory"
     );
     size_t tail_len = len % 64;
-    if (tail_len > 0){
+    if (tail_len > 0) {
         result = ceph_crc32c_sctp(result, buf + len - tail_len, tail_len);
     }
     return result;
