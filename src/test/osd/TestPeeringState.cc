@@ -3118,7 +3118,7 @@ TEST_F(PeeringStateTest, PoolMigrationPrempt) {
   dispatch_events(1, true , 1);
   dispatch_events(2, true , 1);
   dispatch_all();
-  dispatch_events(0, true , 1);
+  dispatch_events(acting[0], true , 1);
   EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/WaitLocalPoolMigrationReserved");
   EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
   EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
@@ -3259,6 +3259,71 @@ TEST_F(PeeringStateTest, Issue73891) {
   osd_up(1, 1);
   test_peering();
   verify_logs(); // Without fix will fail
+}
+
+// Multi-OSD test of peering for fix for https://tracker.ceph.com/issues/71493
+TEST_F(PeeringStateTest, Issue71493) {
+  // Scenario: Backfill gets stopped by a remote reservastion being preempted
+  // but this races with MOSDPGBackfill::OP_BACKFILL_FINISH event. The
+  // probelmatic sequence is:
+  //
+  // Primary calls update_pee_last_backfill to set last_backfill to hobject_t::MAX
+  // Primary sends a MOSDPGBackfill::OP_BACKFILL_FINISH message to the backfilling shard
+  // Backfilling shard preempts the remote reservation and sends Revoked message
+  // Backfilling shard processes the MOSDPGBackfill::OP_BACKFILL_FINISH message
+  // Primary processes RemoteReservation revoked message from the backfilling OSD
+  //   Sets BACKFILL_WAIT and suspends backfill (fix only does this if needs_backfill() returns true)
+  //   Discards the event because needs_backfill() returns false
+  // Primary sends and processes Backfilled event
+  //   Leaves BACKFILL_WAIT set
+  dout(0) << "== Issue71493 ==" << dendl;
+  // Init
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  // Append 3 log entries to all shards - trim the log so that
+  // backfill occurs later on
+  test_append_log_entry();
+  eversion_t expected_tail = test_append_log_entry();
+  eversion_t expected = test_append_log_entry(shard_id_set(), shard_id_set(), false, true);
+  // Full peering cycle
+  test_peering();
+  // Verify that we got to active+clean and that log entries were kept
+  verify_all_active_clean(expected, expected_tail);
+  // Swap out OSD 1 for OSD 9
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  // Keep preempt reservation event on OSD 9 for later
+  get_listener(acting[1])->inject_keep_preempt = true;
+  // Full peering cycle
+  test_peering();
+  // Verify that we got to active+backfill
+  verify_all_active_backfilling(expected, expected_tail);
+  // Backfill the object
+  test_prepare_backfill_for_missing(9, 1, expected);
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, expected);
+  test_recover_got(9, expected);
+  test_object_recovered();
+  test_update_peer_last_backfill(9, 1, hobject_t::get_max());
+  test_update_backfill_progress(9, hobject_t::get_max()); // MOSDPGBackfill::OP_BACKFILL_PROGRESS
+  dout(0) << "= revoking remote reservation =" << dendl;
+  // Preempt remote reservation ahead of MOSDPGBackfill::OP_BACKFILL_FINISH
+  dispatch_all_events(true);
+  dispatch_events(acting[1], true);
+  dispatch_all();
+  // Signal backfill has completed
+  test_event_recovery_done(9); // MOSDPGBackfill::OP_BACKFILL_FINISH
+  dispatch_all();
+  test_event_backfilled();
+  dispatch_all();
+  EXPECT_FALSE(get_ps(acting[0])->state_test(PG_STATE_BACKFILL_WAIT));
+  EXPECT_TRUE(new_epoch(true));
+  test_peering();
+  // Verify that we got to active+clean and that log entries were kept
+  verify_all_active_clean(expected, expected_tail);
 }
 
 // ============================================================================
