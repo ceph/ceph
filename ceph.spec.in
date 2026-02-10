@@ -1788,6 +1788,7 @@ exit 0
 %{_bindir}/cephfs-table-tool
 %{_bindir}/crushdiff
 %{_bindir}/rados
+%{_bindir}/radostrace
 %{_bindir}/radosgw-admin
 %{_bindir}/rbd
 %{_bindir}/rbd-replay
