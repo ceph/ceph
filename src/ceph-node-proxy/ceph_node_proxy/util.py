@@ -226,7 +226,7 @@ def write_tmp_file(
 def _dict_diff(old: Any, new: Any) -> Any:
     if old == new:
         return None
-    if type(old) != type(new) or not isinstance(new, dict):
+    if type(old) is not type(new) or not isinstance(new, dict):
         return new
     if not isinstance(old, dict):
         return new
