@@ -425,6 +425,100 @@ bool NVMeofGwMon::prepare_update(MonOpRequestRef op)
   }
 }
 
+bool NVMeofGwMon::nvme_gw_show_command(std::stringstream &sstrm, ceph::Formatter* f, bufferlist &rdata, const std::string  &pool,
+                                      const std::string &group) {
+  auto group_key = std::make_pair(pool, group);
+  dout(10) << "nvme-gw show  pool " << pool << " group " << group << dendl;
+
+  f->open_object_section("common");
+  f->dump_unsigned("epoch", map.epoch);
+  f->dump_string("pool", pool);
+  f->dump_string("group", group);
+  if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHA)) {
+    f->dump_string("features", "LB");
+    if (map.created_gws[group_key].size()) {
+      time_t seconds_since_1970 = time(NULL);
+      uint32_t index = ((seconds_since_1970/60) %
+           map.created_gws[group_key].size());
+      auto it = map.created_gws[group_key].begin();
+      std::advance(it, index);
+      f->dump_unsigned("rebalance_ana_group", it->second.ana_grp_id + 1);
+    }
+  }
+  f->dump_unsigned("num gws", map.created_gws[group_key].size());
+  if (map.gw_epoch.find(group_key) != map.gw_epoch.end())
+    f->dump_unsigned("GW-epoch", map.gw_epoch[group_key]);
+  if (map.created_gws[group_key].size() == 0) {
+    f->close_section();
+    f->flush(rdata);
+    sstrm.str("");
+  } else {
+    sstrm << "[ ";
+    NvmeGwId gw_id;
+    BeaconSubsystems   *subsystems = NULL;
+    for (auto& gw_created_pair: map.created_gws[group_key]) {
+      gw_id = gw_created_pair.first;
+      auto& st = gw_created_pair.second;
+      if (st.availability != gw_availability_t::GW_DELETING) {
+        // not show ana group of deleting gw in the list -
+        // it is information for the GW used in rebalancing process
+        sstrm << st.ana_grp_id+1 << " ";
+      }
+      if (st.availability == gw_availability_t::GW_AVAILABLE) {
+        subsystems = &st.subsystems;
+      }
+    }
+    sstrm << "]";
+    f->dump_string("Anagrp list", sstrm.str());
+    std::map<NvmeAnaGrpId, uint16_t> num_ns;
+    uint16_t total_ns = 0;
+    if (subsystems && subsystems->size()) {
+      for (auto & subs_it:*subsystems) {
+        for (auto & ns :subs_it.namespaces) {
+          if (num_ns.find(ns.anagrpid) == num_ns.end()) num_ns[ns.anagrpid] = 0;
+            num_ns[ns.anagrpid] +=1;
+            total_ns += 1;
+        }
+      }
+    }
+    f->dump_unsigned("num-namespaces", total_ns);
+    f->open_array_section("Created Gateways:");
+    uint32_t i = 0;
+    for (auto& gw_created_pair: map.created_gws[group_key]) {
+      auto& gw_id = gw_created_pair.first;
+      auto& state = gw_created_pair.second;
+      i = 0;
+      f->open_object_section("stat");
+      f->dump_string("gw-id", gw_id);
+      f->dump_unsigned("anagrp-id",state.ana_grp_id+1);
+      f->dump_unsigned("num-namespaces", num_ns[state.ana_grp_id+1]);
+      f->dump_unsigned("performed-full-startup", state.performed_full_startup);
+      std::stringstream  sstrm1;
+      sstrm1 << state.availability;
+      f->dump_string("Availability", sstrm1.str());
+      uint32_t num_listeners = 0;
+      if (state.availability == gw_availability_t::GW_AVAILABLE) {
+        for (auto &subs: state.subsystems) {
+          num_listeners += subs.listeners.size();
+        }
+        f->dump_unsigned("num-listeners", num_listeners);
+      }
+      sstrm1.str("");
+      for (auto &state_itr: map.created_gws[group_key][gw_id].sm_state) {
+        sstrm1 << " " << state_itr.first + 1 << ": "
+               << state.sm_state[state_itr.first];
+        if (++i < map.created_gws[group_key][gw_id].sm_state.size())
+          sstrm1<<  ", ";
+      }
+      f->dump_string("ana states", sstrm1.str());
+      f->close_section();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  return true;
+}
+
 bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
 {
   dout(10) << dendl;
@@ -448,112 +542,33 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
   dout(10) << "MonCommand : "<< prefix <<  dendl;
   string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
-  if (prefix == "nvme-gw show") {
-    std::string  pool, group;
-    if (!f) {
-      f.reset(Formatter::create(format, "json-pretty", "json-pretty"));
+  if (!f) {
+    f.reset(Formatter::create(format, "json-pretty", "json-pretty"));
+  }
+  if (prefix == "nvme-gw show-all") {
+    f->open_array_section("gateways");
+    for (auto &[group_key, gws_states]:map.created_gws) {
+      nvme_gw_show_command(sstrm, f.get(), rdata, group_key.first, group_key.second);
     }
+    f->close_section(); // gateways
+
+    f->flush(rdata);
+    sstrm.str("");
+    getline(sstrm, rs);
+    mon.reply_command(op, err, rs, rdata, get_last_committed());
+    return true;
+  } else if (prefix == "nvme-gw show") {
+    std::string  pool, group;
     cmd_getval(cmdmap, "pool", pool);
     cmd_getval(cmdmap, "group", group);
-    auto group_key = std::make_pair(pool, group);
-    dout(10) << "nvme-gw show  pool " << pool << " group " << group << dendl;
-
-    f->open_object_section("common");
-    f->dump_unsigned("epoch", map.epoch);
-    f->dump_string("pool", pool);
-    f->dump_string("group", group);
-    if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHA)) {
-      f->dump_string("features", "LB");
-      if (map.created_gws[group_key].size()) {
-        time_t seconds_since_1970 = time(NULL);
-        uint32_t index = ((seconds_since_1970/60) %
-             map.created_gws[group_key].size());
-        auto it = map.created_gws[group_key].begin();
-        std::advance(it, index);
-        f->dump_unsigned("rebalance_ana_group", it->second.ana_grp_id + 1);
-      }
-    }
-    f->dump_unsigned("num gws", map.created_gws[group_key].size());
-    if (map.gw_epoch.find(group_key) != map.gw_epoch.end())
-      f->dump_unsigned("GW-epoch", map.gw_epoch[group_key]);
-    if (map.created_gws[group_key].size() == 0) {
-      f->close_section();
-      f->flush(rdata);
-      sstrm.str("");
-    } else {
-      sstrm << "[ ";
-      NvmeGwId gw_id;
-      BeaconSubsystems   *subsystems = NULL;
-      for (auto& gw_created_pair: map.created_gws[group_key]) {
-        gw_id = gw_created_pair.first;
-        auto& st = gw_created_pair.second;
-        if (st.availability != gw_availability_t::GW_DELETING) {
-          // not show ana group of deleting gw in the list -
-          // it is information for the GW used in rebalancing process
-          sstrm << st.ana_grp_id+1 << " ";
-        }
-        if (st.availability == gw_availability_t::GW_AVAILABLE) {
-          subsystems = &st.subsystems;
-        }
-      }
-      sstrm << "]";
-      f->dump_string("Anagrp list", sstrm.str());
-      std::map<NvmeAnaGrpId, uint16_t> num_ns;
-      uint16_t total_ns = 0;
-      if (subsystems && subsystems->size()) {
-        for (auto & subs_it:*subsystems) {
-          for (auto & ns :subs_it.namespaces) {
-            if (num_ns.find(ns.anagrpid) == num_ns.end()) num_ns[ns.anagrpid] = 0;
-              num_ns[ns.anagrpid] +=1;
-              total_ns += 1;
-          }
-        }
-      }
-      f->dump_unsigned("num-namespaces", total_ns);
-      f->open_array_section("Created Gateways:");
-      uint32_t i = 0;
-      for (auto& gw_created_pair: map.created_gws[group_key]) {
-	auto& gw_id = gw_created_pair.first;
-	auto& state = gw_created_pair.second;
-	i = 0;
-	f->open_object_section("stat");
-	f->dump_string("gw-id", gw_id);
-	f->dump_unsigned("anagrp-id",state.ana_grp_id+1);
-	f->dump_unsigned("num-namespaces", num_ns[state.ana_grp_id+1]);
-	f->dump_unsigned("performed-full-startup", state.performed_full_startup);
-	std::stringstream  sstrm1;
-	sstrm1 << state.availability;
-	f->dump_string("Availability", sstrm1.str());
-	uint32_t num_listeners = 0;
-	if (state.availability == gw_availability_t::GW_AVAILABLE) {
-	  for (auto &subs: state.subsystems) {
-	    num_listeners += subs.listeners.size();
-	  }
-	  f->dump_unsigned("num-listeners", num_listeners);
-	}
-	sstrm1.str("");
-	for (auto &state_itr: map.created_gws[group_key][gw_id].sm_state) {
-	  sstrm1 << " " << state_itr.first + 1 << ": "
-		 << state.sm_state[state_itr.first];
-		 if (++i < map.created_gws[group_key][gw_id].sm_state.size())
-		  sstrm1<<  ", ";
-	}
-	f->dump_string("ana states", sstrm1.str());
-	f->close_section();
-      }
-      f->close_section();
-      f->close_section();
-      f->flush(rdata);
-      sstrm.str("");
-    }
+    nvme_gw_show_command(sstrm, f.get(), rdata, pool, group);
+    f->flush(rdata);
+    sstrm.str("");
     getline(sstrm, rs);
     mon.reply_command(op, err, rs, rdata, get_last_committed());
     return true;
   } else if (prefix == "nvme-gw listeners") {
     std::string  pool, group;
-    if (!f) {
-      f.reset(Formatter::create(format, "json-pretty", "json-pretty"));
-    }
     cmd_getval(cmdmap, "pool", pool);
     cmd_getval(cmdmap, "group", group);
     auto group_key = std::make_pair(pool, group);
