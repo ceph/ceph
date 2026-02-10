@@ -1767,19 +1767,19 @@ class NodeProxyCache:
 
     def get_critical_from_host(self, hostname: str) -> Dict[str, Any]:
         results: Dict[str, Any] = {}
-        for sys_id, component in self.data[hostname]['status'].items():
-            for component_name, data_component in component.items():
-                if component_name not in results.keys():
-                    results[component_name] = {}
-                for member, data_member in data_component.items():
-                    if component_name == 'power':
-                        data_member['status']['health'] = 'critical'
-                        data_member['status']['state'] = 'unplugged'
-                    if component_name == 'memory':
-                        data_member['status']['health'] = 'critical'
-                        data_member['status']['state'] = 'errors detected'
-                    if self._get_health_value(data_member) != 'ok':
-                        results[component_name][member] = data_member
+
+        for component, component_data in self.data[hostname]['status'].items():
+            for sys_id, data_sys in component_data.items():
+                if sys_id not in results.keys():
+                    results[sys_id] = {}
+                if component not in results[sys_id].keys():
+                    results[sys_id][component] = {}
+                for member_name, member_data in data_sys.items():
+                    _health = self._get_health_value(member_data)
+                    if _health and _health != 'ok':
+                        if member_name not in results.keys():
+                            results[sys_id][component][member_name] = {}
+                        results[sys_id][component][member_name] = member_data
         return results
 
     def criticals(self, **kw: Any) -> Dict[str, Any]:

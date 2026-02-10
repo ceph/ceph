@@ -202,16 +202,17 @@ class NodeProxyEndpoint:
         for sys_id in data.keys():
             for member in data[sys_id].keys():
                 member_data = data[sys_id][member]
+                if member == 'firmwares':
+                    continue
                 _status = self._get_health_value(member_data)
                 if _status and _status != 'ok':
                     state = self._get_state_value(member_data)
-                    _member = dict(
-                        sys_id=sys_id,
-                        member=member,
-                        status=_status,
-                        state=state
-                    )
-                    nok_members.append(_member)
+                    nok_members.append({
+                        'sys_id': sys_id,
+                        'member': member,
+                        'status': _status,
+                        'state': state
+                    })
 
         return nok_members
 
