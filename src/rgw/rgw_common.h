@@ -282,6 +282,16 @@ void set_attrs(const Attrs& rmattrs) {
     }
 }
 
+void operator=(std::map<std::string, ceph::bufferlist>& other){
+    defaultMap = other;
+}
+
+void operator=(const std::map<std::string, ceph::bufferlist>& other){
+    defaultMap = other;
+
+}
+
+
 void dump(const DoutPrefixProvider *dpp) const {
     // Iterate through the fast array
     for (size_t i = 0; i < RGW_ATTR_COUNT; ++i) {
@@ -301,6 +311,7 @@ void dump(const DoutPrefixProvider *dpp) const {
         ldpp_dout(dpp, 20) << "Read xattr rgw_rados (map): " << it->first << dendl;
     }
 }
+
 
 
     void encode(ceph::bufferlist& bl) const {
@@ -324,160 +335,6 @@ void dump(const DoutPrefixProvider *dpp) const {
         }
     }
 };
-
-
-
-// static inline const std::map<Const_RGW_Attrs, std::string> Const_RGW_Attrs_To_String{
-//     {Const_RGW_Attrs::RGW_ATTR_ACL_CONST, "0"},
-//     {Const_RGW_Attrs::RGW_ATTR_RATELIMIT_CONST, "1"},
-//     {Const_RGW_Attrs::RGW_ATTR_LC_CONST, "2"}
-// };
-
-  //using Attrs = std::map<std::string, ceph::buffer::list>;
-
-//   class Attrs {
-// public:
-//   using iterator = std::map<std::string, ceph::buffer::list>::iterator;
-//   using const_iterator = std::map<std::string, ceph::buffer::list>::const_iterator;
-//   using value_type = std::map<std::string, ceph::buffer::list>::value_type;
-//   using key_type = std::string;
-//   using mapped_type = ceph::buffer::list;
-
-//   Attrs() = default;
-  
-//   Attrs& operator=(const std::map<std::string, ceph::buffer::list>& other) {
-//     items = other;
-//     return *this;
-//   }
-
-//   // Assignment from another Attrs object
-//   Attrs& operator=(const Attrs& other) = default;
-
-//   // Move assignment
-//   Attrs& operator=(std::map<std::string, ceph::buffer::list>&& other) {
-//     items = std::move(other);
-//     return *this;
-//   }
-
-//   operator std::map<std::string, ceph::buffer::list>&() { return items; }
-//   operator const std::map<std::string, ceph::buffer::list>&() const { return items; }
-
-//   std::map<std::string, ceph::buffer::list>* operator&() { return &items; }
-//   const std::map<std::string, ceph::buffer::list>* operator&() const { return &items; }
-
-//   operator std::map<std::string, ceph::buffer::list>*() { return &items; }
-//   operator const std::map<std::string, ceph::buffer::list>*() const { return &items; }
-
-//   iterator begin() { return items.begin(); }
-//   iterator end() { return items.end(); }
-//   const_iterator begin() const { return items.begin(); }
-//   const_iterator end() const { return items.end(); }
-//   const_iterator cbegin() const { return items.cbegin(); }
-//   const_iterator cend() const { return items.cend(); }
-
-//   bool empty() const { return items.empty(); }
-//   size_t size() const { return items.size(); }
-//   size_t max_size() const { return items.max_size(); }
-
-//   void clear() { items.clear(); }
-//   iterator erase(const_iterator pos) { return items.erase(pos); }
-//   size_t erase(const std::string& key) { return items.erase(key); }
-
-//   std::pair<iterator, bool> insert(const value_type& value) { return items.insert(value); }
-//   template <class... Args>
-//   std::pair<iterator, bool> emplace(Args&&... args) { return items.emplace(std::forward<Args>(args)...); }
-
-//   ceph::buffer::list& operator[](const std::string& k) { return items[k]; }
-//   ceph::buffer::list& at(const std::string& k) { return items.at(k); }
-//   const ceph::buffer::list& at(const std::string& k) const { return items.at(k); }
-
-//   iterator find(const std::string& s) { return items.find(s); }
-//   const_iterator find(const std::string& s) const { return items.find(s); }
-
-//   iterator find(Const_RGW_Attrs key) {
-//     auto it = Const_RGW_Attrs_To_String.find(key);
-//     if (it != Const_RGW_Attrs_To_String.end()) {
-//       return items.find(it->second);
-//     }
-//     return items.end();
-//   }
-
-//   const_iterator find(Const_RGW_Attrs key) const {
-//     auto it = Const_RGW_Attrs_To_String.find(key);
-//     if (it != Const_RGW_Attrs_To_String.end()) {
-//       return items.find(it->second);
-//     }
-//     return items.end();
-//   }
-
-//   void encode(ceph::buffer::list& bl) const { ::encode(items, bl); }
-//   void encode(ceph::buffer::list& bl, uint64_t f) const { ::encode(items, bl, f); }
-//   void decode(ceph::buffer::list::const_iterator& p) { ::decode(items, p); }
-
-// private:
-//   std::map<std::string, ceph::buffer::list> items;
-
-//   static inline const std::map<Const_RGW_Attrs, std::string> Const_RGW_Attrs_To_String{
-//     {Const_RGW_Attrs::RGW_ATTR_ACL_CONST, RGW_ATTR_ACL},
-//     {Const_RGW_Attrs::RGW_ATTR_RATELIMIT_CONST, RGW_ATTR_RATELIMIT},
-//     {Const_RGW_Attrs::RGW_ATTR_LC_CONST, RGW_ATTR_LC}
-//   };
-// };
-
-
-//////////////////////////////////////////////
-
-
-//   class Attrs : public std::map<std::string, ceph::buffer::list> {
-//   public:
-//       using std::map<std::string, ceph::buffer::list>::find;
-//       using std::map<std::string, ceph::buffer::list>::operator=;
-
-//       Attrs() = default;
-//       Attrs(const std::map<std::string, ceph::buffer::list>& other) : std::map<std::string, ceph::buffer::list>(other) {}
-
-//       Attrs& operator=(const std::map<std::string, ceph::buffer::list>& other) {
-//           std::map<std::string, ceph::buffer::list>::operator=(other);
-//           return *this;
-//       }
-
-
-//       const_iterator find(Const_RGW_Attrs key) {
-//           auto it = Const_RGW_Attrs_To_String.find(key);
-//           if (it != Const_RGW_Attrs_To_String.end()) {
-//               return it->second;
-//           }
-//           return end();
-//       }
-
-//       std::string find(Const_RGW_Attrs key) const {
-//           auto it = Const_RGW_Attrs_To_String.find(key);
-//           if (it != Const_RGW_Attrs_To_String.end()) {
-//               return std::map<std::string, ceph::buffer::list>::find(it->second);
-//           }
-//           return std::map<std::string, ceph::buffer::list>::find(it->second);
-//       }
-
-//   private:
-
-//   };
-
-
-//   inline void encode(const Attrs& o, ::ceph::bufferlist& bl, uint64_t f) {
-//     const std::map<std::string, ceph::buffer::list>& base = o;
-//     ::ceph::encode(base, bl, f);
-//   }
-
-//   inline void encode(const Attrs& o, ::ceph::bufferlist& bl) {
-//     const std::map<std::string, ceph::buffer::list>& base = o;
-//     ::ceph::encode(base, bl);
-//   }
-
-//   inline void decode(Attrs& o, ::ceph::bufferlist::const_iterator& p) {
-//     std::map<std::string, ceph::buffer::list>& base = o;
-//     using ::ceph::decode;
-//     decode(base, p);
-//   }
 
 }
 
