@@ -1,0 +1,86 @@
+# Dockerfile for Ceph RGW with POSIX/DBStore backend
+# Put the file at the root of the ceph source directory 
+# Build from the ceph source directory after compiling:
+#   podman build -t radosgw-posix:latest -f Dockerfile.radosgw-posix .
+
+FROM quay.io/centos/centos:stream10
+
+# Enable EPEL and CRB repositories for additional packages
+RUN dnf install -y dnf-plugins-core epel-release && \
+    dnf config-manager --set-enabled crb
+
+# Swap libcurl-minimal for full libcurl (required by radosgw)
+RUN dnf swap -y libcurl-minimal libcurl
+
+# Install runtime dependencies
+RUN dnf install -y \
+    gperftools-libs \
+    thrift \
+    lz4-libs \
+    snappy \
+    zlib \
+    liboath \
+    libcap \
+    libblkid \
+    systemd-libs \
+    rdma-core \
+    libibverbs \
+    librdmacm \
+    libicu \
+    expat \
+    lmdb-libs \
+    lua-libs \
+    openssl-libs \
+    librdkafka \
+    librabbitmq \
+    openldap \
+    sqlite-libs \
+    libzstd \
+    cyrus-sasl-lib \
+    libevent \
+    libnghttp2 \
+    libidn2 \
+    libssh \
+    libpsl \
+    krb5-libs \
+    libbrotli \
+    && dnf clean all
+
+# Create ceph user and directories
+RUN groupadd -r ceph && useradd -r -g ceph ceph && \
+    mkdir -p /var/lib/ceph/radosgw /var/log/ceph /etc/ceph /var/run/ceph && \
+    chown -R ceph:ceph /var/lib/ceph /var/log/ceph /etc/ceph /var/run/ceph
+
+# Copy binaries
+COPY --chmod=755 build/bin/radosgw /usr/bin/radosgw
+COPY --chmod=755 build/bin/radosgw-admin /usr/bin/radosgw-admin
+
+# Copy Ceph shared libraries
+COPY build/lib/libceph-common.so.2 /usr/lib64/
+COPY build/lib/librados.so.2.0.0 /usr/lib64/
+RUN ln -s librados.so.2.0.0 /usr/lib64/librados.so.2 && \
+    ln -s librados.so.2 /usr/lib64/librados.so && \
+    ln -s libceph-common.so.2 /usr/lib64/libceph-common.so && \
+    ldconfig
+
+# Default configuration for DBStore/POSIX
+RUN echo '[client.rgw]' > /etc/ceph/ceph.conf && \
+    echo 'rgw backend store = dbstore' >> /etc/ceph/ceph.conf && \
+    echo 'rgw config store = dbstore' >> /etc/ceph/ceph.conf && \
+    echo 'rgw filter = posix' >> /etc/ceph/ceph.conf && \
+    echo 'rgw frontends = beast port=7480' >> /etc/ceph/ceph.conf
+
+# Data directory for POSIX backend
+VOLUME ["/data"]
+
+EXPOSE 7480
+
+USER ceph
+
+ENTRYPOINT ["/usr/bin/radosgw", \
+    "--cluster", "ceph", \
+    "-n", "client.rgw", \
+    "--no-mon-config", \
+    "--default-log-to-stderr=true", \
+    "--err-to-stderr=true", \
+    "--foreground"]
