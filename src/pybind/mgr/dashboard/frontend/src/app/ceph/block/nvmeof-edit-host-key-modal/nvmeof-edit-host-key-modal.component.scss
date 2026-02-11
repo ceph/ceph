@@ -1,0 +1,69 @@
+.cds-modal {
+  width: 671px;
+  min-height: 324px;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  display: flex;
+  flex-direction: column;
+}
+.cds-modal-header {
+  padding: 16px;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.cds-modal-title {
+  font-size: 1.25rem;
+  font-weight: bold;
+}
+.cds-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+.cds-modal-body {
+  padding: 24px 16px;
+  flex: 1;
+}
+.cds-modal-subtitle {
+  margin-bottom: 8px;
+  font-size: 1rem;
+}
+.cds-modal-label {
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+.cds-modal-input {
+  width: 100%;
+  padding: 8px;
+  font-size: 1rem;
+  border: 1px solid #1976d2;
+  border-radius: 2px;
+  margin-bottom: 8px;
+}
+.cds-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid #e0e0e0;
+  padding: 16px;
+}
+.cds-modal-cancel {
+  background: #333;
+  color: #fff;
+  border: none;
+  padding: 8px 24px;
+  margin-right: 8px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.cds-modal-save {
+  background: #d32f2f;
+  color: #fff;
+  border: none;
+  padding: 8px 24px;
+  border-radius: 2px;
+  cursor: pointer;
+}

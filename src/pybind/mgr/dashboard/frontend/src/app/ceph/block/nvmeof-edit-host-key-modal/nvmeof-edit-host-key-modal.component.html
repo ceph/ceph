@@ -1,0 +1,17 @@
+<div class="cds-modal">
+  <div class="cds-modal-header">
+    <span class="cds-modal-title">Edit Host Key</span>
+    <button class="cds-modal-close" (click)="cancel()">&times;</button>
+  </div>
+  <div class="cds-modal-body">
+    <div class="cds-modal-subtitle">Update DHCHAP authentication key for the selected host.</div>
+    <div class="cds-modal-label">DHCHAP Key | {{ hostName }}</div>
+    <form [formGroup]="form">
+      <input formControlName="dhchapKey" class="cds-modal-input" placeholder="Enter or update the authentication key for this host." />
+    </form>
+  </div>
+  <div class="cds-modal-footer">
+    <button class="cds-modal-cancel" (click)="cancel()">Cancel</button>
+    <button class="cds-modal-save" (click)="save()">Save</button>
+  </div>
+</div>
