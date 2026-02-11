@@ -343,7 +343,7 @@ public:
     // do initial query for utilization to ensure query mechanism works
     rc=get_fcm_utilization();
     if(rc<0){
-      dout(1) << __func__ << " Can not access physical utilization log of FCM device" << dendl;
+      derr << __func__ << " Device detected, but FCM utilization log cannot be accessed (check capabilites!)" << dendl;
       return rc;
     }
     return 0;
@@ -432,17 +432,7 @@ public:
     int rc=get_fcm_utilization();
     if(rc<0)
       return rc;
-    if(rc==0){
-      dout(1) << __func__ << " FCM volume " << get_devname() << " physical utilization:" << dendl;
-      dout(1) << __func__ << " FCM device logical size: " << get_device_logical_size() << dendl;
-      dout(1) << __func__ << " FCM device logical util: " << get_device_logical_util() << dendl;
-      dout(1) << __func__ << " FCM device physical size: " << get_device_physical_size() << dendl;
-      dout(1) << __func__ << " FCM device physical util: " << get_device_physical_util() << dendl;
-      dout(1) << __func__ << " FCM partition logical size: " << get_partition_logical_size() << dendl;
-      dout(1) << __func__ << " FCM partition logical avail: " << get_partition_logical_avail() << dendl;
-      dout(1) << __func__ << " FCM partition physical size: " << get_partition_physical_size() << dendl;
-      dout(1) << __func__ << " FCM partition physical avail: " << get_partition_physical_avail() << dendl;
-    }
+
     state.set_logical_total(get_partition_logical_size());
     state.set_logical_avail(get_partition_logical_avail());
     state.set_physical_total(get_partition_physical_size());
