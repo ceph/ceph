@@ -96,10 +96,10 @@ template <class... AllowedErrors>
 struct ErrorHelper<crimson::errorator<AllowedErrors...>>
 {
   // wrapped error to raw errror
-  template <class ErrorT, ErrorT ErrorV>
-  static auto to_error(const unthrowable_wrapper<ErrorT, ErrorV>&)
+  template <class ErrorT, const ErrorT& ErrorV>
+  static auto to_error(const unthrowable_wrapper<const ErrorT&, ErrorV>&)
   {
-    return std::decay_t<ErrorT>(ErrorV);
+    return ErrorT{ErrorV};
   }
 
   // raw_error to failed future carrying this error OR assert
