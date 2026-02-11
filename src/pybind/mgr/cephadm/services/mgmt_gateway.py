@@ -79,7 +79,8 @@ class MgmtGatewayService(CephadmService):
             for service in ['mgr']
             for d in mgr.cache.get_daemons_by_service(service)
         ]
-        return deps
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
