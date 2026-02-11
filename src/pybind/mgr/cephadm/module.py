@@ -3797,11 +3797,29 @@ Then run the following:
         if spec.is_using_certificates_source(CertificateSource.REFERENCE):
             svc = service_registry.get_service(spec.service_type)
             if svc.SCOPE == TLSObjectScope.SERVICE:
+                # If the service was previously configured with INLINE, the cert/key
+                # may exist in the certmgr store as non-editable (inline-saved).
+                # When switching to REFERENCE, those inline-saved entries must be
+                # removed to avoid "pinning" the service to the old inline values and
+                # to allow the user to provision editable entries via the certmgr CLI.
+                if self.cert_mgr.cert_exists(svc.cert_name, service_name=spec.service_name(), host=None) and \
+                        not self.cert_mgr.is_cert_editable(svc.cert_name, service_name=spec.service_name(), host=None):
+                    self.log.info(
+                        f"Removing inline-saved (non-editable) cert/key for '{spec.service_name()}' "
+                        f"before switching to '{CertificateSource.REFERENCE.value}'."
+                    )
+                    self.cert_mgr.rm_inline_saved_cert_key_pair(
+                        svc.cert_name,
+                        svc.key_name,
+                        service_name=spec.service_name(),
+                        host=None,
+                        ca_cert_name=getattr(svc, 'ca_cert_name', None),
+                    )
                 if not self.cert_mgr.cert_exists(svc.cert_name, service_name=spec.service_name(), host=None):
                     raise OrchestratorError(
                         f"\n\nSSL is configured with '{CertificateSource.REFERENCE.value}', but cannot find an entry for the service '{spec.service_name()}'"
                         f"\nunder the certificate '{svc.cert_name}' within the certmgr store. To set the certificate, use:\n"
-                        f"\n  > ceph orch certmgr cert set --cert-name {svc.cert_name} --service-name {spec.service_name()} -i <cert-key-pem-file> \n"
+                        f"\n  > ceph orch certmgr cert-key set --consumer {spec.service_type} --service-name {spec.service_name()} -i <cert-key-pem-file> \n"
                     )
             else:
                 cert_warning += (
