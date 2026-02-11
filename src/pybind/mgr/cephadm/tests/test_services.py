@@ -170,9 +170,10 @@ class TestISCSIService:
     mgr.spec_store = MagicMock()
     mgr.spec_store.all_specs.get.return_value = iscsi_spec
 
+    @patch("cephadm.services.cephadmservice.CephadmService.get_dependencies", return_value=[])
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
-    def test_iscsi_client_caps(self):
+    def test_iscsi_client_caps(self, _get_deps):
 
         iscsi_daemon_spec = CephadmDaemonDeploySpec(
             host='host', daemon_id='a', service_name=self.iscsi_spec.service_name())
@@ -2312,7 +2313,7 @@ class TestMonitoring:
                                     '    editable: false\n'
                                     '    options:\n'
                                     "      path: '/etc/grafana/provisioning/dashboards'"
-                            }}, ['secure_monitoring_stack:False'])
+                            }}, ['certificate_source: cephadm-signed', 'secure_monitoring_stack:False'])
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_grafana_no_anon_access(self, cephadm_module: CephadmOrchestrator):
@@ -2381,7 +2382,7 @@ class TestMonitoring:
                                     '    editable: false\n'
                                     '    options:\n'
                                     "      path: '/etc/grafana/provisioning/dashboards'"
-                            }}, ['secure_monitoring_stack:False'])
+                            }}, ['certificate_source: cephadm-signed', 'secure_monitoring_stack:False'])
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_monitoring_ports(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -4239,7 +4240,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + haproxy_generated_conf[1][1] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
@@ -4331,7 +4332,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + haproxy_generated_conf[1][1] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
