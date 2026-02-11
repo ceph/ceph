@@ -443,6 +443,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='This flag controls whether cephadm automatically rotates certificates upon expiration.',
         ),
         Option(
+            'certificate_use_customer_ca_for_cephadm_signed',
+            type='bool',
+            default=False,
+            desc='When enabled, cephadm uses the stored customer-provided signing CA (customer_signing_ca_cert/key) to issue cephadm-signed certificates instead of the cephadm root CA.',
+        ),
+        Option(
             'certificate_check_period',
             type='int',
             default=1,  # Default to checking certificates once per day
@@ -611,6 +617,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.certificate_automated_rotation_enabled = False
             self.certificate_check_debug_mode = False
             self.certificate_check_period = 0
+            self.certificate_use_customer_ca_for_cephadm_signed = False
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -3394,6 +3401,31 @@ Then run the following:
     def cert_store_reload(self) -> str:
         self.cert_mgr.load()
         return "OK"
+
+    @orchestrator._cli_write_command('orch certmgr reissue')
+    def _certmgr_reissue(
+            self,
+            by_service: Optional[str] = None,
+    ) -> HandleCommandResult:
+        """
+        Reissue cephadm-signed certificate/key pairs for a service
+        """
+        if not by_service:
+            raise OrchestratorError('Missing required argument: --by-service <svc-name>')
+        removed = self.cert_mgr.reissue_by_service(by_service)
+        if not removed.get('certs_removed') and not removed.get('keys_removed'):
+            return HandleCommandResult(stdout=f'No cephadm-signed certificates found for service "{by_service}"')
+        actions = self.perform_service_action('reconfig', by_service)
+        hosts = removed.get('hosts', [])
+        hosts_str = ','.join(hosts) if hosts else ''
+        msg = (
+            f"Reissued cephadm-signed cert/key pairs for service '{by_service}': "
+            f"removed {removed.get('certs_removed', 0)} cert(s) and {removed.get('keys_removed', 0)} key(s)"
+        )
+        if hosts_str:
+            msg += f" on hosts: {hosts_str}"
+        msg += f". Scheduled reconfig for {len(actions)} daemon(s)."
+        return HandleCommandResult(stdout=msg)
 
     @handle_orch_error
     def cert_store_cert_check(self) -> List[str]:

@@ -159,6 +159,8 @@ class CertMgr:
 
     CEPHADM_ROOT_CA_CERT = 'cephadm_root_ca_cert'
     CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
+    CUSTOMER_SIGNING_CA_CERT = 'customer_signing_ca_cert'
+    CUSTOMER_SIGNING_CA_KEY = 'customer_signing_ca_key'
     CEPHADM_CERTMGR_HEALTH_ERR = 'CEPHADM_CERT_ERROR'
     CEPHADM_SIGNED = 'cephadm-signed'
     LABEL_SEPARATOR = "__lbl__"
@@ -169,12 +171,12 @@ class CertMgr:
         self.known_certs: Dict[TLSObjectScope, List[str]] = {
             TLSObjectScope.SERVICE: [],
             TLSObjectScope.HOST: [],
-            TLSObjectScope.GLOBAL: [self.CEPHADM_ROOT_CA_CERT],
+            TLSObjectScope.GLOBAL: [self.CEPHADM_ROOT_CA_CERT, self.CUSTOMER_SIGNING_CA_CERT],
         }
         self.known_keys: Dict[TLSObjectScope, List[str]] = {
             TLSObjectScope.SERVICE: [],
             TLSObjectScope.HOST: [],
-            TLSObjectScope.GLOBAL: [self.CEPHADM_ROOT_CA_KEY],
+            TLSObjectScope.GLOBAL: [self.CEPHADM_ROOT_CA_KEY, self.CUSTOMER_SIGNING_CA_KEY],
         }
         self.consumers_by_scope: Dict[TLSObjectScope, Dict[str, Dict[str, List[str]]]] = {
             TLSObjectScope.SERVICE: {},
@@ -221,6 +223,19 @@ class CertMgr:
 
     def _initialize_root_ca(self, ip: str) -> None:
         self.ssl_certs: SSLCerts = SSLCerts(self.mgr._cluster_fsid, self.mgr.certificate_duration_days)
+
+        if getattr(self.mgr, 'certificate_use_customer_ca_for_cephadm_signed', False):
+            old_cert = cast(Cert, self.cert_store.get_tlsobject(self.CUSTOMER_SIGNING_CA_CERT))
+            old_key = cast(PrivKey, self.key_store.get_tlsobject(self.CUSTOMER_SIGNING_CA_KEY))
+            if old_key and old_cert:
+                try:
+                    self.ssl_certs.load_root_credentials(old_cert.cert, old_key.key)
+                except SSLConfigException as e:
+                    raise SSLConfigException("Cannot load customer signing CA certificates.") from e
+            else:
+                raise SSLConfigException("Customer signing CA is enabled but customer_signing_ca_cert/key are missing.")
+            return
+
         old_cert = cast(Cert, self.cert_store.get_tlsobject(self.CEPHADM_ROOT_CA_CERT))
         old_key = cast(PrivKey, self.key_store.get_tlsobject(self.CEPHADM_ROOT_CA_KEY))
         if old_key and old_cert:
@@ -365,6 +380,30 @@ class CertMgr:
         self.rm_cert(self.self_signed_cert(service_name, label), service_name, host)
         self.rm_key(self.self_signed_key(service_name, label), service_name, host)
 
+    def reissue_by_service(self, service_name: str) -> Dict[str, Any]:
+        removed: Dict[str, Any] = {'certs_removed': 0, 'keys_removed': 0, 'hosts': []}
+        for cert_name, _cert_obj, target in self.cert_store.list_tlsobjects():
+            if not cert_name or not self.is_cephadm_signed_object(cert_name) or not cert_name.endswith('_cert'):
+                continue
+            if self.service_name_from_cert(cert_name) != service_name:
+                continue
+            try:
+                tlsobj_target = self.cert_store.determine_tlsobject_target(cert_name, target)
+            except TLSObjectException:
+                continue
+            try:
+                key_name = cert_name.replace('_cert', '_key')
+                if self.cert_store.rm_tlsobject(cert_name, tlsobj_target.service, tlsobj_target.host):
+                    removed['certs_removed'] += 1
+                if self.key_store.rm_tlsobject(key_name, tlsobj_target.service, tlsobj_target.host):
+                    removed['keys_removed'] += 1
+            except TLSObjectException:
+                logger.warning(f'Cannot remove TLS object pair {cert_name}/{key_name}')
+                pass
+            if tlsobj_target.host and tlsobj_target.host not in removed['hosts']:
+                removed['hosts'].append(tlsobj_target.host)
+        return removed
+
     def cert_ls(self, filter_by: str = '',
                 include_details: bool = False,
                 include_cephadm_signed: bool = False) -> Dict:
@@ -473,6 +512,7 @@ class CertMgr:
 
         # we don't want this key to be leaked
         ls.pop(self.CEPHADM_ROOT_CA_KEY, None)
+        ls.pop(self.CUSTOMER_SIGNING_CA_KEY, None)
 
         return ls
 
@@ -630,6 +670,21 @@ class CertMgr:
 
     def _renew_self_signed_certificate(self, cert_info: CertInfo, cert_obj: Cert) -> bool:
         try:
+            from cryptography import x509
+            from cryptography.hazmat.backends import default_backend
+
+            old_certificate = x509.load_pem_x509_certificate(cert_obj.cert.encode('utf-8'), backend=default_backend())
+            if old_certificate.issuer != self.ssl_certs.get_root_issuer_name():
+                tlsobj_target = self.cert_store.determine_tlsobject_target(cert_info.cert_name, cert_info.target)
+                logger.info(
+                    f'Active signing CA changed for {cert_info.cert_name}; removing certificate/key to trigger regeneration '
+                    f'(service: {tlsobj_target.service}, host: {tlsobj_target.host}).'
+                )
+                self.cert_store.rm_tlsobject(cert_info.cert_name, tlsobj_target.service, tlsobj_target.host)
+                key_name = cert_info.cert_name.replace('_cert', '_key')
+                self.key_store.rm_tlsobject(key_name, tlsobj_target.service, tlsobj_target.host)
+                return True
+
             logger.info(f'Renewing cephadm-signed certificate for {cert_info.cert_name}')
             new_cert, new_key = self.ssl_certs.renew_cert(cert_obj.cert, self.mgr.certificate_duration_days)
             tlsobj_target = self.cert_store.determine_tlsobject_target(cert_info.cert_name, cert_info.target)
