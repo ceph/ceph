@@ -1080,6 +1080,9 @@ int BlueFS::mount()
     _stop_alloc();
     goto out;
   }
+  if (cct->_conf->bluefs_check_volume_selector_on_mount) {
+    _check_vselector_LNF();
+  }
 
   conf_wal_envelope_mode = cct->_conf.get_val<bool>("bluefs_wal_envelope_mode");
   log.uses_envelope_mode = conf_wal_envelope_mode;
@@ -1164,7 +1167,7 @@ void BlueFS::umount(bool avoid_compact)
   dout(1) << __func__ << dendl;
 
   sync_metadata(avoid_compact);
-  if (cct->_conf->bluefs_check_volume_selector_on_umount) {
+  if (cct->_conf->bluefs_check_volume_selector_on_mount) {
     _check_vselector_LNF();
   }
   _close_writer(log.writer);
