@@ -526,8 +526,9 @@ struct FixedKVInternalNode
       auto it = pending_version.begin();
       while (it != pending_version.end() && iter != this->end()) {
         if (auto child = pending_version.children[it->get_offset()];
-            (is_valid_child_ptr(child) &&
-             (pending_version.is_pending() || child->_is_pending_io()))) {
+            is_valid_child_ptr(child) &&
+            (child->_is_mutable() || child->_is_pending_io())) {
+          // skip the ones that the pending version is also modifying
           it++;
           continue;
         }
