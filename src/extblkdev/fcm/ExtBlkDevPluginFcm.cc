@@ -359,12 +359,12 @@ public:
       int device_i = fcm_get_int_property(e + entry->d_name, "device");
       if (device_i >= 0) {
         vendor_i = fcm_get_int_property(e + entry->d_name, "vendor");
-      }
-      if (vendor_i >= 0 && device_i >= 0) {
-        device = device_i;
-        vendor = vendor_i;
-        result = 0;
-        break;
+        if (vendor_i >= 0) {
+          device = device_i;
+          vendor = vendor_i;
+          result = 0;
+          break;
+        }
       }
     }
     closedir(dir);
