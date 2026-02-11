@@ -3106,7 +3106,9 @@ int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
   }
 
-  return 0;
+  ret = get_obj_attrs(y, dpp);
+
+  return ret;
 }
 
 int POSIXObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
