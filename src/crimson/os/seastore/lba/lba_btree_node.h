@@ -295,19 +295,26 @@ struct LBALeafNode
       auto &pending_version = static_cast<LBALeafNode&>(*copy_dest);
       auto it = pending_version.begin();
       while (it != pending_version.end() && iter != this->end()) {
-        if (iter->get_val().pladdr.is_laddr() ||
-            iter->get_val().pladdr.get_paddr().is_zero()) {
+        const auto &v1 = iter->get_val();
+        if (v1.pladdr.is_laddr() ||
+            v1.pladdr.get_paddr().is_zero()) {
           iter++;
+          continue;
+        }
+        if (const auto &v2 = it->get_val();
+            v2.pladdr.is_laddr() || v2.pladdr.get_paddr().is_zero()) {
+          it++;
           continue;
         }
         if (auto child = pending_version.children[it->get_offset()];
             is_valid_child_ptr(child) &&
-            (pending_version.is_pending() || child->_is_pending_io())) {
+            (child->_is_mutable() || child->_is_pending_io())) {
+          // skip the ones that the pending version is also modifying
           it++;
           continue;
         }
         if (it->get_key() == iter->get_key()) {
-          it->set_val(iter->get_val());
+          it->set_val(v1);
           it++;
           iter++;
         } else if (it->get_key() > iter->get_key()) {
@@ -330,7 +337,7 @@ struct LBALeafNode
 #ifndef NDEBUG
       for (auto &copy_dest : copy_dests.dests_by_key) {
         auto &pending_version = static_cast<LBALeafNode&>(*copy_dest);
-        ceph_assert(pending_version.is_pending());
+        assert(pending_version.is_pending());
       }
 #endif
       this->merge_content_to(t, copy_dests.dests_by_key);

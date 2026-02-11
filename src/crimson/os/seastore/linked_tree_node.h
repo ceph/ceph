@@ -231,6 +231,9 @@ public:
   virtual key_t node_begin() const = 0;
   virtual bool is_retired_placeholder() const = 0;
   virtual bool _is_pending_io() const = 0;
+  virtual bool _is_mutable() const = 0;
+  virtual bool _is_exist_clean() const = 0;
+  virtual bool _is_exist_mutation_pending() const = 0;
 protected:
   parent_tracker_ref<ParentT> parent_tracker;
   virtual bool _is_valid() const = 0;
@@ -1175,6 +1178,15 @@ private:
   }
   bool _is_stable() const final {
     return down_cast().is_stable();
+  }
+  bool _is_mutable() const final {
+    return down_cast().is_mutable();
+  }
+  bool _is_exist_clean() const final {
+    return down_cast().is_exist_clean();
+  }
+  bool _is_exist_mutation_pending() const final {
+    return down_cast().is_exist_mutation_pending();
   }
   bool _is_pending_io() const final {
     return down_cast().is_pending_io();
