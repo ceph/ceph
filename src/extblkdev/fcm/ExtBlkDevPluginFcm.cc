@@ -39,7 +39,14 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <vector>
+#include "common/ceph_context.h"
+#include "common/perf_counters.h"
 
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 //! class managing one logical volume or partition, which may use one or more underlying FCM devices
 class ExtBlkDevFcm : public ceph::ExtBlkDevInterface
@@ -117,6 +124,7 @@ class ExtBlkDevFcm : public ceph::ExtBlkDevInterface
   uint64_t psize=0; // total number of physical bytes of logical volume
   uint64_t pavail=0; // total number of physical available bytes of logical volume
   struct timespec last_access = {0};
+  PerfCounters *perfc = nullptr;
 
   uint64_t get_partition_physical_size() const {return psize;}
   uint64_t get_partition_logical_size() const {return lsize;}
@@ -243,6 +251,7 @@ class ExtBlkDevFcm : public ceph::ExtBlkDevInterface
     pavail = sum_pa*frac;
     lavail = sum_la*frac;
     last_access = tnow;
+
     return 0;
   }
 
@@ -289,7 +298,9 @@ class ExtBlkDevFcm : public ceph::ExtBlkDevInterface
 
 public:
   explicit ExtBlkDevFcm(CephContext *cct) : cct(cct) {}
-  ~ExtBlkDevFcm(){}
+  ~ExtBlkDevFcm(){
+    unregister_perf_counters();
+  }
   int init(const std::string& logdevname_a){
     logdevname=logdevname_a;
 
@@ -336,6 +347,50 @@ public:
       return rc;
     }
     return 0;
+  }
+  enum perf_counters: uint32_t
+  {
+    l_first,
+    l_name,
+    l_dev_phy_size,
+    l_dev_log_size,
+    l_dev_phy_util,
+    l_dev_log_util,
+    l_part_phy_size,
+    l_part_log_size,
+    l_part_phy_avail,
+    l_part_log_avail,
+    l_last
+  };
+
+  void register_perf_counters()
+  {
+    auto constexpr useful = PerfCountersBuilder::PRIO_USEFUL;
+    auto constexpr unone = unit_t::UNIT_NONE;
+    auto constexpr ubytes= unit_t::UNIT_BYTES;
+
+    PerfCountersBuilder b(cct, "extblkdev", l_first, l_last);
+    b.add_u64(l_name, "fcm", "plugin type", "", useful, unone);
+    b.add_u64(l_dev_phy_size, "dev_phy_size", "FCM device physical size", "", useful, ubytes);
+    b.add_u64(l_dev_log_size, "dev_log_size", "FCM device logical size", "", useful, ubytes);
+    b.add_u64(l_dev_phy_util, "dev_phy_util", "FCM device physical util", "", useful, ubytes);
+    b.add_u64(l_dev_log_util, "dev_log_util", "FCM device logical util", "", useful, ubytes);
+    b.add_u64(l_part_phy_size, "part_phy_size", "FCM partition physical size", "", useful, ubytes);
+    b.add_u64(l_part_log_size, "part_log_size", "FCM partition logical size", "", useful, ubytes);
+    b.add_u64(l_part_phy_avail, "part_phy_avail", "FCM partition physical avail", "", useful, ubytes);
+    b.add_u64(l_part_log_avail, "part_log_avail", "FCM partition logical avail", "", useful, ubytes);
+
+    perfc = b.create_perf_counters();
+    cct->get_perfcounters_collection()->add(perfc);
+  }
+
+  void unregister_perf_counters()
+  {
+    if (perfc) {
+      cct->get_perfcounters_collection()->remove(perfc);
+      delete perfc;
+      perfc = nullptr;
+    }
   }
   /*
     Scans provided directory for entries ?/device/device and ?/device/vendor.
@@ -392,6 +447,19 @@ public:
     state.set_logical_avail(get_partition_logical_avail());
     state.set_physical_total(get_partition_physical_size());
     state.set_physical_avail(get_partition_physical_avail());
+
+    if (!perfc) {
+      register_perf_counters();
+    }
+    perfc->set(l_dev_phy_size, get_device_physical_size());
+    perfc->set(l_dev_log_size, get_device_logical_size());
+    perfc->set(l_dev_phy_util, get_device_physical_util());
+    perfc->set(l_dev_log_util, get_device_logical_util());
+    perfc->set(l_part_phy_size, get_partition_physical_size());
+    perfc->set(l_part_log_size, get_partition_logical_size());
+    perfc->set(l_part_phy_avail, get_partition_physical_avail());
+    perfc->set(l_part_log_avail, get_partition_logical_avail());
+
     return 0;
   }
   int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm)
