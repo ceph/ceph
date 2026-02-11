@@ -3,6 +3,8 @@
 /*
  * Ceph - scalable distributed file system
  *
+ * Copyright (C) 2025 IBM
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Library Public License as published by
  * the Free Software Foundation; either version 2, or (at your option)
@@ -14,6 +16,18 @@
  * GNU Library Public License for more details.
  *
  */
+
+ /* This is a test harness for testing PeeringState (with PGLog
+  * and MissingLoc) and the peering process. Because the main
+  * purpose of peering is to reconcile the state of a PG across
+  * the cluster the test harness simulates multiple OSDs each with
+  * their own instance of PeeringState and emulates messenger and
+  * the OSD scheduler passing peering messages between them. This
+  * allows both unit tests of individual functions and tests of
+  * the whole peering cycle. PeeringState coordinates recovery
+  * and backfill, the test harness emulates enough of PG and
+  * PrimaryLogPG to allow this to be tested.
+  */
 
 #include <memory>
 #include <gtest/gtest.h>
@@ -36,7 +50,7 @@
 #include "os/ObjectStore.h"
 
 // dout using global context and OSD subsystem
-// main set OSD subsystem debug level
+// main sets OSD subsystem debug level
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 
@@ -160,6 +174,8 @@ class MockLog : public LoggerSinkSet {
 };
 
 // MockECRecPred - simple stub for IsPGRecoverablePredicate
+// Warning - this always returns true. This means we cannot test scenarios
+// where there are too many OSDs down and the PG should be incomplete
 class MockECRecPred : public IsPGRecoverablePredicate {
  public:
   MockECRecPred() {}
@@ -174,6 +190,8 @@ IsPGRecoverablePredicate *get_is_recoverable_predicate() {
 }
 
 // MockECReadPred - simple stub for IsPGReadablePredicate
+// Warning - this always returns true. This means we cannot test scenarios
+// where there are too many OSDs down and the PG should be incomplete
 class MockECReadPred : public IsPGReadablePredicate {
  public:
   MockECReadPred() {}
@@ -735,8 +753,11 @@ class MockPGLogEntryHandler : public PGLog::LogEntryHandler {
 
 // Mock PeeringListener - stub of PeeringState::PeeringListener
 // to help with testing of PeeringState. Keep track of calls
-// from PeeringState and emulate PrimaryLogPG/PG functionality
-// for testing purposes.
+// from PeeringState and emulate some of PrimaryLogPG/PG
+// functionality for testing purposes.
+//
+// There are some inject_* variables that can be used to help
+// tests create race hazards or test failure paths
 class MockPeeringListener : public PeeringState::PeeringListener {
  public:
   pg_shard_t pg_whoami;
@@ -1014,7 +1035,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   }
 
   void on_change(ObjectStore::Transaction &t) override {
-    next_write_must_be_full = true;
+    first_write_in_interval = true;
     change_called = true;
   }
 
@@ -1251,7 +1272,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   int io_reservations_requested = 0;
   int remote_recovery_reservations_requested = 0;
   int events_on_commit_scheduled = 0;
-  bool next_write_must_be_full = false;
+  bool first_write_in_interval = false;
 };
 
 // Test fixture for PeeringState tests
@@ -1273,6 +1294,8 @@ protected:
   std::map<int,unique_ptr<MockPeeringListener>> listeners;
 
   // Dpp helper
+  // Generate log output that includes the OSD and shard (because tests
+  // simulate multiple OSDs) and the PeeringState
   class DppHelper : public NoDoutPrefix {
     public:
     PeeringStateTest *t;
@@ -1353,6 +1376,7 @@ protected:
     return osdmap;
   }
 
+  // Helper to update OSDMap and the epoch number in each listener
   void apply_incremental(OSDMap::Incremental inc)
   {
     osdmap->apply_incremental(inc);
@@ -1443,6 +1467,7 @@ protected:
         &cerr);
     p->crush_rule = r;
     p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    // Warning - name not unique
     new_pool_inc.new_pool_names[pool_id] = "pool";
     std::map<std::string, std::string> erasure_code_profile =
       {{"plugin", "isa"},
@@ -1450,6 +1475,7 @@ protected:
        {"k", fmt::format("{}", k)},
        {"m", fmt::format("{}", m)},
        {"stripe_unit", "16384"}};
+    // Warning - profile not unique
     osdmap->set_erasure_code_profile(
         "default",
         erasure_code_profile);
@@ -1485,6 +1511,7 @@ protected:
     p->type = pg_pool_t::TYPE_REPLICATED;
     p->crush_rule = 0;
     p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    // Warning - name not unique
     new_pool_inc.new_pool_names[pool_id] = "pool";
     apply_incremental(new_pool_inc);
     setup_up_acting();
@@ -1901,12 +1928,12 @@ protected:
       }
     }
     dout(0) << "= test_append_log_entry written=" << written << " osds=" << osds << " =" << dendl;
-    if (get_listener(acting_primary)->next_write_must_be_full) {
+    if (get_listener(acting_primary)->first_write_in_interval) {
       // Fix for issue 73891
       if (!written.empty()) {
         dout(0) << "First write in new interval is promoted to a full write" << dendl;
         written.clear();
-        get_listener(acting_primary)->next_write_must_be_full = false;
+        get_listener(acting_primary)->first_write_in_interval = false;
       }
     }
     object_t oid("foo");
@@ -2248,7 +2275,7 @@ protected:
     }
   }
 
-  // Helper - verify all OSDs in active+clean state with optional log checks
+  // Helper - verify all OSDs in active+clean state with log checks
   void verify_all_active_clean(const eversion_t& expected_update = eversion_t(),
                                 const eversion_t& expected_tail = eversion_t())
   {
@@ -2268,7 +2295,7 @@ protected:
     verify_logs();
   }
 
-  // Helper - verify all OSDs in active+recovering state with optional log checks
+  // Helper - verify all OSDs in active+recovering state with log checks
   void verify_all_active_recovering(const eversion_t& expected_update,
                                      const eversion_t& expected_complete,
                                      const eversion_t& expected_complete_recovering,
@@ -2319,7 +2346,7 @@ protected:
     verify_logs();
   }
 
-  // Helper - verify all OSDs in active+migrating state with optional log checks
+  // Helper - verify all OSDs in active+migrating state with log checks
   void verify_all_active_migrating(const eversion_t& expected_update = eversion_t(),
                                 const eversion_t& expected_tail = eversion_t())
   {
@@ -3114,9 +3141,9 @@ TEST_F(PeeringStateTest, PoolMigrationPrempt) {
   EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
   dout(0) << "= PoolMigration prempt reservation osd 0, 1 and 2 =" << dendl;
   // 0 Sends RELEASE first, then 1,2 send REVOKE
-  dispatch_events(0, true , 1);
-  dispatch_events(1, true , 1);
-  dispatch_events(2, true , 1);
+  dispatch_events(acting[0], true , 1);
+  dispatch_events(acting[1], true , 1);
+  dispatch_events(acting[2], true , 1);
   dispatch_all();
   dispatch_events(acting[0], true , 1);
   EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/WaitLocalPoolMigrationReserved");
@@ -3144,12 +3171,12 @@ TEST_F(PeeringStateTest, PoolMigrationPrempt) {
   get_listener(acting[1])->inject_keep_preempt = false;
   get_listener(acting[2])->inject_keep_preempt = false;
   // 1 and 2 prempt reservation and send messages to osd 0
-  dispatch_events(1, true);
-  dispatch_events(2, true);
+  dispatch_events(acting[1], true);
+  dispatch_events(acting[2], true);
   dispatch_cluster_messages(1);
   dispatch_cluster_messages(2);
   // 0 prempt reservation is slow
-  dispatch_events(0, true);
+  dispatch_events(acting[0], true);
   dispatch_all();
   // Verify pool migration started
   verify_all_active_migrating(eversion_t(), eversion_t());
@@ -3158,6 +3185,107 @@ TEST_F(PeeringStateTest, PoolMigrationPrempt) {
   // Verify that we got to active+clean
   verify_all_active_clean(eversion_t(), eversion_t());
   EXPECT_TRUE(get_listener(acting[0])->pg_migrated_pool_sent);
+}
+
+// ============================================================================
+// Tests for bug fixes
+// ============================================================================
+
+// Multi-OSD test of peering for fix for https://tracker.ceph.com/issues/71493
+TEST_F(PeeringStateTest, Issue71493) {
+  // Scenario: Backfill gets stopped by a remote reservastion being preempted
+  // but this races with MOSDPGBackfill::OP_BACKFILL_FINISH event. The
+  // probelmatic sequence is:
+  //
+  // Primary calls update_pee_last_backfill to set last_backfill to hobject_t::MAX
+  // Primary sends a MOSDPGBackfill::OP_BACKFILL_FINISH message to the backfilling shard
+  // Backfilling shard preempts the remote reservation and sends Revoked message
+  // Backfilling shard processes the MOSDPGBackfill::OP_BACKFILL_FINISH message
+  // Primary processes RemoteReservation revoked message from the backfilling OSD
+  //   Sets BACKFILL_WAIT and suspends backfill (fix only does this if needs_backfill() returns true)
+  //   Discards the event because needs_backfill() returns false
+  // Primary sends and processes Backfilled event
+  //   Leaves BACKFILL_WAIT set
+  dout(0) << "== Issue71493 ==" << dendl;
+  // Init
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  // Append 3 log entries to all shards - trim the log so that
+  // backfill occurs later on
+  test_append_log_entry();
+  eversion_t expected_tail = test_append_log_entry();
+  eversion_t expected = test_append_log_entry(shard_id_set(), shard_id_set(), false, true);
+  // Full peering cycle
+  test_peering();
+  // Verify that we got to active+clean and that log entries were kept
+  verify_all_active_clean(expected, expected_tail);
+  // Swap out OSD 1 for OSD 9
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  // Keep preempt reservation event on OSD 9 for later
+  get_listener(acting[1])->inject_keep_preempt = true;
+  // Full peering cycle
+  test_peering();
+  // Verify that we got to active+backfill
+  verify_all_active_backfilling(expected, expected_tail);
+  // Backfill the object
+  test_prepare_backfill_for_missing(9, 1, expected);
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, expected);
+  test_recover_got(9, expected);
+  test_object_recovered();
+  test_update_peer_last_backfill(9, 1, hobject_t::get_max());
+  test_update_backfill_progress(9, hobject_t::get_max()); // MOSDPGBackfill::OP_BACKFILL_PROGRESS
+  dout(0) << "= revoking remote reservation =" << dendl;
+  // Preempt remote reservation ahead of MOSDPGBackfill::OP_BACKFILL_FINISH
+  dispatch_all_events(true);
+  dispatch_all();
+  // Signal backfill has completed
+  test_event_recovery_done(9); // MOSDPGBackfill::OP_BACKFILL_FINISH
+  dispatch_all();
+  test_event_backfilled();
+  dispatch_all();
+  // Without the fix BACKFILL_WAIT is still set on the primary
+  EXPECT_FALSE(get_ps(acting[0])->state_test(PG_STATE_BACKFILL_WAIT));
+  // Even without the fix the new interval caused by the acting set changing
+  // after the backfill has completed will clean up the PG state
+  EXPECT_TRUE(new_epoch(true));
+  test_peering();
+  // Verify that we got to active+clean and that log entries were kept
+  verify_all_active_clean(expected, expected_tail);
+}
+
+// Multi-OSD test of peering for fix for https://tracker.ceph.com/issues/73891
+TEST_F(PeeringStateTest, Issue73891) {
+  // Scenario: 3+2 EC pool [0,1,2,3,4]
+  // Partial write A to OSDs 0,3,4 completes
+  // Partial write B to OSDs 0,1,3,4 only updates 0, 1 before interuption
+  // OSD 1 down, peering runs and rolls-backward the partial write B
+  // Partial write C to OSDs 0,3,4 that is completed
+  // OSD 1 up, peering runs
+  //   Without fix OSD 3 doesn't roll back write B
+  dout(0) << "== Issue73891 ==" << dendl;
+  // Init
+  create_ec_pool(3,2);
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  // Partial Write A to OSDs 0,3,4
+  test_append_log_entry(ss({0, 3, 4}), ss({0, 3, 4}));
+  // Partial Write B to OSDs 0,1,3,4 only updates 0, 1
+  test_append_log_entry(ss({0, 1, 3, 4}), ss({0, 1}), true);
+  // OSD 1 down, run peering
+  osd_down(1, 1);
+  test_peering();
+  // Partial Write C to 0,3,4
+  test_append_log_entry(ss({0, 3, 4}), ss({0, 3, 4}));
+  // OSD 1 up, run peering
+  osd_up(1, 1);
+  test_peering();
+  verify_logs(); // Without fix will fail
 }
 
 // Multi-OSD test of peering for fix for https://tracker.ceph.com/issues/74218
@@ -3229,101 +3357,6 @@ TEST_F(PeeringStateTest, Issue74218) {
   verify_no_missing_or_unfound(acting[3], 3, true);
   verify_log_state(acting[3], expected2, expected2, expected2, eversion_t());
   verify_logs();
-}
-
-// Multi-OSD test of peering for fix for https://tracker.ceph.com/issues/73891
-TEST_F(PeeringStateTest, Issue73891) {
-  // Scenario: 3+2 EC pool [0,1,2,3,4]
-  // Partial write A to OSDs 0,3,4 completes
-  // Partial write B to OSDs 0,1,3,4 only updates 0, 1 before interuption
-  // OSD 1 down, peering runs and rolls-backward the partial write B
-  // Partial write C to OSDs 0,3,4 that is completed
-  // OSD 1 up, peering runs
-  //   Without fix OSD 3 doesn't roll back write B
-  dout(0) << "== Issue73891 ==" << dendl;
-  // Init
-  create_ec_pool(3,2);
-  test_create_peering_state();
-  test_init();
-  test_event_initialize();
-  // Partial Write A to OSDs 0,3,4
-  test_append_log_entry(ss({0, 3, 4}), ss({0, 3, 4}));
-  // Partial Write B to OSDs 0,1,3,4 only updates 0, 1
-  test_append_log_entry(ss({0, 1, 3, 4}), ss({0, 1}), true);
-  // OSD 1 down, run peering
-  osd_down(1, 1);
-  test_peering();
-  // Partial Write C to 0,3,4
-  test_append_log_entry(ss({0, 3, 4}), ss({0, 3, 4}));
-  // OSD 1 up, run peering
-  osd_up(1, 1);
-  test_peering();
-  verify_logs(); // Without fix will fail
-}
-
-// Multi-OSD test of peering for fix for https://tracker.ceph.com/issues/71493
-TEST_F(PeeringStateTest, Issue71493) {
-  // Scenario: Backfill gets stopped by a remote reservastion being preempted
-  // but this races with MOSDPGBackfill::OP_BACKFILL_FINISH event. The
-  // probelmatic sequence is:
-  //
-  // Primary calls update_pee_last_backfill to set last_backfill to hobject_t::MAX
-  // Primary sends a MOSDPGBackfill::OP_BACKFILL_FINISH message to the backfilling shard
-  // Backfilling shard preempts the remote reservation and sends Revoked message
-  // Backfilling shard processes the MOSDPGBackfill::OP_BACKFILL_FINISH message
-  // Primary processes RemoteReservation revoked message from the backfilling OSD
-  //   Sets BACKFILL_WAIT and suspends backfill (fix only does this if needs_backfill() returns true)
-  //   Discards the event because needs_backfill() returns false
-  // Primary sends and processes Backfilled event
-  //   Leaves BACKFILL_WAIT set
-  dout(0) << "== Issue71493 ==" << dendl;
-  // Init
-  test_create_peering_state();
-  test_init();
-  test_event_initialize();
-  // Append 3 log entries to all shards - trim the log so that
-  // backfill occurs later on
-  test_append_log_entry();
-  eversion_t expected_tail = test_append_log_entry();
-  eversion_t expected = test_append_log_entry(shard_id_set(), shard_id_set(), false, true);
-  // Full peering cycle
-  test_peering();
-  // Verify that we got to active+clean and that log entries were kept
-  verify_all_active_clean(expected, expected_tail);
-  // Swap out OSD 1 for OSD 9
-  modify_up_acting(1, 9);
-  test_create_peering_state(9, 1);
-  test_init(9);
-  test_event_initialize(9);
-  // Keep preempt reservation event on OSD 9 for later
-  get_listener(acting[1])->inject_keep_preempt = true;
-  // Full peering cycle
-  test_peering();
-  // Verify that we got to active+backfill
-  verify_all_active_backfilling(expected, expected_tail);
-  // Backfill the object
-  test_prepare_backfill_for_missing(9, 1, expected);
-  test_begin_peer_recover(9, 1);
-  test_on_peer_recover(9, 1, expected);
-  test_recover_got(9, expected);
-  test_object_recovered();
-  test_update_peer_last_backfill(9, 1, hobject_t::get_max());
-  test_update_backfill_progress(9, hobject_t::get_max()); // MOSDPGBackfill::OP_BACKFILL_PROGRESS
-  dout(0) << "= revoking remote reservation =" << dendl;
-  // Preempt remote reservation ahead of MOSDPGBackfill::OP_BACKFILL_FINISH
-  dispatch_all_events(true);
-  dispatch_events(acting[1], true);
-  dispatch_all();
-  // Signal backfill has completed
-  test_event_recovery_done(9); // MOSDPGBackfill::OP_BACKFILL_FINISH
-  dispatch_all();
-  test_event_backfilled();
-  dispatch_all();
-  EXPECT_FALSE(get_ps(acting[0])->state_test(PG_STATE_BACKFILL_WAIT));
-  EXPECT_TRUE(new_epoch(true));
-  test_peering();
-  // Verify that we got to active+clean and that log entries were kept
-  verify_all_active_clean(expected, expected_tail);
 }
 
 // ============================================================================
