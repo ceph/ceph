@@ -48,7 +48,7 @@ public:
   write_iertr::future<> handle_rep_write_reply(ECSubWriteReply&& op);
   ll_read_ierrorator::future<ECSubReadReply> handle_rep_read_op(ECSubRead&);
   ll_read_ierrorator::future<ECSubReadReply> handle_rep_read_op(Ref<MOSDECSubOpRead>);
-  ll_read_ierrorator::future<> handle_rep_read_reply(ECSubReadReply& mop);
+  void handle_rep_read_reply(ECSubReadReply& mop);
   ll_read_ierrorator::future<> handle_rep_read_reply(Ref<MOSDECSubOpReadReply>);
 
   PGBackend::get_attr_ierrorator::future<ceph::bufferlist> getxattr(
