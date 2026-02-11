@@ -117,6 +117,17 @@ options:
   - osd
   - mon
 
+- name: crimson_allow_pg_merge
+  type: bool
+  level: advanced
+  default: false
+  desc: Allow Crimson pools to decrease their PG count (merge)
+  long_desc: When enabled, allows the monitor to decrease pg_num for pools using
+             the crimson flag. Only works when objectstore is Bluestore.
+  services:
+  - osd
+  - mon
+
 # Bluestore options:
 
 - name: crimson_bluestore_num_threads
