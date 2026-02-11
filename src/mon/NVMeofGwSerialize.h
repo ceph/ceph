@@ -710,48 +710,13 @@ inline void decode(std::map<NvmeGroupKey, epoch_t>& gw_epoch,
   DECODE_FINISH(bl);
 }
 
-inline void encode(
-    const std::map<NvmeGroupKey, LocationStates> &disaster_locations, ceph::bufferlist &bl) {
-  ENCODE_START(1, 1, bl);
-  encode ((uint32_t)disaster_locations.size(), bl); // number of groups
-  for (auto& group_disaster: disaster_locations) {
-     auto& group_key = group_disaster.first;
-     encode(group_key.first, bl); // pool
-     encode(group_key.second, bl); // group
-     const LocationStates &locations = group_disaster.second;
-     encode((uint32_t)locations.size(), bl);
-     for( auto &locations_it: locations) {
-       NvmeLocation location = locations_it.first;
-       encode(location, bl);
-       encode(locations_it.second.failbacks_in_process, bl);
-     }
-  }
-  ENCODE_FINISH(bl);
+inline void encode(const LocationState &locationstate, ceph::bufferlist &bl) {
+  encode(locationstate.failbacks_in_process, bl);
 }
 
-inline void decode(
-    std::map<NvmeGroupKey, LocationStates> &disaster_locations,
-    ceph::buffer::list::const_iterator &bl) {
-  disaster_locations.clear();
-  uint32_t ngroups;
-  DECODE_START(1, bl);
-  decode(ngroups, bl);
-  for (uint32_t i = 0; i<ngroups; i++) {
-    std::string pool, group;
-    decode(pool, bl);
-    decode(group, bl);
-    uint32_t nlocations;
-    decode(nlocations, bl);
-    for (uint32_t i = 0; i<nlocations; i++) {
-     NvmeLocation location;
-     bool failback_in_progress;
-     decode(location, bl);
-     decode(failback_in_progress, bl);
-     disaster_locations[std::make_pair(pool, group)][location]
-                .failbacks_in_process = failback_in_progress;
-    }
-  }
-  DECODE_FINISH(bl);
+inline void decode(LocationState &locationstate,
+                  ceph::buffer::list::const_iterator &bl) {
+  decode(locationstate.failbacks_in_process, bl);
 }
 
 inline void encode(
