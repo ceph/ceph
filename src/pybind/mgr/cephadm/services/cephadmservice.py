@@ -319,7 +319,6 @@ class CephadmService(metaclass=ABCMeta):
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
 
-
         ssl_enabled = getattr(spec, 'ssl', False)
         if not spec or not ssl_enabled:
             return []
@@ -343,7 +342,7 @@ class CephadmService(metaclass=ABCMeta):
         svc_name = svc_spec.service_name()
         ip = ip_addr or self.mgr.inventory.get_addr(daemon_spec.host)
         host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        tls_creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(svc_name, host_fqdn, label)
+        tls_creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(svc_name, daemon_spec.host, label)
         if not tls_creds:
             tls_creds = self.mgr.cert_mgr.generate_cert(host_fqdn, ip)
             self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_name, tls_creds, host=daemon_spec.host, label=label)
@@ -845,7 +844,7 @@ class CephadmService(metaclass=ABCMeta):
                     host=None,
                     ca_cert_name=self.ca_cert_name,
                 )
-            else: # Host Scope
+            else:  # Host Scope
                 self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(
                     self.cert_name,
                     self.key_name,
@@ -893,7 +892,6 @@ class CephadmService(metaclass=ABCMeta):
             return
 
         _cleanup_tls_creds_for_host(svc_name, host, cert_source, other_daemons_in_service=bool(daemons))
-
 
     def purge(self, service_name: str) -> None:
         """Called to carry out any purge tasks following service removal"""
