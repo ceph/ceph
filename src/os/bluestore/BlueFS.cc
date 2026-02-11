@@ -2511,7 +2511,10 @@ void BlueFS::_envmode_index_file(
   }
   file->envelopes_indexed = true;
   file->fnode.content_size = env_ofs;
+  // we need to update volume selector as file gets updated size at this point
+  vselector->sub_usage(file->vselector_hint, file->fnode);
   file->fnode.size = scan_ofs;
+  vselector->add_usage(file->vselector_hint, file->fnode);
   delete h;
 }
 
