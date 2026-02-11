@@ -123,23 +123,35 @@ class RedFishClient(BaseClient):
         endpoint: str = "",
         timeout: int = 10,
     ) -> Tuple[HTTPMessage, str, int]:
-        _headers = headers.copy() if headers else {}
-        if self.token:
-            _headers["X-Auth-Token"] = self.token
-        if not _headers.get("Content-Type") and method in ["POST", "PUT", "PATCH"]:
-            _headers["Content-Type"] = "application/json"
-        try:
-            response_headers, response_str, response_status = http_req(
+        def req_headers() -> Dict[str, str]:
+            h = headers.copy() if headers else {}
+            if self.token:
+                h["X-Auth-Token"] = self.token
+            if not h.get("Content-Type") and method in ["POST", "PUT", "PATCH"]:
+                h["Content-Type"] = "application/json"
+            return h
+
+        def do_req(h: Dict[str, str]) -> Tuple[HTTPMessage, str, int]:
+            return http_req(
                 hostname=self.host,
                 port=self.port,
                 endpoint=endpoint,
-                headers=_headers,
+                headers=h,
                 method=method,
                 data=data,
                 timeout=timeout,
             )
 
-            return response_headers, response_str, response_status
+        try:
+            return do_req(req_headers())
         except (HTTPError, URLError) as e:
+            if isinstance(e, HTTPError) and e.code == 401:
+                self.log.warning(
+                    f"Got 401 from {endpoint}, re-authenticating and retrying once"
+                )
+                self.token = ""
+                self.location = ""
+                self.login()
+                return do_req(req_headers())
             self.log.debug(f"endpoint={endpoint} err={e}")
             raise

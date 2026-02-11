@@ -123,7 +123,9 @@ class Endpoint:
         except KeyError as e:
             self.log.error(f"KeyError while querying {url}: {e}")
         except HTTPError as e:
-            self.log.error(f"HTTP error while querying {url} - {e.code} - {e.reason}")
+            self.log.error(
+                f"HTTP error while querying {url} - {e.code} - {e.reason}"
+            )
         except json.JSONDecodeError as e:
             self.log.error(f"JSON decode error while querying {url}: {e}")
         except Exception as e:
