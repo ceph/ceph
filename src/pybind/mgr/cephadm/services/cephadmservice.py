@@ -331,7 +331,22 @@ class CephadmService(metaclass=ABCMeta):
         spec: Optional[ServiceSpec] = None,
         daemon_type: Optional[str] = None,
     ) -> List[str]:
-        return []
+
+        ssl_enabled = getattr(spec, 'ssl', False)
+        if not spec or not ssl_enabled:
+            return []
+
+        deps = []
+        cert_source = getattr(spec, 'certificate_source', None)
+        if cert_source:
+            deps.append(f'certificate_source: {cert_source}')
+        if spec.ssl_cert and spec.ssl_key:
+            deps.append(f'ssl_cert: {str(utils.md5_hash(spec.ssl_cert))}')
+            deps.append(f'ssl_key: {str(utils.md5_hash(spec.ssl_key))}')
+        if spec.ssl_ca_cert:
+            deps.append(f'ssl_ca_cert: {str(utils.md5_hash(spec.ssl_ca_cert))}')
+
+        return sorted(deps)
 
     @classmethod
     def sorted_dependencies(
@@ -1341,6 +1356,9 @@ class RgwService(CephService):
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
+        # we keep the following deps calculation for backward compatibility
+        # as old RGW specs use rgw_frontend_ssl_certificate instead of modern
+        # ssl_cert/ssl_key fields
         rgw_spec = cast(RGWSpec, spec)
         ssl_cert = getattr(rgw_spec, 'rgw_frontend_ssl_certificate', None)
         if ssl_cert:
@@ -1348,7 +1366,8 @@ class RgwService(CephService):
                 ssl_cert = '\n'.join(ssl_cert)
             deps.append(f'ssl-cert:{utils.config_hash(ssl_cert)}')
 
-        return sorted(deps)
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
 
     def set_realm_zg_zone(self, spec: RGWSpec) -> None:
         assert self.TYPE == spec.service_type
