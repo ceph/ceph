@@ -464,6 +464,11 @@ public:
     (*pm)[prefix + "fcm_device_logical_size"] = stringify(get_device_logical_size());
     return 0;
   }
+  int get_plugin_id(std::string& id_str) override
+  {
+    id_str = "fcm";
+    return 0;
+  };
 };
 
 class ExtBlkDevPluginFcm : public ceph::ExtBlkDevPlugin {
