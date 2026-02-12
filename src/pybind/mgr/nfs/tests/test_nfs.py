@@ -1801,22 +1801,72 @@ EXPORT {
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
         
-        conf.create_export(
-            fsal_type='cephfs',
-            cluster_id=self.cluster_id,
-            fs_name='myfs',
-            path='/',
-            pseudo_path='/cephfs4',
-            read_only=False,
-            squash='root',
-            kmip_key_id='12345'
-        )
+        # Mock get_enctag_from_path to return matching enctag for validation to pass
+        with mock.patch('nfs.export.get_enctag_from_path', return_value='12345'):
+            conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='myfs',
+                path='/',
+                pseudo_path='/cephfs4',
+                read_only=False,
+                squash='root',
+                kmip_key_id='12345'
+            )
         export = conf._fetch_export(self.cluster_id, '/cephfs4')
         block = format_block(export.to_export_block())
         assert block.startswith('EXPORT {\n    kmip_key_id = "12345";')
 
     def test_nfs_byok_export(self):
         self._do_mock_test(self._do_test_nfs_byok_export)
+
+    def _do_test_nfs_byok_export_enctag_validation_missing(self):
+        """Test that export creation fails when kmip_key_id is provided but enctag is not set"""
+        from object_format import ErrorResponse
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        # Mock get_enctag_from_path to return empty string (enctag not set)
+        with mock.patch('nfs.export.get_enctag_from_path', return_value=''):
+            with pytest.raises(ErrorResponse) as exc_info:
+                conf.create_export(
+                    fsal_type='cephfs',
+                    cluster_id=self.cluster_id,
+                    fs_name='myfs',
+                    path='/',
+                    pseudo_path='/cephfs_enctag_test1',
+                    read_only=False,
+                    squash='root',
+                    kmip_key_id='KEY-12345'
+                )
+            assert "does not have an enctag set" in str(exc_info.value)
+
+    def test_nfs_byok_export_enctag_validation_missing(self):
+        self._do_mock_test(self._do_test_nfs_byok_export_enctag_validation_missing)
+
+    def _do_test_nfs_byok_export_enctag_validation_success(self):
+        """Test that export creation succeeds when kmip_key_id matches enctag"""
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        # Mock get_enctag_from_path to return matching enctag
+        with mock.patch('nfs.export.get_enctag_from_path', return_value='KEY-12345'):
+            conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='myfs',
+                path='/',
+                pseudo_path='/cephfs_enctag_test3',
+                read_only=False,
+                squash='root',
+                kmip_key_id='KEY-12345'
+            )
+        export = conf._fetch_export(self.cluster_id, '/cephfs_enctag_test3')
+        assert export is not None
+        block = format_block(export.to_export_block())
+        assert 'kmip_key_id = "KEY-12345"' in block
+
+    def test_nfs_byok_export_enctag_validation_success(self):
+        self._do_mock_test(self._do_test_nfs_byok_export_enctag_validation_success)
+
 
 class TestNFSClusterIngressPlacement:
     cluster_id = 'mynfs'

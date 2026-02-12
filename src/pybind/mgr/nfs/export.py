@@ -14,10 +14,11 @@ from typing import (
     cast)
 from os.path import normpath
 from ceph.fs.earmarking import EarmarkTopScope
+from ceph.fs.enctag import CephFSVolumeEncryptionTag, EncryptionTagException
 import cephfs
 
-from mgr_util import CephFSEarmarkResolver
-from rados import TimedOut, ObjectNotFound
+from mgr_util import CephFSEarmarkResolver, CephfsClient, open_filesystem
+from rados import TimedOut, ObjectNotFound, Rados
 
 from object_format import ErrorResponse
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
@@ -84,6 +85,26 @@ def validate_cephfs_path(mgr: 'Module', fs_name: str, path: str) -> None:
         raise NFSObjectNotFound(f"path {path} does not exist")
     except cephfs.Error as e:
         raise NFSException(e.args[1], -e.args[0])
+
+
+def get_enctag_from_path(mgr: 'Module', fs_name: str, path: str) -> Optional[str]:
+    """
+    Retrieve the encryption tag (enctag) from a CephFS path.
+    """
+    try:
+        cephfs_client = CephfsClient(mgr)
+        with open_filesystem(cephfs_client, fs_name) as fs_handle:
+            fs_enctag = CephFSVolumeEncryptionTag(fs_handle, path)
+            enctag = fs_enctag.get_tag()
+            return enctag if enctag else ""
+    except EncryptionTagException as e:
+        log.warning("Failed to get enctag for path %s: %s", path, e)
+        if e.errno == -errno.ENODATA:
+            return ""
+        raise NFSException(f"Failed to get enctag for path {path}: {e.error_str}", e.errno)
+    except Exception as e:
+        log.exception("Unexpected error getting enctag for path %s: %s", path, e)
+        raise NFSException(f"Failed to get enctag for path {path}: {e}", -errno.EIO)
 
 
 def _validate_cmount_path(cmount_path: str, path: str) -> None:
@@ -633,6 +654,36 @@ class ExportMgr:
                 )
         return None
 
+    def _validate_kmip_key_id_with_enctag(
+        self,
+        kmip_key_id: str,
+        fs_name: Optional[str],
+        path: Optional[str]
+    ) -> None:
+        """
+        Validate that kmip_key_id matches the subvolume's enctag for CephFS exports.
+        """
+        if not fs_name or not path:
+            log.debug(f"Skipping enctag validation for kmip_key_id '{kmip_key_id}': "
+                      f"fs_name={fs_name}, path={path} (likely not a CephFS export)")
+            return
+
+        enctag = get_enctag_from_path(self.mgr, fs_name, path)
+        if not enctag:
+            raise NFSInvalidOperation(
+                f"Cannot create export with kmip_key_id '{kmip_key_id}': "
+                f"subvolume at path '{path}' does not have an enctag set. "
+                "Please set the enctag on the subvolume using "
+                "'ceph fs subvolume enctag set' command."
+            )
+        if enctag != kmip_key_id:
+            raise NFSInvalidOperation(
+                f"Cannot create export: kmip_key_id '{kmip_key_id}' does not match "
+                f"subvolume enctag '{enctag}' at path '{path}'. "
+                "The kmip_key_id must match the enctag set on the subvolume."
+            )
+        log.info(f"Validated kmip_key_id '{kmip_key_id}' matches subvolume enctag at path '{path}'")
+
     def create_export_from_dict(self,
                                 cluster_id: str,
                                 ex_id: int,
@@ -650,9 +701,11 @@ class ExportMgr:
 
         fsal = ex_dict.get("fsal", {})
         fsal_type = fsal.get("name")
+
         if fsal_type == NFS_GANESHA_SUPPORTED_FSALS[1]:
             if '/' in path and path != '/':
                 raise NFSInvalidOperation('"/" is not allowed in path with bucket name')
+
         elif fsal_type == NFS_GANESHA_SUPPORTED_FSALS[0]:
             fs_name = fsal.get("fs_name")
             if not fs_name:
@@ -661,6 +714,11 @@ class ExportMgr:
                 raise FSNotFound(fs_name)
 
             validate_cephfs_path(self.mgr, fs_name, path)
+
+            # Validate kmip_key_id against subvolume enctag for CephFS
+            kmip_key_id = ex_dict.get("kmip_key_id")
+            if kmip_key_id:
+                self._validate_kmip_key_id_with_enctag(kmip_key_id, fs_name, path)
 
             # Check if earmark is set for the path, given path is of subvolume
             if earmark_resolver:
@@ -714,6 +772,10 @@ class ExportMgr:
         validate_cephfs_path(self.mgr, fs_name, path)
         if cmount_path != "/":
             _validate_cmount_path(cmount_path, path)  # type: ignore
+
+        # Validate kmip_key_id against subvolume enctag
+        if kmip_key_id:
+            self._validate_kmip_key_id_with_enctag(kmip_key_id, fs_name, path)
 
         pseudo_path = normalize_path(pseudo_path)
         # Get the protocols based on cluster's enable_nfsv3 setting
