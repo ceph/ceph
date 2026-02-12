@@ -370,8 +370,6 @@ void LastEpochCleanStarted::Lecs::report(
   }
   epoch_by_pg.resize(pg_num, {0, 0});
   const auto old_lecs = epoch_by_pg[ps];
-  assert(last_epoch_clean != 0);
-  assert(last_epoch_started != 0);
   if (old_lecs.last_epoch_clean < last_epoch_clean) {
     epoch_by_pg[ps].last_epoch_clean = last_epoch_clean;
     if (last_epoch_clean < clean_floor) {
