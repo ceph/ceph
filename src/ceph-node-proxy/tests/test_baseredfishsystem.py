@@ -81,7 +81,7 @@ class TestBaseRedfishSystemGetters:
         assert system.get_sn() == ""
 
     def test_get_sn_from_sys(self, system):
-        system._sys["SKU"] = "ABC123"
+        system._sys["SN"] = "ABC123"
         assert system.get_sn() == "ABC123"
 
     def test_get_memory_empty(self, system):
@@ -115,7 +115,7 @@ class TestBaseRedfishSystemGetters:
 
 class TestBaseRedfishSystemGetSystem:
     def test_get_system_structure(self, system):
-        system._sys["SKU"] = "SN1"
+        system._sys["SN"] = "SN1"
         system._sys["memory"] = {}
         system._sys["processors"] = {}
         system._sys["network"] = {}

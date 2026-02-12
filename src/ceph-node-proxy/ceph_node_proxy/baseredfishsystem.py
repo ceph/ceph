@@ -225,7 +225,7 @@ class BaseRedfishSystem(BaseSystem):
         self._system[update_service_members.id] = update_service_members.data
 
     def get_sn(self) -> str:
-        return str(self._sys.get("SKU", ""))
+        return str(self._sys.get("SN", ""))
 
     def get_status(self) -> Dict[str, Dict[str, Dict]]:
         return dict(self._sys.get("status", {}))
@@ -346,9 +346,11 @@ class BaseRedfishSystem(BaseSystem):
         serials: List[str] = []
         self.log.debug("Updating serial number")
         data: Dict[str, Any] = self.endpoints["systems"].get_members_data()
-        for sys in data.keys():
-            serials.append(data[sys]["SKU"])
-        self._sys["SKU"] = ",".join(serials)
+        for chassis_id in data:
+            serial = data[chassis_id].get("SerialNumber")
+            if serial:
+                serials.append(serial)
+        self._sys["SN"] = ",".join(serials)
 
     def _update_memory(self) -> None:
         self._run_update("memory")
