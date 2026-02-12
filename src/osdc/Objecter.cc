@@ -267,7 +267,8 @@ void Objecter::update_crush_location()
 /*
  * initialize only internal data structures, don't initiate cluster interaction
  */
-void Objecter::init()
+void
+Objecter::init(std::string_view admin_socket_name)
 {
   ceph_assert(!initialized);
 
@@ -407,9 +408,16 @@ void Objecter::init()
 
   m_request_state_hook = new RequestStateHook(this);
   auto admin_socket = cct->get_admin_socket();
-  int ret = admin_socket->register_command("objecter_requests",
-					   m_request_state_hook,
-					   "show in-progress osd requests");
+
+  // Build the admin socket command name. If a name is provided, use
+  // "objecter_requests.<name>", otherwise use "objecter_requests".
+  std::string cmd_name = "objecter_requests";
+  if (!admin_socket_name.empty()) {
+    cmd_name += ".";
+    cmd_name += admin_socket_name;
+  }
+  int ret = admin_socket->register_command(
+      cmd_name, m_request_state_hook, "show in-progress osd requests");
 
   /* Don't warn on EEXIST, happens if multiple ceph clients
    * are instantiated from one process */
