@@ -232,6 +232,7 @@ private:
   int _populate_crush_bucket_osds(
     const int item_id,
     const OSDMap& osdmap,
+    const PGMap& pgmap,
     std::vector<int>& crush_bucket_osds,
     std::ostream *ss = nullptr);
 

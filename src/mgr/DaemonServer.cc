@@ -1194,6 +1194,7 @@ bool DaemonServer::_valid_bucket_type_for_upgrade_check(
 int DaemonServer::_populate_crush_bucket_osds(
   const int item_id,
   const OSDMap& osdmap,
+  const PGMap& pgmap,
   std::vector<int>& crush_bucket_osds,
   std::ostream *ss)
 {
@@ -1242,13 +1243,22 @@ int DaemonServer::_populate_crush_bucket_osds(
   } else if (bucket_type_str == "host" || bucket_type_str == "osd") {
     bucket_names.push_back(item_name);
   }
+  // The following struct is to help re-order the
+  // osds based on the number of pgs on them.
+  struct pgs_per_osd {
+    int osd_id;
+    size_t num_pgs;
+  };
+  std::vector<pgs_per_osd> child_bucket_pgs_per_osd;
   // get osds under each child bucket
-  std::set<int> bucket_osds;
-  for (const auto &item : bucket_names) {
-    r = osdmap.get_osds_by_bucket_name(item, &bucket_osds);
+  for (const auto &name : bucket_names) {
+    // Clear the items for the current child bucket
+    child_bucket_pgs_per_osd.clear();
+    std::set<int> tmp_bucket_osds;
+    r = osdmap.get_osds_by_bucket_name(name, &tmp_bucket_osds);
     if (r < 0) {
       ostringstream os;
-      os << "cannot parse crush bucket:\"" << item
+      os << "cannot parse crush bucket:\"" << name
          << "\" of type: " << bucket_type_str << ". "
          << "got error code: " << r;
       if (ss) {
@@ -1257,15 +1267,38 @@ int DaemonServer::_populate_crush_bucket_osds(
       dout(20) << os.str() << dendl;
       return r;
     }
-    // The osds are pushed to the referenced crush_bucket_osds
-    // vector to maintain the order of osds according to the
-    // child order. This helps optimize the result of
-    // _check_offlines_pgs() down the line.
-    for (const auto &osd : bucket_osds) {
-      crush_bucket_osds.push_back(osd);
+
+    // Special case when bucket contains only 1 osd
+    if (tmp_bucket_osds.size() == 1) {
+      for (const auto &osd : tmp_bucket_osds) {
+        crush_bucket_osds.push_back(osd);
+      }
+      dout(20) << "picked osd: " << tmp_bucket_osds
+               << " from bucket: " << name << dendl;
+      continue;
     }
-    dout(20) << "Picked children: " << bucket_osds
-             << " from parent: " << item << dendl;
+    /**
+     * The osds in this bucket are further re-ordered based on the
+     * number of pgs (ascending) they host. This helps optimize
+     * the result of _check_offlines_pgs() down the line.
+     */
+    for (const auto &osd : tmp_bucket_osds) {
+      child_bucket_pgs_per_osd.push_back({osd, pgmap.get_num_pg_by_osd(osd)});
+    }
+    // Sort once after all data is added
+    std::sort(child_bucket_pgs_per_osd.begin(), child_bucket_pgs_per_osd.end(),
+              [](const pgs_per_osd& a, const pgs_per_osd& b) {
+        return std::tie(a.num_pgs, a.osd_id) < std::tie(b.num_pgs, b.osd_id);
+    });
+    /**
+     * The sorted osds are finally pushed to the passed crush_bucket_osds
+     * vector where osds are maintained according to the child order.
+     */
+    for (const auto &item : child_bucket_pgs_per_osd) {
+      crush_bucket_osds.push_back(item.osd_id);
+    }
+    dout(20) << "picked osds: " << tmp_bucket_osds
+             << " from bucket: " << name << dendl;
   }
   return r;
 }
@@ -1394,7 +1427,7 @@ void DaemonServer::_maximize_ok_to_upgrade_set(
 
     // get candidate additions that are beneath this point in the tree
     children.clear();
-    r = _populate_crush_bucket_osds(parent, osdmap, children);
+    r = _populate_crush_bucket_osds(parent, osdmap, pgmap, children);
     if (r != 0) {
       return; // just go with what we have so far!
     }
@@ -2276,7 +2309,8 @@ bool DaemonServer::_handle_command(
     // bucket type is limited to 'rack', 'chassis', 'host' or 'osd'.
     // This is to help limit the number of OSDs and avoid
     // performance issues during the upgrade check.
-    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+    cluster_state.with_osdmap_and_pgmap([&](
+      const OSDMap& osdmap, const PGMap& pgmap) {
         // Validate crush bucket
         if (!osdmap.crush->name_exists(crush_bucket_name)) {
           ss << "\"" << crush_bucket_name << "\" does not exist";
@@ -2285,7 +2319,8 @@ bool DaemonServer::_handle_command(
         }
         int id = osdmap.crush->get_item_id(crush_bucket_name);
         // get candidate additions that are beneath this point in the tree
-        r = _populate_crush_bucket_osds(id, osdmap, osds_in_crush_bucket, &ss);
+        r = _populate_crush_bucket_osds(id, osdmap, pgmap,
+                                        osds_in_crush_bucket, &ss);
         if (r != 0) {
           return;
         }
