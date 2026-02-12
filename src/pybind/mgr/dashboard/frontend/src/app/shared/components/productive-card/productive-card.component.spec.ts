@@ -9,8 +9,7 @@ describe('ProductiveCardComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [ProductiveCardComponent],
-      imports: [GridModule, LayerModule, TilesModule]
+      imports: [ProductiveCardComponent, GridModule, LayerModule, TilesModule]
     }).compileComponents();
 
     fixture = TestBed.createComponent(ProductiveCardComponent);
