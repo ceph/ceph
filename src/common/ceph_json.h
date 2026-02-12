@@ -193,12 +193,10 @@ protected:
   // that we throw it out:
   static bool parse_json(std::string_view input, boost::json::value& data_out)
   {
-	std::error_code ec;
-
-	data_out = boost::json::parse(input, ec, boost::json::storage_ptr(), 
+	data_out = boost::json::parse(input, boost::json::storage_ptr(), 
 				     { .allow_invalid_utf8 = true });
 
-	return ec ? false : true;
+	return true;
   }
 
 public:
