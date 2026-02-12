@@ -8,6 +8,10 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
+<<<<<<< HEAD
+=======
+import { ToastrModule } from 'ngx-toastr';
+>>>>>>> 98d14c47a67 (mgr/dashboard: Nvmeof edit namespace size)
 import { ModalModule, NumberModule } from 'carbon-components-angular';
 import { of } from 'rxjs';
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -48,6 +52,10 @@ describe('NvmeofNamespaceExpandModalComponent', () => {
       SharedModule,
       ReactiveFormsModule,
       RouterTestingModule,
+<<<<<<< HEAD
+=======
+      ToastrModule.forRoot(),
+>>>>>>> 98d14c47a67 (mgr/dashboard: Nvmeof edit namespace size)
       ModalModule,
       NumberModule
     ],
