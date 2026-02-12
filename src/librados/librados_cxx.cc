@@ -2405,6 +2405,11 @@ int librados::Rados::connect()
   return client->connect();
 }
 
+void librados::Rados::set_objecter_admin_socket_name(std::string name)
+{
+  client->set_objecter_admin_socket_name(std::move(name));
+}
+
 librados::config_t librados::Rados::cct()
 {
   return (config_t)client->cct;
