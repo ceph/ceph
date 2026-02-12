@@ -126,6 +126,7 @@ class NamespaceCreation(NamedTuple):
 class Namespace(NamedTuple):
     bdev_name: str
     rbd_image_name: Annotated[str, CliHeader("RBD Image")]
+    rados_namespace_name: Annotated[Optional[str], CliHeader("RADOS Namespace")]
     rbd_pool_name: Annotated[str, CliHeader("RBD Pool")]
     load_balancing_group: Annotated[int, CliHeader('LB Group')]
     rbd_image_size: Annotated[int, CliFlags.SIZE]
