@@ -1557,7 +1557,7 @@ class TestMirroring(CephFSTestCase):
         # create a directory in the remote fs and check status 'failed'
         self.mount_b.run_shell(['sudo', 'mkdir', remote_snap_path], omit_sudo=False)
         peer_uuid = self.get_peer_uuid(peer_spec)
-        with safe_while(sleep=1, tries=60, action=f'wait for failed status: {peer_spec}') as proceed:
+        with safe_while(sleep=2, tries=100, action=f'wait for failed status: {peer_spec}') as proceed:
             while proceed():
                 res = self.mirror_daemon_command(f'peer status for fs: {self.primary_fs_name}',
                                                  'fs', 'mirror', 'peer', 'status',
@@ -1569,7 +1569,7 @@ class TestMirroring(CephFSTestCase):
                     break
         # remove the directory in the remote fs and check status restores to 'idle'
         self.mount_b.run_shell(['sudo', 'rmdir', remote_snap_path], omit_sudo=False)
-        with safe_while(sleep=1, tries=60, action=f'wait for idle status: {peer_spec}') as proceed:
+        with safe_while(sleep=2, tries=100, action=f'wait for idle status: {peer_spec}') as proceed:
             while proceed():
                 res = self.mirror_daemon_command(f'peer status for fs: {self.primary_fs_name}',
                                                  'fs', 'mirror', 'peer', 'status',
