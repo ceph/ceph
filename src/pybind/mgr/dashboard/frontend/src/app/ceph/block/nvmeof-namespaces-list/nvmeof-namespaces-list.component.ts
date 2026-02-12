@@ -20,7 +20,6 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
 import { catchError, map, switchMap, takeUntil } from 'rxjs/operators';
 
-const BASE_URL = 'block/nvmeof/subsystems';
 const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
 
 @Component({
@@ -107,19 +106,28 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
         disable: () => !this.group
       },
       {
-        name: this.actionLabels.EDIT,
+        name: $localize`Expand`,
         permission: 'update',
         icon: Icons.edit,
         click: () =>
           this.router.navigate(
             [
-              BASE_URL,
-              URLVerbs.EDIT,
-              this.selection.first().ns_subsystem_nqn,
-              'namespace',
-              this.selection.first().nsid
+              {
+                outlets: {
+                  modal: [
+                    URLVerbs.EDIT,
+                    this.selection.first().ns_subsystem_nqn,
+                    'namespace',
+                    this.selection.first().nsid
+                  ]
+                }
+              }
             ],
-            { queryParams: { group: this.group } }
+            {
+              relativeTo: this.route,
+              queryParams: { group: this.group },
+              queryParamsHandling: 'merge'
+            }
           )
       },
       {

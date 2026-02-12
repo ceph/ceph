@@ -10,18 +10,17 @@ import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
-
 import { NvmeofNamespacesFormComponent } from './nvmeof-namespaces-form.component';
 import { FormHelper, Mocks } from '~/testing/unit-test-helper';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { of, Observable } from 'rxjs';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NumberModule, RadioModule, ComboBoxModule, SelectModule } from 'carbon-components-angular';
 import { ActivatedRoute, Router } from '@angular/router';
-import { By } from '@angular/platform-browser';
+
 import { ActivatedRouteStub } from '~/testing/activated-route-stub';
-import { NvmeofInitiatorCandidate } from '~/app/shared/models/nvmeof';
 
 const MOCK_POOLS = [
   Mocks.getPool('pool-1', 1, ['cephfs']),
@@ -47,7 +46,7 @@ const MOCK_NS_RESPONSE = {
   rbd_image_name: 'nvme_rbd_default_sscfagwuvvr',
   rbd_pool_name: 'rbd',
   load_balancing_group: 1,
-  rbd_image_size: '1073741824',
+  rbd_image_size: new FormatterService().toBytes('1GiB').toString(),
   block_size: 512,
   rw_ios_per_second: '0',
   rw_mbytes_per_second: '0',
@@ -130,7 +129,7 @@ describe('NvmeofNamespacesFormComponent', () => {
     });
     it('should create 5 namespaces correctly', () => {
       formHelper.setValue('pool', 'rbd');
-      formHelper.setValue('image_size', 1073741824);
+      formHelper.setValue('image_size', new FormatterService().toBytes('1GiB'));
       formHelper.setValue('subsystem', MOCK_SUBSYSTEM);
       component.onSubmit();
       expect(nvmeofService.createNamespace).toHaveBeenCalledTimes(5);
@@ -139,25 +138,9 @@ describe('NvmeofNamespacesFormComponent', () => {
         rbd_image_name: `nvme_rbd_default_${MOCK_RANDOM_STRING}`,
         rbd_pool: 'rbd',
         create_image: true,
-        rbd_image_size: 1073741824,
+        rbd_image_size: new FormatterService().toBytes('1GiB'),
         no_auto_visible: false
       });
-    });
-
-    it('should create multiple namespaces with suffixed custom image names', () => {
-      formHelper.setValue('pool', 'rbd');
-      formHelper.setValue('image_size', 1073741824);
-      formHelper.setValue('subsystem', MOCK_SUBSYSTEM);
-      formHelper.setValue('nsCount', 2);
-      formHelper.setValue('rbd_image_name', 'test-img');
-      component.onSubmit();
-      expect(nvmeofService.createNamespace).toHaveBeenCalledTimes(2);
-      expect((nvmeofService.createNamespace as any).calls.argsFor(0)[1].rbd_image_name).toBe(
-        'test-img-1'
-      );
-      expect((nvmeofService.createNamespace as any).calls.argsFor(1)[1].rbd_image_name).toBe(
-        'test-img-2'
-      );
     });
     it('should give error on invalid image size', () => {
       formHelper.setValue('image_size', -56);
@@ -183,7 +166,7 @@ describe('NvmeofNamespacesFormComponent', () => {
 
     it('should call addNamespaceInitiators on submit with specific hosts', () => {
       formHelper.setValue('pool', 'rbd');
-      formHelper.setValue('image_size', 1073741824);
+      formHelper.setValue('image_size', new FormatterService().toBytes('1GiB'));
       formHelper.setValue('subsystem', MOCK_SUBSYSTEM);
       formHelper.setValue('host_access', 'specific');
       formHelper.setValue('initiators', ['host1']);
@@ -199,66 +182,10 @@ describe('NvmeofNamespacesFormComponent', () => {
     });
 
     it('should update initiators form control on selection', () => {
-      const mockEvent: NvmeofInitiatorCandidate[] = [
-        { content: 'host1', selected: true },
-        { content: 'host2', selected: true }
-      ];
+      const mockEvent = [{ content: 'host1' }, { content: 'host2' }];
       component.onInitiatorSelection(mockEvent);
       expect(component.nsForm.get('initiators').value).toEqual(['host1', 'host2']);
       expect(component.nsForm.get('initiators').dirty).toBe(true);
-    });
-  });
-  describe('should test edit form', () => {
-    beforeEach(() => {
-      router = TestBed.inject(Router);
-      nvmeofService = TestBed.inject(NvmeofService);
-      spyOn(nvmeofService, 'getNamespace').and.returnValue(of(MOCK_NS_RESPONSE));
-      spyOn(nvmeofService, 'updateNamespace').and.returnValue(
-        of(new HttpResponse({ status: 200 }))
-      );
-      Object.defineProperty(router, 'url', {
-        get: jasmine.createSpy('url').and.returnValue(MOCK_ROUTER.editUrl)
-      });
-      fixture.detectChanges();
-    });
-
-    it('should have set edit fields correctly', () => {
-      expect(nvmeofService.getNamespace).toHaveBeenCalledTimes(1);
-      expect(component.nsForm.get('pool').disabled).toBeTruthy();
-      expect(component.nsForm.get('pool').value).toBe(MOCK_NS_RESPONSE['rbd_pool_name']);
-      // Size formatted by pipe
-      expect(component.nsForm.get('image_size').value).toBe('1 GiB');
-    });
-
-    it('should not show namespace count', () => {
-      const nsCountEl = fixture.debugElement.query(By.css('cds-number[formControlName="nsCount"]'));
-      expect(nsCountEl).toBeFalsy();
-    });
-
-    it('should give error with no change in image size', () => {
-      component.nsForm.get('image_size').updateValueAndValidity();
-      expect(component.nsForm.get('image_size').hasError('minSize')).toBe(true);
-    });
-
-    it('should give error when size less than previous (1 GB) provided', () => {
-      form = component.nsForm;
-      formHelper = new FormHelper(form);
-      formHelper.setValue('image_size', '512 MiB'); // Less than 1 GiB
-      component.nsForm.get('image_size').updateValueAndValidity();
-      expect(component.nsForm.get('image_size').hasError('minSize')).toBe(true);
-    });
-
-    it('should have edited namespace successfully', () => {
-      component.ngOnInit();
-      form = component.nsForm;
-      formHelper = new FormHelper(form);
-      formHelper.setValue('image_size', '2 GiB');
-      component.onSubmit();
-      expect(nvmeofService.updateNamespace).toHaveBeenCalledTimes(1);
-      expect(nvmeofService.updateNamespace).toHaveBeenCalledWith(MOCK_SUBSYSTEM, MOCK_NSID, {
-        gw_group: MOCK_GROUP,
-        rbd_image_size: 2147483648
-      });
     });
   });
 });

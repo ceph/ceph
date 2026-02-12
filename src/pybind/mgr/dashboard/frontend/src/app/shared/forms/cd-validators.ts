@@ -482,6 +482,22 @@ export class CdValidators {
   }
 
   /**
+   * Validator function to ensure the entered value is a multiple of a typical block size (512 or 4096).
+   * It checks the numeric value directly against the modulo 512 calculation.
+   */
+  static blockSizeMultiple(): ValidatorFn {
+    return (control: AbstractControl): { [key: string]: boolean } | null => {
+      const value = control.value;
+      if (value !== null && value !== undefined && value !== '') {
+        if (Number(value) % 512 !== 0) {
+          return { blockSizeMultiple: true };
+        }
+      }
+      return null;
+    };
+  }
+
+  /**
    * Asynchronous validator that checks if the password meets the password
    * policy.
    * @param userServiceThis The object to be used as the 'this' object
