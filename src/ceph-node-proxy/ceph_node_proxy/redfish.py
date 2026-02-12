@@ -123,9 +123,7 @@ class Endpoint:
         except KeyError as e:
             self.log.error(f"KeyError while querying {url}: {e}")
         except HTTPError as e:
-            self.log.error(
-                f"HTTP error while querying {url} - {e.code} - {e.reason}"
-            )
+            self.log.error(f"HTTP error while querying {url} - {e.code} - {e.reason}")
         except json.JSONDecodeError as e:
             self.log.error(f"JSON decode error while querying {url}: {e}")
         except Exception as e:
@@ -276,19 +274,15 @@ def _resolve_path(endpoint: Endpoint, path: str) -> Endpoint:
     return current
 
 
-def update_component(
+def get_component_data(
     endpoints: EndpointMgr,
     collection: str,
-    component: str,
     path: str,
     fields: List[str],
-    _sys: Dict[str, Any],
     log: Any,
     attribute: Optional[str] = None,
-) -> None:
-    """Update _sys[component] from Redfish endpoints using the given spec.
-    path can be a single segment ('Memory') or multiple ('PowerSubsystem/PowerSupplies').
-    """
+) -> Dict[str, Any]:
+    """Build component data from Redfish endpoints. Returns dict sys_id -> member_id -> data."""
     members: List[str] = endpoints[collection].get_members_names()
     result: Dict[str, Any] = {}
     if not members:
@@ -307,6 +301,24 @@ def update_component(
                     data=data, fields=fields, log=log, attribute=attribute
                 )
             except HTTPError as e:
-                log.error(f"Error while updating {component}: {e}")
+                log.error(f"Error while updating {path}: {e}")
                 continue
-    _sys[component] = result
+    return result
+
+
+def update_component(
+    endpoints: EndpointMgr,
+    collection: str,
+    component: str,
+    path: str,
+    fields: List[str],
+    _sys: Dict[str, Any],
+    log: Any,
+    attribute: Optional[str] = None,
+) -> None:
+    """Update _sys[component] from Redfish endpoints using the given spec.
+    path can be a single segment ('Memory') or multiple ('PowerSubsystem/PowerSupplies').
+    """
+    _sys[component] = get_component_data(
+        endpoints, collection, path, fields, log, attribute=attribute
+    )

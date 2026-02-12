@@ -137,33 +137,39 @@ class TestBaseRedfishSystemGetSystem:
         assert "firmwares" in result
 
 
-class TestBaseRedfishSystemGetUpdateSpec:
+class TestBaseRedfishSystemGetSpecs:
 
-    def test_get_update_spec_network(self, system):
-        spec = system.get_update_spec("network")
-        assert isinstance(spec, ComponentUpdateSpec)
-        assert spec.collection == "systems"
-        assert spec.path == "EthernetInterfaces"
-        assert "Name" in spec.fields
-        assert spec.attribute is None
+    def test_get_specs_network(self, system):
+        specs = system.get_specs("network")
+        assert len(specs) == 2
+        assert all(isinstance(s, ComponentUpdateSpec) for s in specs)
+        paths = [s.path for s in specs]
+        assert "EthernetInterfaces" in paths
+        assert "NetworkInterfaces" in paths
+        assert specs[0].collection == "systems"
+        assert "Name" in specs[0].fields
+        assert specs[0].attribute is None
 
-    def test_get_update_spec_memory(self, system):
-        spec = system.get_update_spec("memory")
-        assert spec.collection == "systems"
-        assert spec.path == "Memory"
-        assert "CapacityMiB" in spec.fields
+    def test_get_specs_memory(self, system):
+        specs = system.get_specs("memory")
+        assert len(specs) == 1
+        assert specs[0].collection == "systems"
+        assert specs[0].path == "Memory"
+        assert "CapacityMiB" in specs[0].fields
 
-    def test_get_update_spec_power(self, system):
-        spec = system.get_update_spec("power")
-        assert spec.collection == "chassis"
-        assert "PowerSubsystem" in spec.path
-        assert spec.attribute is None
+    def test_get_specs_power(self, system):
+        specs = system.get_specs("power")
+        assert len(specs) == 1
+        assert specs[0].collection == "chassis"
+        assert "PowerSubsystem" in specs[0].path
+        assert specs[0].attribute is None
 
-    def test_get_update_spec_fans(self, system):
-        spec = system.get_update_spec("fans")
-        assert spec.collection == "chassis"
-        assert spec.path == "Thermal"
-        assert spec.attribute == "Fans"
+    def test_get_specs_fans(self, system):
+        specs = system.get_specs("fans")
+        assert len(specs) == 1
+        assert specs[0].collection == "chassis"
+        assert specs[0].path == "Thermal"
+        assert specs[0].attribute == "Fans"
 
     def test_get_component_spec_overrides_empty(self, system):
         assert system.get_component_spec_overrides() == {}

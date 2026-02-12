@@ -8,6 +8,7 @@ from ceph_node_proxy.redfish import (
     ComponentUpdateSpec,
     Endpoint,
     EndpointMgr,
+    get_component_data,
     update_component,
 )
 from ceph_node_proxy.redfish_client import RedFishClient
@@ -42,22 +43,31 @@ class BaseRedfishSystem(BaseSystem):
         "Status",
     ]
 
-    COMPONENT_SPECS: Dict[str, ComponentUpdateSpec] = {
-        "network": ComponentUpdateSpec(
-            "systems", "EthernetInterfaces", NETWORK_FIELDS, None
-        ),
-        "processors": ComponentUpdateSpec(
-            "systems", "Processors", PROCESSORS_FIELDS, None
-        ),
-        "memory": ComponentUpdateSpec("systems", "Memory", MEMORY_FIELDS, None),
+    COMPONENT_SPECS: Dict[str, List[ComponentUpdateSpec]] = {
+        "network": [
+            ComponentUpdateSpec("systems", "EthernetInterfaces", NETWORK_FIELDS, None),
+            ComponentUpdateSpec("systems", "NetworkInterfaces", NETWORK_FIELDS, None),
+        ],
+        "processors": [
+            ComponentUpdateSpec("systems", "Processors", PROCESSORS_FIELDS, None),
+        ],
+        "memory": [
+            ComponentUpdateSpec("systems", "Memory", MEMORY_FIELDS, None),
+        ],
         # Power supplies: Chassis/.../PowerSubsystem/PowerSupplies (not like other components: like Systems/.../Memory)
-        "power": ComponentUpdateSpec(
-            "chassis", "PowerSubsystem/PowerSupplies", POWER_FIELDS, None
-        ),
-        "fans": ComponentUpdateSpec("chassis", "Thermal", FANS_FIELDS, "Fans"),
-        "firmwares": ComponentUpdateSpec(
-            "update_service", "FirmwareInventory", FIRMWARES_FIELDS, None
-        ),
+        "power": [
+            ComponentUpdateSpec(
+                "chassis", "PowerSubsystem/PowerSupplies", POWER_FIELDS, None
+            ),
+        ],
+        "fans": [
+            ComponentUpdateSpec("chassis", "Thermal", FANS_FIELDS, "Fans"),
+        ],
+        "firmwares": [
+            ComponentUpdateSpec(
+                "update_service", "FirmwareInventory", FIRMWARES_FIELDS, None
+            ),
+        ],
     }
 
     def __init__(self, **kw: Any) -> None:
@@ -244,8 +254,15 @@ class BaseRedfishSystem(BaseSystem):
     def get_component_spec_overrides(self) -> Dict[str, Dict[str, Any]]:
         return {}
 
-    def get_update_spec(self, component: str) -> ComponentUpdateSpec:
-        spec = self.COMPONENT_SPECS[component]
+    def get_specs(self, component: str) -> List[ComponentUpdateSpec]:
+        return [
+            self._apply_spec_overrides(component, spec)
+            for spec in self.COMPONENT_SPECS[component]
+        ]
+
+    def _apply_spec_overrides(
+        self, component: str, spec: ComponentUpdateSpec
+    ) -> ComponentUpdateSpec:
         overrides = self.get_component_spec_overrides().get(component)
         if not overrides:
             return spec
@@ -253,10 +270,37 @@ class BaseRedfishSystem(BaseSystem):
 
     def _run_update(self, component: str) -> None:
         self.log.debug(f"Updating {component}")
-        spec = self.get_update_spec(component)
-        self.update(
-            spec.collection, component, spec.path, spec.fields, attribute=spec.attribute
-        )
+        specs = self.get_specs(component)
+        self._sys[component] = {}
+        use_single_key = len(specs) == 1
+        for spec in specs:
+            try:
+                result = get_component_data(
+                    self.endpoints,
+                    spec.collection,
+                    spec.path,
+                    spec.fields,
+                    self.log,
+                    attribute=spec.attribute,
+                )
+                path_prefix = spec.path.split("/")[-1].lower() or component
+                for sys_id, members in result.items():
+                    if sys_id not in self._sys[component]:
+                        self._sys[component][sys_id] = {}
+                    for member_id, data in members.items():
+                        key = (
+                            member_id
+                            if use_single_key
+                            else f"{path_prefix}_{member_id}"
+                        )
+                        self._sys[component][sys_id][key] = data
+            except Exception as e:
+                self.log.debug(
+                    "Skipping %s path %s (not available on this hardware): %s",
+                    component,
+                    spec.path,
+                    e,
+                )
 
     def _update_network(self) -> None:
         self._run_update("network")
