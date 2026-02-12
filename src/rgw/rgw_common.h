@@ -269,6 +269,27 @@ void erase(const Attrs& rmattrs) {
     }
 }
 
+void erase(std::string& key) {
+    if (key == RGW_ATTR_ACL) { fastAttrArray[RGW_ATTR_ACL_CONST].clear();
+    } else if (key == RGW_ATTR_RATELIMIT) { fastAttrArray[RGW_ATTR_RATELIMIT_CONST].clear();
+    } else if (key == RGW_ATTR_LC) { fastAttrArray[RGW_ATTR_LC_CONST].clear();
+    } else {
+        defaultMap.erase(key);
+    }
+}
+
+void erase(Const_RGW_Attrs index) {
+    if (index >= 0 && index < RGW_ATTR_COUNT) {
+        fastAttrArray[index].clear();
+    }
+}
+
+void erase(const char* key) {
+    if (!key) return;
+  
+    defaultMap.erase(std::string(key));
+}
+
 
 void set_attrs(const Attrs& rmattrs) {
     for (size_t i = 0; i < RGW_ATTR_COUNT; ++i) {
