@@ -4208,7 +4208,7 @@ extern "C" int rbd_mirror_group_global_status_list(rados_ioctx_t p,
   return 0;
 }
 
-extern "C" void rbd_mirror_group_status_cleanup(
+extern "C" void rbd_mirror_group_global_status_cleanup(
     rbd_mirror_group_global_status_t *status) {
   free(status->name);
   rbd_mirror_group_get_info_cleanup(&status->info);
@@ -4222,7 +4222,7 @@ extern "C" void rbd_mirror_group_global_status_list_cleanup(
     char **group_ids, rbd_mirror_group_global_status_t *groups, size_t len) {
   for (size_t i = 0; i < len; i++) {
     free(group_ids[i]);
-    rbd_mirror_group_status_cleanup(&groups[i]);
+    rbd_mirror_group_global_status_cleanup(&groups[i]);
   }
 }
 

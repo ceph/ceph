@@ -3249,6 +3249,167 @@ cdef class Group(object):
 
         return completion
 
+    def mirror_group_enable(self, mode):
+        """
+        Enable mirroring for the group.
+
+        :param mode: mirror mode (RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
+        """
+        cdef:
+            rbd_mirror_image_mode_t _mode = mode
+        with nogil:
+            ret = rbd_mirror_group_enable(self._ioctx, self._name, _mode)
+        if ret != 0:
+            raise make_ex(ret, 'error enabling mirroring for group %s' % self._name,
+                          group_errno_to_exception)
+
+    def mirror_group_disable(self, force):
+        """
+        Disable mirroring for the group.
+
+        :param force: force disable even if not primary
+        """
+        cdef:
+            bint _force = force
+        with nogil:
+            ret = rbd_mirror_group_disable(self._ioctx, self._name, _force)
+        if ret != 0:
+            raise make_ex(ret, 'error disabling mirroring for group %s' % self._name,
+                          group_errno_to_exception)
+
+    def mirror_group_promote(self, force):
+        """
+        Promote group to primary for mirroring.
+
+        :param force: force promotion even if not cleanly demoted
+        """
+        cdef:
+            bint _force = force
+        with nogil:
+            ret = rbd_mirror_group_promote(self._ioctx, self._name, _force)
+        if ret != 0:
+            raise make_ex(ret, 'error promoting group %s to primary' % self._name,
+                          group_errno_to_exception)
+
+    def mirror_group_demote(self):
+        """
+        Demote group to non-primary for mirroring.
+        """
+        with nogil:
+            ret = rbd_mirror_group_demote(self._ioctx, self._name)
+        if ret != 0:
+            raise make_ex(ret, 'error demoting group %s to non-primary' % self._name,
+                          group_errno_to_exception)
+
+    def mirror_group_resync(self):
+        """
+        Flag the group to resync.
+        """
+        with nogil:
+            ret = rbd_mirror_group_resync(self._ioctx, self._name)
+        if ret != 0:
+            raise make_ex(ret, 'error flagging group for resync %s' % self._name,
+                          group_errno_to_exception)
+
+    def mirror_group_get_global_status(self):
+        """
+        Get global mirroring status for the group.
+
+        :returns: dict - contains the following keys:
+
+            * ``name`` (str) - group name
+            * ``info`` (dict) - mirror group info with keys:
+
+                * ``global_id`` (str) - group global id
+                * ``image_mode`` (int) - mirror mode
+                * ``state`` (int) - mirror state
+                * ``primary`` (bool) - is group primary
+
+            * ``site_statuses`` (list) - list of site status dicts with keys:
+
+                * ``mirror_uuid`` (str) - mirror UUID
+                * ``state`` (int) - group status mirror state
+                * ``description`` (str) - status description
+                * ``last_update`` (datetime) - last status update time
+                * ``up`` (bool) - is mirroring agent responsible for group up
+                * ``mirror_images`` (list) - list of mirror image dicts with keys:
+
+                    * ``pool_id`` (int) - pool ID
+                    * ``global_id`` (str) - image global ID
+                    * ``state`` (int) - image status mirror state
+                    * ``description`` (str) - status description
+                    * ``last_update`` (datetime) - last status update time
+                    * ``up`` (bool) - is mirroring agent responsible for image up
+        """
+        cdef rbd_mirror_group_global_status_t c_status
+        with nogil:
+            ret = rbd_mirror_group_get_global_status(self._ioctx, self._name,
+                                                     &c_status, sizeof(c_status))
+        if ret != 0:
+            raise make_ex(ret, 'error getting global mirror status for group %s' % self._name,
+                          group_errno_to_exception)
+
+        try:
+            status = {
+                'name': decode_cstr(c_status.name),
+                'info': {
+                    'global_id': decode_cstr(c_status.info.global_id),
+                    'image_mode': int(c_status.info.mirror_image_mode),
+                    'state': int(c_status.info.state),
+                    'primary': c_status.info.primary,
+                },
+                'site_statuses': []
+            }
+
+            for i in range(c_status.site_statuses_count):
+                site = {
+                    'mirror_uuid': decode_cstr(c_status.site_statuses[i].mirror_uuid),
+                    'state': int(c_status.site_statuses[i].state),
+                    'description': decode_cstr(c_status.site_statuses[i].description),
+                    'last_update': datetime.fromtimestamp(c_status.site_statuses[i].last_update,
+                                                          tz=timezone.utc),
+                    'up': c_status.site_statuses[i].up,
+                    'mirror_images': []
+                }
+
+                for j in range(c_status.site_statuses[i].mirror_image_count):
+                    image = {
+                        'pool_id': c_status.site_statuses[i].mirror_image_pool_ids[j],
+                        'global_id': decode_cstr(c_status.site_statuses[i].mirror_image_global_ids[j]),
+                        'state': int(c_status.site_statuses[i].mirror_images[j].state),
+                        'description': decode_cstr(c_status.site_statuses[i].mirror_images[j].description),
+                        'last_update': datetime.fromtimestamp(c_status.site_statuses[i].mirror_images[j].last_update,
+                                                              tz=timezone.utc),
+                        'up': c_status.site_statuses[i].mirror_images[j].up,
+                    }
+                    site['mirror_images'].append(image)
+
+                status['site_statuses'].append(site)
+
+            return status
+        finally:
+            rbd_mirror_group_global_status_cleanup(&c_status)
+
+    def mirror_group_get_instance_id(self):
+        """
+        Get the instance ID of the mirror daemon managing this group.
+
+        :returns: str - instance ID
+        """
+        cdef:
+            char instance_id[4096]
+            size_t max_len = sizeof(instance_id)
+
+        with nogil:
+            ret = rbd_mirror_group_get_instance_id(self._ioctx, self._name,
+                                                   instance_id, &max_len)
+        if ret != 0:
+            raise make_ex(ret, 'error getting mirror instance ID for group %s' % self._name,
+                          group_errno_to_exception)
+
+        return decode_cstr(instance_id)
+
+
 def requires_not_closed(f):
     def wrapper(self, *args, **kwargs):
         self.require_not_closed()
