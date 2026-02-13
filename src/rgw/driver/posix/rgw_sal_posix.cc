@@ -4062,15 +4062,17 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
 
-  POSIXManifest manifest;
-  manifest.multipart_part_count = total_parts;
-  buffer::list manifest_bl;
-  manifest.encode(manifest_bl);
-  attrs[RGW_POSIX_ATTR_MANIFEST] = manifest_bl;
+  {
+    POSIXManifest manifest;
+    manifest.multipart_part_count = total_parts;
+    buffer::list manifest_bl;
+    manifest.encode(manifest_bl);
+    attrs[RGW_POSIX_ATTR_MANIFEST] = std::move(manifest_bl);
 
-  ret = shadow->merge_and_store_attrs(dpp, attrs, y);
-  if (ret < 0) {
-    return ret;
+    ret = shadow->merge_and_store_attrs(dpp, attrs, y);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   // Rename to target_obj
