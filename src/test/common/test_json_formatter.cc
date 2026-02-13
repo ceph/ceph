@@ -4,7 +4,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2025 IBM
+ * Copyright (C) 2025-2026 IBM
  * Copyright (C) 2018 Red Hat Inc.
  *
  *  This library is free software; you can redistribute it and/or
@@ -184,6 +184,28 @@ TEST(formatter, parse_types) {
 
   JSONObj *expiration = parser.find_obj("expiration");
   ASSERT_TRUE(nullptr != expiration);
+  }
+}
+
+TEST(formatter, malformed_input_as_string) {
+
+  // A couple of the common error cases I see now that we're using a more conformant JSON parser come
+  // from differences in what malformed input should be accepted as. The two most common cases are:
+  // 1) parsing fails at first character, a non-delimited field meant to be a string;
+  // 2) parsing fails just before the end, extra NULL byte
+  // ...ceph_json should honor these gnarly inputs, at least for now.
+
+  const string_view bare_url = "http://turkey.straw.com";
+  const char garbage_at_end[] = { 's', 't', 'r', '\x00', '\x00' };
+
+  {
+  JSONParser parser;
+  ASSERT_TRUE(parser.parse(bare_url));
+  }
+ 
+  {
+  JSONParser parser;
+  ASSERT_TRUE(parser.parse(garbage_at_end));
   }
 }
 

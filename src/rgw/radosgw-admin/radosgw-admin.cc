@@ -3582,6 +3582,7 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
 // would need to be terminated, so the warning is simply suppressed.
 // coverity[root_function:SUPPRESS]
 int main(int argc, const char **argv)
+try
 {
   auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
@@ -11981,6 +11982,7 @@ next:
     if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
         driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
       show_topics_info_v2(topic, subscribed_buckets, formatter.get());
+
     } else {
       encode_json("topic", topic, formatter.get());
     }
@@ -12428,4 +12430,10 @@ next:
     }
   }
   return 0;
+}
+catch(const std::exception& e)
+{
+ std::cerr << "exception: " << e.what() << std::endl;
+
+ return 1;
 }
