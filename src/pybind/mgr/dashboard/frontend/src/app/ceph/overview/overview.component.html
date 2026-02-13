@@ -1,4 +1,5 @@
-@let vm = vm$ | async;
+@let storage = (storageVm$ | async);
+@let health = (healthCardVm$ | async);
 <div cdsGrid
      [fullWidth]="true"
      class="cds-mt-5 cds-mb-5">
@@ -7,11 +8,9 @@
          class="cds-mb-5"
          [columnNumbers]="{lg: 11}">
       <cd-overview-health-card
-        [fsid]="vm?.healthData?.fsid"
-        [status]="vm?.healthData?.health?.status"
-        [incidents]="vm?.incidentCount"
-        (viewIncidents)="togglePanel()">
-      </cd-overview-health-card>
+          [vm]="health"
+          (viewIncidents)="togglePanel()"
+        ></cd-overview-health-card>
     </div>
     <div cdsCol
          class="cds-mb-5"
@@ -24,8 +23,8 @@
          class="cds-mb-5"
          [columnNumbers]="{lg: 16}">
       <cd-overview-storage-card
-        [total]="vm?.healthData?.pgmap.bytes_total"
-        [used]="vm?.healthData?.pgmap.bytes_used">
+        [total]="storage?.total"
+        [used]="storage?.used">
       </cd-overview-storage-card>
     </div>
   </div>
@@ -37,9 +36,9 @@
     </div>
   </div>
 </div>
-@if (isHealthPanelOpen && vm?.incidentCount > 0) {
+@if (isHealthPanelOpen && health?.incidents > 0) {
   <cd-side-panel
-    [headerText]="'Health incidents ('+ vm?.incidentCount +')'"
+    [headerText]="'Health incidents ('+ health?.incidents +')'"
     [expanded]="isHealthPanelOpen"
     size="md"
     (closed)="togglePanel()">
@@ -48,7 +47,7 @@
       <span>Health incidents are Ceph health checks warnings indicating conditions that require attention and remain until resolved.</span>
     </div>
     <div class="panel-content">
-      @for (check of vm?.checks; track key) {
+      @for (check of health?.checks; track key) {
       <div>
         <div class="overview-check-header">
           <cd-icon [type]="check?.icon"></cd-icon>

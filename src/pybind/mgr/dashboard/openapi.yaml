@@ -6259,9 +6259,28 @@ paths:
                       num_mons:
                         description: Number of monitors
                         type: integer
+<<<<<<< HEAD
                     required:
+=======
+                      quorum:
+                        description: List of monitors in quorum
+                        items:
+                          type: integer
+                        type: array
+                    required: &id054
+>>>>>>> 07e9ab519ce (mgr/dashboard: Add systems tab to health card)
                     - num_mons
+                    - quorum
                     type: object
+<<<<<<< HEAD
+=======
+                  num_hosts:
+                    description: Count of hosts
+                    type: integer
+                  num_hosts_available:
+                    description: Count of available hosts
+                    type: integer
+>>>>>>> 07e9ab519ce (mgr/dashboard: Add systems tab to health card)
                   num_iscsi_gateways:
                     description: Iscsi gateways status
                     properties:
@@ -6342,6 +6361,155 @@ paths:
                 - fsmap
                 - num_rgw_gateways
                 - num_iscsi_gateways
+                - num_hosts
+                - num_hosts_available
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                properties:
+                  fsid:
+                    description: Cluster filesystem ID
+                    type: string
+                  fsmap:
+                    description: Filesystem map details
+                    properties:
+                      num_active:
+                        description: Number of active mds
+                        type: integer
+                      num_standbys:
+                        description: Standby MDS count
+                        type: integer
+                    required: *id048
+                    type: object
+                  health:
+                    description: Cluster health overview
+                    properties:
+                      checks:
+                        description: Health checks keyed by name
+                        properties:
+                          <check_name>:
+                            description: Individual health check object
+                            properties:
+                              muted:
+                                description: Whether the check is muted
+                                type: boolean
+                              severity:
+                                description: Health severity level
+                                type: string
+                              summary:
+                                description: Summary details
+                                properties:
+                                  count:
+                                    description: Occurrence count
+                                    type: integer
+                                  message:
+                                    description: Human-readable summary
+                                    type: string
+                                required: *id049
+                                type: object
+                            required: *id050
+                            type: object
+                        required: *id051
+                        type: object
+                      mutes:
+                        description: List of muted check names
+                        items:
+                          type: string
+                        type: array
+                      status:
+                        description: Overall health status
+                        type: string
+                    required: *id052
+                    type: object
+                  mgrmap:
+                    description: Manager map details
+                    properties:
+                      num_active:
+                        description: Number of active managers
+                        type: integer
+                      num_standbys:
+                        description: Standby manager count
+                        type: integer
+                    required: *id053
+                    type: object
+                  monmap:
+                    description: Monitor map details
+                    properties:
+                      num_mons:
+                        description: Number of monitors
+                        type: integer
+                      quorum:
+                        description: List of monitors in quorum
+                        items:
+                          type: integer
+                        type: array
+                    required: *id054
+                    type: object
+                  num_hosts:
+                    description: Count of hosts
+                    type: integer
+                  num_hosts_available:
+                    description: Count of available hosts
+                    type: integer
+                  num_iscsi_gateways:
+                    description: Iscsi gateways status
+                    properties:
+                      down:
+                        description: Count of iSCSI gateways not running
+                        type: integer
+                      up:
+                        description: Count of iSCSI gateways running
+                        type: integer
+                    required: *id055
+                    type: object
+                  num_rgw_gateways:
+                    description: Count of RGW gateway daemons running
+                    type: integer
+                  osdmap:
+                    description: OSD map details
+                    properties:
+                      in:
+                        description: Number of OSDs in
+                        type: integer
+                      num_osds:
+                        description: Total OSD count
+                        type: integer
+                      up:
+                        description: Number of OSDs up
+                        type: integer
+                    required: *id056
+                    type: object
+                  pgmap:
+                    description: Placement group map details
+                    properties:
+                      bytes_total:
+                        description: Total capacity in bytes
+                        type: integer
+                      bytes_used:
+                        description: Used capacity in bytes
+                        type: integer
+                      num_pgs:
+                        description: Total PG count
+                        type: integer
+                      num_pools:
+                        description: Number of pools
+                        type: integer
+                      pgs_by_state:
+                        description: List of PG counts by state
+                        items:
+                          properties:
+                            count:
+                              description: Count of PGs in this state
+                              type: integer
+                            state_name:
+                              description: Placement group state
+                              type: string
+                          required: *id057
+                          type: object
+                        type: array
+                    required: *id058
+                    type: object
+                required: *id059
                 type: object
           description: OK
         '400':

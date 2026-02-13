@@ -15,6 +15,28 @@
   &-status--error {
     color: var(--cds-text-error);
   }
+
+  &-secondary-text {
+    color: var(--cds-text-secondary);
+  }
+
+  &-tab-selected {
+    border-block-end: 2px solid var(--cds-border-interactive) !important;
+
+    .cds--definition-term {
+      color: var(--cds-text-primary) !important;
+      border-block-end: 0 !important;
+    }
+  }
+
+  &-tab-content {
+    padding: var(--cds-spacing-04) 0;
+  }
+
+  &-tab-content-item {
+    border-right: 1px solid var(--cds-border-subtle);
+  }
+
   // Overrides
   .clipboard-btn {
     padding: var(--cds-spacing-02);
@@ -30,5 +52,10 @@
 
   .cds--skeleton__placeholder {
     margin-bottom: var(--cds-spacing-03);
+  }
+
+  .cds--definition-term {
+    color: var(--cds-link-primary);
+    border-block-end: 1px dotted var(--cds-link-primary);
   }
 }
