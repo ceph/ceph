@@ -66,6 +66,8 @@ LogManager::omap_set_keys(
     t, log_root.addr, BEGIN_KEY, END_KEY);
   ceph_assert(ext);
   std::pair<std::string, ceph::bufferlist> ow_kv;
+  // To prevent missing remove_kv even when overwritten is not done
+  bool ow_done = false;
   auto f = [&](const std::string &k, const bufferlist &v, bool has_ow_key) 
     -> omap_set_key_ret {
     CachedExtentRef node;
@@ -76,6 +78,9 @@ LogManager::omap_set_keys(
     assert(node);
     LogNodeRef log_node = node->template cast<LogNode>();
     bool can_ow = has_ow_key && log_node->can_ow();
+    if (can_ow) {
+      ow_done = true;
+    }
     co_await _log_set_key(log_root, t, log_node, k, v, can_ow);
     co_return;
   };
@@ -117,10 +122,17 @@ LogManager::omap_set_keys(
       dup_kvs[p.first] = p.second;
       continue;
     }
+    if (!is_log_key(p.first)) {
+      // remove duplicate keys first
+      co_await remove_kv(t, log_root.addr, p.first, nullptr);
+    }
     co_await f(p.first, p.second, has_ow_key);
   }
 
   if (!ow_kv.first.empty()) {
+    if (!ow_done) {
+      co_await remove_kv(t, log_root.addr, ow_kv.first, nullptr);
+    }
     co_await f(ow_kv.first, ow_kv.second, has_ow_key);
   }
 
@@ -390,14 +402,6 @@ LogManager::remove_kv(Transaction &t, laddr_t dst, const std::string &key, LogNo
   mut->remove_entry(key);
   if (mut->is_removable()) {
     co_await remove_node(t, mut, prev);
-    if (prev != nullptr && !is_log_key(key) && mut->get_prev_addr() != L_ADDR_NULL) {
-      mut = co_await log_load_extent<LogNode>(
-	t, prev->get_laddr(), BEGIN_KEY, END_KEY);
-    }
-  }
-  if (!is_log_key(key) && mut->get_prev_addr() != L_ADDR_NULL) {
-    // Remove all duplicate keys
-    co_await remove_kv(t, mut->get_prev_addr(), key, mut);
   }
   co_return;
 }
