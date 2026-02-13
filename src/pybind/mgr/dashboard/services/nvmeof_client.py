@@ -6,6 +6,7 @@ from typing import Annotated, Any, Callable, Dict, Generator, List, \
     NamedTuple, Optional, Type, get_args, get_origin
 
 from ..exceptions import DashboardException
+from ..services.ceph_service import CephService
 from .nvmeof_conf import NvmeofGatewaysConfig, is_mtls_enabled
 
 logger = logging.getLogger("nvmeof_client")
@@ -262,3 +263,67 @@ else:
                 return field_to_ret
             return wrapper
         return decorator
+
+
+def get_gateway_locations(pool: str, group: str, hosts: Optional[List[str]] = None):
+    """
+    Get locations for gateways in a service group using nvme-gw show command.
+
+    Args:
+        pool: The RBD pool name
+        group: The NVMeoF gateway group name
+        hosts: Optional list of hostnames to match locations to (in order)
+
+    Returns:
+        If hosts provided: List of location strings matching the order of hosts
+        If hosts not provided: List of unique location strings (sorted)
+    """
+    try:  # pylint: disable=too-many-nested-blocks
+        if not pool or not group:
+            logger.warning('Pool or group not provided for location lookup: pool=%s, group=%s',
+                           pool, group)
+            return []
+
+        result = CephService.send_command('mon', 'nvme-gw show',
+                                          pool=pool, group=group)
+
+        # Build a mapping of hostname to location
+        host_to_location = {}
+        if isinstance(result, dict):
+            gateways = result.get('Created Gateways:', [])
+
+            for gw in gateways:
+                if isinstance(gw, dict):
+                    gw_id = gw.get('gw-id', '')
+                    location = gw.get('location', '')
+
+                    # Extract hostname from gw-id (format: client.nvmeof.pool.group.hostname.xxx)
+                    if gw_id:
+                        parts = gw_id.split('.')
+                        if len(parts) >= 5:
+                            hostname = parts[4]
+                            if location:
+                                host_to_location[hostname] = location
+                        else:
+                            # If format is unexpected, log warning
+                            logger.warning('Unexpected gateway ID format: %s', gw_id)
+
+        # If hosts list provided, return locations in the same order
+        if hosts:
+            locations = []
+            for host in hosts:
+                # Get location for this host, empty string if not found
+                location = host_to_location.get(host, '')
+                if not location:
+                    logger.debug('No location found for host: %s', host)
+                locations.append(location)
+            return locations
+
+        # Otherwise return unique sorted locations
+        unique_locations = set(host_to_location.values())
+        return sorted(list(unique_locations))
+
+    except Exception as e:  # pylint: disable=broad-except
+        logger.error('Failed to get gateway locations for pool=%s, group=%s: %s',
+                     pool, group, e)
+        return []
