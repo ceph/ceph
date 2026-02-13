@@ -7,10 +7,17 @@ import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.s
 import { catchError, exhaustMap, takeUntil } from 'rxjs/operators';
 import { EMPTY, Observable, Subject } from 'rxjs';
 import { CommonModule } from '@angular/common';
+import { OverviewHealthCardComponent } from './health-card/overview-health-card.component';
 
 @Component({
   selector: 'cd-overview',
-  imports: [GridModule, TilesModule, OverviewStorageCardComponent, CommonModule],
+  imports: [
+    CommonModule,
+    GridModule,
+    TilesModule,
+    OverviewStorageCardComponent,
+    OverviewHealthCardComponent
+  ],
   standalone: true,
   templateUrl: './overview.component.html',
   styleUrl: './overview.component.scss'

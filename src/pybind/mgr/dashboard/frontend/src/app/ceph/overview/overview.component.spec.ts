@@ -5,8 +5,13 @@ import { OverviewComponent } from './overview.component';
 import { HealthService } from '~/app/shared/api/health.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { HealthSnapshotMap } from '~/app/shared/models/health.interface';
+import { provideHttpClient } from '@angular/common/http';
+import { CommonModule } from '@angular/common';
+import { GridModule, TilesModule } from 'carbon-components-angular';
+import { OverviewHealthCardComponent } from './health-card/overview-health-card.component';
+import { OverviewStorageCardComponent } from './storage-card/overview-storage-card.component';
 
-describe('OverviewComponent (Jest)', () => {
+describe('OverviewComponent', () => {
   let component: OverviewComponent;
   let fixture: ComponentFixture<OverviewComponent>;
 
@@ -28,8 +33,16 @@ describe('OverviewComponent (Jest)', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [OverviewComponent],
+      imports: [
+        OverviewComponent,
+        CommonModule,
+        GridModule,
+        TilesModule,
+        OverviewStorageCardComponent,
+        OverviewHealthCardComponent
+      ],
       providers: [
+        provideHttpClient(),
         { provide: HealthService, useValue: mockHealthService },
         { provide: RefreshIntervalService, useValue: mockRefreshIntervalService }
       ]

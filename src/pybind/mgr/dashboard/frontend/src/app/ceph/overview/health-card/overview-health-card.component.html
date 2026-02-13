@@ -1,0 +1,66 @@
+@let data = (data$ | async);
+<cd-productive-card>
+  <!-- HEALTH CARD Title -->
+  @if(fsid) {
+  <ng-template #header>
+    <div class="overview-health-card-header">
+      <div class="cds-mb-4 cds-mr-3"><cd-icon type="dataCenter"></cd-icon></div>
+      <h2
+        class="cds--type-heading-compact-02"
+        id="fsid">
+        <span>{{fsid}}</span>
+      </h2>
+      <cd-copy-2-clipboard-button
+        size="sm"
+        source="fsid"></cd-copy-2-clipboard-button>
+    </div>
+    <cds-icon-button
+      type="button"
+      kind="ghost"
+      size="sm"
+      description="Check logs"
+      i18n-description
+      [routerLink]="['/logs']">
+      <cd-icon type="dataViewAlt"></cd-icon>
+    </cds-icon-button>
+  </ng-template>
+  } @else {
+  <cds-skeleton-text
+    [lines]="1"
+    [maxLineWidth]="400"
+    [minLineWidth]="400"></cds-skeleton-text>
+  }
+  <!-- HEALTH CARD BODY -->
+  @if(data?.currentHealth){
+  <p class="cds--type-heading-05 cds-mb-0"
+     [ngClass]="'overview-health-card-status--' + data?.currentHealth?.icon">
+    {{data?.currentHealth?.title}}
+    <cd-icon [type]="data?.currentHealth?.icon"></cd-icon>
+  </p>
+  <p class="cds--type-label-01">{{data?.currentHealth?.message}}</p>
+  } @else {
+  <cds-skeleton-placeholder></cds-skeleton-placeholder>
+  }
+
+  @if(data?.summary?.version) {
+  <!-- CEPH VERSION -->
+  <p class="cds--type-label-02">
+    <span i18n>Ceph version:&nbsp;</span>
+    <span class="cds--type-heading-compact-01">{{ data?.summary?.version | cephVersion  }}</span>&nbsp;
+    <!-- UPGRADE AVAILABLE -->
+    @if (data?.upgrade?.versions?.length) {
+    <a [routerLink]="['/upgrade']"
+       cdsLink
+       [inline]="true"
+       i18n>
+      Upgrade available
+      <cd-icon type="upgrade"></cd-icon>
+    </a>
+    }
+  </p>
+  } @else {
+  <cds-skeleton-text
+    [lines]="1"
+    [maxLineWidth]="250"></cds-skeleton-text>
+  }
+</cd-productive-card>

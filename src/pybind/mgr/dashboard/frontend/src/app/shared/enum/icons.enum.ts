@@ -105,7 +105,11 @@ export enum Icons {
   error = 'error--filled',
   notificationOff = 'notification--off',
   notificationNew = 'notification--new',
-  emptySearch = 'search'
+  emptySearch = 'search',
+  dataViewAlt = 'data--view--alt',
+  dataCenter = 'data--center',
+  upgrade = 'upgrade',
+  warningAltFilled = 'warning--alt--filled'
 }
 
 export enum IconSize {
@@ -129,5 +133,9 @@ export const ICON_TYPE = {
   success: 'success',
   warning: 'warning',
   add: 'add',
-  emptySearch: 'emptySearch'
+  emptySearch: 'emptySearch',
+  dataViewAlt: 'data--view--alt',
+  dataCenter: 'data--center',
+  upgrade: 'upgrade',
+  warningAltFilled: 'warning--alt--filled'
 } as const;
