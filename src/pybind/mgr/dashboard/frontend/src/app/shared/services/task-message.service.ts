@@ -555,6 +555,9 @@ export class TaskMessageService {
     'ceph-user/create': this.newTaskMessage(
       this.commonOperations.create,
       (metadata: { userEntity: string }) => this.cephUser(metadata)
+    ),
+    'mirroring/token/create': this.newTaskMessage(this.commonOperations.create, () =>
+      this.bootstrap()
     )
   };
 
@@ -733,5 +736,9 @@ export class TaskMessageService {
 
   cephUser(metadata: { userEntity: string }) {
     return $localize`Ceph user  '${metadata.userEntity}'`;
+  }
+
+  bootstrap() {
+    return $localize`bootstrap token`;
   }
 }

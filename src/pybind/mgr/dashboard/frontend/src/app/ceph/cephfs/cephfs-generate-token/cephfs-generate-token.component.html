@@ -1,0 +1,254 @@
+<div class="scroll-overflow">
+  <div>
+        <div class="cds--type-heading-03"
+          i18n>Generate token</div>
+    <p class="cds--type-body-01 cds-mt-2"
+       i18n>
+      Generate the token that will be used by the local cluster to establish connection.
+    </p>
+  </div>
+
+  <!-- Environment Ready Alert -->
+  @if (!generatedToken && showEnvironmentAlert) {
+    <cd-alert-panel
+      type="success"
+      class="token-alert cds-mb-3 cds-mt-6"
+      dismissible="true"
+      (dismissed)="onDismissEnvironmentAlert()">
+      <div>
+        <div class="cds--type-heading-compact-01 cds-mb-2"
+             i18n>Environment Ready for Token Generation</div>
+        <div class="cds--type-body-compact-01 cds-mb-3"
+             i18n>
+          The following changes were applied in previous steps:
+        </div>
+        <ul class="list-disc cds-ml-5 cds--type-body-compact-01">
+          <li i18n>Filesystem mirroring was enabled on this cluster.</li>
+          <li i18n>The mirroring entity was created and assigned proper permissions on MDS, MON, and OSD.</li>
+          <li i18n>All configuration is ready for the local cluster connection.</li>
+        </ul>
+        <div class="cds--type-body-compact-01 cds-mt-4"
+             i18n>
+          Once generated, the token will contain all relevant configuration details and parameters
+          required by the Local cluster. It will be pasted into the Local cluster during its setup.
+        </div>
+        <div class="cds--type-body-compact-01 cds-mt-4"
+             i18n>
+          Enter a site name and select Generate token to complete this setup.
+        </div>
+      </div>
+    </cd-alert-panel>
+  }
+
+  <!-- Setup Summary -->
+  <cds-tile
+    class="cds-mt-6">
+    <div class="cds--type-heading-compact-02 cds-mb-3"
+         i18n>Setup summary</div>
+    <p class="cds--type-label-01 cds-mb-2"
+      i18n>Summary of the remote cluster configuration</p>
+
+    <div
+      cdsStack="vertical"
+      class="cds-mt-6">
+      <div
+        cdsStack="horizontal">
+        <div class="summary-item">
+          <div class="cds--type-label-01"
+            i18n>Cluster ID</div>
+          <div class="cds--type-body-01 cds-mt-2">{{ clusterId }}</div>
+        </div>
+        @if (generatedToken) {
+          <div class="summary-item">
+            <div class="cds--type-label-01"
+              i18n>Site name</div>
+            <div class="cds--type-body-01 cds-mt-2">{{ siteName.value }}</div>
+          </div>
+        }
+        <div class="summary-item">
+          <div class="cds--type-label-01"
+            i18n>Filesystem</div>
+          <div class="cds--type-body-01 cds-mt-2">
+            {{ filesystemName || 'Not selected' }}
+          </div>
+        </div>
+      </div>
+
+      <div
+        cdsStack="horizontal"
+        class="cds-mt-6">
+        <div class="summary-item">
+          <div class="cds--type-label-01"
+            i18n>Mirroring</div>
+          <div class="cds--type-body-01 cds-mt-2"
+               i18n>Enabled</div>
+        </div>
+        <div class="summary-item">
+          <div class="cds--type-label-01"
+            i18n>Ceph entity</div>
+          <div class="cds--type-body-01 cds-mt-2">
+            {{ entityName || 'Not selected' }}
+          </div>
+        </div>
+        @if (generatedToken) {
+          <div class="summary-item">
+            <div class="cds--type-label-01"
+              i18n>Bootstrap token</div>
+            <div class="cds--type-body-01 cds-mt-2"
+              i18n>Generated</div>
+          </div>
+        }
+      </div>
+    </div>
+  </cds-tile>
+
+  <!-- Bootstrap Token Input Section -->
+  <cds-tile
+    class="cds-mt-6"
+    *ngIf="!generatedToken">
+    <div class="cds--type-heading-compact-02 cds-mb-3"
+         i18n>Bootstrap token</div>
+    <p class="cds--type-label-01 cds-mb-4"
+      i18n>Generate a secure token for local cluster connection.</p>
+
+    <div
+      cdsStack="vertical"
+      class="cds-mt-6">
+      <cds-text-label
+        labelInputID="site_name"
+        i18n
+        helperText="A user-defined name used to uniquely identify this remote cluster"
+        i18n-helperText
+        cdRequiredField="Site Name"
+        [invalid]="!siteName.valid && siteName.dirty"
+        [invalidText]="'Site name is required'"
+        i18n-invalidText
+        class="site-name-field">
+        Site name
+        <input
+          cdsText
+          id="site_name"
+          name="site_name"
+          placeholder="Site name"
+          i18n-placeholder
+          [formControl]="siteName"
+          [invalid]="!siteName.valid && siteName.dirty" />
+      </cds-text-label>
+
+      <div class="cds-mt-6">
+        <button
+          cdsButton="primary"
+          (click)="onGenerateToken()"
+          [disabled]="!siteName.valid || isGenerating">
+          <span i18n>{{ isGenerating ? 'Generating token...' : 'Generate token' }}</span>
+        </button>
+      </div>
+    </div>
+  </cds-tile>
+
+  <!-- Generated Token Section -->
+  <div
+    *ngIf="generatedToken"
+    class="cds-mt-6">
+    <!-- Success Alert -->
+    <cd-alert-panel
+      type="success"
+      dismissible="true"
+      (dismissed)="onDismissSuccessAlert()"
+      class="cds-mb-4"
+      *ngIf="showSuccessAlert">
+      <div>
+        <div class="cds--type-heading-compact-01 cds-mb-2"
+             i18n>Token generated successfully</div>
+        <div class="cds--type-body-compact-01"
+             i18n>
+          The bootstrap token has been generated successfully. Copy or download the token below
+          and understand the next actions required for establishing the mirroring connection.
+        </div>
+      </div>
+    </cd-alert-panel>
+
+    <!-- Important Alert -->
+    <cd-alert-panel
+      type="danger"
+      dismissible="true"
+      (dismissed)="onDismissWarningAlert()"
+      class="cds-mb-4"
+      *ngIf="showWarningAlert">
+      <div>
+        <div class="cds--type-heading-compact-01 cds-mb-2"
+             i18n>Important</div>
+        <div class="cds--type-body-compact-01"
+             i18n>
+          This token cannot be recovered later. Download or copy it before leaving this setup.
+        </div>
+      </div>
+    </cd-alert-panel>
+
+    <!-- Generated Token Display -->
+    <cds-tile class="cds-mt-6">
+      <div class="cds--type-heading-compact-02 cds-mb-4"
+           i18n>Generated token</div>
+      <p class="cds--type-label-01 cds-mb-4"
+         i18n>
+        Share this token securely with the local cluster administrator to establish the mirroring
+        connection.
+      </p>
+
+      <div class="cds-mt-6">
+        <cds-textarea-label
+          for="token"
+          i18n>Token
+          <textarea
+            cdsTextArea
+            placeholder="Generated token..."
+            i18n-placeholder
+            id="token"
+            [value]="generatedToken"
+            cols="200"
+            rows="5"
+            readonly></textarea>
+        </cds-textarea-label>
+
+        <div class="btn-group cds-mt-4"
+             role="group">
+          <cd-copy-2-clipboard-button
+            [source]="generatedToken"
+            [byId]="false">
+          </cd-copy-2-clipboard-button>
+        </div>
+      </div>
+
+      <!-- Download Button -->
+      <div class="cds-mt-6">
+        <button
+          cdsButton="secondary"
+          (click)="downloadToken()"
+          i18n>
+          Download token
+          <svg
+            cdsIcon="download"
+            class="cds-ml-3"></svg>
+        </button>
+      </div>
+    </cds-tile>
+
+    <!-- Next Steps Alert -->
+    <cd-alert-panel
+      type="info"
+      dismissible="true"
+      (dismissed)="onDismissInfoAlert()"
+      class="cds-mt-4"
+      *ngIf="showInfoAlert">
+      <div>
+        <div class="cds--type-heading-compact-01 cds-mb-3"
+             i18n>Next steps</div>
+        <ul class="list-disc cds-ml-5 cds--type-body-compact-01">
+          <li i18n>Securely share this token with the local cluster administrator.</li>
+          <li i18n>The local cluster will import this token to establish the connection.</li>
+          <li i18n>Monitor the mirroring status in the dashboard.</li>
+        </ul>
+      </div>
+    </cd-alert-panel>
+  </div>
+</div>

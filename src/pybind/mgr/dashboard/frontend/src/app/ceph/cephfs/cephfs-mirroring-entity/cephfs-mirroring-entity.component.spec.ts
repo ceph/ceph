@@ -1,96 +1,166 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { CephfsService } from '~/app/shared/api/cephfs.service';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ReactiveFormsModule } from '@angular/forms';
+import { of } from 'rxjs';
+
 import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity.component';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { ClusterService } from '~/app/shared/api/cluster.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
 describe('CephfsMirroringEntityComponent', () => {
   let component: CephfsMirroringEntityComponent;
   let fixture: ComponentFixture<CephfsMirroringEntityComponent>;
 
+  let clusterServiceMock: any;
+  let cephfsServiceMock: any;
+  let taskWrapperServiceMock: any;
+
   beforeEach(async () => {
+    clusterServiceMock = {
+      listUser: jest.fn(),
+      createUser: jest.fn()
+    };
+
+    cephfsServiceMock = {
+      setAuth: jest.fn()
+    };
+
+    taskWrapperServiceMock = {
+      wrapTaskAroundCall: jest.fn()
+    };
+
     await TestBed.configureTestingModule({
       declarations: [CephfsMirroringEntityComponent],
-      providers: [ActionLabelsI18n, { provide: CephfsService, useValue: {} }]
-    }).compileComponents();
+      imports: [ReactiveFormsModule],
+      providers: [
+        CdFormBuilder,
+        { provide: ClusterService, useValue: clusterServiceMock },
+        { provide: CephfsService, useValue: cephfsServiceMock },
+        { provide: TaskWrapperService, useValue: taskWrapperServiceMock }
+      ]
+    })
+      .overrideComponent(CephfsMirroringEntityComponent, {
+        set: { template: '' }
+      })
+      .compileComponents();
 
     fixture = TestBed.createComponent(CephfsMirroringEntityComponent);
     component = fixture.componentInstance;
+    component.selectedFilesystem = { name: 'myfs' } as any;
+    clusterServiceMock.listUser.mockReturnValue(of([]));
+
     fixture.detectChanges();
   });
 
-  it('should create the component', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should create component', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should initialize columns correctly on ngOnInit', () => {
-    component.ngOnInit();
-    expect(component.columns.length).toBe(4);
-    expect(component.columns[0].prop).toBe('entity');
-    expect(component.columns[1].prop).toBe('mdsCaps');
-    expect(component.columns[2].prop).toBe('monCaps');
-    expect(component.columns[3].prop).toBe('osdCaps');
+  it('should initialize form with required + noClientPrefix validator', () => {
+    const control = component.entityForm.get('user_entity');
+    control?.setValue('');
+    expect(control?.valid).toBeFalsy();
+    control?.setValue('client.test');
+    expect(control?.errors?.['forbiddenClientPrefix']).toBeTruthy();
+    control?.setValue('validuser');
+    expect(control?.valid).toBeTruthy();
   });
 
-  it('should initialize the form with user_entity control', () => {
-    component.ngOnInit();
-    expect(component.entityForm.contains('user_entity')).toBeTrue();
+  it('should filter entities based on fsname', fakeAsync(() => {
+    clusterServiceMock.listUser.mockReturnValue(
+      of([
+        {
+          entity: 'client.valid',
+          caps: { mds: 'allow rw fsname=myfs' }
+        },
+        {
+          entity: 'client.invalid',
+          caps: { mds: 'allow rw fsname=otherfs' }
+        },
+        {
+          entity: 'osd.something',
+          caps: { mds: 'allow rw fsname=myfs' }
+        }
+      ])
+    );
+
+    component.loadEntities();
+    tick();
+    component.entities$.subscribe((rows) => {
+      expect(rows.length).toBe(1);
+      expect(rows[0].entity).toBe('client.valid');
+      expect(rows[0].mdsCaps).toContain('fsname=myfs');
+    });
+  }));
+
+  it('should not submit if form invalid', () => {
+    component.entityForm.get('user_entity')?.setValue('');
+    component.submitAction();
+    expect(clusterServiceMock.createUser).not.toHaveBeenCalled();
+    expect(component.isSubmitting).toBeFalsy();
   });
 
-  it('should emit entitySelected when updateSelection is called', () => {
-    spyOn(component.entitySelected, 'emit');
-    const selection = { first: () => ({ entity: 'foo' }) } as any;
+  it('should create entity and set auth successfully', fakeAsync(() => {
+    component.entityForm.get('user_entity')?.setValue('newuser');
+    clusterServiceMock.createUser.mockReturnValue(of({}));
+    taskWrapperServiceMock.wrapTaskAroundCall.mockReturnValue(of({}));
+    cephfsServiceMock.setAuth.mockReturnValue(of({}));
+
+    const emitSpy = jest.spyOn(component.entitySelected, 'emit');
+
+    component.submitAction();
+    tick();
+    expect(clusterServiceMock.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_entity: 'client.newuser'
+      })
+    );
+    expect(cephfsServiceMock.setAuth).toHaveBeenCalledWith('myfs', 'newuser', ['/', 'rwps'], false);
+    expect(emitSpy).toHaveBeenCalledWith('client.newuser');
+    expect(component.isSubmitting).toBeFalsy();
+    expect(component.isCreatingNewEntity).toBeFalsy();
+  }));
+
+  it('should emit selected entity on updateSelection', () => {
+    const selection = new CdTableSelection();
+    selection.selected = [{ entity: 'client.test' }];
+    const emitSpy = jest.spyOn(component.entitySelected, 'emit');
     component.updateSelection(selection);
-    expect(component.entitySelected.emit).toHaveBeenCalledWith('foo');
+    expect(emitSpy).toHaveBeenCalledWith('client.test');
   });
 
-  it('should emit entitySelected with null if no selection', () => {
-    spyOn(component.entitySelected, 'emit');
-    const selection = { first: () => undefined } as any;
+  it('should emit null when selection empty', () => {
+    const selection = new CdTableSelection();
+    selection.selected = [];
+    const emitSpy = jest.spyOn(component.entitySelected, 'emit');
     component.updateSelection(selection);
-    expect(component.entitySelected.emit).toHaveBeenCalledWith(null);
+    expect(emitSpy).toHaveBeenCalledWith(null);
   });
 
-  it('should set isCreatingNewEntity and show warnings/info on onCreateEntitySelected', () => {
-    component.isCreatingNewEntity = false;
-    component.showCreateRequirementsWarning = false;
-    component.showCreateCapabilitiesInfo = false;
-    component.onCreateEntitySelected();
-    expect(component.isCreatingNewEntity).toBeTrue();
-    expect(component.showCreateRequirementsWarning).toBeTrue();
-    expect(component.showCreateCapabilitiesInfo).toBeTrue();
-  });
-
-  it('should set isCreatingNewEntity to false and show warnings/info on onExistingEntitySelected', () => {
-    component.isCreatingNewEntity = true;
-    component.showSelectRequirementsWarning = false;
-    component.showSelectEntityInfo = false;
+  it('should toggle create/existing states correctly', () => {
     component.onExistingEntitySelected();
-    expect(component.isCreatingNewEntity).toBeFalse();
-    expect(component.showSelectRequirementsWarning).toBeTrue();
-    expect(component.showSelectEntityInfo).toBeTrue();
+    expect(component.isCreatingNewEntity).toBeFalsy();
+    component.onCreateEntitySelected();
+    expect(component.isCreatingNewEntity).toBeTruthy();
   });
 
-  it('should hide create requirements warning on onDismissCreateRequirementsWarning', () => {
-    component.showCreateRequirementsWarning = true;
+  it('should dismiss warnings correctly', () => {
     component.onDismissCreateRequirementsWarning();
-    expect(component.showCreateRequirementsWarning).toBeFalse();
-  });
+    expect(component.showCreateRequirementsWarning).toBeFalsy();
 
-  it('should hide create capabilities info on onDismissCreateCapabilitiesInfo', () => {
-    component.showCreateCapabilitiesInfo = true;
     component.onDismissCreateCapabilitiesInfo();
-    expect(component.showCreateCapabilitiesInfo).toBeFalse();
-  });
+    expect(component.showCreateCapabilitiesInfo).toBeFalsy();
 
-  it('should hide select requirements warning on onDismissSelectRequirementsWarning', () => {
-    component.showSelectRequirementsWarning = true;
     component.onDismissSelectRequirementsWarning();
-    expect(component.showSelectRequirementsWarning).toBeFalse();
-  });
+    expect(component.showSelectRequirementsWarning).toBeFalsy();
 
-  it('should hide select entity info on onDismissSelectEntityInfo', () => {
-    component.showSelectEntityInfo = true;
     component.onDismissSelectEntityInfo();
-    expect(component.showSelectEntityInfo).toBeFalse();
+    expect(component.showSelectEntityInfo).toBeFalsy();
   });
 });

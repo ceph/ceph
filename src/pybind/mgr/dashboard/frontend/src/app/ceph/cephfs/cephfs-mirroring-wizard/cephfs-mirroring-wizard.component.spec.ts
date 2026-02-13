@@ -5,7 +5,8 @@ import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { BehaviorSubject } from 'rxjs';
 import {
-  STEP_TITLES_MIRRORING_CONFIGURED,
+  STEP_TITLES_MIRRORING_LOCAL,
+  STEP_TITLES_MIRRORING_REMOTE,
   LOCAL_ROLE,
   REMOTE_ROLE
 } from './cephfs-mirroring-wizard-step.enum';
@@ -21,7 +22,9 @@ describe('CephfsMirroringWizardComponent', () => {
 
   const mockSteps: WizardStepModel[] = [
     { stepIndex: 0, isComplete: false },
-    { stepIndex: 1, isComplete: false }
+    { stepIndex: 1, isComplete: false },
+    { stepIndex: 2, isComplete: false },
+    { stepIndex: 3, isComplete: false }
   ];
 
   beforeEach(async () => {
@@ -57,10 +60,10 @@ describe('CephfsMirroringWizardComponent', () => {
 
   it('should initialize wizard steps on ngOnInit', () => {
     expect(wizardStepsService.setTotalSteps).toHaveBeenCalledWith(
-      STEP_TITLES_MIRRORING_CONFIGURED.length
+      STEP_TITLES_MIRRORING_LOCAL.length
     );
 
-    expect(component.steps.length).toBe(STEP_TITLES_MIRRORING_CONFIGURED.length);
+    expect(component.steps.length).toBe(STEP_TITLES_MIRRORING_LOCAL.length);
   });
 
   it('should navigate to step when goToStep is called', () => {
@@ -83,6 +86,7 @@ describe('CephfsMirroringWizardComponent', () => {
       localRole: LOCAL_ROLE,
       remoteRole: null
     });
+    expect(component.steps.length).toBe(STEP_TITLES_MIRRORING_LOCAL.length);
   });
 
   it('should update form on remote role change', () => {
@@ -92,6 +96,7 @@ describe('CephfsMirroringWizardComponent', () => {
       localRole: null,
       remoteRole: REMOTE_ROLE
     });
+    expect(component.steps.length).toBe(STEP_TITLES_MIRRORING_REMOTE.length);
   });
 
   it('should navigate to mirroring list on cancel', () => {

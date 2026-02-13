@@ -1,8 +1,9 @@
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { Step } from 'carbon-components-angular';
 import { Router } from '@angular/router';
 import {
-  STEP_TITLES_MIRRORING_CONFIGURED,
+  STEP_TITLES_MIRRORING_REMOTE,
+  STEP_TITLES_MIRRORING_LOCAL,
   LOCAL_ROLE,
   REMOTE_ROLE
 } from './cephfs-mirroring-wizard-step.enum';
@@ -31,7 +32,6 @@ export class CephfsMirroringWizardComponent implements OnInit {
   private wizardStepsService = inject(WizardStepsService);
   private fb = inject(FormBuilder);
   private router = inject(Router);
-  private cdr = inject(ChangeDetectorRef);
 
   sourceList: string[] = [
     $localize`Sends data to remote clusters`,
@@ -53,53 +53,28 @@ export class CephfsMirroringWizardComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.wizardStepsService.setTotalSteps(STEP_TITLES_MIRRORING_CONFIGURED.length);
+    this.wizardStepsService.setTotalSteps(STEP_TITLES_MIRRORING_REMOTE.length);
 
     const stepsData = this.wizardStepsService.steps$.value;
-    this.steps = STEP_TITLES_MIRRORING_CONFIGURED.map((title, index) => ({
+    this.steps = STEP_TITLES_MIRRORING_REMOTE.map((title, index) => ({
       label: title,
       onClick: () => this.goToStep(stepsData[index]),
-      invalid: true
+      invalid: index === 0 ? false : undefined
     }));
-
-    // Step 1 (filesystem selection) should be invalid until a filesystem is selected
-    if (this.steps[1]) {
-      this.steps[1].invalid = true;
-    }
-
-    // Step 2 (entity selection) should be invalid until an entity is selected
-    if (this.steps[2]) {
-      this.steps[2].invalid = true;
-    }
   }
 
-  onFilesystemSelected(filesystem: FilesystemRow) {
+  onFilesystemSelected(filesystem: FilesystemRow | null) {
     this.selectedFilesystem = filesystem;
-    if (this.steps[1]) {
-      this.steps[1].invalid = !filesystem;
-    }
-    this.cdr.detectChanges();
-  }
-
-  onEntitySelected(entity: string) {
-    this.selectedEntity = entity;
-    if (this.steps[2]) {
-      this.steps[2].invalid = !entity;
-    }
-    this.cdr.detectChanges();
-  }
-
-  onFilesystemSelected(filesystem: FilesystemRow) {
-    this.selectedFilesystem = filesystem;
-    if (this.steps[1]) {
-      this.steps[1].invalid = !filesystem;
+    this.updateStepValidity();
+    if (!filesystem) {
+      this.selectedEntity = null;
     }
   }
 
-  onEntitySelected(entity: string) {
-    this.selectedEntity = entity;
-    if (this.steps[2]) {
-      this.steps[2].invalid = !entity;
+  onEntitySelected(entity: string | null) {
+    if (entity) {
+      this.selectedEntity = entity;
+      this.updateStepValidity();
     }
   }
 
@@ -112,6 +87,13 @@ export class CephfsMirroringWizardComponent implements OnInit {
   onLocalRoleChange() {
     this.form.patchValue({ localRole: LOCAL_ROLE, remoteRole: null });
     this.showMessage = false;
+    // Update step titles for local role
+    const stepsData = this.wizardStepsService.steps$.value;
+    this.steps = STEP_TITLES_MIRRORING_LOCAL.map((title, index) => ({
+      label: title,
+      onClick: () => this.goToStep(stepsData[index]),
+      invalid: true
+    }));
     if (this.steps[0]) {
       this.steps[0].invalid = false;
     }
@@ -120,6 +102,13 @@ export class CephfsMirroringWizardComponent implements OnInit {
   onRemoteRoleChange() {
     this.form.patchValue({ localRole: null, remoteRole: REMOTE_ROLE });
     this.showMessage = true;
+    // Update step titles for remote role
+    const stepsData = this.wizardStepsService.steps$.value;
+    this.steps = STEP_TITLES_MIRRORING_REMOTE.map((title, index) => ({
+      label: title,
+      onClick: () => this.goToStep(stepsData[index]),
+      invalid: true
+    }));
     if (this.steps[0]) {
       this.steps[0].invalid = false;
     }
@@ -129,5 +118,31 @@ export class CephfsMirroringWizardComponent implements OnInit {
 
   onCancel() {
     this.router.navigate(['/cephfs/mirroring']);
+  }
+
+  private updateStepValidity() {
+    if (this.steps[1]) {
+      this.steps[1].invalid = !this.selectedFilesystem;
+    }
+
+    // Step 2 (entity selection) is only required for remote role
+    if (!this.isLocalSelected() && this.steps[2]) {
+      this.steps[2].invalid = !this.selectedEntity;
+    }
+
+    // Step 3 (import/generate token) validity
+    if (this.steps[3]) {
+      if (this.isLocalSelected()) {
+        // For local, require filesystem selection
+        this.steps[3].invalid = !this.selectedFilesystem;
+      } else {
+        // For remote, require both filesystem and entity selection
+        this.steps[3].invalid = !(this.selectedFilesystem && this.selectedEntity);
+      }
+    }
+  }
+
+  private isLocalSelected(): boolean {
+    return this.form.get('localRole')?.value === LOCAL_ROLE;
   }
 }

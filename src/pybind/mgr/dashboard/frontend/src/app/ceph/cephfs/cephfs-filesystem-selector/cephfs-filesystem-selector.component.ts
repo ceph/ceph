@@ -3,9 +3,9 @@ import {
   OnInit,
   TemplateRef,
   ViewChild,
-  inject,
   Output,
-  EventEmitter
+  EventEmitter,
+  inject
 } from '@angular/core';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
@@ -40,7 +40,6 @@ export class CephfsFilesystemSelectorComponent implements OnInit {
   filesystems$: Observable<FilesystemRow[]> = of([]);
   selection = new CdTableSelection();
   icons = Icons;
-  @Output() filesystemSelected = new EventEmitter<FilesystemRow | null>();
   mdsStatusLabels: Record<MdsStatus, string> = {
     Active: $localize`Active`,
     Warning: $localize`Warning`,
@@ -50,6 +49,8 @@ export class CephfsFilesystemSelectorComponent implements OnInit {
     Enabled: $localize`Enabled`,
     Disabled: $localize`Disabled`
   };
+
+  @Output() filesystemSelected = new EventEmitter<FilesystemRow | null>();
 
   private cephfsService = inject(CephfsService);
   private dimlessBinaryPipe = inject(DimlessBinaryPipe);

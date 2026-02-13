@@ -1,5 +1,5 @@
-import { Component, OnInit, Output, EventEmitter, Input, inject } from '@angular/core';
-import { BehaviorSubject, Observable, of } from 'rxjs';
+import { Component, OnInit, Output, EventEmitter, Input, inject, OnDestroy } from '@angular/core';
+import { BehaviorSubject, Observable, of, Subscription } from 'rxjs';
 import { catchError, map, switchMap, defaultIfEmpty } from 'rxjs/operators';
 
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -23,7 +23,7 @@ import { CephAuthUser } from '~/app/shared/models/cluster.model';
   styleUrls: ['./cephfs-mirroring-entity.component.scss'],
   standalone: false
 })
-export class CephfsMirroringEntityComponent extends CdForm implements OnInit {
+export class CephfsMirroringEntityComponent extends CdForm implements OnInit, OnDestroy {
   columns: CdTableColumn[];
   selection = new CdTableSelection();
 
@@ -36,11 +36,11 @@ export class CephfsMirroringEntityComponent extends CdForm implements OnInit {
     { name: $localize`OSD`, permission: 'rwps' }
   ];
 
-  isCreatingNewEntity = true;
-  showCreateRequirementsWarning = true;
-  showCreateCapabilitiesInfo = true;
-  showSelectRequirementsWarning = true;
-  showSelectEntityInfo = true;
+  isCreatingNewEntity: boolean = true;
+  showCreateRequirementsWarning: boolean = true;
+  showCreateCapabilitiesInfo: boolean = true;
+  showSelectRequirementsWarning: boolean = true;
+  showSelectEntityInfo: boolean = true;
 
   entityForm: CdFormGroup;
 
@@ -54,6 +54,8 @@ export class CephfsMirroringEntityComponent extends CdForm implements OnInit {
   private clusterService = inject(ClusterService);
   private taskWrapperService = inject(TaskWrapperService);
   private formBuilder = inject(CdFormBuilder);
+
+  private submitSubscription?: Subscription;
 
   ngOnInit(): void {
     const noClientPrefix: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
@@ -156,7 +158,7 @@ export class CephfsMirroringEntityComponent extends CdForm implements OnInit {
 
     this.isSubmitting = true;
 
-    this.taskWrapperService
+    this.submitSubscription = this.taskWrapperService
       .wrapTaskAroundCall({
         task: new FinishedTask(`ceph-user/create`, {
           userEntity: fullEntity,
@@ -181,9 +183,25 @@ export class CephfsMirroringEntityComponent extends CdForm implements OnInit {
         complete: () => {
           this.isSubmitting = false;
           this.entityForm.reset();
+          this.resetSubmitButton();
           this.handleEntityCreated(fullEntity);
+        },
+        error: () => {
+          this.isSubmitting = false;
+          this.resetSubmitButton();
         }
       });
+  }
+
+  ngOnDestroy(): void {
+    this.submitSubscription?.unsubscribe();
+  }
+
+  private resetSubmitButton() {
+    this.entityForm.setErrors({
+      ...(this.entityForm.errors || {}),
+      cdSubmitButton: true
+    });
   }
 
   private handleEntityCreated(entityId: string) {
