@@ -273,6 +273,26 @@ export class CdValidators {
   }
 
   /**
+   * Validator for DH-HMAC-CHAP keys that must be Base64 encoded.
+   * Accepts plain Base64 or DHHC-1:XX:base64: format.
+   * Skips validation when value is empty (use with required validator if needed).
+   * @returns {ValidatorFn} Returns error map with `invalidBase64` if validation fails.
+   */
+  static base64(): ValidatorFn {
+    const plainBase64Regex = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+    const dhchapFormatRegex = /^DHHC-1:[0-9a-fA-F]{2}:[A-Za-z0-9+/]+:$/;
+    return (control: AbstractControl): { [key: string]: boolean } | null => {
+      if (isEmptyInputValue(control.value)) {
+        return null;
+      }
+      const value = control.value;
+      return plainBase64Regex.test(value) || dhchapFormatRegex.test(value)
+        ? null
+        : { invalidBase64: true };
+    };
+  }
+
+  /**
    * Validate form control if condition is true with validators.
    *
    * @param {AbstractControl} formControl

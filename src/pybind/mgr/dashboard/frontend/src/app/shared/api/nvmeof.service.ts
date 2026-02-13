@@ -44,6 +44,7 @@ export type NamespaceUpdateRequest = NvmeofRequest & {
 
 export type InitiatorRequest = NvmeofRequest & {
   host_nqn: string;
+  dhchap_key?: string;
 };
 
 const API_PATH = 'api/nvmeof';
@@ -180,7 +181,23 @@ export class NvmeofService {
     });
   }
 
-  removeInitiators(subsystemNQN: string, request: InitiatorRequest) {
+  updateHostKey(subsystemNQN: string, request: InitiatorRequest) {
+    return this.http.put(
+      `${API_PATH}/subsystem/${subsystemNQN}/host/${request.host_nqn}/change_key`,
+      request,
+      {
+        observe: 'response'
+      }
+    );
+  }
+
+  addNamespaceInitiators(nsid: string, request: NamespaceInitiatorRequest) {
+    return this.http.post(`${UI_API_PATH}/namespace/${nsid}/host`, request, {
+      observe: 'response'
+    });
+  }
+
+  removeSubsystemInitiators(subsystemNQN: string, request: InitiatorRequest) {
     return this.http.delete(
       `${UI_API_PATH}/subsystem/${subsystemNQN}/host/${request.host_nqn}/${request.gw_group}`,
       {

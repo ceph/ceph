@@ -1,0 +1,89 @@
+<cds-modal size="sm"
+           [open]="open"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h2 cdsModalHeaderLabel
+        i18n>
+        {{'Subsystem'}}
+    </h2>
+
+  <!-- Step 1: Enter DHCHAP key -->
+  <ng-container *ngIf="!showConfirmation">
+    <h2 class="cds--type-heading-03"
+        cdsModalHeaderHeading
+        i18n>Edit Host Key</h2>
+  </ng-container>
+
+  <!-- Step 2: Confirm changes -->
+  <ng-container *ngIf="showConfirmation">
+    <h2 class="cds--type-heading-03"
+        cdsModalHeaderHeading
+        i18n>Confirm changes</h2>
+  </ng-container>
+  </cds-modal-header>
+
+  <section cdsModalContent>
+    <!-- Step 1: Enter DHCHAP key -->
+    <ng-container *ngIf="!showConfirmation">
+      <p class="cds--type-body-01 cds-mb-5"
+         i18n>Update DHCHAP authentication key for the selected host.</p>
+      <form name="editForm"
+            #formDir="ngForm"
+            [formGroup]="editForm"
+            class="form-item "
+            novalidate>
+        <cds-text-label
+          i18n
+          helperText="Enter or update the authentication key for this host."
+          i18n-helperText
+          labelInputID="dhchapKey"
+          [invalid]="dhchapKey.isInvalid"
+          [invalidText]="dhchapKeyError">
+          DHCHAP Key | {{ hostNQN }}
+          <input cdsPassword
+                 cdValidate
+                 #dhchapKey="cdValidate"
+                 [invalid]="dhchapKey.isInvalid"
+                 formControlName="dhchapKey"
+                 type="password"
+                 id="dhchap_key"
+                 placeholder="Enter Host DH-HMAC-CHAP key"
+                 i18n-placeholder
+                 modal-primary-focus
+                 autofocus
+                 autocomplete="off">
+        </cds-text-label>
+        <ng-template #dhchapKeyError>
+          <span *ngIf="editForm.controls.dhchapKey.hasError('required')"
+                class="invalid-feedback"
+                i18n>This field is required.</span>
+          <span *ngIf="editForm.controls.dhchapKey.hasError('invalidBase64')"
+                class="invalid-feedback"
+                i18n>Invalid DH-HMAC-CHAP key. Please enter a valid Base64 encoded key.</span>
+        </ng-template>
+      </form>
+    </ng-container>
+
+    <!-- Step 2: Confirm changes -->
+    <ng-container *ngIf="showConfirmation">
+      <p class="cds--type-body-01"
+         i18n>Modifying or removing the Host key can invalidate existing NVMe sessions and interrupt secure communication with hosts. Ensure new keys are configured on all connected systems before continuing.</p>
+    </ng-container>
+  </section>
+
+  <!-- Step 1: Save button -->
+  <cd-form-button-panel *ngIf="!showConfirmation"
+                        (submitActionEvent)="onSave()"
+                        (backActionEvent)="closeModal()"
+                        [form]="editForm"
+                        [submitText]="'Save'"
+                        [modalForm]="true"></cd-form-button-panel>
+
+  <!-- Step 2: Confirm button -->
+  <cd-form-button-panel *ngIf="showConfirmation"
+                        (submitActionEvent)="onSubmit()"
+                        (backActionEvent)="goBack()"
+                        [form]="editForm"
+                        [submitText]="'Save changes'"
+                        [modalForm]="true"></cd-form-button-panel>
+</cds-modal>

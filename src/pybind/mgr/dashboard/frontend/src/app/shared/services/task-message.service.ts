@@ -409,6 +409,9 @@ export class TaskMessageService {
     'nvmeof/initiator/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
       this.nvmeofInitiator(metadata)
     ),
+    'nvmeof/initiator/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.nvmeofInitiator(metadata)
+    ),
     'nvmeof/initiator/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.nvmeofInitiator(metadata)
     ),
