@@ -211,6 +211,31 @@ cdef extern from "rbd/librbd.h" nogil:
         rbd_mirror_group_state_t state
         bint primary
 
+    ctypedef enum rbd_mirror_group_status_state_t:
+        _MIRROR_GROUP_STATUS_STATE_UNKNOWN "MIRROR_GROUP_STATUS_STATE_UNKNOWN"
+        _MIRROR_GROUP_STATUS_STATE_ERROR "MIRROR_GROUP_STATUS_STATE_ERROR"
+        _MIRROR_GROUP_STATUS_STATE_STARTING_REPLAY "MIRROR_GROUP_STATUS_STATE_STARTING_REPLAY"
+        _MIRROR_GROUP_STATUS_STATE_REPLAYING "MIRROR_GROUP_STATUS_STATE_REPLAYING"
+        _MIRROR_GROUP_STATUS_STATE_STOPPING_REPLAY "MIRROR_GROUP_STATUS_STATE_STOPPING_REPLAY"
+        _MIRROR_GROUP_STATUS_STATE_STOPPED "MIRROR_GROUP_STATUS_STATE_STOPPED"
+
+    ctypedef struct rbd_mirror_group_site_status_t:
+        char *mirror_uuid
+        rbd_mirror_group_status_state_t state
+        char *description
+        uint32_t mirror_image_count
+        int64_t *mirror_image_pool_ids
+        char **mirror_image_global_ids
+        rbd_mirror_image_site_status_t *mirror_images
+        time_t last_update
+        bint up
+
+    ctypedef struct rbd_mirror_group_global_status_t:
+        char *name
+        rbd_mirror_group_info_t info
+        uint32_t site_statuses_count
+        rbd_mirror_group_site_status_t *site_statuses
+
     ctypedef enum rbd_lock_mode_t:
         _RBD_LOCK_MODE_EXCLUSIVE "RBD_LOCK_MODE_EXCLUSIVE"
         _RBD_LOCK_MODE_SHARED "RBD_LOCK_MODE_SHARED"
@@ -520,6 +545,23 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_mirror_group_info_list_cleanup(
         char **group_ids, rbd_mirror_group_info_t *info_entries,
         size_t num_entries);
+    int rbd_mirror_group_enable(rados_ioctx_t gp_ioctx, const char *gp_name,
+                                rbd_mirror_image_mode_t mirror_image_mode)
+    int rbd_mirror_group_disable(rados_ioctx_t gp_ioctx, const char *gp_name,
+                                 bint force)
+    int rbd_mirror_group_promote(rados_ioctx_t gp_ioctx, const char *gp_name,
+                                 bint force)
+    int rbd_mirror_group_demote(rados_ioctx_t gp_ioctx, const char *gp_name)
+    int rbd_mirror_group_resync(rados_ioctx_t gp_ioctx, const char *gp_name)
+    int rbd_mirror_group_get_global_status(rados_ioctx_t gp_ioctx, const char *gp_name,
+                                           rbd_mirror_group_global_status_t *status,
+                                           size_t status_size)
+    void rbd_mirror_group_global_status_cleanup(
+        rbd_mirror_group_global_status_t *status)
+    int rbd_mirror_group_get_instance_id(rados_ioctx_t gp_ioctx,
+                                         const char *gp_name,
+                                         char *instance_id,
+                                         size_t *max_instance_id_len)
 
     int rbd_pool_metadata_get(rados_ioctx_t io_ctx, const char *key,
                               char *value, size_t *val_len)
