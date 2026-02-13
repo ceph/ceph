@@ -329,7 +329,7 @@ struct seastore_test_t :
 	std::move(t)).get();
     }
 
-    void clone(
+    object_state_t clone(
       SeaStoreShard &sharded_seastore,
       snapid_t snap) {
       ghobject_t coid = oid;
@@ -342,6 +342,7 @@ struct seastore_test_t :
       clone_contents[snap].reserve(contents.length());
       auto it = contents.begin();
       it.copy_all(clone_contents[snap]);
+      return get_clone(snap);
     }
 
     object_state_t get_clone(snapid_t snap) {
@@ -949,6 +950,25 @@ TEST_P(seastore_test_t, clone_aligned_extents)
     auto clone_obj20 = test_obj.get_clone(20);
     clone_obj10.read(*sharded_seastore, 0, 12288);
     clone_obj20.read(*sharded_seastore, 0, 12288);
+  });
+}
+
+TEST_P(seastore_test_t, clone_remove)
+{
+  run_async([this] {
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.write(*sharded_seastore, 0, 64 << 10, 'a');
+
+    auto clone_obj10 = test_obj.clone(*sharded_seastore, 10);
+    test_obj.write(*sharded_seastore, 4 << 10, 4 << 10, 'b');
+    test_obj.write(*sharded_seastore, 8 << 10, 4 << 10, 'c');
+
+    auto clone_obj20 = test_obj.clone(*sharded_seastore, 20);
+    test_obj.write(*sharded_seastore, 4 << 10, 4 << 10, 'b');
+    test_obj.write(*sharded_seastore, 8 << 10, 4 << 10, 'c');
+
+    clone_obj20.remove(*sharded_seastore);
+    clone_obj10.remove(*sharded_seastore);
   });
 }
 
