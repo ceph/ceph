@@ -1699,6 +1699,9 @@ CEPH_RBD_API int rbd_aio_mirror_group_get_info(
     rados_ioctx_t p, const char *name,
     rbd_mirror_group_info_t *mirror_group_info, size_t info_size,
     rbd_completion_t c);
+CEPH_RBD_API int rbd_mirror_group_get_instance_id(
+    rados_ioctx_t p, const char *name, char *instance_id,
+    size_t *instance_id_max_length);
 
 CEPH_RBD_API int rbd_namespace_create(rados_ioctx_t io,
                                       const char *namespace_name);
