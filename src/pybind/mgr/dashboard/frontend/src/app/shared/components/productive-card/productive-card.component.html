@@ -1,23 +1,8 @@
 <cds-tile class="productive-card"
           [ngClass]="{'productive-card--shadow': applyShadow}"
           [cdsLayer]="0">
-  <header
-    cdsGrid
-    class="productive-card-header">
-    <div cdsRow
-         class="productive-card-header-row">
-      <div cdsCol
-           [columnNumbers]="{sm: headerActionTemplate ? 12 : 16, md: headerActionTemplate ? 12 : 16, lg: headerActionTemplate ? 12 : 16}">
-        <h2 class="cds--type-heading-compact-02">{{headerTitle}}</h2>
-      </div>
-      @if(!!headerActionTemplate) {
-      <div cdsCol
-           [columnNumbers]="{sm: 4, md: 4, lg: 4}"
-           class="productive-card-header-actions">
-        <ng-container *ngTemplateOutlet="headerActionTemplate"></ng-container>
-      </div>
-      }
-    </div>
+  <header class="productive-card-header">
+    <ng-container *ngTemplateOutlet="headerTemplate"></ng-container>
   </header>
   <section class="productive-card-section cds--type-body-compact-01"
            [ngClass]="{'productive-card-section--footer': footerTemplate}">

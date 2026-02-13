@@ -1,0 +1,36 @@
+.overview-health-card {
+  &-header {
+    display: flex;
+    align-items: end;
+  }
+
+  // CSS for status text, modifier names match icons name
+  &-status--success {
+    color: var(--cds-support-success);
+  }
+
+  &-status--warningAltFilled {
+    color: var(--cds-support-caution-major);
+  }
+
+  &-status--error {
+    color: var(--cds-text-error);
+  }
+}
+
+// Overrides
+.clipboard-btn {
+  padding: var(--cds-spacing-02);
+}
+
+.cds--btn--icon-only {
+  padding: var(--cds-spacing-01);
+}
+
+.cds--link.cds--link--inline {
+  text-decoration: none;
+}
+
+.cds--skeleton__placeholder {
+  margin-bottom: var(--cds-spacing-03);
+}
