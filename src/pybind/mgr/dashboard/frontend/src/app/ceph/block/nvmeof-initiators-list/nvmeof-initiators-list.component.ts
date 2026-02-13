@@ -3,6 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -189,10 +190,15 @@ export class NvmeofInitiatorsListComponent implements OnInit {
       hostNQNs.splice(allowAllHostIndex, 1);
       itemNames = [...hostNQNs, $localize`Allow any host(*)`];
     }
+    const hostName = itemNames[0];
     this.modalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: 'Initiator',
+      itemDescription: $localize`host`,
+      impact: DeletionImpact.high,
       itemNames,
       actionDescription: 'remove',
+      bodyContext: {
+        deletionMessage: $localize`Removing <strong>${hostName}</strong> will disconnect it and revoke its permissions for the <strong>${this.subsystemNQN}</strong> subsystem.`
+      },
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
           task: new FinishedTask('nvmeof/initiator/remove', {

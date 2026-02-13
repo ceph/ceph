@@ -2,21 +2,24 @@
            [open]="open"
            (overlaySelected)="closeModal()">
   <cds-modal-header (closeSelect)="closeModal()">
-    <h2 cdsModalHeaderLabel
+    <h2
+        cdsModalHeaderLabel
         i18n>
-        {{'Subsystem'}}
+      {{'Subsystem'}}
     </h2>
 
   <!-- Step 1: Enter DHCHAP key -->
   <ng-container *ngIf="!showConfirmation">
-    <h2 class="cds--type-heading-03"
+    <h2
+        class="cds--type-heading-03"
         cdsModalHeaderHeading
         i18n>Edit Host Key</h2>
   </ng-container>
 
   <!-- Step 2: Confirm changes -->
   <ng-container *ngIf="showConfirmation">
-    <h2 class="cds--type-heading-03"
+    <h2
+        class="cds--type-heading-03"
         cdsModalHeaderHeading
         i18n>Confirm changes</h2>
   </ng-container>
