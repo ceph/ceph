@@ -26,6 +26,7 @@ usr/bin/rgw-restore-bucket-index
 usr/bin/rbd
 usr/bin/rbdmap
 usr/bin/rbd-replay*
+usr/bin/radostrace
 usr/bin/ceph-post-file
 usr/sbin/mount.ceph sbin
 usr/lib/ceph/compressor/*

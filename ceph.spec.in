@@ -28,6 +28,7 @@
 %else
 %bcond_without tcmalloc
 %endif
+%bcond_without ebpf_trace
 %bcond_without rbd_ssd_cache
 %ifarch x86_64
 %bcond_without rbd_rwl_cache
@@ -1477,6 +1478,11 @@ cmake .. \
     -DWITH_LTTNG:BOOL=OFF \
     -DWITH_BABELTRACE:BOOL=OFF \
 %endif
+%if %{with ebpf_trace}
+    -DWITH_EBPF_TRACE:BOOL=ON \
+%else
+    -DWITH_EBPF_TRACE:BOOL=OFF \
+%endif
     $CEPH_EXTRA_CMAKE_ARGS \
 %if 0%{with ocf}
     -DWITH_OCF:BOOL=ON \
@@ -1803,6 +1809,9 @@ exit 0
 %endif
 %if %{with lttng}
 %{_bindir}/rbd-replay-prep
+%endif
+%if %{with ebpf_trace}
+%{_bindir}/radostrace
 %endif
 %{_bindir}/ceph-post-file
 %dir %{_libdir}/ceph/denc
