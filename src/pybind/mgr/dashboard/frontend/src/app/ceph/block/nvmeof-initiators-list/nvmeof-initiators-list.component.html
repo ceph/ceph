@@ -14,12 +14,10 @@
         Allowing all hosts grants access to every initiator on the network. Authentication is not supported in this mode, which may expose the subsystem to unauthorized access.
       </p>
     </div>
-    <span
-      class="text-nowrap cds-ml-3 text-muted"
-      i18n
-    >
-      Edit host access
-    </span>
+    <a cdsLink
+       class="text-nowrap cds-ml-3 text-muted"
+       (click)="editHostAccess()"
+       i18n>Edit host access</a>
   </div>
 </cd-alert-panel>
 

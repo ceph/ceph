@@ -17,6 +17,7 @@ import { NvmeofSubsystemAuthType } from '~/app/shared/enum/nvmeof.enum';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { NvmeofEditHostKeyModalComponent } from '../nvmeof-edit-host-key-modal/nvmeof-edit-host-key-modal.component';
 
 const BASE_URL = 'block/nvmeof/subsystems';
 
@@ -99,6 +100,14 @@ export class NvmeofInitiatorsListComponent implements OnInit {
         disable: () => this.hasAllHostsAllowed()
       },
       {
+        name: $localize`Edit host key`,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () => this.editHostKeyModal(),
+        disable: () => this.selection.selected.length !== 1,
+        canBePrimary: (selection: CdTableSelection) => selection.selected.length === 1
+      },
+      {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
@@ -114,6 +123,17 @@ export class NvmeofInitiatorsListComponent implements OnInit {
       this.listInitiators();
       this.getSubsystem();
     }
+  }
+
+  editHostKeyModal() {
+    const selected = this.selection.selected[0];
+    if (!selected) return;
+    this.modalService.show(NvmeofEditHostKeyModalComponent, {
+      subsystemNQN: this.subsystemNQN,
+      hostNQN: selected.nqn,
+      group: this.group,
+      dhchapKey: selected.dhchap_key || ''
+    });
   }
 
   getAllowAllHostIndex() {

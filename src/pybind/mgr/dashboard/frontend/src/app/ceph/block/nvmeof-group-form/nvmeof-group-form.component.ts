@@ -75,16 +75,6 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       enableEncryption: new UntypedFormControl(false),
       encryptionConfig: new UntypedFormControl(null)
     });
-
-    this.groupForm.get('enableEncryption')?.valueChanges.subscribe((enabled) => {
-      const encryptionControl = this.groupForm.get('encryptionConfig');
-      if (enabled) {
-        encryptionControl?.setValidators([Validators.required]);
-      } else {
-        encryptionControl?.clearValidators();
-      }
-      encryptionControl?.updateValueAndValidity();
-    });
   }
 
   onHostsLoaded(count: number): void {
@@ -169,8 +159,8 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       unmanaged: formValues.unmanaged
     };
 
-    if (formValues.enableEncryption && formValues.encryptionConfig) {
-      serviceSpec['encryption_key'] = formValues.encryptionConfig;
+    if (formValues.enableCds && formValues.cdsInput) {
+      serviceSpec['encryption_key'] = formValues.cdsInput;
     }
 
     this.taskWrapperService

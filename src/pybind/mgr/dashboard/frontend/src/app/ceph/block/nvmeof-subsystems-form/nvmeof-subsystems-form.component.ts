@@ -81,7 +81,6 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
       host_nqn: payload.hostType === HOST_TYPE.ALL ? '*' : payload.addedHosts.join(','),
       gw_group: this.group
     };
-
     this.nvmeofService
       .createSubsystem({
         nqn: payload.nqn,
