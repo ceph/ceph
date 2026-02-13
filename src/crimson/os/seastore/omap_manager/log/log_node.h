@@ -198,15 +198,17 @@ using LogNodeRef = TCachedExtentRef<LogNode>;
 struct log_key_t {
   uint16_t key_len = 0;
   uint16_t val_len = 0;
+  uint16_t chunk_idx = 0;
 
   log_key_t() = default;
-  log_key_t(uint16_t k_len, uint16_t v_len)
-  : key_len(k_len), val_len(v_len) {}
+  log_key_t(uint16_t k_len, uint16_t v_len, uint16_t c_idx = 0)
+  : key_len(k_len), val_len(v_len), chunk_idx(c_idx) {}
 
   DENC(log_key_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.key_len, p);
     denc(v.val_len, p);
+    denc(v.chunk_idx, p);
     DENC_FINISH(p);
   }
 };
@@ -214,23 +216,26 @@ struct log_key_t {
 struct log_key_le_t {
   ceph_le16 key_len{0};
   ceph_le16 val_len{0};
+  ceph_le16 chunk_idx{0};
 
   log_key_le_t() = default;
   log_key_le_t(const log_key_le_t &) = default;
   explicit log_key_le_t(const log_key_t &key)
     : key_len(key.key_len),
-      val_len(key.val_len) {}
+      val_len(key.val_len),
+      chunk_idx(key.chunk_idx) {}
 
   log_key_le_t& operator=(log_key_t key) {
     key_len = key.key_len;
     val_len = key.val_len;
+    chunk_idx = key.chunk_idx;
     return *this;
   }
 
 
   operator log_key_t() const {
     return log_key_t{uint16_t(key_len),
-                           uint16_t(val_len)};
+      uint16_t(val_len), uint16_t(chunk_idx)};
   }
 };
 
@@ -462,6 +467,10 @@ public:
       bl.append(bptr);
       return bl;
     }
+
+    uint64_t get_chunk_idx() const {
+      return get_node_key().chunk_idx;
+    }
   };
   
   using const_iterator = iter_t<true>;
@@ -657,6 +666,18 @@ public:
     set_size(get_size() + 1);
   }
 
+  void _append_multi_block_kv(const std::string &key, const ceph::bufferlist &val,
+    const uint16_t idx) {
+    iterator prev_iter(this, get_last_pos());
+    auto last = prev_iter->get_node_key();
+    iterator next_iter(this, get_size() == 0 ? get_last_pos() :
+      get_last_pos() + get_entry_size(last.key_len, last.val_len));
+    next_iter.set_node_key(log_key_t(key.size(), val.length(), idx));
+    next_iter.set_node_val(key, val);
+    ceph_assert(get_size() == 0);
+    set_size(get_size() + 1);
+  }
+
   void _overwrite(const std::string &key, const ceph::bufferlist &val) {
     iterator iter(this, get_last_pos());
     iter.set_node_key(log_key_t(key.size(), val.length()));
@@ -781,6 +802,9 @@ struct LogNode
   delta_buffer_t *maybe_get_delta_buffer() {
     return is_mutation_pending() ? &delta_buffer : nullptr;
   }
+
+  void append_multi_block_kv(Transaction &t, const std::string &key,
+    const ceph::bufferlist &val, const uint16_t idx);
 
   void append_kv(Transaction &t, const std::string &key,
     const ceph::bufferlist &val);
@@ -924,6 +948,25 @@ struct LogNode
       return true;
     }
     return free_space() < get_entry_size(ksize, vsize) + reserved_len;
+  }
+
+  size_t get_max_val_length(size_t ksize) {
+    return (capacity() - get_entry_size(ksize, 0));
+  }
+
+  bool is_first_multi_block(const std::string &key) const {
+    auto iter = iter_begin();
+    return (iter->get_chunk_idx() == 1 && iter->get_key() == key);
+  }
+
+  bool has_multi_block_kv() const {
+    auto iter = iter_begin();
+    return (iter->get_chunk_idx() >= 1);
+  }
+
+  bool has_multi_block_kv(const std::string &key) const {
+    auto iter = iter_begin();
+    return (iter->get_chunk_idx() >= 1 && iter->get_key() == key);
   }
 
   void update_delta() {
