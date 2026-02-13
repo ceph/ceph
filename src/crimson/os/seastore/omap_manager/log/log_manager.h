@@ -301,6 +301,48 @@ public:
 
   base_iertr::future<laddr_t> get_dup_addr_from_root(Transaction &t, laddr_t addr);
 
+  /**
+   *
+   * Support for multi-block KV pairs
+   *
+   * Each log_key_t contains a chunk_idx field to manage values
+   * that span multiple LogNodes when the value size exceeds the
+   * maximum capacity of a single LogNode.
+   * For simplicity, we always create separate blocks for each chunk,
+   * even if this may introduce some internal fragmentation.
+   * TODO: Implement block packing to improve space efficiency.
+   *
+   * Layout example:
+   *
+   *                     log_root
+   *                         |
+   *                         v
+   *        +-------------------------------+
+   *        |  LogNode (1 KV, chunk_idx:2)  |
+   *        |        (later chunk)          |
+   *        +-------------------------------+
+   *                         |
+   *                         v
+   *        +-------------------------------+
+   *        |  LogNode (1 KV, chunk_idx:1)  |
+   *        |        (earlier chunk)        |
+   *        +-------------------------------+
+   *
+   */
+  omap_get_value_iertr::future<>
+  find_multi_block_kv(Transaction &t, const std::string &key,
+    LogNodeRef extent, bufferlist &buf);
+  omap_list_iertr::future<>
+  find_multi_block_kvs(Transaction &t, LogNodeRef extent,
+    const std::optional<std::string> &first,
+    const std::optional<std::string> &last,
+    std::map<std::string, bufferlist> &kvs);
+  omap_set_key_ret
+  _log_set_multi_block_key(omap_root_t &log_root,
+    Transaction &t, LogNodeRef tail,
+    const std::string &key, const ceph::bufferlist &value);
+
+
   TransactionManager &tm;
 };
 

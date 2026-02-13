@@ -34,6 +34,12 @@ void delta_t::replay(LogKVNodeLayout &l) {
   }
 }
 
+void LogNode::append_multi_block_kv(Transaction &t, const std::string &key,
+  const ceph::bufferlist &val, const uint16_t idx) {
+  assert(!maybe_get_delta_buffer());
+  _append_multi_block_kv(key, val, idx);
+}
+
 void LogNode::append_kv(Transaction &t, const std::string &key,
     const ceph::bufferlist &val) {
   auto p = maybe_get_delta_buffer();
@@ -181,7 +187,17 @@ void LogNode::list(const std::optional<std::string> &first,
   for_each_live_entry([&](const auto& ent, uint32_t index) -> bool {
     const auto k = ent.get_key();
     if (k >= s && (!last || k <= e)) {
-      kvs[k] = ent.get_val();
+      if (ent.get_chunk_idx() == 0) {
+	// This is not multi block kv pair
+	kvs[k] = ent.get_val();
+      } else {
+	bufferlist head = ent.get_val();
+	auto it = kvs.find(k);
+	if (it != kvs.end()) {
+	  head.claim_append(kvs[k]);
+	}
+	kvs[k] = std::move(head);
+      }
     }
     return false;
   });
