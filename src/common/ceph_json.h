@@ -4,7 +4,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2025 International Business Machines Corp.
+ * Copyright (C) 2025-2026 International Business Machines Corp.
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -189,15 +189,78 @@ protected:
   void handle_value(boost::json::value v);
 
 protected:
-  // Although the error_code contains useful information, the API constraints require
-  // that we throw it out:
-  static bool parse_json(std::string_view input, boost::json::value& data_out)
-  {
+  /* While basic parsing is straightforward:
 	data_out = boost::json::parse(input, boost::json::storage_ptr(), 
 				     { .allow_invalid_utf8 = true });
+   ...we need to fit in with the previous parser, which was frankly more tolerant of
+   invalid data than boost.json is out of the box. Therefore, we employ the stream
+   parser, which is slightly more complicated but more flexible; we also try to reinterpret
+   certain kinds of failures as strings, which IMO is fairly naughty... */
+   static bool parse_json(std::string_view input, boost::json::value& data_out)
+   {
+    boost::json::stream_parser p;
+    boost::system::error_code ec;
 
-	return true;
-  }
+    std::size_t bytes_written = p.write_some(input, ec);
+
+    if (!ec) {
+      p.finish(ec);
+      data_out = p.release();
+
+      return true;
+    }
+
+fmt::println("JFW: JSON error -- bytes_written = {}, input.size() = {}. Input:\n{}", bytes_written, input.size(), input);
+   // The original parser tolerated a number of questionable to things that are basically just involved accepting the item
+   // as a string; I'm trying to figure out ways to model this as a retry that will be similar to the bugs/behavior of
+   // the previous parser. Obviously, we don't want every reported syntax error to be a non-failure, for instance...
+   //   The most common case I found is that of a syntax error being reported around a bare URL-- the previous parser would
+   // non-delimited JSON like that around and the expectation was that it would be parsed as a string; the other common situation
+   // is that of having an extra NULL character at the end of the string, which once again is rightly rejected as junk input:
+   if (boost::json::error::syntax == ec && 0 == bytes_written) {
+fmt::println(" JFW: from syntax, trying again...");
+    // This feels very uncomforable, but it's what the old library basically always did as far as I can tell!
+    // In this case, we don't try to parse a JSON value out of it:
+    data_out = input;
+
+    return true; 
+   }
+
+   if(boost::json::error::extra_data == ec) {
+fmt::println("JFW: from extra data, trying again...");
+      // Try again, less any NULL characters (if that's the issue):
+      std::string_view sv(input);
+      while(sv.ends_with('\x00'))
+       sv.remove_suffix(1);
+
+      // Reset, try again:
+      p.finish(ec);
+      ec = {};
+
+      bytes_written = p.write_some(sv, ec);
+
+      if (!ec) {
+        p.finish(ec);
+        data_out = p.release();
+
+        return true;
+      }
+/* JFW:
+      boost::system::result<std::string> r = boost::json::try_value_to<std::string>(sv);
+
+      if(r) {
+       ec = {};
+       data_out = *r;
+       return true; 
+      }
+*/
+   } 
+
+  throw std::runtime_error(fmt::format(
+    "JFW: JSON error (at position {}): {}\n{}\n---", bytes_written, ec.message(), input));
+
+  return false;
+ }
 
 public:
   JSONObj() = default;
@@ -306,7 +369,7 @@ public:
   }
 
   bool parse(ceph::buffer::list& bl) {
-	return parse(bl.c_str(), bl.length());
+	return parse(bl.c_str(), bl.length() - 1);
   }
 
   [[deprecated("this may not be reliable")]] bool parse_file(const std::filesystem::path file_name); 

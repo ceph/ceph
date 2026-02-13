@@ -4,7 +4,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2025 International Business Machines Corp.
+ * Copyright (C) 2025-2026 International Business Machines Corp.
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -23,7 +23,7 @@
 #include <boost/container/flat_map.hpp>
 
 /* Enable boost.json's header-only mode:
-        (see: "https://github.com/boostorg/json?tab=readme-ov-file#header-only"): */
+        (See: "https://github.com/boostorg/json?tab=readme-ov-file#header-only"): */
 #include <boost/json/src.hpp>
 
 #include <memory>
@@ -88,7 +88,7 @@ vector<string> JSONObj::get_array_elements()
    elements.emplace_back(boost::json::serialize(i));
  });
 
-  return elements;
+ return elements;
 }
 
 // parse the complete internal json_buffer
