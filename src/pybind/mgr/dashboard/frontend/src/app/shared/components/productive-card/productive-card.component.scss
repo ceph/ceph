@@ -5,16 +5,11 @@
   padding: 0;
 
   &-header {
-    padding-inline: var(--cds-spacing-05);
     margin: 0;
-  }
-
-  &-header-row {
     padding: var(--cds-spacing-05);
-  }
-
-  &-header-actions {
-    padding-right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
   }
 
   &-section {

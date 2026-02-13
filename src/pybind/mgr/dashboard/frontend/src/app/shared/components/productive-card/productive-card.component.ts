@@ -21,17 +21,14 @@ import { GridModule, LayerModule, TilesModule } from 'carbon-components-angular'
   styleUrl: './productive-card.component.scss'
 })
 export class ProductiveCardComponent {
-  /* Card Title */
-  @Input() headerTitle!: string;
-
   /* Optional: Applies a tinted-colored background to card */
   @Input() applyShadow: boolean = false;
 
   /* Optional: Header action template, appears alongwith title in top-right corner */
-  @ContentChild('headerAction', {
+  @ContentChild('header', {
     read: TemplateRef
   })
-  headerActionTemplate?: TemplateRef<any>;
+  headerTemplate?: TemplateRef<any>;
 
   /* Optional: Footer template , otherwise no footer will be used for card.*/
   @ContentChild('footer', {

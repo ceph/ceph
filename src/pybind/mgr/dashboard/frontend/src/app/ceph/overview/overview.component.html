@@ -1,3 +1,4 @@
+@let healthData = healthData$ | async;
 <div cdsGrid
      [narrow]="true"
      [condensed]="false"
@@ -8,7 +9,10 @@
     <div cdsCol
          class="cds-mb-5"
          [columnNumbers]="{lg: 11}">
-      <cds-tile>Health card</cds-tile>
+      <cd-overview-health-card
+        [fsid]="healthData?.fsid"
+        [health]="healthData?.health?.status">
+      </cd-overview-health-card>
     </div>
     <div cdsCol
          class="cds-mb-5"
@@ -21,12 +25,10 @@
     <div cdsCol
          class="cds-mb-5"
          [columnNumbers]="{lg: 16}">
-      @if (healthData$ | async; as healthData) {
       <cd-overview-storage-card
-        [total]="healthData.pgmap.bytes_total"
-        [used]="healthData.pgmap.bytes_used">
+        [total]="healthData?.pgmap.bytes_total"
+        [used]="healthData?.pgmap.bytes_used">
       </cd-overview-storage-card>
-      }
     </div>
   </div>
   <div cdsRow>
