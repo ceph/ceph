@@ -115,7 +115,7 @@ public:
       return Client::walk(path, result, perms, followsym);
     }
 
-        void ll_write_n_bytes(struct Fh *fh, size_t to_write, size_t block_size,
+    void ll_write_n_bytes(struct Fh *fh, size_t to_write, size_t block_size,
                             int iov_cnt, off_t *offset) {
       /// @brief Write N bytes of data asynchronously.
       /// @param fh - File handle
