@@ -526,9 +526,16 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
     changed = true;
   }
 
+  if (changed && pool.is_crimson()) {
+    mark_dirty_to(eversion_t::max());
+  }
+
   // now handle dups
   if (merge_log_dups(olog)) {
     changed = true;
+    if (pool.is_crimson()) {
+      mark_dirty_to_dups(eversion_t::max());
+    }
   }
 
   dout(10) << "merge_log result " << log << " " << missing <<
