@@ -392,12 +392,13 @@ public:
 	  std::string ser_data;
 	  zpp::bits::out out(ser_data);
 	  struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
-	  auto errc =
-	    out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-		bde.ver.pool, bde.ver.epoch, bde.exists,
-		bde.meta.category, bde.meta.size, ts.tv_sec, ts.tv_nsec,
-		bde.meta.owner, bde.meta.owner_display_name, bde.meta.accounted_size,
-		bde.meta.storage_class, bde.meta.appendable, bde.meta.etag);
+          auto errc =
+              out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
+                  bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+                  bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+                  bde.meta.owner_display_name, bde.meta.accounted_size,
+                  bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+                  bde.flags);
 	  /*std::cout << fmt::format("fill: bde.key.name: {}", bde.key.name)
 	    << std::endl;*/
 	  if (errc.code != std::errc{0}) {
@@ -449,12 +450,13 @@ public:
 	std::string ser_v{svv};
 	zpp::bits::in in_v(ser_v);
 	struct timespec ts;
-	errc =
-	  in_v(bde.key.name, bde.key.instance, /* bde.key.ns, */
-	       bde.ver.pool, bde.ver.epoch, bde.exists,
-	       bde.meta.category, bde.meta.size, ts.tv_sec, ts.tv_nsec,
-	       bde.meta.owner, bde.meta.owner_display_name, bde.meta.accounted_size,
-	       bde.meta.storage_class, bde.meta.appendable, bde.meta.etag);
+        errc = in_v(
+            bde.key.name, bde.key.instance, /* bde.key.ns, */
+            bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+            bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+            bde.meta.owner_display_name, bde.meta.accounted_size,
+            bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+            bde.flags);
 	if (errc.code != std::errc{0}) {
 	  abort();
 	}
@@ -535,12 +537,13 @@ public:
 	  std::string ser_data;
 	  zpp::bits::out out(ser_data);
 	  struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
-	  auto errc =
-	    out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
-		bde.ver.pool, bde.ver.epoch, bde.exists,
-		bde.meta.category, bde.meta.size, ts.tv_sec, ts.tv_nsec,
-		bde.meta.owner, bde.meta.owner_display_name, bde.meta.accounted_size,
-		bde.meta.storage_class, bde.meta.appendable, bde.meta.etag);
+          auto errc =
+              out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
+                  bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+                  bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+                  bde.meta.owner_display_name, bde.meta.accounted_size,
+                  bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+                  bde.flags);
 	  if (errc.code != std::errc{0}) {
 	    abort();
 	  }
@@ -595,7 +598,8 @@ public:
               bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
               bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
               bde.meta.owner_display_name, bde.meta.accounted_size,
-              bde.meta.storage_class, bde.meta.appendable, bde.meta.etag);
+              bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+              bde.flags);
       if (errc.code != std::errc{0}) {
         abort();
       }
