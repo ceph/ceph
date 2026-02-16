@@ -425,6 +425,7 @@ const routes: Routes = [
             path: 'hosts',
             component: NvmeofInitiatorsListComponent
           },
+
           {
             path: 'namespaces',
             component: NvmeofSubsystemNamespacesListComponent
@@ -432,6 +433,11 @@ const routes: Routes = [
           {
             path: 'listeners',
             component: NvmeofListenersListComponent
+          },
+          {
+            path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,
+            component: NvmeofNamespaceExpandModalComponent,
+            outlet: 'modal'
           }
         ]
       }
