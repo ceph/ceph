@@ -1900,7 +1900,7 @@ class DB {
 	    rgw::sal::Attrs& attrs,
             bool assume_noent, bool modify_tail);
         int write_meta(const DoutPrefixProvider *dpp, uint64_t size,
-	    uint64_t accounted_size, std::map<std::string, bufferlist>& attrs);
+	    uint64_t accounted_size, rgw::sal::Attrs& attrs);
       };
 
       struct Delete {

@@ -1367,7 +1367,7 @@ int DB::Object::Read::prepare(const DoutPrefixProvider *dpp)
     *params.target_obj = state.obj;
   }
   if (params.attrs) {
-    *params.attrs = astate->attrset;
+    *params.attrs = astate->attrset.get_full_map();
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       for (iter = params.attrs->begin(); iter != params.attrs->end(); ++iter) {
         ldpp_dout(dpp, 20) << "Read xattr rgw_rados: " << iter->first << dendl;
@@ -1824,7 +1824,7 @@ out:
 }
 
 int DB::Object::Write::write_meta(const DoutPrefixProvider *dpp, uint64_t size, uint64_t accounted_size,
-    map<string, bufferlist>& attrs)
+    rgw::sal::Attrs& attrs)
 {
   bool assume_noent = false;
   /* handle assume_noent */

@@ -312,6 +312,15 @@ void operator=(const std::map<std::string, ceph::bufferlist>& other){
 
 }
 
+std::map<std::string, ceph::bufferlist> get_full_map(){
+  std::map<std::string, ceph::bufferlist> fullMap = defaultMap;
+  fullMap[RGW_ATTR_ACL] = fastAttrArray[RGW_ATTR_ACL_CONST];
+  fullMap[RGW_ATTR_RATELIMIT] = fastAttrArray[RGW_ATTR_RATELIMIT_CONST];
+  fullMap[RGW_ATTR_LC] = fastAttrArray[RGW_ATTR_LC_CONST];
+  return fullMap;
+
+}
+
 
 void dump(const DoutPrefixProvider *dpp) const {
     // Iterate through the fast array
