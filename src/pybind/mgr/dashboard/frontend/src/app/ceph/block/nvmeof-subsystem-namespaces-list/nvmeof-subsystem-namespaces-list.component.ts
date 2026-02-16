@@ -17,8 +17,6 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { combineLatest, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
-const BASE_URL = 'block/nvmeof/subsystems';
-
 @Component({
   selector: 'cd-nvmeof-subsystem-namespaces-list',
   templateUrl: './nvmeof-subsystem-namespaces-list.component.html',
@@ -105,37 +103,40 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
   setupTableActions() {
     this.tableActions = [
       {
-        name: this.actionLabels.CREATE,
+        name: this.actionLabels.ADD,
         permission: 'create',
         icon: Icons.add,
         click: () =>
-          this.router.navigate(
-            [BASE_URL, { outlets: { modal: [URLVerbs.CREATE, this.subsystemNQN, 'namespace'] } }],
-            { queryParams: { group: this.group } }
-          ),
+          this.router.navigate(['block/nvmeof/namespaces/create'], {
+            queryParams: {
+              group: this.group,
+              subsystem_nqn: this.subsystemNQN
+            }
+          }),
+
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
-        name: this.actionLabels.EDIT,
+        name: $localize`Expand`,
         permission: 'update',
         icon: Icons.edit,
-        click: () =>
+        click: (row: NvmeofSubsystemNamespace) => {
+          const namespace = row || this.selection.first();
           this.router.navigate(
             [
-              BASE_URL,
               {
                 outlets: {
-                  modal: [
-                    URLVerbs.EDIT,
-                    this.subsystemNQN,
-                    'namespace',
-                    this.selection.first().nsid
-                  ]
+                  modal: [URLVerbs.EDIT, this.subsystemNQN, 'namespace', namespace.nsid]
                 }
               }
             ],
-            { queryParams: { group: this.group } }
-          )
+            {
+              relativeTo: this.route.parent,
+              queryParams: { group: this.group },
+              queryParamsHandling: 'merge'
+            }
+          );
+        }
       },
       {
         name: this.actionLabels.DELETE,
