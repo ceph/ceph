@@ -221,6 +221,8 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
 
   updateGroupSelectionState() {
     if (this.gwGroups.length) {
+      this.gwGroupsEmpty = false;
+      this.gwGroupPlaceholder = DEFAULT_PLACEHOLDER;
       if (!this.group) {
         this.onGroupSelection(this.gwGroups[0]);
       } else {
@@ -229,8 +231,6 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
           selected: g.content === this.group
         }));
       }
-      this.gwGroupsEmpty = false;
-      this.gwGroupPlaceholder = DEFAULT_PLACEHOLDER;
     } else {
       this.gwGroupsEmpty = true;
       this.gwGroupPlaceholder = $localize`No groups available`;

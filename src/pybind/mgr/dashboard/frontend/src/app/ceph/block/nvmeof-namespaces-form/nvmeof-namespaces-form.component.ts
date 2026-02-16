@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Params, Router } from '@angular/router';
 import {
   NamespaceCreateRequest,
   NamespaceInitiatorRequest,
@@ -40,9 +40,12 @@ export class NvmeofNamespacesFormComponent implements OnInit {
   resource: string;
   pageURL: string;
 
+  title: string = '';
+  description: string = '';
+
   nsForm: CdFormGroup;
   subsystemNQN: string;
-  subsystems: NvmeofSubsystem[];
+  subsystems: NvmeofSubsystem[] = [];
   rbdPools: Array<Pool> = null;
   rbdImages: any[] = [];
   initiatorCandidates: { content: string; selected: boolean }[] = [];
@@ -74,18 +77,36 @@ export class NvmeofNamespacesFormComponent implements OnInit {
   }
 
   init() {
-    this.route.queryParams.subscribe((params) => {
-      this.group = params?.['group'];
-    });
     this.createForm();
     this.action = this.actionLabels.CREATE;
-    this.route.params.subscribe((params: { subsystem_nqn: string; nsid: string }) => {
-      this.subsystemNQN = params.subsystem_nqn;
-      this.nsid = params?.nsid;
+    this.title = this.action + ' ' + this.resource;
+    this.description = $localize`Namespaces define the storage volumes that subsystems present to hosts.`;
+
+    this.route.params.subscribe((params: Params) => {
+      this.subsystemNQN = params['subsystem_nqn'];
+      this.nsid = params['nsid'];
+      if (params['group']) {
+        this.group = params['group'];
+      }
+      if (this.subsystemNQN && this.group) {
+        this.pageURL = `block/nvmeof/subsystems/${this.subsystemNQN}/${this.group}`;
+        this.action = this.actionLabels.ADD;
+        this.title = this.action + ' ' + this.resource;
+        this.description = $localize`Create a new namespace associated with this subsystem.`;
+      }
     });
-    this.route.queryParams.subscribe((params) => {
-      if (params?.['subsystem_nqn']) {
-        this.subsystemNQN = params?.['subsystem_nqn'];
+    this.route.queryParams.subscribe((params: Params) => {
+      if (params['group']) {
+        this.group = params['group'];
+      }
+      if (params['subsystem_nqn']) {
+        this.subsystemNQN = params['subsystem_nqn'];
+      }
+      if (this.subsystemNQN && this.group) {
+        this.pageURL = `block/nvmeof/subsystems/${this.subsystemNQN}/namespaces`;
+        this.action = this.actionLabels.ADD;
+        this.title = this.action + ' ' + this.resource;
+        this.description = $localize`Create a new namespace associated with this subsystem.`;
       }
     });
   }
@@ -408,7 +429,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       },
       complete: () => {
         this.router.navigate([this.pageURL], {
-          queryParams: { group: this.group, tab: 'namespace' }
+          queryParams: { group: this.group }
         });
       }
     });
