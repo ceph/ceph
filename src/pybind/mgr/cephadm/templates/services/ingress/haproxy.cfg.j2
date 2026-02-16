@@ -37,6 +37,7 @@ defaults
     timeout check           5s
 {% endif %}
 {% if mode == 'tcp' %}
+    option tcplog
     timeout queue           1m
     timeout connect         10s
     timeout client          1m
@@ -95,8 +96,13 @@ backend backend
     mode        tcp
     balance     roundrobin
     {% if backend_spec.service_type == 'nfs' %}
-    stick-table type ip size 200k expire 30m peers haproxy_peers
-    stick on src
+    stick-table type ip size 1m expire 2h store server_id peers haproxy_peers
+    stick match src
+    stick store-request src
+    option tcp-check
+    retries 3
+    retry-on all-retryable-errors
+    timeout connect 2s
     {% endif %}
     hash-type   consistent
 {% if spec.use_tcp_mode_over_rgw %}
@@ -105,7 +111,7 @@ backend backend
 {% endif %}
 {% endif %}
 {% if default_server_opts %}
-    default-server {{ default_server_opts|join(" ") }}
+    default-server {{ default_server_opts|join(" ") }} fall 2 inter 5000 rise 1 on-marked-down shutdown-sessions
 {% endif %}
 {% endif %}
 {% if backend_spec.service_type == 'rgw' %}
@@ -114,6 +120,6 @@ backend backend
     {% endfor %}
 {% else %}
     {% for server in servers %}
-    server {{ server.name }} {{ server.ip }}:{{ server.port }} check
+    server {{ server.name }} {{ server.ip }}:{{ server.port }} id {{ server.name.split('.')[-1] | int + 1 }} check inter {{ health_check_interval }} rise 2 fall 3
     {% endfor %}
 {% endif %}

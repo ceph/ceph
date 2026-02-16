@@ -100,6 +100,7 @@ class TestIngressService:
             'defaults\n'
             '    mode                    tcp\n'
             '    log                     global\n'
+            '    option tcplog\n'
             '    timeout queue           1m\n'
             '    timeout connect         10s\n'
             '    timeout client          1m\n'
@@ -125,13 +126,18 @@ class TestIngressService:
             'backend backend\n'
             '    mode        tcp\n'
             '    balance     roundrobin\n'
-            '    stick-table type ip size 200k expire 30m peers haproxy_peers\n'
-            '    stick on src\n'
+            '    stick-table type ip size 1m expire 2h store server_id peers haproxy_peers\n'
+            '    stick match src\n'
+            '    stick store-request src\n'
+            '    option tcp-check\n'
+            '    retries 3\n'
+            '    retry-on all-retryable-errors\n'
+            '    timeout connect 2s\n'
             '    hash-type   consistent\n'
         )
         if enable_haproxy_protocol:
-            haproxy_txt += '    default-server send-proxy-v2\n'
-        haproxy_txt += '    server nfs.foo.0 192.168.122.111:12049 check\n'
+            haproxy_txt += '    default-server send-proxy-v2 fall 2 inter 5000 rise 1 on-marked-down shutdown-sessions\n'
+        haproxy_txt += '    server nfs.foo.0 192.168.122.111:12049 id 1 check inter 2s rise 2 fall 3\n'
         haproxy_expected_conf = {
             'files': {'haproxy.cfg': haproxy_txt}
         }
@@ -481,6 +487,7 @@ class TestIngressService:
                                 '\ndefaults\n    '
                                 'mode                    tcp\n    '
                                 'log                     global\n    '
+                                'option tcplog\n    '
                                 'timeout queue           1m\n    '
                                 'timeout connect         10s\n    '
                                 'timeout client          1m\n    '
@@ -1005,6 +1012,7 @@ class TestIngressService:
             'defaults\n'
             '    mode                    tcp\n'
             '    log                     global\n'
+            '    option tcplog\n'
             '    timeout queue           1m\n'
             '    timeout connect         10s\n'
             '    timeout client          1m\n'
@@ -1031,11 +1039,16 @@ class TestIngressService:
             'backend backend\n'
             '    mode        tcp\n'
             '    balance     roundrobin\n'
-            '    stick-table type ip size 200k expire 30m peers haproxy_peers\n'
-            '    stick on src\n'
+            '    stick-table type ip size 1m expire 2h store server_id peers haproxy_peers\n'
+            '    stick match src\n'
+            '    stick store-request src\n'
+            '    option tcp-check\n'
+            '    retries 3\n'
+            '    retry-on all-retryable-errors\n'
+            '    timeout connect 2s\n'
             '    hash-type   consistent\n'
-            '    default-server send-proxy-v2\n'
-            '    server nfs.foo.0 192.168.122.111:12049 check\n'
+            '    default-server send-proxy-v2 fall 2 inter 5000 rise 1 on-marked-down shutdown-sessions\n'
+            '    server nfs.foo.0 192.168.122.111:12049 id 1 check inter 2s rise 2 fall 3\n'
         )
         haproxy_expected_conf = {
             'files': {'haproxy.cfg': haproxy_txt}
@@ -1283,7 +1296,7 @@ class TestIngressService:
             ),
         )
         gen_config_lines = haproxy_generated_conf['files']['haproxy.cfg']
-        assert 'server nfs.foo.0 10.10.2.20:12049 check' in gen_config_lines
+        assert 'server nfs.foo.0 10.10.2.20:12049 id 1 check inter 2s rise 2 fall 3' in gen_config_lines
 
         nfs_generated_conf, _ = nfs_svc.generate_config(
             CephadmDaemonDeploySpec(
