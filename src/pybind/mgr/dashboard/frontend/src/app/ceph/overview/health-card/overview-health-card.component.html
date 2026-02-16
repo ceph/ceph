@@ -1,4 +1,5 @@
-@let data = (data$ | async);
+@let data=(data$ | async);
+@let colorClass="overview-health-card-status--" + data?.currentHealth?.icon;
 <cd-productive-card>
   <!-- HEALTH CARD Title -->
   @if(fsid) {
@@ -33,7 +34,7 @@
   <!-- HEALTH CARD BODY -->
   @if(data?.currentHealth){
   <p class="cds--type-heading-05 cds-mb-0"
-     [ngClass]="'overview-health-card-status--' + data?.currentHealth?.icon">
+     [ngClass]="colorClass">
     {{data?.currentHealth?.title}}
     <cd-icon [type]="data?.currentHealth?.icon"></cd-icon>
   </p>
@@ -47,7 +48,6 @@
   <p class="cds--type-label-02">
     <span i18n>Ceph version:&nbsp;</span>
     <span class="cds--type-heading-compact-01">{{ data?.summary?.version | cephVersion  }}</span>&nbsp;
-    <!-- UPGRADE AVAILABLE -->
     @if (data?.upgrade?.versions?.length) {
     <a [routerLink]="['/upgrade']"
        cdsLink
@@ -63,4 +63,34 @@
     [lines]="1"
     [maxLineWidth]="250"></cds-skeleton-text>
   }
+  <!-- ------------------------------------------- -->
+  <!-- HEALTH CHECKS -->
+   @if(incidents > 0) {
+  <cd-icon
+    type="incidentReporter"
+    [ngClass]="colorClass"></cd-icon>
+  <cds-tooltip-definition
+    [highContrast]="true"
+    [openOnHover]="true"
+    [dropShadow]="true"
+    [caret]="true"
+    (click)="onViewIncidentsClick()"
+    description="Click to view health incidents"
+    i18n-description>
+    <span
+      class="cds--type-heading-compact-01"
+      [ngClass]="colorClass"
+      i18n>
+      {{incidents}} Health incidents
+    </span>
+  </cds-tooltip-definition>
+  <cds-tooltip
+    class="cds-ml-3"
+    [caret]="true"
+    description="Health incidents represent Ceph health check warnings that indicate abnormal conditions requiring intervention and persist until the condition is resolved."
+    i8n-description
+  >
+  <cd-icon type="help"></cd-icon>
+</cds-tooltip>
+}
 </cd-productive-card>

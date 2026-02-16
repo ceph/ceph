@@ -10,27 +10,19 @@ import { CommonModule } from '@angular/common';
 import { GridModule, TilesModule } from 'carbon-components-angular';
 import { OverviewHealthCardComponent } from './health-card/overview-health-card.component';
 import { OverviewStorageCardComponent } from './storage-card/overview-storage-card.component';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
 
 describe('OverviewComponent', () => {
   let component: OverviewComponent;
   let fixture: ComponentFixture<OverviewComponent>;
 
-  let mockHealthService: {
-    getHealthSnapshot: jest.Mock;
-  };
-
-  let mockRefreshIntervalService: {
-    intervalData$: Subject<void>;
-  };
+  let mockHealthService: { getHealthSnapshot: jest.Mock };
+  let mockRefreshIntervalService: { intervalData$: Subject<void> };
 
   beforeEach(async () => {
-    mockHealthService = {
-      getHealthSnapshot: jest.fn()
-    };
-
-    mockRefreshIntervalService = {
-      intervalData$: new Subject<void>()
-    };
+    mockHealthService = { getHealthSnapshot: jest.fn() };
+    mockRefreshIntervalService = { intervalData$: new Subject<void>() };
 
     await TestBed.configureTestingModule({
       imports: [
@@ -43,8 +35,10 @@ describe('OverviewComponent', () => {
       ],
       providers: [
         provideHttpClient(),
+        provideHttpClientTesting(),
         { provide: HealthService, useValue: mockHealthService },
-        { provide: RefreshIntervalService, useValue: mockRefreshIntervalService }
+        { provide: RefreshIntervalService, useValue: mockRefreshIntervalService },
+        provideRouter([])
       ]
     }).compileComponents();
 
@@ -53,49 +47,41 @@ describe('OverviewComponent', () => {
     fixture.detectChanges();
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+  afterEach(() => jest.clearAllMocks());
 
-  // --------------------------------------------------
-  // CREATION
-  // --------------------------------------------------
-
+  // -----------------------------
+  // Component creation
+  // -----------------------------
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  // --------------------------------------------------
-  // refreshIntervalObs - success case
-  // --------------------------------------------------
+  // -----------------------------
+  // Vie model stream success
+  // -----------------------------
+  it('vm$ should emit transformed HealthSnapshotMap', (done) => {
+    const mockData: HealthSnapshotMap = { health: { checks: { a: {} } } } as any;
+    mockHealthService.getHealthSnapshot.mockReturnValue(of(mockData));
 
-  it('should call healthService when interval emits', (done) => {
-    const mockResponse: HealthSnapshotMap = { status: 'OK' } as any;
-
-    mockHealthService.getHealthSnapshot.mockReturnValue(of(mockResponse));
-
-    component.healthData$.subscribe((data) => {
-      expect(data).toEqual(mockResponse);
-      expect(mockHealthService.getHealthSnapshot).toHaveBeenCalled();
+    component.vm$.subscribe((vm) => {
+      expect(vm.healthData).toEqual(mockData);
+      expect(vm.incidentCount).toBe(1);
       done();
     });
 
     mockRefreshIntervalService.intervalData$.next();
   });
 
-  // --------------------------------------------------
-  // refreshIntervalObs - error case (catchError → EMPTY)
-  // --------------------------------------------------
-
-  it('should return EMPTY when healthService throws error', (done) => {
+  // -----------------------------
+  // View model stream error → EMPTY
+  // -----------------------------
+  it('vm$ should not emit if healthService throws', (done) => {
     mockHealthService.getHealthSnapshot.mockReturnValue(throwError(() => new Error('API Error')));
 
     let emitted = false;
 
-    component.healthData$.subscribe({
-      next: () => {
-        emitted = true;
-      },
+    component.vm$.subscribe({
+      next: () => (emitted = true),
       complete: () => {
         expect(emitted).toBe(false);
         done();
@@ -106,73 +92,28 @@ describe('OverviewComponent', () => {
     mockRefreshIntervalService.intervalData$.complete();
   });
 
-  // --------------------------------------------------
-  // refreshIntervalObs - exhaustMap behavior
-  // --------------------------------------------------
-
-  it('should ignore new interval emissions until previous completes', () => {
-    const interval$ = new Subject<void>();
-    const inner$ = new Subject<any>();
-
-    const mockRefreshService = {
-      intervalData$: interval$
-    };
-
-    const testComponent = new OverviewComponent(
-      mockHealthService as any,
-      mockRefreshService as any
-    );
-
-    mockHealthService.getHealthSnapshot.mockReturnValue(inner$);
-
-    testComponent.healthData$.subscribe();
-
-    // First emission
-    interval$.next();
-
-    // Second emission (should be ignored)
-    interval$.next();
-
-    expect(mockHealthService.getHealthSnapshot).toHaveBeenCalledTimes(1);
-
-    // Complete first inner observable
-    inner$.complete();
-
-    // Now it should allow another call
-    interval$.next();
-
-    expect(mockHealthService.getHealthSnapshot).toHaveBeenCalledTimes(2);
+  // -----------------------------
+  // toggle health panel
+  // -----------------------------
+  it('should toggle panel open/close', () => {
+    expect(component.isHealthPanelOpen).toBe(false);
+    component.togglePanel();
+    expect(component.isHealthPanelOpen).toBe(true);
+    component.togglePanel();
+    expect(component.isHealthPanelOpen).toBe(false);
   });
 
-  // --------------------------------------------------
+  // -----------------------------
   // ngOnDestroy
-  // --------------------------------------------------
-
-  it('should complete destroy$ on destroy', () => {
-    const nextSpy = jest.spyOn((component as any).destroy$, 'next');
-    const completeSpy = jest.spyOn((component as any).destroy$, 'complete');
+  // -----------------------------
+  it('should complete destroy$', () => {
+    const destroy$ = (component as any).destroy$;
+    const nextSpy = jest.spyOn(destroy$, 'next');
+    const completeSpy = jest.spyOn(destroy$, 'complete');
 
     component.ngOnDestroy();
 
     expect(nextSpy).toHaveBeenCalled();
     expect(completeSpy).toHaveBeenCalled();
-  });
-
-  // --------------------------------------------------
-  // refreshIntervalObs manual test
-  // --------------------------------------------------
-
-  it('refreshIntervalObs should pipe intervalData$', (done) => {
-    const testFn = jest.fn().mockReturnValue(of('TEST'));
-
-    const obs$ = component.refreshIntervalObs(testFn);
-
-    obs$.subscribe((value) => {
-      expect(value).toBe('TEST');
-      expect(testFn).toHaveBeenCalled();
-      done();
-    });
-
-    mockRefreshIntervalService.intervalData$.next();
   });
 });

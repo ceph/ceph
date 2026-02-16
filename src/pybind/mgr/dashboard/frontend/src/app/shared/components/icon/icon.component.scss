@@ -15,7 +15,19 @@
 }
 
 .warning-icon {
-  color: theme.$support-caution-major;
+  fill: theme.$support-caution-major !important;
+}
+
+.warningAltFilled-icon {
+  fill: theme.$support-caution-major !important;
+}
+
+.error-icon {
+  fill: var(--cds-text-error) !important;
+}
+
+.info-icon {
+  fill: theme.$support-info !important;
 }
 
 .deploy-icon {
