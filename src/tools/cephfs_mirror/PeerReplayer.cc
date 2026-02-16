@@ -1330,6 +1330,7 @@ PeerReplayer::SyncMechanism::~SyncMechanism() {
 void PeerReplayer::SyncMechanism::push_dataq_entry(SyncEntry e) {
   dout(10) << ": snapshot data replayer dataq pushed" << " syncm=" << this
 	   << " epath=" << e.epath << dendl;
+  m_peer_replayer.inc_total_bytes(std::string(m_dir_root), e.stx.stx_size);
   std::unique_lock lock(sdq_lock);
   m_sync_dataq.push(std::move(e));
   sdq_cv.notify_all();
@@ -2521,6 +2522,32 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
   } // outer while
 }
 
+std::string PeerReplayer::format_bytes(double bytes) {
+  static constexpr double KiB = 1024.0;
+  static constexpr double MiB = KiB * 1024.0;
+  static constexpr double GiB = MiB * 1024.0;
+  static constexpr double TiB = GiB * 1024.0;
+  static constexpr double PiB = TiB * 1024.0;
+
+  std::ostringstream out;
+  out << std::fixed << std::setprecision(2);
+
+  if (bytes >= PiB) {
+    out << (bytes / PiB) << " PiB";
+  } else if (bytes >= TiB) {
+    out << (bytes / TiB) << " TiB";
+  } else if (bytes >= GiB) {
+    out << (bytes / GiB) << " GiB";
+  } else if (bytes >= MiB) {
+    out << (bytes / MiB) << " MiB";
+  } else if (bytes >= KiB) {
+    out << (bytes / KiB) << " KiB";
+  } else {
+    out << bytes << " B";
+  }
+  return out.str();
+};
+
 void PeerReplayer::peer_status(Formatter *f) {
   std::scoped_lock locker(m_lock);
   f->open_object_section("stats");
@@ -2538,7 +2565,17 @@ void PeerReplayer::peer_status(Formatter *f) {
       f->open_object_section("current_syncing_snap");
       f->dump_unsigned("id", (*sync_stat.current_syncing_snap).first);
       f->dump_string("name", (*sync_stat.current_syncing_snap).second);
-      f->close_section();
+      f->open_object_section("bytes");
+      f->dump_string("sync_bytes", format_bytes(sync_stat.sync_bytes));
+      f->dump_string("total_bytes", format_bytes(sync_stat.total_bytes));
+      if (sync_stat.total_bytes > 0) {
+        double sync_pct = (static_cast<double>(sync_stat.sync_bytes) * 100.0) / sync_stat.total_bytes;
+        std::ostringstream os;
+        os << std::fixed << std::setprecision(2) << sync_pct << "%";
+        f->dump_string("sync_percent", os.str());
+      }
+      f->close_section(); //bytes
+      f->close_section(); //current_syncing_snap
     }
     if (sync_stat.last_synced_snap) {
       f->open_object_section("last_synced_snap");
@@ -2549,7 +2586,7 @@ void PeerReplayer::peer_status(Formatter *f) {
         f->dump_stream("sync_time_stamp") << sync_stat.last_synced;
       }
       if (sync_stat.last_sync_bytes) {
-	f->dump_unsigned("sync_bytes", *sync_stat.last_sync_bytes);
+	    f->dump_string("sync_bytes", format_bytes(*sync_stat.last_sync_bytes));
       }
       f->close_section();
     }

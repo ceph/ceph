@@ -386,6 +386,7 @@ private:
     boost::optional<double> last_sync_duration;
     boost::optional<uint64_t> last_sync_bytes; //last sync bytes for display in status
     uint64_t sync_bytes = 0; //sync bytes counter, independently for each directory sync.
+    uint64_t total_bytes = 0; //total bytes counter, independently for each directory sync.
   };
 
   void _inc_failed_count(const std::string &dir_root) {
@@ -415,6 +416,11 @@ private:
     sync_stat.last_failed_reason = boost::none;
   }
 
+  void _reset_sync_stat(const std::string &dir_root) {
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.sync_bytes = 0;
+    sync_stat.total_bytes = 0;
+  }
   void _set_last_synced_snap(const std::string &dir_root, uint64_t snap_id,
                             const std::string &snap_name) {
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
@@ -433,6 +439,7 @@ private:
     std::scoped_lock locker(m_lock);
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.current_syncing_snap = std::make_pair(snap_id, snap_name);
+    _reset_sync_stat(dir_root); //reset counters at the start of every snap sync
   }
   void clear_current_syncing_snap(const std::string &dir_root) {
     std::scoped_lock locker(m_lock);
@@ -463,6 +470,11 @@ private:
     std::scoped_lock locker(m_lock);
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.sync_bytes += b;
+  }
+  void inc_total_bytes(const std::string &dir_root, const uint64_t& b) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.total_bytes += b;
   }
   bool should_backoff(const std::string &dir_root, int *retval) {
     if (m_fs_mirror->is_blocklisted()) {
@@ -608,6 +620,9 @@ private:
   uint64_t set_datasync_files_per_batch(uint64_t value) {
     return datasync_files_per_batch.exchange(value, std::memory_order_relaxed);
   }
+
+  // format routines for peer_status
+  static std::string format_bytes(double bytes);
 };
 
 } // namespace mirror
