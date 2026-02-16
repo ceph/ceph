@@ -12,6 +12,7 @@
   <cds-tab
     heading="Gateways"
     [tabContent]="gateways_content"
+
     i18n-heading
     [active]="activeTab === Tabs.gateways"
     (selected)="onSelected(Tabs.gateways)">
@@ -19,6 +20,7 @@
   <cds-tab
     heading="Subsystem"
     [tabContent]="subsystem_content"
+
     i18n-heading
     [active]="activeTab === Tabs.subsystem"
     (selected)="onSelected(Tabs.subsystem)">
@@ -26,6 +28,7 @@
   <cds-tab
     heading="Namespace"
     [tabContent]="namespace_content"
+
     i18n-heading
     [active]="activeTab === Tabs.namespace"
     (selected)="onSelected(Tabs.namespace)">

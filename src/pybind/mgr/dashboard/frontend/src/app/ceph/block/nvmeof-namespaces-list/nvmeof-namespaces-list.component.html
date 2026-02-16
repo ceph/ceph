@@ -25,7 +25,6 @@
   <cd-table [data]="namespaces"
             columnMode="flex"
             (fetchData)="fetchData()"
-            [autoReload]="false"
             [columns]="namespacesColumns"
             selectionType="single"
             (updateSelection)="updateSelection($event)"
@@ -34,12 +33,12 @@
             emptyStateMessage="Namespaces are storage volumes mapped to subsystems for host access. Create a namespace to start provisioning storage within a subsystem."
             i18n-emptyStateMessage>
 
-    <div class="table-actions">
-      <cd-table-actions [permission]="permission"
-                        [selection]="selection"
-                        class="btn-group"
-                        [tableActions]="tableActions">
-      </cd-table-actions>
-    </div>
-  </cd-table>
+  <div class="table-actions">
+    <cd-table-actions [permission]="permission"
+                      [selection]="selection"
+                      class="btn-group"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
+  </div>
+</cd-table>
 </ng-container>
