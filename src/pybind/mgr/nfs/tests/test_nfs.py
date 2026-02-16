@@ -150,7 +150,7 @@ QOS {
     enable_cluster_qos = true;
     enable_bw_control = true;
     combined_rw_bw_control = false;
-    qos_type = 3;
+    qos_type = "Per_Export_Per_Client";
     max_export_write_bw = 2000000;
     max_export_read_bw = 2000000;
     max_client_write_bw = 3000000;
