@@ -30,7 +30,10 @@ class RedFishClient(BaseClient):
             json_data: Dict[str, Any] = json.loads(_data)
             self.session_service = json_data["Links"]["Sessions"]["@odata.id"]
         except (URLError, KeyError) as e:
-            msg = f"{_error_msg}: {e}"
+            if isinstance(e, HTTPError):
+                msg = f"{_error_msg}: {e.code} {e.reason}"
+            else:
+                msg = f"{_error_msg}: {e}"
             self.log.error(msg)
             raise RuntimeError
 
@@ -153,5 +156,11 @@ class RedFishClient(BaseClient):
                 self.location = ""
                 self.login()
                 return do_req(req_headers())
+            if isinstance(e, HTTPError) and e.code >= 500:
+                msg = f"HTTP query error: {e.code} {e.reason}"
+                body = e.read().decode("utf-8", errors="replace").strip()
+                if body:
+                    msg += f" — {body[:4096]}{'...' if len(body) > 4096 else ''}"
+                self.log.warning(msg)
             self.log.debug(f"endpoint={endpoint} err={e}")
             raise
