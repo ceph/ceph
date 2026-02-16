@@ -110,17 +110,13 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
         name: $localize`Expand`,
         permission: 'update',
         icon: Icons.edit,
-        click: () =>
+        click: (row: NvmeofSubsystemNamespace) => {
+          const namespace = row || this.selection.first();
           this.router.navigate(
             [
               {
                 outlets: {
-                  modal: [
-                    URLVerbs.EDIT,
-                    this.selection.first().ns_subsystem_nqn,
-                    'namespace',
-                    this.selection.first().nsid
-                  ]
+                  modal: [URLVerbs.EDIT, namespace.ns_subsystem_nqn, 'namespace', namespace.nsid]
                 }
               }
             ],
@@ -129,7 +125,8 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
               queryParams: { group: this.group },
               queryParamsHandling: 'merge'
             }
-          )
+          );
+        }
       },
       {
         name: this.actionLabels.DELETE,
