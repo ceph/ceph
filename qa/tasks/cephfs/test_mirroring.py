@@ -43,8 +43,8 @@ def retry_assert(timeout=60, interval=1):
                         attempt += 1
             # Final failure
             if last_exc is not None and hasattr(last_exc, "res"):
-              log.error("\n--- Last peer status (res) ---")
-              log.error(last_exc.res)
+                log.error("\n--- Last peer status (res) ---")
+                log.error(last_exc.res)
 
             raise AssertionError(
                 f"{func.__name__} did not succeed within {timeout}s "
@@ -53,6 +53,7 @@ def retry_assert(timeout=60, interval=1):
 
         return wrapper
     return decorator
+
 
 class TestMirroring(CephFSTestCase):
     MDSS_REQUIRED = 5
@@ -329,7 +330,6 @@ class TestMirroring(CephFSTestCase):
     def check_peer_snap_in_progress(self, fs_name, fs_id,
                                     peer_spec, dir_name, snap_name, timeout=60, interval=1):
         peer_uuid = self.get_peer_uuid(peer_spec)
-        deadline = time.time() + timeout
         try:
             res = self.mirror_daemon_command(f'peer status for fs: {fs_name}',
                                              'fs', 'mirror', 'peer', 'status',
