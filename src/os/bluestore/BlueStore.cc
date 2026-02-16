@@ -7163,14 +7163,20 @@ int BlueStore::_open_bdev(bool create)
       }
       string bdev_plugin_id;
       r = bdev->get_ebd_id(bdev_plugin_id);
+      bool is_osd = cct->get_module_type() & CEPH_ENTITY_TYPE_OSD;
       if (r != 0) {
         derr << __func__ << " plugin " << meta_plugin_id << " not loaded" << dendl;
-        goto fail_close;
-      }
-      if (meta_plugin_id != bdev_plugin_id) {
-        derr << __func__ << " plugin '" << meta_plugin_id << "' used on mkfs, "
-          << "but now uses plugin '" << bdev_plugin_id << "'" << dendl;
-        goto fail_close;
+        if (is_osd) {
+          goto fail_close;
+        }
+      } else {
+        if (meta_plugin_id != bdev_plugin_id) {
+          derr << __func__ << " plugin '" << meta_plugin_id << "' used on mkfs, "
+            << "but now uses plugin '" << bdev_plugin_id << "'" << dendl;
+          if (is_osd) {
+            goto fail_close;
+          }
+        }
       }
     }
   }
