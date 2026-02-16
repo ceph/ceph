@@ -92,6 +92,64 @@ namespace rgw::dedup {
     uint8_t flags;
   };
 
+  struct __attribute__ ((packed)) crypt_mode_t {
+    enum class crypt_mode_id_t : uint8_t {
+      CRYPT_MODE_ID_NONE,
+      CRYPT_MODE_ID_AES256,
+      CRYPT_MODE_ID_RGW_AUTO,
+      CRYPT_MODE_ID_SSE_C_AES256,
+      CRYPT_MODE_ID_SSE_KMS,
+      CRYPT_MODE_ID_INVALID
+    };
+
+    using enum crypt_mode_id_t;
+
+    static constexpr std::string_view CRYPT_MODE_STR_NONE         = "";
+    static constexpr std::string_view CRYPT_MODE_STR_AES256       = "AES256";
+    static constexpr std::string_view CRYPT_MODE_STR_RGW_AUTO     = "RGW-AUTO";
+    static constexpr std::string_view CRYPT_MODE_STR_SSE_C_AES256 = "SSE-C-AES256";
+    static constexpr std::string_view CRYPT_MODE_STR_SSE_KMS      = "SSE-KMS";
+    static constexpr std::string_view CRYPT_MODE_STR_INVALID      = "INVALID";
+
+    crypt_mode_t() : crypt_mode_id(crypt_mode_id_t::CRYPT_MODE_ID_NONE) {}
+
+    crypt_mode_t(const std::string &crypt_mode_str)
+      : crypt_mode_id(parse_crypt_mode(crypt_mode_str)) {}
+
+    void set_crypt_mode(const std::string &crypt_mode_str) {
+      crypt_mode_id = parse_crypt_mode(crypt_mode_str);
+    }
+
+    void set_crypt_mode(crypt_mode_id_t _crypt_mode_id) {
+      crypt_mode_id = _crypt_mode_id;
+    }
+
+    crypt_mode_id_t get_crypt_mode_id() const {
+      return crypt_mode_id;
+    }
+
+    const std::string_view& get_crypt_mode_str() const {
+      if (crypt_mode_id == CRYPT_MODE_ID_NONE) return CRYPT_MODE_STR_NONE;
+      if (crypt_mode_id == CRYPT_MODE_ID_AES256) return CRYPT_MODE_STR_AES256;
+      if (crypt_mode_id == CRYPT_MODE_ID_RGW_AUTO) return CRYPT_MODE_STR_RGW_AUTO;
+      if (crypt_mode_id == CRYPT_MODE_ID_SSE_C_AES256) return CRYPT_MODE_STR_SSE_C_AES256;
+      if (crypt_mode_id == CRYPT_MODE_ID_SSE_KMS) return CRYPT_MODE_STR_SSE_KMS;
+      return CRYPT_MODE_STR_INVALID;
+    }
+
+  private:
+    static crypt_mode_id_t parse_crypt_mode(const std::string &crypt_mode_str) {
+      if (crypt_mode_str.empty()) return CRYPT_MODE_ID_NONE;
+      if (crypt_mode_str == CRYPT_MODE_STR_AES256) return CRYPT_MODE_ID_AES256;
+      if (crypt_mode_str == CRYPT_MODE_STR_RGW_AUTO) return CRYPT_MODE_ID_RGW_AUTO;
+      if (crypt_mode_str == CRYPT_MODE_STR_SSE_C_AES256) return CRYPT_MODE_ID_SSE_C_AES256;
+      if (crypt_mode_str == CRYPT_MODE_STR_SSE_KMS) return CRYPT_MODE_ID_SSE_KMS;
+      return CRYPT_MODE_ID_INVALID;
+    }
+
+    crypt_mode_id_t crypt_mode_id;
+  };
+
   class alignas(8) Throttle {
     friend void validate_max_calls_offset();
   public:

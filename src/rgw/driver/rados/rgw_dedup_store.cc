@@ -88,6 +88,7 @@ namespace rgw::dedup {
     this->s.md5_high        = CEPHTOH_64(p_rec->s.md5_high);
     this->s.md5_low         = CEPHTOH_64(p_rec->s.md5_low);
     this->s.obj_bytes_size  = CEPHTOH_64(p_rec->s.obj_bytes_size);
+    this->s.crypt_mode      = p_rec->s.crypt_mode;
 
     this->s.bucket_id_len   = CEPHTOH_16(p_rec->s.bucket_id_len);
     this->s.tenant_name_len = CEPHTOH_16(p_rec->s.tenant_name_len);
@@ -149,6 +150,7 @@ namespace rgw::dedup {
     p_rec->s.md5_high        = HTOCEPH_64(this->s.md5_high);
     p_rec->s.md5_low         = HTOCEPH_64(this->s.md5_low);
     p_rec->s.obj_bytes_size  = HTOCEPH_64(this->s.obj_bytes_size);
+    p_rec->s.crypt_mode      = this->s.crypt_mode;
 
     p_rec->s.bucket_id_len   = HTOCEPH_16(this->bucket_id.length());
     p_rec->s.tenant_name_len = HTOCEPH_16(this->tenant_name.length());
@@ -267,6 +269,7 @@ namespace rgw::dedup {
     stream << rec.ref_tag << "::" << rec.s.ref_tag_len << "\n";
     stream << "num_parts = " << rec.s.num_parts << "\n";
     stream << "obj_size  = " << rec.s.obj_bytes_size/1024 <<" KiB"  << "\n";
+    stream << "Crypt Mode= " << rec.s.crypt_mode.get_crypt_mode_str() <<  "\n";
     stream << "MD5       = " << std::hex << rec.s.md5_high << rec.s.md5_low << "\n";
     stream << "HASH      = ";
     // BLAKE3 hash has 256 bit splitted into multiple 64bit units

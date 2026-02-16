@@ -170,7 +170,8 @@ namespace rgw::dedup {
       uint16_t      ref_tag_len;
 
       uint16_t      manifest_len;
-      uint8_t       pad[6];
+      uint8_t       pad[5];
+      crypt_mode_t  crypt_mode;
 
       uint64_t      shared_manifest; // 64bit hash of the SRC object manifest
       uint64_t      hash[4];       // 4 * 8 Bytes of BLAKE3

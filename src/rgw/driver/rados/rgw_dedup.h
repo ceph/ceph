@@ -187,6 +187,7 @@ namespace rgw::dedup {
                                 disk_record_t         *p_rec,
                                 const rgw::sal::Attrs &attrs,
                                 dedup_table_t         *p_table,
+                                crypt_mode_t           crypt_mode,
                                 md5_stats_t           *p_stats); /* IN-OUT */
 
     int read_object_attribute(dedup_table_t    *p_table,

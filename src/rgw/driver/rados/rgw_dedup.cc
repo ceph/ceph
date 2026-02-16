@@ -434,8 +434,39 @@ namespace rgw::dedup {
     }
     ldpp_dout(dpp, 20) << __func__ << "::" << p_bucket->get_name() << "/"
                        << obj_name << " was written to block_idx="
-                       << rec_info.block_id << " rec_id=" << rec_info.rec_id << dendl;
+                       << rec_info.block_id << " rec_id=" << (int)rec_info.rec_id << dendl;
     return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  static void report_failed_add_entry(const DoutPrefixProvider* const dpp,
+                                      const std::string &obj_name,
+                                      md5_stats_t *p_stats)
+  {
+    // We allocate memory for the dedup on startup based on the existing obj count
+    // If the system grew significantly since that point we won't be able to
+    // accommodate all the objects in the hash-table.
+    // Please keep in mind that it is very unlikely since duplicates objects will
+    // consume a single entry and since we skip small objects so in reality
+    // I expect the allocation to be more than sufficient.
+    //
+    // However, if we filled up the system there is still value is continuing
+    // with this process since we might find duplicates to existing object (which
+    // don't take extra space)
+
+    int level = 15;
+    if (p_stats->failed_table_load % 0x10000 == 0) {
+      level = 5;
+    }
+    else if (p_stats->failed_table_load % 0x100 == 0) {
+      level = 10;
+    }
+    ldpp_dout(dpp, level) << __func__ << "::Failed p_table->add_entry (overflow) "
+                          << obj_name << "::loaded_objects=" << p_stats->loaded_objects
+                          << "::failed_table_load=" << p_stats->failed_table_load
+                          << dendl;
+
+    p_stats->failed_table_load++;
   }
 
   //---------------------------------------------------------------------------
@@ -453,12 +484,14 @@ namespace rgw::dedup {
       // TBD: need stat counters
       return -EOVERFLOW;
     }
+    // at this stage we don't know the crypto-mode, will update later
+    crypt_mode_t crypt_mode;    // init by default to CRYPT_MODE_NONE
     key_t key(p_rec->s.md5_high, p_rec->s.md5_low, size_4k_units,
-              p_rec->s.num_parts, sc_idx);
+              p_rec->s.num_parts, sc_idx, crypt_mode);
     bool has_shared_manifest = p_rec->has_shared_manifest();
     ldpp_dout(dpp, 20) << __func__ << "::bucket=" << p_rec->bucket_name
                        << ", obj=" << p_rec->obj_name << ", block_id="
-                       << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
+                       << block_id << ", rec_id=" << (int)rec_id
                        << ", shared_manifest=" << has_shared_manifest
                        << "::num_parts=" << p_rec->s.num_parts
                        << "::size_4k_units=" << key.size_4k_units
@@ -475,30 +508,7 @@ namespace rgw::dedup {
                          << "::loaded_objects=" << p_stats->loaded_objects << dendl;
     }
     else {
-      // We allocate memory for the dedup on startup based on the existing obj count
-      // If the system grew significantly since that point we won't be able to
-      // accommodate all the objects in the hash-table.
-      // Please keep in mind that it is very unlikely since duplicates objects will
-      // consume a single entry and since we skip small objects so in reality
-      // I expect the allocation to be more than sufficient.
-      //
-      // However, if we filled up the system there is still value is continuing
-      // with this process since we might find duplicates to existing object (which
-      // don't take extra space)
-
-      int level = 15;
-      if (p_stats->failed_table_load % 0x10000 == 0) {
-        level = 5;
-      }
-      else if (p_stats->failed_table_load % 0x100 == 0) {
-        level = 10;
-      }
-      ldpp_dout(dpp, level) << __func__ << "::Failed p_table->add_entry (overflow)"
-                            << "::loaded_objects=" << p_stats->loaded_objects
-                            << "::failed_table_load=" << p_stats->failed_table_load
-                            << dendl;
-
-      p_stats->failed_table_load++;
+      report_failed_add_entry(dpp, p_rec->obj_name, p_stats);
     }
     return ret;
   }
@@ -892,7 +902,9 @@ namespace rgw::dedup {
                        << ", obj=" << p_tgt_rec->obj_name
                        << ", block_id=" << block_id
                        << ", rec_id=" << (int)rec_id
-                       << ", md5_shard=" << (int)md5_shard << dendl;
+                       << ", md5_shard=" << (int)md5_shard
+                       << ", crypt_mode=" << p_tgt_rec->s.crypt_mode.get_crypt_mode_str()
+                       << dendl;
 
     ldpp_dout(dpp, 20) << __func__ << "::md5_shard=" << (int)md5_shard
                        << "::" << p_tgt_rec->bucket_name
@@ -907,8 +919,10 @@ namespace rgw::dedup {
                                           disk_record_t         *p_rec,
                                           const rgw::sal::Attrs &attrs,
                                           dedup_table_t         *p_table,
+                                          crypt_mode_t           crypt_mode,
                                           md5_stats_t           *p_stats) /*IN-OUT*/
   {
+    p_rec->s.crypt_mode = crypt_mode;
     // if TAIL_TAG exists -> use it as ref-tag, eitherwise take ID_TAG
     auto itr = attrs.find(RGW_ATTR_TAIL_TAG);
     if (itr != attrs.end()) {
@@ -1017,8 +1031,8 @@ namespace rgw::dedup {
   // Need to read attributes from the Head-Object and output them to a new SLAB
   int Background::read_object_attribute(dedup_table_t    *p_table,
                                         disk_record_t    *p_rec,
-                                        disk_block_id_t   old_block_id,
-                                        record_id_t       old_rec_id,
+                                        disk_block_id_t   block_id,
+                                        record_id_t       rec_id,
                                         md5_shard_t       md5_shard,
                                         md5_stats_t      *p_stats /* IN-OUT */,
                                         disk_block_seq_t *p_disk,
@@ -1026,7 +1040,7 @@ namespace rgw::dedup {
   {
     bool should_print_debug = cct->_conf->subsys.should_gather<ceph_subsys_rgw_dedup, 20>();
     if (unlikely(should_print_debug)) {
-      print_record(dpp, p_rec, old_block_id, old_rec_id, md5_shard);
+      print_record(dpp, p_rec, block_id, rec_id, md5_shard);
     }
     p_stats->processed_objects ++;
 
@@ -1038,8 +1052,10 @@ namespace rgw::dedup {
       // TBD: need stat counters
       return -EOVERFLOW;
     }
+    // Prev stage added keys without crypto-mode key
+    crypt_mode_t crypt_mode;    // init by default to CRYPT_MODE_NONE
     key_t key_from_bucket_index(p_rec->s.md5_high, p_rec->s.md5_low, size_4k_units,
-                                p_rec->s.num_parts, sc_idx);
+                                p_rec->s.num_parts, sc_idx, crypt_mode);
     dedup_table_t::value_t src_val;
     int ret = p_table->get_val(&key_from_bucket_index, &src_val);
     if (ret != 0) {
@@ -1060,24 +1076,6 @@ namespace rgw::dedup {
         ldpp_dout(dpp, 20) << __func__ << "::skipped singleton::"
                            << p_rec->obj_name << std::dec << dendl;
       }
-      return 0;
-    }
-
-    // limit the number of ref_count in the SRC-OBJ to MAX_COPIES_PER_OBJ
-    // check <= because we also count the SRC-OBJ
-    if (src_val.get_count() <= MAX_COPIES_PER_OBJ) {
-      disk_block_id_t src_block_id = src_val.get_src_block_id();
-      record_id_t     src_rec_id   = src_val.get_src_rec_id();
-      // update the number of identical copies we got
-      ldpp_dout(dpp, 20) << __func__ << "::Obj " << p_rec->obj_name
-                         << " has " << src_val.get_count() << " copies" << dendl;
-      p_table->inc_count(&key_from_bucket_index, src_block_id, src_rec_id);
-    }
-    else {
-      // We don't want more than @MAX_COPIES_PER_OBJ to prevent OMAP overload
-      p_stats->skipped_too_many_copies++;
-      ldpp_dout(dpp, 10) << __func__ << "::Obj " << p_rec->obj_name
-                         << " has too many copies already" << dendl;
       return 0;
     }
 
@@ -1113,13 +1111,6 @@ namespace rgw::dedup {
     }
 
     const rgw::sal::Attrs& attrs = p_obj->get_attrs();
-    if (attrs.find(RGW_ATTR_CRYPT_MODE) != attrs.end()) {
-      p_stats->ingress_skip_encrypted++;
-      p_stats->ingress_skip_encrypted_bytes += ondisk_byte_size;
-      ldpp_dout(dpp, 20) <<__func__ << "::Skipping encrypted object "
-                         << p_rec->obj_name << dendl;
-      return 0;
-    }
 
     // TBD: We should be able to support RGW_ATTR_COMPRESSION when all copies are compressed
     if (attrs.find(RGW_ATTR_COMPRESSION) != attrs.end()) {
@@ -1158,7 +1149,8 @@ namespace rgw::dedup {
     sc_idx = remapper->remap(storage_class, dpp, &p_stats->failed_map_overflow);
     key_t key_from_obj(parsed_etag.md5_high, parsed_etag.md5_low,
                        byte_size_to_disk_blocks(p_obj->get_size()),
-                       parsed_etag.num_parts, sc_idx);
+                       parsed_etag.num_parts, sc_idx,
+                       crypt_mode /* still set to CRYPT_MODE_NONE */);
     if (unlikely(key_from_obj != key_from_bucket_index ||
                  p_rec->s.obj_bytes_size != p_obj->get_size())) {
       ldpp_dout(dpp, 15) <<__func__ << "::Skipping changed object "
@@ -1167,15 +1159,87 @@ namespace rgw::dedup {
       return 0;
     }
 
+    // commit to a single key
+    key_t *p_key = &key_from_obj;
+    //===========================================================================
+    // Crypt Mode is not reported in bucket-index, only now we can add it
+    bool crypt_mode_load = false;
+    itr = attrs.find(RGW_ATTR_CRYPT_MODE);
+    if (itr != attrs.end()) {
+      const std::string &crypt_mode_str = itr->second.to_str();
+      ldpp_dout(dpp, 20) <<__func__ << "::encrypted object " << p_rec->obj_name
+                         << " crypt_mode=" << crypt_mode_str << dendl;
+      crypt_mode.set_crypt_mode(crypt_mode_str);
+      crypt_mode_t::crypt_mode_id_t crypt_mode_id = crypt_mode.get_crypt_mode_id();
+      if (crypt_mode_id == crypt_mode_t::CRYPT_MODE_ID_AES256) {
+        ldpp_dout(dpp, 20) << __func__ << "::CRYPT_MODE_ID_AES256" << dendl;
+        // TBD - stat_counter
+      }
+      else if (crypt_mode_id == crypt_mode_t::CRYPT_MODE_ID_RGW_AUTO) {
+        ldpp_dout(dpp, 20) << __func__ << "::CRYPT_MODE_ID_RGW_AUTO" << dendl;
+        // TBD - stat_counter
+      }
+      else {
+        p_stats->ingress_skip_encrypted++;
+        p_stats->ingress_skip_encrypted_bytes += ondisk_byte_size;
+        ldpp_dout(dpp, 20) <<__func__ << "::Skipping encrypted object "
+                           << p_rec->obj_name << dendl;
+        return 0;
+      }
+
+      // update the table with crypt_mode
+      p_key->set_crypt_mode(crypt_mode);
+      // now get the correct value with crypt_mode set in key
+      ret = p_table->get_val(p_key, &src_val);
+      if (ret != 0) {
+        crypt_mode_load = true;
+        ldpp_dout(dpp, 20) << __func__ << "::add_entry: " << p_rec->obj_name
+                           << "::block_id=" << block_id << dendl;
+        ret = p_table->add_entry(p_key, block_id, rec_id, p_rec->has_shared_manifest(),
+                                 nullptr, nullptr, nullptr); // no need to update stats!
+        if (ret == 0) {
+          ret = p_table->get_val(p_key, &src_val);
+          ceph_assert(ret == 0);
+        }
+        else {
+          report_failed_add_entry(dpp, p_rec->obj_name, p_stats);
+          return ret;
+        }
+      }
+    } // CRYPT_MODE
+
+    // limit the number of ref_count in the SRC-OBJ to MAX_COPIES_PER_OBJ
+    // check <= because we also count the SRC-OBJ
+    if (src_val.get_count() <= MAX_COPIES_PER_OBJ) {
+      // crypt_mode_reload already inc the counter, don't do it twice
+      if (!crypt_mode_load) {
+        disk_block_id_t src_block_id = src_val.get_src_block_id();
+        record_id_t     src_rec_id   = src_val.get_src_rec_id();
+        // update the number of identical copies we got
+        ldpp_dout(dpp, 20) << __func__ << "::Obj " << p_rec->obj_name
+                           << " has " << src_val.get_count() << " copies"
+                           << "::block_id=" << src_block_id << dendl;
+
+        p_table->inc_count(p_key, src_block_id, src_rec_id);
+      }
+    }
+    else {
+      // We don't want more than @MAX_COPIES_PER_OBJ to prevent OMAP overload
+      p_stats->skipped_too_many_copies++;
+      ldpp_dout(dpp, 10) << __func__ << "::Obj " << p_rec->obj_name
+                         << " has too many copies already" << dendl;
+      return 0;
+    }
+    //===========================================================================
+
     // reset flags
     p_rec->s.flags.clear();
-    ret = add_obj_attrs_to_record(&b, p_rec, attrs, p_table, p_stats);
+    ret = add_obj_attrs_to_record(&b, p_rec, attrs, p_table, crypt_mode, p_stats);
     if (unlikely(ret != 0)) {
       ldpp_dout(dpp, 5) << __func__ << "::ERR: failed add_obj_attrs_to_record() ret="
                         << ret << "::" << cpp_strerror(-ret) << dendl;
       return ret;
     }
-
     disk_block_seq_t::record_info_t rec_info;
     ret = p_disk->add_record(d_dedup_cluster_ioctx, p_rec, &rec_info);
     if (ret == 0) {
@@ -1185,7 +1249,7 @@ namespace rgw::dedup {
                           << p_rec->obj_name << " was written to block_idx="
                           << rec_info.block_id << "::rec_id=" << (int)rec_info.rec_id
                           << "::shared_manifest=" << p_rec->has_shared_manifest() << dendl;
-      p_table->update_entry(&key_from_bucket_index, rec_info.block_id,
+      p_table->update_entry(p_key, rec_info.block_id,
                             rec_info.rec_id, p_rec->has_shared_manifest());
     }
     else {
@@ -1256,7 +1320,7 @@ namespace rgw::dedup {
                                                  &p_stats->failed_map_overflow);
     ceph_assert(sc_idx != remapper_t::NULL_IDX);
     key_t key(p_tgt_rec->s.md5_high, p_tgt_rec->s.md5_low, size_4k_units,
-              p_tgt_rec->s.num_parts, sc_idx);
+              p_tgt_rec->s.num_parts, sc_idx, p_tgt_rec->s.crypt_mode);
     dedup_table_t::value_t src_val;
     int ret = p_table->get_val(&key, &src_val);
     if (ret != 0) {
@@ -1300,7 +1364,7 @@ namespace rgw::dedup {
       p_stats->failed_src_load++;
       // we can withstand most errors moving to the next object
       ldpp_dout(dpp, 5) << __func__ << "::ERR: Failed load_record("
-                        << src_block_id << ", " << src_rec_id << ")" << dendl;
+                        << src_block_id << ", " << (int)src_rec_id << ")" << dendl;
       return 0;
     }
 

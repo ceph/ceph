@@ -22,18 +22,63 @@ namespace rgw::dedup {
 
   // 24 Bytes key
   struct key_t {
+  private:
+    struct __attribute__ ((packed)) key_flags_t {
+    private:
+      static constexpr uint8_t KEY_FLAG_CRYPT_MODE_AES256   = 0x01;
+      static constexpr uint8_t KEY_FLAG_CRYPT_MODE_RGW_AUTO = 0x02;
+    public:
+      key_flags_t() : flags(0) {}
+      key_flags_t(uint8_t _flags) : flags(_flags) {}
+      inline void clear() { this->flags = 0; }
+      inline bool is_crypt_mode_aes256() const {
+        return ((flags & KEY_FLAG_CRYPT_MODE_AES256) != 0);
+      }
+      inline void set_crypt_mode_aes256() {
+        ceph_assert(!is_crypt_mode_rgw_auto());
+        flags |= KEY_FLAG_CRYPT_MODE_AES256;
+      }
+      inline bool is_crypt_mode_rgw_auto() const {
+        return ((flags & KEY_FLAG_CRYPT_MODE_RGW_AUTO) != 0);
+      }
+      inline void set_crypt_mode_rgw_auto() {
+        ceph_assert(!is_crypt_mode_aes256());
+        flags |= KEY_FLAG_CRYPT_MODE_RGW_AUTO;
+      }
+      inline bool is_crypt_mode_none() const {
+        return ((flags & (KEY_FLAG_CRYPT_MODE_AES256|KEY_FLAG_CRYPT_MODE_RGW_AUTO)) == 0);
+      }
+    private:
+      uint8_t flags;
+    };
+  public:
     key_t() { ;}
     key_t(uint64_t _md5_high,
           uint64_t _md5_low,
           uint32_t _size_4k_units,
           uint16_t _num_parts,
-          uint8_t  _stor_class_idx) {
+          uint8_t  _stor_class_idx,
+          crypt_mode_t crypt_mode) {
       md5_high       = _md5_high;
       md5_low        = _md5_low;
       size_4k_units  = _size_4k_units;
       num_parts      = _num_parts;
       stor_class_idx = _stor_class_idx;
-      pad8           = 0;
+      set_crypt_mode(crypt_mode);
+    }
+
+    void set_crypt_mode(crypt_mode_t crypt_mode) {
+      crypt_mode_t::crypt_mode_id_t crypt_mode_id = crypt_mode.get_crypt_mode_id();
+      if (crypt_mode_id == crypt_mode_t::CRYPT_MODE_ID_AES256) {
+        key_flags.set_crypt_mode_aes256();
+      }
+      else if (crypt_mode_id == crypt_mode_t::CRYPT_MODE_ID_RGW_AUTO) {
+        key_flags.set_crypt_mode_rgw_auto();
+      }
+      else if (crypt_mode_id != crypt_mode_t::CRYPT_MODE_ID_NONE) {
+        //ceph_abort("unsupported_crypt_mode");
+        // what should we do here ???
+      }
     }
 
     bool operator==(const struct key_t& other) const {
@@ -58,7 +103,7 @@ namespace rgw::dedup {
     uint32_t size_4k_units; // Object size in 4KB units max out at 16TB (AWS MAX-SIZE is 5TB)
     uint16_t num_parts;     // How many parts were used in multipart upload (AWS MAX-PART is 10,000)
     uint8_t  stor_class_idx;// storage class id
-    uint8_t  pad8;
+    key_flags_t key_flags;
   } __attribute__((__packed__));
   static_assert(sizeof(key_t) == 24);
 
