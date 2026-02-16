@@ -1653,6 +1653,16 @@ class NodeProxyCache:
     def _is_unknown_status(self, statuses: ValuesView) -> bool:
         return self._has_health_value(statuses, 'unknown') and not self._is_error_status(statuses)
 
+    def _resolve_hosts(self, **kw: Any) -> List[str]:
+        hostname = kw.get('hostname')
+        if hostname is None:
+            return list(self.data.keys())
+        if hostname not in self.data:
+            raise OrchestratorError(
+                f"Host '{hostname}' has no node-proxy data (unknown host or node-proxy not running)."
+            )
+        return [hostname]
+
     def fullreport(self, **kw: Any) -> Dict[str, Any]:
         """
         Retrieves the full report for the specified hostname.
@@ -1667,8 +1677,7 @@ class NodeProxyCache:
         :return: The full report data for the specified hostname(s).
         :rtype: dict
         """
-        hostname = kw.get('hostname')
-        hosts = [hostname] if hostname else self.data.keys()
+        hosts = self._resolve_hosts(**kw)
         return {host: self.data[host] for host in hosts}
 
     def summary(self, **kw: Any) -> Dict[str, Any]:
@@ -1687,9 +1696,7 @@ class NodeProxyCache:
                 host or all hosts and their components.
         :rtype: Dict[str, Dict[str, str]]
         """
-        hostname = kw.get('hostname')
-        hosts = [hostname] if hostname else self.data.keys()
-
+        hosts = self._resolve_hosts(**kw)
         _result: Dict[str, Any] = {}
 
         for host in hosts:
@@ -1735,9 +1742,8 @@ class NodeProxyCache:
         :return: Endpoint information for the specified host(s).
         :rtype: Union[Dict[str, Any], Any]
         """
-        hostname = kw.get('hostname')
+        hosts = self._resolve_hosts(**kw)
         _result = {}
-        hosts = [hostname] if hostname else self.data.keys()
 
         for host in hosts:
             try:
@@ -1760,12 +1766,14 @@ class NodeProxyCache:
         :return: A dictionary containing firmware information for each host.
         :rtype: Dict[str, Any]
         """
-        hostname = kw.get('hostname')
-        hosts = [hostname] if hostname else self.data.keys()
-
+        hosts = self._resolve_hosts(**kw)
         return {host: self.data[host]['firmwares'] for host in hosts}
 
     def get_critical_from_host(self, hostname: str) -> Dict[str, Any]:
+        if hostname not in self.data:
+            raise OrchestratorError(
+                f"Host '{hostname}' has no node-proxy data (unknown host or node-proxy not running)."
+            )
         results: Dict[str, Any] = {}
 
         for component, component_data in self.data[hostname]['status'].items():
@@ -1796,10 +1804,9 @@ class NodeProxyCache:
         :return: A dictionary containing critical information for each host.
         :rtype: List[Dict[str, Any]]
         """
-        hostname = kw.get('hostname')
+        hosts = self._resolve_hosts(**kw)
         results: Dict[str, Any] = {}
 
-        hosts = [hostname] if hostname else self.data.keys()
         for host in hosts:
             results[host] = self.get_critical_from_host(host)
         return results
