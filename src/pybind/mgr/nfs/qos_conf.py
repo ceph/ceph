@@ -34,9 +34,9 @@ class UserQoSType(Enum):
 
 
 class QOSType(Enum):
-    PerShare = 1
-    PerClient = 2
-    PerShare_PerClient = 3
+    PerShare = "Per_Export"
+    PerClient = "Per_Client"
+    PerShare_PerClient = "Per_Export_Per_Client"
 
 
 def _validate_qos_bw(bandwidth: str) -> int:
