@@ -3754,6 +3754,7 @@ class TestIngressService:
             '        mount_path_pseudo = true;\n'
             '        Enable_UDP = false;\n'
             '        NFS_Port = 2049;\n'
+            '        allow_set_io_flusher_fail = true;\n'
             '        Monitoring_Port = 9587;\n'
             '        HAProxy_Hosts = 192.168.122.111, 10.10.2.20, 192.168.122.222;\n'
             '}\n'
@@ -4023,7 +4024,6 @@ class TestNFS:
                     CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Monitoring_Addr = 1.2.3.1" in ganesha_conf
-                assert "allow_set_io_flusher_fail = true" in ganesha_conf
                 assert "Monitoring_Port = 9587" in ganesha_conf
 
             nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
@@ -4060,7 +4060,6 @@ class TestNFS:
                 # Loopback IP should be accepted even though it's not in host network cache
                 assert "Monitoring_Addr = 127.0.0.50" in ganesha_conf
                 assert "Monitoring_Port = 9587" in ganesha_conf
-                assert "allow_set_io_flusher_fail = true" in ganesha_conf
 
             # Test with non-loopback IP that's not in host networks (should be ignored)
             nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['host1']),
@@ -4071,7 +4070,6 @@ class TestNFS:
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 # Non-loopback IP not in host networks should not be in config
                 assert "Monitoring_Addr = 192.168.9.9" not in ganesha_conf
-                assert "allow_set_io_flusher_fail = true" not in ganesha_conf
 
             # Test with invalid IP (should be ignored)
             nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['host1']),
@@ -4082,7 +4080,6 @@ class TestNFS:
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 # Invalid IP should not be in config
                 assert "Monitoring_Addr = not-an-ip" not in ganesha_conf
-                assert "allow_set_io_flusher_fail = true" not in ganesha_conf
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
