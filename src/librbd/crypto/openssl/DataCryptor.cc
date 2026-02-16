@@ -51,6 +51,11 @@ int DataCryptor::init(const char* cipher_name, const unsigned char* key,
   m_key = new unsigned char[key_length];
   memcpy(m_key, key, key_length);
   m_iv_size = static_cast<uint32_t>(EVP_CIPHER_iv_length(m_cipher.get()));
+  if (m_iv_size == 0) {
+    // When AEAD cipher is used IV equals 0. However I still want to use IV 
+    // as AAD.
+    m_iv_size = sizeof(ceph_le64);
+  }
   return 0;
 }
 
@@ -129,18 +134,10 @@ int DataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
   return 0;
 }
 
-int DataCryptor::update_context(EVP_CIPHER_CTX* ctx, const unsigned char* in,
-                                unsigned char* out, uint32_t in_len, uint32_t out_len, 
-                                const unsigned char* index, uint32_t index_len) const {
-  if (in_len != out_len) {
-    lderr(m_cct) << "EVP_CipherUpdate failed. in_len= " << in_len
-                 << " and out_len=" << out_len << " not equal" << dendl;
-    log_errors();
-    return -EIO;
-  }
+int DataCryptor::update_context(EVP_CIPHER_CTX* ctx, const CryptArgs& params) const {
   int result_len;
-  if (1 != EVP_CipherUpdate(ctx, out, &result_len, in, in_len)) {
-    lderr(m_cct) << "EVP_CipherUpdate failed. in_len=" << in_len << dendl;
+  if (1 != EVP_CipherUpdate(ctx, params.out, &result_len, params.in, params.len)) {
+    lderr(m_cct) << "EVP_CipherUpdate failed. in_len=" << params.len << dendl;
     log_errors();
     return -EIO;
   }
@@ -158,10 +155,8 @@ void DataCryptor::log_errors() const {
   }
 }
 
-int DataCryptor::decrypt(EVP_CIPHER_CTX *ctx, const unsigned char *in,
-                         unsigned char *out, uint32_t in_len, uint32_t out_len, 
-                         const unsigned char* index, uint32_t index_len) const {
-  return update_context(ctx, in, out, in_len, out_len);
+int DataCryptor::decrypt(EVP_CIPHER_CTX *ctx, const CryptArgs& params) const {
+  return update_context(ctx, params);
 }
 
 int AEADDataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv, 
@@ -178,22 +173,18 @@ int AEADDataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
   return 0;
 }
 
-  int AEADDataCryptor::update_context(EVP_CIPHER_CTX* ctx, const unsigned char* in,
-                              unsigned char* out,uint32_t in_len, uint32_t out_len, 
-                              const unsigned char* index,uint32_t index_len) const {
+  int AEADDataCryptor::update_context(EVP_CIPHER_CTX* ctx, const CryptArgs& params) const {
     int result_len = 0;
     int ciphertext_len = 0;
-    if (out_len != (in_len + AES_256_SIV_OVERHEAD)) {
+    if (params.meta_len != AES_256_SIV_OVERHEAD) {
       lderr(m_cct) << "Encryption buffer size mismatch. "
-                   << "Input Length: " << in_len
-                   << ", Overhead Length: " << AES_256_SIV_OVERHEAD
-                   << ", Expected Output Length: " << (in_len + AES_256_SIV_OVERHEAD)
-                   << ", Actual Output Length: " << out_len << dendl;
+                   << "Input meata Length: " << params.meta_len
+                   << ", Overhead Length: " << AES_256_SIV_OVERHEAD << dendl;
       log_errors();
       return -EIO;
     }
     // Data layout is: [ Data (len) | Tag (AES_256_SIV_TAG_SIZE) | Nonce (AES_256_SIV_NONCE_SIZE) ]
-    unsigned char* random_nonce = out + in_len + AES_256_SIV_TAG_SIZE;
+    unsigned char* random_nonce = params.meta + AES_256_SIV_TAG_SIZE;
     // TODO: Maybe replace with Ceph random
     if (1 != RAND_bytes(random_nonce, AES_256_SIV_NONCE_SIZE)) {
         lderr(m_cct) << "RAND_bytes failed" << dendl;
@@ -206,65 +197,50 @@ int AEADDataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
       log_errors();
       return -EIO;
     }
-    if (1 != EVP_EncryptUpdate(ctx, nullptr, &result_len, index, index_len)) {
+    if (1 != EVP_EncryptUpdate(ctx, nullptr, &result_len, params.iv, params.iv_len)) {
       lderr(m_cct) << "Sector IV AAD update failed" << dendl;
       log_errors();
       return -EIO;
     }
-    if (1 != EVP_EncryptUpdate(ctx, out, &result_len, in, in_len)) {
-      lderr(m_cct) << "Failed encryption, in_len=" << in_len << " out_len=" << out_len << dendl;
+    if (1 != EVP_EncryptUpdate(ctx, params.out, &result_len, params.in, params.len)) {
+      lderr(m_cct) << "Failed encryption, len=" << params.len << dendl;
       log_errors();
       return -EIO;
     }
     ciphertext_len += result_len;
-    if (1 != EVP_EncryptFinal_ex(ctx, out + result_len, &result_len)) {
-      lderr(m_cct) << "Failed to finalize encryption, in_len=" << in_len << " out_len=" << out_len << dendl;
+    if (1 != EVP_EncryptFinal_ex(ctx, params.out + result_len, &result_len)) {
+      lderr(m_cct) << "Failed to finalize encryption, len=" << params.len << dendl;
       log_errors();
       return -EIO;
     }
     ciphertext_len += result_len;
     if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, AES_256_SIV_TAG_SIZE,
-                                out + in_len)) {
-      lderr(m_cct) << "Failed to retrieve authentication tag, in_len=" << in_len << " out_len=" << out_len << dendl;
+                                params.meta)) {
+      lderr(m_cct) << "Failed to retrieve authentication tag, len=" << params.len << dendl;
       log_errors();
       return -EIO;
     }
-    // add tag length
-    ciphertext_len += AES_256_SIV_TAG_SIZE;
-    // Add nonce length
-    ciphertext_len += AES_256_SIV_NONCE_SIZE;
-    if (std::cmp_not_equal(ciphertext_len, out_len)) {
-      lderr(m_cct) << "Encryption failed out_len= " << out_len
-                   << " ciphertext_len=" << ciphertext_len
-                   << " not correct, expected length=" << out_len << dendl;
+    if (std::cmp_not_equal(ciphertext_len, params.len)) {
+      lderr(m_cct) << "Decryption failed" << dendl;
       log_errors();
       return -EIO;
     }
     return ciphertext_len;
   }
 
-  int AEADDataCryptor::decrypt(EVP_CIPHER_CTX* ctx, const unsigned char* in, 
-                          unsigned char* out, uint32_t in_len, uint32_t out_len, 
-                          const unsigned char* index, uint32_t index_len) const {                      
-    if (in_len != (out_len + AES_256_SIV_OVERHEAD)) {
+  int AEADDataCryptor::decrypt(EVP_CIPHER_CTX* ctx, const CryptArgs& params) const {                      
+    if (params.meta_len != ( AES_256_SIV_OVERHEAD)) {
       lderr(m_cct) << "Encryption buffer size mismatch. "
-                   << "Input Length: " << in_len
-                   << ", Overhead Length: " << AES_256_SIV_OVERHEAD
-                   << ", Expected Output Length: " << (in_len - AES_256_SIV_OVERHEAD)
-                   << ", Actual Output Length: " << out_len << dendl;
+                   << "Input Length: " << params.meta_len
+                   << ", Overhead Length: " << AES_256_SIV_OVERHEAD << dendl;
       log_errors();
       return -EIO;
     }
     int result_len = 0;
     int plaintext_len = 0;
     // Data layout is: [ Data (len) | Tag (AES_256_SIV_TAG_SIZE) | Nonce (AES_256_SIV_NONCE_SIZE) ]
-    if (in_len < AES_256_SIV_OVERHEAD) {
-        lderr(m_cct) << "Input Buffer too short for metadata, in_len=" << in_len << " out_len=" << out_len << dendl;
-        return -EINVAL;
-    }
-    uint32_t data_len = in_len - AES_256_SIV_OVERHEAD;
-    const unsigned char* tag = in + data_len;
-    const unsigned char* nonce = tag + AES_256_SIV_TAG_SIZE;
+    const unsigned char* tag = params.meta; //in + data_len;
+    const unsigned char* nonce = params.meta + AES_256_SIV_TAG_SIZE;
     if (1 != EVP_CipherInit_ex(ctx, nullptr, nullptr, m_key, nonce, -1)) {
       lderr(m_cct) << "EVP_CipherInit_ex reset failed" << dendl;
       log_errors();
@@ -273,33 +249,31 @@ int AEADDataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv,
     if (!EVP_CIPHER_CTX_ctrl(
             ctx, EVP_CTRL_AEAD_SET_TAG, AES_256_SIV_TAG_SIZE,
             const_cast<void*>(static_cast<const void*>(tag)))) {
-      lderr(m_cct) << "failed to set auth-tag, in_len=" << in_len << " out_len=" << out_len << dendl;
+      lderr(m_cct) << "failed to set auth-tag" << dendl;
       log_errors();
       return -EIO;
     }
 
-    if (1 != EVP_DecryptUpdate(ctx, NULL, &result_len, index, index_len)) {
-      lderr(m_cct) << "Failed to decrypt update context with nonce, in_len=" << in_len << " out_len=" << out_len << dendl;
+    if (1 != EVP_DecryptUpdate(ctx, NULL, &result_len, params.iv, params.iv_len)) {
+      lderr(m_cct) << "Failed to decrypt update context with nonce"<< dendl;
       log_errors();
       return -EIO;
     }
-    if (1 != EVP_DecryptUpdate(ctx, out, &result_len, in, in_len - (AES_256_SIV_NONCE_SIZE+AES_256_SIV_TAG_SIZE))) {
-      lderr(m_cct) << "Failed decryption, in_len=" << in_len << " out_len=" << out_len << dendl;
+    if (1 != EVP_DecryptUpdate(ctx, params.out, &result_len, params.in, params.len)) {
+      lderr(m_cct) << "Failed decryption" << dendl;
       log_errors();
       // TODO: Correct error code? 
       return -EBADMSG;
     }
     plaintext_len += result_len;
-    if (1 != EVP_DecryptFinal_ex(ctx, out + result_len, &result_len)) {
-      lderr(m_cct) << "Failed to finalize decryption, in_len=" << in_len << " out_len=" << out_len << dendl;
+    if (1 != EVP_DecryptFinal_ex(ctx, params.out + result_len, &result_len)) {
+      lderr(m_cct) << "Failed to finalize decryption" << dendl;
       log_errors();
       return -EIO;  
     }
     plaintext_len += result_len;
-    if (std::cmp_not_equal(plaintext_len, out_len)) {
-      lderr(m_cct) << "Decryption failed, out_len= " << out_len
-                   << " plaintext_len=" << plaintext_len
-                   << " not correct, expected length=" << out_len << dendl;
+    if (std::cmp_not_equal(plaintext_len, params.len)) {
+      lderr(m_cct) << "Decryption failed" << dendl;
       log_errors();
       return -EIO;
     }

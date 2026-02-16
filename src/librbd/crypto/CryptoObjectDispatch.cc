@@ -88,16 +88,26 @@ struct C_AlignedObjectReadRequest : public Context {
       ldout(cct, 20) << "aligned read r=" << r << dendl;
       if (r >= 0) {
         r = 0;
-        for (auto& extent: *extents) {
-          auto off = crypto->map_physical_logical(extent.offset, 0).first;
+        const bool has_meta = (crypto->get_meta_size() > 0);
+        const size_t stride = has_meta ? 2 : 1;
+        for (size_t i = 0; i < extents->size(); i += stride) {
+          if (has_meta && (i + 1 >= extents->size())) {
+             lderr(cct) << "Missing metadata extent for index " << i << dendl;
+             r = -EINVAL; 
+             break;
+          }
+          auto& data_extent = (*extents)[i];
+          auto* meta_extent = has_meta ? &(*extents)[i+1] : nullptr;
           auto crypto_ret = crypto->decrypt_aligned_extent(
-              extent, get_file_offset(image_ctx, object_no, off));
+              data_extent, 
+              get_file_offset(image_ctx, object_no, data_extent.offset),
+              meta_extent);
           if (crypto_ret != 0) {
             ceph_assert(crypto_ret < 0);
             r = crypto_ret;
             break;
           }
-          r += extent.length;
+          r += data_extent.length;
         }
       }
 
@@ -128,7 +138,7 @@ struct C_UnalignedObjectReadRequest : public Context {
             Context* on_dispatched) : cct(image_ctx->cct), extents(extents),
                                       on_finish(on_dispatched) {
     if (crypto->get_meta_size() != 0) {
-      crypto->align_extents_physical(*extents, &aligned_extents);
+      crypto->get_physical_extends(*extents, &aligned_extents, image_ctx->get_object_size());
     } else {
       crypto->align_extents(*extents, &aligned_extents);
     }
@@ -149,9 +159,13 @@ struct C_UnalignedObjectReadRequest : public Context {
     }
 
     void remove_alignment_data() {
+      // When AEAD is active, get_physical_extends creates 2N aligned extents
+      // (data+meta pairs) for N original extents. Use stride 2 to skip meta.
+      const bool has_meta = (aligned_extents.size() > extents->size());
+      const size_t stride = has_meta ? 2 : 1;
       for (uint64_t i = 0; i < extents->size(); ++i) {
         auto& extent = (*extents)[i];
-        auto& aligned_extent = aligned_extents[i];
+        auto& aligned_extent = aligned_extents[i * stride];
         if (aligned_extent.extent_map.empty()) {
           uint64_t cut_offset = extent.offset - aligned_extent.offset;
           int64_t padding_count =
@@ -512,34 +526,13 @@ bool CryptoObjectDispatch<I>::write(
                  << object_off << "~" << data.length() << dendl;
   ceph_assert(m_crypto != nullptr);
 
-  const bool has_meta = (m_crypto->get_meta_size() != 0);
-
-  if (has_meta &&
-      (m_crypto->is_aligned(object_off, data.length()))) {
-    auto align = m_crypto->map_logical_physical(object_off, data.length());
-
+  if (m_crypto->is_aligned(object_off, data.length())) {
     auto r = m_crypto->encrypt(
         &data, get_file_offset(m_image_ctx, object_no, object_off));
-    ceph_assert(data.length() == align.second);
-    ceph_assert(r == 0);
-
-    // re-call this layer to change the offset and length of the write operation
-    *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
-    auto write_req = io::ObjectDispatchSpec::create_write(
-        m_image_ctx,
-        io::util::get_previous_layer(io::OBJECT_DISPATCH_LAYER_CRYPTO),
-        object_no, align.first, std::move(data), io_context, op_flags,
-        write_flags, assert_version, journal_tid == nullptr ? 0 : *journal_tid,
-        parent_trace, on_dispatched);
-    write_req->send();
-
-  } else if (has_meta &&
-             m_crypto->is_physical_aligned(object_off, data.length())) {
-    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-    on_dispatched->complete(0);
-  } else if (m_crypto->is_aligned(object_off, data.length())) {
-    auto r = m_crypto->encrypt(
-        &data, get_file_offset(m_image_ctx, object_no, object_off));
+    // TODO: Maybe use issue a new write to use write_flags instead
+    *object_dispatch_flags |= (m_crypto->get_meta_size() > 0)
+                                  ? io::OBJECT_DISPATCH_FLAG_IS_AEAD_ENCRYPTED
+                                  : 0;
     *dispatch_result = r == 0 ? io::DISPATCH_RESULT_CONTINUE
                               : io::DISPATCH_RESULT_COMPLETE;
     on_dispatched->complete(r);
@@ -686,6 +679,9 @@ int CryptoObjectDispatch<I>::prepare_copyup(
 
     // encrypt
     io::SparseBufferlist encrypted_sparse_bufferlist;
+    const uint64_t meta_size = m_crypto->get_meta_size();
+    const uint64_t block_size = m_crypto->get_block_size();
+    const uint64_t object_size = m_image_ctx->get_object_size();
     for (auto& extent : extent_map) {
       auto [aligned_off, aligned_len] = m_crypto->align(
               extent.get_off(), extent.get_len());
@@ -708,13 +704,33 @@ int CryptoObjectDispatch<I>::prepare_copyup(
 
         encrypted_bl.append(aligned_bl);
       }
-      if (m_crypto->get_meta_size() != 0) {
-        std::tie(aligned_off, aligned_len) = m_crypto->map_logical_physical(aligned_off, aligned_len);
-      } 
-      ceph_assert(encrypted_bl.length() == aligned_len);
-      encrypted_sparse_bufferlist.insert(
-        aligned_off, aligned_len, {io::SPARSE_EXTENT_STATE_DATA, aligned_len,
-                                   std::move(encrypted_bl)});
+
+      if (meta_size != 0) {
+        // Split layout: data at logical offsets, meta beyond object_size
+        uint64_t num_blocks = aligned_len / block_size;
+        uint64_t data_len = num_blocks * block_size;
+        uint64_t meta_len = num_blocks * meta_size;
+        ceph_assert(encrypted_bl.length() == data_len + meta_len);
+
+        ceph::bufferlist data_bl;
+        data_bl.substr_of(encrypted_bl, 0, data_len);
+        encrypted_sparse_bufferlist.insert(
+          aligned_off, data_len,
+          {io::SPARSE_EXTENT_STATE_DATA, data_len, std::move(data_bl)});
+
+        uint64_t start_block = aligned_off / block_size;
+        uint64_t meta_off = object_size + start_block * meta_size;
+        ceph::bufferlist meta_bl;
+        meta_bl.substr_of(encrypted_bl, data_len, meta_len);
+        encrypted_sparse_bufferlist.insert(
+          meta_off, meta_len,
+          {io::SPARSE_EXTENT_STATE_DATA, meta_len, std::move(meta_bl)});
+      } else {
+        ceph_assert(encrypted_bl.length() == aligned_len);
+        encrypted_sparse_bufferlist.insert(aligned_off, aligned_len,
+          {io::SPARSE_EXTENT_STATE_DATA, aligned_len,
+           std::move(encrypted_bl)});
+      }
     }
 
     // replace original plaintext sparse bufferlist with encrypted one
