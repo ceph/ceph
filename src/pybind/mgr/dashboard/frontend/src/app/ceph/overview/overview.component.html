@@ -1,17 +1,16 @@
-@let healthData = healthData$ | async;
+@let vm = vm$ | async;
 <div cdsGrid
-     [narrow]="true"
-     [condensed]="false"
      [fullWidth]="true"
      class="cds-mt-5 cds-mb-5">
-  <div cdsRow
-       [narrow]="true">
+  <div cdsRow>
     <div cdsCol
          class="cds-mb-5"
          [columnNumbers]="{lg: 11}">
       <cd-overview-health-card
-        [fsid]="healthData?.fsid"
-        [health]="healthData?.health?.status">
+        [fsid]="vm?.healthData?.fsid"
+        [status]="vm?.healthData?.health?.status"
+        [incidents]="vm?.incidentCount"
+        (viewIncidents)="togglePanel()">
       </cd-overview-health-card>
     </div>
     <div cdsCol
@@ -20,14 +19,13 @@
       <cds-tile>Alerts card</cds-tile>
     </div>
   </div>
-  <div cdsRow
-       [narrow]="true">
+  <div cdsRow>
     <div cdsCol
          class="cds-mb-5"
          [columnNumbers]="{lg: 16}">
       <cd-overview-storage-card
-        [total]="healthData?.pgmap.bytes_total"
-        [used]="healthData?.pgmap.bytes_used">
+        [total]="vm?.healthData?.pgmap.bytes_total"
+        [used]="vm?.healthData?.pgmap.bytes_used">
       </cd-overview-storage-card>
     </div>
   </div>
@@ -39,3 +37,28 @@
     </div>
   </div>
 </div>
+@if (isHealthPanelOpen && vm?.incidentCount > 0) {
+  <cd-side-panel
+    [headerText]="'Health incidents ('+ vm?.incidentCount +')'"
+    [expanded]="isHealthPanelOpen"
+    size="md"
+    (closed)="togglePanel()">
+    <div panel-header-description
+         class="cds--type-body-01">
+      <span>Health incidents are Ceph health checks warnings indicating conditions that require attention and remain until resolved.</span>
+    </div>
+    <div class="panel-content">
+      @for (check of vm?.checks; track key) {
+      <div>
+        <div class="overview-check-header">
+          <cd-icon [type]="check?.icon"></cd-icon>
+          <span class="cds--type-body-compact-01 overview-check-name">
+            {{ check?.name }}
+          </span>
+        </div>
+        <p class="cds--type-body-compact-01 overview-check-description">{{ check?.description }}</p>
+      </div>
+      }
+    </div>
+  </cd-side-panel>
+}

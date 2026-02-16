@@ -105,7 +105,9 @@ export enum Icons {
   dataViewAlt = 'data--view--alt',
   dataCenter = 'data--center',
   upgrade = 'upgrade',
-  warningAltFilled = 'warning--alt--filled'
+  warningAltFilled = 'warning--alt--filled',
+  help = 'help',
+  incidentReporter = 'incident-reporter'
 }
 
 export enum IconSize {
@@ -132,5 +134,7 @@ export const ICON_TYPE = {
   dataViewAlt: 'data--view--alt',
   dataCenter: 'data--center',
   upgrade: 'upgrade',
-  warningAltFilled: 'warning--alt--filled'
+  warningAltFilled: 'warning--alt--filled',
+  help: 'help',
+  incidentReporter: 'incident-reporter'
 } as const;

@@ -1,11 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  EventEmitter,
   inject,
   Input,
+  Output,
   ViewEncapsulation
 } from '@angular/core';
-import { SkeletonModule, ButtonModule, LinkModule } from 'carbon-components-angular';
+import { SkeletonModule, ButtonModule, LinkModule, TooltipModule } from 'carbon-components-angular';
 import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 import { RouterModule } from '@angular/router';
 import { ComponentsModule } from '~/app/shared/components/components.module';
@@ -17,6 +19,7 @@ import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { UpgradeInfoInterface } from '~/app/shared/models/upgrade.interface';
 import { UpgradeService } from '~/app/shared/api/upgrade.service';
 import { catchError, filter, map, startWith } from 'rxjs/operators';
+import { HealthIconMap, HealthStatus } from '~/app/shared/models/overview';
 
 type OverviewHealthData = {
   summary: Summary;
@@ -30,23 +33,22 @@ type Health = {
   icon: string;
 };
 
-type HealthStatus = 'HEALTH_OK' | 'HEALTH_WARN' | 'HEALTH_ERR';
 const WarnAndErrMessage = $localize`There are active alerts and unresolved health warnings.`;
 
 const HealthMap: Record<HealthStatus, Health> = {
   HEALTH_OK: {
     message: $localize`All core services are running normally`,
-    icon: 'success',
+    icon: HealthIconMap['HEALTH_OK'],
     title: $localize`Healthy`
   },
   HEALTH_WARN: {
     message: WarnAndErrMessage,
-    icon: 'warningAltFilled',
+    icon: HealthIconMap['HEALTH_WARN'],
     title: $localize`Warning`
   },
   HEALTH_ERR: {
     message: WarnAndErrMessage,
-    icon: 'error',
+    icon: HealthIconMap['HEALTH_ERR'],
     title: $localize`Critical`
   }
 };
@@ -61,7 +63,8 @@ const HealthMap: Record<HealthStatus, Health> = {
     RouterModule,
     ComponentsModule,
     LinkModule,
-    PipesModule
+    PipesModule,
+    TooltipModule
   ],
   standalone: true,
   templateUrl: './overview-health-card.component.html',
@@ -70,19 +73,21 @@ const HealthMap: Record<HealthStatus, Health> = {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class OverviewHealthCardComponent {
-  @Input() fsid!: string;
-  @Input()
-  set health(value: HealthStatus) {
-    this.health$.next(value);
-  }
-  private health$ = new ReplaySubject<HealthStatus>(1);
-
   private readonly summaryService = inject(SummaryService);
   private readonly upgradeService = inject(UpgradeService);
 
+  @Input() fsid!: string;
+  @Input()
+  set status(value: HealthStatus) {
+    this.health$.next(value);
+  }
+  @Input() incidents!: number;
+  @Output() viewIncidents = new EventEmitter<void>();
+
+  private health$ = new ReplaySubject<HealthStatus>(1);
+
   readonly data$: Observable<OverviewHealthData> = combineLatest([
     this.summaryService.summaryData$.pipe(filter((summary): summary is Summary => !!summary)),
-
     this.upgradeService.listCached().pipe(
       startWith(null as UpgradeInfoInterface),
       catchError(() => of(null))
@@ -91,4 +96,8 @@ export class OverviewHealthCardComponent {
   ]).pipe(
     map(([summary, upgrade, health]) => ({ summary, upgrade, currentHealth: HealthMap?.[health] }))
   );
+
+  onViewIncidentsClick() {
+    this.viewIncidents.emit();
+  }
 }
