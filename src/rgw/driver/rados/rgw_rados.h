@@ -55,7 +55,6 @@ class RGWLC;
 class RGWObjectExpirer;
 class RGWMetaSyncProcessorThread;
 class RGWDataSyncProcessorThread;
-class AdminSocketHook;
 class RGWSyncLogTrimThread;
 class RGWSyncTraceManager;
 struct RGWZoneGroup;
@@ -373,7 +372,6 @@ class RGWRados
   RGWDataNotifier* data_notifier{nullptr};
   RGWMetaSyncProcessorThread* meta_sync_processor_thread{nullptr};
   RGWSyncTraceManager* sync_tracer{nullptr};
-  class AdminSocketHook* heap_profiler_hook{nullptr};
   std::map<rgw_zone_id, RGWDataSyncProcessorThread *> data_sync_processor_threads;
 
   boost::optional<rgw::BucketTrimManager> bucket_trim;

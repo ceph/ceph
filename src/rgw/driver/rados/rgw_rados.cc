@@ -15,12 +15,9 @@
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 
-#include "common/admin_socket.h"
 #include "common/ceph_json.h"
-#include "common/cmdparse.h"
+
 #include "common/errno.h"
-#include "include/str_list.h"
-#include "perfglue/heap_profiler.h"
 #include "common/Formatter.h"
 #include "common/Throttle.h"
 #include "common/BackTrace.h"
@@ -130,43 +127,6 @@ static string default_storage_extra_pool_suffix = "rgw.buckets.non-ec";
 
 static RGWObjCategory main_category = RGWObjCategory::Main;
 #define RGW_USAGE_OBJ_PREFIX "usage."
-
-namespace {
-
-class RGWHeapProfilerHook : public AdminSocketHook {
-  CephContext *cct;
-public:
-  explicit RGWHeapProfilerHook(CephContext *_cct) : cct(_cct) {}
-
-  int call(std::string_view command,
-	  const cmdmap_t& cmdmap,
-	  const ceph::buffer::list&,
-	  ceph::Formatter *,
-	  std::ostream& errss,
-	  ceph::buffer::list& out) override {
-    if (!ceph_using_tcmalloc()) {
-      errss << "not using tcmalloc";
-      return -EOPNOTSUPP;
-    }
-    std::string heapcmd;
-    if (!ceph::common::cmd_getval(cmdmap, "heapcmd", heapcmd)) {
-      errss << "unable to get value for heapcmd";
-      return -EINVAL;
-    }
-    std::vector<std::string> cmd_vec;
-    get_str_vec(heapcmd, cmd_vec);
-    std::string value;
-    if (ceph::common::cmd_getval(cmdmap, "value", value)) {
-      cmd_vec.push_back(value);
-    }
-    std::ostringstream ss;
-    ceph_heap_profiler_handle_command(cmd_vec, ss);
-    out.append(ss.str());
-    return 0;
-  }
-};
-
-} // anonymous namespace
 
 // reads attribute as std::string
 static inline void read_attr(std::map<std::string, bufferlist>& attrs,
@@ -1163,11 +1123,6 @@ void RGWRados::finalize()
     data_notifier->stop();
     delete data_notifier;
   }
-  if (heap_profiler_hook) {
-    cct->get_admin_socket()->unregister_commands(heap_profiler_hook);
-    delete heap_profiler_hook;
-    heap_profiler_hook = nullptr;
-  }
   delete sync_tracer;
   
   delete lc;
@@ -1243,20 +1198,6 @@ int RGWRados::init_rados()
   }
 
   cr_registry = crs.release();
-
-  heap_profiler_hook = new RGWHeapProfilerHook(cct);
-  ret = cct->get_admin_socket()->register_command(
-    "heap "
-    "name=heapcmd,type=CephChoices,strings="
-    "dump|start_profiler|stop_profiler|release|get_release_rate|set_release_rate|stats "
-    "name=value,type=CephString,req=false",
-    heap_profiler_hook,
-    "show heap usage info (available only if compiled with tcmalloc)");
-  if (ret < 0) {
-    delete heap_profiler_hook;
-    heap_profiler_hook = nullptr;
-    return ret;
-  }
 
   if (use_datacache) {
     d3n_data_cache = new D3nDataCache();

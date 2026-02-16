@@ -2,7 +2,7 @@
  Memory Profiling
 ==================
 
-Ceph Monitor, OSD, and MDS can report ``TCMalloc`` heap profiles. Install
+Ceph Monitor, OSD, MDS, and RGW can report ``TCMalloc`` heap profiles. Install
 ``google-perftools`` if you want to generate these. Your OS distribution might
 package this under a different name (for example, ``gperftools``), and your OS
 distribution might use a different package manager. Run a command similar to
@@ -74,8 +74,8 @@ the heap profiler. You can enable or disable the heap profiler at runtime, or
 ensure that it runs continuously. When running commands based on the examples
 that follow, do the following:
 
-#. replace ``{daemon-type}`` with ``mon``, ``osd`` or ``mds`` 
-#. replace ``{daemon-id}`` with the OSD number or the MON ID or the MDS ID 
+#. replace ``{daemon-type}`` with ``mon``, ``osd``, ``mds``, or ``client.rgw``
+#. replace ``{daemon-id}`` with the OSD number, the MON ID, the MDS ID, or the RGW instance ID
 
 
 Starting the Profiler
@@ -110,6 +110,12 @@ For example:
 .. prompt:: bash
 
    ceph tell osd.0 heap stats
+
+For RGW, use ``ceph daemon`` via the admin socket:
+
+.. prompt:: bash
+
+   ceph daemon /var/run/ceph/ceph-client.rgw.0.asok heap stats
 
 .. note:: The reporting of stats with this command does not require the
    profiler to be running and does not dump the heap allocation information to
