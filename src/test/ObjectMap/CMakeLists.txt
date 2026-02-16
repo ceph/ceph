@@ -17,6 +17,7 @@ add_executable(ceph_test_keyvaluedb_atomicity
   test_keyvaluedb_atomicity.cc
   )
 target_link_libraries(ceph_test_keyvaluedb_atomicity
+  kv
   os
   ceph-common
   ${UNITTEST_LIBS}
@@ -31,6 +32,7 @@ add_executable(ceph_test_keyvaluedb_iterators
   KeyValueDBMemory.cc
   )
 target_link_libraries(ceph_test_keyvaluedb_iterators
+  kv
   os
   ceph-common
   ${UNITTEST_LIBS}
