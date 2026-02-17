@@ -219,7 +219,8 @@ BlueFS::BlueFS(CephContext* cct)
     ioc(MAX_BDEV),
     alloc(MAX_BDEV),
     alloc_size(MAX_BDEV, 0),
-    locked_alloc(MAX_BDEV)
+    locked_alloc(MAX_BDEV),
+    spillover_cleaner_thread(this)
 {
   dirty.pending_release.resize(MAX_BDEV);
   discard_cb[BDEV_WAL] = wal_discard_cb;
@@ -244,6 +245,7 @@ BlueFS::~BlueFS()
   for (auto p : ioc) {
     delete p;
   }
+  _spillover_cleaner_stop();
 }
 
 void BlueFS::_init_logger()
@@ -2129,6 +2131,101 @@ int BlueFS::device_migrate_to_existing(
     new_log_dev_next,
     flags,
     layout);
+  return 0;
+}
+
+int BlueFS::migrate_file(
+  CephContext* cct,
+  FileRef file_ref,
+  int from_bdev,
+  int to_bdev)
+{
+  vector<byte> buf;
+  bool buffered = cct->_conf->bluefs_buffered_io;
+
+  mempool::bluefs::vector<bluefs_extent_t> old_fnode_extents;
+  {
+    std::lock_guard l(file_ref->lock);
+    bool rewrite = std::any_of(
+      file_ref->fnode.extents.begin(),
+      file_ref->fnode.extents.end(),
+      [=](auto& ext) {
+        return ext.bdev != to_bdev;
+      });
+    if (!rewrite)
+      return 0;
+    old_fnode_extents = file_ref->fnode.extents;
+  }
+
+  // read entire file
+  bufferlist bl;
+  for (const auto &old_ext : old_fnode_extents) {
+	  buf.resize(old_ext.length);
+	  int r = _bdev_read_random(old_ext.bdev,
+	    old_ext.offset,
+	    old_ext.length,
+	    (char*)&buf.at(0),
+	    buffered);
+	  if (r != 0) {
+      derr << __func__ << " failed to read 0x" << std::hex
+	       << old_ext.offset << "~" << old_ext.length << std::dec
+	       << " from " << (int)old_ext.bdev << dendl;
+	    return -EIO;
+	  }
+	  bl.append((char*)&buf[0], old_ext.length);
+    dout(10) << __func__ << " Migrate File " << file_ref->fnode.ino << " read 0x" << std::hex << old_ext.length << std::dec
+       << " from bdev " << (int)old_ext.bdev << dendl;
+  }
+  // write entire file
+  bluefs_fnode_t new_fnode;
+  auto l = _allocate(to_bdev, bl.length(), 0,
+    &new_fnode, nullptr, 0, false);
+  if (l < 0) {
+    dout(10) << __func__ << " unable to allocate len 0x" << std::hex
+        << bl.length() << std::dec << " from " << (int)to_bdev
+        << ": " << cpp_strerror(l) << dendl;
+    return -ENOSPC;
+  }
+
+  uint64_t off = 0;
+  for (auto& i : new_fnode.extents) {
+    bufferlist cur;
+    uint64_t cur_len = std::min<uint64_t>(i.length, bl.length() - off);
+    ceph_assert(cur_len > 0);
+    cur.substr_of(bl, off, cur_len);
+    int r = bdev[to_bdev]->write(i.offset, cur, buffered);
+    ceph_assert(r == 0);
+    dout(10) << __func__ << " Migrate File " << file_ref->fnode.ino << " wrote 0x" << std::hex << cur_len << std::dec
+       << " to bdev " << (int)to_bdev << dendl;
+    off += cur_len;
+    vselector->add_usage(file_ref->vselector_hint, i);
+  }
+
+  {
+    std::lock_guard l(file_ref->lock);
+    // update fnode and extents
+    if (file_ref->deleted) {
+      dout(10) << __func__ << " file " << file_ref->fnode.ino
+        << " is deleted, skip updating fnode" << dendl;
+      return 0;
+    }
+    file_ref->fnode.swap_extents(new_fnode);
+  }
+
+  // release old extents
+  for (const auto &old_ext : old_fnode_extents) {
+    vselector->sub_usage(file_ref->vselector_hint, old_ext);
+    PExtentVector to_release;
+    to_release.emplace_back(old_ext.offset, old_ext.length);
+    alloc[old_ext.bdev]->release(to_release);
+    if (is_shared_alloc(old_ext.bdev)) {
+      shared_alloc->bluefs_used -= old_ext.length;
+    }
+  }
+
+  log.t.op_file_update(file_ref->fnode);
+  sync_metadata(false);
+
   return 0;
 }
 
@@ -4769,6 +4866,117 @@ void BlueFS::close_writer(FileWriter *h)
     _drain_writer(h);
   }
   delete h;
+}
+
+void BlueFS::_spillover_cleaner_start()
+{
+  dout(10) << __func__ << dendl;
+  std::lock_guard l(spillover_cleaner_lock);
+  if (splclr_thread_created) {
+    dout(10) << __func__ << " already started" << dendl;
+    return;
+  }
+  spillover_cleaner_thread.create("bluefs_splclr");
+  splclr_thread_created = true;
+}
+
+void BlueFS::_spillover_cleaner_stop()
+{
+  dout(10) << __func__ << dendl;
+  {
+    std::unique_lock l(spillover_cleaner_lock);
+    if (!splclr_thread_created) {
+      dout(10) << __func__ << " Spillover thread not started" << dendl;
+      return;
+    }
+    while(!splclr_thread_start) {
+      spillover_cleaner_cond.wait(l);
+    }
+    splclr_thread_stop = true;
+    spillover_cleaner_cond.notify_all();
+  }
+  spillover_cleaner_thread.join();
+  {
+    std::lock_guard l(spillover_cleaner_lock);
+    splclr_thread_stop = false;
+  }
+  dout(10) << __func__ << " stopped" << dendl;
+}
+
+void BlueFS::_spillover_cleaner_thread()
+{
+  dout(10) << __func__ << " started" << dendl;
+
+  {
+    std::lock_guard l(spillover_cleaner_lock);
+    splclr_thread_start = true;
+    spillover_cleaner_cond.notify_all();
+  }
+
+  while (true) {
+    {
+      std::lock_guard l(spillover_cleaner_lock);
+      if (splclr_thread_stop)
+        break;
+    }
+
+    std::vector<FileRef> to_move;
+
+    {
+      std::lock_guard nl(nodes.lock);
+      for (auto& [ino, file_ref] : nodes.file_map) {
+        if (ino == 1)
+          continue;
+
+        bool has_slow = std::any_of(
+          file_ref->fnode.extents.begin(),
+          file_ref->fnode.extents.end(),
+          [](const auto& e) {
+            return e.bdev != BDEV_DB;
+          });
+        if (!has_slow)
+          continue;
+
+        to_move.push_back(file_ref);
+      }
+    }
+
+    for (auto& file_ref : to_move) {
+      if (file_ref->num_writers.load(std::memory_order_acquire) > 0) {
+        dout(10) << __func__ << " skip file ino " << file_ref->fnode.ino
+             << " because it is being written to" << dendl;
+        continue;
+      }
+      int r = migrate_file(cct, file_ref, BDEV_SLOW, BDEV_DB);
+      if (r < 0) {
+        derr << __func__ << " failed to migrate file ino " << file_ref->fnode.ino
+            << " from bdev " << BDEV_SLOW
+            << " to bdev " << BDEV_DB
+            << ": " << cpp_strerror(r) << dendl;
+      }
+      std::lock_guard l(spillover_cleaner_lock);
+      if (splclr_thread_stop)
+        goto exit;
+    }
+
+    {
+      std::unique_lock l(spillover_cleaner_lock);
+      spillover_cleaner_cond.wait_for(
+        l,
+        std::chrono::seconds(cct->_conf->bluefs_spillover_clean_interval),
+        [this] { return splclr_thread_stop; }
+      );
+    }
+  }
+
+exit:
+  {
+    std::lock_guard l(spillover_cleaner_lock);
+    splclr_thread_start = false;
+    splclr_thread_created = false;
+  }
+
+  dout(10) << __func__ << " stopped" << dendl;
 }
 
 uint64_t BlueFS::debug_get_dirty_seq(FileWriter *h)

@@ -550,6 +550,19 @@ public:
     FileRef file;
     explicit FileLock(FileRef f) : file(std::move(f)) {}
   };
+
+  struct SpilloverCleanerThread : public Thread {
+    BlueFS* bluefs;
+    explicit SpilloverCleanerThread(BlueFS* f) : bluefs(f) {}
+    void* entry() override {
+      bluefs->_spillover_cleaner_thread();
+      return nullptr;
+    }
+  };
+
+  void _spillover_cleaner_start();
+  void _spillover_cleaner_stop();
+
 private:
   PerfCounters *logger = nullptr;
 
@@ -628,6 +641,13 @@ private:
     return id == shared_alloc_id;
   }
   std::atomic<int64_t> cooldown_deadline = 0;
+
+  SpilloverCleanerThread spillover_cleaner_thread;
+  ceph::mutex spillover_cleaner_lock = ceph::make_mutex("BlueFS::spillover_cleaner_lock");
+  ceph::condition_variable spillover_cleaner_cond;
+  bool splclr_thread_created = false;
+  bool splclr_thread_stop = false;
+  bool splclr_thread_start = false;
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;
@@ -784,6 +804,8 @@ private:
     }
   }
 
+  void _spillover_cleaner_thread();
+
 public:
   BlueFS(CephContext* cct);
   ~BlueFS();
@@ -815,6 +837,12 @@ public:
     const std::set<int>& devs_source,
     int dev_target,
     const bluefs_layout_t& layout);
+  int migrate_file(
+    CephContext *cct,
+    FileRef file_ref,
+    int from_bdev,
+    int to_bdev
+  );
   int revert_wal_to_plain();
 
   uint64_t get_used();
