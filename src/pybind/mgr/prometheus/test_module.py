@@ -95,6 +95,30 @@ ceph_disk_occupation_display{ceph_daemon="osd.5+osd.6",device="/dev/dm-1",instan
 
 
 class ConfigureTest(TestCase):
+    @patch('prometheus.module.json.loads')
+    def test_configure_with_empty_security_config_no_json_parse(self, mock_json_loads):
+        """Test that json.loads is NOT called when output is empty string"""
+        module = Mock(spec=Module)
+        module.log = Mock()
+
+        # Mock mon_command to return empty string (the problematic case)
+        module.mon_command = Mock(return_value=(0, "", ""))
+
+        # Mock setup_default_config
+        module.setup_default_config = Mock()
+
+        # Call the actual configure method with our mocks
+        Module.configure(module, "127.0.0.1", 9283)
+
+        # Verify that json.loads was NOT called (this is the fix!)
+        mock_json_loads.assert_not_called()
+
+        # Verify that setup_default_config was called (fallback behavior)
+        module.setup_default_config.assert_called_once_with("127.0.0.1", 9283)
+
+        # Verify no exception was raised and log was not called with exception
+        module.log.exception.assert_not_called()
+
     def test_configure_with_empty_security_config(self):
         """Test that configure handles empty string from orch get-security-config"""
         module = Mock(spec=Module)
