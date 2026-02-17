@@ -23,7 +23,7 @@ from tasks.util.rgw import get_user_summary, get_user_successful_ops, rgwadmin
 
 log = logging.getLogger(__name__)
 
-def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
+def rgwadmin_rest(endpoint, connection, cmd, params=None, headers=None, raw=False):
     """
     perform a rest command
     """
@@ -117,7 +117,7 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
         log.info(' json result: %s' % result.json())
         return result.status_code, result.json()
 
-def test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, op, op_args, uid, display_name, access_key, secret_key, user_type):
+def test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, endpoint, op, op_args, uid, display_name, access_key, secret_key, user_type):
     user_caps = 'user-info-without-keys=read'
 
     (err, out) = rgwadmin(ctx, client, [
@@ -133,8 +133,6 @@ def test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, 
     logging.error(err)
     assert not err
 
-    endpoint = ctx.rgw.role_endpoints.get(client)
-
     privileged_user_conn = boto.s3.connection.S3Connection(
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
@@ -144,7 +142,7 @@ def test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, 
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
 
-    (ret, out) = rgwadmin_rest(privileged_user_conn, op, op_args)
+    (ret, out) = rgwadmin_rest(endpoint, privileged_user_conn, op, op_args)
     # show that even though the cap is set, since the user is privileged the user can still see keys
     assert len(out['keys']) == 1
     assert out['swift_keys'] == []
@@ -157,7 +155,7 @@ def test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, 
     logging.error(err)
     assert not err
 
-def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin_user, op, op_args):
+def test_cap_user_info_without_keys_get_user_info(ctx, client, endpoint, admin_auth, admin_user, op, op_args):
     true_admin_uid = 'a_user'
     true_admin_display_name = 'True Admin User'
     true_admin_access_key = 'true_admin_akey'
@@ -168,8 +166,8 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     system_access_key = 'system_akey'
     system_secret_key = 'system_skey'
 
-    test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, op, op_args, system_uid, system_display_name, system_access_key, system_secret_key, '--system')
-    test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, op, op_args, true_admin_uid, true_admin_display_name, true_admin_access_key, true_admin_secret_key, '--admin')
+    test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, endpoint, op, op_args, system_uid, system_display_name, system_access_key, system_secret_key, '--system')
+    test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, endpoint, op, op_args, true_admin_uid, true_admin_display_name, true_admin_access_key, true_admin_secret_key, '--admin')
 
     # TESTCASE 'info-existing','user','info','existing user','returns no keys with user-info-without-keys cap set to read'
     (err, out) = rgwadmin(ctx, client, [
@@ -181,7 +179,7 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     logging.error(err)
     assert not err
 
-    (ret, out) = rgwadmin_rest(admin_conn, op, op_args)
+    (ret, out) = rgwadmin_rest(endpoint, admin_auth, op, op_args)
     assert 'keys' not in out
     assert 'swift_keys' not in out
 
@@ -195,7 +193,7 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     logging.error(err)
     assert not err
 
-    (ret, out) = rgwadmin_rest(admin_conn, op, op_args)
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, op, op_args)
     assert 'keys' not in out
     assert 'swift_keys' not in out
 
@@ -209,7 +207,7 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     logging.error(err)
     assert not err
 
-    (ret, out) = rgwadmin_rest(admin_conn, op, op_args)
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, op, op_args)
     assert 'keys' in out
     assert 'swift_keys' in out
 
@@ -232,7 +230,7 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     logging.error(err)
     assert not err
 
-    (ret, out) = rgwadmin_rest(admin_conn, op, op_args)
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, op, op_args)
     assert ret == 403
 
     # remove cap user-info-without-keys permenantly for future testing
@@ -255,7 +253,7 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     logging.error(err)
     assert not err
 
-def test_cap_user_info_without_keys(ctx, client, admin_conn, admin_user, user1):
+def test_cap_user_info_without_keys(ctx, client, endpoint, admin_conn, admin_user, user1):
     (err, out) = rgwadmin(ctx, client, [
             'caps', 'rm',
             '--uid', admin_user,
@@ -267,7 +265,7 @@ def test_cap_user_info_without_keys(ctx, client, admin_conn, admin_user, user1):
 
     op = ['user', 'info']
     op_args = {'uid' : user1}
-    test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin_user, op, op_args)
+    test_cap_user_info_without_keys_get_user_info(ctx, client, endpoint, admin_conn, admin_user, op, op_args)
 
     # add caps that were removed earlier in the function back in
     (err, out) = rgwadmin(ctx, client, [
@@ -351,11 +349,11 @@ def task(ctx, config):
         )
 
     # TESTCASE 'info-nosuch','user','info','non-existent user','fails'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {"uid": user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {"uid": user1})
     assert ret == 404
 
     # TESTCASE 'create-ok','user','create','w/all valid info','succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
             ['user', 'create'],
             {'uid' : user1,
              'display-name' :  display_name1,
@@ -368,7 +366,7 @@ def task(ctx, config):
     assert ret == 200
 
     # TESTCASE 'list-no-user','user','list','list user keys','user list object'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'list' : '', 'max-entries' : 0})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'list'], {'list' : '', 'max-entries' : 0})
     assert ret == 200
     assert out['count'] == 0
     assert out['truncated'] == True
@@ -376,7 +374,7 @@ def task(ctx, config):
     assert len(out['marker']) > 0
 
     # TESTCASE 'list-user-without-marker','user','list','list user keys','user list object'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'list' : '', 'max-entries' : 1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'list'], {'list' : '', 'max-entries' : 1})
     assert ret == 200
     assert out['count'] == 1
     assert out['truncated'] == True
@@ -385,14 +383,14 @@ def task(ctx, config):
     marker = out['marker']
 
     # TESTCASE 'list-user-with-marker','user','list','list user keys','user list object'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'list' : '', 'max-entries' : 1, 'marker': marker})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'list'], {'list' : '', 'max-entries' : 1, 'marker': marker})
     assert ret == 200
     assert out['count'] == 1
     assert out['truncated'] == False
     assert len(out['keys']) == 1
 
     # TESTCASE 'info-existing','user','info','existing user','returns correct info'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {'uid' : user1})
 
     assert out['user_id'] == user1
     assert out['email'] == email
@@ -422,7 +420,7 @@ def task(ctx, config):
     assert out['type'] == 'rgw'
     assert out['mfa_ids'] == []
     # TESTCASE 'info-existing','user','info','existing user query with wrong uid but correct access key','returns correct info'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'access-key' : access_key, 'uid': 'uid_not_exist'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {'access-key' : access_key, 'uid': 'uid_not_exist'})
 
     assert out['user_id'] == user1
     assert out['email'] == email
@@ -453,29 +451,29 @@ def task(ctx, config):
     assert out['mfa_ids'] == []
 
     # TESTCASES for cap user-info-without-keys
-    test_cap_user_info_without_keys(ctx, client, admin_conn, admin_user, user1)
+    test_cap_user_info_without_keys(ctx, client, endpoint, admin_conn, admin_user, user1)
 
     # TESTCASE 'suspend-ok','user','suspend','active user','succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : True})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : True})
     assert ret == 200
 
     # TESTCASE 'suspend-suspended','user','suspend','suspended user','succeeds w/advisory'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {'uid' : user1})
     assert ret == 200
     assert out['suspended']
     assert out['email'] == email
 
     # TESTCASE 're-enable','user','enable','suspended user','succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : 'false'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : 'false'})
     assert not err
 
     # TESTCASE 'info-re-enabled','user','info','re-enabled user','no longer suspended'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {'uid' : user1})
     assert ret == 200
     assert not out['suspended']
 
     # TESTCASE 'add-keys','key','create','w/valid info','succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
             ['key', 'create'],
             {'uid' : user1,
              'access-key' : access_key2,
@@ -486,14 +484,14 @@ def task(ctx, config):
     assert ret == 200
 
     # TESTCASE 'info-new-key','user','info','after key addition','returns all keys'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {'uid' : user1})
     assert ret == 200
     assert len(out['keys']) == 2
     assert out['keys'][0]['access_key'] == access_key2 or out['keys'][1]['access_key'] == access_key2
     assert out['keys'][0]['secret_key'] == secret_key2 or out['keys'][1]['secret_key'] == secret_key2
 
     # TESTCASE 'rm-key','key','rm','newly added key','succeeds, key is removed'
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
             ['key', 'rm'],
             {'uid' : user1,
              'access-key' : access_key2
@@ -501,14 +499,14 @@ def task(ctx, config):
 
     assert ret == 200
 
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {'uid' : user1})
 
     assert len(out['keys']) == 1
     assert out['keys'][0]['access_key'] == access_key
     assert out['keys'][0]['secret_key'] == secret_key
 
     # TESTCASE 'add-swift-key','key','create','swift key','succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
             ['subuser', 'create'],
             {'subuser' : subuser1,
              'secret-key' : swift_secret1,
@@ -518,14 +516,14 @@ def task(ctx, config):
     assert ret == 200
 
     # TESTCASE 'info-swift-key','user','info','after key addition','returns all keys'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {'uid' : user1})
     assert ret == 200
     assert len(out['swift_keys']) == 1
     assert out['swift_keys'][0]['user'] == subuser1
     assert out['swift_keys'][0]['secret_key'] == swift_secret1
 
     # TESTCASE 'add-swift-subuser','key','create','swift sub-user key','succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
             ['subuser', 'create'],
             {'subuser' : subuser2,
              'secret-key' : swift_secret2,
@@ -535,14 +533,14 @@ def task(ctx, config):
     assert ret == 200
 
     # TESTCASE 'info-swift-subuser','user','info','after key addition','returns all sub-users/keys'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {'uid' :  user1})
     assert ret == 200
     assert len(out['swift_keys']) == 2
     assert out['swift_keys'][0]['user'] == subuser2 or out['swift_keys'][1]['user'] == subuser2
     assert out['swift_keys'][0]['secret_key'] == swift_secret2 or out['swift_keys'][1]['secret_key'] == swift_secret2
 
     # TESTCASE 'rm-swift-key1','key','rm','subuser','succeeds, one key is removed'
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
             ['key', 'rm'],
             {'subuser' : subuser1,
              'key-type' :'swift'
@@ -550,22 +548,22 @@ def task(ctx, config):
 
     assert ret == 200
 
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {'uid' :  user1})
     assert len(out['swift_keys']) == 1
 
     # TESTCASE 'rm-subuser','subuser','rm','subuser','success, subuser is removed'
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
             ['subuser', 'rm'],
             {'subuser' : subuser1
             })
 
     assert ret == 200
 
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {'uid' :  user1})
     assert len(out['subusers']) == 1
 
     # TESTCASE 'rm-subuser-with-keys','subuser','rm','subuser','succeeds, second subser and key is removed'
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
             ['subuser', 'rm'],
             {'subuser' : subuser2,
              'key-type' : 'swift',
@@ -574,12 +572,12 @@ def task(ctx, config):
 
     assert ret == 200
 
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {'uid' :  user1})
     assert len(out['swift_keys']) == 0
     assert len(out['subusers']) == 0
 
     # TESTCASE 'bucket-stats','bucket','info','no session/buckets','succeeds, empty list'
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'uid' :  user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['bucket', 'info'], {'uid' :  user1})
     assert ret == 200
     assert len(out) == 0
 
@@ -594,7 +592,7 @@ def task(ctx, config):
         )
 
     # TESTCASE 'bucket-stats2','bucket','stats','no buckets','succeeds, empty list'
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'uid' : user1, 'stats' : True})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['bucket', 'info'], {'uid' : user1, 'stats' : True})
     assert ret == 200
     assert len(out) == 0
 
@@ -602,13 +600,13 @@ def task(ctx, config):
     bucket = connection.create_bucket(bucket_name)
 
     # TESTCASE 'bucket-list','bucket','list','one bucket','succeeds, expected list'
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'uid' : user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['bucket', 'info'], {'uid' : user1})
     assert ret == 200
     assert len(out) == 1
     assert out[0] == bucket_name
 
     # TESTCASE 'bucket-stats3','bucket','stats','new empty bucket','succeeds, empty list'
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
             ['bucket', 'info'], {'bucket' : bucket_name, 'stats' : True})
 
     assert ret == 200
@@ -617,7 +615,7 @@ def task(ctx, config):
     bucket_id = out['id']
 
     # TESTCASE 'bucket-stats4','bucket','stats','new empty bucket','succeeds, expected bucket ID'
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'uid' : user1, 'stats' : True})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['bucket', 'info'], {'uid' : user1, 'stats' : True})
     assert ret == 200
     assert len(out) == 1
     assert out[0]['id'] == bucket_id    # does it return the same ID twice in a row?
@@ -627,14 +625,14 @@ def task(ctx, config):
     key.set_contents_from_string('one')
 
     # TESTCASE 'bucket-stats5','bucket','stats','after creating key','succeeds, lists one non-empty object'
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'bucket' : bucket_name, 'stats' : True})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['bucket', 'info'], {'bucket' : bucket_name, 'stats' : True})
     assert ret == 200
     assert out['id'] == bucket_id
     assert out['usage']['rgw.main']['num_objects'] == 1
     assert out['usage']['rgw.main']['size_kb'] > 0
 
     # TESTCASE 'bucket-stats6', 'bucket', 'stats', 'non-existent bucket', 'fails, 'bucket not found error'
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'bucket' : 'doesnotexist'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['bucket', 'info'], {'bucket' : 'doesnotexist'})
     assert ret == 404
     assert out['Code'] == 'NoSuchBucket'
 
@@ -642,12 +640,12 @@ def task(ctx, config):
     key.delete()
 
     # TESTCASE 'bucket unlink', 'bucket', 'unlink', 'unlink bucket from user', 'fails', 'access denied error'
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'unlink'], {'uid' : user1, 'bucket' : bucket_name})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['bucket', 'unlink'], {'uid' : user1, 'bucket' : bucket_name})
 
     assert ret == 200
 
     # create a second user to link the bucket to
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
             ['user', 'create'],
             {'uid' : user2,
             'display-name' :  display_name2,
@@ -673,7 +671,7 @@ def task(ctx, config):
     key.delete()
 
     # link the bucket to another user
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
             ['bucket', 'link'],
             {'uid' : user2,
              'bucket' : bucket_name,
@@ -693,7 +691,7 @@ def task(ctx, config):
     assert denied
 
     # relink the bucket to the first user and delete the second user
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
             ['bucket', 'link'],
             {'uid' : user1,
              'bucket' : bucket_name,
@@ -701,7 +699,7 @@ def task(ctx, config):
             })
     assert ret == 200
 
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'rm'], {'uid' : user2})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'rm'], {'uid' : user2})
     assert ret == 200
 
     # TESTCASE 'object-rm', 'object', 'rm', 'remove object', 'succeeds, object is removed'
@@ -712,11 +710,11 @@ def task(ctx, config):
     key.set_contents_from_string(object_name)
 
     # now delete it
-    (ret, out) = rgwadmin_rest(admin_conn, ['object', 'rm'], {'bucket' : bucket_name, 'object' : object_name})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['object', 'rm'], {'bucket' : bucket_name, 'object' : object_name})
     assert ret == 200
 
     # TESTCASE 'bucket-stats6','bucket','stats','after deleting key','succeeds, lists one no objects'
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'bucket' : bucket_name, 'stats' : True})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['bucket', 'info'], {'bucket' : bucket_name, 'stats' : True})
     assert ret == 200
     assert out['id'] == bucket_id
     assert out['usage']['rgw.main']['num_objects'] == 0
@@ -736,7 +734,7 @@ def task(ctx, config):
     # need to wait for all usage data to get flushed, should take up to 30 seconds
     timestamp = time.time()
     while time.time() - timestamp <= (20 * 60):      # wait up to 20 minutes
-        (ret, out) = rgwadmin_rest(admin_conn, ['usage', 'show'], {'categories' : 'delete_obj'})  # last operation we did is delete obj, wait for it to flush
+        (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['usage', 'show'], {'categories' : 'delete_obj'})  # last operation we did is delete obj, wait for it to flush
 
         if get_user_successful_ops(out, user1) > 0:
             break
@@ -745,7 +743,7 @@ def task(ctx, config):
     assert time.time() - timestamp <= (20 * 60)
 
     # TESTCASE 'usage-show' 'usage' 'show' 'all usage' 'succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn, ['usage', 'show'])
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['usage', 'show'])
     assert ret == 200
     assert len(out['entries']) > 0
     assert len(out['summary']) > 0
@@ -754,7 +752,7 @@ def task(ctx, config):
     assert total['successful_ops'] > 0
 
     # TESTCASE 'usage-show2' 'usage' 'show' 'user usage' 'succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn, ['usage', 'show'], {'uid' : user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['usage', 'show'], {'uid' : user1})
     assert ret == 200
     assert len(out['entries']) > 0
     assert len(out['summary']) > 0
@@ -766,7 +764,7 @@ def task(ctx, config):
     # TESTCASE 'usage-show3' 'usage' 'show' 'user usage categories' 'succeeds'
     test_categories = ['create_bucket', 'put_obj', 'delete_obj', 'delete_bucket']
     for cat in test_categories:
-        (ret, out) = rgwadmin_rest(admin_conn, ['usage', 'show'], {'uid' : user1, 'categories' : cat})
+        (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['usage', 'show'], {'uid' : user1, 'categories' : cat})
         assert ret == 200
         assert len(out['summary']) > 0
         user_summary = out['summary'][0]
@@ -777,15 +775,15 @@ def task(ctx, config):
         assert entry['successful_ops'] > 0
 
     # TESTCASE 'usage-trim' 'usage' 'trim' 'user usage' 'succeeds, usage removed'
-    (ret, out) = rgwadmin_rest(admin_conn, ['usage', 'trim'], {'uid' : user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['usage', 'trim'], {'uid' : user1})
     assert ret == 200
-    (ret, out) = rgwadmin_rest(admin_conn, ['usage', 'show'], {'uid' : user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['usage', 'show'], {'uid' : user1})
     assert ret == 200
     assert len(out['entries']) == 0
     assert len(out['summary']) == 0
 
     # TESTCASE 'user-suspend2','user','suspend','existing user','succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : True})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : True})
     assert ret == 200
 
     # TESTCASE 'user-suspend3','user','suspend','suspended user','cannot write objects'
@@ -796,7 +794,7 @@ def task(ctx, config):
         assert e.status == 403
 
     # TESTCASE 'user-renable2','user','enable','suspended user','succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'modify'], {'uid' :  user1, 'suspended' : 'false'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'modify'], {'uid' :  user1, 'suspended' : 'false'})
     assert ret == 200
 
     # TESTCASE 'user-renable3','user','enable','reenabled user','can write objects'
@@ -815,7 +813,7 @@ def task(ctx, config):
     big_key.delete()
 
     # TESTCASE 'rm-user-buckets','user','rm','existing user','fails, still has buckets'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'rm'], {'uid' : user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'rm'], {'uid' : user1})
     assert ret == 409
 
     # delete should fail because ``key`` still exists
@@ -837,14 +835,14 @@ def task(ctx, config):
     # should be private already but guarantee it
     key.set_acl('private')
 
-    (ret, out) = rgwadmin_rest(admin_conn, ['policy', 'show'], {'bucket' : bucket.name, 'object' : key.key})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['policy', 'show'], {'bucket' : bucket.name, 'object' : key.key})
     assert ret == 200
     assert len(out['acl']['grant_map']) == 1
 
     # add another grantee by making the object public read
     key.set_acl('public-read')
 
-    (ret, out) = rgwadmin_rest(admin_conn, ['policy', 'show'], {'bucket' : bucket.name, 'object' : key.key})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['policy', 'show'], {'bucket' : bucket.name, 'object' : key.key})
     assert ret == 200
     assert len(out['acl']['grant_map']) == 2
 
@@ -855,22 +853,22 @@ def task(ctx, config):
         key = boto.s3.key.Key(bucket)
         key.set_contents_from_string(key_name[i])
 
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'rm'], {'bucket' : bucket_name, 'purge-objects' : True})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['bucket', 'rm'], {'bucket' : bucket_name, 'purge-objects' : True})
     assert ret == 200
 
     # TESTCASE 'rm-bucket', 'bucket', 'rm', 'non-existent bucket', 'correct error'
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'rm'], {'bucket' : bucket_name})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['bucket', 'rm'], {'bucket' : bucket_name})
     assert ret == 404
     assert out['Code'] == 'NoSuchBucket'
 
     # TESTCASE 'caps-add', 'caps', 'add', 'add user cap', 'succeeds'
     caps = 'usage=read'
-    (ret, out) = rgwadmin_rest(admin_conn, ['caps', 'add'], {'uid' :  user1, 'user-caps' : caps})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['caps', 'add'], {'uid' :  user1, 'user-caps' : caps})
     assert ret == 200
     assert out[0]['perm'] == 'read'
 
     # TESTCASE 'caps-rm', 'caps', 'rm', 'remove existing cap from user', 'succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn, ['caps', 'rm'], {'uid' :  user1, 'user-caps' : caps})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['caps', 'rm'], {'uid' :  user1, 'user-caps' : caps})
     assert ret == 200
     assert not out
 
@@ -878,7 +876,7 @@ def task(ctx, config):
     bucket = connection.create_bucket(bucket_name)
     key = boto.s3.key.Key(bucket)
 
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'rm'], {'uid' : user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'rm'], {'uid' : user1})
     assert ret == 409
 
     # TESTCASE 'rm-user2', 'user', 'rm', user with data', 'succeeds'
@@ -886,15 +884,15 @@ def task(ctx, config):
     key = boto.s3.key.Key(bucket)
     key.set_contents_from_string('twelve')
 
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'rm'], {'uid' : user1, 'purge-data' : True})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'rm'], {'uid' : user1, 'purge-data' : True})
     assert ret == 200
 
     # TESTCASE 'rm-user3','user','info','deleted user','fails'
-    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['user', 'info'], {'uid' :  user1})
     assert ret == 404
 
     # TESTCASE 'info' 'display info' 'succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn, ['info', ''])
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['info', ''])
     assert ret == 200
     info = out['info']
     backends = info['storage_backends']
@@ -907,7 +905,7 @@ def task(ctx, config):
     assert len(fsid) > 0
     
     # TESTCASE 'ratelimit' 'user' 'info' 'succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn,
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn,
         ['user', 'create'],
         {'uid' : ratelimit_user,
          'display-name' :  display_name1,
@@ -916,69 +914,69 @@ def task(ctx, config):
          'secret-key' : secret_key,
          'max-buckets' : '1000'
         })
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user})
     assert ret == 200
 
     # TESTCASE 'ratelimit' 'user' 'info'  'not existing user' 'fails'
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user + 'string'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user + 'string'})
     assert ret == 404
 
     # TESTCASE 'ratelimit' 'user' 'info'  'uid not specified' 'fails'
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user'})
     assert ret == 400
 
     # TESTCASE 'ratelimit' 'bucket' 'info' 'succeeds'
     ratelimit_bucket = 'ratelimitbucket'
     connection.create_bucket(ratelimit_bucket)
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket})
     assert ret == 200
 
     # TESTCASE 'ratelimit' 'bucket' 'info'  'not existing bucket' 'fails'
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket + 'string'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket + 'string'})
     assert ret == 404
 
     # TESTCASE 'ratelimit' 'bucket' 'info' 'bucket not specified' 'fails'
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket'})
     assert ret == 400
 
     # TESTCASE 'ratelimit' 'global' 'info' 'succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'global' : 'true'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'info'], {'global' : 'true'})
     assert ret == 200
 
     # TESTCASE 'ratelimit' 'user' 'modify'  'not existing user' 'fails'
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user + 'string', 'enabled' : 'true'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user + 'string', 'enabled' : 'true'})
     assert ret == 404
 
     # TESTCASE 'ratelimit' 'user' 'modify'  'uid not specified' 'fails'
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'user'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'user'})
     assert ret == 400
     
     # TESTCASE 'ratelimit' 'bucket' 'modify'  'not existing bucket' 'fails'
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket + 'string', 'enabled' : 'true'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket + 'string', 'enabled' : 'true'})
     assert ret == 404
 
     # TESTCASE 'ratelimit' 'bucket' 'modify' 'bucket not specified' 'fails'
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'enabled' : 'true'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'enabled' : 'true'})
     assert ret == 400
 
     # TESTCASE 'ratelimit' 'user' 'modifiy' 'enabled' 'max-read-bytes = 2' 'succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user, 'enabled' : 'true', 'max-read-bytes' : '2'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user, 'enabled' : 'true', 'max-read-bytes' : '2'})
     assert ret == 200
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user})
     assert ret == 200
     user_ratelimit = out['user_ratelimit']
     assert user_ratelimit['enabled'] == True
     assert user_ratelimit['max_read_bytes'] ==  2
 
     # TESTCASE 'ratelimit' 'bucket' 'modifiy' 'enabled' 'max-write-bytes = 2' 'succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket, 'enabled' : 'true', 'max-write-bytes' : '2'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket, 'enabled' : 'true', 'max-write-bytes' : '2'})
     assert ret == 200
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket})
     assert ret == 200
     bucket_ratelimit = out['bucket_ratelimit']
     assert bucket_ratelimit['enabled'] == True
     assert bucket_ratelimit['max_write_bytes'] == 2
 
     # TESTCASE 'ratelimit' 'global' 'modify' 'anonymous' 'enabled' 'succeeds'
-    (ret, out) = rgwadmin_rest(admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'global': 'true', 'enabled' : 'true'})
+    (ret, out) = rgwadmin_rest(endpoint, admin_conn, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'global': 'true', 'enabled' : 'true'})
     assert ret == 200
