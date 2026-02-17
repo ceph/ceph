@@ -1966,7 +1966,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         cmd = {'prefix': 'orch get-security-config'}
         ret, out, _ = self.mon_command(cmd)
 
-        if ret == 0 and out is not None:
+        if ret == 0 and out:
             try:
                 security_config = json.loads(out)
                 if security_config.get('security_enabled', False):
@@ -2013,7 +2013,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         if ret != 0:
             self.log.error(f'mon command to generate-certificates failed: {err}')
             return
-        elif out is None:
+        elif not out:
             self.log.error('mon command to generate-certificates failed to generate certificates')
             return
 
