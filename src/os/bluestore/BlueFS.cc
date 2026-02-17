@@ -115,6 +115,9 @@ public:
 					   "Injects 8K zeros into next BlueFS read. Debug only.");
 	ceph_assert(r == 0);
       }
+      r = admin_socket->register_command("bluefs spillover cleaner stats", hook,
+              "Show spillover cleaner thread stats");
+      ceph_assert(r == 0);
     }
     return hook;
   }
@@ -205,6 +208,24 @@ private:
       f->flush(out);
     } else if (command == "bluefs debug_inject_read_zeros") {
       bluefs->inject_read_zeros++;
+    } else if (command == "bluefs spillover cleaner stats") {
+      std::lock_guard l(bluefs->spillover_cleaner_lock);
+      auto& stats = bluefs->spillover_cleaner_thread.migration_stats;
+      f->open_array_section("spillover_migration_stats");
+      for (auto& s : stats) {
+        f->open_object_section("file");
+        f->dump_int("ino", s.first);
+        std::stringstream ss;
+        ss << "0x" << std::hex << s.second.migrated_bytes << std::dec
+          << " (" << s.second.migrated_bytes << " bytes)";
+        f->dump_string("migrated_bytes", ss.str());
+        ss.str("");
+        ss.clear();
+        ss << s.second.last_migration_time;
+        f->dump_string("last_migration_time", ss.str());
+        f->close_section();
+      }
+      f->close_section();
     } else {
       errss << "Invalid command" << std::endl;
       return -ENOSYS;
@@ -219,7 +240,8 @@ BlueFS::BlueFS(CephContext* cct)
     ioc(MAX_BDEV),
     alloc(MAX_BDEV),
     alloc_size(MAX_BDEV, 0),
-    locked_alloc(MAX_BDEV)
+    locked_alloc(MAX_BDEV),
+    spillover_cleaner_thread(this)
 {
   dirty.pending_release.resize(MAX_BDEV);
   discard_cb[BDEV_WAL] = wal_discard_cb;
@@ -2128,6 +2150,100 @@ int BlueFS::device_migrate_to_existing(
     new_log_dev_next,
     flags,
     layout);
+  return 0;
+}
+
+int BlueFS::migrate_file(
+  CephContext* cct,
+  FileRef file_ref,
+  int from_bdev,
+  int to_bdev,
+  std::function<void(uint64_t)> bt)
+{
+  vector<byte> buf;
+  bool buffered = cct->_conf->bluefs_buffered_io;
+  bufferlist bl;
+  mempool::bluefs::vector<bluefs_extent_t> old_fnode_extents;
+  bluefs_fnode_t new_fnode;
+
+  std::unique_lock l(file_ref->lock);
+
+  if (file_ref->deleted)
+    return 0;
+
+  bool rewrite = std::any_of(
+    file_ref->fnode.extents.begin(),
+    file_ref->fnode.extents.end(),
+    [=](auto& ext) {
+      return ext.bdev != to_bdev;
+    });
+
+  if (!rewrite)
+    return 0;
+
+  old_fnode_extents = file_ref->fnode.extents;
+
+  for (const auto &old_ext : old_fnode_extents) {
+    buf.resize(old_ext.length);
+    int r = _bdev_read_random(old_ext.bdev,
+      old_ext.offset,
+      old_ext.length,
+      (char*)&buf.at(0),
+      buffered);
+    if (r != 0) {
+      derr << __func__ << " failed to read 0x" << std::hex
+           << old_ext.offset << "~" << old_ext.length << std::dec
+           << " from " << (int)old_ext.bdev << dendl;
+      return -EIO;
+    }
+    bl.append((char*)&buf[0], old_ext.length);
+  }
+
+  auto r = _allocate(to_bdev, bl.length(), 0,
+    &new_fnode, nullptr, 0, false);
+  if (r < 0) {
+    dout(10) << __func__ << " unable to allocate len 0x" << std::hex
+        << bl.length() << std::dec << " from " << (int)to_bdev
+        << ": " << cpp_strerror(r) << dendl;
+    return -ENOSPC;
+  }
+
+  uint64_t off = 0;
+  for (auto& i : new_fnode.extents) {
+    bufferlist cur;
+    uint64_t cur_len = std::min<uint64_t>(i.length, bl.length() - off);
+    ceph_assert(cur_len > 0);
+    cur.substr_of(bl, off, cur_len);
+    int w = bdev[to_bdev]->write(i.offset, cur, buffered);
+    ceph_assert(w == 0);
+    off += cur_len;
+    vselector->add_usage(file_ref->vselector_hint, i);
+  }
+
+  if (bt) {
+    bt(off);
+  }
+
+  file_ref->fnode.swap_extents(new_fnode);
+  l.unlock();
+
+  {
+    std::lock_guard ll(log.lock);
+    log.t.op_file_update(file_ref->fnode);
+  }
+
+  sync_metadata(false);
+
+  for (const auto &old_ext : old_fnode_extents) {
+    vselector->sub_usage(file_ref->vselector_hint, old_ext);
+    PExtentVector to_release;
+    to_release.emplace_back(old_ext.offset, old_ext.length);
+    alloc[old_ext.bdev]->release(to_release);
+    if (is_shared_alloc(old_ext.bdev)) {
+      shared_alloc->bluefs_used -= old_ext.length;
+    }
+  }
+
   return 0;
 }
 
@@ -4783,6 +4899,128 @@ void BlueFS::close_writer(FileWriter *h)
     _drain_writer(h);
   }
   delete h;
+}
+
+void BlueFS::spillover_cleaner_start()
+{
+  dout(10) << __func__ << dendl;
+  std::lock_guard l(spillover_cleaner_lock);
+  if (splclr_thread_created) {
+    dout(10) << __func__ << " already started" << dendl;
+    return;
+  }
+  spillover_cleaner_thread.create("bluefs_splclr");
+  splclr_thread_created = true;
+}
+
+void BlueFS::spillover_cleaner_stop()
+{
+  dout(10) << __func__ << dendl;
+  {
+    std::unique_lock l(spillover_cleaner_lock);
+    if (!splclr_thread_created) {
+      dout(10) << __func__ << " Spillover thread not started" << dendl;
+      return;
+    }
+    while(!splclr_thread_start) {
+      spillover_cleaner_cond.wait(l);
+    }
+    splclr_thread_stop = true;
+    spillover_cleaner_cond.notify_all();
+  }
+  spillover_cleaner_thread.join();
+  {
+    std::lock_guard l(spillover_cleaner_lock);
+    splclr_thread_stop = false;
+  }
+  dout(10) << __func__ << " stopped" << dendl;
+}
+
+void BlueFS::update_spillover_cleaner_from_config()
+{
+  if(cct->_conf->bluefs_spillover_cleaner) {
+    spillover_cleaner_start();
+  } else {
+    spillover_cleaner_stop();
+  }
+}
+
+void BlueFS::_spillover_cleaner_thread()
+{
+  dout(10) << __func__ << " started" << dendl;
+
+  {
+    std::lock_guard l(spillover_cleaner_lock);
+    splclr_thread_start = true;
+    spillover_cleaner_cond.notify_all();
+  }
+
+  while (true) {
+    {
+      std::lock_guard l(spillover_cleaner_lock);
+      if (splclr_thread_stop)
+        break;
+    }
+
+    std::vector<FileRef> to_move;
+    std::unique_lock nl(nodes.lock);
+    for (auto& [ino, file_ref] : nodes.file_map) {
+      if (ino == 1)
+        continue;
+
+      bool has_slow = std::any_of(
+        file_ref->fnode.extents.begin(),
+        file_ref->fnode.extents.end(),
+        [](const auto& e) {
+          return e.bdev != BDEV_DB;
+        });
+      if (!has_slow)
+        continue;
+
+      to_move.push_back(file_ref);
+    }
+    nl.unlock();
+
+    for (auto& file_ref : to_move) {
+      int r = migrate_file(cct,
+                file_ref,
+                BDEV_SLOW,
+                BDEV_DB,
+                [&](uint64_t b) {
+                  std::lock_guard l(spillover_cleaner_lock);
+                  auto& s = spillover_cleaner_thread.migration_stats[file_ref->fnode.ino];
+                  s.migrated_bytes = b;
+                  s.last_migration_time = ceph_clock_now();
+                });
+      if (r < 0) {
+        derr << __func__ << " failed to migrate file ino " << file_ref->fnode.ino
+            << " from bdev " << BDEV_SLOW
+            << " to bdev " << BDEV_DB
+            << ": " << cpp_strerror(r) << dendl;
+      }
+      std::lock_guard l(spillover_cleaner_lock);
+      if (splclr_thread_stop)
+        goto exit;
+    }
+
+    {
+      std::unique_lock l(spillover_cleaner_lock);
+      spillover_cleaner_cond.wait_for(
+        l,
+        std::chrono::seconds(cct->_conf->bluefs_spillover_clean_interval),
+        [this] { return splclr_thread_stop; }
+      );
+    }
+  }
+
+exit:
+  {
+    std::lock_guard l(spillover_cleaner_lock);
+    splclr_thread_start = false;
+    splclr_thread_created = false;
+  }
+
+  dout(10) << __func__ << " stopped" << dendl;
 }
 
 uint64_t BlueFS::debug_get_dirty_seq(FileWriter *h)
