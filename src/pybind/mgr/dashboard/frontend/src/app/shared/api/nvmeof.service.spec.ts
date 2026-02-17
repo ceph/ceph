@@ -1,18 +1,34 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { NvmeofService } from '../../shared/api/nvmeof.service';
-import { throwError } from 'rxjs';
+import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { HostService } from './host.service';
+import { OrchestratorService } from './orchestrator.service';
+import { of, throwError } from 'rxjs';
 
 describe('NvmeofService', () => {
   let service: NvmeofService;
   let httpTesting: HttpTestingController;
   const mockGroupName = 'default';
   const mockNQN = 'nqn.2001-07.com.ceph:1721041732363';
+  const mockHostService = {
+    checkHostsFactsAvailable: jest.fn(),
+    list: jest.fn(),
+    getAllHosts: jest.fn()
+  };
+
+  const mockOrchService = {
+    status: jest.fn()
+  };
   const UI_API_PATH = 'ui-api/nvmeof';
   const API_PATH = 'api/nvmeof';
+
   configureTestBed({
-    providers: [NvmeofService],
+    providers: [
+      NvmeofService,
+      { provide: HostService, useValue: mockHostService },
+      { provide: OrchestratorService, useValue: mockOrchService }
+    ],
     imports: [HttpClientTestingModule]
   });
 
@@ -56,7 +72,7 @@ describe('NvmeofService', () => {
         ]
       ];
 
-      service.exists('default').subscribe((exists) => {
+      service.exists('default').subscribe((exists: boolean) => {
         expect(exists).toBe(true);
       });
 
@@ -75,7 +91,7 @@ describe('NvmeofService', () => {
         ]
       ];
 
-      service.exists('non-existent-group').subscribe((exists) => {
+      service.exists('non-existent-group').subscribe((exists: boolean) => {
         expect(exists).toBe(false);
       });
 
@@ -85,13 +101,48 @@ describe('NvmeofService', () => {
     });
 
     it('should check if gateway group exists - returns false on API error', () => {
-      service.exists('test-group').subscribe((exists) => {
+      service.exists('test-group').subscribe((exists: boolean) => {
         expect(exists).toBe(false);
       });
 
       const req = httpTesting.expectOne(`${API_PATH}/gateway/group`);
       expect(req.request.method).toBe('GET');
       req.error(new ErrorEvent('Network error'));
+    });
+
+    it('should get available hosts', () => {
+      const mockGroups = [[{ placement: { hosts: ['used-host'] } }]];
+      const mockHosts = [
+        { hostname: 'used-host', status: 'Available' },
+        { hostname: 'free-host', status: 'Available' }
+      ];
+
+      mockOrchService.status.mockReturnValue(of({ available: true }));
+      mockHostService.checkHostsFactsAvailable.mockReturnValue(true);
+      mockHostService.list.mockReturnValue(of(mockHosts));
+
+      service.getAvailableHosts().subscribe((hosts: any[]) => {
+        expect(hosts.length).toBe(1);
+        expect(hosts[0].hostname).toBe('free-host');
+      });
+
+      const req = httpTesting.expectOne(`${API_PATH}/gateway/group`);
+      req.flush(mockGroups);
+    });
+
+    it('should fetch hosts and groups', () => {
+      const mockGroups = [[{ spec: { group: 'group1' } }]];
+      const mockHosts = [{ hostname: 'host1', status: '' }];
+
+      mockHostService.getAllHosts.mockReturnValue(of(mockHosts));
+
+      service.fetchHostsAndGroups().subscribe((result: any) => {
+        expect(result.groups).toEqual(mockGroups);
+        expect(result.hosts[0].status).toBe('Available');
+      });
+
+      const req = httpTesting.expectOne(`${API_PATH}/gateway/group`);
+      req.flush(mockGroups);
     });
   });
 
@@ -132,7 +183,7 @@ describe('NvmeofService', () => {
     });
     it('should call isSubsystemPresent', () => {
       spyOn(service, 'getSubsystem').and.returnValue(throwError('test'));
-      service.isSubsystemPresent(mockNQN, mockGroupName).subscribe((res) => {
+      service.isSubsystemPresent(mockNQN, mockGroupName).subscribe((res: boolean) => {
         expect(res).toBe(false);
       });
     });

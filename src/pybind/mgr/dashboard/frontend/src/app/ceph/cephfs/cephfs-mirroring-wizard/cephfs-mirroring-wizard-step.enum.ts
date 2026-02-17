@@ -1,10 +1,10 @@
-export enum StepTitles {
-  ChooseMirrorPeerRole = 'Choose mirror peer role',
-  SelectFilesystem = 'Select filesystem',
-  CreateOrSelectEntity = 'Create or select entity',
-  GenerateBootstrapToken = 'Generate bootstrap token',
-  Review = 'Review'
-}
+export const StepTitles = {
+  ChooseMirrorPeerRole: $localize`Choose mirror peer role`,
+  SelectFilesystem: $localize`Select filesystem`,
+  CreateOrSelectEntity: $localize`Create or select entity`,
+  GenerateBootstrapToken: $localize`Generate bootstrap token`,
+  Review: $localize`Review`
+} as const;
 
 export const STEP_TITLES_MIRRORING_CONFIGURED = [
   StepTitles.ChooseMirrorPeerRole,

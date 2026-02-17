@@ -41,6 +41,9 @@ export interface CephServiceSpec {
   placement: CephServicePlacement;
 }
 
+// Type for service spec update payload (excludes read-only status field)
+export type CephServiceSpecUpdate = Omit<CephServiceSpec, 'status'>;
+
 export interface CephServiceAdditionalSpec {
   backend_service: string;
   api_user: string;

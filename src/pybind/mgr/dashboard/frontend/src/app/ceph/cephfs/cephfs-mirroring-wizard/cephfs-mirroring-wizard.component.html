@@ -67,8 +67,7 @@
         type="info"
         spacingClass="mb-3 mt-3"
         dismissible="true"
-        (dismissed)="showMessage = false"
-        class="mirroring-alert">
+        (dismissed)="showMessage = false">
         <div>
           <div class="cds--type-heading-compact-01 cds-mb-2"
                i18n>About Remote Peer Setup</div>
@@ -94,7 +93,8 @@
 
   <!-- Step 1 -->
   <cd-tearsheet-step>
-    <div>Test 1</div>
+    <cd-cephfs-filesystem-selector>
+    </cd-cephfs-filesystem-selector>
   </cd-tearsheet-step>
 
   <!-- Step 2 -->

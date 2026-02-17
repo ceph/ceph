@@ -136,7 +136,8 @@ class to_ceph_volume(object):
                 cmd += " --objectstore {}".format(self.spec.objectstore)
 
                 if self.spec.osd_type:
-                    cmd += " --osd-type {}".format(self.spec.osd_type)
+                    osd_type_str = getattr(self.spec.osd_type, 'value', self.spec.osd_type)
+                    cmd += " --osd-type {}".format(osd_type_str)
 
                 cmds.append(cmd)
 

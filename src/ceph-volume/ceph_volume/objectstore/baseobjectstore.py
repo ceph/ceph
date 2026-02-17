@@ -51,6 +51,9 @@ class BaseObjectStore:
                 self.cephx_lockbox_secret = prepare_utils.create_key()
                 self.secrets['cephx_lockbox_secret'] = \
                     self.cephx_lockbox_secret
+        # If set, we skip mkfs-time discards by overriding bdev_enable_discard flag
+        # for the `ceph-osd --mkfs` command.
+        self.skip_mkfs_discard: bool = False
 
     def get_ptuuid(self, argument: str) -> str:
         uuid = disk.get_partuuid(argument)
@@ -161,6 +164,10 @@ class BaseObjectStore:
             '-i', self.osd_id,
             '--monmap', self.monmap,
         ]
+        # Skip mkfs discard if we have already formatted the device
+        # set bdev_enable_discard = false
+        if self.skip_mkfs_discard and self.objectstore == 'bluestore':
+            self.osd_mkfs_cmd.extend(['--bdev-enable-discard', 'false'])
         if self.cephx_secret is not None:
             self.osd_mkfs_cmd.extend(['--keyfile', '-'])
 

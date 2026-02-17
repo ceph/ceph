@@ -2,7 +2,11 @@ import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/c
 import { ActivatedRoute, Router } from '@angular/router';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { NvmeofSubsystem, NvmeofSubsystemInitiator } from '~/app/shared/models/nvmeof';
+import {
+  NvmeofSubsystem,
+  NvmeofSubsystemInitiator,
+  getSubsystemAuthStatus
+} from '~/app/shared/models/nvmeof';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -10,6 +14,7 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { NvmeofSubsystemAuthType } from '~/app/shared/enum/nvmeof.enum';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -52,6 +57,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
   group: string = null;
   gwGroupsEmpty: boolean = false;
   gwGroupPlaceholder: string = DEFAULT_PLACEHOLDER;
+  authType = NvmeofSubsystemAuthType;
 
   private destroy$ = new Subject<void>();
 
@@ -249,8 +255,9 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
         return {
           ...sub,
           gw_group: this.group,
-          initiator_count: count
-        } as NvmeofSubsystem & { initiator_count?: number };
+          initiator_count: count,
+          auth: getSubsystemAuthStatus(sub, initiators)
+        } as NvmeofSubsystem & { initiator_count?: number; auth?: string };
       })
     );
   }

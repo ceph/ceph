@@ -206,17 +206,24 @@ class TestZap:
         mock_zap.assert_called_once
 
     @pytest.mark.usefixtures("prevent_exclude_invalid_devices")
-    @patch('ceph_volume.devices.lvm.zap.Zap.zap')
-    @patch('ceph_volume.devices.raw.list.List.filter_lvm_osd_devices', Mock(side_effect=['/dev/vdx', '/dev/vdy', '/dev/vdz', None]))
-    @patch('ceph_volume.process.call', Mock(side_effect=process_call))
-    def test_raw_multiple_devices(self, mock_zap, monkeypatch, is_root, patch_udevdata):
+    def test_raw_multiple_devices(self, monkeypatch, is_root, patch_udevdata):
         volumes = []
         monkeypatch.setattr(zap.api, 'get_lvs', lambda **kw: volumes)
-        z = zap.Zap(['--osd-id', '5'])
-        z.main()
+        # direct_report must return a raw OSD report so ensure_associated_raw finds the three devices for osd-id 5
+        raw_report = {
+            'uuid-5-a': {'osd_id': 5, 'osd_uuid': 'uuid-5', 'device': '/dev/vdx'},
+            'uuid-5-b': {'osd_id': 5, 'osd_uuid': 'uuid-5', 'device': '/dev/vdy'},
+            'uuid-5-c': {'osd_id': 5, 'osd_uuid': 'uuid-5', 'device': '/dev/vdz'},
+        }
+        with patch('ceph_volume.devices.lvm.zap.direct_report', return_value=raw_report), \
+             patch('ceph_volume.devices.lvm.zap.Zap.zap') as mock_zap, \
+             patch('ceph_volume.devices.raw.list.List.filter_lvm_osd_devices', Mock(side_effect=['/dev/vdx', '/dev/vdy', '/dev/vdz', None])), \
+             patch('ceph_volume.process.call', Mock(side_effect=process_call)):
+            z = zap.Zap(['--osd-id', '5'])
+            z.main()
 
-        set([device.path for device in z.args.devices]) == {'/dev/vdx', '/dev/vdy', '/dev/vdz'}
-        mock_zap.assert_called_once
+        assert set([device.path for device in z.args.devices]) == {'/dev/vdx', '/dev/vdy', '/dev/vdz'}
+        mock_zap.assert_called_once()
 
     @patch('ceph_volume.devices.lvm.zap.direct_report', Mock(return_value={}))
     @patch('ceph_volume.devices.lvm.zap.api.get_lvs', Mock(return_value=[]))

@@ -61,7 +61,12 @@ class RateLimiterEntry {
     return true;
   }
     // we don't want to reduce ops' tokens if we've rejected it.
-    read.ops -= fixed_point_rgw_ratelimit;
+    if (read_ops() > 0)
+    {
+      // make sure read.ops always greater or equal than 0
+      // to avoid large budget caused by the case that rate limiter was enabled and read.ops set to 0
+      read.ops -= fixed_point_rgw_ratelimit;
+    }
     return false;
   }
   bool should_rate_limit_list(int64_t ops_limit)
@@ -69,7 +74,12 @@ class RateLimiterEntry {
     if ((list_ops() - 1 < 0) && (ops_limit > 0)) {
       return true;
     }
-    list.ops -= fixed_point_rgw_ratelimit;
+    if (list_ops() > 0)
+    {
+      // make sure list.ops always greater or equal than 0
+      // to avoid large budget caused by the case that rate limiter was enabled and list.ops set to 0
+      list.ops -= fixed_point_rgw_ratelimit;
+    }
     return false;
   }
   bool should_rate_limit_delete(int64_t ops_limit)
@@ -77,7 +87,12 @@ class RateLimiterEntry {
     if ((delete_ops() - 1 < 0) && (ops_limit > 0)) {
       return true;
     }
-    del.ops -= fixed_point_rgw_ratelimit;
+    if (delete_ops() > 0)
+    {
+      // make sure del.ops always greater or equal than 0
+      // to avoid large budget caused by the case that rate limiter was enabled and del.ops set to 0
+      del.ops -= fixed_point_rgw_ratelimit;
+    }
     return false;
   }
   bool should_rate_limit_write(int64_t ops_limit, int64_t bw_limit) 
@@ -90,7 +105,12 @@ class RateLimiterEntry {
     }
 
     // we don't want to reduce ops' tokens if we've rejected it.
-    write.ops -= fixed_point_rgw_ratelimit;
+    if (write_ops() > 0)
+    {
+      // make sure write.ops always greater or equal than 0
+      // to avoid large budget caused by the case that rate limiter was enabled and write.ops set to 0
+      write.ops -= fixed_point_rgw_ratelimit;
+    }
     return false;
   }
   /* The purpose of this function is to minimum time before overriding the stored timestamp

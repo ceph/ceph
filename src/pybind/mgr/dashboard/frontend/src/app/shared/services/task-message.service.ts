@@ -378,6 +378,9 @@ export class TaskMessageService {
     'nvmeof/gateway/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nvmeofGateway(metadata)
     ),
+    'nvmeof/gateway/node/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
+      this.nvmeofGatewayNode(metadata)
+    ),
     'nvmeof/subsystem/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofSubsystem(metadata)
     ),
@@ -588,6 +591,10 @@ export class TaskMessageService {
   }
   nvmeofGateway(metadata: any) {
     return $localize`Gateway group '${metadata.group}'`;
+  }
+
+  nvmeofGatewayNode(metadata: any) {
+    return $localize`hosts to gateway group '${metadata.group_name}'`;
   }
   nvmeofListener(metadata: any) {
     return $localize`listener '${metadata.host_name} for subsystem ${metadata.nqn}`;

@@ -38,6 +38,11 @@ Make sure X (and, ideally, X+1) is defined:
 - [x] src/mon/mon_types.h (`ceph::features::mon::FEATURE_*` and related structs and helpers)
 - [x] src/mds/cephfs_features.h (`CEPHFS_CURRENT_RELEASE`)
 
+Github Actions
+~~~~~~~~~~~~~~
+
+- [ ] .github/workflows/redmine-upkeep.yml add release branch to pull_request_target trigger
+
 Scripts
 ~~~~~~~
 

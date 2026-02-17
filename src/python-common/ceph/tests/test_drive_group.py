@@ -7,7 +7,7 @@ import yaml
 from ceph.deployment import drive_selection, translate
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import PlacementSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.tests.utils import _mk_inventory, _mk_device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
     DriveGroupValidationError
@@ -449,6 +449,19 @@ def test_ceph_volume_command_14(test_input4):
         spec.validate()
 
 
+def test_ceph_volume_command_15():
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
+                          data_devices=DeviceSelection(all=True),
+                          osd_type='crimson',
+                          )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device()*2)
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --osd-type crimson --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
+
+
 def test_raw_ceph_volume_command_0():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
                           service_id='foobar',
@@ -597,3 +610,32 @@ def test_raw_ceph_volume_command_4(test_input7):
     assert cmds[0] == 'raw prepare --bluestore --data /dev/sda --block.db /dev/sdd --block.wal /dev/sdg --crush-device-class hdd'
     assert cmds[1] == 'raw prepare --bluestore --data /dev/sdb --block.db /dev/sdf --block.wal /dev/sdi --crush-device-class nvme'
     assert cmds[2] == 'raw prepare --bluestore --data /dev/sdc --block.db /dev/sde --block.wal /dev/sdh --crush-device-class ssd'
+
+
+def test_drive_group_osd_type_invalid():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        osd_type='invalid',
+    )
+    with pytest.raises(DriveGroupValidationError, match='osd_type must be one of'):
+        spec.validate()
+
+
+def test_drive_group_osd_type_crimson_roundtrip():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        osd_type='crimson',
+    )
+    spec.validate()
+
+    j = spec.to_json()
+    assert j['spec']['osd_type'] == 'crimson'
+
+    spec2 = ServiceSpec.from_json(j)
+    assert spec2.osd_type == 'crimson'
+    j2 = spec2.to_json()
+    assert j2['spec']['osd_type'] == 'crimson'

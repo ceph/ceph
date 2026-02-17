@@ -111,6 +111,11 @@ void print_inc_upmaps(const OSDMap::Incremental& pending_inc, int fd, bool vstar
     }
     ss << std::endl;
   }
+  for (auto& i : pending_inc.old_pg_upmap_primary) {
+    if (vstart)
+      ss << prefix;
+    ss << cmd +  " osd rm-pg-upmap-primary " << i << std::endl;
+  }
   for (auto& i : pending_inc.new_pg_upmap_primary) {
     if (vstart)
       ss << prefix;

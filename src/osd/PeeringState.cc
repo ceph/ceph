@@ -30,6 +30,7 @@ using std::hex;
 using std::make_pair;
 using std::map;
 using std::ostream;
+using std::ostringstream;
 using std::pair;
 using std::set;
 using std::string;
@@ -1528,8 +1529,18 @@ bool PeeringState::needs_recovery() const
       continue;
     }
     if (pm->second.num_missing()) {
-      psdout(10) << "osd." << peer << " has "
-		 << pm->second.num_missing() << " missing" << dendl;
+      std::ostringstream ss;
+      ss << "osd." << peer << " has "
+         << pm->second.num_missing() << " missing";
+
+      const auto &items = pm->second.get_items();
+      if (!items.empty()) {
+        const auto &first = *items.begin();
+        const hobject_t &oid = first.first;
+        ss << ", first missing oid=" << oid;
+      }
+
+      psdout(10) << ss.str() << dendl;
       return true;
     }
   }

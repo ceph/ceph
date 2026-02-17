@@ -1,0 +1,2 @@
+setuptools
+-e ../python-common
