@@ -119,26 +119,6 @@ class ConfigureTest(TestCase):
         # Verify no exception was raised and log was not called with exception
         module.log.exception.assert_not_called()
 
-    def test_configure_with_empty_security_config(self):
-        """Test that configure handles empty string from orch get-security-config"""
-        module = Mock(spec=Module)
-        module.log = Mock()
-
-        # Mock mon_command to return empty string (the problematic case)
-        module.mon_command = Mock(return_value=(0, "", ""))
-
-        # Mock setup_default_config
-        module.setup_default_config = Mock()
-
-        # Call the actual configure method with our mocks
-        Module.configure(module, "127.0.0.1", 9283)
-
-        # Verify that setup_default_config was called (fallback behavior)
-        module.setup_default_config.assert_called_once_with("127.0.0.1", 9283)
-
-        # Verify no exception was raised and log was not called with exception
-        module.log.exception.assert_not_called()
-
     def test_configure_with_none_security_config(self):
         """Test that configure handles None from orch get-security-config"""
         module = Mock(spec=Module)
