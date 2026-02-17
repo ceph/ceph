@@ -755,7 +755,7 @@ int FSCryptFNameDenc::get_encrypted_symlink_length(const int& plain_size) const
   return padded_size;
 }
 
-int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string *encrypted, std::string *alt_name)
+int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string *encrypted, std::string *alt_name, bool force_alt)
 {
   if (plain == "." || plain == ".." ) {
     *encrypted = plain;
@@ -790,7 +790,11 @@ int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string 
     memcpy(extra, hash, sizeof(hash));
     enc_len = CEPH_NOHASH_NAME_MAX + sizeof(hash);
   } else {
-    alt_name->clear();
+    if (force_alt) {
+      *alt_name = std::string(enc_name, enc_len);
+    } else {
+      alt_name->clear();
+    }
   }
 
   int b64_len = NAME_MAX * 2; // name.size() * 2;

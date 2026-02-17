@@ -1414,7 +1414,7 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
   if (fscrypt_denc) {
     string _enc_name;
     string _alt_name;
-    int r = fscrypt_denc->get_encrypted_fname(dname, &_enc_name, &_alt_name);
+    int r = fscrypt_denc->get_encrypted_fname(dname, &_enc_name, &_alt_name, false);
     if (r < 0) {
       ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
       return r;
@@ -1425,12 +1425,12 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
       alternate_name = std::move(_alt_name);
     } else {
       /* encrypt wrapped name */
-      int r = fscrypt_denc->get_encrypted_fname(alternate_name, &_enc_name, &_alt_name);
+      int r = fscrypt_denc->get_encrypted_fname(alternate_name, &_enc_name, &_alt_name, true);
       if (r < 0) {
         ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
         return r;
       }
-      alternate_name = _alt_name.empty() ? std::move(_enc_name) : std::move(_alt_name);
+      alternate_name = std::move(_alt_name);
     }
   }
 #endif
