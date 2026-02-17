@@ -2357,14 +2357,15 @@ class RGWDataSyncShardControlCR : public RGWBackoffControlCR {
 public:
   RGWDataSyncShardControlCR(RGWDataSyncCtx *_sc, const rgw_pool& _pool,
                            uint32_t _shard_id, rgw_data_sync_marker& _marker,
-                           const rgw_data_sync_status& sync_status,
+                           const rgw_data_sync_status& _sync_status,
                            RGWObjVersionTracker& objv,
                            RGWSyncTraceNodeRef& _tn_parent)
           : RGWBackoffControlCR(_sc->cct, false),
           sc(_sc), sync_env(_sc->env),
           pool(_pool),
           shard_id(_shard_id),
-          sync_marker(_marker), objv(objv) {
+          sync_marker(_marker),
+          sync_status(_sync_status), objv(objv) {
     tn = sync_env->sync_tracer->add_node(_tn_parent, "shard", std::to_string(shard_id));
   }
 
