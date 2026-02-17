@@ -341,6 +341,13 @@ void librados::ObjectOperation::omap_cmp(
   o->omap_cmp(assertions, prval);
 }
 
+void librados::ObjectOperation::set_caller_id(std::string caller_id)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->set_caller_id(std::move(caller_id));
+}
+
 void librados::ObjectReadOperation::list_watchers(
   list<obj_watch_t> *out_watchers,
   int *prval)

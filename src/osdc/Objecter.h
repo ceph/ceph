@@ -92,6 +92,8 @@ struct ObjectOperation {
   osdc_opvec ops;
   int flags = 0;
   int priority = 0;
+  std::string caller_id;
+  ///< Optional caller ID for debugging (e.g., RGW trans_id)
 
   boost::container::small_vector<ceph::buffer::list*, osdc_opvec_len> out_bl;
   boost::container::small_vector<
@@ -113,10 +115,23 @@ struct ObjectOperation {
     return ops.size();
   }
 
+  void
+  set_caller_id(std::string id)
+  {
+    caller_id = std::move(id);
+  }
+
+  const std::string&
+  get_caller_id() const
+  {
+    return caller_id;
+  }
+
   void clear() {
     ops.clear();
     flags = 0;
     priority = 0;
+    caller_id.clear();
     out_bl.clear();
     out_handler.clear();
     out_rval.clear();
@@ -1700,6 +1715,7 @@ public:
   using OpSignature = void(boost::system::error_code);
   using OpCompletion = boost::asio::any_completion_handler<OpSignature>;
 
+
   // config observer bits
   std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
@@ -2054,6 +2070,8 @@ public:
     ZTracer::Trace trace;
     std::uint64_t subsystem = 0;
     const jspan_context* otel_trace = nullptr;
+    std::string caller_id;
+    // Optional caller ID for request correlation (e.g., RGW trans_id)
 
     static bool has_completion(decltype(onfinish)& f) {
       return std::visit([](auto&& arg) { return bool(arg);}, f);
@@ -3077,6 +3095,10 @@ public:
     o->out_handler.swap(op.out_handler);
     o->out_ec.swap(op.out_ec);
     o->reqid = reqid;
+    // Copy caller_id from public ObjectOperation to internal Op
+    if (!op.get_caller_id().empty()) {
+      o->caller_id = op.get_caller_id();
+    }
     op.clear();
     return o;
   }
@@ -3134,6 +3156,10 @@ public:
     o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
     o->out_ec.swap(op.out_ec);
+    // Copy caller_id from public ObjectOperation to internal Op
+    if (!op.get_caller_id().empty()) {
+      o->caller_id = op.get_caller_id();
+    }
     op.clear();
     return o;
   }

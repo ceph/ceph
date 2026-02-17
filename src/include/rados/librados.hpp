@@ -377,6 +377,15 @@ inline namespace v14_2_0 {
       const std::map<std::string, std::pair<bufferlist, int> > &assertions,
       int *prval);
 
+    /**
+     * Set caller ID for request correlation (e.g., RGW trans_id)
+     * This ID will be included in objecter_requests admin socket output
+     * to allow tracing RADOS operations back to their originating request.
+     *
+     * @param caller_id [in] identifier string (e.g., S3 request trans_id)
+     */
+    void set_caller_id(std::string caller_id);
+
   protected:
     ObjectOperationImpl* impl;
     friend class IoCtx;

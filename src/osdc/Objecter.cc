@@ -2389,6 +2389,7 @@ void Objecter::_op_submit_with_budget(Op *op,
 {
   ceph_assert(initialized);
 
+
   ceph_assert(op->ops.size() == op->out_bl.size());
   ceph_assert(op->ops.size() == op->out_rval.size());
   ceph_assert(op->ops.size() == op->out_handler.size());
@@ -4866,6 +4867,10 @@ void Objecter::_dump_ops(const OSDSession *s, Formatter *fmt)
     auto age = std::chrono::duration<double>(ceph::coarse_mono_clock::now() - op->stamp);
     fmt->open_object_section("op");
     fmt->dump_unsigned("tid", op->tid);
+    // Dump caller_id if set (for RGW request correlation)
+    if (!op->caller_id.empty()) {
+      fmt->dump_string("caller_id", op->caller_id);
+    }
     op->target.dump(fmt);
     fmt->dump_stream("last_sent") << op->stamp;
     fmt->dump_float("age", age.count());
