@@ -1,0 +1,58 @@
+<div class="scroll-overflow">
+  <div [cdsStack]="'vertical'" gap="6">
+    <div>
+      <div class="cds--type-heading-03" i18n>Import Bootstrap Token</div>
+      <p class="cds--type-body-01" i18n>
+        Paste the token generated on the remote cluster to establish a connection.
+      </p>
+    </div>
+
+    <div>
+      <div class="cds--type-heading-compact-01 cds-mb-3" i18n>Bootstrap Token</div>
+      <cds-textarea-label
+        class="token-textarea"
+        for="bootstrapToken"
+        cdRequiredField="Bootstrap Token"
+        i18n>
+        <textarea
+          cdsTextArea
+          id="bootstrapToken"
+          name="bootstrapToken"
+          placeholder="Paste the bootstrap token from the remote cluster here..."
+          i18n-placeholder
+          rows="5"
+          [(ngModel)]="token">
+        </textarea>
+      </cds-textarea-label>
+      <p class="cds--type-body-compact-01 token-helper" i18n>
+        The token contains encrypted connection details and authentication credentials for the
+        remote cluster.
+      </p>
+    </div>
+
+    <div class="token-actions">
+      <button
+        cdsButton="primary"
+        [disabled]="!token?.trim() || !selectedFilesystemName || isSubmitting"
+        (click)="importToken()"
+        i18n>
+        Validate & Import Token
+      </button>
+    </div>
+
+    <cd-alert-panel type="info" class="cds-mt-2">
+      <div>
+        <div class="cds--type-heading-compact-01 cds-mb-2" i18n>
+          How to obtain the bootstrap token
+        </div>
+        <ul class="requirements-list cds--type-body-compact-01">
+          <li i18n>Log in to the remote cluster's Ceph Dashboard.</li>
+          <li i18n>Navigate to CephFS → Mirroring → Configure (Remote).</li>
+          <li i18n>Complete the remote cluster setup wizard.</li>
+          <li i18n>Generate and copy the bootstrap token.</li>
+          <li i18n>Paste the token in the text area above.</li>
+        </ul>
+      </div>
+    </cd-alert-panel>
+  </div>
+</div>

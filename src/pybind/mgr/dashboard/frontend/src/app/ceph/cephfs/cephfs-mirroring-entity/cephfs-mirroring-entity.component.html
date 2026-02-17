@@ -1,0 +1,130 @@
+<div class="scroll-overflow">
+<div [cdsStack]="'vertical'" gap="5">
+  <div class="cds--type-heading-03"i18n>Create or Select Entity</div>
+  <p i18n>
+    Choose an existing CephFS mirroring entity or create a new one to be used for mirroring.
+  </p>
+</div>
+<cds-tile>
+<div>
+  <cds-radio-group [(ngModel)]="isCreatingNewEntity">
+    <cds-radio [value]="true" i18n> Create New Entity </cds-radio>
+    <cds-radio [value]="false" i18n> Use Existing Entity </cds-radio>
+  </cds-radio-group>
+</div>
+
+@if (isCreatingNewEntity) {
+  <cd-alert-panel type="warning" class="mx-3" i18n>
+    <div [cdsStack]="'vertical'" gap="2">
+    <div class="cds--type-heading-compact-01">Mirroring entity requirements</div>
+    <div class="cds--type-body-compact-01">This entity will be used by the mirroring service to manage snapshots and replication.
+    It must have rwps capabilities on MDS, MON, and OSD.</div>
+    </div>
+  </cd-alert-panel>
+
+  <cd-alert-panel
+    type="info"
+    class="mb-3"
+    i18n
+  >
+    <div [cdsStack]="'vertical'" gap="2">
+      <div class="cds--type-heading-compact-01">Capabilities added automatically.</div>
+      <div class="cds--type-body-compact-01">
+        If you create a new entity, the following capabilities will be assigned automatically:
+      </div>
+      <ul class="list-disc">
+        @for (cap of capabilities; track cap.name) {
+        <li>
+          {{ cap.name }}: {{ cap.permission }}
+        </li>
+        }
+      </ul>
+    </div>
+  </cd-alert-panel>
+
+  <form name="entityForm"
+        #formDir="ngForm"
+        [formGroup]="entityForm"
+        novalidate>
+
+    <div [cdsStack]="'vertical'" gap="5" class="form-item form-item-append cds-mt-5">
+      <cds-text-label labelInputID="user_entity"
+                      i18n
+                      helperText="Ceph Authentication entity used by mirroring."
+                      i18n-helperText
+                      cdRequiredField="Ceph Entity"
+                      [helperText]="user_entityHelperText"
+                      [invalid]="!entityForm.controls['user_entity'].valid && (entityForm.controls['user_entity'].dirty)"
+                      [invalidText]="user_entityError"
+                      i18n-invalidText>
+        Ceph Entity
+        <div [cdsStack]="'horizontal'" gap="0">
+          <input cdsText value="client." readonly />
+          <input cdsText
+                 id="user_entity"
+                 name="user_entity"
+                 formControlName="user_entity"
+                 [invalid]="!entityForm.controls['user_entity'].valid && (entityForm.controls['user_entity'].dirty)" />
+        </div>
+      </cds-text-label>
+
+      <ng-template #user_entityError>
+        @if (entityForm.showError('user_entity', formDir, 'required')) {
+        <span class="invalid-feedback"
+              i18n>This field is required.</span>
+        }
+        @if (entityForm.showError('user_entity', formDir, 'forbiddenClientPrefix')) {
+        <span class="invalid-feedback"
+              i18n>Do not include 'client.' prefix. Enter only the entity suffix.</span>
+        }
+      </ng-template>
+    </div>
+    <div class="text-left">
+      <cd-form-button-panel
+        (submitActionEvent)="submitAction()"
+        [form]="entityForm"
+        [submitText]="'Create Entity'"
+        [showCancel]="false">
+      </cd-form-button-panel>
+    </div>
+  </form>
+}
+
+@if (!isCreatingNewEntity) {
+  <cd-alert-panel type="warning" class="mx-3" i18n>
+     <div [cdsStack]="'vertical'" gap="2">
+    <div class="cds--type-heading-compact-01">Mirroring entity requirements</div>
+    <div class="cds--type-body-compact-01">This selected entity will be used by the mirroring service to manage snapshots and replication.
+    It must have rwps capabilities on MDS, MON, and OSD.</div>
+    </div>
+  </cd-alert-panel>
+  <cd-alert-panel
+    type="info"
+    class="mb-3"
+    i18n
+  >
+    <div [cdsStack]="'vertical'" gap="2">
+      <div class="cds--type-heading-01">Entity Selection Note</div>
+      <div class="cds--type-body-compact-01">
+        Only entities with valid rwps capabilities can be used for mirroring.
+      </div>
+    </div>
+  </cd-alert-panel>
+}
+
+@let entities = (entities$ | async);
+@if (!isCreatingNewEntity && entities) {
+  <cd-table
+    #table
+    [data]="entities"
+    [columns]="columns"
+    columnMode="flex"
+    selectionType="singleRadio"
+    identifier="entity"
+    (updateSelection)="updateSelection($event)"
+    (fetchData)="loadEntities($event)"
+  >
+  </cd-table>
+}
+</cds-tile>
+</div>

@@ -1,0 +1,21 @@
+::ng-deep .site-name-field {
+  max-width: 400px;
+
+  input {
+    width: 100%;
+  }
+}
+
+.summary-item {
+  flex: 1;
+  min-width: 282px;
+}
+
+.scroll-overflow {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.list-disc {
+  list-style-type: disc;
+}

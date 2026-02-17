@@ -1,0 +1,31 @@
+@use '@carbon/layout';
+
+.scroll-overflow {
+  max-height: 70vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.requirements-list {
+  list-style-type: disc;
+  padding-left: var(--cds-spacing-05);
+  margin-left: layout.$spacing-02;
+}
+
+.token-helper {
+  color: var(--cds-text-secondary);
+  margin-top: layout.$spacing-03;
+}
+
+.token-actions {
+  margin-top: layout.$spacing-03;
+}
+
+.token-textarea {
+  display: block;
+  width: 100%;
+}
+
+.token-textarea textarea {
+  width: 100%;
+}

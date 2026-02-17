@@ -9,6 +9,7 @@ import {
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 import { WizardStepModel } from '~/app/shared/models/wizard-steps';
 import { FormBuilder, FormGroup } from '@angular/forms';
+import { FilesystemRow } from '~/app/shared/models/cephfs.model';
 @Component({
   selector: 'cd-cephfs-mirroring-wizard',
   templateUrl: './cephfs-mirroring-wizard.component.html',
@@ -21,6 +22,8 @@ export class CephfsMirroringWizardComponent implements OnInit {
   description: string = $localize`Configure a new mirroring relationship between clusters`;
   form: FormGroup;
   showMessage: boolean = true;
+  selectedFilesystem: FilesystemRow | null = null;
+  selectedEntity: string | null = null;
 
   LOCAL_ROLE = LOCAL_ROLE;
   REMOTE_ROLE = REMOTE_ROLE;
@@ -72,6 +75,21 @@ export class CephfsMirroringWizardComponent implements OnInit {
   onRemoteRoleChange() {
     this.form.patchValue({ localRole: null, remoteRole: REMOTE_ROLE });
     this.showMessage = true;
+  }
+
+  onFilesystemSelected(filesystem: FilesystemRow | null) {
+    Promise.resolve().then(() => {
+      this.selectedFilesystem = filesystem;
+      if (!filesystem) {
+        this.selectedEntity = null;
+      }
+    });
+  }
+
+  onEntitySelected(entity: string | null) {
+    Promise.resolve().then(() => {
+      this.selectedEntity = entity;
+    });
   }
 
   onSubmit() {}
