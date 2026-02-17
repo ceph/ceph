@@ -544,7 +544,7 @@ void PGRecovery::enqueue_push(
     return seastar::make_ready_future<>();
   }).then_interruptible([this, FNAME, obj] {
 
-    DEBUGDPP("enqueue_push", pg->get_dpp());
+    DEBUGDPP("complete obj={}", pg->get_dpp(), obj);
     using BackfillState = crimson::osd::BackfillState;
     if (backfill_state->is_triggered()) {
       backfill_state->post_event(
