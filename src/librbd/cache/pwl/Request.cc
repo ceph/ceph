@@ -409,6 +409,14 @@ C_DiscardRequest<T>::~C_DiscardRequest() {
 }
 
 template <typename T>
+void C_DiscardRequest<T>::finish_req(int r) {
+  ldout(pwl.get_context(), 20) << "discard_req=" << this
+                               << " cell=" << this->get_cell() << dendl;
+  ceph_assert(this->get_cell());
+  this->release_cell();
+}
+
+template <typename T>
 bool C_DiscardRequest<T>::alloc_resources() {
   ldout(pwl.get_context(), 20) << "req type=" << get_name()
                                << " req=[" << *this << "]" << dendl;
@@ -436,12 +444,8 @@ void C_DiscardRequest<T>::setup_log_operations() {
   Context *on_write_append = pwl.get_current_sync_point()->prior_persisted_gather_new_sub();
 
   Context *on_write_persist = new LambdaContext(
-    [this, discard_req](int r) {
-      ldout(pwl.get_context(), 20) << "discard_req=" << discard_req
-                                   << " cell=" << discard_req->get_cell() << dendl;
-      ceph_assert(discard_req->get_cell());
-      discard_req->complete_user_request(r);
-      discard_req->release_cell();
+    [discard_req](int r) {
+      discard_req->complete(r);
     });
   op->init_op(current_sync_gen, persist_on_flush, pwl.get_last_op_sequence_num(),
               on_write_persist, on_write_append);
