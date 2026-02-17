@@ -206,16 +206,22 @@ namespace rgw::sal {
 
 
 
-enum Const_RGW_Attrs{
+enum class Const_RGW_Attrs{
   RGW_ATTR_ACL_CONST = 0,
   RGW_ATTR_RATELIMIT_CONST = 1,
   RGW_ATTR_LC_CONST = 2,
   RGW_ATTR_COUNT = 3,
 };
 
+constexpr std::array<std::string_view, static_cast<size_t>(Const_RGW_Attrs::RGW_ATTR_COUNT)> rgw_attrs_array = {
+  RGW_ATTR_ACL,
+  RGW_ATTR_RATELIMIT,
+  RGW_ATTR_LC,
+};
+
 class Attrs {
 
-    std::array<ceph::bufferlist, RGW_ATTR_COUNT> fastAttrArray;
+    std::array<ceph::bufferlist, static_cast<size_t>(Const_RGW_Attrs::RGW_ATTR_COUNT)> fastAttrArray;
     std::map<std::string, ceph::bufferlist> defaultMap;
 
 public:
@@ -234,18 +240,22 @@ public:
 
     ceph::bufferlist* find(const std::string& key) {
         // Currently for backward comp - in case someone calls one of the array objects with string.
-        if (key == RGW_ATTR_ACL) return &fastAttrArray[RGW_ATTR_ACL_CONST];
-        if (key == RGW_ATTR_RATELIMIT)  return &fastAttrArray[RGW_ATTR_RATELIMIT_CONST];
-        if (key == RGW_ATTR_LC)  return &fastAttrArray[RGW_ATTR_LC_CONST];
+        for(int i = 0; i < static_cast<size_t>(Const_RGW_Attrs::RGW_ATTR_COUNT); i++){
+            if(rgw_attrs_array[i] == key){
+                return &fastAttrArray[i];
+        }
+      }
         
         auto it = defaultMap.find(key);
         return (it != defaultMap.end()) ? &it->second : nullptr;
     }
 
     const ceph::bufferlist* find(const std::string& key) const {
-        if (key == RGW_ATTR_ACL) return &fastAttrArray[0];
-        if (key == RGW_ATTR_RATELIMIT)  return &fastAttrArray[1];
-        if (key == RGW_ATTR_LC)  return &fastAttrArray[2];
+        for(int i = 0; i < static_cast<size_t>(Const_RGW_Attrs::RGW_ATTR_COUNT); i++){
+            if(rgw_attrs_array[i] == key){
+                return &fastAttrArray[i];
+        }
+      }
         
         auto it = defaultMap.find(key);
         return (it != defaultMap.end()) ? &it->second : nullptr;
@@ -257,7 +267,7 @@ public:
 
 void erase(const Attrs& rmattrs) {
     // Clear the corresponding entries in the fast array
-    for (size_t i = 0; i < RGW_ATTR_COUNT; ++i) {
+    for(int i = 0; i < static_cast<size_t>(Const_RGW_Attrs::RGW_ATTR_COUNT); i++){
         if (rmattrs.fastAttrArray[i].length() > 0) {
             fastAttrArray[i].clear();
         }
@@ -270,17 +280,21 @@ void erase(const Attrs& rmattrs) {
 }
 
 void erase(std::string& key) {
-    if (key == RGW_ATTR_ACL) { fastAttrArray[RGW_ATTR_ACL_CONST].clear();
-    } else if (key == RGW_ATTR_RATELIMIT) { fastAttrArray[RGW_ATTR_RATELIMIT_CONST].clear();
-    } else if (key == RGW_ATTR_LC) { fastAttrArray[RGW_ATTR_LC_CONST].clear();
-    } else {
-        defaultMap.erase(key);
+      for(int i = 0; i < static_cast<size_t>(Const_RGW_Attrs::RGW_ATTR_COUNT); i++){
+            if(rgw_attrs_array[i] == key){
+                fastAttrArray[i].clear();
+                return;
+      }
     }
+
+      defaultMap.erase(key);
+    
 }
 
 void erase(Const_RGW_Attrs index) {
-    if (index >= 0 && index < RGW_ATTR_COUNT) {
-        fastAttrArray[index].clear();
+    const size_t idx = static_cast<size_t>(index);
+    if (idx < fastAttrArray.size()) {
+        fastAttrArray[idx].clear();
     }
 }
 
@@ -292,7 +306,7 @@ void erase(const char* key) {
 
 
 void set_attrs(const Attrs& rmattrs) {
-    for (size_t i = 0; i < RGW_ATTR_COUNT; ++i) {
+    for (size_t i = 0; i < fastAttrArray.size(); ++i) {
         if (rmattrs.fastAttrArray[i].length() > 0) {
             this->fastAttrArray[i] = rmattrs.fastAttrArray[i];
         }
@@ -314,9 +328,11 @@ void operator=(const std::map<std::string, ceph::bufferlist>& other){
 
 std::map<std::string, ceph::bufferlist> get_full_map(){
   std::map<std::string, ceph::bufferlist> fullMap = defaultMap;
-  fullMap[RGW_ATTR_ACL] = fastAttrArray[RGW_ATTR_ACL_CONST];
-  fullMap[RGW_ATTR_RATELIMIT] = fastAttrArray[RGW_ATTR_RATELIMIT_CONST];
-  fullMap[RGW_ATTR_LC] = fastAttrArray[RGW_ATTR_LC_CONST];
+  for (size_t i = 0; i < rgw_attrs_array.size(); ++i) {
+        if (fastAttrArray[i].length() > 0) {
+            fullMap[std::string(rgw_attrs_array[i])] = fastAttrArray[i];
+        }
+  }
   return fullMap;
 
 }
@@ -324,15 +340,10 @@ std::map<std::string, ceph::bufferlist> get_full_map(){
 
 void dump(const DoutPrefixProvider *dpp) const {
     // Iterate through the fast array
-    for (size_t i = 0; i < RGW_ATTR_COUNT; ++i) {
+for (size_t i = 0; i < rgw_attrs_array.size(); ++i) {
         if (fastAttrArray[i].length() > 0) {
-            const char* name = "";
-            // Mapping the index back to the RGW string constant
-            if (i == RGW_ATTR_ACL_CONST) name = RGW_ATTR_ACL;
-            else if (i == RGW_ATTR_RATELIMIT_CONST) name = RGW_ATTR_RATELIMIT;
-            else if (i == RGW_ATTR_LC_CONST) name = RGW_ATTR_LC;
-            
-            ldpp_dout(dpp, 20) << "Read xattr rgw_rados (fast): " << name << dendl;
+            // Use the constexpr array to get the name
+            ldpp_dout(dpp, 20) << "Read xattr rgw_rados (fast): " << rgw_attrs_array[i] << dendl;
         }
     }
 
@@ -346,9 +357,11 @@ void dump(const DoutPrefixProvider *dpp) const {
 
     void encode(ceph::bufferlist& bl) const {
         std::map<std::string, ceph::bufferlist> to_encode = defaultMap;
-        if (fastAttrArray[0].length() > 0) to_encode[RGW_ATTR_ACL] = fastAttrArray[RGW_ATTR_ACL_CONST];
-        if (fastAttrArray[1].length() > 0) to_encode[RGW_ATTR_RATELIMIT]  = fastAttrArray[RGW_ATTR_RATELIMIT_CONST];
-        if (fastAttrArray[2].length() > 0) to_encode[RGW_ATTR_LC]  = fastAttrArray[RGW_ATTR_LC_CONST];
+        for (size_t i = 0; i < rgw_attrs_array.size(); ++i) {
+          if (fastAttrArray[i].length() > 0) {
+              to_encode[std::string(rgw_attrs_array[i])] = fastAttrArray[i];
+          }
+        }
 
         ::ceph::encode(to_encode, bl);
     }
@@ -358,10 +371,17 @@ void dump(const DoutPrefixProvider *dpp) const {
         ::ceph::decode(decoded_map, bl);
 
         for (auto& [key, val] : decoded_map) {
-            if (key == RGW_ATTR_ACL)      fastAttrArray[RGW_ATTR_ACL_CONST] = std::move(val);
-            else if (key == RGW_ATTR_RATELIMIT)  fastAttrArray[RGW_ATTR_RATELIMIT_CONST] = std::move(val);
-            else if (key == RGW_ATTR_LC)  fastAttrArray[RGW_ATTR_LC_CONST] = std::move(val);
-            else defaultMap[key] = std::move(val);
+            bool isFoundInFastArray = false;
+            for (size_t i = 0; i < rgw_attrs_array.size(); ++i) {
+                if (key == rgw_attrs_array[i]) {
+                    fastAttrArray[i] = std::move(val);
+                    isFoundInFastArray = true;
+                    break;
+                }
+            }
+            if (!isFoundInFastArray) {
+                defaultMap[key] = std::move(val);
+            }
         }
     }
 };
