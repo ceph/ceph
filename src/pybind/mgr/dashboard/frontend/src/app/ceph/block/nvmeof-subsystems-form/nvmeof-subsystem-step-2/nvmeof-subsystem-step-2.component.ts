@@ -37,6 +37,9 @@ export class NvmeofSubsystemsStepTwoComponent implements OnInit, TearsheetStep {
 
   ngOnInit() {
     this.createForm();
+    this.formGroup.get('hostType').valueChanges.subscribe(() => {
+      this.formGroup.get('hostname').updateValueAndValidity();
+    });
   }
 
   isValidNQN = CdValidators.custom(

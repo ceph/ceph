@@ -93,10 +93,10 @@ export class NvmeofInitiatorsListComponent implements OnInit {
         permission: 'create',
         icon: Icons.add,
         click: () =>
-          this.router.navigate(
-            [BASE_URL, { outlets: { modal: [URLVerbs.ADD, this.subsystemNQN, 'initiator'] } }],
-            { queryParams: { group: this.group } }
-          ),
+          this.router.navigate([{ outlets: { modal: [URLVerbs.ADD, 'initiator'] } }], {
+            queryParams: { group: this.group },
+            relativeTo: this.route.parent
+          }),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
         disable: () => this.hasAllHostsAllowed()
       },
@@ -206,7 +206,7 @@ export class NvmeofInitiatorsListComponent implements OnInit {
             nqn: this.subsystemNQN,
             plural: itemNames.length > 1
           }),
-          call: this.nvmeofService.removeSubsystemInitiators(this.subsystemNQN, {
+          call: this.nvmeofService.removeInitiators(this.subsystemNQN, {
             host_nqn,
             gw_group: this.group
           })

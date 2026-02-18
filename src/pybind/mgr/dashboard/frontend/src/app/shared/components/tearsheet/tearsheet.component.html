@@ -50,11 +50,13 @@
                   (click)="closeTearsheet()"
                   size="xl"
                   i18n>Cancel</button>
+          @if (steps.length > 1) {
           <button cdsButton="secondary"
                   size="xl"
                   [disabled]="currentStep === 0"
                   (click)="onPrevious()"
                   i18n>Previous</button>
+          }
           @if (currentStep === lastStep) {
           <button cdsButton="primary"
                   size="xl"
@@ -96,6 +98,7 @@
            [useCssGrid]="true"
            [fullWidth]="true">
     <!-- Tearsheet Left Influencer-->
+    @if (steps.length > 1) {
     <div cdsCol
          [columnNumbers]="{lg: 3, md: 3, sm: 3}"
          class="tearsheet-left-influencer">
@@ -107,8 +110,9 @@
         (stepSelected)="onStepSelect($event)">
       </cds-progress-indicator>
     </div>
+    }
     <div cdsCol
-         [columnNumbers]="{lg: 13, md: 13, sm: 13}"
+         [columnNumbers]="steps.length > 1 ? {lg: 13, md: 13, sm: 13} : {lg: 16, md: 16, sm: 16}"
          class="tearsheet-main">
       @if (showRightInfluencer) {
       <!-- Tearsheet content with right influencer  -->
@@ -143,11 +147,13 @@
                 (click)="closeTearsheet()"
                 size="xl"
                 i18n>Cancel</button>
+        @if (steps.length > 1) {
         <button cdsButton="secondary"
                 size="xl"
                 [disabled]="currentStep === 0"
                 (click)="onPrevious()"
                 i18n>Previous</button>
+        }
         @if (currentStep === lastStep) {
         <button cdsButton="primary"
                 size="xl"

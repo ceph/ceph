@@ -4,7 +4,6 @@ import { HttpClient } from '@angular/common/http';
 import _ from 'lodash';
 import { Observable, forkJoin, of as observableOf } from 'rxjs';
 import { catchError, map, mapTo, mergeMap } from 'rxjs/operators';
-import { NvmeofSubsystemNamespace } from '../models/nvmeof';
 import { CephServiceSpec } from '../models/service.interface';
 import { HostService } from './host.service';
 import { OrchestratorService } from './orchestrator.service';
@@ -33,12 +32,11 @@ export type ListenerRequest = NvmeofRequest & {
 };
 
 export type NamespaceCreateRequest = NvmeofRequest & {
-  rbd_image_name?: string;
+  rbd_image_name: string;
   rbd_pool: string;
   rbd_image_size?: number;
   no_auto_visible?: boolean;
   create_image: boolean;
-  block_size?: number;
 };
 
 export type NamespaceUpdateRequest = NvmeofRequest & {
@@ -47,7 +45,6 @@ export type NamespaceUpdateRequest = NvmeofRequest & {
 
 export type InitiatorRequest = NvmeofRequest & {
   host_nqn: string;
-  dhchap_key?: string;
 };
 
 export type NamespaceInitiatorRequest = InitiatorRequest & {
@@ -182,40 +179,15 @@ export class NvmeofService {
     return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/host?gw_group=${group}`);
   }
 
-  addSubsystemInitiators(subsystemNQN: string, request: InitiatorRequest) {
+  addInitiators(subsystemNQN: string, request: InitiatorRequest) {
     return this.http.post(`${UI_API_PATH}/subsystem/${subsystemNQN}/host`, request, {
       observe: 'response'
     });
   }
 
-  updateHostKey(subsystemNQN: string, request: InitiatorRequest) {
-    return this.http.put(
-      `${API_PATH}/subsystem/${subsystemNQN}/host/${request.host_nqn}/change_key`,
-      request,
-      {
-        observe: 'response'
-      }
-    );
-  }
-
-  addNamespaceInitiators(nsid: string, request: NamespaceInitiatorRequest) {
-    return this.http.post(`${UI_API_PATH}/namespace/${nsid}/host`, request, {
-      observe: 'response'
-    });
-  }
-
-  removeSubsystemInitiators(subsystemNQN: string, request: InitiatorRequest) {
+  removeInitiators(subsystemNQN: string, request: InitiatorRequest) {
     return this.http.delete(
       `${UI_API_PATH}/subsystem/${subsystemNQN}/host/${request.host_nqn}/${request.gw_group}`,
-      {
-        observe: 'response'
-      }
-    );
-  }
-
-  removeNamespaceInitiators(nsid: string, request: NamespaceInitiatorRequest) {
-    return this.http.delete(
-      `${UI_API_PATH}/namespace/${nsid}/host/${request.subsystem_nqn}/${request.host_nqn}/${request.gw_group}`,
       {
         observe: 'response'
       }
@@ -250,11 +222,6 @@ export class NvmeofService {
           force: 'true'
         }
       }
-    );
-  }
-  listSubsystemNamespaces(subsystemNQN: string) {
-    return this.http.get<NvmeofSubsystemNamespace[]>(
-      `${API_PATH}/subsystem/${subsystemNQN}/namespace`
     );
   }
 

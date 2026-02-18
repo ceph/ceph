@@ -147,7 +147,9 @@ export class NvmeofListenersFormComponent implements OnInit {
           component.listenerForm.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.router.navigate([this.pageURL, { outlets: { modal: null } }]);
+          this.router.navigate([this.pageURL, { outlets: { modal: null } }], {
+            queryParamsHandling: 'preserve'
+          });
         }
       });
   }

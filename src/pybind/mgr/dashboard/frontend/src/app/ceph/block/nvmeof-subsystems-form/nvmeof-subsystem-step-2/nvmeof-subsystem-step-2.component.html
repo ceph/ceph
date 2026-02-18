@@ -23,6 +23,7 @@
           orientation="vertical">
           <cds-radio
             [value]="HOST_TYPE.ALL"
+            class="cds-mb-2"
             i18n>Allow all hosts</cds-radio>
           <span class="cds--form__helper-text cds-mb-3"
                 i18n>Any host can connect to this subsystem without verification.</span>
@@ -30,13 +31,18 @@
           <cd-alert-panel
             title="Caution"
             type="warning"
+            class="cds-mb-3"
             i18n
             i18n-title>
             Allowing all hosts grants access to every initiator on the network. Authentication is not supported in this mode, which may expose the subsystem to unauthorized access.
           </cd-alert-panel>
           }
-          <cds-radio [value]="HOST_TYPE.SPECIFIC">
-            <span i18n>Restrict to specific hosts</span>
+          <cds-radio
+            [value]="HOST_TYPE.SPECIFIC"
+            class="cds-mb-2">
+            <span
+              class="cds-mr-3"
+              i18n>Restrict to specific hosts</span>
             <cds-tag
               type="blue"
               size="sm"
@@ -45,7 +51,7 @@
               Recommended for secure environments
             </cds-tag>
           </cds-radio>
-          <span class="cds--form__helper-text"
+          <span class="cds--form__helper-text cds-mb-3"
                 i18n>Add the specific hosts permitted to connect.</span>
         </cds-radio-group>
       </div>
