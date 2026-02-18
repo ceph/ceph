@@ -109,4 +109,70 @@ describe('FormatterService', () => {
       convertToBytesAndBack('123.5 EiB');
     });
   });
+
+  describe('formatToBinary', () => {
+    it('should return formatted string when split=false (default decimals=1)', () => {
+      expect(service.formatToBinary('0', false)).toBe('0 B');
+      expect(service.formatToBinary('0.1', false)).toBe('0.1 B');
+      expect(service.formatToBinary('1', false)).toBe('1 B');
+      expect(service.formatToBinary('1024', false)).toBe('1 KiB');
+      expect(service.formatToBinary(23.45678 * Math.pow(1024, 3), false)).toBe('23.5 GiB');
+    });
+
+    it('should respect decimals param when split=false', () => {
+      expect(service.formatToBinary(23.45678 * Math.pow(1024, 3), false, 2)).toBe('23.46 GiB');
+      expect(service.formatToBinary('1024', false, 3)).toBe('1 KiB');
+    });
+
+    it('should return tuple [number, unit] when split=true', () => {
+      expect(service.formatToBinary('0', true)).toEqual([0, 'B']);
+      expect(service.formatToBinary('1024', true)).toEqual([1, 'KiB']);
+      expect(service.formatToBinary(23.45678 * Math.pow(1024, 3), true)).toEqual([23.5, 'GiB']);
+    });
+
+    it('should return "-" for unsupported values when split=false', () => {
+      expect(service.formatToBinary(undefined as any, false)).toBe('-');
+      expect(service.formatToBinary(null as any, false)).toBe('-');
+      expect(service.formatToBinary(service as any, false)).toBe('-');
+    });
+
+    it('should return a safe tuple when split=true and input is unsupported', () => {
+      expect(service.formatToBinary(undefined as any, true)).toEqual([0, 'B']);
+      expect(service.formatToBinary(null as any, true)).toEqual([0, 'B']);
+      expect(service.formatToBinary(service as any, true)).toEqual([0, 'B']);
+    });
+  });
+
+  describe('convertToUnit', () => {
+    it('should return 0 for empty-ish values', () => {
+      expect(service.convertToUnit('', 'B', 'KiB')).toBe(0);
+      expect(service.convertToUnit(undefined as any, 'B', 'KiB')).toBe(0);
+      expect(service.convertToUnit(null as any, 'B', 'KiB')).toBe(0);
+    });
+
+    it('should convert between binary units (default decimals=1)', () => {
+      expect(service.convertToUnit('1024', 'B', 'KiB')).toBe(1);
+      expect(service.convertToUnit('1', 'GiB', 'MiB')).toBe(1024);
+      expect(service.convertToUnit('1', 'MiB', 'KiB')).toBe(1024);
+    });
+
+    it('should respect decimals rounding', () => {
+      // 1000 MiB -> 0.9765625 GiB -> with 3 decimals => 0.977
+      expect(service.convertToUnit('1000', 'mib', 'gib', 3)).toBe(0.977);
+
+      // with 1 decimal => 1.0 (rounding)
+      expect(service.convertToUnit('1000', 'mib', 'gib', 1)).toBe(1);
+    });
+
+    it('should handle very small conversions that round to 0', () => {
+      expect(service.convertToUnit('0.1', 'B', 'TiB')).toBe(0);
+    });
+  });
+
+  describe('convertToNumber', () => {
+    it('should remove commas and trim', () => {
+      expect(service.convertToNumber('1,024')).toBe(1024);
+      expect(service.convertToNumber('  23.5  ')).toBe(23.5);
+    });
+  });
 });

@@ -14,13 +14,13 @@
       <cds-dropdown-list [items]="dropdownItems"></cds-dropdown-list>
     </cds-dropdown>
   </ng-template>
-  <!-- CAPACITY USAGE TEXT AND RAW CAPACITY TOGGLE-->
+  <!-- CAPACITY USAGE TEXT -->
   <div class="overview-storage-card-usage-text">
-    @if(usedRaw && totalRaw && usedRawUnit && totalRawUnit) {
+    @if(displayUsedRaw && totalRaw && usedRawUnit && totalRawUnit) {
     <h5>
       <span
         class="cds--type-heading-05"
-        i18n>{{usedRaw}}&ngsp;</span>
+        i18n>{{displayUsedRaw}}&ngsp;</span>
       <span
         class="cds--type-body-02"
         i18n>{{usedRawUnit}} of {{totalRaw}} {{totalRawUnit}} used</span>
@@ -33,23 +33,6 @@
       [maxLineWidth]="400">
     </cds-skeleton-text>
     }
-    <cds-checkbox
-      [checked]="isRawCapacity"
-      [disabled]="!(displayData && usedRaw && totalRaw && usedRawUnit && totalRawUnit)"
-      (checkedChange)="toggleRawCapacity($event)">
-      <cds-tooltip-definition
-        [autoAlign]="true"
-        [highContrast]="true"
-        [openOnHover]="false"
-        [dropShadow]="true"
-        title=""
-        [caret]="true"
-        description="Raw capacity includes all physical storage before replication or overhead."
-        i18n-description
-        i18n>
-        Raw capacity
-      </cds-tooltip-definition>
-    </cds-checkbox>
   </div>
   <!-- CAPACITY CHART -->
   @if(displayData) {

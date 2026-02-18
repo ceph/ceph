@@ -21,12 +21,10 @@
   // Hiding the native chart title
   &-chart {
     .meter-title {
-      height: 0 !important;
       display: none !important;
     }
 
     .spacer {
-      height: 0 !important;
       display: none !important;
     }
   }

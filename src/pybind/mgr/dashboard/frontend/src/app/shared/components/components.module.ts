@@ -94,7 +94,6 @@ import CopyIcon from '@carbon/icons/es/copy/32';
 import { IconComponent } from './icon/icon.component';
 import downloadIcon from '@carbon/icons/es/download/16';
 import { ChartsModule } from '@carbon/charts-angular';
-import { ProductiveCardComponent } from './productive-card/productive-card.component';
 
 @NgModule({
   imports: [
@@ -186,7 +185,6 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     IconComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -229,7 +227,6 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     IconComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent
   ]
 })
 export class ComponentsModule {
