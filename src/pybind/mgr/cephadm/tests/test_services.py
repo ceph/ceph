@@ -1,4 +1,3 @@
-import hashlib
 from textwrap import dedent
 import json
 import urllib.parse
@@ -4999,12 +4998,13 @@ class TestSMB:
                 service_id="foo",
                 config_uri='rados://.smb/foxtrot/config2.json',
                 placement=PlacementSpec(hosts=['test']),
-                ssl=True,
-                ssl_cert=ceph_generated_cert,
-                ssl_key=ceph_generated_key,
-                ssl_ca_cert=cephadm_root_ca,
+                ssl={
+                    'enabled': True,
+                    'ssl_cert': ceph_generated_cert,
+                    'ssl_key': ceph_generated_key,
+                    'ssl_ca_cert': cephadm_root_ca,
+                },
                 certificate_source='inline',
-                tls_min_version='TLSv1.3'
             )
 
             with with_service(cephadm_module, smb_spec):
@@ -5016,17 +5016,9 @@ class TestSMB:
                     )
                 )
                 # ---- TLS assertions against dict keys ----
-                expected_cert_id = hashlib.md5(ceph_generated_cert.encode()).hexdigest()
-                assert smb_generated_conf['ssl_cert'] == expected_cert_id
-                expected_key = hashlib.md5(ceph_generated_key.encode()).hexdigest()
-                assert smb_generated_conf['ssl_key'] == expected_key
-                expected_root_ca = hashlib.md5(cephadm_root_ca.encode()).hexdigest()
-                assert smb_generated_conf['ssl_ca_cert'] == expected_root_ca
-
-                assert smb_generated_conf['tls_min_version'] == 'TLSv1.3'
-                assert smb_generated_conf['tls_ktls'] is False
-                assert smb_generated_conf['tls_debug'] is False
-                
+                assert smb_generated_conf['files']['ssl.crt'] == ceph_generated_cert
+                assert smb_generated_conf['files']['ssl.key'] == ceph_generated_key
+                assert smb_generated_conf['files']['ssl-ca.crt'] == cephadm_root_ca
 
 class TestMgmtGateway:
     @patch("cephadm.serve.CephadmServe._run_cephadm")

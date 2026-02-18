@@ -55,41 +55,44 @@ An SMB Service can be applied using a specification. An example in YAML follows:
 
 The specification can then be applied by running the following command:
 
+.. prompt:: bash #
+
+   ceph orch apply -i smb.yaml
+
+
 TLS/SSL Example
 ---------------
 
 Here's an example SMB service specification with TLS/SSL configuration:
 
 .. code-block:: yaml
-   service_id: smbcluster
-   service_type: smb
-   cluster_id: samba
-   config_uri: rados://.smb/tango/scc.toml
-   placement:
-     hosts:
-       - host0
 
-   spec:
-     certificate_source: inline
-     certificate_source: inline
-   ssl: true
+    service_id: tango
+    service_type: smb
+    cluster_id: tango
+    config_uri: 'rados://.smb/foxtrot/config.json'
+    placement:
+      hosts:
+        - mycephfs11
 
-   ssl_cert: |
-    -----BEGIN CERTIFICATE-----
-    -----END CERTIFICATE-----
+    spec:
+      certificate_source: inline
+      ssl:
+        enabled: true
+        ssl_cert: |
+          -----BEGIN CERTIFICATE-----
+          ...
+          -----END CERTIFICATE-----
 
-  ssl_key: |
-    -----BEGIN PRIVATE KEY-----
-    -----END PRIVATE KEY-----
+        ssl_key: |
+          -----BEGIN PRIVATE KEY-----
+          ...
+          -----END PRIVATE KEY-----
 
-  ssl_ca_cert: |
-    -----BEGIN CERTIFICATE-----
-    -----END CERTIFICATE-----
-
-      tls_ktls: false
-      tls_debug: false
-      tls_min_version: TLSv1.3
-      tls_ciphers: AES-256
+        ssl_ca_cert: |
+          -----BEGIN CERTIFICATE-----
+          ...
+          -----END CERTIFICATE-----
 
 This example configures an SMB service with TLS encryption enabled using
 inline certificates.
@@ -97,9 +100,7 @@ inline certificates.
 TLS/SSL Parameters
 ~~~~~~~~~~~~~~~~~~
 
-The following parameters can be used to configure TLS/SSL encryption for the NFS service:
-
-* ``ssl`` (boolean): Enable or disable SSL/TLS encryption. Default is ``false``.
+The following parameters can be used to configure TLS/SSL encryption for the SMB service:
 
 * ``certificate_source`` (string): Specifies the source of the TLS certificates.
   Options include:
@@ -108,6 +109,8 @@ The following parameters can be used to configure TLS/SSL encryption for the NFS
   - ``inline``: Provide certificates directly in the specification using ``ssl_cert``, ``ssl_key``, and ``ssl_ca_cert`` fields
   - ``reference``: Users can register their own certificate and key with certmgr and
     set the ``certificate_source`` to ``reference`` in the spec.
+
+* ``enable`` (boolean): Enable or disable SSL/TLS encryption. Default is ``false``.
 
 * ``ssl_cert`` (string): The SSL certificate in PEM format. Required when using
   ``inline`` certificate source.
@@ -118,22 +121,8 @@ The following parameters can be used to configure TLS/SSL encryption for the NFS
 * ``ssl_ca_cert`` (string): The SSL CA certificate in PEM format. Required when
   using ``inline`` certificate source.
 
-* ``custom_sans`` (list): List of custom Subject Alternative Names (SANs) to
-  include in the certificate.
 
-* ``tls_ktls`` (boolean): Enable kernel TLS (kTLS) for improved performance when
-  available. Default is ``false``.
-
-* ``tls_debug`` (boolean): Enable TLS debugging output. Useful for troubleshooting
-  TLS issues. Default is ``false``.
-
-* ``tls_min_version`` (string): Specify the minimum TLS version to accept.
-  Examples: TLSv1.3, TLSv1.2
-
-* ``tls_ciphers`` (string): Specify allowed cipher suites for TLS connections.
-  Example: :-CIPHER-ALL:+AES-256-GCM
-
-.. note:: When ``ssl`` is enabled, a ``certificate_source`` must be specified.
+.. note:: When ``enabled`` is true, a ``certificate_source`` must be specified.
    If using ``inline`` certificates, all three certificate fields (``ssl_cert``,
    ``ssl_key``, ``ssl_ca_cert``) must be provided.
 
