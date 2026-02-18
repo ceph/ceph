@@ -1443,6 +1443,146 @@ TEST(TestRGWLuaBackground, TableIncrementError)
   ASSERT_NE(rc, 0);
 }
 
+// Regular background iteration test
+TEST(TestRGWLuaBackground, TableIterateBackground)
+{
+  DEFINE_REQ_STATE;
+  
+  // Script counts elements in RGW table, excluding its own "count" key
+  const std::string background_script = R"(
+    local count = 0
+    for k, v in pairs(RGW) do
+      if tostring(k) ~= "count" then
+        count = count + 1
+      end
+    end
+    RGW["count"] = count
+  )";
+
+  // Use the helper function to set the background script
+  set_script(pe.lua.manager.get(), background_script);
+  
+  TestBackground lua_background(pe.lua.manager.get());
+  pe.lua.background = &lua_background;
+  lua_background.start();
+
+  // Wait 1s to ensure background thread is initialized before injecting data
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  // Inject multiple data types via request context to populate the shared RGW table
+  const std::string request_script = R"(
+    RGW["key1"] = "string_value"
+    RGW["key2"] = 100
+    RGW["key3"] = false
+  )";
+
+  // Inject data into the shared table via a request script
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, request_script);
+  ASSERT_EQ(rc, 0);
+
+  // Wait 6s to allow at least one full background iteration (interval is 5s)
+  // This verifies that each new VM instance can correctly iterate over the shared RGW table.
+  std::this_thread::sleep_for(std::chrono::seconds(6));
+
+  // Verify that all data types were preserved and correctly counted
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string_value");
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 100);
+  EXPECT_FALSE(get_table_value<bool>(lua_background, "key3"));
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "count"), 3);
+
+  lua_background.shutdown();
+}
+
+// Edge case: Test early exit from iteration using 'break'
+TEST(TestRGWLuaBackground, TableIterateBackgroundBreak)
+{
+  DEFINE_REQ_STATE;
+  
+  // Script stops counting after reaching 2 elements to test if partial iteration works
+  const std::string background_script = R"(
+    local count = 0
+    for k, v in pairs(RGW) do
+      if tostring(k) ~= "count" then
+        count = count + 1
+      end
+      if count == 2 then break end 
+    end
+    RGW["count"] = count
+  )";
+
+  // Use the helper function to set the background script
+  set_script(pe.lua.manager.get(), background_script);
+  
+  TestBackground lua_background(pe.lua.manager.get());
+  pe.lua.background = &lua_background;
+  lua_background.start();
+
+  // Wait 1s to ensure background thread is initialized before injecting data
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  // Inject 3 items, but the script above should only count 2
+  const std::string request_script = R"(
+    RGW["key1"] = "string_value"
+    RGW["key2"] = 100
+    RGW["key3"] = false
+  )";
+
+  ASSERT_EQ(lua::request::execute(nullptr, nullptr, &s, nullptr, request_script), 0);
+
+  // Wait 6s to allow at least one full background iteration (interval is 5s)
+  std::this_thread::sleep_for(std::chrono::seconds(6));
+
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "string_value");
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 100);
+  // Even though 3 items exist, count should be 2 due to the 'break' in Lua
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "count"), 2);
+
+  lua_background.shutdown();
+}
+
+// Incremental test: Verifies that the background thread detects table changes over time
+TEST(TestRGWLuaBackground, TableIterateStepByStep)
+{
+  DEFINE_REQ_STATE;
+  
+  // Background script: Iterates over RGW table and counts elements, excluding the "count" key
+  const std::string background_script = R"(
+    local count = 0
+    for k, v in pairs(RGW) do
+      if tostring(k) ~= "count" then
+        count = count + 1
+      end
+    end
+    RGW["count"] = count
+  )";
+
+  // Use the helper function to set the background script
+  set_script(pe.lua.manager.get(), background_script);
+  
+  TestBackground lua_background(pe.lua.manager.get());
+  pe.lua.background = &lua_background;
+  lua_background.start();
+
+  // --- Step 1: Initial state (Empty table) ---
+  // Wait 1s to ensure background thread is initialized before injecting data
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "count"), 0);
+
+  // --- Step 2: Add first item ---
+  ASSERT_EQ(lua::request::execute(nullptr, nullptr, &s, nullptr, "RGW['key1'] = 'val1'"), 0);
+  std::this_thread::sleep_for(std::chrono::seconds(6)); 
+  EXPECT_EQ(get_table_value<std::string>(lua_background, "key1"), "val1");
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "count"), 1);
+
+  // --- Step 3: Add second item ---
+  ASSERT_EQ(lua::request::execute(nullptr, nullptr, &s, nullptr, "RGW['key2'] = 42"), 0);
+  std::this_thread::sleep_for(std::chrono::seconds(6));
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "key2"), 42);
+  EXPECT_EQ(get_table_value<long long int>(lua_background, "count"), 2);
+
+  lua_background.shutdown();
+}
+
 TEST(TestRGWLua, TracingSetAttribute)
 {
   const std::string script = R"(
