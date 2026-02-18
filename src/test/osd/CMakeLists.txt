@@ -77,6 +77,13 @@ add_executable(unittest_ecbackend
 add_ceph_unittest(unittest_ecbackend)
 target_link_libraries(unittest_ecbackend osd global)
 
+# unittest_pgbackend
+add_executable(unittest_pgbackend
+  TestPGBackend.cc
+  )
+add_ceph_unittest(unittest_pgbackend)
+target_link_libraries(unittest_pgbackend osd global ec_isa)
+
 # unittest_ecutil
 add_executable(unittest_ecutil
         TestECUtil.cc
