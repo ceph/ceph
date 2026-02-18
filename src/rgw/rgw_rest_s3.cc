@@ -5658,8 +5658,15 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
     return ret;
   }
 
-  ldpp_dout(s, 10) << "s->object=" << s->object
-           << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
+  ldpp_dout(s, 10) << "s->user=" << s->user->get_display_name()
+                   << " s->object=" << s->object
+                   << " s->bucket=" << rgw_make_bucket_entry_name(
+                      s->bucket_tenant, s->bucket_name)
+                   << " s->trans_id=" << s->trans_id
+                   << " s->op_type=" << (get_op()
+                                           ? get_op()->name()
+                                           : std::to_string(
+                                               s->op_type)) << dendl;
 
   ret = rgw_validate_tenant_name(s->bucket_tenant);
   if (ret)
