@@ -7780,7 +7780,7 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
         bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
         bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100);
     } else {
-      vselector = new RocksDBBlueFSVolumeSelector(
+      vselector = new TestBedBlueFSVolumeSelector(
 	bluefs->get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
 	bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
 	bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100,
