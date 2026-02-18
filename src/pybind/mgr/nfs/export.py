@@ -931,11 +931,11 @@ class ExportMgr:
             clust_qos_obj = get_cluster_qos_config(cluster_id, self.mgr)
             clust_qos_conf = {}
             if clust_qos_obj:
-                clust_qos_conf[f'cluster_{QOSParams.enable_qos.value}'] = clust_qos_obj.enable_qos
+                clust_qos_conf[f'global_{QOSParams.enable_qos.value}'] = clust_qos_obj.enable_qos
                 if clust_qos_obj.bw_obj:
-                    clust_qos_conf[f'cluster_{QOSParams.enable_bw_ctrl.value}'] = clust_qos_obj.bw_obj.enable_bw_ctrl
+                    clust_qos_conf[f'global_{QOSParams.enable_bw_ctrl.value}'] = clust_qos_obj.bw_obj.enable_bw_ctrl
                 if clust_qos_obj.ops_obj:
-                    clust_qos_conf[f'cluster_{QOSParams.enable_iops_ctrl.value}'] = clust_qos_obj.ops_obj.enable_iops_ctrl
+                    clust_qos_conf[f'global_{QOSParams.enable_iops_ctrl.value}'] = clust_qos_obj.ops_obj.enable_iops_ctrl
 
             export_obj = self.get_export_obj(cluster_id, pseudo_path)
             if export_obj.qos_block:

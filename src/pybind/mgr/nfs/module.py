@@ -12,7 +12,7 @@ from orchestrator.module import IngressType
 from mgr_util import CephFSEarmarkResolver
 
 from .export import ExportMgr, AppliedExportResults
-from .cluster import NFSCluster, ClusterQosAction
+from .cluster import NFSCluster
 from .utils import available_clusters
 from .qos_conf import QOSType, QOSBandwidthControl, UserQoSType, QOSOpsControl
 
@@ -333,15 +333,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Disable QOS bandwidth control for NFS cluster"""
         return self.nfs.disable_cluster_qos_bw(cluster_id)
 
-    @CLICommand('nfs cluster cluster_qos', perm='rw')
+    @CLICommand('nfs cluster qos set', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_global_qos(self,
                                     cluster_id: str,
-                                    action: ClusterQosAction,
-                                    msg_interval: int = 0) -> None:
-        """Enable or disable cluster-wide QoS. If disabled, QoS remains enabled,
-        but the configured values apply on a per-host basis"""
-        return self.nfs.global_cluster_qos_action(cluster_id, action.name, msg_interval)
+                                    msg_interval: int) -> None:
+        """Set the message interval for cluster QoS synchronization among hosts."""
+        return self.nfs.cluster_qos_set_config(cluster_id, msg_interval)
 
     @CLICommand('nfs cluster qos get', perm='r')
     @object_format.Responder()
