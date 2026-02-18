@@ -115,6 +115,11 @@ public:
 					   "Injects 8K zeros into next BlueFS read. Debug only.");
 	ceph_assert(r == 0);
       }
+      r = admin_socket->register_command("bluefs volume_selector set "
+              "name=mode,type=CephChoices,strings=slow|db|normal,req=true"
+              , hook,
+              "Set volume selector mode");
+      ceph_assert(r == 0);
       r = admin_socket->register_command("bluefs spillover cleaner stats", hook,
               "Show spillover cleaner thread stats");
       ceph_assert(r == 0);
@@ -208,6 +213,11 @@ private:
       f->flush(out);
     } else if (command == "bluefs debug_inject_read_zeros") {
       bluefs->inject_read_zeros++;
+    } else if (command == "bluefs volume_selector set") {
+      std::string mode;
+      cmd_getval(cmdmap, "mode", mode);
+      auto sel = bluefs->vselector.get();
+      sel->set_mode(mode);
     } else if (command == "bluefs spillover cleaner stats") {
       std::lock_guard l(bluefs->spillover_cleaner_lock);
       auto& stats = bluefs->spillover_cleaner_thread.migration_stats;

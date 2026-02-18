@@ -211,6 +211,7 @@ public:
   /* used for sanity checking of vselector */
   virtual BlueFSVolumeSelector* clone_empty() const { return nullptr; }
   virtual bool compare(BlueFSVolumeSelector* other) { return true; };
+  virtual void set_mode(const std::string& mode) {};
 };
 
 struct bluefs_shared_alloc_context_t {
@@ -1277,6 +1278,100 @@ public:
   void dump(std::ostream& sout) override;
   BlueFSVolumeSelector* clone_empty() const override;
   bool compare(BlueFSVolumeSelector* other) override;
+};
+
+class TestBedBlueFSVolumeSelector : public RocksDBBlueFSVolumeSelector
+{
+public:
+  enum class Mode {
+    NORMAL = 0,
+    FORCE_SLOW,
+    FORCE_DB
+  };
+
+  enum {
+    TB_LEVEL_LOG = 1,
+    TB_LEVEL_WAL = 2,
+    TB_LEVEL_DB = 3,
+    TB_LEVEL_SLOW = 4
+  };
+
+  using RocksDBBlueFSVolumeSelector::add_usage;
+  using RocksDBBlueFSVolumeSelector::sub_usage;
+
+private:
+  std::atomic<Mode> mode;
+
+public:
+  TestBedBlueFSVolumeSelector(
+    uint64_t wal_total_,
+    uint64_t db_total_,
+    uint64_t slow_total_,
+    uint64_t level0_size_,
+    uint64_t level_base_,
+    uint64_t level_multiplier_,
+    bool new_pol_)
+  : RocksDBBlueFSVolumeSelector(
+        wal_total_,
+        db_total_,
+        slow_total_,
+        level0_size_,
+        level_base_,
+        level_multiplier_,
+        new_pol_),
+    mode(Mode::NORMAL)
+  {}
+
+  TestBedBlueFSVolumeSelector()
+  : RocksDBBlueFSVolumeSelector(
+        0, 0, 0, 0, 0, 0, false),
+    mode(Mode::NORMAL)
+  {}
+
+  void set_mode(const std::string& md) override {
+    if (md == "slow") {
+      this->mode.store(Mode::FORCE_SLOW, std::memory_order_relaxed);
+    } else if (md == "db") {
+      this->mode.store(Mode::FORCE_DB, std::memory_order_relaxed);
+    } else {
+      this->mode.store(Mode::NORMAL, std::memory_order_relaxed);
+    }
+  }
+
+  uint8_t select_prefer_bdev(void* h) override
+  {
+    Mode m = mode.load(std::memory_order_relaxed);
+    uint64_t hint = reinterpret_cast<uint64_t>(h);
+
+    if (hint == TB_LEVEL_WAL || hint == TB_LEVEL_LOG) {
+      return RocksDBBlueFSVolumeSelector::select_prefer_bdev(h);
+    }
+
+    if (m == Mode::FORCE_SLOW) {
+      return BlueFS::BDEV_SLOW;
+    }
+
+    if (m == Mode::FORCE_DB) {
+      return BlueFS::BDEV_DB;
+    }
+
+    // NORMAL mode → defer to RocksDB policy
+    return RocksDBBlueFSVolumeSelector::select_prefer_bdev(h);
+  }
+
+  BlueFSVolumeSelector* clone_empty() const override
+  {
+    auto* sel = new TestBedBlueFSVolumeSelector();
+    Mode m = mode.load(std::memory_order_relaxed);
+    if (m == Mode::FORCE_SLOW) {
+      sel->set_mode("slow");
+    } else if (m == Mode::FORCE_DB) {
+      sel->set_mode("db");
+    } else {
+      sel->set_mode("normal");
+    }
+    return sel;
+  }
 };
 
 /**
