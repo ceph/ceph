@@ -51,9 +51,10 @@ class Module(MgrModule):
 
     @MirroringCLICommand.Read('fs snapshot mirror peer_list')
     def snapshot_mirror_peer_list(self,
-                                  fs_name: str):
+                                  fs_name: str,
+                                  format: str = 'json'):
         """List configured peers for a file system"""
-        return self.fs_snapshot_mirror.peer_list(fs_name)
+        return self.fs_snapshot_mirror.peer_list(fs_name, format)
 
     @MirroringCLICommand.Write('fs snapshot mirror peer_remove')
     def snapshot_mirror_peer_remove(self,
@@ -111,6 +112,7 @@ class Module(MgrModule):
         return self.fs_snapshot_mirror.show_distribution(fs_name)
 
     @MirroringCLICommand.Read('fs snapshot mirror daemon status')
-    def snapshot_mirror_daemon_status(self):
+    def snapshot_mirror_daemon_status(self,
+                                      format: str = 'json'):
         """Get mirror daemon status"""
-        return self.fs_snapshot_mirror.daemon_status()
+        return self.fs_snapshot_mirror.daemon_status(format)
