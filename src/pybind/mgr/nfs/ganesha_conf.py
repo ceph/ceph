@@ -382,7 +382,7 @@ class Export:
                          if b.block_name == "CLIENT"]
 
         qos_block = [b for b in export_block.blocks
-                     if b.block_name == "qos_block"]
+                     if b.block_name == "QOS_BLOCK"]
         qos_block = QOS.from_qos_block(qos_block[0]) if qos_block else None
 
         protocols = export_block.values.get('protocols')
