@@ -16,6 +16,8 @@ from teuthology.contextutil import safe_while
 log = logging.getLogger(__name__)
 
 
+# Exceptions to retry in test assertions
+RETRY_EXCEPTIONS = (AssertionError, KeyError, IndexError, CommandFailedError)
 # retry decorator
 def retry_assert(timeout=60, interval=1):
     """
@@ -34,7 +36,7 @@ def retry_assert(timeout=60, interval=1):
                 while proceed():
                     try:
                         return func(*args, **kwargs)
-                    except (AssertionError, KeyError, IndexError) as e:
+                    except RETRY_EXCEPTIONS as e:
                         last_exc = e
                         log.debug(
                             f"[retry_assert] {func.__name__}: "
@@ -263,7 +265,7 @@ class TestMirroring(CephFSTestCase):
                                          f'{fs_name}@{fs_id}', peer_uuid)
         try:
             self.assertFalse(res)
-        except (AssertionError, KeyError, IndexError) as e:
+        except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
 
@@ -278,7 +280,7 @@ class TestMirroring(CephFSTestCase):
             self.assertTrue(dir_name in res)
             self.assertTrue(res[dir_name]['last_synced_snap']['name'] == expected_snap_name)
             self.assertTrue(res[dir_name]['snaps_synced'] == expected_snap_count)
-        except (AssertionError, KeyError, IndexError) as e:
+        except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
 
@@ -294,7 +296,7 @@ class TestMirroring(CephFSTestCase):
             self.assertTrue('idle' == res[dir_name]['state'])
             self.assertTrue(expected_snap_name == res[dir_name]['last_synced_snap']['name'])
             self.assertTrue(expected_snap_count == res[dir_name]['snaps_synced'])
-        except (AssertionError, KeyError, IndexError) as e:
+        except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
 
@@ -308,7 +310,7 @@ class TestMirroring(CephFSTestCase):
         try:
             self.assertTrue(dir_name in res)
             self.assertTrue(res[dir_name]['snaps_deleted'] == expected_delete_count)
-        except (AssertionError, KeyError, IndexError) as e:
+        except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
 
@@ -322,7 +324,7 @@ class TestMirroring(CephFSTestCase):
         try:
             self.assertTrue(dir_name in res)
             self.assertTrue(res[dir_name]['snaps_renamed'] == expected_rename_count)
-        except (AssertionError, KeyError, IndexError) as e:
+        except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
 
@@ -337,7 +339,7 @@ class TestMirroring(CephFSTestCase):
 
             self.assertTrue('syncing' == res[dir_name]['state'])
             self.assertTrue(res[dir_name]['current_syncing_snap']['name'] == snap_name)
-        except (AssertionError, KeyError, IndexError) as e:
+        except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
 
