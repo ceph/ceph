@@ -180,7 +180,7 @@ export class NvmeofService {
     return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/host?gw_group=${group}`);
   }
 
-  addSubsystemInitiators(subsystemNQN: string, request: InitiatorRequest) {
+  addInitiators(subsystemNQN: string, request: InitiatorRequest) {
     return this.http.post(`${UI_API_PATH}/subsystem/${subsystemNQN}/host`, request, {
       observe: 'response'
     });
@@ -202,18 +202,9 @@ export class NvmeofService {
     });
   }
 
-  removeSubsystemInitiators(subsystemNQN: string, request: InitiatorRequest) {
+  removeInitiators(subsystemNQN: string, request: InitiatorRequest) {
     return this.http.delete(
       `${UI_API_PATH}/subsystem/${subsystemNQN}/host/${request.host_nqn}/${request.gw_group}`,
-      {
-        observe: 'response'
-      }
-    );
-  }
-
-  removeNamespaceInitiators(nsid: string, request: NamespaceInitiatorRequest) {
-    return this.http.delete(
-      `${UI_API_PATH}/namespace/${nsid}/host/${request.subsystem_nqn}/${request.host_nqn}/${request.gw_group}`,
       {
         observe: 'response'
       }

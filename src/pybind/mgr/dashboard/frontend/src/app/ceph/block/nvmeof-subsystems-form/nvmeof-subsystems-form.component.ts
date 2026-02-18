@@ -96,10 +96,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
               {
                 step: this.steps[1].label,
                 call: () =>
-                  this.nvmeofService.addSubsystemInitiators(
-                    `${payload.nqn}.${this.group}`,
-                    initiatorRequest
-                  )
+                  this.nvmeofService.addInitiators(`${payload.nqn}.${this.group}`, initiatorRequest)
               }
             ],
             stepResults

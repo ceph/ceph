@@ -14,6 +14,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { SideNavModule, ThemeModule } from 'carbon-components-angular';
 
 import { NvmeSubsystemViewComponent } from './nvme-subsystem-view.component';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 
 >>>>>>> 50177830211 (mgr/dashboard: NVMe – Fix host,listeners namespace list display on Subsystem resource page)
 describe('NvmeSubsystemViewComponent', () => {
@@ -44,7 +45,7 @@ describe('NvmeSubsystemViewComponent', () => {
     waitForAsync(() => {
       TestBed.configureTestingModule({
         declarations: [NvmeSubsystemViewComponent],
-        imports: [RouterTestingModule, SideNavModule, ThemeModule],
+        imports: [RouterTestingModule, SideNavModule, ThemeModule, HttpClientTestingModule],
         schemas: [CUSTOM_ELEMENTS_SCHEMA]
       }).compileComponents();
     })
