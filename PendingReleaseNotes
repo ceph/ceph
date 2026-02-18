@@ -1,3 +1,9 @@
+>=20.0.2
+
+* RGW: For `radosgw-admin account rm`, the `--purge-data` option previously applied only
+  to buckets and objects, but now deletes account users, roles, groups, and oidc-providers
+  too instead of failing with ENOTEMPTY.
+
 >=20.0.0
 
 * RADOS: leader monitor and stretch mode status are now included in the `ceph status` output.
