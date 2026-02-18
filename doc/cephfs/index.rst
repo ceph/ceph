@@ -94,6 +94,7 @@ Administration
     Scheduled Snapshots <snap-schedule>
     CephFS Snapshot Mirroring <cephfs-mirroring>
     Purge Queue <purge-queue>
+    CephFS QoS <cephfs-dmclock>
 
 .. raw:: html
 
