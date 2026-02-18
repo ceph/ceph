@@ -198,13 +198,13 @@ describe('NvmeofService', () => {
       );
       expect(req.request.method).toBe('GET');
     });
-    it('should call addSubsystemInitiators', () => {
-      service.addSubsystemInitiators(mockNQN, request).subscribe();
+    it('should call addInitiators', () => {
+      service.addInitiators(mockNQN, request).subscribe();
       const req = httpTesting.expectOne(`${UI_API_PATH}/subsystem/${mockNQN}/host`);
       expect(req.request.method).toBe('POST');
     });
-    it('should call removeSubsystemInitiators', () => {
-      service.removeSubsystemInitiators(mockNQN, request).subscribe();
+    it('should call removeInitiators', () => {
+      service.removeInitiators(mockNQN, request).subscribe();
       const req = httpTesting.expectOne(
         `${UI_API_PATH}/subsystem/${mockNQN}/host/${request.host_nqn}/${mockGroupName}`
       );

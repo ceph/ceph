@@ -17,6 +17,7 @@ import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
 })
 export class NvmeofSubsystemsStepTwoComponent implements OnInit, TearsheetStep {
   @Input() group!: string;
+  @Input() existingHosts: string[] = [];
   @ViewChild('rightInfluencer', { static: true })
   rightInfluencer?: TemplateRef<any>;
   formGroup: CdFormGroup;
@@ -37,6 +38,9 @@ export class NvmeofSubsystemsStepTwoComponent implements OnInit, TearsheetStep {
 
   ngOnInit() {
     this.createForm();
+    this.formGroup.get('hostType').valueChanges.subscribe(() => {
+      this.formGroup.get('hostname').updateValueAndValidity();
+    });
   }
 
   isValidNQN = CdValidators.custom(
@@ -46,7 +50,10 @@ export class NvmeofSubsystemsStepTwoComponent implements OnInit, TearsheetStep {
 
   isDuplicate = CdValidators.custom(
     'duplicate',
-    (input: string) => !!input && this.formGroup?.get('addedHosts')?.value.includes(input)
+    (input: string) =>
+      !!input &&
+      (this.formGroup?.get('addedHosts')?.value.includes(input) ||
+        this.existingHosts.includes(input))
   );
 
   isRequired = CdValidators.custom(

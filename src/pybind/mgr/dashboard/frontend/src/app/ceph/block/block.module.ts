@@ -438,6 +438,11 @@ const routes: Routes = [
             path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,
             component: NvmeofNamespaceExpandModalComponent,
             outlet: 'modal'
+          },
+          {
+            path: `${URLVerbs.ADD}/initiator`,
+            component: NvmeofInitiatorsFormComponent,
+            outlet: 'modal'
           }
         ]
       }
