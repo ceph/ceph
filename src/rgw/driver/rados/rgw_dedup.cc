@@ -587,7 +587,9 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 20) << __func__ << "::dec ref-count on tail object: " << raw_obj.oid << dendl;
       cls_refcount_put(op, ref_tag, true);
       rgw::AioResultList completed = aio->get(obj.obj,
-                                              rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
+                                              rgw::Aio::librados_op(
+                                                  dpp, obj.ioctx, std::move(op),
+                                                  null_yield),
                                               cost, id);
     }
     rgw::AioResultList completed = aio->drain();
@@ -621,10 +623,12 @@ namespace rgw::dedup {
       ObjectWriteOperation op;
       cls_refcount_get(op, ref_tag, true);
       d_ctl.metadata_access_throttle.acquire();
-      ldpp_dout(dpp, 20) << __func__ << "::inc ref-count on tail object: " << raw_obj.oid << dendl;
-      rgw::AioResultList completed = aio->get(obj.obj,
-                                              rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
-                                              cost, id);
+      ldpp_dout(dpp, 20) << __func__ << "::inc ref-count on tail object: " <<
+ raw_obj.oid << dendl;
+      rgw::AioResultList completed = aio->get(
+          obj.obj,
+          rgw::Aio::librados_op(dpp, obj.ioctx, std::move(op), null_yield),
+          cost, id);
       ret = rgw::check_for_errors(completed);
       all_results.splice(all_results.end(), completed);
       if (ret < 0) {
@@ -664,9 +668,10 @@ namespace rgw::dedup {
 
       ObjectWriteOperation op;
       cls_refcount_put(op, ref_tag, true);
-      rgw::AioResultList completed = aio->get(obj.obj,
-                                              rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
-                                              cost, id);
+      rgw::AioResultList completed = aio->get(
+          obj.obj,
+          rgw::Aio::librados_op(dpp, obj.ioctx, std::move(op), null_yield),
+          cost, id);
       ret2 = rgw::check_for_errors(completed);
       if (ret2 < 0) {
         ldpp_dout(dpp, 1) << __func__ << "::ERR: cleanup after error failed to drop reference on obj=" << aio_res.obj << dendl;

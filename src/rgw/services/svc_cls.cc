@@ -299,7 +299,7 @@ int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp,
   if (!completion) {
     r = obj.operate(dpp, std::move(op), y);
   } else {
-    r = obj.aio_operate(completion, &op);
+    r = obj.aio_operate(dpp, completion, &op);
   }
   return r;
 }
@@ -375,7 +375,7 @@ int RGWSI_Cls::TimeLog::info_async(const DoutPrefixProvider *dpp,
 
   cls_log_info(op, header);
 
-  int ret = obj.aio_operate(completion, &op, nullptr);
+  int ret = obj.aio_operate(dpp, completion, &op, nullptr);
   if (ret < 0)
     return ret;
 
@@ -404,7 +404,7 @@ int RGWSI_Cls::TimeLog::trim(const DoutPrefixProvider *dpp,
   if (!completion) {
     r = obj.operate(dpp, std::move(op), y);
   } else {
-    r = obj.aio_operate(completion, &op);
+    r = obj.aio_operate(dpp, completion, &op);
   }
   return r;
 }

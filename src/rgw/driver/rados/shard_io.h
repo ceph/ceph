@@ -60,7 +60,10 @@ class RevertibleWriter : public DoutPrefixPipe {
   executor_type get_executor() const { return ex; }
 
   RevertibleWriter(const DoutPrefixProvider& dpp, executor_type ex)
-    : DoutPrefixPipe(dpp), ex(std::move(ex)) {}
+    : DoutPrefixPipe(dpp), ex(std::move(ex)),
+      trans_id(dpp.get_trans_id())
+  {
+  }
 
   virtual ~RevertibleWriter() {}
 
@@ -84,6 +87,10 @@ class RevertibleWriter : public DoutPrefixPipe {
 
  private:
   executor_type ex;
+
+protected:
+  // Transaction ID captured at construction for caller_id correlation
+  std::string trans_id;
 };
 
 /// Interface for async_writes() that can initiate write operations.
@@ -95,7 +102,10 @@ class Writer : public DoutPrefixPipe {
   executor_type get_executor() const { return ex; }
 
   Writer(const DoutPrefixProvider& dpp, executor_type ex)
-    : DoutPrefixPipe(dpp), ex(std::move(ex)) {}
+    : DoutPrefixPipe(dpp), ex(std::move(ex)),
+      trans_id(dpp.get_trans_id())
+  {
+  }
 
   virtual ~Writer() {}
 
@@ -115,6 +125,10 @@ class Writer : public DoutPrefixPipe {
 
  private:
   executor_type ex;
+
+protected:
+  // Transaction ID captured at construction for caller_id correlation
+  std::string trans_id;
 };
 
 /// Interface for async_reads() that can initiate read operations.
@@ -126,7 +140,10 @@ class Reader : public DoutPrefixPipe {
   executor_type get_executor() const { return ex; }
 
   Reader(const DoutPrefixProvider& dpp, executor_type ex)
-    : DoutPrefixPipe(dpp), ex(std::move(ex)) {}
+    : DoutPrefixPipe(dpp), ex(std::move(ex)),
+      trans_id(dpp.get_trans_id())
+  {
+  }
 
   virtual ~Reader() {}
 
@@ -146,6 +163,10 @@ class Reader : public DoutPrefixPipe {
 
  private:
   executor_type ex;
+
+protected:
+  // Transaction ID captured at construction for caller_id correlation
+  std::string trans_id;
 };
 
 namespace detail {
@@ -658,6 +679,11 @@ class RadosRevertibleWriter : public RevertibleWriter {
     librados::ObjectWriteOperation op;
     prepare_write(shard, op);
 
+    // Set caller_id from trans_id captured at construction
+    if (!trans_id.empty()) {
+      op.set_caller_id(trans_id);
+    }
+
     constexpr int flags = 0;
     constexpr jspan_context* trace = nullptr;
     librados::async_operate(get_executor(), ioctx, object, std::move(op),
@@ -668,6 +694,11 @@ class RadosRevertibleWriter : public RevertibleWriter {
               detail::RevertHandler&& handler) final {
     librados::ObjectWriteOperation op;
     prepare_revert(shard, op);
+
+    // Set caller_id from trans_id captured at construction
+    if (!trans_id.empty()) {
+      op.set_caller_id(trans_id);
+    }
 
     constexpr int flags = 0;
     constexpr jspan_context* trace = nullptr;
@@ -696,6 +727,11 @@ class RadosWriter : public Writer {
     librados::ObjectWriteOperation op;
     prepare_write(shard, op);
 
+    // Set caller_id from trans_id captured at construction
+    if (!trans_id.empty()) {
+      op.set_caller_id(trans_id);
+    }
+
     constexpr int flags = 0;
     constexpr jspan_context* trace = nullptr;
     librados::async_operate(get_executor(), ioctx, object, std::move(op),
@@ -722,6 +758,11 @@ class RadosReader : public Reader {
             detail::ReadHandler&& handler) final {
     librados::ObjectReadOperation op;
     prepare_read(shard, op);
+
+    // Set caller_id from trans_id captured at construction
+    if (!trans_id.empty()) {
+      op.set_caller_id(trans_id);
+    }
 
     constexpr int flags = 0;
     constexpr jspan_context* trace = nullptr;

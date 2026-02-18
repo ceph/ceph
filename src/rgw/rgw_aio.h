@@ -98,12 +98,17 @@ class Aio {
   // wait for all outstanding completions and return their results
   virtual AioResultList drain() = 0;
 
-  static OpFunc librados_op(librados::IoCtx ctx,
-                            librados::ObjectReadOperation&& op,
-                            optional_yield y);
-  static OpFunc librados_op(librados::IoCtx ctx,
-                            librados::ObjectWriteOperation&& op,
-                            optional_yield y, jspan_context *trace_ctx = nullptr);
+  static OpFunc librados_op(
+      const DoutPrefixProvider* dpp,
+      librados::IoCtx ctx,
+      librados::ObjectReadOperation&& op,
+      optional_yield y);
+  static OpFunc librados_op(
+      const DoutPrefixProvider* dpp,
+      librados::IoCtx ctx,
+      librados::ObjectWriteOperation&& op,
+      optional_yield y,
+      jspan_context* trace_ctx = nullptr);
   static OpFunc d3n_cache_op(const DoutPrefixProvider *dpp, optional_yield y,
                              off_t read_ofs, off_t read_len, std::string& location);
 };

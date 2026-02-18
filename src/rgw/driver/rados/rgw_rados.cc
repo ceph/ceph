@@ -5243,8 +5243,9 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
       static constexpr uint64_t cost = 1; // 1 throttle unit per request
       static constexpr uint64_t id = 0; // ids unused
       rgw::AioResultList completed =
-	aio->get(obj.obj, rgw::Aio::librados_op(obj.ioctx, std::move(op), y),
-		 cost, id);
+          aio->get(
+              obj.obj, rgw::Aio::librados_op(dpp, obj.ioctx, std::move(op), y),
+              cost, id);
       ret = rgw::check_for_errors(completed);
       all_results.splice(all_results.end(), completed);
       if (ret < 0) {
@@ -5324,8 +5325,9 @@ done_ret:
       static constexpr uint64_t cost = 1; // 1 throttle unit per request
       static constexpr uint64_t id = 0; // ids unused
       rgw::AioResultList completed =
-	aio->get(obj.obj, rgw::Aio::librados_op(obj.ioctx, std::move(op), y),
-		 cost, id);
+          aio->get(
+              obj.obj, rgw::Aio::librados_op(dpp, obj.ioctx, std::move(op), y),
+              cost, id);
       ret2 = rgw::check_for_errors(completed);
       if (ret2 < 0) {
         ldpp_dout(dpp, 0) << "ERROR: cleanup after error failed to drop reference on obj=" << r.obj << dendl;
@@ -6237,8 +6239,9 @@ void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_cha
     raw.oid = std::move(obj->key.name);
     raw.loc = std::move(obj->loc);
 
-    auto completed = aio->get(std::move(raw), rgw::Aio::librados_op(
-            ioctx, std::move(op), y), cost, id);
+    auto completed = aio->get(
+        std::move(raw), rgw::Aio::librados_op(
+            dpp, ioctx, std::move(op), y), cost, id);
     std::ignore = rgw::check_for_errors(completed);
   }
 
@@ -8085,7 +8088,9 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
 
   bool add_log = log_op && store->svc.zone->need_to_log_data();
 
-  ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace, add_log);
+  ret = store->cls_obj_complete_add(
+      dpp, *bs, obj, optag, poolid, epoch, ent, category, remove_objs,
+      bilog_flags, zones_trace, add_log);
   if (add_log) {
     ret = add_datalog_entry(dpp, store->svc.datalog_rados,
 			    target->bucket_info, bs->shard_id, y);
@@ -8115,7 +8120,9 @@ int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
 
   bool add_log = log_op && store->svc.zone->need_to_log_data();
 
-  ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, removed_mtime, remove_objs, bilog_flags, zones_trace, add_log);
+  ret = store->cls_obj_complete_del(
+      dpp, *bs, optag, poolid, epoch, obj, removed_mtime, remove_objs,
+      bilog_flags, zones_trace, add_log);
 
   if (add_log) {
     ret = add_datalog_entry(dpp, store->svc.datalog_rados,
@@ -8140,8 +8147,9 @@ int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp,
   bool add_log = log_op && store->svc.zone->need_to_log_data();
 
   int ret = guard_reshard(dpp, obj, &bs, [&](BucketShard *bs) -> int {
-				 return store->cls_obj_complete_cancel(*bs, optag, obj, remove_objs, bilog_flags, zones_trace, add_log);
-			       }, y);
+      return store->cls_obj_complete_cancel(
+          dpp, *bs, optag, obj, remove_objs, bilog_flags, zones_trace, add_log);
+    }, y);
 
   if (add_log) {
     /*
@@ -8375,7 +8383,9 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
   const uint64_t cost = len;
   const uint64_t id = obj_ofs; // use logical object offset for sorting replies
 
-  auto completed = d->aio->get(obj.obj, rgw::Aio::librados_op(obj.ioctx, std::move(op), d->yield), cost, id);
+  auto completed = d->aio->get(
+      obj.obj, rgw::Aio::librados_op(
+          dpp, obj.ioctx, std::move(op), d->yield), cost, id);
 
   return d->flush(std::move(completed));
 }
@@ -10503,11 +10513,21 @@ int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs,
   return ret;
 }
 
-int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, string& tag,
-                                  int64_t pool, uint64_t epoch,
-                                  rgw_bucket_dir_entry& ent, RGWObjCategory category,
-                                  list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
-                                  rgw_zone_set *_zones_trace, bool log_op)
+int
+RGWRados::cls_obj_complete_op(
+    const DoutPrefixProvider* dpp,
+    BucketShard& bs,
+    const rgw_obj& obj,
+    RGWModifyOp op,
+    string& tag,
+    int64_t pool,
+    uint64_t epoch,
+    rgw_bucket_dir_entry& ent,
+    RGWObjCategory category,
+    list<rgw_obj_index_key>* remove_objs,
+    uint16_t bilog_flags,
+    rgw_zone_set* _zones_trace,
+    bool log_op)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
   ldout_bitx_c(bitx, cct, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs <<
@@ -10540,51 +10560,75 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
   index_completion_manager->create_completion(obj, op, tag, ver, key, dir_meta, remove_objs,
                                               log_op, bilog_flags, &zones_trace, &arg);
   librados::AioCompletion *completion = arg->rados_completion;
-  int ret = bs.bucket_obj.aio_operate(arg->rados_completion, &o);
+  int ret = bs.bucket_obj.aio_operate(dpp, arg->rados_completion, &o);
   completion->release(); /* can't reference arg here, as it might have already been released */
 
   ldout_bitx_c(bitx, cct, 10) << "EXITING " << __func__ << ": ret=" << ret << dendl_bitx;
   return ret;
 }
 
-int RGWRados::cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, string& tag,
-                                   int64_t pool, uint64_t epoch,
-                                   rgw_bucket_dir_entry& ent, RGWObjCategory category,
-                                   list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
-                                   rgw_zone_set *zones_trace, bool log_op)
+int
+RGWRados::cls_obj_complete_add(
+    const DoutPrefixProvider* dpp,
+    BucketShard& bs,
+    const rgw_obj& obj,
+    string& tag,
+    int64_t pool,
+    uint64_t epoch,
+    rgw_bucket_dir_entry& ent,
+    RGWObjCategory category,
+    list<rgw_obj_index_key>* remove_objs,
+    uint16_t bilog_flags,
+    rgw_zone_set* zones_trace,
+    bool log_op)
 {
-  return cls_obj_complete_op(bs, obj, CLS_RGW_OP_ADD, tag, pool, epoch,
-                             ent, category, remove_objs, bilog_flags,
-                             zones_trace, log_op);
+  return cls_obj_complete_op(
+      dpp, bs, obj, CLS_RGW_OP_ADD, tag, pool, epoch,
+      ent, category, remove_objs, bilog_flags,
+      zones_trace, log_op);
 }
 
-int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
-                                   int64_t pool, uint64_t epoch,
-                                   rgw_obj& obj,
-                                   real_time& removed_mtime,
-                                   list<rgw_obj_index_key> *remove_objs,
-                                   uint16_t bilog_flags,
-                                   rgw_zone_set *zones_trace,
-                                   bool log_op)
+int
+RGWRados::cls_obj_complete_del(
+    const DoutPrefixProvider* dpp,
+    BucketShard& bs,
+    string& tag,
+    int64_t pool,
+    uint64_t epoch,
+    rgw_obj& obj,
+    real_time& removed_mtime,
+    list<rgw_obj_index_key>* remove_objs,
+    uint16_t bilog_flags,
+    rgw_zone_set* zones_trace,
+    bool log_op)
 {
   rgw_bucket_dir_entry ent;
   ent.meta.mtime = removed_mtime;
   obj.key.get_index_key(&ent.key);
-  return cls_obj_complete_op(bs, obj, CLS_RGW_OP_DEL, tag, pool, epoch,
-			     ent, RGWObjCategory::None, remove_objs,
-			     bilog_flags, zones_trace, log_op);
+  return cls_obj_complete_op(
+      dpp, bs, obj, CLS_RGW_OP_DEL, tag, pool, epoch,
+      ent, RGWObjCategory::None, remove_objs,
+      bilog_flags, zones_trace, log_op);
 }
 
-int RGWRados::cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj,
-                                      list<rgw_obj_index_key> *remove_objs,
-                                      uint16_t bilog_flags, rgw_zone_set *zones_trace, bool log_op)
+int
+RGWRados::cls_obj_complete_cancel(
+    const DoutPrefixProvider* dpp,
+    BucketShard& bs,
+    string& tag,
+    rgw_obj& obj,
+    list<rgw_obj_index_key>* remove_objs,
+    uint16_t bilog_flags,
+    rgw_zone_set* zones_trace,
+    bool log_op)
 {
   rgw_bucket_dir_entry ent;
   obj.key.get_index_key(&ent.key);
-  return cls_obj_complete_op(bs, obj, CLS_RGW_OP_CANCEL, tag,
-			     -1 /* pool id */, 0, ent,
-			     RGWObjCategory::None, remove_objs, bilog_flags,
-			     zones_trace, log_op);
+  return cls_obj_complete_op(
+      dpp, bs, obj, CLS_RGW_OP_CANCEL, tag,
+      -1 /* pool id */, 0, ent,
+      RGWObjCategory::None, remove_objs, bilog_flags,
+      zones_trace, log_op);
 }
 
 

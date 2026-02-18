@@ -232,6 +232,14 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
                       optional_yield y, int flags, const jspan_context* trace_info,
                       version_t* pver)
 {
+  // Set caller_id from request context to enable correlation with S3 requests
+  if (dpp) {
+    auto trans_id = dpp->get_trans_id();
+    if (!trans_id.empty()) {
+      op.set_caller_id(std::move(trans_id));
+    }
+  }
+
   // given a yield_context, call async_operate() to yield the coroutine instead
   // of blocking
   if (y) {
@@ -260,6 +268,14 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
                       librados::ObjectWriteOperation&& op, optional_yield y,
 		      int flags, const jspan_context* trace_info, version_t* pver)
 {
+  // Set caller_id from request context to enable correlation with S3 requests
+  if (dpp) {
+    auto trans_id = dpp->get_trans_id();
+    if (!trans_id.empty()) {
+      op.set_caller_id(std::move(trans_id));
+    }
+  }
+
   if (y) {
     auto& yield = y.get_yield_context();
     auto ex = yield.get_executor();

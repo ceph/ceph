@@ -256,7 +256,7 @@ public:
     if (ret < 0) {
       return ret;
     }
-    ret = bs.bucket_obj.aio_operate(c, &op);
+    ret = bs.bucket_obj.aio_operate(nullptr, c, &op);
     if (ret < 0) {
       derr << "ERROR: failed to store entries in target bucket shard (bs=" << bs.bucket << "/" << bs.shard_id << ") error=" << cpp_strerror(-ret) << dendl;
       return ret;

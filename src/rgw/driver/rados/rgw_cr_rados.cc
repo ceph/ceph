@@ -721,7 +721,7 @@ int RGWRadosBILogTrimCR::send_request(const DoutPrefixProvider *dpp)
   op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
 
   cn = stack->create_completion_notifier();
-  return bs.bucket_obj.aio_operate(cn->completion(), &op);
+  return bs.bucket_obj.aio_operate(dpp, cn->completion(), &op);
 }
 
 int RGWRadosBILogTrimCR::request_complete()

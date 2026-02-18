@@ -144,7 +144,7 @@ class RGWErrorRepoWriteCR : public RGWSimpleCoroutine {
     }
 
     cn = stack->create_completion_notifier();
-    return ref.aio_operate(cn->completion(), &op);
+    return ref.aio_operate(dpp, cn->completion(), &op);
   }
 
   int request_complete() override {
@@ -189,7 +189,7 @@ class RGWErrorRepoRemoveCR : public RGWSimpleCoroutine {
     }
 
     cn = stack->create_completion_notifier();
-    return ref.aio_operate(cn->completion(), &op);
+    return ref.aio_operate(dpp, cn->completion(), &op);
   }
 
   int request_complete() override {

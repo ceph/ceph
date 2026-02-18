@@ -138,13 +138,36 @@ struct rgw_rados_ref {
     return rgw_rados_operate(dpp, ioctx, obj.oid, std::move(op), y, flags);
   }
 
-  int aio_operate(librados::AioCompletion* c,
-		  librados::ObjectWriteOperation* op) {
+  int
+  aio_operate(
+      const DoutPrefixProvider* dpp,
+      librados::AioCompletion* c,
+      librados::ObjectWriteOperation* op)
+  {
+    // Set caller_id from request context to enable correlation with S3 requests
+    if (dpp) {
+      auto trans_id = dpp->get_trans_id();
+      if (!trans_id.empty()) {
+        op->set_caller_id(std::move(trans_id));
+      }
+    }
     return ioctx.aio_operate(obj.oid, c, op);
   }
 
-  int aio_operate(librados::AioCompletion* c, librados::ObjectReadOperation* op,
-		  bufferlist *pbl) {
+  int
+  aio_operate(
+      const DoutPrefixProvider* dpp,
+      librados::AioCompletion* c,
+      librados::ObjectReadOperation* op,
+      bufferlist* pbl)
+  {
+    // Set caller_id from request context to enable correlation with S3 requests
+    if (dpp) {
+      auto trans_id = dpp->get_trans_id();
+      if (!trans_id.empty()) {
+        op->set_caller_id(std::move(trans_id));
+      }
+    }
     return ioctx.aio_operate(obj.oid, c, op, pbl);
   }
 
