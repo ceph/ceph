@@ -4,6 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { SideNavModule, ThemeModule } from 'carbon-components-angular';
 
 import { NvmeSubsystemViewComponent } from './nvme-subsystem-view.component';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 
 describe('NvmeSubsystemViewComponent', () => {
   let component: NvmeSubsystemViewComponent;
@@ -13,7 +14,7 @@ describe('NvmeSubsystemViewComponent', () => {
     waitForAsync(() => {
       TestBed.configureTestingModule({
         declarations: [NvmeSubsystemViewComponent],
-        imports: [RouterTestingModule, SideNavModule, ThemeModule],
+        imports: [RouterTestingModule, SideNavModule, ThemeModule, HttpClientTestingModule],
         schemas: [CUSTOM_ELEMENTS_SCHEMA]
       }).compileComponents();
     })
