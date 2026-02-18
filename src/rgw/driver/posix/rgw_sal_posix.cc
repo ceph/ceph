@@ -35,6 +35,7 @@ const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_MPUPLOAD "POSIX-Multipart-Upload"
 #define RGW_POSIX_ATTR_OWNER "POSIX-Owner"
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
+#define RGW_POSIX_ATTR_MANIFEST "POSIX-Manifest"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
@@ -3496,6 +3497,20 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
     return -EINVAL;
   }
 
+  buffer::list manifest_bl;
+  if (source->get_attr(RGW_POSIX_ATTR_MANIFEST, manifest_bl)) {
+    POSIXManifest manifest;
+    auto iter = manifest_bl.cbegin();
+    try {
+      manifest.decode(iter);
+      if (manifest.multipart_part_count > 0) {
+        params.parts_count = manifest.multipart_part_count;
+      }
+    } catch (buffer::error& err) {
+      // pass
+    }
+  }
+
 #if 0 // WIP
   if (params.mod_ptr || params.unmod_ptr) {
     obj_time_weight src_weight;
@@ -3822,6 +3837,8 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   mp_obj.upload_info.cksum_type = cksum_type;
+  mp_obj.upload_info.cksum_flags = cksum_flags;
+
   if (obj_retention) {
     mp_obj.upload_info.obj_retention_exist = true;
     mp_obj.upload_info.obj_retention = *obj_retention;
@@ -3830,6 +3847,7 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
     mp_obj.upload_info.obj_legal_hold_exist = true;
     mp_obj.upload_info.obj_legal_hold = *obj_legal_hold;
   }
+
   mp_obj.upload_info.dest_placement = dest_placement;
   mp_obj.owner = owner;
 
@@ -4044,9 +4062,17 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
 
-  ret = shadow->merge_and_store_attrs(dpp, attrs, y);
-  if (ret < 0) {
-    return ret;
+  {
+    POSIXManifest manifest;
+    manifest.multipart_part_count = total_parts;
+    buffer::list manifest_bl;
+    manifest.encode(manifest_bl);
+    attrs[RGW_POSIX_ATTR_MANIFEST] = std::move(manifest_bl);
+
+    ret = shadow->merge_and_store_attrs(dpp, attrs, y);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   // Rename to target_obj
@@ -4117,12 +4143,17 @@ int POSIXMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
       }
     }
     *rule = &mp_obj.upload_info.dest_placement;
+
     if (mp_obj.upload_info.obj_retention_exist) {
       obj_retention = mp_obj.upload_info.obj_retention;
     }
     if (mp_obj.upload_info.obj_legal_hold_exist) {
       obj_legal_hold = mp_obj.upload_info.obj_legal_hold;
     }
+
+    /* no te olvides los cksum */
+    cksum_type = mp_obj.upload_info.cksum_type;
+    cksum_flags = mp_obj.upload_info.cksum_flags;
   }
 
   return 0;
