@@ -23,8 +23,8 @@
          [columnNumbers]="{lg: 16}">
       @if (healthData$ | async; as healthData) {
       <cd-overview-storage-card
-        [total]="healthData?.pgmap.bytes_total"
-        [used]="healthData?.pgmap.bytes_used">
+        [total]="healthData.pgmap.bytes_total"
+        [used]="healthData.pgmap.bytes_used">
       </cd-overview-storage-card>
       }
     </div>

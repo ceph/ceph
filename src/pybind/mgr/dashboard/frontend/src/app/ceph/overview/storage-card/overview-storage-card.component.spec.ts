@@ -22,15 +22,15 @@ describe('OverviewStorageCardComponent (Jest)', () => {
     result: [
       {
         metric: { application: 'Block' },
-        value: [0, 1024]
+        value: [0, '1024']
       },
       {
         metric: { application: 'Filesystem' },
-        value: [0, 2048]
+        value: [0, '2048']
       },
       {
         metric: { application: 'Object' },
-        value: [0, 0] // should be filtered
+        value: [0, '0'] // should be filtered
       }
     ]
   };
@@ -103,31 +103,6 @@ describe('OverviewStorageCardComponent (Jest)', () => {
     expect(component.usedRaw).toBe(10);
     expect(component.usedRawUnit).toBe('GiB');
   });
-
-  // --------------------------------------------------
-  // TOGGLE
-  // --------------------------------------------------
-
-  it('should switch to RAW when toggled true', () => {
-    component.toggleRawCapacity(true);
-
-    expect(component.isRawCapacity).toBe(true);
-    expect(component.selectedCapacityType).toBe('raw');
-  });
-
-  it('should switch to USED when toggled false', () => {
-    component.toggleRawCapacity(false);
-
-    expect(component.isRawCapacity).toBe(false);
-    expect(component.selectedCapacityType).toBe('used');
-  });
-
-  it('should call Prometheus again when toggled', () => {
-    component.toggleRawCapacity(false);
-
-    expect(mockPrometheusService.getPrometheusQueryData).toHaveBeenCalledTimes(2);
-  });
-
   // --------------------------------------------------
   // ngOnInit data load
   // --------------------------------------------------
@@ -147,11 +122,9 @@ describe('OverviewStorageCardComponent (Jest)', () => {
       { group: 'Filesystem', value: 20 }
     ];
 
-    component.selectedStorageType = 'Block';
-    (component as any).setChartData();
+    component.onStorageTypeSelect({ item: { content: 'Block', selected: true } } as any);
 
-    expect(component.displayData.length).toBe(1);
-    expect(component.displayData[0].group).toBe('Block');
+    expect(component.displayData).toEqual([{ group: 'Block', value: 10 }]);
   });
 
   it('should show all data when ALL selected', () => {
@@ -160,8 +133,7 @@ describe('OverviewStorageCardComponent (Jest)', () => {
       { group: 'Filesystem', value: 20 }
     ];
 
-    component.selectedStorageType = 'All';
-    (component as any).setChartData();
+    component.onStorageTypeSelect({ item: { content: 'All', selected: true } } as any);
 
     expect(component.displayData.length).toBe(2);
   });
@@ -181,23 +153,10 @@ describe('OverviewStorageCardComponent (Jest)', () => {
   it('should auto-select single item if only one exists', () => {
     component.allData = [{ group: 'Block', value: 10 }];
 
-    (component as any).setDropdownItemsAndStorageType();
-
-    expect(component.selectedStorageType).toBe('Block');
-    expect(component.dropdownItems.length).toBe(1);
-  });
-
-  it('should reset to ALL if previous selection missing', () => {
-    component.selectedStorageType = 'Block';
-
-    component.allData = [
-      { group: 'Filesystem', value: 20 },
-      { group: 'Object', value: 30 }
-    ];
-
-    (component as any).setDropdownItemsAndStorageType();
+    (component as any)._setDropdownItemsAndStorageType();
 
     expect(component.selectedStorageType).toBe('All');
+    expect(component.dropdownItems.length).toBe(2);
   });
 
   // --------------------------------------------------

@@ -16,8 +16,6 @@ import { CommonModule } from '@angular/common';
   styleUrl: './overview.component.scss'
 })
 export class OverviewComponent implements OnDestroy {
-  totalCapacity: number;
-  usedCapacity: number;
   private destroy$ = new Subject<void>();
   public healthData$: Observable<HealthSnapshotMap>;
 
