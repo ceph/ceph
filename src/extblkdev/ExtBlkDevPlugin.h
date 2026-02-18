@@ -30,7 +30,8 @@ namespace ceph {
   namespace extblkdev {
     int preload(CephContext *cct);
     int detect_device(CephContext *cct,
-			  const std::string &logdevname,
+			  const std::string& logdevname,
+			  const std::string& device,
 			  ExtBlkDevInterfaceRef& ebd_impl);
     int release_device(ExtBlkDevInterfaceRef& ebd_impl);
   }
