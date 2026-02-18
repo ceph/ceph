@@ -7,28 +7,42 @@ import { ToastrModule } from 'ngx-toastr';
 
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
-import { NvmeofSubsystemsFormComponent } from './nvmeof-subsystems-form.component';
-import { FormHelper } from '~/testing/unit-test-helper';
 import {
-  DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM,
-  NvmeofService
-} from '~/app/shared/api/nvmeof.service';
+  NvmeofSubsystemsFormComponent,
+  SubsystemPayload
+} from './nvmeof-subsystems-form.component';
+import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystem-step-1/nvmeof-subsystem-step-1.component';
+import { GridModule, InputModule, RadioModule, TagModule } from 'carbon-components-angular';
+import { NvmeofSubsystemsStepThreeComponent } from './nvmeof-subsystem-step-3/nvmeof-subsystem-step-3.component';
+import { HOST_TYPE } from '~/app/shared/models/nvmeof';
+import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystem-step-2/nvmeof-subsystem-step-2.component';
+import { of } from 'rxjs';
 
 describe('NvmeofSubsystemsFormComponent', () => {
   let component: NvmeofSubsystemsFormComponent;
   let fixture: ComponentFixture<NvmeofSubsystemsFormComponent>;
   let nvmeofService: NvmeofService;
-  let form: CdFormGroup;
-  let formHelper: FormHelper;
   const mockTimestamp = 1720693470789;
   const mockGroupName = 'default';
+  const mockPayload: SubsystemPayload = {
+    nqn: '',
+    gw_group: mockGroupName,
+    subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY=',
+    addedHosts: [],
+    hostType: HOST_TYPE.ALL
+  };
 
   beforeEach(async () => {
     spyOn(Date, 'now').and.returnValue(mockTimestamp);
     await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemsFormComponent],
+      declarations: [
+        NvmeofSubsystemsFormComponent,
+        NvmeofSubsystemsStepOneComponent,
+        NvmeofSubsystemsStepThreeComponent,
+        NvmeofSubsystemsStepTwoComponent
+      ],
       providers: [NgbActiveModal],
       imports: [
         HttpClientTestingModule,
@@ -36,6 +50,10 @@ describe('NvmeofSubsystemsFormComponent', () => {
         ReactiveFormsModule,
         RouterTestingModule,
         SharedModule,
+        InputModule,
+        GridModule,
+        RadioModule,
+        TagModule,
         ToastrModule.forRoot()
       ]
     }).compileComponents();
@@ -43,8 +61,6 @@ describe('NvmeofSubsystemsFormComponent', () => {
     fixture = TestBed.createComponent(NvmeofSubsystemsFormComponent);
     component = fixture.componentInstance;
     component.ngOnInit();
-    form = component.subsystemForm;
-    formHelper = new FormHelper(form);
     fixture.detectChanges();
     component.group = mockGroupName;
   });
@@ -56,48 +72,38 @@ describe('NvmeofSubsystemsFormComponent', () => {
   describe('should test form', () => {
     beforeEach(() => {
       nvmeofService = TestBed.inject(NvmeofService);
-      spyOn(nvmeofService, 'createSubsystem').and.stub();
+      spyOn(nvmeofService, 'createSubsystem').and.returnValue(of({}));
+      spyOn(nvmeofService, 'addInitiators').and.returnValue(of({}));
     });
 
     it('should be creating request correctly', () => {
       const expectedNqn = 'nqn.2001-07.com.ceph:' + mockTimestamp;
-      component.onSubmit();
+      mockPayload['nqn'] = expectedNqn;
+      component.onSubmit(mockPayload);
       expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
         nqn: expectedNqn,
-        max_namespaces: DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM,
+        gw_group: mockGroupName,
         enable_ha: true,
-        gw_group: mockGroupName
+        dhchap_key: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY='
       });
     });
 
-    it('should give error on invalid nqn', () => {
-      formHelper.setValue('nqn', 'nqn:2001-07.com.ceph:');
-      component.onSubmit();
-      formHelper.expectError('nqn', 'pattern');
-    });
+    it('should add initiators with wildcard when hostType is ALL', () => {
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY='
+      };
 
-    it('should give error on invalid max_namespaces', () => {
-      formHelper.setValue('max_namespaces', -56);
-      component.onSubmit();
-      formHelper.expectError('max_namespaces', 'pattern');
-    });
+      component.group = mockGroupName;
+      component.onSubmit(payload);
 
-    it(`should not give error on max_namespaces greater than ${DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM}`, () => {
-      const expectedNqn = 'nqn.2001-07.com.ceph:' + mockTimestamp;
-      formHelper.setValue('max_namespaces', 600);
-      component.onSubmit();
-      expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
-        nqn: expectedNqn,
-        max_namespaces: DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM,
-        enable_ha: true,
+      expect(nvmeofService.addInitiators).toHaveBeenCalledWith('test-nqn.default', {
+        host_nqn: '*',
         gw_group: mockGroupName
       });
-    });
-
-    it('should give error on max_namespaces lesser than 1', () => {
-      formHelper.setValue('max_namespaces', 0);
-      component.onSubmit();
-      formHelper.expectError('max_namespaces', 'min');
     });
   });
 });
