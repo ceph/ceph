@@ -645,6 +645,7 @@ public:
           RGWDataChangesLogInfo& info = shards_info[i];
           auto& marker = status->sync_markers[i];
           marker.next_step_marker = info.marker;
+          // timestamp from remote is epoch zero when datalog shards are empty.
           marker.timestamp = info.last_update;
           const auto& oid = RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, i);
           auto& objv = objvs[i];
@@ -1436,6 +1437,8 @@ class RGWDataSyncSingleEntryCR : public RGWCoroutine {
 
   ceph::real_time progress;
   int sync_status = 0;
+  bool error_inject{false};
+
 public:
   RGWDataSyncSingleEntryCR(RGWDataSyncCtx *_sc, rgw::bucket_sync::Handle state,
                            rgw_data_sync_obligation _obligation,
@@ -1449,6 +1452,7 @@ public:
       lease_cr(std::move(lease_cr)) {
     set_description() << "data sync single entry (source_zone=" << sc->source_zone << ") " << obligation;
     tn = sync_env->sync_tracer->add_node(_tn_parent, "entry", to_string(obligation.bs, obligation.gen));
+    error_inject = (sync_env->cct->_conf->rgw_data_sync_single_entry_inject_err_probability > 0);
   }
 
   int operate(const DoutPrefixProvider *dpp) override {
@@ -1480,13 +1484,23 @@ public:
           obligation_counter = state->counter;
           progress = ceph::real_time{};
 
+          ldout(cct, 4) << "state obligation timestamp: " << state->obligation->timestamp << ' '
+              << "obligation timestamp: " << obligation.timestamp << dendl;
+
           ldout(cct, 4) << "starting sync on " << bucket_shard_str{state->key.first}
-              << ' ' << *state->obligation << " progress timestamp " << state->progress_timestamp
-              << " progress " << progress << dendl;
-          yield call(new RGWRunBucketSourcesSyncCR(sc, lease_cr,
-                                                   state->key.first, tn,
-                                                   state->obligation->gen,
-						   &progress));
+            << ' ' << *state->obligation << " progress timestamp " << state->progress_timestamp
+            << " progress " << progress << dendl;
+
+          if (error_inject &&
+              rand() % 10000 < cct->_conf->rgw_data_sync_single_entry_inject_err_probability * 10000.0) {
+             ldout(cct, 10) << " RGWDataSyncSingleEntryCR() injecting error "<< state->key.first << dendl;
+            retcode = -EIO;
+          } else {
+            yield call(new RGWRunBucketSourcesSyncCR(sc, lease_cr,
+                                                    state->key.first, tn,
+                                                    state->obligation->gen,
+                &progress));
+          }
           if (retcode < 0) {
             break;
           }
@@ -1495,6 +1509,8 @@ public:
         // any new obligations will process themselves
         complete = std::move(*state->obligation);
         state->obligation.reset();
+
+        tn->log(10, SSTR("complete timestamp: " <<  complete->timestamp));
 
         tn->log(10, SSTR("sync finished on " << bucket_shard_str{state->key.first}
                          << " progress=" << progress << ' ' << complete << " r=" << retcode));
@@ -1519,14 +1535,13 @@ public:
             tn->log(0, SSTR("ERROR: failed to log sync failure: retcode=" << retcode));
           }
         }
-        if (complete->timestamp != ceph::real_time{}) {
-          tn->log(10, SSTR("writing " << *complete << " to error repo for retry"));
-          yield call(rgw::error_repo::write_cr(sync_env->driver->getRados()->get_rados_handle(), error_repo,
-                                              rgw::error_repo::encode_key(complete->bs, complete->gen),
-                                              complete->timestamp));
-          if (retcode < 0) {
-            tn->log(0, SSTR("ERROR: failed to log sync failure in error repo: retcode=" << retcode));
-          }
+
+        tn->log(10, SSTR("writing " << *complete << " to error repo for retry"));
+        yield call(rgw::error_repo::write_cr(sync_env->driver->getRados()->get_rados_handle(), error_repo,
+                                            rgw::error_repo::encode_key(complete->bs, complete->gen),
+                                            complete->timestamp));
+        if (retcode < 0) {
+          tn->log(0, SSTR("ERROR: failed to log sync failure in error repo: retcode=" << retcode));
         }
       } else if (complete->retry) {
         yield call(rgw::error_repo::remove_cr(sync_env->driver->getRados()->get_rados_handle(), error_repo,
