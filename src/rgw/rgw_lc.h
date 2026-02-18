@@ -28,6 +28,7 @@
 #define MAX_ID_LEN 255
 static std::string lc_oid_prefix = "lc";
 static std::string lc_index_lock_name = "lc_process";
+static const std::string lc_trans_id_prefix = "Lifecycle";
 
 extern const char* LC_STATUS[];
 
@@ -669,13 +670,33 @@ public:
   unsigned get_subsys() const;
   std::ostream& gen_prefix(std::ostream& out) const;
 
-  private:
+  // Thread-local storage for current bucket being processed
+  static thread_local std::string trans_id;
 
+  static void set_trans_id(const std::string& bucket)
+  {
+    // Store as "Lifecycle:bucket_name" so get_trans_id() can return it directly
+    trans_id = lc_trans_id_prefix + ":" + bucket;
+  }
+
+  std::string
+  get_trans_id() const override
+  {
+    if (!trans_id.empty()) {
+      return trans_id;
+    }
+    return lc_trans_id_prefix;
+  }
+
+private:
   int handle_multipart_expiration(rgw::sal::Bucket* target,
-				  const std::multimap<std::string, lc_op>& prefix_map,
-				  ceph::async::spawn_throttle& workpool,
-				  boost::asio::yield_context yield,
-				  LCWorker* worker, time_t stop_at, bool once);
+                                  const std::multimap<std::string, lc_op>&
+                                  prefix_map,
+                                  ceph::async::spawn_throttle& workpool,
+                                  boost::asio::yield_context yield,
+                                  LCWorker* worker,
+                                  time_t stop_at,
+                                  bool once);
 };
 
 namespace rgw::lc {

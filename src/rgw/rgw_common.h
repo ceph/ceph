@@ -1466,6 +1466,7 @@ struct req_state : DoutPrefixProvider {
   std::ostream& gen_prefix(std::ostream& out) const override;
   CephContext* get_cct() const override { return cct; }
   unsigned get_subsys() const override { return ceph_subsys_rgw; }
+  std::string get_trans_id() const override { return trans_id; }
 };
 
 void set_req_state_err(req_state*, int);

@@ -51,6 +51,8 @@ const char* LC_STATUS[] = {
       "COMPLETE"
 };
 
+thread_local std::string RGWLC::trans_id;
+
 using namespace librados;
 
 bool LCRule::valid() const
@@ -1598,6 +1600,8 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 		       << " failed" << dendl;
     return ret;
   }
+// Set current bucket for transaction ID tracking
+  set_trans_id(bucket_name);
 
   // use a limited number of coroutines for concurrent processing
   size_t limit = cct->_conf.get_val<int64_t>("rgw_lc_max_wp_worker");
@@ -2067,8 +2071,11 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     << " index: " << index << " worker ix: " << worker->ix
 		     << dendl;
 
+
   lock.unlock();
   ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
+
+
   ldpp_dout(this, 5) << "RGWLC::process_bucket(): END entry 2: " << entry
     << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
   bucket_lc_post(index, max_lock_secs, entry, ret, worker);

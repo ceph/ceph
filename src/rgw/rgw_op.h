@@ -325,6 +325,9 @@ public:
   CephContext* get_cct() const override { return s->cct; }
   unsigned get_subsys() const override { return ceph_subsys_rgw; }
 
+  std::string
+  get_trans_id() const override { return s ? s->trans_id : ""; }
+
   virtual dmc::client_id dmclock_client() { return dmc::client_id::metadata; }
   virtual dmc::Cost dmclock_cost() { return 1; }
   virtual void write_ops_log_entry(rgw_log_entry& entry) const {};

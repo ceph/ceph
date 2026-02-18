@@ -15,6 +15,8 @@
 
 #include <atomic>
 
+static const std::string gc_trans_id_prefix = "GarbageCollection";
+
 class RGWGCIOManager;
 
 class RGWGC : public DoutPrefixProvider {
@@ -76,6 +78,11 @@ public:
 
   CephContext *get_cct() const override { return store->ctx(); }
   unsigned get_subsys() const;
+
+  std::string
+  get_trans_id() const override {
+    return gc_trans_id_prefix;
+  }
 
   std::ostream& gen_prefix(std::ostream& out) const;
 

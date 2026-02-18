@@ -61,6 +61,10 @@ public:
   virtual std::ostream& gen_prefix(std::ostream& out) const = 0;
   virtual CephContext *get_cct() const = 0;
   virtual unsigned get_subsys() const = 0;
+
+  virtual std::string
+  get_trans_id() const { return ""; }
+
   virtual ~DoutPrefixProvider() {}
 };
 
