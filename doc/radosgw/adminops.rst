@@ -1189,7 +1189,7 @@ A tenant name may also specified as a part of ``uid``, by following the syntax
 
 ``account-id``
 
-:Description: the account under which a user should exist.
+:Description: The account under which a user should exist.
 :Type: string
 :Example: RGW00000000000000001
 :Required: No
@@ -1402,6 +1402,15 @@ Request Parameters
 :Description: default storage class for the user, default-placement must be defined when setting this option.
 :Type: string
 :Example: STANDARD-1A
+:Required: No
+
+.. versionadded:: Squid
+
+``account-id``
+
+:Description: The account under which a user should exist. Cannot be changed or removed once set.
+:Type: string
+:Example: RGW00000000000000001
 :Required: No
 
 Response Entities
