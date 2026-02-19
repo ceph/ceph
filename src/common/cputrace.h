@@ -22,6 +22,7 @@
 
 #include "common/Formatter.h"
 #include "include/ceph_assert.h"
+#include "ceph_mutex.h"
 
 #define CPUTRACE_MAX_ANCHORS 10
 #define CPUTRACE_MAX_THREADS 64
@@ -74,6 +75,23 @@ struct sample_t {
         result.ins = ins - other.ins;
         return result;
     }
+  sample_t& operator-=(const sample_t& other) {
+    swi   -= other.swi;
+    cyc   -= other.cyc;
+    cmiss -= other.cmiss;
+    bmiss -= other.bmiss;
+    ins   -= other.ins;
+    return *this;
+  }
+
+  sample_t& operator+=(const sample_t& other) {
+    swi   += other.swi;
+    cyc   += other.cyc;
+    cmiss += other.cmiss;
+    bmiss += other.bmiss;
+    ins   += other.ins;
+    return *this;
+  }
 };
 
 struct measurement_t {
@@ -107,7 +125,6 @@ struct measurement_t {
     }
 
     void dump(ceph::Formatter* f, cputrace_flags flags, const std::string& counter = "") const {
-        f->open_object_section("metrics");
         f->dump_unsigned("sample_count", sample_count);
         if (flags & HW_PROFILE_SWI) {
             f->open_object_section("context_switches");
@@ -140,8 +157,6 @@ struct measurement_t {
 
         if (flags & HW_PROFILE_INS && (counter.empty() || counter == "instructions"))
             dump_counter("instructions", sum_ins);
-
-        f->close_section();
     }
 
     void dump_to_stringstream(std::stringstream& ss, cputrace_flags flags) const {
@@ -266,5 +281,93 @@ void cputrace_stop(ceph::Formatter* f = nullptr);
 void cputrace_reset(ceph::Formatter* f = nullptr);
 void cputrace_dump(ceph::Formatter* f, const std::string& logger = "", const std::string& counter = "");
 void cputrace_print_to_stringstream(std::stringstream& ss);
+
+struct hw_per_thread_ctx {
+private:
+  hw_per_thread_ctx()
+  {
+    HW_init(
+        &ctx, HW_PROFILE_SWI | HW_PROFILE_CYC | HW_PROFILE_CMISS |
+                  HW_PROFILE_BMISS | HW_PROFILE_INS);
+  };
+
+  ~hw_per_thread_ctx() { HW_clean(&ctx); };
+
+  HW_ctx ctx;
+  // The idea for stats excluded is related to cases when second sample block
+  // is started when we are still inside current block.
+  // stats_excluded allows to exlude inner block. Otherwise, we would be measuring
+  // some stats twice.
+  sample_t stats_excluded;
+
+public:
+  static hw_per_thread_ctx* get_thread_local();
+
+  sample_t read()
+  {
+    sample_t s;
+    HW_read(&ctx, &s);
+    s -= stats_excluded;
+    return s;
+  };
+
+  void exclude_stats(const sample_t& exclude)
+  {
+    stats_excluded += exclude;
+  }
+
+  static void sample(
+    const sample_t& elapsed,
+    measurement_t& mmt,
+    ceph::mutex& lock)
+  {
+    std::lock_guard _(lock);
+    mmt.sample(elapsed);
+  }
+};
+
+struct cpucounter_group {
+  const char* name;
+  std::vector<std::pair<const char*, measurement_t&>> counters;
+  cpucounter_group(const char* name)
+  : name(name) {
+    register_group(this);
+  }
+  void register_group(cpucounter_group* group);
+};
+
+struct measure_scope {
+  measure_scope(
+    measurement_t& measure,
+    ceph::mutex& mutex)
+  : measure(measure), mutex(mutex)
+  {
+    tl_ctx = hw_per_thread_ctx::get_thread_local();
+    start = tl_ctx->read();
+  }
+  ~measure_scope() {
+    sample_t elapsed = tl_ctx->read() - start;
+    tl_ctx->exclude_stats(elapsed);
+    tl_ctx->sample(elapsed, measure, mutex);
+  }
+  private:
+  measurement_t& measure;
+  ceph::mutex&   mutex;
+  hw_per_thread_ctx* tl_ctx;
+  sample_t       start;
+};
+
+struct register_trace_scope {
+  measurement_t val;
+  ceph::mutex mutex;
+  register_trace_scope(cpucounter_group& group, const char* name)
+  : mutex(ceph::make_mutex(name)) {
+    group.counters.emplace_back(name, val);
+  }
+};
+
+#define MEASURE_SCOPE(x, y) \
+  static register_trace_scope _##y##_(x, #y); \
+  measure_scope _(_##y##_.val, _##y##_.mutex)
 
 #endif

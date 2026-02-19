@@ -45,6 +45,17 @@ int register_anchor(const char* name) {
     return id;
 }
 
+std::vector<cpucounter_group*>& get_groups() {
+  static std::vector<cpucounter_group*> groups;
+  return groups;
+}
+
+void cpucounter_group::register_group(cpucounter_group* group)
+{
+  std::lock_guard<std::mutex> lck(name_id_mtx); //reuse mutex
+  get_groups().push_back(group);
+}
+
 struct read_format {
     uint64_t nr;
     struct values {
@@ -318,6 +329,14 @@ void cputrace_reset(ceph::Formatter* f) {
         g_profiler.anchors[i].global_results.reset();
         pthread_mutex_unlock(&g_profiler.anchors[i].lock);
     }
+  {
+    std::lock_guard<std::mutex> lck(name_id_mtx);
+    for (auto& g : get_groups()) {
+      for (auto& e : g->counters) {
+        e.second.reset();
+      }
+    }
+  }
     if (f) {
         f->open_object_section("cputrace_reset");
         f->dump_format("status", "Counters reset");
@@ -350,9 +369,23 @@ void cputrace_dump(ceph::Formatter* f, const std::string& logger, const std::str
         f->close_section();
         dumped = true;
     }
-
-    f->dump_format("status", dumped ? "Profiling data dumped" : "No profiling data available");
-    f->close_section();
+  {
+    std::lock_guard<std::mutex> lck(name_id_mtx);
+    for (auto& g : get_groups()) {
+      f->open_object_section(g->name);
+      for (auto& e : g->counters) {
+        f->open_object_section(e.first);
+        e.second.dump(f,
+          HW_PROFILE_SWI | HW_PROFILE_CYC | HW_PROFILE_CMISS | HW_PROFILE_BMISS | HW_PROFILE_INS,
+          "");
+        f->close_section();
+        dumped = true;
+      }
+      f->close_section();
+    }
+  }
+  f->dump_format("status", dumped ? "Profiling data dumped" : "No profiling data available");
+  f->close_section();
 }
 
 void cputrace_print_to_stringstream(std::stringstream& ss) {
@@ -416,4 +449,9 @@ __attribute__((destructor)) static void cputrace_fini() {
     }
     free(g_profiler.anchors);
     g_profiler.anchors = nullptr;
+}
+
+hw_per_thread_ctx* hw_per_thread_ctx::get_thread_local() {
+  thread_local hw_per_thread_ctx thread_ctx;
+  return &thread_ctx;
 }
