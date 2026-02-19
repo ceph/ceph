@@ -284,7 +284,16 @@ end
 
     result = conn.get_object(Bucket=bucket_name, Key=key)
     message = result['ResponseMetadata']['HTTPHeaders']['x-amz-meta-test']
-    assert message == bucket_name+","+key+","+key+",0,1970-01-01 00:00:00"
+
+    # The MTime part is supposed to be a datetime "1970-01-01 00:00:00"
+    # however in different TZ environment the hours can be different,
+    # for example, for UTC+1, zero date turns into "1970-01-01 01:00:00",
+    # while for UTC-1, it is "1969-12-31 23:00:00", so we only check
+    # if the date corresponds to either of those two days.
+    assert ',' in message
+    (message_without_mtime, message_mtime) = message.rsplit(',', 1)
+    assert message_without_mtime == f"{bucket_name},{key},{key},0"
+    assert message_mtime[:10] in ['1969-12-31', '1970-01-01']
 
     # cleanup
     conn.delete_object(Bucket=bucket_name, Key=key)
