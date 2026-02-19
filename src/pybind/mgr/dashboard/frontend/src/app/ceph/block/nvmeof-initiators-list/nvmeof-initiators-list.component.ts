@@ -6,6 +6,7 @@ import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import {
@@ -19,8 +20,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofEditHostKeyModalComponent } from '../nvmeof-edit-host-key-modal/nvmeof-edit-host-key-modal.component';
-
-const BASE_URL = 'block/nvmeof/subsystems';
 
 @Component({
   selector: 'cd-nvmeof-initiators-list',
@@ -37,7 +36,7 @@ export class NvmeofInitiatorsListComponent implements OnInit {
   @ViewChild('dhchapTpl', { static: true })
   dhchapTpl: TemplateRef<any>;
 
-  initiatorColumns: any;
+  initiatorColumns: CdTableColumn[];
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
   permission: Permission;
@@ -143,13 +142,6 @@ export class NvmeofInitiatorsListComponent implements OnInit {
 
   hasAllHostsAllowed(): boolean {
     return this.initiators.some((initiator) => initiator.nqn === '*');
-  }
-
-  editHostAccess() {
-    this.router.navigate(
-      [BASE_URL, { outlets: { modal: [URLVerbs.ADD, this.subsystemNQN, 'initiator'] } }],
-      { queryParams: { group: this.group } }
-    );
   }
 
   updateSelection(selection: CdTableSelection) {
