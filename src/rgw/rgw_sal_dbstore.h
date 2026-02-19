@@ -330,6 +330,9 @@ protected:
 
     /** Get a script named with the given key from the backing store */
     virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+    /** Get a ref to the Lua bytecode if it exists, else the script named with the given key from the backing store */
+    virtual std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
+                                                                          const std::string& key) override;
     /** Put a script named with the given key to the backing store */
     virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
     /** Delete a script named with the given key from the backing store */
@@ -342,6 +345,7 @@ protected:
     virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) override;
     /** Reload lua packages */
     virtual int reload_packages(const DoutPrefixProvider* dpp, optional_yield y) override;
+
   };
 
   /*

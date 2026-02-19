@@ -3879,6 +3879,12 @@ int MotrStore::init_metadata_cache(const DoutPrefixProvider *dpp,
     return -ENOENT;
   }
 
+  std::tuple<rgw::lua::LuaCodeType, int> MotrLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
+                                                                                const std::string& key)
+  {
+    return std::make_tuple("", -ENOENT);
+  }
+
   int MotrLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
   {
     return -ENOENT;
