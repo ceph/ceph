@@ -131,7 +131,7 @@ namespace rgw::dedup {
       p_big_objs->duplicate_count ++;
       p_big_objs->dedup_bytes_estimate += dup_bytes_approx;
 
-      if (!p_key->multipart_object()) {
+      if (!p_key->multipart_object() && p_duplicate_head_bytes) {
         // single part objects duplicate the head object when dedup is used
         *p_duplicate_head_bytes += head_object_size;
       }
@@ -165,7 +165,7 @@ namespace rgw::dedup {
     }
     else {
       ceph_assert(hash_tab[idx].key == *p_key);
-      if (val.count <= MAX_COPIES_PER_OBJ) {
+      if (val.count <= MAX_COPIES_PER_OBJ && p_small_objs && p_big_objs) {
         inc_counters(p_key, head_object_size, p_small_objs, p_big_objs,
                      p_duplicate_head_bytes);
       }
@@ -206,10 +206,11 @@ namespace rgw::dedup {
       // replace value!
       value_t new_val(block_id, rec_id, shared_manifest);
       new_val.count = val.count;
-      hash_tab[idx].val = new_val;
+      //hash_tab[idx].val = new_val;
       ldpp_dout(dpp, 20) << __func__ << "::Replaced table entry::["
                          << val.block_idx << "/" << (int)val.rec_id << "] -> ["
                          << block_id << "/" << (int)rec_id << "]" << dendl;
+      val = new_val;
     }
   }
 

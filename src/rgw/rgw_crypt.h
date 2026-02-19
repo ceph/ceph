@@ -81,6 +81,10 @@ public:
                        optional_yield y) = 0;
 };
 
+std::unique_ptr<BlockCrypt> AES_256_CBC_create(const DoutPrefixProvider* dpp,
+                                               CephContext* cct,
+                                               const uint8_t* key,
+                                               size_t len);
 static const size_t AES_256_KEYSIZE = 256 / 8;
 bool AES_256_ECB_encrypt(const DoutPrefixProvider* dpp,
                          CephContext* cct,

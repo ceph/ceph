@@ -31,6 +31,9 @@
 #include "driver/rados/rgw_bucket.h"
 #include "rgw_sal_config.h"
 #include "rgw_lib.h"
+#include "rgw_kms.h"
+#include "rgw_crypt.h"
+#include "rgw_b64.h"
 #include "rgw_placement_types.h"
 #include "driver/rados/rgw_bucket.h"
 #include "driver/rados/rgw_sal_rados.h"
@@ -742,6 +745,51 @@ namespace rgw::dedup {
     }
   }
 
+#if 0
+  //---------------------------------------------------------------------------
+  static void check_crypt_attributes(const DoutPrefixProvider* const dpp,
+                                     rgw::sal::Driver* driver,
+                                     const disk_record_t *p_rec)
+  {
+    rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
+    unique_ptr<rgw::sal::Bucket> bucket;
+    int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
+    if (unlikely(ret != 0)) {
+      ldpp_dout(dpp, 10) << __func__ << "::Failed driver->load_bucket(): "
+                         << cpp_strerror(-ret) << dendl;
+      return;
+    }
+
+    const rgw_obj_index_key roi_key(p_rec->obj_name, p_rec->instance);
+    unique_ptr<rgw::sal::Object> p_obj = bucket->get_object(roi_key);
+    if (unlikely(!p_obj)) {
+      ldpp_dout(dpp, 10) << __func__ << "::Failed bucket->get_object("
+                         << p_rec->obj_name << ")" << dendl;
+      return;
+    }
+
+    ret = p_obj->get_obj_attrs(null_yield, dpp);
+    if (unlikely(ret < 0)) {
+      ldpp_dout(dpp, 10) << __func__ << "::ERR: failed to stat object("
+                         << p_rec->obj_name << "), returned error: "
+                         << cpp_strerror(-ret) << dendl;
+      return;
+    }
+
+    const rgw::sal::Attrs& attrs = p_obj->get_attrs();
+    auto itr = attrs.find(RGW_ATTR_CRYPT_KEYSEL);
+    if (itr->second == p_rec->crypt_key_bl) {
+      ldpp_dout(dpp, 10) << __func__ << "::CRYPT_KEYSEL match" << dendl;
+    }
+    else {
+      ldpp_dout(dpp, 10) << __func__ << "::ERR: CRYPT_KEYSEL mismatch!::"
+                         << itr->second.to_str() << "::" << itr->second.length()
+                         << "::" << p_rec->crypt_key_bl.to_str() << "::"
+                         << p_rec->crypt_key_bl.length() << dendl;
+    }
+  }
+#endif
+
   //---------------------------------------------------------------------------
   int Background::dedup_object(const disk_record_t *p_src_rec,
                                const disk_record_t *p_tgt_rec,
@@ -785,6 +833,24 @@ namespace rgw::dedup {
       tgt_op.setxattr(RGW_ATTR_BLAKE3, tgt_hash_bl);
       p_stats->set_hash_attrs++;
     }
+
+#if 1
+    auto crypt_mode = p_src_rec->s.crypt_mode;
+    if (crypt_mode.get_crypt_mode_id() != crypt_mode_t::CRYPT_MODE_ID_NONE) {
+      bufferlist crypt_mode_bl;
+      crypt_mode_bl.append(crypt_mode.get_crypt_mode_str());
+      tgt_op.setxattr(RGW_ATTR_CRYPT_MODE, crypt_mode_bl);
+      if (crypt_mode.get_crypt_mode_id() == crypt_mode_t::CRYPT_MODE_ID_RGW_AUTO) {
+        tgt_op.setxattr(RGW_ATTR_CRYPT_KEYSEL, p_src_rec->crypt_key_bl);
+      }
+      else if (crypt_mode.get_crypt_mode_id() == crypt_mode_t::CRYPT_MODE_ID_AES256) {
+        tgt_op.setxattr(RGW_ATTR_CRYPT_KEYID, p_src_rec->crypt_key_bl);
+        tgt_op.setxattr(RGW_ATTR_CRYPT_DATAKEY, p_src_rec->crypt_data_bl);
+        tgt_op.setxattr(RGW_ATTR_CRYPT_CONTEXT, p_src_rec->crypt_ctx_bl);
+      }
+      //check_crypt_attributes(dpp, driver, p_src_rec);
+    }
+#endif
 
     std::string src_oid, tgt_oid;
     librados::IoCtx src_ioctx, tgt_ioctx;
@@ -845,7 +911,74 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::calc_object_blake3(const disk_record_t *p_rec, uint8_t *p_hash)
+  /**
+   * RAII wrapper for encryption key that automatically zeros memory on destruction
+   */
+  class EncryptionKeyGuard {
+  private:
+    std::string& key;
+
+  public:
+    explicit EncryptionKeyGuard(std::string& k) : key(k) {}
+
+    ~EncryptionKeyGuard() {
+      if (!key.empty()) {
+        ::ceph::crypto::zeroize_for_security(key.data(), key.length());
+        key.clear();
+      }
+    }
+
+    // Prevent copying
+    EncryptionKeyGuard(const EncryptionKeyGuard&) = delete;
+    EncryptionKeyGuard& operator=(const EncryptionKeyGuard&) = delete;
+  };
+
+  //---------------------------------------------------------------------------
+  static int reconstitute_actual_key_from_sse_rgw_auto(const DoutPrefixProvider* const dpp,
+                                                       CephContext* cct,
+                                                       rgw::sal::Attrs &attrs,
+                                                       std::string &key)
+  {
+    std::string master_key;
+    try {
+      master_key = from_base64(std::string(cct->_conf->rgw_crypt_default_encryption_key));
+    } catch (...) {
+      ldpp_dout(dpp, 5) << __func__ << "::ERR: invalid default encryption key "
+                        << "contains character that is not base64 encoded" << dendl;
+      return -EINVAL;
+    }
+
+    if (master_key.size() != AES_256_KEYSIZE) {
+      ldpp_dout(dpp, 1) << __func__ << "ERR: default encryption key bad size ("
+                        << master_key.size() << ")" << dendl;
+      return -EIO;
+    }
+
+    std::string attr_key_selector = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
+    if (attr_key_selector.size() != AES_256_KEYSIZE) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: missing or invalid " RGW_ATTR_CRYPT_KEYSEL << dendl;
+      return -EIO;
+    }
+
+    uint8_t actual_key[AES_256_KEYSIZE];
+    if (AES_256_ECB_encrypt(dpp, cct,
+                            reinterpret_cast<const uint8_t*>(master_key.c_str()),
+                            AES_256_KEYSIZE,
+                            reinterpret_cast<const uint8_t*>(attr_key_selector.c_str()),
+                            actual_key, AES_256_KEYSIZE) != true) {
+      ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed fetching actual_key" << dendl;
+      return -EIO;
+    }
+
+    key.assign(reinterpret_cast<const char*>(actual_key), AES_256_KEYSIZE);
+    return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::calc_object_blake3(const disk_record_t *p_rec,
+                                     uint8_t *p_hash,
+                                     rgw::sal::Attrs &attrs)
   {
     ldpp_dout(dpp, 20) << __func__ << "::obj_name=" << p_rec->obj_name << dendl;
     RGWObjManifest manifest;
@@ -857,6 +990,43 @@ namespace rgw::dedup {
                          << p_rec->obj_name << dendl;
       return -EINVAL;
     }
+
+    // Get the encryption key from Vault/KMS
+    std::string key;
+    std::unique_ptr<BlockCrypt> block_crypt;
+    auto crypt_mode_id = p_rec->s.crypt_mode.get_crypt_mode_id();
+    if (crypt_mode_id != crypt_mode_t::CRYPT_MODE_ID_NONE) {
+      int ret = 0;
+      if (crypt_mode_id == crypt_mode_t::CRYPT_MODE_ID_AES256) {
+        ldpp_dout(dpp, 20)  << __func__ << "::CRYPT_MODE_ID_AES256" << dendl;
+        ret = reconstitute_actual_key_from_sse_s3(dpp, attrs, null_yield, key);
+      } else if (crypt_mode_id == crypt_mode_t::CRYPT_MODE_ID_RGW_AUTO) {
+        ldpp_dout(dpp, 20)  << __func__ << "::CRYPT_MODE_ID_RGW_AUTO" << dendl;
+        reconstitute_actual_key_from_sse_rgw_auto(dpp, cct, attrs, key);
+      }
+
+      if (ret != 0) {
+        ldpp_dout(dpp, 0) << __func__ << "::ERR: Failed to retrieve encrypt key: "
+                          << ret << dendl;
+        return ret;
+      }
+
+      if (key.size() != AES_256_KEYSIZE) {
+        ldpp_dout(dpp, 0) << "ERROR: Invalid encryption key size: "
+                          << key.size() << " (expected " << AES_256_KEYSIZE << ")" << dendl;
+        return -EINVAL;
+      }
+
+      block_crypt = AES_256_CBC_create(dpp, cct, reinterpret_cast<const uint8_t*>(key.c_str()), AES_256_KEYSIZE);
+      ::ceph::crypto::zeroize_for_security(key.data(), key.length());
+
+      if (!block_crypt) {
+        ldpp_dout(dpp, 0) << "ERROR: failed to create AES-256-CBC cipher" << dendl;
+        return -EIO;
+      }
+    }
+    // RAII guard ensures key is zeroized on all exit paths
+    //EncryptionKeyGuard key_guard(key);
 
     blake3_hasher hmac;
     blake3_hasher_init(&hmac);
@@ -874,6 +1044,19 @@ namespace rgw::dedup {
       librados::IoCtx ioctx = obj.ioctx;
       // read full object
       ret = ioctx.read(raw_obj.oid, bl, 0, 0);
+      if (block_crypt) {
+        ldpp_dout(dpp, 20) << __func__ << "::decrypted_bl for oid " << raw_obj.oid << dendl;
+        bufferlist decrypted_bl;
+        bool ok = block_crypt->decrypt(bl, 0, bl.length(),
+                                       decrypted_bl, 0, null_yield);
+        if (!ok) {
+          ldpp_dout(dpp, 1) << __func__ << "::failed decrypted_bl() for oid: "
+                            << raw_obj.oid << dendl;
+          return -EIO;
+        }
+        bl.clear();
+        bl = decrypted_bl;
+      }
       if (ret > 0) {
         for (const auto& bptr : bl.buffers()) {
           blake3_hasher_update(&hmac, (const unsigned char *)bptr.c_str(), bptr.length());
@@ -917,12 +1100,11 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int Background::add_obj_attrs_to_record(rgw_bucket            *p_rb,
                                           disk_record_t         *p_rec,
-                                          const rgw::sal::Attrs &attrs,
+                                          rgw::sal::Attrs       &attrs,
                                           dedup_table_t         *p_table,
                                           crypt_mode_t           crypt_mode,
                                           md5_stats_t           *p_stats) /*IN-OUT*/
   {
-    p_rec->s.crypt_mode = crypt_mode;
     // if TAIL_TAG exists -> use it as ref-tag, eitherwise take ID_TAG
     auto itr = attrs.find(RGW_ATTR_TAIL_TAG);
     if (itr != attrs.end()) {
@@ -993,6 +1175,60 @@ namespace rgw::dedup {
       memset(&p_rec->s.shared_manifest, 0, sizeof(p_rec->s.shared_manifest));
     }
 
+    p_rec->s.crypt_mode = crypt_mode;
+    if (crypt_mode.get_crypt_mode_id() == crypt_mode_t::CRYPT_MODE_ID_RGW_AUTO) {
+      auto itr = attrs.find(RGW_ATTR_CRYPT_KEYSEL);
+      if (itr != attrs.end()) {
+        p_rec->crypt_key_bl = itr->second;
+        p_rec->s.crypt_key_len = p_rec->crypt_key_bl.length();
+#ifdef CRYPT_DEBUG
+        ldpp_dout(dpp, 5)  << __func__ << "::RGW_AUTO::CRYPT_KEYSEL="
+                           << p_rec->crypt_key_bl.to_str()
+                           << "::" << p_rec->s.crypt_key_len << dendl;
+#endif
+      }
+      else {
+        ldpp_dout(dpp, 5)  << __func__ << "::ERROR: no CRYPT_KEYSEL attr" << dendl;
+        return -EINVAL;
+      }
+    }
+    else if(crypt_mode.get_crypt_mode_id() == crypt_mode_t::CRYPT_MODE_ID_AES256) {
+      auto itr = attrs.find(RGW_ATTR_CRYPT_KEYID);
+      if (itr != attrs.end()) {
+        p_rec->crypt_key_bl = itr->second;
+        p_rec->s.crypt_key_len = p_rec->crypt_key_bl.length();
+#ifdef CRYPT_DEBUG
+        ldpp_dout(dpp, 5)  << __func__ << "::AES256::CRYPT_KEYID="
+                           << p_rec->crypt_key_bl.to_str()
+                           << "::" << p_rec->s.crypt_key_len << dendl;
+#endif
+      }
+      else {
+        ldpp_dout(dpp, 5)  << __func__ << "::ERROR: no CRYPT_KEYID attr" << dendl;
+        return -EINVAL;
+      }
+
+      itr = attrs.find(RGW_ATTR_CRYPT_DATAKEY);
+      if (itr != attrs.end()) {
+        p_rec->crypt_data_bl = itr->second;
+        p_rec->s.crypt_data_len = p_rec->crypt_data_bl.length();
+      }
+      else {
+        ldpp_dout(dpp, 5)  << __func__ << "::ERROR: no CRYPT_DATAKEY attr" << dendl;
+        return -EINVAL;
+      }
+
+      itr = attrs.find(RGW_ATTR_CRYPT_CONTEXT);
+      if (itr != attrs.end()) {
+        p_rec->crypt_ctx_bl = itr->second;
+        p_rec->s.crypt_ctx_len = p_rec->crypt_ctx_bl.length();
+      }
+      else {
+        ldpp_dout(dpp, 5)  << __func__ << "::ERROR: no CRYPT_CONTEXT attr" << dendl;
+        return -EINVAL;
+      }
+    }
+
     itr = attrs.find(RGW_ATTR_BLAKE3);
     if (itr != attrs.end()) {
       try {
@@ -1017,7 +1253,7 @@ namespace rgw::dedup {
     // TBD: redundant memset...
     memset(p_rec->s.hash, 0, sizeof(p_rec->s.hash));
     // BLAKE3_OUT_LEN is 32 Bytes
-    int ret = calc_object_blake3(p_rec, (uint8_t*)p_rec->s.hash);
+    int ret = calc_object_blake3(p_rec, (uint8_t*)p_rec->s.hash, attrs);
     if (ret == 0) {
       p_rec->s.flags.set_hash_calculated();
     }
@@ -1110,7 +1346,7 @@ namespace rgw::dedup {
       return ret;
     }
 
-    const rgw::sal::Attrs& attrs = p_obj->get_attrs();
+    rgw::sal::Attrs& attrs = p_obj->get_attrs();
 
     // TBD: We should be able to support RGW_ATTR_COMPRESSION when all copies are compressed
     if (attrs.find(RGW_ATTR_COMPRESSION) != attrs.end()) {
