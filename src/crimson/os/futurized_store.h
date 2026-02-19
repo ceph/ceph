@@ -269,6 +269,11 @@ auto with_store(BackendStore store, Args&&... args)
   constexpr bool is_seastar_future = seastar::is_future<raw_return_type>::value && !is_errorator;
   constexpr bool is_plain = !is_errorator && !is_seastar_future;
   const auto original_core = seastar::this_shard_id();
+  if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
+    if (store.shard_id != GLOBAL_STORE) {
+      ceph_assert(store.shard_id == seastar::this_shard_id());
+    }
+  }
   if (store.shard_id == seastar::this_shard_id() || store.shard_id == GLOBAL_STORE) {
     if constexpr (is_plain) {
       return seastar::make_ready_future<raw_return_type>(
