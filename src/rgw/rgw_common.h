@@ -317,6 +317,10 @@ void set_attrs(const Attrs& rmattrs) {
     }
 }
 
+void emplace_attr_to_map(std::string&& key, buffer::list&& bl){
+  defaultMap.emplace(std::move(key), std::move(bl));
+}
+
 void operator=(std::map<std::string, ceph::bufferlist>& other){
     defaultMap = other;
 }
