@@ -298,10 +298,11 @@ void erase(Const_RGW_Attrs index) {
     }
 }
 
-void erase(const char* key) {
-    if (!key) return;
+bool erase(const char* key) {
+    if (!key) return false;
   
     defaultMap.erase(std::string(key));
+    return true;
 }
 
 
