@@ -2555,7 +2555,7 @@ class OAuth2ProxySpec(ServiceSpec):
         # cephadm will calculate automatically the value of this url.
         self.redirect_url = redirect_url
         #: OAuth scope specification. 
-        # Default list of scopes which will be used in case no scope is configured.
+        # Default list of scopes will be used in case no scope is configured.
         self.scope = scope
         #: The secret key used for signing cookies. Its length must be 16,
         # 24, or 32 bytes to create an AES cipher.
@@ -2587,7 +2587,7 @@ class OAuth2ProxySpec(ServiceSpec):
         if self.redirect_url is not None:
             self._validate_url(self.redirect_url, "redirect_url")
         if self.scope is not None:
-            self._validate_url(self.scope, "scope")
+            self._validate_non_empty_string(self.scope, "scope")
         if self.https_address is not None:
             self._validate_https_address(self.https_address)
 
