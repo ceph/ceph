@@ -33,6 +33,44 @@ FILTER_SCHEMA = [{
 @APIDoc("Manage Cluster Configurations", "ClusterConfiguration")
 class ClusterConfiguration(RESTController):
 
+    def _get_cephadm_options(self):
+        """
+        Fetches all cephadm module options and formats them like config options.
+        :return: list of cephadm options formatted as config options
+        """
+        cephadm_options = []
+        mgr_map = mgr.get('mgr_map')
+
+        # Get cephadm module config from mgr_map
+        cephadm_module_config = None
+        for module_config in mgr_map.get('available_modules', []):
+            if module_config['name'] == 'cephadm':
+                cephadm_module_config = module_config
+                break
+
+        if not cephadm_module_config:
+            return cephadm_options
+
+        module_options = cephadm_module_config.get('module_options', {})
+
+        for option_name, opt in module_options.items():
+            current_value = mgr.get_module_option_ex(
+                'cephadm', option_name, opt.get('default_value'))
+
+            option = dict(opt)
+            option['name'] = f'mgr/cephadm/{option_name}'
+            option['default'] = option.pop('default_value', None)
+            option['daemon_default'] = option['default']
+            option['enum_values'] = option.pop('enum_allowed', [])
+            option['services'] = ['mgr']
+            option['can_update_at_runtime'] = True
+            option['value'] = [{'section': 'mgr', 'value': current_value}]
+            option['source'] = 'mgr_module'
+
+            cephadm_options.append(option)
+
+        return cephadm_options
+
     def _append_config_option_values(self, options):
         """
         Appends values from the config database (if available) to the given options
@@ -56,7 +94,10 @@ class ClusterConfiguration(RESTController):
 
     def list(self):
         options = mgr.get('config_options')['options']
-        return self._append_config_option_values(options)
+        options = self._append_config_option_values(options)
+        # Append all cephadm module options
+        options.extend(self._get_cephadm_options())
+        return options
 
     def get(self, name):
         return self._get_config_option(name)
@@ -126,6 +167,10 @@ class ClusterConfiguration(RESTController):
         for option in mgr.get('config_options')['options']:
             if option['name'] == name:
                 return self._append_config_option_values([option])[0]
+
+        for cephadm_option in self._get_cephadm_options():
+            if cephadm_option['name'] == name:
+                return cephadm_option
 
         raise cherrypy.HTTPError(404)
 
