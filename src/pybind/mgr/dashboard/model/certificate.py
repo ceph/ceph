@@ -4,9 +4,9 @@ Model definitions for certificate API responses.
 These classes centralize the enums and response shapes so callers avoid
 constructing ad-hoc dictionaries and can rely on consistent typing.
 """
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 
 class CertificateStatus(str, Enum):
@@ -82,6 +82,23 @@ class CertificateStatusResponse:
         for key in self.BOOL_FIELDS:
             if data.get(key) is None:
                 data[key] = False
+        return data
+
+
+@dataclass
+class CertificateDeleteResponse:
+    """Response for certificate deletion operation."""
+    service_name: str
+    cert_name: str
+    certificate_removed: Union[str, List[Dict[str, str]], None] = None
+    key_removed: Union[str, List[Dict[str, str]], None] = None
+    errors: Optional[List[str]] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        data = asdict(self)
+        # Convert None errors to empty list for consistent API response
+        if data.get('errors') is None:
+            data['errors'] = []
         return data
 
 

@@ -226,6 +226,16 @@ class CertStoreManager(ResourceManager):
                 include_cephadm_signed: bool = False) -> Dict[str, Any]:
         return self.api.cert_store_cert_ls(filter_by, show_details, include_cephadm_signed)
 
+    @wait_api_result
+    def rm_cert(self, cert_name: str, service_name: Optional[str] = None,
+                hostname: Optional[str] = None) -> str:
+        return self.api.cert_store_rm_cert(cert_name, service_name, hostname)
+
+    @wait_api_result
+    def rm_key(self, key_name: str, service_name: Optional[str] = None,
+               hostname: Optional[str] = None) -> str:
+        return self.api.cert_store_rm_key(key_name, service_name, hostname)
+
 
 class MonitoringManager(ResourceManager):
 
