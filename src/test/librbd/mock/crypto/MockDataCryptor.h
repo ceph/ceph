@@ -30,12 +30,8 @@ public:
   MOCK_METHOD2(return_context, void(MockCryptoContext*, CipherMode));
   MOCK_CONST_METHOD3(init_context, int(MockCryptoContext*,
                                        const unsigned char*, uint32_t));
-  MOCK_CONST_METHOD7(update_context, int(MockCryptoContext*,
-                                         const unsigned char*, unsigned char*,
-                                         uint32_t, uint32_t, const unsigned char*, uint32_t));
-  MOCK_CONST_METHOD7(decrypt, int(MockCryptoContext*,
-                                         const unsigned char*, unsigned char*,
-                                         uint32_t, uint32_t, const unsigned char*, uint32_t));
+  MOCK_CONST_METHOD2(update_context, int(MockCryptoContext*, const CryptArgs&));
+  MOCK_CONST_METHOD2(decrypt, int(MockCryptoContext*, const CryptArgs&));
   MOCK_CONST_METHOD0(get_key, const unsigned char*());
   MOCK_CONST_METHOD0(get_key_length, int());
 };

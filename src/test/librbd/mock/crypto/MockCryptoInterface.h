@@ -4,6 +4,7 @@
 #ifndef CEPH_TEST_LIBRBD_MOCK_CRYPTO_MOCK_CRYPTO_INTERFACE_H
 #define CEPH_TEST_LIBRBD_MOCK_CRYPTO_MOCK_CRYPTO_INTERFACE_H
 
+#include <include/buffer_fwd.h>
 #include "include/buffer.h"
 #include "gmock/gmock.h"
 #include "librbd/crypto/CryptoInterface.h"
@@ -20,6 +21,7 @@ struct MockCryptoInterface : CryptoInterface {
 
   MOCK_METHOD2(encrypt, int(ceph::bufferlist*, uint64_t));
   MOCK_METHOD2(decrypt, int(ceph::bufferlist*, uint64_t));
+
   MOCK_CONST_METHOD0(get_key, const unsigned char*());
   MOCK_CONST_METHOD0(get_key_length, int());
 
@@ -31,7 +33,7 @@ struct MockCryptoInterface : CryptoInterface {
     return DATA_OFFSET;
   }
 
-  uint32_t get_meta_size() const override{
+  uint32_t get_meta_size() const override {
     return meta_size;
   }
 };

@@ -112,6 +112,15 @@ struct C_AlignedObjectReadRequest : public Context {
       }
 
       if (r == -ENOENT && !disable_read_from_parent) {
+        // For AEAD, strip metadata extents before reading from parent.
+        // read_parent is based on logical extents
+        if (crypto->get_meta_size() > 0) {
+          io::ReadExtents data_only;
+          for (size_t i = 0; i < extents->size(); i += 2) {
+            data_only.push_back(std::move((*extents)[i]));
+          }
+          *extents = std::move(data_only);
+        }
         io::util::read_parent<I>(
                 image_ctx, object_no, extents,
                 io_context->get_read_snap(),
@@ -139,10 +148,11 @@ struct C_UnalignedObjectReadRequest : public Context {
                                       on_finish(on_dispatched) {
     if (crypto->get_meta_size() != 0) {
       crypto->get_physical_extends(*extents, &aligned_extents, image_ctx->get_object_size());
+      read_flags |= io::READ_FLAG_ENCRYPTED_AEAD_READ;
     } else {
       crypto->align_extents(*extents, &aligned_extents);
     }
-    
+
     ldout(cct, 20) << data_object_name(image_ctx, object_no) << " aligned extends "
                  << aligned_extents << dendl;
 
@@ -489,9 +499,14 @@ bool CryptoObjectDispatch<I>::read(
   ceph_assert(m_crypto != nullptr);
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
-  bool is_request_aligned = (m_crypto->get_meta_size() != 0) 
-                          ? m_crypto->is_physical_aligned(*extents) 
-                          : m_crypto->is_aligned(*extents);
+  bool is_request_aligned;
+  if (m_crypto->get_meta_size() != 0) {
+    // If the READ_FLAG_ENCRYPTED_AEAD_READ we know it already contains
+    // physically aligned extents. 
+    is_request_aligned = (read_flags & io::READ_FLAG_ENCRYPTED_AEAD_READ) != 0;
+  } else {
+    is_request_aligned = m_crypto->is_aligned(*extents);
+  }
   if (is_request_aligned) {
     auto req = new C_AlignedObjectReadRequest<I>(
             m_image_ctx, m_crypto, object_no, extents, io_context,
@@ -530,6 +545,7 @@ bool CryptoObjectDispatch<I>::write(
     auto r = m_crypto->encrypt(
         &data, get_file_offset(m_image_ctx, object_no, object_off));
     // TODO: Maybe use issue a new write to use write_flags instead
+    ceph_assert(object_dispatch_flags != nullptr);
     *object_dispatch_flags |= (m_crypto->get_meta_size() > 0)
                                   ? io::OBJECT_DISPATCH_FLAG_IS_AEAD_ENCRYPTED
                                   : 0;
@@ -662,7 +678,8 @@ int CryptoObjectDispatch<I>::prepare_copyup(
   }
 
   ceph::bufferlist current_bl;
-  current_bl.append_zero(m_image_ctx->get_object_size());
+  const uint64_t object_size = m_image_ctx->get_object_size();
+  current_bl.append_zero(object_size);
 
   for (auto& [key, extent_map]: *snapshot_sparse_bufferlist) {
     // update current_bl with data from extent_map
@@ -681,7 +698,6 @@ int CryptoObjectDispatch<I>::prepare_copyup(
     io::SparseBufferlist encrypted_sparse_bufferlist;
     const uint64_t meta_size = m_crypto->get_meta_size();
     const uint64_t block_size = m_crypto->get_block_size();
-    const uint64_t object_size = m_image_ctx->get_object_size();
     for (auto& extent : extent_map) {
       auto [aligned_off, aligned_len] = m_crypto->align(
               extent.get_off(), extent.get_len());
