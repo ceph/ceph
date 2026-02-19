@@ -381,10 +381,9 @@ int process_request(const RGWProcessEnv& penv,
   {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
     if (!is_health_request) {
-      std::string script;
-      auto rc = rgw::lua::read_script(s, penv.lua.manager.get(),
-                                      s->bucket_tenant, s->yield,
-                                      rgw::lua::context::preRequest, script);
+      auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
+                                                  s->bucket_tenant, s->yield,
+                                                  rgw::lua::context::preRequest);
       if (rc == -ENOENT) {
         // no script, nothing to do
       } else if (rc < 0) {
@@ -393,7 +392,8 @@ int process_request(const RGWProcessEnv& penv,
           "error: " << rc << dendl;
       } else {
         int script_return_code = 0;
-        rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, script, script_return_code);
+        rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, lua_script, script_return_code);
+
         if (rc < 0) {
           ldpp_dout(op, 5) <<
             "WARNING: failed to execute pre request script. "
@@ -436,10 +436,9 @@ done:
       }
     }
     if (!is_health_request) {
-      std::string script;
-      auto rc = rgw::lua::read_script(s, penv.lua.manager.get(),
-                                      s->bucket_tenant, s->yield,
-                                      rgw::lua::context::postRequest, script);
+      auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
+                                                  s->bucket_tenant, s->yield,
+                                                  rgw::lua::context::postRequest);
       if (rc == -ENOENT) {
         // no script, nothing to do
       } else if (rc < 0) {
@@ -447,7 +446,7 @@ done:
           "WARNING: failed to read post request script. "
           "error: " << rc << dendl;
       } else {
-        rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, script);
+        rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, lua_script);
         if (rc < 0) {
           ldpp_dout(op, 5) <<
             "WARNING: failed to execute post request script. "

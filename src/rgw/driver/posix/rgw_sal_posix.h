@@ -350,7 +350,6 @@ std::string get_key_fname(rgw_obj_key& key, bool use_version);
 
 class POSIXDriver : public FilterDriver {
 protected:
-
   std::unique_ptr<BucketCache> bucket_cache;
   std::string base_path;
   std::unique_ptr<Directory> root_dir;

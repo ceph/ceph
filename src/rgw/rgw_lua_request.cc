@@ -786,8 +786,8 @@ int execute(
     OpsLogSink* olog,
     req_state* s, 
     RGWOp* op,
-    const std::string& script,
-    int& script_return_code )
+    const rgw::lua::LuaCodeType& code,
+    int& script_return_code)
 {
   lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state,
                          s->cct->_conf->rgw_lua_max_runtime_per_state, s);
@@ -822,18 +822,15 @@ int execute(
     if (s->penv.lua.background) {
       s->penv.lua.background->create_background_metatable(L);
     }
+    rc = rgw::lua::lua_execute(L, s, code);
 
-    // execute the lua script
-    if (luaL_dostring(L, script.c_str()) != LUA_OK) {
-      const std::string err(lua_tostring(L, -1));
-      ldpp_dout(s, 1) << "Lua ERROR: " << err << dendl;
-      rc = -1;
-    }
-    if (lua_isinteger(L, -1)) {
-      script_return_code = static_cast<int>(lua_tointeger(L, -1));
-      ldpp_dout(s, 20) << "Lua script executed successfully and returned code: " << script_return_code << dendl;
-    } else {
-      ldpp_dout(s, 20) << "Lua script executed, but did not return an integer. Ignoring return code." << dendl;
+    if (!rc) {
+      if (lua_isinteger(L, -1)) {
+        script_return_code = static_cast<int>(lua_tointeger(L, -1));
+        ldpp_dout(s, 20) << "Lua script executed successfully and returned code: " << script_return_code << dendl;
+      } else {
+        ldpp_dout(s, 20) << "Lua script executed, but did not return an integer. Ignoring return code." << dendl;
+      }
     }
   } catch (const std::runtime_error& e) {
     ldpp_dout(s, 1) << "Lua ERROR: " << e.what() << dendl;
@@ -851,11 +848,10 @@ int execute(
     OpsLogSink* olog,
     req_state* s, 
     RGWOp* op,
-    const std::string& script
-)
+    const rgw::lua::LuaCodeType& code)
 {
   int dummy_script_return_code = 0;
-  return execute(rest, olog, s, op, script, dummy_script_return_code);
+  return execute(rest, olog, s, op, code, dummy_script_return_code);
 }
 
 } // namespace rgw::lua::request
