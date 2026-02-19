@@ -91,14 +91,14 @@ void decode(OwnershipControls& c, bufferlist::const_iterator& bl)
 ObjectOwnership get_object_ownership(const sal::Attrs& attrs)
 {
   auto i = attrs.find(RGW_ATTR_OWNERSHIP_CONTROLS);
-  if (i == attrs.end()) {
+  if (i == nullptr) {
     // default to ObjectWriter for backward compat
     return ObjectOwnership::ObjectWriter;
   }
 
   try {
     OwnershipControls ownership;
-    auto p = i->second.cbegin();
+    auto p = (*i).cbegin();
     decode(ownership, p);
     return ownership.object_ownership;
   } catch (const buffer::error&) {
