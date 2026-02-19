@@ -94,6 +94,10 @@ void OpRequest::_dump_op_descriptor(ostream& stream) const
 }
 
 void OpRequest::_unregistered() {
+  // End the OpenTelemetry span when the operation completes. This ensures the span duration reflects the 
+  // actual operation time, not the time the OpRequest is kept in OpHistory for debugging
+  osd_parent_span->End();
+
   request->clear_data();
   request->clear_payload();
   request->release_message_throttle();
