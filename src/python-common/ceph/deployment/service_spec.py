@@ -2588,6 +2588,8 @@ class OAuth2ProxySpec(ServiceSpec):
             self._validate_url(self.redirect_url, "redirect_url")
         if self.scope is not None:
             self._validate_non_empty_string(self.scope, "scope")
+        if self.email_domains is not None:
+            self._validate_domain_name(self.email_domains, "email_domains")
         if self.https_address is not None:
             self._validate_https_address(self.https_address)
 
@@ -2604,6 +2606,19 @@ class OAuth2ProxySpec(ServiceSpec):
         else:
             if not all([result.scheme, result.netloc]):
                 raise SpecValidationError(f"Error parsing {field_name} field: Must be a valid URL.")
+            
+    def _validate_domain_name(self, domain: Optional[str], field_name: str) -> None:
+        from urllib.parse import urlparse
+        try:
+            result = urlparse(f"http://{domain}")
+        except Exception as e:
+            raise SpecValidationError(f"Invalid {field_name}: {e}. Must be a valid domain name.")
+        else:
+            if result.netloc != domain:
+                raise SpecValidationError(
+                    f"Invalid {field_name}: '{domain}' is not a valid domain name. "
+                    f"Must be a valid domain (e.g., 'domain.test')."
+                )
 
     def _validate_https_address(self, https_address: Optional[str]) -> None:
         from urllib.parse import urlparse
