@@ -21,8 +21,9 @@ namespace test {
 librados::Rados PoolTypeTestFixture::rados;
 std::map<PoolType, std::string> PoolTypeTestFixture::pool_names;
 
-// Define static member for ECOnlyTestFixture
+// Define static members for ECOnlyTestFixture
 librados::Rados ECOnlyTestFixture::rados;
+std::string ECOnlyTestFixture::static_pool_name;
 
 void PoolTypeTestFixture::cleanup_namespace(librados::Rados& cluster,
                                             librados::IoCtx& ioctx,
@@ -241,15 +242,22 @@ void PoolTypeTestFixture::setup_and_trigger_recovery(
 }
 
 void ECOnlyTestFixture::SetUp() {
-  ASSERT_EQ("", connect_cluster_pp(rados));
-  pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_pool_by_type(pool_name, rados, PoolType::FAST_EC));
+  pool_name = static_pool_name;
   ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  auto test_info = ::testing::UnitTest::GetInstance()->current_test_info();
+  nspace = std::string(test_info->name()) + "_" +
+           std::to_string(std::chrono::system_clock::now()
+                            .time_since_epoch().count());
+  ioctx.set_namespace(nspace);
+
+  cleanup_namespace(rados, ioctx, nspace);
 }
 
 void ECOnlyTestFixture::TearDown() {
+  cleanup_namespace(rados, ioctx, "");
+  cleanup_namespace(rados, ioctx, nspace);
   ioctx.close();
-  ASSERT_EQ(0, destroy_pool_by_type(pool_name, rados, PoolType::FAST_EC));
 }
 
 } // namespace test
