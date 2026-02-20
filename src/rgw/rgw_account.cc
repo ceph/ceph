@@ -424,6 +424,30 @@ int remove(const DoutPrefixProvider* dpp,
     ldpp_dout_fmt(dpp, 1, "Deleted account oidc provider {}", info.provider_url);
   }
 
+  rgw::sal::TopicList topics;
+  do {
+    ret = driver->list_account_topics(dpp, y, info.tenant,
+                                      topics.next_marker, max_items, topics);
+    if (ret < 0) {
+      err_msg = "Unable to list account topics";
+      return ret;
+    }
+    if (!topics.topics.empty() && !op_state.purge_data) {
+      err_msg = "The account cannot be deleted until all topics are removed.";
+      return -ENOTEMPTY;
+    }
+
+    for (const auto& topic_name : topics.topics) {
+      RGWObjVersionTracker objv;
+      ret = driver->remove_topic_v2(topic_name, info.tenant, objv, y, dpp);
+      if (ret < 0) {
+        err_msg = fmt::format("unable to delete topic {}", topic_name);
+        return ret;
+      }
+      ldpp_dout_fmt(dpp, 1, "Deleted account topic {}", topic_name);
+    }
+  } while (!topics.next_marker.empty());
+
   return driver->delete_account(dpp, y, info, objv);
 }
 
