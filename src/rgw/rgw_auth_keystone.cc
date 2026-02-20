@@ -119,8 +119,7 @@ check_access_rules(
 
   for (const auto& rule : rules) {
     if (rule.method == method && path_matches_pattern(rule.path, path)) {
-      ldpp_dout(dpp, 10) << "Access rule matched: " << rule.method << " "
-                         << rule.path << dendl;
+      ldpp_dout(dpp, 10) << "Access rule matched: " << rule.method << " " << rule.path << dendl;
       return true;
     }
   }
@@ -133,20 +132,19 @@ check_access_rules(
 bool
 TokenEngine::is_applicable(const std::string& token) const noexcept
 {
-  return !token.empty() && !cct->_conf->rgw_keystone_url.empty();
+  return ! token.empty() && ! cct->_conf->rgw_keystone_url.empty();
 }
 
 boost::optional<TokenEngine::token_envelope_t>
-TokenEngine::get_from_keystone(
-    const DoutPrefixProvider* dpp,
-    const std::string& token,
-    bool allow_expired,
-    optional_yield y) const
+TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp,
+                               const std::string& token,
+                               bool allow_expired,
+                               optional_yield y) const
 {
   /* Unfortunately, we can't use the short form of "using" here. It's because
    * we're aliasing a class' member, not namespace. */
-  using RGWValidateKeystoneToken =
-      rgw::keystone::Service::RGWValidateKeystoneToken;
+  using RGWValidateKeystoneToken = \
+    rgw::keystone::Service::RGWValidateKeystoneToken;
 
   bool admin_token_retried = false;
 
@@ -389,6 +387,8 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
       const auto& raw_rules = t->get_access_rules();
       const auto accepted_svcs = build_accepted_service_types(dpp->get_cct());
       std::vector<token_envelope_t::AccessRule> rules_to_check;
+
+      //filter rules on service type
       if (accepted_svcs.empty()) {
         rules_to_check = raw_rules;
       } else {
@@ -398,6 +398,8 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
           }
         }
       }
+
+      //check request method, t is from cache but info->method is fresh call checking all req
       if (!check_access_rules(dpp, rules_to_check, s->info.method, s->decoded_uri)) {
         ldpp_dout(dpp, 0) << "access rules check failed for cached token, method="
                           << s->info.method << " path=" << s->decoded_uri
@@ -405,6 +407,8 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
         return result_t::deny(-EACCES);
       }
     }
+
+    //on rule pass
     auto apl = apl_factory->create_apl_remote(
         cct, s, get_acl_strategy(*t), get_creds_info(*t));
     return result_t::grant(std::move(apl));
