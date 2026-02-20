@@ -272,7 +272,7 @@ static int cls_2pc_queue_commit(cls_method_context_t hctx, bufferlist *in, buffe
       return -EINVAL;
     } //end - catch
     it = xattr_reservations.find(commit_op.id);
-    if (it == urgent_data.reservations.end()) {
+    if (it == xattr_reservations.end()) {
       CLS_LOG(1, "ERROR: cls_2pc_queue_commit: reservation does not exist: %u", commit_op.id);
       return -ENOENT;
     }

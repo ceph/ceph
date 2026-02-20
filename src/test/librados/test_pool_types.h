@@ -94,6 +94,8 @@ class PoolTypeTestFixture : public ::testing::TestWithParam<PoolType> {
   }
 };
 
+using ClsTestFixture = PoolTypeTestFixture;
+
 // Base class for EC-only tests
 class ECOnlyTestFixture : public ::testing::Test {
  protected:
@@ -112,6 +114,8 @@ class ECOnlyTestFixture : public ::testing::Test {
     ASSERT_EQ(0, destroy_pool_by_type(pool_name, rados, PoolType::FAST_EC));
   }
 };
+
+using ClsTestFixtureEC = ECOnlyTestFixture;
 
 } // namespace test
 } // namespace ceph

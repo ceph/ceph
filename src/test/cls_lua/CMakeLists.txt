@@ -1,5 +1,6 @@
 add_executable(ceph_test_cls_lua
   test_cls_lua.cc
+  ../librados/test_pool_types.cc
 )
 target_link_libraries(ceph_test_cls_lua
   cls_lua_client

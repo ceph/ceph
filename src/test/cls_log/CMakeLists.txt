@@ -1,5 +1,6 @@
 add_executable(ceph_test_cls_log
-  test_cls_log.cc)
+  test_cls_log.cc
+  ../librados/test_pool_types.cc)
 target_link_libraries(ceph_test_cls_log
   librados
   cls_log_client
