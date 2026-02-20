@@ -9,6 +9,7 @@
 
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
+#include "test/librados/test_pool_types.h"
 #include "global/global_context.h"
 
 #include <string>
@@ -19,23 +20,10 @@
 #include <atomic>
 
 using namespace std;
+using namespace ceph::test;
 
-class TestClsQueue : public ::testing::Test {
+class TestClsQueue : public ClsTestFixture {
 protected:
-  librados::Rados rados;
-  std::string pool_name;
-  librados::IoCtx ioctx;
-
-  void SetUp() override {
-    pool_name = get_temp_pool_name();
-    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
-  }
-
-  void TearDown() override {
-    ioctx.close();
-    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
-  }
 
   void test_enqueue(const std::string& queue_name, 
           int number_of_ops, 
@@ -60,7 +48,7 @@ protected:
   }
 };
 
-TEST_F(TestClsQueue, GetCapacity)
+TEST_P(TestClsQueue, GetCapacity)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -75,7 +63,7 @@ TEST_F(TestClsQueue, GetCapacity)
   ASSERT_EQ(queue_size, size);
 }
 
-TEST_F(TestClsQueue, Enqueue)
+TEST_P(TestClsQueue, Enqueue)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -90,7 +78,7 @@ TEST_F(TestClsQueue, Enqueue)
   test_enqueue(queue_name, 10, 100, 0);
 }
 
-TEST_F(TestClsQueue, QueueFull)
+TEST_P(TestClsQueue, QueueFull)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024;
@@ -107,7 +95,7 @@ TEST_F(TestClsQueue, QueueFull)
   test_enqueue(queue_name, 2, 5, -28);
 }
 
-TEST_F(TestClsQueue, List)
+TEST_P(TestClsQueue, List)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -137,7 +125,7 @@ TEST_F(TestClsQueue, List)
   ASSERT_EQ(total_elements, number_of_ops*number_of_elements);
 }
 
-TEST_F(TestClsQueue, ListByEndMarker)
+TEST_P(TestClsQueue, ListByEndMarker)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -182,7 +170,7 @@ TEST_F(TestClsQueue, ListByEndMarker)
   ASSERT_EQ(total_elements, number_of_ops*number_of_elements);
 }
 
-TEST_F(TestClsQueue, Dequeue)
+TEST_P(TestClsQueue, Dequeue)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -208,7 +196,7 @@ TEST_F(TestClsQueue, Dequeue)
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 }
 
-TEST_F(TestClsQueue, DequeueMarker)
+TEST_P(TestClsQueue, DequeueMarker)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -252,7 +240,7 @@ TEST_F(TestClsQueue, DequeueMarker)
   }
 }
 
-TEST_F(TestClsQueue, ListEmpty)
+TEST_P(TestClsQueue, ListEmpty)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -272,7 +260,7 @@ TEST_F(TestClsQueue, ListEmpty)
   ASSERT_EQ(entries.size(), 0);
 }
 
-TEST_F(TestClsQueue, DequeueEmpty)
+TEST_P(TestClsQueue, DequeueEmpty)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -292,7 +280,7 @@ TEST_F(TestClsQueue, DequeueEmpty)
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 }
 
-TEST_F(TestClsQueue, ListAll)
+TEST_P(TestClsQueue, ListAll)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -315,7 +303,7 @@ TEST_F(TestClsQueue, ListAll)
   ASSERT_EQ(truncated, false);
 }
 
-TEST_F(TestClsQueue, DeleteAll)
+TEST_P(TestClsQueue, DeleteAll)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -343,7 +331,7 @@ TEST_F(TestClsQueue, DeleteAll)
   ASSERT_EQ(entries.size(), 0);
 }
 
-TEST_F(TestClsQueue, EnqueueDequeue)
+TEST_P(TestClsQueue, EnqueueDequeue)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -383,7 +371,7 @@ TEST_F(TestClsQueue, EnqueueDequeue)
   ASSERT_EQ(consume_count, number_of_ops*number_of_elements);
 }
 
-TEST_F(TestClsQueue, QueueFullDequeue)
+TEST_P(TestClsQueue, QueueFullDequeue)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 4096;
@@ -442,7 +430,7 @@ TEST_F(TestClsQueue, QueueFullDequeue)
   ASSERT_EQ(consume_count, number_of_ops*number_of_elements);
 }
 
-TEST_F(TestClsQueue, MultiProducer)
+TEST_P(TestClsQueue, MultiProducer)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -488,7 +476,7 @@ TEST_F(TestClsQueue, MultiProducer)
   ASSERT_EQ(consume_count, number_of_ops*number_of_elements*max_producer_count);
 }
 
-TEST_F(TestClsQueue, MultiConsumer)
+TEST_P(TestClsQueue, MultiConsumer)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -536,7 +524,7 @@ TEST_F(TestClsQueue, MultiConsumer)
   ASSERT_EQ(consume_count, number_of_ops*number_of_elements);
 }
 
-TEST_F(TestClsQueue, NoLockMultiConsumer)
+TEST_P(TestClsQueue, NoLockMultiConsumer)
 {
   const std::string queue_name = "my-queue";
   const uint64_t queue_size = 1024*1024;
@@ -589,7 +577,7 @@ TEST_F(TestClsQueue, NoLockMultiConsumer)
   ASSERT_EQ(truncated, false);
 }
 
-TEST_F(TestClsQueue, WrapAround)
+TEST_P(TestClsQueue, WrapAround)
 {
   const std::string queue_name = "my-queue";
   const auto number_of_entries = 10U;
@@ -649,4 +637,11 @@ TEST_F(TestClsQueue, WrapAround)
     }
   }
 }
+
+INSTANTIATE_TEST_SUITE_P(, TestClsQueue,
+  ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+  [](const ::testing::TestParamInfo<PoolType>& info) {
+  return pool_type_name(info.param);
+  }
+);
 
