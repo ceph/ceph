@@ -63,8 +63,6 @@ from mgr_module import (
     MonCommandFailed,
     MgrModuleRecoverDB,
     CLIRequiresDB,
-    CLIReadCommand,
-    CLIWriteCommand,
 )
 from mgr_util import build_url, is_valid_container_image_ref, NvmeofMetadataPoolHelper
 import orchestrator
@@ -4548,7 +4546,7 @@ Then run the following:
         self.event.set()
 
     @CLIRequiresDB
-    @CLIReadCommand('cephadm get-cluster-version-history')
+    @CephadmCLICommand.Read('cephadm get-cluster-version-history')
     @MgrModuleRecoverDB
     def do_get_cluster_version_history(self) -> Tuple[int, str, str]:
         '''
@@ -4557,7 +4555,7 @@ Then run the following:
         return self.version_tracker.get_cluster_version_history()
 
     @CLIRequiresDB
-    @CLIWriteCommand('cephadm remove-cluster-version-history')
+    @CephadmCLICommand.Write('cephadm remove-cluster-version-history')
     @MgrModuleRecoverDB
     def do_remove_cluster_version_history(self, all: Optional[bool] = False, before: Optional[str] = None, after: Optional[str] = None) -> Tuple[int, str, str]:
         '''
