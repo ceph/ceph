@@ -106,6 +106,148 @@ auto create_pool(neorados::RADOS& r,
 #pragma GCC diagnostic pop
 #pragma clang diagnostic pop
 
+/// \brief Create a FastEC pool with overwrites enabled
+///
+/// Creates an erasure-coded pool with k=2, m=1, and enables
+/// ec_overwrites, ec_optimizations, and omap support.
+///
+/// \param r RADOS handle
+/// \param pname Pool name
+/// \param token Boost.Asio completion token
+///
+/// \return The ID of the newly created pool
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmismatched-new-delete"
+template<boost::asio::completion_token_for<
+	   void(boost::system::error_code, int64_t)> CompletionToken>
+auto create_fast_ec_pool(neorados::RADOS& r,
+			 std::string pname,
+			 CompletionToken&& token)
+{
+  namespace asio = boost::asio;
+  using boost::system::error_code;
+  using boost::system::system_error;
+
+  return asio::async_initiate<CompletionToken, void(error_code, int64_t)>
+    (asio::experimental::co_composed<void(error_code, int64_t)>
+     ([](auto state, neorados::RADOS& r, std::string pname) -> void {
+       try {
+	 // Create EC profile with k=2, m=1
+	 std::vector<std::string> profile_set = {
+	   fmt::format(
+	     R"({{"prefix": "osd erasure-code-profile set", "name": "testprofile-{}", )"
+	     R"( "profile": [ "k=2", "m=1", "crush-failure-domain=osd"]}})",
+	     pname)
+	 };
+	 co_await r.mon_command(std::move(profile_set), {}, nullptr, nullptr,
+				asio::deferred);
+	 
+	 // Create EC pool
+	 std::vector<std::string> pool_create = {
+	   fmt::format(
+	     R"({{"prefix": "osd pool create", "pool": "{}", "pool_type":"erasure", )"
+	     R"("pg_num":8, "pgp_num":8, "erasure_code_profile":"testprofile-{}"}})",
+	     pname, pname)
+	 };
+	 co_await r.mon_command(std::move(pool_create), {}, nullptr, nullptr,
+				asio::deferred);
+
+	 // Enable ec_overwrites
+	 std::vector<std::string> set_overwrites = {
+	   fmt::format(
+	     R"({{"prefix": "osd pool set", "pool": "{}", "var": "allow_ec_overwrites", "val": "true"}})",
+	     pname)
+	 };
+	 co_await r.mon_command(std::move(set_overwrites), {}, nullptr, nullptr,
+				asio::deferred);
+
+	 // Enable ec_optimisations
+	 std::vector<std::string> set_optimisations = {
+	   fmt::format(
+	     R"({{"prefix": "osd pool set", "pool": "{}", "var": "allow_ec_optimizations", "val": "true"}})",
+	     pname)
+	 };
+	 co_await r.mon_command(std::move(set_optimisations), {}, nullptr, nullptr,
+				asio::deferred);
+
+	 // Enable omap
+	 std::vector<std::string> set_omap = {
+	   fmt::format(
+	     R"({{"prefix": "osd pool set", "pool": "{}", "var": "supports_omap", "val": "true"}})",
+	     pname)
+	 };
+	 co_await r.mon_command(std::move(set_omap), {}, nullptr, nullptr,
+				asio::deferred);
+
+	 // Wait for OSD map to propagate to prevent race conditions
+	 co_await r.wait_for_latest_osd_map(asio::deferred);
+
+	 auto pool = co_await r.lookup_pool(pname, asio::deferred);
+	 co_return {error_code{}, pool};
+       } catch (const system_error& e) {
+	 co_return {e.code(), int64_t{}};
+       }
+     }, r.get_executor()),
+     token, std::ref(r), std::move(pname));
+}
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
+
+/// \brief Delete a FastEC pool and its profile
+///
+/// \param r RADOS handle
+/// \param pool_id Pool ID to delete
+/// \param pname Pool name (used for profile cleanup)
+/// \param token Boost.Asio completion token
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmismatched-new-delete"
+template<boost::asio::completion_token_for<
+	   void(boost::system::error_code)> CompletionToken>
+auto delete_fast_ec_pool(neorados::RADOS& r,
+			 int64_t pool_id,
+			 std::string pname,
+			 CompletionToken&& token)
+{
+  namespace asio = boost::asio;
+  using boost::system::error_code;
+  using boost::system::system_error;
+
+  return asio::async_initiate<CompletionToken, void(error_code)>
+    (asio::experimental::co_composed<void(error_code)>
+     ([](auto state, neorados::RADOS& r, int64_t pool_id, std::string pname) -> void {
+       try {
+	 co_await r.delete_pool(pool_id, asio::deferred);
+	 
+	 std::vector<std::string> profile_rm = {
+	   fmt::format(
+	     R"({{"prefix": "osd erasure-code-profile rm", "name": "testprofile-{}"}})",
+	     pname)
+	 };
+	 co_await r.mon_command(std::move(profile_rm), {}, nullptr, nullptr,
+				asio::deferred);
+	 
+	 std::vector<std::string> rule_rm = {
+	   fmt::format(
+	     R"({{"prefix": "osd crush rule rm", "name":"{}"}})",
+	     pname)
+	 };
+	 co_await r.mon_command(std::move(rule_rm), {}, nullptr, nullptr,
+				asio::deferred);
+	 
+	 co_return {error_code{}};
+       } catch (const system_error& e) {
+	 co_return {e.code()};
+       }
+     }, r.get_executor()),
+     token, std::ref(r), pool_id, std::move(pname));
+}
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
+
 /// \brief Create a new, empty RADOS object
 ///
 /// \param r RADOS handle
@@ -371,11 +513,72 @@ private:
 /// \brief C++20 coroutine test harness for NeoRados on erasure-coded
 /// pools
 ///
-/// The supplied pool is erasure coded
+/// The supplied pool is erasure coded (legacy, no ec_overwrites)
 class NeoRadosECTest : public NeoRadosTestBase {
 private:
   boost::asio::awaitable<uint64_t> create_pool() override;
   boost::asio::awaitable<void> clean_pool() override;
+};
+
+/// \brief C++20 coroutine test harness for NeoRados on fast erasure-coded
+/// pools
+///
+/// The supplied pool is erasure coded with ec_overwrites enabled
+class NeoRadosFastECTest : public NeoRadosTestBase {
+private:
+  boost::asio::awaitable<uint64_t> create_pool() override;
+  boost::asio::awaitable<void> clean_pool() override;
+};
+
+/// \brief Pool type enumeration for parameterized tests
+enum class PoolType {
+  REPLICATED,
+  FAST_EC
+};
+
+/// \brief Parameterized test fixture for running tests on both Replicated and FastEC pools
+///
+/// This fixture allows tests to run on both replicated and fast erasure-coded pools
+/// using GoogleTest's parameterized test framework. Use with CORO_TEST_P macro.
+///
+/// Example usage:
+/// \code
+/// INSTANTIATE_TEST_SUITE_P(
+///     ,
+///     NeoRadosPoolTypeTest,
+///     ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+///     [](const ::testing::TestParamInfo<PoolType>& info) {
+///       return info.param == PoolType::REPLICATED ? "Replicated" : "FastEC";
+///     });
+///
+/// CORO_TEST_P(NeoRadosPoolTypeTest, my_test) {
+///   // Test code here - runs on both pool types
+/// }
+/// \endcode
+class NeoRadosPoolTypeTest : public NeoRadosTestBase,
+                              public ::testing::WithParamInterface<PoolType> {
+private:
+  boost::asio::awaitable<uint64_t> create_pool() override {
+    PoolType type = GetParam();
+    if (type == PoolType::REPLICATED) {
+      co_return co_await ::create_pool(rados(), pool_name(),
+                                       boost::asio::use_awaitable);
+    } else { // FAST_EC
+      co_return co_await ::create_fast_ec_pool(rados(), pool_name(),
+                                               boost::asio::use_awaitable);
+    }
+  }
+
+  boost::asio::awaitable<void> clean_pool() override {
+    PoolType type = GetParam();
+    if (type == PoolType::REPLICATED) {
+      co_await rados().delete_pool(pool().get_pool(),
+                                   boost::asio::use_awaitable);
+    } else { // FAST_EC
+      co_await ::delete_fast_ec_pool(rados(), pool().get_pool(),
+                                     pool_name(), boost::asio::use_awaitable);
+    }
+  }
 };
 
 /// \brief Helper macro for defining coroutine tests with a fixture
@@ -420,6 +623,53 @@ private:
 	      fixture>::GetTearDownCaseOrSuite(__FILE__, __LINE__),            \
 	  new ::testing::internal::TestFactoryImpl<GTEST_TEST_CLASS_NAME_(     \
 	      test_suite_name, test_name)>);                                   \
+  boost::asio::awaitable<void> GTEST_TEST_CLASS_NAME_(test_suite_name,         \
+						      test_name)::CoTestBody()
+
+/// \brief Helper macro for defining parameterized coroutine tests
+///
+/// Defines a parameterized test using a coroutine fixture. The fixture
+/// must be a descendant of `CoroTest` and `::testing::WithParamInterface<T>`.
+///
+/// Use with `INSTANTIATE_TEST_SUITE_P` to specify parameter values.
+///
+/// \warning Use `EXPECT_*` only, not `ASSERT_*`. `ASSERT_` macros
+/// return from the calling function and will not work in a
+/// coroutine.
+///
+/// \param test_suite_name Name of the test suite (must be a parameterized fixture)
+/// \param test_name Name of the test
+#define CORO_TEST_P(test_suite_name, test_name)                                \
+  static_assert(sizeof(GTEST_STRINGIFY_(test_suite_name)) > 1,                 \
+		"test_suite_name must not be empty");                          \
+  static_assert(sizeof(GTEST_STRINGIFY_(test_name)) > 1,                       \
+		"test_name must not be empty");                                \
+  class GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)                     \
+    : public test_suite_name, private ::testing::internal::GTestNonCopyable {  \
+  public:                                                                      \
+    GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)() = default;            \
+    ~GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)() override = default;  \
+									       \
+  private:                                                                     \
+    boost::asio::awaitable<void> CoTestBody() override;                        \
+    [[maybe_unused]] static int AddToRegistry() {                              \
+      ::testing::UnitTest::GetInstance()                                       \
+          ->parameterized_test_registry()                                      \
+          .GetTestSuitePatternHolder<test_suite_name>(                         \
+              #test_suite_name,                                                \
+              ::testing::internal::CodeLocation(__FILE__, __LINE__))           \
+          ->AddTestPattern(                                                    \
+              GTEST_STRINGIFY_(test_suite_name), GTEST_STRINGIFY_(test_name),  \
+              new ::testing::internal::TestMetaFactory<GTEST_TEST_CLASS_NAME_( \
+                  test_suite_name, test_name)>(),                              \
+              ::testing::internal::CodeLocation(__FILE__, __LINE__));          \
+      return 0;                                                                \
+    }                                                                          \
+    [[maybe_unused]] static int gtest_registering_dummy_;                      \
+  };                                                                           \
+  int GTEST_TEST_CLASS_NAME_(test_suite_name,                                  \
+                             test_name)::gtest_registering_dummy_ =            \
+      GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)::AddToRegistry();     \
   boost::asio::awaitable<void> GTEST_TEST_CLASS_NAME_(test_suite_name,         \
 						      test_name)::CoTestBody()
 
