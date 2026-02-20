@@ -498,6 +498,10 @@ void rgw::keystone::TokenEnvelope::ApplicationCredential::decode_json(JSONObj *o
   JSONDecoder::decode_json("id", id, obj, true);
   JSONDecoder::decode_json("name", name, obj, true);
   JSONDecoder::decode_json("restricted", restricted, obj, true);
+  // access_rules is nested under application_credential in the Keystone
+  // response, and only present when the OpenStack-Identity-Access-Rules
+  // request header was sent.
+  JSONDecoder::decode_json("access_rules", access_rules, obj, false);
 }
 
 void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
@@ -513,10 +517,6 @@ void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
   ApplicationCredential tmp_app_cred;
   if (JSONDecoder::decode_json("application_credential", tmp_app_cred, root_obj, false)) {
     app_cred = std::move(tmp_app_cred);
-    JSONObjIter app_cred_iter = root_obj->find_first("application_credential");
-    if (!app_cred_iter.end()) {
-      JSONDecoder::decode_json("access_rules", access_rules, *app_cred_iter);
-    }
   }
 
   struct tm t;
