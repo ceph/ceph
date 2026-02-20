@@ -668,6 +668,7 @@ void ObjectWriteRequest<I>::add_write_ops(neorados::WriteOp* wr) {
   size_t block_num = 0;
   size_t meta_size = 0;
   if (m_write_flags & OBJECT_WRITE_FLAG_ENCRYPTED_AEAD_WRITE) {
+    std::shared_lock image_locker{image_ctx->image_lock};
     auto crypto = image_ctx->encryption_format->get_crypto();
     ceph_assert(crypto != nullptr);
     size_t block_length = crypto->get_block_size();
@@ -709,18 +710,21 @@ void ObjectDiscardRequest<I>::add_write_ops(neorados::WriteOp* wr) {
     // For AEAD with a non-zero truncate point, a plain truncate would remove
     // meta for surviving blocks stored beyond object_size. Convert to zero ops
     // that only affect the discarded data range and its corresponding meta.
-    if (this->m_object_off > 0 && this->m_ictx->encryption_format) {
-      auto crypto = this->m_ictx->encryption_format->get_crypto();
-      uint32_t meta_size = crypto->get_meta_size();
-      if (meta_size > 0) {
-        uint64_t block_size = crypto->get_block_size();
-        uint64_t object_size = this->m_ictx->get_object_size();
-        wr->zero(this->m_object_off, object_size - this->m_object_off);
-        uint64_t start_block = this->m_object_off / block_size;
-        uint64_t total_blocks = object_size / block_size;
-        wr->zero(object_size + start_block * meta_size,
-                 (total_blocks - start_block) * meta_size);
-        break;
+    if (this->m_object_off > 0) {
+      std::shared_lock image_locker{this->m_ictx->image_lock};
+      if (this->m_ictx->encryption_format) {
+        auto crypto = this->m_ictx->encryption_format->get_crypto();
+        uint32_t meta_size = crypto->get_meta_size();
+        if (meta_size > 0) {
+          uint64_t block_size = crypto->get_block_size();
+          uint64_t object_size = this->m_ictx->get_object_size();
+          wr->zero(this->m_object_off, object_size - this->m_object_off);
+          uint64_t start_block = this->m_object_off / block_size;
+          uint64_t total_blocks = object_size / block_size;
+          wr->zero(object_size + start_block * meta_size,
+                   (total_blocks - start_block) * meta_size);
+          break;
+        }
       }
     }
     wr->truncate(this->m_object_off);
@@ -728,15 +732,18 @@ void ObjectDiscardRequest<I>::add_write_ops(neorados::WriteOp* wr) {
   case DISCARD_ACTION_ZERO:
     wr->zero(this->m_object_off, this->m_object_len);
     // For AEAD, also zero the corresponding meta region beyond object_size
-    if (this->m_ictx->encryption_format) {
-      auto crypto = this->m_ictx->encryption_format->get_crypto();
-      uint32_t meta_size = crypto->get_meta_size();
-      if (meta_size > 0) {
-        uint64_t block_size = crypto->get_block_size();
-        uint64_t start_block = this->m_object_off / block_size;
-        uint64_t num_blocks = this->m_object_len / block_size;
-        wr->zero(this->m_ictx->get_object_size() + start_block * meta_size,
-                 num_blocks * meta_size);
+    {
+      std::shared_lock image_locker{this->m_ictx->image_lock};
+      if (this->m_ictx->encryption_format) {
+        auto crypto = this->m_ictx->encryption_format->get_crypto();
+        uint32_t meta_size = crypto->get_meta_size();
+        if (meta_size > 0) {
+          uint64_t block_size = crypto->get_block_size();
+          uint64_t start_block = this->m_object_off / block_size;
+          uint64_t num_blocks = this->m_object_len / block_size;
+          wr->zero(this->m_ictx->get_object_size() + start_block * meta_size,
+                   num_blocks * meta_size);
+        }
       }
     }
     break;
