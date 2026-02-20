@@ -13,6 +13,7 @@ from ipaddress import (
     ip_interface,
     ip_network,
 )
+import ssl
 from typing import (
     Any,
     Callable,
@@ -867,6 +868,7 @@ class ServiceSpec(object):
         'mgmt-gateway': {'user_cert_allowed': True, 'scope': 'global', 'requires_ca_cert': False},
         'nvmeof': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': False},
         'nfs': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': True},
+        'smb': {'user_cert_allowed': True, 'scope': 'service', 'requires_ca_cert': True},
 
         # Services that only support cephadm-signed certificates
         'agent': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
@@ -3685,6 +3687,52 @@ class SMBClusterBindIPSpec:
                 )
         return out
 
+class SSLParameters:
+    def __init__(
+        self,
+        enabled: bool = False,
+        ssl_cert: Optional[str] = None,
+        ssl_key: Optional[str] = None,
+        ssl_ca_cert: Optional[str] = None,
+    ):
+        self.enabled = enabled
+        self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
+        self.ssl_ca_cert = ssl_ca_cert
+        self.validate()
+
+    def validate(self, component: str = "ssl") -> None:
+        if not self.enabled:
+            return
+
+        missing = []
+        if not self.ssl_cert: missing.append("ssl_cert")
+        if not self.ssl_key: missing.append("ssl_key")
+
+        if missing:
+            raise ValueError(
+                f"[{component}] SSL is enabled but the following fields are missing: {', '.join(missing)}"
+            )
+
+    @classmethod
+    def from_dict(cls, data: Any) -> 'SSLParameters':
+        if not isinstance(data, dict):
+            return cls(enabled=False)
+
+        return cls(
+            enabled=data.get('enabled', False),
+            ssl_cert=data.get('ssl_cert'),
+            ssl_key=data.get('ssl_key'),
+            ssl_ca_cert=data.get('ssl_ca_cert'),
+        )
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            'enabled': self.enabled,
+            'ssl_cert': self.ssl_cert,
+            'ssl_key': self.ssl_key,
+            'ssl_ca_cert': self.ssl_ca_cert,
+        }
 
 class SMBSpec(ServiceSpec):
     service_type = 'smb'
@@ -3749,6 +3797,9 @@ class SMBSpec(ServiceSpec):
         # not listed the default port will be used.
         custom_ports: Optional[Dict[str, int]] = None,
         bind_addrs: Optional[List[SMBClusterBindIPSpec]] = None,
+        certificate_source: Optional[str] = None,
+        ssl: Optional[dict] = None,
+        ssl_certificates: Optional[Dict[str, SSLParameters]] = None,
         # === remote control server ===
         remote_control_ssl_cert: Optional[str] = None,
         remote_control_ssl_key: Optional[str] = None,
@@ -3760,12 +3811,23 @@ class SMBSpec(ServiceSpec):
     ) -> None:
         if service_type != self.service_type:
             raise ValueError(f'invalid service_type: {service_type!r}')
+
+        self.certificate_source = certificate_source
+        self.ssl_certificates: Dict[str, SSLParameters] = {
+            'ssl': SSLParameters.from_dict(ssl or {}),
+        }
+        ssl_def = self.ssl_certificates['ssl']
         super().__init__(
             self.service_type,
             service_id=service_id,
             placement=placement,
             count=count,
             config=config,
+            ssl=ssl_def.enabled if ssl_def else False,
+            ssl_cert=ssl_def.ssl_cert,
+            ssl_key=ssl_def.ssl_key,
+            ssl_ca_cert=ssl_def.ssl_ca_cert,
+            certificate_source=self.certificate_source,
             unmanaged=unmanaged,
             preview_only=preview_only,
             networks=networks,
@@ -3830,6 +3892,24 @@ class SMBSpec(ServiceSpec):
             if key not in self._valid_service_names:
                 raise ValueError(f'{key} is not a valid service name')
 
+        # TLS certificate validation
+        ssl_def = self.ssl_certificates.get('ssl')
+        if ssl_def and ssl_def.enabled and not self.certificate_source:
+             raise ValueError('If SSL is enabled, a certificate_source must be provided.')
+
+        if self.certificate_source == 'inline' and ssl_def and ssl_def.enabled:
+            tls_fields = {
+                'ssl_cert': ssl_def.ssl_cert,
+                'ssl_key': ssl_def.ssl_key,
+                'ssl_ca_cert': ssl_def.ssl_ca_cert,
+            }
+            present_fields = [k for k, v in tls_fields.items() if v]
+            if 0 < len(present_fields) < 3:
+                missing = set(tls_fields.keys()) - set(present_fields)
+                raise ValueError(
+                    f'For inline SSL, all TLS fields must be provided. Missing: {", ".join(missing)}'
+                )
+
     def _derive_cluster_uri(self, uri: str, objname: str) -> str:
         if not uri.startswith('rados://'):
             raise ValueError('invalid uri scheme for cluster metadata')
@@ -3872,12 +3952,18 @@ class SMBSpec(ServiceSpec):
     def to_json(self) -> "OrderedDict[str, Any]":
         obj = super().to_json()
         spec = obj.get('spec')
+
         if spec and spec.get('cluster_public_addrs'):
             spec['cluster_public_addrs'] = [
                 a.to_json() for a in spec['cluster_public_addrs']
             ]
         if spec and spec.get('bind_addrs'):
             spec['bind_addrs'] = [a.to_json() for a in spec['bind_addrs']]
+
+        if self.ssl_certificates:
+                spec['ssl_certificates'] = {
+                    k: v.to_json() for k, v in self.ssl_certificates.items()
+                }
         return obj
 
 

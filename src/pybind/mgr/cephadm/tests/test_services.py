@@ -8,6 +8,7 @@ import pytest
 
 from unittest.mock import Mock, MagicMock, call, patch, ANY
 
+
 from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import MonService, CephadmDaemonDeploySpec
@@ -4989,7 +4990,42 @@ class TestSMB:
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_smb_tls(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
+        with with_host(cephadm_module, 'test', addr='1.2.3.7'):
+            cephadm_module.cache.update_host_networks(
+                'test',
+                {'1.2.3.0/24': {'if0': ['1.2.3.7']}}
+            )
+
+            smb_spec = SMBSpec(
+                cluster_id="foxtrot",
+                service_id="foo",
+                config_uri='rados://.smb/foxtrot/config2.json',
+                placement=PlacementSpec(hosts=['test']),
+                ssl={
+                    'enabled': True,
+                    'ssl_cert': ceph_generated_cert,
+                    'ssl_key': ceph_generated_key,
+                    'ssl_ca_cert': cephadm_root_ca,
+                },
+                certificate_source='inline',
+            )
+
+            with with_service(cephadm_module, smb_spec):
+                smb_generated_conf, _ = service_registry.get_service('smb').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='test',
+                        daemon_id='foo.test.0',
+                        service_name=smb_spec.service_name()
+                    )
+                )
+                # ---- TLS assertions against dict keys ----
+                assert smb_generated_conf['files']['ssl.crt'] == ceph_generated_cert
+                assert smb_generated_conf['files']['ssl.key'] == ceph_generated_key
+                assert smb_generated_conf['files']['ssl-ca.crt'] == cephadm_root_ca
 
 class TestMgmtGateway:
     @patch("cephadm.serve.CephadmServe._run_cephadm")

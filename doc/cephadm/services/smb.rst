@@ -60,6 +60,79 @@ The specification can then be applied by running the following command:
    ceph orch apply -i smb.yaml
 
 
+TLS/SSL Example
+---------------
+
+Here's an example SMB service specification with TLS/SSL configuration:
+
+.. code-block:: yaml
+
+    service_id: tango
+    service_type: smb
+    cluster_id: tango
+    config_uri: 'rados://.smb/foxtrot/config.json'
+    placement:
+      hosts:
+        - mycephfs11
+
+    spec:
+      certificate_source: inline
+      ssl:
+        enabled: true
+        ssl_cert: |
+          -----BEGIN CERTIFICATE-----
+          ...
+          -----END CERTIFICATE-----
+
+        ssl_key: |
+          -----BEGIN PRIVATE KEY-----
+          ...
+          -----END PRIVATE KEY-----
+
+        ssl_ca_cert: |
+          -----BEGIN CERTIFICATE-----
+          ...
+          -----END CERTIFICATE-----
+
+This example configures an SMB service with TLS encryption enabled using
+inline certificates.
+
+TLS/SSL Parameters
+~~~~~~~~~~~~~~~~~~
+
+The following parameters can be used to configure TLS/SSL encryption for the SMB service:
+
+* ``certificate_source`` (string): Specifies the source of the TLS certificates.
+  Options include:
+
+  - ``cephadm-signed``: Use certificates signed by cephadm's internal CA
+  - ``inline``: Provide certificates directly in the specification using ``ssl_cert``, ``ssl_key``, and ``ssl_ca_cert`` fields
+  - ``reference``: Users can register their own certificate and key with certmgr and
+    set the ``certificate_source`` to ``reference`` in the spec.
+
+* ``enable`` (boolean): Enable or disable SSL/TLS encryption. Default is ``false``.
+
+* ``ssl_cert`` (string): The SSL certificate in PEM format. Required when using
+  ``inline`` certificate source.
+
+* ``ssl_key`` (string): The SSL private key in PEM format. Required when using
+  ``inline`` certificate source.
+
+* ``ssl_ca_cert`` (string): The SSL CA certificate in PEM format. Required when
+  using ``inline`` certificate source.
+
+
+.. note:: When ``enabled`` is true, a ``certificate_source`` must be specified.
+   If using ``inline`` certificates, all three certificate fields (``ssl_cert``,
+   ``ssl_key``, ``ssl_ca_cert``) must be provided.
+
+The specification can then be applied by running the following command:
+
+.. prompt:: bash #
+
+   ceph orch apply -i smb.yaml
+
+
 Service Spec Options
 --------------------
 
