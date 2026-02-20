@@ -10,6 +10,7 @@
 
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
+#include "test/librados/test_pool_types.h"
 #include "global/global_context.h"
 #include "cls/2pc_queue/cls_2pc_queue_const.h"
 
@@ -21,26 +22,16 @@
 #include <atomic>
 
 using namespace std;
+using ceph::test::PoolType;
+using ceph::test::pool_type_name;
+using ceph::test::create_pool_by_type;
+using ceph::test::destroy_pool_by_type;
 
-class TestCls2PCQueue : public ::testing::Test {
-protected:
-  librados::Rados rados;
-  std::string pool_name;
-  librados::IoCtx ioctx;
-
-  void SetUp() override {
-    pool_name = get_temp_pool_name();
-    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
-  }
-
-  void TearDown() override {
-    ioctx.close();
-    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
-  }
+class TestCls2PCQueue : public ceph::test::ClsTestFixture {
+  // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
 };
 
-TEST_F(TestCls2PCQueue, GetCapacity)
+TEST_P(TestCls2PCQueue, GetCapacity)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 8*1024;
@@ -56,7 +47,7 @@ TEST_F(TestCls2PCQueue, GetCapacity)
   ASSERT_EQ(max_size, size);
 }
 
-TEST_F(TestCls2PCQueue, AsyncGetCapacity)
+TEST_P(TestCls2PCQueue, AsyncGetCapacity)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 8*1024;
@@ -76,7 +67,7 @@ TEST_F(TestCls2PCQueue, AsyncGetCapacity)
   ASSERT_EQ(max_size, size);
 }
 
-TEST_F(TestCls2PCQueue, Reserve)
+TEST_P(TestCls2PCQueue, Reserve)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024U*1024U;
@@ -102,7 +93,7 @@ TEST_F(TestCls2PCQueue, Reserve)
   }
 }
 
-TEST_F(TestCls2PCQueue, AsyncReserve)
+TEST_P(TestCls2PCQueue, AsyncReserve)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024U*1024U;
@@ -140,7 +131,7 @@ TEST_F(TestCls2PCQueue, AsyncReserve)
   }
 }
 
-TEST_F(TestCls2PCQueue, Commit)
+TEST_P(TestCls2PCQueue, Commit)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024*1024*128;
@@ -174,7 +165,7 @@ TEST_F(TestCls2PCQueue, Commit)
   ASSERT_EQ(reservations.size(), 0);
 }
 
-TEST_F(TestCls2PCQueue, Stats)
+TEST_P(TestCls2PCQueue, Stats)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024*1024*128;
@@ -216,7 +207,7 @@ TEST_F(TestCls2PCQueue, Stats)
   ASSERT_EQ(reservations.size(), 0);
 }
 
-TEST_F(TestCls2PCQueue, UpgradeFromReef)
+TEST_P(TestCls2PCQueue, UpgradeFromReef)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024*1024*128;
@@ -299,7 +290,7 @@ TEST_F(TestCls2PCQueue, UpgradeFromReef)
   ASSERT_EQ(entries_number, 0);
 }
 
-TEST_F(TestCls2PCQueue, Abort)
+TEST_P(TestCls2PCQueue, Abort)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024U*1024U;
@@ -323,7 +314,7 @@ TEST_F(TestCls2PCQueue, Abort)
   ASSERT_EQ(reservations.size(), 0);
 }
 
-TEST_F(TestCls2PCQueue, ReserveError)
+TEST_P(TestCls2PCQueue, ReserveError)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 256U*1024U;
@@ -359,7 +350,7 @@ TEST_F(TestCls2PCQueue, ReserveError)
   }
 }
 
-TEST_F(TestCls2PCQueue, CommitError)
+TEST_P(TestCls2PCQueue, CommitError)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024*1024;
@@ -413,7 +404,7 @@ TEST_F(TestCls2PCQueue, CommitError)
   ASSERT_EQ(reservations.size(), 2);
 }
 
-TEST_F(TestCls2PCQueue, AbortError)
+TEST_P(TestCls2PCQueue, AbortError)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024*1024;
@@ -446,7 +437,7 @@ TEST_F(TestCls2PCQueue, AbortError)
   ASSERT_EQ(reservations.size(), 1);
 }
 
-TEST_F(TestCls2PCQueue, MultiReserve)
+TEST_P(TestCls2PCQueue, MultiReserve)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024*1024;
@@ -483,7 +474,7 @@ TEST_F(TestCls2PCQueue, MultiReserve)
   ASSERT_EQ(total_reservations, number_of_ops*max_producer_count*size_to_reserve);
 }
 
-TEST_F(TestCls2PCQueue, MultiCommit)
+TEST_P(TestCls2PCQueue, MultiCommit)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024*1024;
@@ -526,7 +517,7 @@ TEST_F(TestCls2PCQueue, MultiCommit)
   ASSERT_EQ(reservations.size(), 0);
 }
 
-TEST_F(TestCls2PCQueue, MultiAbort)
+TEST_P(TestCls2PCQueue, MultiAbort)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024*1024;
@@ -560,7 +551,7 @@ TEST_F(TestCls2PCQueue, MultiAbort)
   ASSERT_EQ(reservations.size(), 0);
 }
 
-TEST_F(TestCls2PCQueue, ReserveCommit)
+TEST_P(TestCls2PCQueue, ReserveCommit)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024*1024;
@@ -615,7 +606,7 @@ TEST_F(TestCls2PCQueue, ReserveCommit)
   ASSERT_EQ(reservations.size(), 0);
 }
 
-TEST_F(TestCls2PCQueue, ReserveAbort)
+TEST_P(TestCls2PCQueue, ReserveAbort)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024*1024;
@@ -662,7 +653,7 @@ TEST_F(TestCls2PCQueue, ReserveAbort)
   ASSERT_EQ(reservations.size(), 0);
 }
 
-TEST_F(TestCls2PCQueue, ManualCleanup)
+TEST_P(TestCls2PCQueue, ManualCleanup)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 128*1024*1024;
@@ -736,7 +727,7 @@ TEST_F(TestCls2PCQueue, ManualCleanup)
   ASSERT_EQ(reservations.size(), 0);
 }
 
-TEST_F(TestCls2PCQueue, Cleanup)
+TEST_P(TestCls2PCQueue, Cleanup)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 128*1024*1024;
@@ -791,7 +782,7 @@ TEST_F(TestCls2PCQueue, Cleanup)
   }
 }
 
-TEST_F(TestCls2PCQueue, MultiProducer)
+TEST_P(TestCls2PCQueue, MultiProducer)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 128*1024*1024;
@@ -857,7 +848,7 @@ TEST_F(TestCls2PCQueue, MultiProducer)
   ASSERT_EQ(consume_count, number_of_ops*number_of_elements*max_producer_count);
 }
 
-TEST_F(TestCls2PCQueue, AsyncConsumer)
+TEST_P(TestCls2PCQueue, AsyncConsumer)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   constexpr auto max_size = 128*1024*1024;
@@ -913,7 +904,7 @@ TEST_F(TestCls2PCQueue, AsyncConsumer)
   ASSERT_EQ(entries.size(), 0);
 }
 
-TEST_F(TestCls2PCQueue, MultiProducerConsumer)
+TEST_P(TestCls2PCQueue, MultiProducerConsumer)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024*1024;
@@ -1024,7 +1015,7 @@ TEST_F(TestCls2PCQueue, MultiProducerConsumer)
   ASSERT_EQ(entries.size(), 0);
 }
 
-TEST_F(TestCls2PCQueue, ReserveSpillover)
+TEST_P(TestCls2PCQueue, ReserveSpillover)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024U*1024U;
@@ -1050,7 +1041,7 @@ TEST_F(TestCls2PCQueue, ReserveSpillover)
   }
 }
 
-TEST_F(TestCls2PCQueue, CommitSpillover)
+TEST_P(TestCls2PCQueue, CommitSpillover)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024U*1024U;
@@ -1088,7 +1079,7 @@ TEST_F(TestCls2PCQueue, CommitSpillover)
   ASSERT_EQ(reservations.size(), 0);
 }
 
-TEST_F(TestCls2PCQueue, AbortSpillover)
+TEST_P(TestCls2PCQueue, AbortSpillover)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
   const auto max_size = 1024U*1024U;
@@ -1116,3 +1107,9 @@ TEST_F(TestCls2PCQueue, AbortSpillover)
   ASSERT_EQ(reservations.size(), 0);
 }
 
+INSTANTIATE_TEST_SUITE_P(, TestCls2PCQueue,
+  ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+  [](const ::testing::TestParamInfo<PoolType>& info) {
+  return pool_type_name(info.param);
+  }
+);
