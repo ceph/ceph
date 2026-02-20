@@ -49,7 +49,8 @@
           [dataUnit]="'B'"
           [legendEnabled]="false"
           [rawData]="trendData"
-          [subHeading]="'Shows last 7 days of storage consumption trends based on recent usage'">
+          [subHeading]="'Shows last 7 days of storage consumption trends based on recent usage'"
+          [height]="'200px'">
       </cd-area-chart>
     </div>
     <div cdsCol [columnNumbers]="{ lg: 2, md: 8, sm: 8 }">
@@ -91,7 +92,35 @@
     </div>
   </div>
   }
-  @else {
+  @if (selectedStorageType !== 'All' && topPoolsData) {
+
+  @if (topPoolsData) {
+  <div>
+    <div cdsRow class="align-items-center">
+      <div cdsCol [columnNumbers]="{ lg: 4, md: 8, sm: 16 }">
+        <div cdsStack="vertical" gap="4" class="cds-mb-3 cds-ml-3">
+            @for(metric of storageMetrics[selectedStorageType].metrics; track metric.label){
+            <div class="cds-mb-5 cds-ml-3 align-items-center">
+              <span class="cds--type-heading-05">{{metric.value}}</span>
+              <span class="cds--type-heading-03 cds-ml-5">{{metric.label}}</span>
+            </div>
+          }
+        </div>
+      </div>
+      <div cdsCol [columnNumbers]="{ lg: 6, md: 8, sm: 16 }">
+        <cd-pie-chart
+            [chartData]="topPoolsData"
+            [data]="topPoolsData"
+            [title]="'Top 5 ' + selectedStorageType + ' pools'"
+            [legendPosition]="'right'"
+            [showPercentage]="true"
+            [height]="'250px'">
+          </cd-pie-chart>
+      </div>
+    </div>
+  </div>
+}
+  @else { 
   <cds-skeleton-text
     [lines]="1"
     [minLineWidth]="1025"
@@ -103,4 +132,5 @@
     [maxLineWidth]="200">
   </cds-skeleton-text>
   }
+}
 </cd-productive-card>

@@ -43,6 +43,7 @@ export class AreaChartComponent implements OnChanges {
   @Input() customOptions?: Partial<AreaChartOptions>;
   @Input() legendEnabled = true;
   @Input() subHeading = '';
+  @Input() height = '300px';
 
   @Output() currentFormattedValues = new EventEmitter<{
     key: string;
@@ -184,7 +185,7 @@ export class AreaChartComponent implements OnChanges {
         ]
       },
       animations: false,
-      height: '300px',
+      height: this.height,
       data: {
         loading: !this.chartData?.length
       }

@@ -28,6 +28,8 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { interval, Subject } from 'rxjs';
 import { startWith, switchMap, takeUntil } from 'rxjs/operators';
 import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
+import { PieChartComponent } from '~/app/shared/components/pie-chart/pie-chart.component';
+import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 
 const CHART_HEIGHT = '45px';
 const REFRESH_INTERVAL_MS = 15_000;
@@ -51,6 +53,67 @@ const TotalRawUsedTrend = {
   TOTAL_RAW_USED: 'sum(ceph_pool_bytes_used)'
 };
 
+
+const TopPoolsQueryMap: Record<string, string> = {
+  [StorageType.BLOCK]: `
+  topk(
+  5,
+  (
+    ceph_pool_bytes_used
+    * on(pool_id)
+      group_left(instance, name, application)
+      ceph_pool_metadata{application="Block"}
+  )
+  /
+  (
+    ceph_pool_max_avail
+    * on(pool_id)
+      group_left(instance, name, application)
+      ceph_pool_metadata{application="Block"}
+  )
+)
+
+  `,
+  [StorageType.FILE]: `
+  topk(
+  5,
+  (
+    ceph_pool_bytes_used
+    * on(pool_id)
+      group_left(instance, name, application)
+      ceph_pool_metadata{application="Filesystem"}
+  )
+  /
+  (
+    ceph_pool_max_avail
+    * on(pool_id)
+      group_left(instance, name, application)
+      ceph_pool_metadata{application="Filesystem"}
+  )
+)
+
+  `,
+  [StorageType.OBJECT]: `
+  topk(
+  5,
+  (
+    ceph_pool_bytes_used
+    * on(pool_id)
+      group_left(instance, name, application)
+      ceph_pool_metadata{application="Object"}
+  )
+  /
+  (
+    ceph_pool_max_avail
+    * on(pool_id)
+      group_left(instance, name, application)
+      ceph_pool_metadata{application="Object"}
+  )
+)`
+
+};
+
+
 const chartGroupLabels = [StorageType.BLOCK, StorageType.FILE, StorageType.OBJECT];
 
 @Component({
@@ -66,7 +129,8 @@ const chartGroupLabels = [StorageType.BLOCK, StorageType.FILE, StorageType.OBJEC
     TooltipModule,
     SkeletonModule,
     LayoutModule,
-    AreaChartComponent
+    AreaChartComponent,
+    PieChartComponent
   ],
   templateUrl: './overview-storage-card.component.html',
   styleUrl: './overview-storage-card.component.scss',
@@ -77,6 +141,7 @@ export class OverviewStorageCardComponent implements OnInit, OnDestroy {
 
   private readonly prometheusService = inject(PrometheusService);
   private readonly formatterService = inject(FormatterService);
+  private readonly rgwBucketService = inject(RgwBucketService);
   private readonly cdr = inject(ChangeDetectorRef);
   private destroy$ = new Subject<void>();
 
@@ -114,6 +179,40 @@ export class OverviewStorageCardComponent implements OnInit, OnDestroy {
   allData: ChartData[] = null;
   displayData: ChartData[] = null;
   displayUsedRaw: number;
+  topBlockPoolsData: { group: string; value: number }[] | null = null;
+  topPoolsData: { group: string; value: number }[] | null = null;
+  storageMetrics = {
+  [StorageType.BLOCK]: {
+    title: 'Block',
+    metrics: [
+      { label: 'block pools', value: 0 },
+      { label: 'volumes', value: 0 }
+    ]
+  },
+  [StorageType.FILE]: {
+    title: 'File system',
+    metrics: [
+      { label: 'filesystems', value: 0 },
+      { label: 'filesystem pools', value: 0 }
+    ]
+  },
+  [StorageType.OBJECT]: {
+    title: 'Object',
+    metrics: [
+      { label: 'buckets', value: 0 },
+      { label: 'object pools', value: 0 }
+    ]
+  }
+};
+
+
+//   private readonly StorageCountQueries = {
+//   blockPools: 'count(ceph_pool_metadata{application="Block"})',
+//   blockVolumes: 'count(ceph_rbd_image_metadata)',
+
+//   fsCount: 'count(ceph_fs_metadata)',
+//   fsPools: 'count(ceph_pool_metadata{application="Filesystem"})'
+// };
 
   @Input()
   set total(value: number) {
@@ -136,25 +235,84 @@ export class OverviewStorageCardComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+  interval(REFRESH_INTERVAL_MS)
+    .pipe(
+      startWith(0),
+      switchMap(() =>
+        this.prometheusService.getPrometheusQueryData({
+          params: RawUsedByStorageType
+        })
+      ),
+      takeUntil(this.destroy$)
+    )
+    .subscribe((data: PromqlGuageMetric) => {
+      this.allData = this.mapStorageData(data);
+      this.setChartData();
 
-    interval(REFRESH_INTERVAL_MS)
-      .pipe(
-        startWith(0),
-        switchMap(() =>
-          this.prometheusService.getPrometheusQueryData({
-            params: RawUsedByStorageType
-          })
-        ),
-        takeUntil(this.destroy$)
-      )
-      .subscribe((data: PromqlGuageMetric) => {
-        this.allData = this.mapStorageData(data);
-        this.setChartData();
+      // GENERIC TOP POOLS REFRESH
+      if (this.selectedStorageType !== StorageType.ALL) {
+        this.loadTopPoolsForType(this.selectedStorageType);
+      }
+
+      this.cdr.markForCheck();
+    });
+
+  this.loadTrendData();
+}
+
+private loadStorageTypeCounts(type: string) {
+  if (type === StorageType.BLOCK) {
+    this.loadPromQLCount(
+      'count(ceph_pool_metadata{application="Block"})',
+      val => this.storageMetrics[StorageType.BLOCK].metrics[0].value = val
+    );
+
+    this.loadPromQLCount(
+      'count(ceph_rbd_image_metadata)',
+      val => this.storageMetrics[StorageType.BLOCK].metrics[1].value = val
+    );
+  }
+
+  else if (type === StorageType.FILE) {
+    this.loadPromQLCount(
+      'count(ceph_fs_metadata)',
+      val => this.storageMetrics[StorageType.FILE].metrics[0].value = val
+    );
+
+    this.loadPromQLCount(
+      'count(ceph_pool_metadata{application="Filesystem"})',
+      val => this.storageMetrics[StorageType.FILE].metrics[1].value = val
+    );
+  }
+
+  else if (type === StorageType.OBJECT) {
+    this.loadPromQLCount(
+      'count(ceph_pool_metadata{application="Object"})',
+      val => this.storageMetrics[StorageType.OBJECT].metrics[1].value = val
+    );
+    this.rgwBucketService.getTotalBucketsAndUsersLength()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((res: any) => {
+        this.storageMetrics[StorageType.OBJECT].metrics[0].value = res?.buckets_count ?? 0;
         this.cdr.markForCheck();
       });
-
-    this.loadTrendData();
   }
+  console.log(this.storageMetrics);
+  
+}
+
+
+private loadPromQLCount(query: string, setter: (count: number) => void) {
+  this.prometheusService.getPrometheusQueryData({ params: query })
+    .pipe(takeUntil(this.destroy$))
+    .subscribe(res => {
+      const val = Number(res?.result?.[0]?.value?.[1]) || 0;
+      setter(val);
+      this.cdr.markForCheck();
+    });
+}
+
+
 
   ngOnDestroy(): void {
     this.destroy$.next();
@@ -188,12 +346,19 @@ export class OverviewStorageCardComponent implements OnInit, OnDestroy {
   }
 
   public onStorageTypeSelect(selected: any) {
-    this.selectedStorageType = selected?.item?.content;
-    this.setChartData();
-    if (this.selectedStorageType === StorageType.ALL) {
-      this.loadTrendData();
-    }
+  this.selectedStorageType = selected?.item?.content;
+  this.setChartData();
+
+  if (this.selectedStorageType === StorageType.ALL) {
+    this.loadTrendData();
+    this.topPoolsData = null;
+  } else {
+    this.trendData = [];
+    this.loadTopPoolsForType(this.selectedStorageType);
+    this.loadStorageTypeCounts(this.selectedStorageType);
   }
+}
+
 
   private getSevenDaysTime() {
     const now = Math.floor(Date.now() / 1000);
@@ -289,4 +454,28 @@ export class OverviewStorageCardComponent implements OnInit, OnDestroy {
     };
     this.cdr.markForCheck();
   }
+
+  private loadTopPoolsForType(type: string) {
+  const query = TopPoolsQueryMap[type];
+  if (!query) {
+    this.topPoolsData = null;
+    return;
+  }
+
+  this.prometheusService
+    .getPrometheusQueryData({ params: query })
+    .pipe(takeUntil(this.destroy$))
+    .subscribe((data: PromqlGuageMetric) => {
+      const result = data?.result ?? [];
+
+      this.topPoolsData = result.map(r => ({
+        group: r.metric?.name || r.metric?.pool || 'unknown',
+        value: Number(r.value?.[1]) * 100  // convert fraction → percentage
+      }));
+
+
+      this.cdr.markForCheck();
+    });
+}
+
 }
