@@ -397,6 +397,19 @@ if(WITH_RADOSGW_DAOS)
   link_directories( ${PC_DAOS_LIBRARY_DIRS} )
 endif()
 
+if(WITH_RADOSGW_LANCEDB)
+  # Create imported library target for liblancedb
+  add_library(lancedb SHARED IMPORTED)
+  set_target_properties(lancedb PROPERTIES
+    IMPORTED_LOCATION ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+    IMPORTED_NO_SONAME TRUE
+  )
+  target_link_libraries(rgw_common PUBLIC lancedb)
+  add_dependencies(rgw_common lancedb-c)
+  install(FILES ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+    DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
 set(rgw_a_srcs
   rgw_appmain.cc
   rgw_asio_client.cc
