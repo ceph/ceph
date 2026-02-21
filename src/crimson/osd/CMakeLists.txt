@@ -1,3 +1,10 @@
+add_library(crimson-main-config-bootstrap STATIC
+  main_config_bootstrap_helpers.cc)
+target_link_libraries(crimson-main-config-bootstrap
+  crimson-common
+  crimson
+  legacy-option-headers)
+
 add_executable(crimson-osd
   backfill_state.cc
   ec_backend.cc
@@ -5,7 +12,6 @@ add_executable(crimson-osd
   heartbeat.cc
   lsan_suppressions.cc
   main.cc
-  main_config_bootstrap_helpers.cc
   osd.cc
   osd_meta.cc
   pg.cc
@@ -77,6 +83,7 @@ if(USING_MOLD_LINKER AND WITH_BLUESTORE)
   # Link crimson-alienstore BEFORE crimson-common so its definitions win
   # with --allow-multiple-definition (Mold picks first definition).
   target_link_libraries(crimson-osd
+    crimson-main-config-bootstrap
     legacy-option-headers
     crimson-admin
     crimson-alienstore
@@ -90,6 +97,7 @@ if(USING_MOLD_LINKER AND WITH_BLUESTORE)
   target_link_options(crimson-osd PRIVATE -Wl,--allow-multiple-definition)
 else()
   target_link_libraries(crimson-osd
+    crimson-main-config-bootstrap
     legacy-option-headers
     crimson-admin
     crimson-common

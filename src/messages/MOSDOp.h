@@ -24,6 +24,7 @@
 #include "MOSDFastDispatchOp.h"
 #include "include/ceph_features.h"
 #include "include/ceph_fs.h" // for CEPH_MSG_OSD_OP
+#include "include/rados.h"   // for CEPH_OSD_OP_CALL, ceph_osd_op::cls
 #include "common/hobject.h"
 
 /*
@@ -229,6 +230,28 @@ public:
   }
   void zero(uint64_t off, uint64_t len) {
     add_simple_op(CEPH_OSD_OP_ZERO, off, len);
+  }
+  /// Add op with data payload (e.g. CMPEXT compare buffer).
+  void add_op_with_data(int o, uint64_t off, uint64_t len, ceph::buffer::list&& bl) {
+    OSDOp osd_op;
+    osd_op.op.op = o;
+    osd_op.op.extent.offset = off;
+    osd_op.op.extent.length = len;
+    osd_op.indata = std::move(bl);
+    ops.push_back(std::move(osd_op));
+  }
+  /// Add cls call op (CEPH_OSD_OP_CALL). indata = cname + method + in.
+  void add_call(std::string_view cname, std::string_view method,
+                const ceph::buffer::list& indata) {
+    OSDOp osd_op;
+    osd_op.op.op = CEPH_OSD_OP_CALL;
+    osd_op.op.cls.class_len = static_cast<__u8>(std::min(cname.size(), size_t(255)));
+    osd_op.op.cls.method_len = static_cast<__u8>(std::min(method.size(), size_t(255)));
+    osd_op.op.cls.indata_len = indata.length();
+    osd_op.indata.append(cname.data(), osd_op.op.cls.class_len);
+    osd_op.indata.append(method.data(), osd_op.op.cls.method_len);
+    osd_op.indata.append(indata);
+    ops.push_back(std::move(osd_op));
   }
   void truncate(uint64_t off) {
     add_simple_op(CEPH_OSD_OP_TRUNCATE, off, 0);
