@@ -1,10 +1,16 @@
+add_library(crimson-main-config-bootstrap STATIC
+  main_config_bootstrap_helpers.cc)
+target_link_libraries(crimson-main-config-bootstrap
+  crimson-common
+  crimson
+  legacy-option-headers)
+
 add_executable(crimson-osd
   backfill_state.cc
   ec_backend.cc
   heartbeat.cc
   lsan_suppressions.cc
   main.cc
-  main_config_bootstrap_helpers.cc
   osd.cc
   osd_meta.cc
   pg.cc
@@ -65,6 +71,7 @@ if(HAS_VTA)
     PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
 endif()
 target_link_libraries(crimson-osd
+  crimson-main-config-bootstrap
   legacy-option-headers
   crimson-admin
   crimson-common

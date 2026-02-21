@@ -88,6 +88,10 @@ struct early_config_t {
 tl::expected<early_config_t, int>
 get_early_config(int argc, const char *argv[]);
 
+/// Like get_early_config but for CEPH_ENTITY_TYPE_CLIENT (e.g. client.admin).
+tl::expected<early_config_t, int>
+get_early_config_client(int argc, const char *argv[]);
+
 }
 
 WRITE_CLASS_ENCODER(crimson::osd::early_config_t)
