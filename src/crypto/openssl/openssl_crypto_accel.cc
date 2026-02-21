@@ -108,7 +108,7 @@ bool OpenSSLCryptoAccel::gcm_encrypt(unsigned char* out, const unsigned char* in
                                       const unsigned char (&iv)[AES_GCM_NONCE_SIZE],
                                       const unsigned char (&key)[AES_256_KEYSIZE],
                                       const unsigned char* aad, size_t aad_len,
-                                      unsigned char (&tag)[AES_GCM_TAGSIZE],
+                                      unsigned char* tag,
                                       optional_yield y)
 {
   using pctx_t = std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;
@@ -157,7 +157,7 @@ bool OpenSSLCryptoAccel::gcm_encrypt(unsigned char* out, const unsigned char* in
     return false;
   }
 
-  if (EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_GET_TAG, AES_GCM_TAGSIZE, &tag[0]) != EVP_SUCCESS) {
+  if (EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_GET_TAG, AES_GCM_TAGSIZE, tag) != EVP_SUCCESS) {
     derr << "failed to get GCM tag" << dendl;
     return false;
   }
@@ -169,7 +169,7 @@ bool OpenSSLCryptoAccel::gcm_decrypt(unsigned char* out, const unsigned char* in
                                       const unsigned char (&iv)[AES_GCM_NONCE_SIZE],
                                       const unsigned char (&key)[AES_256_KEYSIZE],
                                       const unsigned char* aad, size_t aad_len,
-                                      const unsigned char (&tag)[AES_GCM_TAGSIZE],
+                                      const unsigned char* tag,
                                       optional_yield y)
 {
   using pctx_t = std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;
@@ -198,7 +198,7 @@ bool OpenSSLCryptoAccel::gcm_decrypt(unsigned char* out, const unsigned char* in
   }
 
   if (EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_SET_TAG, AES_GCM_TAGSIZE,
-                          const_cast<unsigned char*>(&tag[0])) != EVP_SUCCESS) {
+                          const_cast<unsigned char*>(tag)) != EVP_SUCCESS) {
     derr << "failed to set GCM expected tag" << dendl;
     return false;
   }
