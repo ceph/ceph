@@ -59,13 +59,13 @@ class CryptoAccel {
                    const unsigned char (&iv)[AES_GCM_NONCE_SIZE],
                    const unsigned char (&key)[AES_256_KEYSIZE],
                    const unsigned char* aad, size_t aad_len,
-                   unsigned char (&tag)[AES_GCM_TAGSIZE],
+                   unsigned char* tag,
                    optional_yield y) = 0;
   virtual bool gcm_decrypt(unsigned char* out, const unsigned char* in, size_t size,
                    const unsigned char (&iv)[AES_GCM_NONCE_SIZE],
                    const unsigned char (&key)[AES_256_KEYSIZE],
                    const unsigned char* aad, size_t aad_len,
-                   const unsigned char (&tag)[AES_GCM_TAGSIZE],
+                   const unsigned char* tag,
                    optional_yield y) = 0;
   virtual bool gcm_encrypt_batch(unsigned char* out, const unsigned char* in, size_t size,
                    const unsigned char iv[][AES_GCM_NONCE_SIZE],

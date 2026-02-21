@@ -6,6 +6,8 @@
  */
 
 #include <string_view>
+#include <atomic>
+#include <mutex>
 
 #include <rgw/rgw_op.h>
 #include <rgw/rgw_crypt.h>
@@ -678,6 +680,8 @@ private:
   uint8_t base_nonce[AES_256_IVSIZE];
   bool nonce_initialized = false;
   uint32_t part_number_ = 0;  // For multipart: ensures unique IVs across parts
+  std::once_flag gcm_accel_init_once;
+  CryptoAccelRef gcm_accel;
 
 public:
   explicit AES_256_GCM(const DoutPrefixProvider* dpp, CephContext* cct)
@@ -907,7 +911,25 @@ public:
     aad[7] = chunk_index & 0xFF;
   }
 
-  // GCM transform using OpenSSL EVP (no acceleration)
+  CryptoAccelRef get_gcm_accel()
+  {
+    static std::atomic<bool> failed_to_get_crypto_gcm(false);
+    if (failed_to_get_crypto_gcm.load(std::memory_order_acquire)) {
+      return nullptr;
+    }
+
+    std::call_once(gcm_accel_init_once, [this]() {
+      static const size_t max_requests = g_ceph_context->_conf->rgw_thread_pool_size;
+      gcm_accel = get_crypto_accel(dpp, cct, CHUNK_SIZE, max_requests);
+      if (!gcm_accel) {
+        failed_to_get_crypto_gcm.store(true, std::memory_order_release);
+      }
+    });
+
+    return gcm_accel;
+  }
+
+  // GCM transform using OpenSSL EVP
   bool gcm_transform(unsigned char* out,
                      const unsigned char* in,
                      size_t size,
@@ -915,51 +937,64 @@ public:
                      const unsigned char (&key)[AES_256_KEYSIZE],
                      unsigned char* tag,
                      uint64_t chunk_index,
-                     bool encrypt)
+                     bool encrypt,
+                     EVP_CIPHER_CTX* evp_ctx = nullptr)
   {
     using pctx_t = std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;
-    pctx_t pctx{ EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free };
+    pctx_t owned_ctx{nullptr, EVP_CIPHER_CTX_free};
+    EVP_CIPHER_CTX* ctx = evp_ctx;
 
-    if (!pctx) {
-      ldpp_dout(dpp, 5) << "EVP: failed to create cipher context" << dendl;
-      return false;
+    if (!ctx) {
+      owned_ctx.reset(EVP_CIPHER_CTX_new());
+      ctx = owned_ctx.get();
+      if (!ctx) {
+        ldpp_dout(dpp, 5) << "EVP: failed to create cipher context" << dendl;
+        return false;
+      }
+      if (encrypt) {
+        if (1 != EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(),
+                                     nullptr, nullptr, nullptr)) {
+          ldpp_dout(dpp, 5) << "EVP: failed to initialize GCM" << dendl;
+          return false;
+        }
+      } else {
+        if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(),
+                                     nullptr, nullptr, nullptr)) {
+          ldpp_dout(dpp, 5) << "EVP: failed to initialize GCM" << dendl;
+          return false;
+        }
+      }
     }
 
     uint8_t aad[8];
     encode_chunk_aad(aad, chunk_index);
 
     if (encrypt) {
-      if (1 != EVP_EncryptInit_ex(pctx.get(), EVP_aes_256_gcm(),
-                                   nullptr, nullptr, nullptr)) {
-        ldpp_dout(dpp, 5) << "EVP: failed to initialize GCM" << dendl;
-        return false;
-      }
-
-      if (1 != EVP_EncryptInit_ex(pctx.get(), nullptr, nullptr, key, iv)) {
+      if (1 != EVP_EncryptInit_ex(ctx, nullptr, nullptr, key, iv)) {
         ldpp_dout(dpp, 5) << "EVP: failed to set key/IV" << dendl;
         return false;
       }
 
       int aad_len = 0;
-      if (1 != EVP_EncryptUpdate(pctx.get(), nullptr, &aad_len, aad, sizeof(aad))) {
+      if (1 != EVP_EncryptUpdate(ctx, nullptr, &aad_len, aad, sizeof(aad))) {
         ldpp_dout(dpp, 5) << "EVP: failed to set AAD" << dendl;
         return false;
       }
 
       int written = 0;
       ceph_assert(size <= CHUNK_SIZE);
-      if (1 != EVP_EncryptUpdate(pctx.get(), out, &written, in, size)) {
+      if (1 != EVP_EncryptUpdate(ctx, out, &written, in, size)) {
         ldpp_dout(dpp, 5) << "EVP: EncryptUpdate failed" << dendl;
         return false;
       }
 
       int finally_written = 0;
-      if (1 != EVP_EncryptFinal_ex(pctx.get(), out + written, &finally_written)) {
+      if (1 != EVP_EncryptFinal_ex(ctx, out + written, &finally_written)) {
         ldpp_dout(dpp, 5) << "EVP: EncryptFinal_ex failed" << dendl;
         return false;
       }
 
-      if (1 != EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_GET_TAG,
+      if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG,
                                     GCM_TAG_SIZE, tag)) {
         ldpp_dout(dpp, 5) << "EVP: failed to get GCM tag" << dendl;
         return false;
@@ -967,38 +1002,32 @@ public:
 
       return (written + finally_written) == static_cast<int>(size);
     } else {
-      if (1 != EVP_DecryptInit_ex(pctx.get(), EVP_aes_256_gcm(),
-                                   nullptr, nullptr, nullptr)) {
-        ldpp_dout(dpp, 5) << "EVP: failed to initialize GCM" << dendl;
-        return false;
-      }
-
-      if (1 != EVP_DecryptInit_ex(pctx.get(), nullptr, nullptr, key, iv)) {
+      if (1 != EVP_DecryptInit_ex(ctx, nullptr, nullptr, key, iv)) {
         ldpp_dout(dpp, 5) << "EVP: failed to set key/IV" << dendl;
         return false;
       }
 
       int aad_len = 0;
-      if (1 != EVP_DecryptUpdate(pctx.get(), nullptr, &aad_len, aad, sizeof(aad))) {
+      if (1 != EVP_DecryptUpdate(ctx, nullptr, &aad_len, aad, sizeof(aad))) {
         ldpp_dout(dpp, 5) << "EVP: failed to set AAD" << dendl;
         return false;
       }
 
       int written = 0;
       ceph_assert(size <= CHUNK_SIZE);
-      if (1 != EVP_DecryptUpdate(pctx.get(), out, &written, in, size)) {
+      if (1 != EVP_DecryptUpdate(ctx, out, &written, in, size)) {
         ldpp_dout(dpp, 5) << "EVP: DecryptUpdate failed" << dendl;
         return false;
       }
 
-      if (1 != EVP_CIPHER_CTX_ctrl(pctx.get(), EVP_CTRL_GCM_SET_TAG,
+      if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG,
                                     GCM_TAG_SIZE, const_cast<unsigned char*>(tag))) {
         ldpp_dout(dpp, 5) << "EVP: failed to set GCM tag" << dendl;
         return false;
       }
 
       int finally_written = 0;
-      if (1 != EVP_DecryptFinal_ex(pctx.get(), out + written, &finally_written)) {
+      if (1 != EVP_DecryptFinal_ex(ctx, out + written, &finally_written)) {
         ldpp_dout(dpp, 5) << "EVP: DecryptFinal_ex failed - authentication failure" << dendl;
         memset(out, 0, size);
         return false;
@@ -1024,36 +1053,24 @@ public:
                      unsigned char* tag,
                      uint64_t chunk_index,
                      bool encrypt,
-                     optional_yield y)
+                     optional_yield y,
+                     const CryptoAccelRef& accel,
+                     EVP_CIPHER_CTX* evp_ctx = nullptr)
   {
-    static std::atomic<bool> failed_to_get_crypto_gcm(false);
-    CryptoAccelRef crypto_accel;
-    if (!failed_to_get_crypto_gcm.load()) {
-      static size_t max_requests = g_ceph_context->_conf->rgw_thread_pool_size;
-      crypto_accel = get_crypto_accel(dpp, cct, CHUNK_SIZE, max_requests);
-      if (!crypto_accel)
-        failed_to_get_crypto_gcm = true;
-    }
-
-    if (crypto_accel != nullptr) {
+    if (accel) {
       uint8_t aad[8];
       encode_chunk_aad(aad, chunk_index);
-      unsigned char tag_buf[GCM_TAG_SIZE];
 
       if (encrypt) {
-        bool result = crypto_accel->gcm_encrypt(out, in, size, iv, key,
-                                                 aad, sizeof(aad), tag_buf, y);
-        if (result) memcpy(tag, tag_buf, GCM_TAG_SIZE);
-        return result;
+        return accel->gcm_encrypt(out, in, size, iv, key,
+                                  aad, sizeof(aad), tag, y);
       } else {
-        memcpy(tag_buf, tag, GCM_TAG_SIZE);
-        return crypto_accel->gcm_decrypt(out, in, size, iv, key,
-                                          aad, sizeof(aad), tag_buf, y);
+        return accel->gcm_decrypt(out, in, size, iv, key,
+                                  aad, sizeof(aad), tag, y);
       }
     }
 
-    // No hardware accelerator available — use OpenSSL EVP fallback
-    return gcm_transform(out, in, size, iv, key, tag, chunk_index, encrypt);
+    return gcm_transform(out, in, size, iv, key, tag, chunk_index, encrypt, evp_ctx);
   }
 
   bool encrypt(bufferlist& input,
@@ -1073,46 +1090,75 @@ public:
       output_size += remainder + GCM_TAG_SIZE;
     }
 
-    buffer::ptr buf(output_size);
+    buffer::ptr buf(buffer::create_aligned(output_size, 64));
     unsigned char* buf_raw = reinterpret_cast<unsigned char*>(buf.c_str());
-    const unsigned char* input_raw = reinterpret_cast<const unsigned char*>(
-        input.c_str() + in_ofs);
+
+    if (in_ofs < 0 || static_cast<uint64_t>(in_ofs) > input.length()) {
+      ldpp_dout(dpp, 5) << "GCM: invalid input offset " << in_ofs << dendl;
+      return false;
+    }
+
+    // Resolve accelerator once for all chunks
+    CryptoAccelRef accel = get_gcm_accel();
+
+    // Pre-create EVP context for the fallback path
+    using pctx_t = std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;
+    pctx_t evp_ctx{nullptr, EVP_CIPHER_CTX_free};
+    if (!accel) {
+      evp_ctx.reset(EVP_CIPHER_CTX_new());
+      if (!evp_ctx) {
+        ldpp_dout(dpp, 5) << "EVP: failed to create cipher context" << dendl;
+        return false;
+      }
+      if (1 != EVP_EncryptInit_ex(evp_ctx.get(), EVP_aes_256_gcm(),
+                                   nullptr, nullptr, nullptr)) {
+        ldpp_dout(dpp, 5) << "EVP: failed to initialize GCM" << dendl;
+        return false;
+      }
+    }
+
+    // Linearize input if fragmented (bounded by rgw_max_chunk_size, typically 4MB)
+    const unsigned char* input_raw =
+        reinterpret_cast<const unsigned char*>(input.c_str() + in_ofs);
 
     size_t out_pos = 0;
+
+    // Initialize IV cursor: decode base_nonce once, then emit + increment per chunk
+    iv_cursor cursor;
+    if (!init_iv_cursor(cursor, stream_offset)) {
+      return false;
+    }
 
     // Process full chunks
     for (size_t offset = 0; offset < num_full_chunks * CHUNK_SIZE; offset += CHUNK_SIZE) {
       unsigned char iv[AES_256_IVSIZE];
-      if (!prepare_iv(iv, stream_offset + offset)) {
-        return false;
-      }
-      uint64_t chunk_index = (stream_offset + offset) / CHUNK_SIZE;
+      cursor.emit(iv);
+      const unsigned char* input_ptr = input_raw + offset;
 
       unsigned char* ciphertext = buf_raw + out_pos;
       unsigned char* tag = buf_raw + out_pos + CHUNK_SIZE;
 
-      if (!gcm_transform(ciphertext, input_raw + offset, CHUNK_SIZE,
-                         iv, key, tag, chunk_index, true, y)) {
+      if (!gcm_transform(ciphertext, input_ptr, CHUNK_SIZE,
+                         iv, key, tag, cursor.chunk_index, true, y, accel, evp_ctx.get())) {
         ldpp_dout(dpp, 5) << "Failed to encrypt chunk at offset " << offset << dendl;
         return false;
       }
 
+      cursor.advance();
       out_pos += ENCRYPTED_CHUNK_SIZE;
     }
 
     // Process remainder (if any)
     if (remainder > 0) {
       unsigned char iv[AES_256_IVSIZE];
-      if (!prepare_iv(iv, stream_offset + num_full_chunks * CHUNK_SIZE)) {
-        return false;
-      }
-      uint64_t chunk_index = (stream_offset + num_full_chunks * CHUNK_SIZE) / CHUNK_SIZE;
+      cursor.emit(iv);
+      const unsigned char* input_ptr = input_raw + num_full_chunks * CHUNK_SIZE;
 
       unsigned char* ciphertext = buf_raw + out_pos;
       unsigned char* tag = buf_raw + out_pos + remainder;
 
-      if (!gcm_transform(ciphertext, input_raw + num_full_chunks * CHUNK_SIZE,
-                         remainder, iv, key, tag, chunk_index, true, y)) {
+      if (!gcm_transform(ciphertext, input_ptr,
+                         remainder, iv, key, tag, cursor.chunk_index, true, y, accel, evp_ctx.get())) {
         ldpp_dout(dpp, 5) << "Failed to encrypt final chunk" << dendl;
         return false;
       }
@@ -1147,33 +1193,60 @@ public:
       output_size += remainder - GCM_TAG_SIZE;
     }
 
-    buffer::ptr buf(output_size);
+    buffer::ptr buf(buffer::create_aligned(output_size, 64));
     unsigned char* buf_raw = reinterpret_cast<unsigned char*>(buf.c_str());
-    unsigned char* input_raw = reinterpret_cast<unsigned char*>(
-        input.c_str() + in_ofs);
 
-    size_t in_pos = 0;
+    if (in_ofs < 0 || static_cast<uint64_t>(in_ofs) > input.length()) {
+      ldpp_dout(dpp, 5) << "GCM: invalid input offset " << in_ofs << dendl;
+      return false;
+    }
+
+    // Resolve accelerator once for all chunks
+    CryptoAccelRef accel = get_gcm_accel();
+
+    // Pre-create EVP context for the fallback path
+    using pctx_t = std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;
+    pctx_t evp_ctx{nullptr, EVP_CIPHER_CTX_free};
+    if (!accel) {
+      evp_ctx.reset(EVP_CIPHER_CTX_new());
+      if (!evp_ctx) {
+        ldpp_dout(dpp, 5) << "EVP: failed to create cipher context" << dendl;
+        return false;
+      }
+      if (1 != EVP_DecryptInit_ex(evp_ctx.get(), EVP_aes_256_gcm(),
+                                   nullptr, nullptr, nullptr)) {
+        ldpp_dout(dpp, 5) << "EVP: failed to initialize GCM" << dendl;
+        return false;
+      }
+    }
+
+    // Linearize input if fragmented (bounded by rgw_max_chunk_size, typically 4MB)
+    const unsigned char* input_raw =
+        reinterpret_cast<const unsigned char*>(input.c_str() + in_ofs);
+
     size_t out_pos = 0;
+
+    // Initialize IV cursor: decode base_nonce once, then emit + increment per chunk
+    iv_cursor cursor;
+    if (!init_iv_cursor(cursor, stream_offset)) {
+      return false;
+    }
 
     // Process full chunks
     for (size_t i = 0; i < num_full_chunks; i++) {
       unsigned char iv[AES_256_IVSIZE];
-      if (!prepare_iv(iv, stream_offset + i * CHUNK_SIZE)) {
-        return false;
-      }
-      uint64_t chunk_index = (stream_offset + i * CHUNK_SIZE) / CHUNK_SIZE;
+      cursor.emit(iv);
+      const unsigned char* chunk_ptr = input_raw + i * ENCRYPTED_CHUNK_SIZE;
 
-      unsigned char* ciphertext = input_raw + in_pos;
-      unsigned char* tag = input_raw + in_pos + CHUNK_SIZE;
-
-      if (!gcm_transform(buf_raw + out_pos, ciphertext, CHUNK_SIZE,
-                         iv, key, tag, chunk_index, false, y)) {
+      if (!gcm_transform(buf_raw + out_pos, chunk_ptr, CHUNK_SIZE,
+                         iv, key, const_cast<unsigned char*>(chunk_ptr + CHUNK_SIZE),
+                         cursor.chunk_index, false, y, accel, evp_ctx.get())) {
         ldpp_dout(dpp, 5) << "GCM: Failed to decrypt chunk " << i
                           << " - authentication failed" << dendl;
         return false;
       }
 
-      in_pos += ENCRYPTED_CHUNK_SIZE;
+      cursor.advance();
       out_pos += CHUNK_SIZE;
     }
 
@@ -1181,16 +1254,12 @@ public:
     if (remainder > 0) {
       size_t plaintext_size = remainder - GCM_TAG_SIZE;
       unsigned char iv[AES_256_IVSIZE];
-      if (!prepare_iv(iv, stream_offset + num_full_chunks * CHUNK_SIZE)) {
-        return false;
-      }
-      uint64_t chunk_index = (stream_offset + num_full_chunks * CHUNK_SIZE) / CHUNK_SIZE;
+      cursor.emit(iv);
+      const unsigned char* chunk_ptr = input_raw + num_full_chunks * ENCRYPTED_CHUNK_SIZE;
 
-      unsigned char* ciphertext = input_raw + in_pos;
-      unsigned char* tag = input_raw + in_pos + plaintext_size;
-
-      if (!gcm_transform(buf_raw + out_pos, ciphertext, plaintext_size,
-                         iv, key, tag, chunk_index, false, y)) {
+      if (!gcm_transform(buf_raw + out_pos, chunk_ptr, plaintext_size,
+                         iv, key, const_cast<unsigned char*>(chunk_ptr + plaintext_size),
+                         cursor.chunk_index, false, y, accel, evp_ctx.get())) {
         ldpp_dout(dpp, 5) << "GCM: Failed to decrypt final chunk - authentication failed" << dendl;
         return false;
       }
@@ -1204,47 +1273,57 @@ public:
   }
 
   /**
-   * Derive per-chunk nonce from base_nonce + combined index.
-   * This ensures each chunk has a unique nonce while maintaining
-   * the "number used once" property required by GCM.
-   *
-   * For multipart uploads, we combine part_number and chunk_index to ensure
-   * unique IVs across all parts (since each part's offset starts at 0).
+   * IV cursor for efficient sequential IV generation.
+   * Decodes base_nonce to host order once, then emits and increments per chunk.
    *
    * Combined index layout (64 bits):
    *   - Upper 24 bits: part_number (supports up to 16M parts; S3 limit is 10K)
    *   - Lower 40 bits: chunk_index (supports up to 1T chunks per part)
    */
-  bool prepare_iv(unsigned char (&iv)[AES_256_IVSIZE], off_t offset) {
+  struct iv_cursor {
+    uint64_t lo;           // host-order low 64 bits of current nonce
+    uint32_t hi;           // host-order high 32 bits of current nonce
+    uint64_t chunk_index;  // current chunk index (for AAD)
+
+    void emit(unsigned char (&iv)[AES_256_IVSIZE]) const {
+      uint32_t be_hi = boost::endian::native_to_big(hi);
+      uint64_t be_lo = boost::endian::native_to_big(lo);
+      memcpy(iv, &be_hi, sizeof(be_hi));
+      memcpy(iv + 4, &be_lo, sizeof(be_lo));
+    }
+
+    void advance() {
+      lo++;
+      if (lo == 0) hi++;
+      chunk_index++;
+    }
+  };
+
+  bool init_iv_cursor(iv_cursor& cursor, off_t stream_offset) {
     ceph_assert(nonce_initialized);
 
-    // Combine part_number and chunk_index to ensure unique IVs across parts
-    // Without this, multipart parts would reuse IVs (all start at offset 0)
-    uint64_t chunk_index = offset / CHUNK_SIZE;
-
-    // Validate chunk_index fits in CHUNK_INDEX_BITS (supports up to 4 PB per part at 4KB chunks)
-    // This is a runtime check to prevent IV reuse in release builds
+    uint64_t chunk_index = stream_offset / CHUNK_SIZE;
     if (chunk_index > MAX_CHUNK_INDEX) {
       ldpp_dout(dpp, 0) << "ERROR: chunk_index " << chunk_index
                         << " exceeds maximum " << MAX_CHUNK_INDEX
-                        << " - IV collision risk, refusing to encrypt" << dendl;
+                        << " - IV collision risk" << dendl;
       return false;
     }
 
-    uint64_t combined_index = (static_cast<uint64_t>(part_number_) << CHUNK_INDEX_BITS) | chunk_index;
+    cursor.chunk_index = chunk_index;
+    uint64_t combined_index =
+        (static_cast<uint64_t>(part_number_) << CHUNK_INDEX_BITS) | chunk_index;
 
-    // Derive IV: base_nonce + combined_index (with carry propagation)
-    int i = AES_256_IVSIZE - 1;
-    unsigned int val;
-    unsigned int carry = 0;
+    // Decode base_nonce from big-endian to host order (done once per request)
+    memcpy(&cursor.hi, base_nonce, sizeof(cursor.hi));
+    memcpy(&cursor.lo, base_nonce + 4, sizeof(cursor.lo));
+    boost::endian::big_to_native_inplace(cursor.lo);
+    boost::endian::big_to_native_inplace(cursor.hi);
 
-    while (i >= 0) {
-      val = (combined_index & 0xff) + base_nonce[i] + carry;
-      iv[i] = static_cast<unsigned char>(val);
-      carry = val >> 8;
-      combined_index = combined_index >> 8;
-      i--;
-    }
+    uint64_t new_lo = cursor.lo + combined_index;
+    uint32_t carry = (new_lo < cursor.lo) ? 1 : 0;
+    cursor.hi += carry;
+    cursor.lo = new_lo;
     return true;
   }
 };
