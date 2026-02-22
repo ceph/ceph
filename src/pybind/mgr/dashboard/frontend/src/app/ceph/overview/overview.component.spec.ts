@@ -10,8 +10,8 @@ import { CommonModule } from '@angular/common';
 import { GridModule, TilesModule } from 'carbon-components-angular';
 import { OverviewHealthCardComponent } from './health-card/overview-health-card.component';
 import { OverviewStorageCardComponent } from './storage-card/overview-storage-card.component';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, RouterModule } from '@angular/router';
+import { OverviewAlertsCardComponent } from './alerts-card/overview-alerts-card.component';
 
 describe('OverviewComponent', () => {
   let component: OverviewComponent;
@@ -31,11 +31,13 @@ describe('OverviewComponent', () => {
         GridModule,
         TilesModule,
         OverviewStorageCardComponent,
-        OverviewHealthCardComponent
+        OverviewHealthCardComponent,
+        OverviewAlertsCardComponent,
+        RouterModule
       ],
       providers: [
         provideHttpClient(),
-        provideHttpClientTesting(),
+        provideRouter([]),
         { provide: HealthService, useValue: mockHealthService },
         { provide: RefreshIntervalService, useValue: mockRefreshIntervalService },
         provideRouter([])

@@ -1,0 +1,69 @@
+import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { combineLatest } from 'rxjs';
+
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
+import { ButtonModule, GridModule, LinkModule, TilesModule } from 'carbon-components-angular';
+import { RouterModule } from '@angular/router';
+import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
+import { ComponentsModule } from '~/app/shared/components/components.module';
+import { map, shareReplay, startWith } from 'rxjs/operators';
+
+const AlertIcon = {
+  error: 'error',
+  warning: 'warning',
+  success: 'success'
+};
+
+@Component({
+  selector: 'cd-overview-alerts-card',
+  standalone: true,
+  imports: [
+    CommonModule,
+    GridModule,
+    TilesModule,
+    ComponentsModule,
+    RouterModule,
+    ProductiveCardComponent,
+    ButtonModule,
+    LinkModule
+  ],
+  templateUrl: './overview-alerts-card.component.html',
+  styleUrl: './overview-alerts-card.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class OverviewAlertsCardComponent implements OnInit {
+  private readonly prometheusAlertService = inject(PrometheusAlertService);
+
+  ngOnInit(): void {
+    this.prometheusAlertService.getGroupedAlerts(true);
+  }
+
+  readonly vm$ = combineLatest([
+    this.prometheusAlertService.totalAlerts$.pipe(startWith(0)),
+    this.prometheusAlertService.criticalAlerts$.pipe(startWith(0)),
+    this.prometheusAlertService.warningAlerts$.pipe(startWith(0))
+  ]).pipe(
+    map(([total, critical, warning]) => {
+      const hasAlerts = total > 0;
+      const hasCritical = critical > 0;
+      const hasWarning = warning > 0;
+
+      const icon = !hasAlerts
+        ? AlertIcon.success
+        : hasCritical
+        ? AlertIcon.error
+        : AlertIcon.warning;
+
+      const statusText = hasAlerts ? $localize`Need attention` : $localize`No active alerts`;
+
+      const badges = [
+        hasCritical && { key: 'critical', icon: AlertIcon.error, count: critical },
+        hasWarning && { key: 'warning', icon: AlertIcon.warning, count: warning }
+      ].filter(Boolean);
+
+      return { total, icon, statusText, badges };
+    }),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+}

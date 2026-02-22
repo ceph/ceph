@@ -8,7 +8,7 @@ import { GridModule, LayerModule, TilesModule } from 'carbon-components-angular'
  * @example
  * <cd-productive-card title="Card Title"
  *                     [applyShadow]="true">
- *   <ng-template #headerAction>...</ng-template>
+ *   <ng-template #header>...</ng-template>
  *   <ng-template #footer>...</ng-template>
  *   <p>My card body content</p>
  * </cd-productive-card>

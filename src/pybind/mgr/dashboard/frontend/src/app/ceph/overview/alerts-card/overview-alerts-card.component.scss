@@ -1,0 +1,22 @@
+.overview-alerts-card {
+  &-badges {
+    display: flex;
+    align-items: center;
+  }
+
+  &-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--cds-spacing-04);
+  }
+
+  &-badge-with-border {
+    border-left: 1px solid var(--cds-border-subtle);
+  }
+
+  &-need-attention {
+    display: block;
+    margin-top: var(--cds-spacing-02);
+    color: var(--cds-text-secondary);
+  }
+}

@@ -1,0 +1,50 @@
+<cd-productive-card>
+@if (vm$ | async; as vm) {
+  <ng-template #header>
+    <h2 class="cds--type-heading-compact-02"
+        i18n>
+      System alerts
+    </h2>
+    <button
+      cdsButton="ghost"
+      size="sm"
+      [routerLink]="['/monitoring/active-alerts']"
+      i18n
+    >
+      View all
+    </button>
+  </ng-template>
+
+  <div>
+    <span class="cds--type-heading-07">{{ vm.total }}</span>
+    <cd-icon [type]="vm.icon"></cd-icon>
+  </div>
+
+  <small
+    class="cds--type-label-01 overview-alerts-card-need-attention"
+    i18n>
+    {{ vm.statusText }}
+  </small>
+
+  <div class="cds-mt-6">
+  @if (vm.badges.length) {
+    <div class="overview-alerts-card-badges">
+      @for (b of vm.badges; track b.key; let first = $first) {
+      <span
+        class="overview-alerts-card-badge"
+        [class.overview-alerts-card-badge-with-border]="!first">
+        <cd-icon [type]="b.icon"></cd-icon>
+        <a
+          cdsLink
+          class="cds-ml-3"
+          [routerLink]="['/monitoring/active-alerts']"
+          [queryParams]="{ severity: b.key }">
+          {{ b.count }}
+        </a>
+      </span>
+      }
+    </div>
+  }
+  </div>
+}
+</cd-productive-card>
