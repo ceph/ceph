@@ -293,6 +293,7 @@
      --rgw-zone=<name>                 name of zone in which radosgw is running
      --zone-id=<id>                    zone id
      --zone-new-name=<name>            zone new name
+     --log-zone=<name>                 target zone for per-zone datalog operations
      --source-zone                     specify the source zone (for data sync)
      --default                         set entity (realm, zonegroup, zone) as default
      --read-only                       set zone as read-only (when adding to zonegroup)
