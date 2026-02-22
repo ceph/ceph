@@ -137,3 +137,11 @@ target_link_libraries(
   crimson::gtest)
 
 add_subdirectory(cbt)
+add_executable(unittest-crimson-pg-pool-shift
+  test_pg_pool_shift.cc)
+add_ceph_test(unittest-crimson-pg-pool-shift
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest-crimson-pg-pool-shift
+  --memory 256M --smp 1)
+target_link_libraries(unittest-crimson-pg-pool-shift
+  crimson-common
+  crimson::gtest)
