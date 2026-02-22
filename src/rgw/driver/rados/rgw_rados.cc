@@ -338,6 +338,29 @@ public:
 
     return run(dpp, stacks);
   }
+
+  // Per-zone: send each zone only its own modified shards
+  int notify_per_zone(
+      const DoutPrefixProvider *dpp,
+      map<rgw_zone_id, RGWRESTConn *>& conn_map,
+      std::map<rgw_zone_id, bc::flat_map<int, bc::flat_set<rgw_data_notify_entry>>>& zone_shards) {
+    list<RGWCoroutinesStack *> stacks;
+    const char *source_zone = store->svc.zone->get_zone_params().get_id().c_str();
+    for (auto& [zone_id, conn] : conn_map) {
+      auto it = zone_shards.find(zone_id);
+      if (it == zone_shards.end() || it->second.empty()) {
+       continue; // no modifications for this zone
+      }
+      RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
+      stack->call(new RGWDataPostNotifyCR(store, http_manager, it->second,
+                                         source_zone, conn));
+      stacks.push_back(stack);
+    }
+    if (stacks.empty()) {
+      return 0;
+    }
+    return run(dpp, stacks);
+  }
 };
 
 /* class RGWRadosThread */
@@ -456,21 +479,34 @@ int RGWDataNotifier::process(const DoutPrefixProvider *dpp)
     return 0;
   }
 
-  auto shards = data_log->read_clear_modified();
-
-  if (shards.empty()) {
-    return 0;
-  }
-
-  for (const auto& [shard_id, entries] : shards) {
-    bc::flat_set<rgw_data_notify_entry>::iterator it;
-    for (const auto& entry : entries) {
-      ldpp_dout(dpp, 20) << __func__ << "(): notifying datalog change, shard_id="
-        << shard_id << ":" << entry.gen << ":" << entry.key << dendl;
+  // Per-zone notifications: send each zone only its own modified shards
+  auto zone_shards = data_log->read_clear_zone_modified();
+  if (!zone_shards.empty()) {
+    for (const auto& [zone_id, shards] : zone_shards) {
+      for (const auto& [shard_id, entries] : shards) {
+       for (const auto& entry : entries) {
+         ldpp_dout(dpp, 20) << __func__
+           << "(): notifying per-zone datalog change, zone=" << zone_id
+           << " shard_id=" << shard_id << ":" << entry.gen
+           << ":" << entry.key << dendl;
+       }
+      }
     }
+    notify_mgr.notify_per_zone(dpp,
+      store->svc.zone->get_zone_data_notify_to_map(), zone_shards);
   }
 
-  notify_mgr.notify_all(dpp, store->svc.zone->get_zone_data_notify_to_map(), shards);
+  // Legacy notifications (when legacy writes are active)
+  auto shards = data_log->read_clear_modified();
+  if (!shards.empty()) {
+    for (const auto& [shard_id, entries] : shards) {
+      for (const auto& entry : entries) {
+       ldpp_dout(dpp, 20) << __func__ << "(): notifying datalog change, shard_id="
+         << shard_id << ":" << entry.gen << ":" << entry.key << dendl;
+      }
+    }
+    notify_mgr.notify_all(dpp, store->svc.zone->get_zone_data_notify_to_map(), shards);
+  }
 
   return 0;
 }
