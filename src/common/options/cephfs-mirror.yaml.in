@@ -25,6 +25,21 @@ options:
   services:
   - cephfs-mirror
   min: 1
+- name: cephfs_mirror_distribute_datasync_threads
+  type: bool
+  level: advanced
+  desc: distribute data synchronization threads evenly across multiple snapshots.
+  long_desc: controls how datasync worker threads are scheduled when multiple snapshots are
+    queued for synchronization. When enabled, worker threads are distributed fairly across
+    active snapshots, preventing a single large snapshot from monopolizing all available
+    threads and causing other snapshots to starve. When disabled, datasync threads process
+    one snapshot until completion before switching to another, which can improve
+    throughput for individual large snapshots but may increase latency for other queued snapshots.
+    Enabling this option improves responsiveness and reduces starvation in environments
+    where multiple directories are configured to be mirrored.
+  default: true
+  services:
+  - cephfs-mirror
 - name: cephfs_mirror_blockdiff_min_file_size
   type: size
   level: advanced
