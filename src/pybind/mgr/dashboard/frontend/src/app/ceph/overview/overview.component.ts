@@ -1,13 +1,15 @@
 import { ChangeDetectionStrategy, Component, inject, OnDestroy } from '@angular/core';
 import { GridModule, TilesModule } from 'carbon-components-angular';
 import { OverviewStorageCardComponent } from './storage-card/overview-storage-card.component';
+import { OverviewHealthCardComponent } from './health-card/overview-health-card.component';
+import { OverviewAlertsCardComponent } from './alerts-card/overview-alerts-card.component';
 import { HealthService } from '~/app/shared/api/health.service';
 import { HealthCheck, HealthSnapshotMap } from '~/app/shared/models/health.interface';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { catchError, exhaustMap, map, takeUntil } from 'rxjs/operators';
 import { EMPTY, Observable, Subject } from 'rxjs';
 import { CommonModule } from '@angular/common';
-import { OverviewHealthCardComponent } from './health-card/overview-health-card.component';
+
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { HealthIconMap } from '~/app/shared/models/overview';
 
@@ -25,7 +27,8 @@ interface OverviewVM {
     TilesModule,
     OverviewStorageCardComponent,
     OverviewHealthCardComponent,
-    ComponentsModule
+    ComponentsModule,
+    OverviewAlertsCardComponent
   ],
   standalone: true,
   templateUrl: './overview.component.html',

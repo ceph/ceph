@@ -110,10 +110,6 @@ import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
 import Help16 from '@carbon/icons/es/help/16';
 import IncidentReporter16 from '@carbon/icons/es/incident-reporter/16';
 
-import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
-import { PageHeaderComponent } from './page-header/page-header.component';
-import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
-
 @NgModule({
   imports: [
     CommonModule,
