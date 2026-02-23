@@ -1,5 +1,6 @@
 <cd-productive-card class="overview-alerts-card">
 @if (vm$ | async; as vm) {
+  <!-- HEADER -->
   <ng-template #header>
     <h2 class="cds--type-heading-compact-02"
         i18n>
@@ -14,7 +15,7 @@
       View all
     </button>
   </ng-template>
-
+  <!-- TOTAL COUNT -->
   <div>
     <span class="cds--type-heading-07">{{ vm.total }}</span>
     <cd-icon [type]="vm.icon"></cd-icon>
@@ -26,20 +27,26 @@
     {{ vm.statusText }}
   </small>
 
+  <!-- SUB TOTAL COUNTS -->
   <div class="cds-mt-6">
   @if (vm.badges.length) {
-    <div class="overview-alerts-card-badges">
-      @for (b of vm.badges; track b.key; let first = $first) {
+    <div [cdsStack]="compact? 'horizontal' : 'vertical'">
+      @for (b of vm.badges; track b.key; let last = $last) {
       <span
         class="overview-alerts-card-badge"
-        [class.overview-alerts-card-badge-with-border]="!first">
+        [class.overview-alerts-card-badge-with-border--right]="!last && compact"
+        [class.overview-alerts-card-badge-with-border--bottom]="!compact">
         <cd-icon [type]="b.icon"></cd-icon>
         <a
           cdsLink
           class="cds-ml-3"
           [routerLink]="['/monitoring/active-alerts']"
           [queryParams]="{ severity: b.key }">
+          @if(compact) {
           {{ b.count }}
+          } @else {
+           {{b.key | upperFirst}} ({{ b.count }})
+          }
         </a>
       </span>
       }

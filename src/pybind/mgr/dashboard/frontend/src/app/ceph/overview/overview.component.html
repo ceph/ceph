@@ -11,12 +11,13 @@
       <cd-overview-health-card
           [vm]="health"
           (viewIncidents)="togglePanel()"
+          (activeSectionChange)="activeHealthTab = $event"
         ></cd-overview-health-card>
     </div>
     <div cdsCol
          class="cds-mb-5"
          [columnNumbers]="{lg: 5}">
-      <cd-overview-alerts-card></cd-overview-alerts-card>
+      <cd-overview-alerts-card [compact]="!activeHealthTab"></cd-overview-alerts-card>
     </div>
   </div>
   <div cdsRow>
@@ -45,7 +46,7 @@
     (closed)="togglePanel()">
     <div panel-header-description
          class="cds--type-body-01">
-      <span>Health incidents are Ceph health checks warnings indicating conditions that require attention and remain until resolved.</span>
+      <span i18n>Health incidents are Ceph health checks warnings indicating conditions that require attention and remain until resolved.</span>
     </div>
     <div class="panel-content">
       @for (check of health?.checks; track key) {

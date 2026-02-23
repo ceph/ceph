@@ -109,13 +109,15 @@ describe('OverviewAlertsCardComponent', () => {
     fixture.detectChanges();
 
     const badgeEls = Array.from(
-      fixture.nativeElement.querySelectorAll(
-        '.overview-alerts-card-badges .overview-alerts-card-badge'
-      )
+      fixture.nativeElement.querySelectorAll('.overview-alerts-card-badge')
     ) as HTMLElement[];
 
     expect(badgeEls.length).toBe(2);
-    expect(badgeEls[0].classList.contains('overview-alerts-card-badge-with-border')).toBe(false);
-    expect(badgeEls[1].classList.contains('overview-alerts-card-badge-with-border')).toBe(true);
+    expect(badgeEls[0].classList.contains('overview-alerts-card-badge-with-border--right')).toBe(
+      true
+    );
+    expect(badgeEls[1].classList.contains('overview-alerts-card-badge-with-border--right')).toBe(
+      false
+    );
   });
 });

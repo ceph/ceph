@@ -26,14 +26,12 @@ import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { UpgradeInfoInterface } from '~/app/shared/models/upgrade.interface';
 import { UpgradeService } from '~/app/shared/api/upgrade.service';
 import { catchError, filter, map, startWith } from 'rxjs/operators';
-import { HealthCardVM } from '~/app/shared/models/overview';
+import { HealthCardTabSection, HealthCardVM } from '~/app/shared/models/overview';
 
 type OverviewHealthData = {
   summary: Summary;
   upgrade: UpgradeInfoInterface;
 };
-
-type TabSection = 'system' | 'hardware' | 'resiliency';
 
 interface HealthItemConfig {
   key: 'mon' | 'mgr' | 'osd' | 'hosts';
@@ -69,8 +67,9 @@ export class OverviewHealthCardComponent {
 
   @Input({ required: true }) vm!: HealthCardVM;
   @Output() viewIncidents = new EventEmitter<void>();
+  @Output() activeSectionChange = new EventEmitter<HealthCardTabSection | null>();
 
-  activeSection: TabSection | null = null;
+  activeSection: HealthCardTabSection | null = null;
   healthItems: HealthItemConfig[] = [
     { key: 'mon', label: $localize`Monitor` },
     { key: 'mgr', label: $localize`Manager` },
@@ -78,8 +77,9 @@ export class OverviewHealthCardComponent {
     { key: 'hosts', label: $localize`Nodes` }
   ];
 
-  toggleSection(section: TabSection) {
+  toggleSection(section: HealthCardTabSection) {
     this.activeSection = this.activeSection === section ? null : section;
+    this.activeSectionChange.emit(this.activeSection);
   }
 
   readonly data$: Observable<OverviewHealthData> = combineLatest([

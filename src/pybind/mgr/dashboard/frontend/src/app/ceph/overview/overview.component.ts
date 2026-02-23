@@ -9,6 +9,7 @@ import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.s
 import { HealthCheck, HealthSnapshotMap } from '~/app/shared/models/health.interface';
 import {
   HealthCardCheckVM,
+  HealthCardTabSection,
   HealthCardVM,
   HealthDisplayVM,
   HealthIconMap,
@@ -131,6 +132,7 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
 })
 export class OverviewComponent {
   isHealthPanelOpen = false;
+  activeHealthTab: HealthCardTabSection | null = null;
 
   private readonly healthService = inject(HealthService);
   private readonly refreshIntervalService = inject(RefreshIntervalService);

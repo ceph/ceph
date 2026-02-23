@@ -1,18 +1,17 @@
 .overview-alerts-card {
-  // height: 100%;
-  &-badges {
-    display: flex;
-    align-items: center;
-  }
-
   &-badge {
     display: inline-flex;
     align-items: center;
+  }
+
+  &-badge-with-border--right {
+    border-right: 1px solid var(--cds-border-subtle);
     padding: 0 var(--cds-spacing-04);
   }
 
-  &-badge-with-border {
-    border-left: 1px solid var(--cds-border-subtle);
+  &-badge-with-border--bottom {
+    border-bottom: 1px solid var(--cds-border-subtle);
+    padding-bottom: var(--cds-spacing-03);
   }
 
   &-need-attention {
@@ -21,8 +20,14 @@
     color: var(--cds-text-secondary);
   }
 
+  // Override to make alert card take full available height.
+  // Carbon tiles set a min height of 4 rem which was causing alerts card not to stretch with its sibling card.
   .cds--tile {
     min-block-size: 0;
     height: 100%;
+  }
+
+  &-badge cd-icon svg {
+    display: block;
   }
 }

@@ -72,3 +72,5 @@ export interface HealthCardVM {
   osd: HealthCardSubStateVM;
   hosts: HealthCardSubStateVM;
 }
+
+export type HealthCardTabSection = 'system' | 'hardware' | 'resiliency';
