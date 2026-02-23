@@ -1,4 +1,10 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnInit,
+  ViewEncapsulation,
+  inject
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { combineLatest } from 'rxjs';
 
@@ -30,7 +36,8 @@ const AlertIcon = {
   ],
   templateUrl: './overview-alerts-card.component.html',
   styleUrl: './overview-alerts-card.component.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None
 })
 export class OverviewAlertsCardComponent implements OnInit {
   private readonly prometheusAlertService = inject(PrometheusAlertService);

@@ -35,6 +35,13 @@ type OverviewHealthData = {
 
 type TabSection = 'system' | 'hardware' | 'resiliency';
 
+interface HealthItemConfig {
+  key: 'mon' | 'mgr' | 'osd' | 'hosts';
+  label: string;
+  prefix?: string;
+  i18n?: boolean;
+}
+
 @Component({
   selector: 'cd-overview-health-card',
   imports: [
@@ -64,6 +71,12 @@ export class OverviewHealthCardComponent {
   @Output() viewIncidents = new EventEmitter<void>();
 
   activeSection: TabSection | null = null;
+  healthItems: HealthItemConfig[] = [
+    { key: 'mon', label: $localize`Monitor` },
+    { key: 'mgr', label: $localize`Manager` },
+    { key: 'osd', label: $localize`OSD` },
+    { key: 'hosts', label: $localize`Nodes` }
+  ];
 
   toggleSection(section: TabSection) {
     this.activeSection = this.activeSection === section ? null : section;
