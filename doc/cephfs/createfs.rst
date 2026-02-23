@@ -155,5 +155,13 @@ If you are storing lots of small files or are frequently modifying files you can
 
     ceph osd pool set my_ec_pool allow_ec_optimizations true
 
-You may not use Erasure Coded pools as CephFS metadata pools, because CephFS metadata is stored using RADOS *OMAP* data structures, which EC pools cannot store.
+RADOS *OMAP* data structures are not supported by default in Erasure Coded pools. Therefore, if you wish to use CephFS with an Erasure Coded pool,
+you must enable the ``supports_omap`` flag for this pool, which can be done as follows:
+
+.. code:: bash
+
+    ceph osd pool set my_ec_pool supports_omap true
+
+RADOS *OMAP* data structures can only be enabled in Erasure Coded pools that allow ec optimizations.
+Alternatively, you can use a Replicated pool as a metadata pool, while using an Erasure Coded pool as the data pool.
 
