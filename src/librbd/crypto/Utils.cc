@@ -37,23 +37,10 @@ void set_crypto(I *image_ctx,
 }
 
 int build_crypto(
-        CephContext* cct, const unsigned char* key, uint32_t key_length,
+        CephContext* cct, const char* cipher_suite,
+        const unsigned char* key, uint32_t key_length,
         uint64_t block_size, uint64_t data_offset, uint32_t meta_size,
         std::unique_ptr<CryptoInterface>* result_crypto) {
-  const char* cipher_suite;
-  switch (key_length) {
-    case 32:
-      cipher_suite = "aes-128-xts";
-      break;
-    case 64:
-    // TODO: Change setup
-      cipher_suite = "AES-256-SIV";
-      //cipher_suite = "aes-256-xts";
-      break;
-    default:
-      lderr(cct) << "unsupported key length: " << key_length << dendl;
-      return -ENOTSUP;
-  }
   openssl::DataCryptor* data_cryptor; 
   if (crypto::is_aead(cipher_suite)) {
     data_cryptor = new openssl::AEADDataCryptor(cct);

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "LoadRequest.h"
+#include <string>
 
 #include "common/dout.h"
 #include "common/errno.h"
@@ -12,6 +13,7 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ReadResult.h"
+#include "common/ceph_json.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -178,17 +180,9 @@ void LoadRequest<I>::handle_read_header(int r) {
   ceph_assert(*m_detected_format_name == "LUKS");
   *m_detected_format_name = m_header.get_format_name();
 
-  auto cipher = m_header.get_cipher();
-  if (strcmp(cipher, "aes") != 0) {
-    lderr(m_image_ctx->cct) << "unsupported cipher: " << cipher << dendl;
-    finish(-ENOTSUP);
-    return;
-  }
-
-  auto cipher_mode = m_header.get_cipher_mode();
-  if (strcmp(cipher_mode, "xts-plain64") != 0) {
-    lderr(m_image_ctx->cct) << "unsupported cipher mode: " << cipher_mode
-                            << dendl;
+  std::string cipher = std::string(m_header.get_cipher()) + "-" + std::string(m_header.get_cipher_mode());
+  if ((cipher != "aes-xts-plain64") && (cipher != "cipher_null-ecb")) {
+    lderr(m_image_ctx->cct) << "unsupported cipher or cipher mode: " << cipher << dendl;
     finish(-ENOTSUP);
     return;
   }
@@ -248,10 +242,46 @@ void LoadRequest<I>::read_volume_key() {
     finish(r);
     return;
   }
-  // TODO: maybe derive metadata sector from openssl 
-  size_t meta_size = 32;
+
+  size_t meta_size = 0;
+  std::string openssl_cipher;
+  if (m_format == RBD_ENCRYPTION_FORMAT_LUKS2 ||
+      (m_format == RBD_ENCRYPTION_FORMAT_LUKS &&
+       strcmp(m_header.get_format_name(), CRYPT_LUKS2) == 0)) {
+    const char* json_data = nullptr;
+    r = m_header.token_get(token::TYPE_AEAD, &json_data);
+    if (r == 0 && json_data != nullptr) {
+      JSONParser parser;
+      if (parser.parse(json_data, strlen(json_data))) {
+        AEADToken aead_token;
+        aead_token.decode_json(&parser);
+        meta_size = aead_token.meta_size;
+        openssl_cipher = aead_token.alg;
+        ldout(m_image_ctx->cct, 20)
+            << "detected AEAD configuration: meta_size=" << meta_size
+            << " alg=" << openssl_cipher << dendl;
+      }
+    }
+  }
+
+  if (openssl_cipher.empty()) {
+    if (strcmp(m_header.get_cipher(), "aes") == 0 &&
+        strcmp(m_header.get_cipher_mode(), "xts-plain64") == 0) {
+      if (volume_key_size == 32) {
+        openssl_cipher = "aes-128-xts";
+      } else if (volume_key_size == 64) {
+        openssl_cipher = "aes-256-xts";
+      }
+    } else {
+      lderr(m_image_ctx->cct) << "unsupported cipher configuration" << dendl;
+      finish(-ENOTSUP);
+      return;
+    }
+  }
+
   r = util::build_crypto(
-          m_image_ctx->cct, reinterpret_cast<unsigned char*>(volume_key),
+          m_image_ctx->cct, openssl_cipher.c_str(), 
+          reinterpret_cast<unsigned char*>(volume_key),
           volume_key_size, m_header.get_sector_size(), 
           m_header.get_data_offset(), meta_size, m_result_crypto);
   ceph_memzero_s(volume_key, 64, 64);

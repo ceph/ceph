@@ -192,6 +192,46 @@ int Header::add_keyslot(const char* passphrase, size_t passphrase_size) {
   return 0;
 }
 
+int Header::token_update(const char* identifier, const char* json_data) {
+  ceph_assert(m_cd != nullptr);
+  int target_slot = find_token_slot(identifier);
+  auto r = crypt_token_json_set(m_cd, target_slot, json_data);
+  if (r < 0) {
+    lderr(m_cct) << "crypt_token_json_set failed: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int Header::token_get(const char* identifier, const char** json_data) {
+  ceph_assert(m_cd != nullptr);
+  int slot = find_token_slot(identifier);
+  auto r = crypt_token_json_get(m_cd, slot, json_data);
+  if (r < 0) {
+    ldout(m_cct, 20) << "crypt_token_json_get failed for token " << identifier << ": "
+                     << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int Header::find_token_slot(const char* identifier) const {
+  // Careful this code assume we use the LUKS2 header
+  for (int i = 0; i < crypt_token_max(CRYPT_LUKS2); i++) {
+    const char* token_type = nullptr;
+    int info = crypt_token_status(m_cd, i, &token_type);
+    if (info != CRYPT_TOKEN_INVALID && info != CRYPT_TOKEN_INACTIVE) {
+      if (token_type != nullptr && strcmp(token_type, identifier) == 0) {
+        return i;
+      }
+    }
+  }
+
+  return CRYPT_ANY_TOKEN;
+}
+
 int Header::load(const char* type) {
   ceph_assert(m_cd != nullptr);
 

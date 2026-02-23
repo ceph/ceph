@@ -14,6 +14,7 @@
 #include "librbd/crypto/luks/Magic.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
+#include "common/JSONFormatter.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -46,7 +47,6 @@ void FormatRequest<I>::send() {
   size_t sector_size;
   // TODO: Figure out how to handle storing
   //    metadata size on disk
-  size_t meta_size;
   switch (m_format) {
     case RBD_ENCRYPTION_FORMAT_LUKS1:
       type = CRYPT_LUKS1;
@@ -55,7 +55,6 @@ void FormatRequest<I>::send() {
     case RBD_ENCRYPTION_FORMAT_LUKS2:
       type = CRYPT_LUKS2;
       sector_size = 4096;
-      meta_size = 32;
       break;
     default:
       lderr(m_image_ctx->cct) << "unsupported format type: " << m_format
@@ -65,15 +64,29 @@ void FormatRequest<I>::send() {
   }
 
   const char* cipher;
+  const char* cipher_mode;
+  const char* openssl_cipher;
+  uint32_t meta_size = 0;
   size_t key_size;
   switch (m_alg) {
     case RBD_ENCRYPTION_ALGORITHM_AES128:
       cipher = "aes";
+      cipher_mode = "xts-plain64";
+      openssl_cipher = "aes-128-xts";
       key_size = 32;
       break;
     case RBD_ENCRYPTION_ALGORITHM_AES256:
       cipher = "aes";
+      cipher_mode = "xts-plain64";
+      openssl_cipher = "aes-256-xts";
       key_size = 64;
+      break;
+    case RBD_ENCRYPTION_ALGORITHM_AES256_SIV:
+      cipher = "cipher_null";
+      cipher_mode = "ecb";
+      openssl_cipher = "AES-256-SIV";
+      key_size = 64;
+      meta_size = 32;
       break;
     default:
       lderr(m_image_ctx->cct) << "unsupported cipher algorithm: " << m_alg
@@ -101,7 +114,7 @@ void FormatRequest<I>::send() {
   // format (create LUKS header)
   auto stripe_period = m_image_ctx->get_stripe_period();
   r = m_header.format(type, cipher, reinterpret_cast<char*>(key), key_size,
-                      "xts-plain64", sector_size, stripe_period,
+                      cipher_mode, sector_size, stripe_period,
                       m_insecure_fast_mode);
   if (r != 0) {
     finish(r);
@@ -126,7 +139,23 @@ void FormatRequest<I>::send() {
     return;
   }
 
-  r = util::build_crypto(m_image_ctx->cct, key, key_size,
+  if (m_format == RBD_ENCRYPTION_FORMAT_LUKS2 &&
+      m_alg == RBD_ENCRYPTION_ALGORITHM_AES256_SIV) {
+    AEADToken token{meta_size, openssl_cipher};
+    ceph::JSONFormatter jf(false);
+    jf.open_object_section("");
+    token.encode_json(&jf);
+    jf.close_section();
+    std::stringstream ss;
+    jf.flush(ss);
+    r = m_header.token_update(token::TYPE_AEAD, ss.str().c_str());
+    if (r != 0) {
+      finish(r);
+      return;
+    }
+  }
+
+  r = util::build_crypto(m_image_ctx->cct, openssl_cipher, key, key_size,
                          m_header.get_sector_size(),
                          m_header.get_data_offset(), meta_size, m_result_crypto);
   ceph_memzero_s(key, key_size, key_size);
