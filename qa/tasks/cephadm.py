@@ -1112,6 +1112,12 @@ def ceph_osds(ctx, config):
             osd_method = config.get('osd_method')
             if osd_method:
                 add_osd_args.append(osd_method)
+            osd_type = config.get('osd_type')
+            if osd_type:
+                add_osd_args.extend(['--osd-type', osd_type])
+            objectstore = config.get('conf', {}).get('osd', {}).get('osd objectstore')
+            if objectstore:
+                add_osd_args.extend(['--objectstore', objectstore])
             if use_skip_validation:
                 try:
                     _shell(ctx, cluster_name, remote, add_osd_args + ['--skip-validation'])
@@ -1136,6 +1142,12 @@ def ceph_osds(ctx, config):
             osd_cmd = ['ceph', 'orch', 'apply', 'osd', '--all-available-devices']
             if raw:
                 osd_cmd.extend(['--method', 'raw'])
+            osd_type = config.get('osd_type')
+            if osd_type:
+                osd_cmd.extend(['--osd-type', osd_type])
+            objectstore = config.get('conf', {}).get('osd', {}).get('osd objectstore')
+            if objectstore:
+                osd_cmd.extend(['--objectstore', objectstore])
             _shell(ctx, cluster_name, remote, osd_cmd)
             # expect the number of scratch devs
             num_osds = sum(map(len, devs_by_remote.values()))
@@ -1166,6 +1178,21 @@ def ceph_osds(ctx, config):
         yield
     finally:
         pass
+
+
+@contextlib.contextmanager
+def check_enable_crimson(ctx, config):
+    """
+    Enable crimson-related flags if crimson_compat is set.
+    """
+    cluster_name = config['cluster']
+    if config.get('crimson_compat', False):
+        log.info('Enabling crimson flags...')
+        remote = ctx.ceph[cluster_name].bootstrap_remote
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'osd', 'set-allow-crimson', '--yes-i-really-mean-it'
+        ])
+    yield
 
 
 @contextlib.contextmanager
@@ -2035,6 +2062,7 @@ def task(ctx, config):
             lambda: module_setup(ctx=ctx, config=config),
             lambda: ceph_mgrs(ctx=ctx, config=config),
             lambda: conf_setup(ctx=ctx, config=config),
+            lambda: check_enable_crimson(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
             lambda: cephfs_setup(ctx=ctx, config=config),
