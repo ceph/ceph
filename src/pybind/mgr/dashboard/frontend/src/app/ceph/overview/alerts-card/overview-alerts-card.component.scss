@@ -1,4 +1,5 @@
 .overview-alerts-card {
+  // height: 100%;
   &-badges {
     display: flex;
     align-items: center;
@@ -18,5 +19,10 @@
     display: block;
     margin-top: var(--cds-spacing-02);
     color: var(--cds-text-secondary);
+  }
+
+  .cds--tile {
+    min-block-size: 0;
+    height: 100%;
   }
 }

@@ -42,6 +42,12 @@
     max-block-size: fit-content;
   }
 
+  &-icon-and-text {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cds-spacing-03);
+  }
+
   // Overrides
   .clipboard-btn {
     padding: var(--cds-spacing-02);
@@ -62,5 +68,9 @@
   .cds--definition-term {
     color: var(--cds-link-primary);
     border-block-end: 1px dotted var(--cds-link-primary);
+  }
+
+  &-icon-and-text cd-icon svg {
+    display: block;
   }
 }

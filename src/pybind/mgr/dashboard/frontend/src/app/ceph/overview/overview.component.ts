@@ -100,11 +100,14 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
 
     health: healthDisplay,
 
-    mon: { value: `${monQuorum}/${monTotal}`, severity: SeverityIconMap[monSev] },
-    mgr: { value: `${mgrActive} active, ${mgrStandby} standby`, severity: SeverityIconMap[mgrSev] },
-    osd: { value: `${osdUp}/${osdTotal} in/up`, severity: SeverityIconMap[osdSev] },
+    mon: { value: $localize`Quorum: ${monQuorum}/${monTotal}`, severity: SeverityIconMap[monSev] },
+    mgr: {
+      value: $localize`${mgrActive} active, ${mgrStandby} standby`,
+      severity: SeverityIconMap[mgrSev]
+    },
+    osd: { value: $localize`${osdUp}/${osdTotal} in/up`, severity: SeverityIconMap[osdSev] },
     hosts: {
-      value: `${hostsAvailable} / ${hostsTotal} available`,
+      value: $localize`${hostsAvailable} / ${hostsTotal} available`,
       severity: SeverityIconMap[hostsSev]
     }
   };
