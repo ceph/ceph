@@ -1015,7 +1015,8 @@ def _generate_smb_service_spec(
     if needs_proxy:
         features.append(_CEPHFS_PROXY)
     if cluster.remote_control_is_enabled:
-        features.append(_REMOTE_CONTROL)
+        assert cluster.remote_control is not None
+        features.extend(cluster.remote_control.enabled_features())
     # only one config uri can be used, the input list should be
     # ordered from lowest to highest priority and the highest priority
     # item that exists in the store will be used.
