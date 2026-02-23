@@ -972,12 +972,14 @@ void RGWIndexCompletionManager::process()
       }
 
       if (c->log_op) {
-        // This null_yield can stay, for now, since we're in our own thread
-        r = add_datalog_entry(&dpp, store->svc.datalog_rados, bucket_info,
-			      bs.shard_id, null_yield);
-	ldpp_dout(&dpp, 0) << "ERROR: " << __func__ << "(): write to datalog failed, obj=" << c->obj << " r=" << r << dendl;
-
-        /* ignoring error, can't do anything about it */
+        /* this null_yield can stay for now since we're in our own
+         * thread */
+        std::ignore = add_datalog_entry(&dpp, store->svc.datalog_rados,
+                                        bucket_info, bs.shard_id,
+                                        null_yield);
+        /* if there is an error we can ignore it, as a) there's
+         * nothing we can do and b) it's already logged in
+         * add_datalog_entry */
       }
     }
   }
