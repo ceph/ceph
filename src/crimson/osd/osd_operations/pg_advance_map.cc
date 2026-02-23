@@ -167,8 +167,12 @@ seastar::future<> PGAdvanceMap::split_pg(
   unsigned new_pg_num = next_map->get_pg_num(pg->get_pgid().pool());
   pg->update_snap_mapper_bits(pg->get_pgid().get_split_bits(new_pg_num));
 
-  co_await seastar::coroutine::parallel_for_each(split_children, [this, &next_map,
-  pg_epoch, FNAME] (auto child_pgid) -> seastar::future<> {
+  // Process children sequentially to avoid a race where concurrent
+  // split_collection transactions overwrite the parent's split_bits
+  // with a lower value. A future optimisation could re-introduce
+  // parallel_for_each once we can guarantee that the bits would
+  // be applied in order. 
+  for (auto child_pgid : split_children) {
     children_pgids.insert(child_pgid);
 
     // Map each child pg ID to a core
@@ -181,8 +185,6 @@ seastar::future<> PGAdvanceMap::split_pg(
     DEBUG(" Parent pgid: {}", pg->get_pgid());
     DEBUG(" Child pgid: {}", child_pg->get_pgid());
     unsigned new_pg_num = next_map->get_pg_num(pg->get_pgid().pool());
-    // Depending on the new_pg_num the parent PG's collection is split.
-    // The child PG will be initiated with this split collection.
     unsigned split_bits = child_pg->get_pgid().get_split_bits(new_pg_num);
     DEBUG(" pg num is {}, m_seed is {}, split bits is {}",
 	new_pg_num, child_pg->get_pgid().ps(), split_bits);
@@ -190,15 +192,13 @@ seastar::future<> PGAdvanceMap::split_pg(
     co_await pg->split_colls(child_pg->get_pgid(), split_bits, child_pg->get_pgid().ps(),
                              &child_pg->get_pgpool().info, rctx.transaction);
     DEBUG(" {} split collection done", child_pg->get_pgid());
-    // Update the child PG's info from the parent PG
     pg->split_into(child_pg->get_pgid().pgid, child_pg, split_bits);
-    // Make SnapMapper OID for the child PG
     auto child_coll_ref = child_pg->get_collection_ref();
     rctx.transaction.touch(child_coll_ref->get_cid(), child_pg->get_pgid().make_snapmapper_oid());
 
     co_await handle_split_pg_creation(child_pg, next_map);
     split_pgs.insert(child_pg);
-  });
+  }
 
   split_stats(split_pgs, children_pgids);
   co_return;
