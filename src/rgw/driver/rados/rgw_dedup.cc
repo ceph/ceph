@@ -605,13 +605,55 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static void remove_created_tail_object(const DoutPrefixProvider *dpp,
-                                         librados::IoCtx &ioctx,
-                                         const std::string &tail_oid,
-                                         md5_stats_t *p_stats)
+  static inline bool invalid_tail_placement(const rgw_bucket_placement& tail_placement)
   {
+    return (tail_placement.bucket.name.empty() || tail_placement.placement_rule.name.empty());
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::get_tail_ioctx(const disk_record_t *p_rec,
+                                 const RGWObjManifest &manifest,
+                                 const std::string &tail_name,
+                                 md5_stats_t *p_stats /*IN-OUT*/,
+                                 librados::IoCtx *p_ioctx /*OUT*/,
+                                 std::string *p_oid /*OUT*/)
+  {
+    const rgw_bucket_placement &tail_placement = manifest.get_tail_placement();
+    // Tail placement_rule was fixed before committed to SLAB, if looks bad -> abort
+    if (unlikely(invalid_tail_placement(tail_placement))) {
+      p_stats->split_head_no_tail_placement++;
+      ldpp_dout(dpp, 1) << __func__ << "::invalid_tail_placement -> abort" << dendl;
+      return -EINVAL;
+    }
+
+    const rgw_bucket& bucket = tail_placement.bucket;
+    // tail objects might be on another storage_class/pool, need another ioctx
+    int ret = get_ioctx_internal(dpp, driver, store, tail_name, p_rec->instance,
+                                 bucket, p_ioctx, p_oid);
+    if (unlikely(ret != 0)) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed get_ioctx_internal()" << dendl;
+      return ret;
+    }
+
+    return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  void Background::remove_created_tail_object(const disk_record_t *p_rec,
+                                              const RGWObjManifest &manifest,
+                                              const std::string &tail_name,
+                                              md5_stats_t *p_stats /*IN-OUT*/)
+  {
+    librados::IoCtx tail_ioctx;
+    std::string tail_oid;
+    int ret = get_tail_ioctx(p_rec, manifest, tail_name, p_stats, &tail_ioctx,
+                             &tail_oid);
+    if (unlikely(ret != 0)) {
+      return;
+    }
+
     p_stats->rollback_tail_obj++;
-    int ret = ioctx.remove(tail_oid);
+    ret = tail_ioctx.remove(tail_oid);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << __func__ << "::" << tail_oid
                          << " was successfully removed" << dendl;
@@ -923,8 +965,8 @@ namespace rgw::dedup {
                                const RGWObjManifest         &src_manifest,
                                const RGWObjManifest         &tgt_manifest,
                                md5_stats_t                  *p_stats,
-                               const dedup_table_t::value_t *p_src_val,
-                               const std::string            &tail_oid)
+                               const std::string            &tail_name,
+                               const dedup_table_t::value_t *p_src_val)
   {
     const uint64_t src_head_size = src_manifest.get_head_size();
     const uint64_t tgt_head_size = tgt_manifest.get_head_size();
@@ -948,7 +990,7 @@ namespace rgw::dedup {
     if (unlikely(ret != 0)) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: failed TGT get_ioctx()" << dendl;
       if (p_src_rec->s.flags.is_split_head()) {
-        remove_created_tail_object(dpp, src_ioctx, tail_oid, p_stats);
+        remove_created_tail_object(p_src_rec, src_manifest, tail_name, p_stats);
       }
       return ret;
     }
@@ -959,7 +1001,7 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 5) << __func__ << "::abort! src_head_size=" << src_head_size
                         << "::tgt_head_size=" << tgt_head_size << dendl;
       if (p_src_rec->s.flags.is_split_head()) {
-        remove_created_tail_object(dpp, src_ioctx, tail_oid, p_stats);
+        remove_created_tail_object(p_src_rec, src_manifest, tail_name, p_stats);
       }
       // TBD: can we create a test case (requires control over head-object-size)??
       return -ECANCELED;
@@ -971,7 +1013,7 @@ namespace rgw::dedup {
     ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
     if (unlikely(ret != 0)) {
       if (p_src_rec->s.flags.is_split_head()) {
-        remove_created_tail_object(dpp, src_ioctx, tail_oid, p_stats);
+        remove_created_tail_object(p_src_rec, src_manifest, tail_name, p_stats);
       }
       return ret;
     }
@@ -1011,7 +1053,7 @@ namespace rgw::dedup {
                           << src_oid << "), err is " << cpp_strerror(-ret)<<dendl;
         rollback_ref_by_manifest(ref_tag, src_oid, src_manifest);
         if (p_src_rec->s.flags.is_split_head()) {
-          remove_created_tail_object(dpp, src_ioctx, tail_oid, p_stats);
+          remove_created_tail_object(p_src_rec, src_manifest, tail_name, p_stats);
         }
         return ret;
       }
@@ -1124,12 +1166,6 @@ namespace rgw::dedup {
                        << "::num_parts=" << p_tgt_rec->s.num_parts
                        << "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
                        << p_tgt_rec->s.md5_low << std::dec << dendl;
-  }
-
-  //---------------------------------------------------------------------------
-  static inline bool invalid_tail_placement(const rgw_bucket_placement& tail_placement)
-  {
-    return (tail_placement.bucket.name.empty() || tail_placement.placement_rule.name.empty());
   }
 
   //---------------------------------------------------------------------------
@@ -1636,8 +1672,8 @@ namespace rgw::dedup {
   int Background::split_head_object(disk_record_t *p_src_rec, // IN-OUT PARAM
                                     RGWObjManifest &src_manifest, // IN/OUT PARAM
                                     const disk_record_t *p_tgt_rec,
-                                    std::string &tail_oid, // OUT PARAM
-                                    md5_stats_t *p_stats)
+                                    std::string *p_tail_name /*OUT*/,
+                                    md5_stats_t *p_stats /* IN-OUT */)
   {
     ldpp_dout(dpp, 20) << __func__ << "::" << p_src_rec->obj_name << "::"
                        << p_src_rec->s.obj_bytes_size << dendl;
@@ -1683,22 +1719,12 @@ namespace rgw::dedup {
       }
     }
 
-    std::string tail_name = generate_split_head_tail_name(src_manifest);
-    const rgw_bucket_placement &tail_placement = src_manifest.get_tail_placement();
-    // Tail placement_rule was fixed before committed to SLAB, if looks bad -> abort
-    if (unlikely(invalid_tail_placement(tail_placement))) {
-      p_stats->split_head_no_tail_placement++;
-      ldpp_dout(dpp, 1) << __func__ << "::invalid_tail_placement -> abort" << dendl;
-      return -EINVAL;
-    }
-
-    const rgw_bucket *p_bucket = &tail_placement.bucket;
-    // tail objects might be on another storage_class/pool, need another ioctx
+    *p_tail_name = generate_split_head_tail_name(src_manifest);
     librados::IoCtx tail_ioctx;
-    ret = get_ioctx_internal(dpp, driver, store, tail_name, p_src_rec->instance,
-                             *p_bucket, &tail_ioctx, &tail_oid);
+    std::string tail_oid;
+    ret = get_tail_ioctx(p_src_rec, src_manifest, *p_tail_name, p_stats,
+                         &tail_ioctx, &tail_oid);
     if (unlikely(ret != 0)) {
-      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed get_ioctx_internal()" << dendl;
       return ret;
     }
 
@@ -1736,8 +1762,8 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 20) << __func__ << "::wrote tail obj:" << tail_oid << "::ret="
                          << ret << dendl;
     }
-
-    build_and_set_explicit_manifest(dpp, p_bucket, tail_name, &src_manifest);
+    const rgw_bucket *p_bucket = &(src_manifest.get_tail_placement().bucket);
+    build_and_set_explicit_manifest(dpp, p_bucket, *p_tail_name, &src_manifest);
 
     bufferlist manifest_bl;
     encode(src_manifest, manifest_bl);
@@ -1753,7 +1779,7 @@ namespace rgw::dedup {
                                              RGWObjManifest &src_manifest,
                                              const RGWObjManifest &tgt_manifest,
                                              const dedup_table_t::value_t *p_src_val,
-                                             std::string &tail_oid, // OUT PARAM
+                                             std::string *p_tail_name /*OUT*/,
                                              md5_stats_t *p_stats)
   {
     int ret = 0;
@@ -1798,7 +1824,7 @@ namespace rgw::dedup {
     // in the obj-attributes
     uint64_t head_size = src_manifest.get_head_size();
     if (should_split_head(head_size, src_manifest.get_obj_size())) {
-      ret = split_head_object(p_src_rec, src_manifest, p_tgt_rec, tail_oid, p_stats);
+      ret = split_head_object(p_src_rec, src_manifest, p_tgt_rec, p_tail_name, p_stats);
       // compare_strong_hash() is called internally by split_head_object()
       return (ret == 0);
     }
@@ -2026,11 +2052,9 @@ namespace rgw::dedup {
     if (unlikely(has_shared_tail_objects(dpp, rados, p_src_rec, p_tgt_rec, src_manifest, tgt_manifest, p_stats))) {
       return 0;
     }
-
-
-    std::string tail_oid;
+    std::string tail_name;
     bool success = check_and_set_strong_hash(p_src_rec, p_tgt_rec, src_manifest,
-                                             tgt_manifest, &src_val, tail_oid, p_stats);
+                                             tgt_manifest, &src_val, &tail_name, p_stats);
     if (unlikely(!success)) {
       if (p_src_rec->s.flags.hash_calculated() && !src_val.has_valid_hash()) {
         // set hash attributes on head objects to save calc next time
@@ -2049,7 +2073,7 @@ namespace rgw::dedup {
     }
 
     ret = dedup_object(p_src_rec, p_tgt_rec, src_manifest, tgt_manifest, p_stats,
-                       &src_val, tail_oid);
+                       tail_name, &src_val);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << __func__ << "::dedup success " << p_src_rec->obj_name << dendl;
       p_stats->deduped_objects++;

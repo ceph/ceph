@@ -1138,6 +1138,28 @@ def verify_objects(bucket_name, files, conn, expected_results, config, delete_du
     log.debug("verify_objects::completed successfully!!")
 
 #-------------------------------------------------------------------------------
+def verify_objects_copy(bucket_name, files, conn, expected_results, config):
+    if expected_results:
+        assert expected_results == count_object_parts_in_all_buckets(True)
+
+    tmpfile = OUT_DIR + "temp"
+    for f in files:
+        filename=f[0]
+        obj_size=f[1]
+        num_copies=f[2]
+        log.debug("comparing copy =%s, size=%d, copies=%d", filename, obj_size, num_copies)
+
+        for i in range(0, num_copies):
+            filecmp.clear_cache()
+            key = gen_object_name(filename, i) + "_cp"
+            conn.download_file(bucket_name, key, tmpfile, Config=config)
+            equal = filecmp.cmp(tmpfile, OUT_DIR + filename, shallow=False)
+            assert equal ,"Files %s and %s differ!!" % (key, tmpfile)
+            os.remove(tmpfile)
+
+    log.debug("verify_objects_copy::completed successfully!!")
+
+#-------------------------------------------------------------------------------
 def verify_objects_multi(files, conns, bucket_names, expected_results, config, delete_dups):
     if expected_results:
         assert expected_results == count_object_parts_in_all_buckets(True)
@@ -2288,16 +2310,19 @@ def test_copy_after_dedup():
 
     prepare_test()
     log.debug("test_copy_after_dedup: connect to AWS ...")
+    config=default_config
     max_copies_count=3
     num_files=8
     files=[]
     min_size=8*MB
 
-    # create files in range [8MB, 32MB] aligned on RADOS_OBJ_SIZE
-    gen_files_in_range(files, num_files, min_size, min_size*4)
+    # create files in range [1MB, 4MB] to force split-head
+    # This will verify server-side-copy with split-head generated tails
+    gen_files_in_range(files, num_files, 1*MB, 4*MB)
 
-    # add file with excatly MULTIPART_SIZE
-    write_random(files, MULTIPART_SIZE, 2, 2)
+    # create files in range [8MB, 32MB] aligned on RADOS_OBJ_SIZE
+    gen_files_in_range(files, num_files, 8*MB, 32*MB)
+
     bucket_cp= gen_bucket_name()
     bucket_names=[]
     try:
@@ -2305,11 +2330,14 @@ def test_copy_after_dedup():
         conn.create_bucket(Bucket=bucket_cp)
         bucket_names=create_buckets(conn, max_copies_count)
         conns=[conn] * max_copies_count
-        dry_run=False
-        ret = simple_dedup_with_tenants(files, conns, bucket_names, default_config,
-                                        dry_run)
+        indices=[0] * len(files)
+        ret=upload_objects_multi(files, conns, bucket_names, indices, config)
         expected_results = ret[0]
         dedup_stats = ret[1]
+        dry_run=False
+        exec_dedup(dedup_stats, dry_run)
+        verify_objects_multi(files, conns, bucket_names, expected_results, config,
+                             False)
 
         cp_head_count=0
         for f in files:
@@ -2325,7 +2353,23 @@ def test_copy_after_dedup():
                 conn.copy_object(CopySource=base_obj, Bucket=bucket_cp, Key=key_cp)
                 cp_head_count += 1
 
+        # Make sure that server-side-copy behaved as expected copying only the head
+        # object and linking to the existing tail-objects
         assert (expected_results + cp_head_count) == count_object_parts_in_all_buckets(False, 0)
+        # delete the original objects and verify server-side-copy objects are valid
+        for (bucket_name, conn) in zip(bucket_names, conns):
+            delete_bucket_with_all_objects(bucket_name, conn)
+
+        result = admin(['gc', 'process', '--include-all'])
+        assert result[1] == 0
+        bucket_names.clear()
+        conns.clear()
+
+        # At this point the original obejcts are all removed
+        # Objects created by server-side-copy should keep the tail in place
+        # because of teh refcount
+        verify_objects_copy(bucket_cp, files, conn, expected_results, config)
+
     finally:
         # cleanup must be executed even after a failure
         delete_bucket_with_all_objects(bucket_cp, conn)
@@ -3649,13 +3693,3 @@ def test_dedup_identical_copies_multipart_small():
     force_clean=True
     log.info("test_dedup_identical_copies_multipart:full test")
     __test_dedup_identical_copies(files, config, dry_run, verify, force_clean)
-
-
-#-------------------------------------------------------------------------------
-@pytest.mark.basic_test
-def test_copy_single_obj():
-    return
-    conn=get_single_connection()
-    base_obj = {'Bucket': "bucket2", 'Key': "rados2"}
-    conn.copy_object(CopySource=base_obj, Bucket="bucket3", Key="rados3")
-
