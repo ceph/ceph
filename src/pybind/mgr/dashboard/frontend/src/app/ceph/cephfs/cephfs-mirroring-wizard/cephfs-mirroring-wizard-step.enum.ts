@@ -2,15 +2,24 @@ export const StepTitles = {
   ChooseMirrorPeerRole: $localize`Choose mirror peer role`,
   SelectFilesystem: $localize`Select filesystem`,
   CreateOrSelectEntity: $localize`Create or select entity`,
-  GenerateBootstrapToken: $localize`Generate bootstrap token`,
+  GenerateBootstrapToken: $localize`Generate token`,
+  ImportBootstrapToken: $localize`Import token`,
   Review: $localize`Review`
 } as const;
 
-export const STEP_TITLES_MIRRORING_CONFIGURED = [
+export const STEP_TITLES_MIRRORING_REMOTE = [
   StepTitles.ChooseMirrorPeerRole,
   StepTitles.SelectFilesystem,
   StepTitles.CreateOrSelectEntity,
-  StepTitles.GenerateBootstrapToken
+  StepTitles.GenerateBootstrapToken,
+  StepTitles.Review
+];
+
+export const STEP_TITLES_MIRRORING_LOCAL = [
+  StepTitles.ChooseMirrorPeerRole,
+  StepTitles.SelectFilesystem,
+  StepTitles.ImportBootstrapToken,
+  StepTitles.Review
 ];
 
 export const LOCAL_ROLE = 'local';

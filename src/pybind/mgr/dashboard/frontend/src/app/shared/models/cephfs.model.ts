@@ -130,3 +130,20 @@ export function mdsStateToStatus(state: string | undefined): MdsStatus {
 }
 
 export type DaemonResponse = Daemon[];
+
+export type MirroringEntityRow = {
+  entity: string;
+  mdsCaps: string;
+  monCaps: string;
+  osdCaps: string;
+};
+
+export type CephAuthUser = {
+  [key: string]: unknown;
+  entity?: string;
+  caps?: {
+    mds?: string;
+    mon?: string;
+    osd?: string;
+  };
+};

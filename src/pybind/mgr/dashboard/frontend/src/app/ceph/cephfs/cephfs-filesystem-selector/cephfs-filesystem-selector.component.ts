@@ -1,4 +1,12 @@
-import { Component, OnInit, TemplateRef, ViewChild, inject } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  TemplateRef,
+  ViewChild,
+  Output,
+  EventEmitter,
+  inject
+} from '@angular/core';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -41,6 +49,8 @@ export class CephfsFilesystemSelectorComponent implements OnInit {
     Enabled: $localize`Enabled`,
     Disabled: $localize`Disabled`
   };
+
+  @Output() filesystemSelected = new EventEmitter<FilesystemRow | null>();
 
   private cephfsService = inject(CephfsService);
   private dimlessBinaryPipe = inject(DimlessBinaryPipe);
@@ -111,5 +121,7 @@ export class CephfsFilesystemSelectorComponent implements OnInit {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+    const selectedRow = typeof selection?.first === 'function' ? selection.first() : null;
+    this.filesystemSelected.emit(selectedRow as FilesystemRow | null);
   }
 }
