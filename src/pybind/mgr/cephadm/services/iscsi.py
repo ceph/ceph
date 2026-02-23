@@ -56,7 +56,7 @@ class IscsiService(CephService):
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
-        self.register_for_certificates(daemon_spec)
+        super().prepare_certificates(daemon_spec)
 
         spec = cast(IscsiServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         igw_id = daemon_spec.daemon_id

@@ -398,28 +398,6 @@ class CephadmService(metaclass=ABCMeta):
         cert_source = getattr(svc_spec, cert_source_attr, None)
         logger.debug(f'Getting certificate for {svc_spec.service_name()} using source: {cert_source}')
 
-        # Reconcile TLS objects when switching certificate sources.
-        #
-        # - Inline-saved certs/keys are persisted in the certmgr store as user_made=True
-        #   but editable=False. These should be garbage-collected once the service no
-        #   longer uses INLINE.
-        # - Cephadm-signed certs/keys are stored under cephadm-signed_* entities and
-        #   should be removed when the service no longer uses CEPHADM_SIGNED.
-        svc_name = svc_spec.service_name()
-        host = daemon_spec.host
-        if cert_source in (CertificateSource.REFERENCE.value, CertificateSource.CEPHADM_SIGNED.value):
-            self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(
-                cert_name,
-                key_name,
-                service_name=svc_name,
-                host=host,
-                ca_cert_name=ca_cert_name,
-            )
-        if cert_source != CertificateSource.CEPHADM_SIGNED.value:
-            # Best-effort: the cephadm-signed entities might not be registered if the
-            # service never used CEPHADM_SIGNED (or after a manager restart).
-            self.mgr.cert_mgr.try_rm_self_signed_cert_key_pair(svc_name, host)
-
         if cert_source == CertificateSource.INLINE.value:
             return self._get_certificates_from_spec(svc_spec, daemon_spec, cert_attr, key_attr, cert_name, key_name, ca_cert_attr, ca_cert_name)
         elif cert_source == CertificateSource.REFERENCE.value:
@@ -596,8 +574,38 @@ class CephadmService(metaclass=ABCMeta):
         if spec.is_using_certificates_source(CertificateSource.CEPHADM_SIGNED):
             self.mgr.cert_mgr.register_self_signed_cert_key_pair(spec.service_name())
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
         self.register_for_certificates(daemon_spec)
+        self.reconcile_certificates(daemon_spec)
+
+    def reconcile_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
+        """Garbage-collect stale TLS objects when the certificate source has changed."""
+        if not self.requires_certificates:
+            return
+        spec = self.mgr.spec_store[daemon_spec.service_name].spec
+        cert_source = getattr(spec, 'certificate_source', None)
+        svc_name = spec.service_name()
+        host = daemon_spec.host
+
+        # Inline-saved certs/keys are persisted in the certmgr store as user_made=True
+        # but editable=False. These should be garbage-collected once the service no
+        # longer uses INLINE.
+        if cert_source in (CertificateSource.REFERENCE.value, CertificateSource.CEPHADM_SIGNED.value):
+            self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(
+                self.cert_name,
+                self.key_name,
+                service_name=svc_name,
+                host=host,
+                ca_cert_name=self.ca_cert_name,
+            )
+
+        # Cephadm-signed certs/keys are stored under cephadm-signed_* entities and
+        # should be removed when the service no longer uses CEPHADM_SIGNED.
+        if cert_source != CertificateSource.CEPHADM_SIGNED.value:
+            self.mgr.cert_mgr.try_rm_self_signed_cert_key_pair(svc_name, host)
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        self.prepare_certificates(daemon_spec)
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
@@ -1399,7 +1407,7 @@ class RgwService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        self.register_for_certificates(daemon_spec)
+        super().prepare_certificates(daemon_spec)
         rgw_id, _ = daemon_spec.daemon_id, daemon_spec.host
         spec = cast(RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
@@ -1759,7 +1767,7 @@ class CephExporterService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        self.register_for_certificates(daemon_spec)
+        super().prepare_certificates(daemon_spec)
         spec = cast(CephExporterSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         keyring = self.get_keyring_with_caps(self.get_auth_entity(daemon_spec.daemon_id),
                                              ['mon', 'profile ceph-exporter',
