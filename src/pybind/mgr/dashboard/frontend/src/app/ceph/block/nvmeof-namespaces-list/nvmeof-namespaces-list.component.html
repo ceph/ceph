@@ -21,16 +21,18 @@
 </div>
 </div>
 
-<cd-table [data]="namespaces$ | async"
-          columnMode="flex"
-          (fetchData)="listNamespaces()"
-          [columns]="namespacesColumns"
-          selectionType="single"
-          (updateSelection)="updateSelection($event)"
-          emptyStateTitle="No namespaces created."
-          i18n-emptyStateTitle
-          emptyStateMessage="Namespaces are storage volumes mapped to subsystems for host access. Create a namespace to start provisioning storage within a subsystem."
-          i18n-emptyStateMessage>
+<ng-container *ngIf="namespaces$ | async as namespaces">
+  <cd-table [data]="namespaces"
+            columnMode="flex"
+            (fetchData)="fetchData()"
+            [autoReload]="false"
+            [columns]="namespacesColumns"
+            selectionType="single"
+            (updateSelection)="updateSelection($event)"
+            emptyStateTitle="No namespaces created."
+            i18n-emptyStateTitle
+            emptyStateMessage="Namespaces are storage volumes mapped to subsystems for host access. Create a namespace to start provisioning storage within a subsystem."
+            i18n-emptyStateMessage>
 
   <div class="table-actions">
     <cd-table-actions [permission]="permission"
@@ -40,3 +42,4 @@
     </cd-table-actions>
   </div>
 </cd-table>
+</ng-container>

@@ -87,6 +87,13 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   private sub: Subscription | undefined;
 
+  private normalizeHostname(hostname: string | undefined): string {
+    if (!hostname) {
+      return '';
+    }
+    return hostname.split('.')[0];
+  }
+
   constructor(
     private authStorageService: AuthStorageService,
     private nvmeofService: NvmeofService,
@@ -110,6 +117,10 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     if (this.mode === NvmeofGatewayNodeMode.DETAILS) {
       this.route.parent?.params.subscribe((params: any) => {
         this.groupName = params.group;
+        // Initial table fetch may happen before route params arrive; refresh once group is known.
+        if (this.groupName) {
+          this.table?.refreshBtn();
+        }
       });
       this.setTableActions();
     }
@@ -276,22 +287,23 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     const allUsedHostnames = new Set<string>();
     groupList.forEach((group: CephServiceSpec) => {
       const hosts = group.placement?.hosts || (group.spec as any)?.placement?.hosts || [];
-      hosts.forEach((hostname: string) => allUsedHostnames.add(hostname));
+      hosts.forEach((hostname: string) => allUsedHostnames.add(this.normalizeHostname(hostname)));
     });
 
     this.usedHostnames = allUsedHostnames;
 
     // Check if there are any available hosts globally (not used by any group)
     this.hasAvailableHosts = (hostList || []).some(
-      (host: Host) => !this.usedHostnames.has(host.hostname)
+      (host: Host) => !this.usedHostnames.has(this.normalizeHostname(host.hostname))
     );
     this.setTableActions();
 
     const currentGroup = groupList.find((group: CephServiceSpec) => {
+      const serviceId = group.service_id || '';
       return (
         group.spec?.group === this.groupName ||
-        group.service_id === `nvmeof.${this.groupName}` ||
-        group.service_id.endsWith(`.${this.groupName}`)
+        serviceId === `nvmeof.${this.groupName}` ||
+        serviceId.endsWith(`.${this.groupName}`)
       );
     });
 
@@ -302,10 +314,12 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
     } else {
       const placementHosts =
         this.serviceSpec.placement?.hosts || (this.serviceSpec.spec as any)?.placement?.hosts || [];
-      const currentGroupHosts = new Set<string>(placementHosts);
+      const currentGroupHosts = new Set<string>(
+        placementHosts.map((hostname: string) => this.normalizeHostname(hostname))
+      );
 
       this.hosts = (hostList || []).filter((host: Host) => {
-        return currentGroupHosts.has(host.hostname);
+        return currentGroupHosts.has(this.normalizeHostname(host.hostname));
       });
     }
 
