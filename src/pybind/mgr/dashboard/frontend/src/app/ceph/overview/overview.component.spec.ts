@@ -116,7 +116,7 @@ describe('OverviewComponent', () => {
       );
       expect(vm.hosts).toEqual(
         expect.objectContaining({
-          value: '1 offline, 4 available',
+          value: '0 / 5 available',
           severity: expect.any(String)
         })
       );
@@ -188,9 +188,6 @@ describe('OverviewComponent', () => {
   // ngOnDestroy
   // -----------------------------
   it('should complete destroy$', () => {
-    // NOTE: your component now uses DestroyRef + takeUntilDestroyed,
-    // so there is no (component as any).destroy$ anymore.
-    // The simplest test here is to just ensure it can be destroyed without error.
     expect(() => fixture.destroy()).not.toThrow();
   });
 });

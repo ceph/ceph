@@ -20,6 +20,10 @@
     color: var(--cds-text-secondary);
   }
 
+  &-tab {
+    display: flex;
+  }
+
   &-tab-selected {
     border-block-end: 2px solid var(--cds-border-interactive) !important;
 
@@ -35,6 +39,7 @@
 
   &-tab-content-item {
     border-right: 1px solid var(--cds-border-subtle);
+    max-block-size: fit-content;
   }
 
   // Overrides
