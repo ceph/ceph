@@ -14,3 +14,9 @@
     </cd-table-actions>
   </cd-table>
 }
+
+<ng-template #localFsLinkTpl
+             let-row="data.row"
+             let-value="data.value">
+  <a (click)="navigateToPaths(row)">{{ value }}</a>
+</ng-template>

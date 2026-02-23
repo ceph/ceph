@@ -1,0 +1,48 @@
+<div cdsTheme="g10"
+     [cdsLayer]="0">
+  <div cdsGrid
+       [fullWidth]="true">
+    <div cdsRow
+         class="cds-mb-5">
+      <div cdsCol
+           [columnNumbers]="{lg: 5}">
+        <cds-tile [cdsLayer]="1">
+          <div class="cds--type-heading-compact-02"
+               i18n>Local filesystem</div>
+          <div class="cds--type-body-02">{{ localFsName }}</div>
+        </cds-tile>
+      </div>
+      <div cdsCol
+           [columnNumbers]="{lg: 5}">
+        <cds-tile [cdsLayer]="1">
+          <div class="cds--type-heading-compact-02"
+               i18n>Remote filesystem</div>
+          <div class="cds--type-body-02">{{ remoteFsName }}</div>
+        </cds-tile>
+      </div>
+      <div cdsCol
+           [columnNumbers]="{lg: 6}">
+        <cds-tile [cdsLayer]="1">
+          <div class="cds--type-heading-compact-02"
+               i18n>Remote cluster</div>
+          <div class="cds--type-body-02">{{ remoteClusterName }}</div>
+        </cds-tile>
+      </div>
+    </div>
+
+    <div cdsRow
+         class="cds-mt-5">
+      <div cdsCol
+           [columnNumbers]="{lg: 16}">
+        <cds-tile [cdsLayer]="1">
+          <h3 class="cds--type-expressive-heading-03 cds-mb-3"
+              i18n>Mirroring paths</h3>
+          <cd-table
+            [data]="(mirroringPaths$ | async) || []"
+            [columns]="columns">
+          </cd-table>
+        </cds-tile>
+      </div>
+    </div>
+  </div>
+</div>
