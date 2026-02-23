@@ -1188,7 +1188,7 @@ NFS_CORE_PARAM {
         assert export.export_id
         assert export.path == "/"
         assert export.pseudo == "/cephfs3"
-        assert export.access_type == "RW"
+        assert export.access_type == "rw"
         assert export.squash == "root"
         assert export.protocols == [3, 4]
         assert export.fsal.name == "CEPH"
@@ -1235,10 +1235,10 @@ NFS_CORE_PARAM {
             read_only=False,
             squash='root',
             addr=["192.168.1.0/8"],
-            delegation='rw',
+            export_delegation= 'rw',
         )
         assert r["bind"] == "/cephfs_deleg"
-        assert r["delegations"] == "rw"
+        assert r.get("delegations") == "rw"
 
         ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 4
@@ -1247,9 +1247,11 @@ NFS_CORE_PARAM {
         assert export.export_id
         assert export.pseudo == "/cephfs_deleg"
         assert export.fsal.name == "CEPH"
-        # When addr is provided, delegation goes to client level
+        # export_delegation applies at export level
+        assert export.delegation == 'rw'
         assert len(export.clients) == 1
-        assert export.clients[0].delegation == 'rw'
+        # Client doesn't have delegation (uses export-level)
+        assert export.clients[0].delegation is None
 
     def test_create_export_cephfs_with_delegation_no_clients(self):
         self._do_mock_test(self._do_test_create_export_cephfs_with_delegation_no_clients)
@@ -1269,7 +1271,7 @@ NFS_CORE_PARAM {
             pseudo_path='/cephfs_deleg_export',
             read_only=False,
             squash='root',
-            delegation='ro',
+            export_delegation='ro',
         )
         assert r["bind"] == "/cephfs_deleg_export"
         assert r["delegations"] == "ro"
@@ -1302,10 +1304,10 @@ NFS_CORE_PARAM {
             read_only=False,
             squash='root',
             addr=["192.168.0.0/16"],
-            delegation='rw',
+            export_delegation='rw',
         )
         assert r["bind"] == "/rgw_deleg"
-        assert r["delegations"] == "rw"
+        assert r.get("delegations") == "rw"
 
         ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 4
@@ -1313,10 +1315,12 @@ NFS_CORE_PARAM {
         export = conf._fetch_export('foo', '/rgw_deleg')
         assert export.export_id
         assert export.pseudo == "/rgw_deleg"
+        # export_delegation applies at export level
+        assert export.delegation == 'rw'
         assert export.fsal.name == "RGW"
-        # When addr is provided, delegation goes to client level
+        # When addr is provided, client is created but inherits export delegation
         assert len(export.clients) == 1
-        assert export.clients[0].delegation == 'rw'
+        assert export.clients[0].delegation is None  # Client inherits from export
 
     def test_update_export_with_delegation(self):
         self._do_mock_test(self._do_test_update_export_with_delegation)
@@ -1388,7 +1392,7 @@ EXPORT {
     pseudo = "/ganesha_deleg_test";
     access_type = "RW";
     squash = "no_root_squash";
-    Delegations = Write;
+    Delegations = "rw";
     protocols = 4;
     transports = "TCP";
 }
@@ -1418,7 +1422,7 @@ EXPORT {
     pseudo = "/ganesha_deleg_lcase";
     access_type = "RW";
     squash = "no_root_squash";
-    delegations = Read;
+    delegations = ro;
     protocols = 4;
     transports = "TCP";
 }
@@ -1483,7 +1487,7 @@ EXPORT {
         conf = ExportMgr(nfs_mod)
         
         # Get EXPORT DEFAULT delegation when not configured
-        result = conf.get_export_default_delegation(self.cluster_id)
+        result = conf.get_export_default(self.cluster_id)
         
         assert result['cluster'] == self.cluster_id
         assert result['level'] == 'EXPORT DEFAULT'
@@ -1498,7 +1502,7 @@ EXPORT {
         conf = ExportMgr(nfs_mod)
         
         # Set EXPORT DEFAULT delegation
-        result = conf.set_export_default_delegation(self.cluster_id, 'rw')
+        result = conf.set_export_default(self.cluster_id, 'rw')
         
         assert result['cluster'] == self.cluster_id
         assert result['level'] == 'EXPORT DEFAULT'
@@ -1506,7 +1510,7 @@ EXPORT {
         assert result['state'] == 'created'
         
         # Verify we can retrieve it
-        get_result = conf.get_export_default_delegation(self.cluster_id)
+        get_result = conf.get_export_default(self.cluster_id)
         assert get_result['delegations'] == 'rw'
 
     def test_update_export_default_delegation(self):
@@ -1517,16 +1521,16 @@ EXPORT {
         conf = ExportMgr(nfs_mod)
         
         # First set EXPORT DEFAULT delegation
-        result = conf.set_export_default_delegation(self.cluster_id, 'rw')
+        result = conf.set_export_default(self.cluster_id, 'rw')
         assert result['state'] == 'created'
         
         # Now update it
-        result = conf.set_export_default_delegation(self.cluster_id, 'ro')
+        result = conf.set_export_default(self.cluster_id, 'ro')
         assert result['state'] == 'updated'
         assert result['delegations'] == 'ro'
         
         # Verify the update
-        get_result = conf.get_export_default_delegation(self.cluster_id)
+        get_result = conf.get_export_default(self.cluster_id)
         assert get_result['delegations'] == 'ro'
 
     def test_set_export_default_delegation_none(self):
@@ -1537,12 +1541,12 @@ EXPORT {
         conf = ExportMgr(nfs_mod)
         
         # Set EXPORT DEFAULT delegation to 'none'
-        result = conf.set_export_default_delegation(self.cluster_id, 'none')
+        result = conf.set_export_default(self.cluster_id, 'none')
         
         assert result['delegations'] == 'none'
         
         # Verify
-        get_result = conf.get_export_default_delegation(self.cluster_id)
+        get_result = conf.get_export_default(self.cluster_id)
         assert get_result['delegations'] == 'none'
 
     def _do_test_cluster_ls(self):
@@ -1623,67 +1627,6 @@ def test_ganesha_validate_access_type():
         _validate_access_type("any")
 
 
-def test_ganesha_validate_delegation():
-    """Check error handling of internal validation function for delegation value."""
-    from nfs.ganesha_conf import _validate_delegation
-    from nfs.exception import NFSInvalidOperation
-
-    # Valid delegation values
-    for ok in ("ro", "rw", "none", "RO", "RW", "NONE"):
-        _validate_delegation(ok)
-    
-    # Invalid delegation values should raise
-    with pytest.raises(NFSInvalidOperation):
-        _validate_delegation("invalid")
-    with pytest.raises(NFSInvalidOperation):
-        _validate_delegation("read")
-    with pytest.raises(NFSInvalidOperation):
-        _validate_delegation("write")
-
-
-def test_map_delegation_value():
-    """Check mapping of delegation values to Ganesha format."""
-    from nfs.ganesha_conf import _map_delegation_value
-    from nfs.exception import NFSInvalidOperation
-
-    # Valid mappings
-    assert _map_delegation_value("ro") == "Read"
-    assert _map_delegation_value("RO") == "Read"
-    assert _map_delegation_value("rw") == "Write"
-    assert _map_delegation_value("RW") == "Write"
-    assert _map_delegation_value("none") == "None"
-    assert _map_delegation_value("NONE") == "None"
-    
-    # Invalid values should raise
-    with pytest.raises(NFSInvalidOperation):
-        _map_delegation_value("invalid")
-    with pytest.raises(NFSInvalidOperation):
-        _map_delegation_value("read")
-
-
-def test_unmap_delegation_value():
-    """Check unmapping of Ganesha delegation format back to user format."""
-    from nfs.ganesha_conf import _unmap_delegation_value
-
-    # Ganesha format to user format
-    assert _unmap_delegation_value("Read") == "ro"
-    assert _unmap_delegation_value("read") == "ro"
-    assert _unmap_delegation_value("READ") == "ro"
-    assert _unmap_delegation_value("Write") == "rw"
-    assert _unmap_delegation_value("write") == "rw"
-    assert _unmap_delegation_value("None") == "none"
-    assert _unmap_delegation_value("none") == "none"
-    
-    # Already in user format (pass-through)
-    assert _unmap_delegation_value("ro") == "ro"
-    assert _unmap_delegation_value("rw") == "rw"
-    
-    # None input
-    assert _unmap_delegation_value(None) is None
-    
-    # Unknown value (pass-through)
-    assert _unmap_delegation_value("unknown") == "unknown"
-
 
 class TestNFSDelegation:
     """Test cases for NFS delegation support."""
@@ -1703,7 +1646,7 @@ EXPORT {
     pseudo = "/cephfs_deleg";
     access_type = "RW";
     squash = "no_root_squash";
-    Delegations = "Write";
+    Delegations = "rw";
     attr_expiration_time = 0;
     security_label = true;
     protocols = 4;
@@ -1733,7 +1676,7 @@ EXPORT {
         Clients = 192.168.1.0/24;
         Access_Type = RW;
         Squash = no_root_squash;
-        Delegations = Read;
+        Delegations = "ro";
     }
 }
 """
@@ -1751,7 +1694,7 @@ EXPORT {
     pseudo = "/cephfs_both_deleg";
     access_type = "RW";
     squash = "no_root_squash";
-    Delegations = Write;
+    Delegations = "rw";
     attr_expiration_time = 0;
     security_label = true;
     protocols = 4;
@@ -1759,12 +1702,12 @@ EXPORT {
 
     CLIENT {
         Clients = 192.168.2.0/24;
-        Delegations = Read;
+        Delegations = "ro";
     }
 
     CLIENT {
         Clients = 192.168.3.0/24;
-        Delegations = None;
+        Delegations = "none";
     }
 }
 """
@@ -1778,7 +1721,7 @@ EXPORT {
         
         assert export.export_id == 1
         assert export.pseudo == "/cephfs_deleg"
-        assert export.delegation == "rw"  # Write -> rw
+        assert export.delegation == "rw"
 
     def test_export_parser_with_client_delegation(self) -> None:
         """Test parsing export block with delegation at client level."""
@@ -1791,7 +1734,7 @@ EXPORT {
         assert export.pseudo == "/cephfs_client_deleg"
         assert export.delegation is None  # No export-level delegation
         assert len(export.clients) == 1
-        assert export.clients[0].delegation == "ro"  # Read -> ro
+        assert export.clients[0].delegation == "ro"
 
     def test_export_parser_with_both_delegations(self) -> None:
         """Test parsing export block with both export and client level delegation."""
@@ -1802,10 +1745,10 @@ EXPORT {
         
         assert export.export_id == 3
         assert export.pseudo == "/cephfs_both_deleg"
-        assert export.delegation == "rw"  # Export level: Write -> rw
+        assert export.delegation == "rw"
         assert len(export.clients) == 2
-        assert export.clients[0].delegation == "ro"  # Client 1: Read -> ro
-        assert export.clients[1].delegation == "none"  # Client 2: None -> none
+        assert export.clients[0].delegation == "ro"
+        assert export.clients[1].delegation == "none"
 
     def test_export_to_dict_with_delegation(self) -> None:
         """Test export to_dict includes delegation when set."""
@@ -1906,9 +1849,9 @@ EXPORT {
         # Convert to export block
         export_block = export.to_export_block()
         
-        # Should have Delegations in values (mapped to Ganesha format)
+        # Should have Delegations in values
         assert 'Delegations' in export_block.values
-        assert export_block.values['Delegations'] == 'Write'
+        assert export_block.values['Delegations'] == 'rw'
 
     def test_export_from_to_dict_roundtrip_with_delegation(self) -> None:
         """Test export from_dict -> to_dict roundtrip preserves delegation."""
@@ -1980,60 +1923,3 @@ EXPORT {
         with mock.patch('nfs.ganesha_conf.check_fs', return_value=True):
             export.validate(nfs_mod)  # Should not raise
 
-    def test_export_validate_with_invalid_delegation(self) -> None:
-        """Test export validation fails with invalid delegation value."""
-        from nfs.exception import NFSInvalidOperation
-        
-        export = Export.from_dict(1, {
-            'export_id': 1,
-            'path': '/',
-            'cluster_id': self.cluster_id,
-            'pseudo': '/invalid_deleg',
-            'access_type': 'RW',
-            'squash': 'no_root_squash',
-            'security_label': True,
-            'protocols': [4],
-            'transports': ['TCP'],
-            'clients': [],
-            'delegations': 'invalid',
-            'fsal': {
-                'name': 'CEPH',
-                'fs_name': 'a',
-            }
-        })
-        
-        nfs_mod = Module('nfs', '', '')
-        with mock.patch('nfs.ganesha_conf.check_fs', return_value=True):
-            with pytest.raises(NFSInvalidOperation):
-                export.validate(nfs_mod)
-
-    def test_export_validate_with_invalid_client_delegation(self) -> None:
-        """Test export validation fails with invalid client delegation value."""
-        from nfs.exception import NFSInvalidOperation
-        
-        export = Export.from_dict(1, {
-            'export_id': 1,
-            'path': '/',
-            'cluster_id': self.cluster_id,
-            'pseudo': '/invalid_client_deleg',
-            'access_type': 'RW',
-            'squash': 'no_root_squash',
-            'security_label': True,
-            'protocols': [4],
-            'transports': ['TCP'],
-            'clients': [{
-                'addresses': ['192.168.1.0/24'],
-                'access_type': 'RW',
-                'squash': 'no_root_squash',
-                'delegations': 'bad_value'
-            }],
-            'fsal': {
-                'name': 'CEPH',
-                'fs_name': 'a',
-            }
-        })
-        
-        nfs_mod = Module('nfs', '', '')
-        with mock.patch('nfs.ganesha_conf.check_fs', return_value=True):
-            with pytest.raises(NFSInvalidOperation):
-                export.validate(nfs_mod)

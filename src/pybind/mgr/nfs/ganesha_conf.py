@@ -53,58 +53,6 @@ def _validate_sec_type(sec_type: str) -> None:
             f"SecType {sec_type} invalid, valid types are {valid_sec_types}")
 
 
-def _map_delegation_value(delegation: str) -> str:
-    """Map delegation values to Ganesha format.
-
-    Ganesha accepts: 'Read', 'Write', or 'None'
-    Input values: 'ro' (read-only), 'rw' (read-write), 'none' (no delegation)
-    """
-    delegation_map = {
-        'ro': 'Read',
-        'rw': 'Write',
-        'none': 'None',
-    }
-    if delegation.lower() not in delegation_map:
-        raise NFSInvalidOperation(
-            f"Invalid delegation value {delegation}. Valid values are: ro, rw, none")
-    return delegation_map[delegation.lower()]
-
-
-def _unmap_delegation_value(delegation: Optional[str]) -> Optional[str]:
-    """Convert Ganesha delegation format back to user format.
-
-    Ganesha format: 'Read', 'Write', 'None'
-    Output format: 'ro' (read-only), 'rw' (read-write), 'none' (no delegation)
-    """
-    if not delegation:
-        return None
-
-    reverse_map = {
-        'Read': 'ro',
-        'Write': 'rw',
-        'None': 'none',
-    }
-
-    # Handle case-insensitive input
-    for ganesha_val, user_val in reverse_map.items():
-        if delegation.lower() == ganesha_val.lower():
-            return user_val
-
-    # If already in user format, return as-is
-    if delegation.lower() in ['ro', 'rw', 'none']:
-        return delegation.lower()
-
-    return delegation
-
-
-def _validate_delegation(delegation: str) -> None:
-    """Validate delegation value."""
-    valid_delegations = ['ro', 'rw', 'none']
-    if delegation.lower() not in valid_delegations:
-        raise NFSInvalidOperation(
-            f"Delegation {delegation} invalid, valid types are {valid_delegations}")
-
-
 class RawBlock():
     def __init__(self, block_name: str, blocks: List['RawBlock'] = [], values: Dict[str, Any] = {}):
         if not values:  # workaround mutable default argument
@@ -390,13 +338,15 @@ class Client:
         addresses = client_block.values.get('clients', [])
         if isinstance(addresses, str):
             addresses = [addresses]
-        # Handle both capitalized and lowercase delegations (like SecType/sectype)
+
+        # Get delegation value (try both 'Delegations' and 'delegations')
         delegation = (client_block.values.get('Delegations')
                       or client_block.values.get('delegations') or None)
+
         return cls(addresses,
                    client_block.values.get('access_type', None),
                    client_block.values.get('squash', None),
-                   _unmap_delegation_value(delegation))
+                   delegation)
 
     def to_client_block(self) -> RawBlock:
         result = RawBlock('CLIENT', values={'clients': self.addresses})
@@ -405,7 +355,7 @@ class Client:
         if self.squash:
             result.values['squash'] = self.squash
         if self.delegation:
-            result.values['Delegations'] = _map_delegation_value(self.delegation)
+            result.values['Delegations'] = self.delegation
         return result
 
     @classmethod
@@ -483,11 +433,11 @@ class Export:
         # https://github.com/ceph/go-ceph/issues/1097
         if sectype is not None and not isinstance(sectype, list):
             sectype = [sectype]
-        # if this module wrote the ganesha conf the param is camelcase
-        # "Delegations".  but for compatibility with manually edited ganesha confs,
-        # accept "delegations" too.
+
+        # Get delegation value (try both 'Delegations' and 'delegations')
         delegation = (export_block.values.get("Delegations")
                       or export_block.values.get("delegations") or None)
+
         return cls(export_block.values['export_id'],
                    export_block.values['path'],
                    cluster_id,
@@ -501,7 +451,7 @@ class Export:
                    [Client.from_client_block(client)
                     for client in client_blocks],
                    sectype=sectype,
-                   delegation=_unmap_delegation_value(delegation))
+                   delegation=delegation)
 
     def to_export_block(self) -> RawBlock:
         values = {
@@ -518,7 +468,7 @@ class Export:
         if self.sectype:
             values['SecType'] = self.sectype
         if self.delegation:
-            values['Delegations'] = _map_delegation_value(self.delegation)
+            values['Delegations'] = self.delegation
         result = RawBlock("EXPORT", values=values)
         result.blocks = [
             self.fsal.to_fsal_block()
@@ -591,11 +541,6 @@ class Export:
                 _validate_squash(client.squash)
             if client.access_type:
                 _validate_access_type(client.access_type)
-            if client.delegation:
-                _validate_delegation(client.delegation)
-
-        if self.delegation:
-            _validate_delegation(self.delegation)
 
         if self.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
             fs = cast(CephFSFSAL, self.fsal)
@@ -614,6 +559,80 @@ class Export:
         if not isinstance(other, Export):
             return False
         return self.to_dict() == other.to_dict()
+
+
+class ExportDefault:
+    """Represents the EXPORT DEFAULT block for global export configuration.
+
+    This class encapsulates the EXPORT DEFAULT block which provides
+    fallback configuration values for all exports in a cluster.
+    Currently supports delegations configuration.
+    """
+
+    def __init__(self, delegations: Optional[str] = None) -> None:
+        """Initialize ExportDefault with optional delegations.
+
+        Args:
+            delegations: Delegations type (Read, Write, or None)
+        """
+        self.delegations = delegations
+
+    @classmethod
+    def from_export_default_block(cls, block: RawBlock) -> 'ExportDefault':
+        """Create ExportDefault from a parsed RawBlock.
+
+        Args:
+            block: RawBlock with block_name "EXPORT DEFAULT"
+
+        Returns:
+            ExportDefault instance
+        """
+        # Get delegations value (try both 'Delegations' and 'delegations')
+        delegations = (block.values.get('Delegations')
+                       or block.values.get('delegations') or None)
+        return cls(delegations)
+
+    def to_export_default_block(self) -> RawBlock:
+        """Convert ExportDefault to RawBlock for config generation.
+
+        Returns:
+            RawBlock with block_name "EXPORT DEFAULT"
+        """
+        values = {}
+        if self.delegations:
+            values['Delegations'] = self.delegations
+        return RawBlock('EXPORT DEFAULT', values=values)
+
+    @classmethod
+    def from_dict(cls, export_default_dict: Dict[str, Any]) -> 'ExportDefault':
+        """Create ExportDefault from dictionary.
+
+        Args:
+            export_default_dict: Dictionary with 'delegations' key
+
+        Returns:
+            ExportDefault instance
+        """
+        return cls(export_default_dict.get('delegations'))
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert ExportDefault to dictionary.
+
+        Returns:
+            Dictionary with 'delegations' key if set
+        """
+        result = {}
+        if self.delegations:
+            result['delegations'] = self.delegations
+        return result
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, ExportDefault):
+            return False
+        return self.delegations == other.delegations
+
+    def __repr__(self) -> str:
+        return f'ExportDefault(delegations={self.delegations!r})'
 
 
 def _format_block_body(block: RawBlock, depth: int = 0) -> str:

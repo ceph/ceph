@@ -1,3 +1,4 @@
+import enum
 import logging
 import threading
 from typing import Tuple, Optional, List, Dict, Any
@@ -16,6 +17,13 @@ from .cluster import NFSCluster
 from .utils import available_clusters
 
 log = logging.getLogger(__name__)
+
+
+class Delegation(enum.Enum):
+    """NFS Delegation types"""
+    ro = "ro"
+    rw = "rw"
+    none = "none"
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
@@ -44,10 +52,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
             cmount_path: Optional[str] = "/",
-            delegations: Optional[str] = None,
+            export_delegations: Optional[Delegation] = None,
             inbuf: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Create a CephFS export"""
+        """Create a CephFS export
+
+        Args:
+            export_delegations: Delegation at export level (applies to all clients)
+            inbuf: JSON file with client configuration list .
+        """
         earmark_resolver = CephFSEarmarkResolver(self)
         return self.export_mgr.create_export(
             fsal_type='cephfs',
@@ -61,7 +74,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             sectype=sectype,
             cmount_path=cmount_path,
             earmark_resolver=earmark_resolver,
-            delegation=delegations,
+            export_delegation=export_delegations.value if export_delegations else None,
             clients_config=inbuf
         )
 
@@ -77,10 +90,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
-            delegations: Optional[str] = None,
+            export_delegations: Optional[Delegation] = None,
             inbuf: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Create an RGW export"""
+        """Create an RGW export
+
+        Args:
+            export_delegations: Delegation at export level (applies to all clients)
+            inbuf: JSON file with client configuration list.
+        """
         return self.export_mgr.create_export(
             fsal_type='rgw',
             bucket=bucket,
@@ -91,7 +109,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             squash=squash,
             addr=client_addr,
             sectype=sectype,
-            delegation=delegations,
+            export_delegation=export_delegations.value if export_delegations else None,
             clients_config=inbuf
         )
 
@@ -130,13 +148,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_nfs_export_update(self,
                                cluster_id: str,
                                pseudo_path: str,
-                               delegations: Optional[str] = None,
+                               export_delegations: Optional[Delegation] = None,
                                inbuf: Optional[str] = None) -> Dict[str, Any]:
-        """Update an existing NFS export configuration."""
+        """Update an existing NFS export configuration.
+
+        This command is intended to update export-level delegations and client configurations.
+        Client configuration should be provided via an input file (JSON format) using -i option.
+        """
         return self.export_mgr.modify_export(
             cluster_id=cluster_id,
             pseudo_path=pseudo_path,
-            export_delegation=delegations,
+            export_delegation=export_delegations.value if export_delegations else None,
             clients_config=inbuf
         )
 
@@ -153,16 +175,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @object_format.Responder()
     def _cmd_nfs_cluster_get_export_default(self,
                                             cluster_id: str) -> Dict[str, Any]:
-        """Retrieve delegation configuration from EXPORT DEFAULT level."""
-        return self.export_mgr.get_export_default_delegation(cluster_id)
+        """Retrieve configuration from EXPORT DEFAULT block (global fallback for all exports)."""
+        return self.export_mgr.get_export_default(cluster_id)
 
     @CLICommand('nfs cluster set-export-default', perm='rw')
     @object_format.Responder()
     def _cmd_nfs_cluster_set_export_default(self,
                                             cluster_id: str,
-                                            delegations: str) -> Dict[str, Any]:
-        """Update delegation at EXPORT DEFAULT level (global fallback)."""
-        return self.export_mgr.set_export_default_delegation(cluster_id, delegations)
+                                            delegations: Delegation) -> Dict[str, Any]:
+        """Update configuration in EXPORT DEFAULT block (global fallback for all exports)."""
+        return self.export_mgr.set_export_default(cluster_id, delegations.value)
 
     @CLICommand('nfs cluster create', perm='rw')
     @object_format.EmptyResponder()
