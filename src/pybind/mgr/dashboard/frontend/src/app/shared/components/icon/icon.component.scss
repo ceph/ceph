@@ -33,3 +33,19 @@
 .deploy-icon {
   fill: theme.$layer-selected-disabled !important;
 }
+
+.notificationNew-icon circle {
+  fill: theme.$support-error !important;
+}
+
+.emptySearch-icon {
+  fill: theme.$layer-selected-disabled !important;
+}
+
+.warningAlt-icon {
+  fill: theme.$support-caution-major !important;
+}
+
+.checkMarkOutline-icon {
+  fill: theme.$support-success !important;
+}
