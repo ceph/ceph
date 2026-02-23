@@ -46,6 +46,8 @@ def shell(ctx, cluster_name, remote, args, name=None, **kwargs):
             ctx.cephadm,
             '--image', ctx.ceph[cluster_name].image,
             'shell',
+            '-c', '/etc/ceph/{}.conf'.format(cluster_name),
+            '-k', '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
         ] + extra_args + [
             '--fsid', ctx.ceph[cluster_name].fsid,
             '--',

@@ -2,6 +2,7 @@
 verify_ceph_hash: false
 tasks:
 - cephadm:
+    osd_type: crimson
     conf:
       mgr:
         debug ms: 1

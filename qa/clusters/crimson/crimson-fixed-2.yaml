@@ -1,6 +1,6 @@
 roles:
-- [mon.a, osd.0, osd.1, client.0, node-exporter.a]
-- [mgr.x, osd.2, osd.3, client.1, prometheus.a, node-exporter.b]
+- [mon.a, mgr.x, osd.0, osd.1, client.0, node-exporter.a]
+- [osd.2, osd.3, client.1, prometheus.a, node-exporter.b]
 overrides:
   ceph:
     conf:
