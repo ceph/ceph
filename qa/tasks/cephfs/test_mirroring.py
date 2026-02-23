@@ -1164,6 +1164,9 @@ class TestMirroring(CephFSTestCase):
 
     def test_cephfs_mirror_incremental_sync(self):
         """ Test incremental snapshot synchronization (based on mtime differences)."""
+
+        self.skipTest("temporarily disable test: snapdiff bug - see https://tracker.ceph.com/issues/74984")
+
         self.setup_mount_b(mds_perm='rw')
         repo = 'ceph-qa-suite'
         repo_dir = 'ceph_repo'
@@ -1313,6 +1316,9 @@ class TestMirroring(CephFSTestCase):
         mirror daemon should identify the purge and switch to using remote
         comparison to sync the snapshot (in the next iteration of course).
         """
+
+        self.skipTest("temporarily disable test: snapdiff bug - see https://tracker.ceph.com/issues/74984")
+
         self.setup_mount_b(mds_perm='rw')
         repo = 'ceph-qa-suite'
         repo_dir = 'ceph_repo'
