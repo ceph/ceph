@@ -15,14 +15,14 @@ import { NvmeofInitiatorsListComponent } from './nvmeof-initiators-list.componen
 const mockInitiators = [
   {
     nqn: '*',
-    dhchap_key: ''
+    use_dhchap: ''
   }
 ];
 
 const mockSubsystem = {
   nqn: 'nqn.2016-06.io.spdk:cnode1',
   serial_number: '12345',
-  psk: ''
+  has_dhchap_key: false
 };
 
 class MockNvmeOfService {
@@ -65,7 +65,6 @@ describe('NvmeofInitiatorsListComponent', () => {
     component.subsystemNQN = 'nqn.2016-06.io.spdk:cnode1';
     component.group = 'group1';
     component.ngOnInit();
-    fixture.detectChanges();
   });
 
   it('should create', () => {
@@ -82,7 +81,7 @@ describe('NvmeofInitiatorsListComponent', () => {
   }));
 
   it('should update authStatus when initiator has dhchap_key', fakeAsync(() => {
-    const initiatorsWithKey = [{ nqn: 'nqn1', dhchap_key: 'key1' }];
+    const initiatorsWithKey = [{ nqn: 'nqn1', use_dhchap: 'key1' }];
     spyOn(TestBed.inject(NvmeofService), 'getInitiators').and.returnValue(of(initiatorsWithKey));
     component.listInitiators();
     tick();
@@ -90,7 +89,8 @@ describe('NvmeofInitiatorsListComponent', () => {
   }));
 
   it('should update authStatus when subsystem has psk', fakeAsync(() => {
-    const subsystemWithPsk = { ...mockSubsystem, psk: 'psk1' };
+    const subsystemWithPsk = { ...mockSubsystem, has_dhchap_key: true };
+    component.initiators = [{ nqn: 'nqn1', use_dhchap: 'key1' }];
     spyOn(TestBed.inject(NvmeofService), 'getSubsystem').and.returnValue(of(subsystemWithPsk));
     component.getSubsystem();
     tick();

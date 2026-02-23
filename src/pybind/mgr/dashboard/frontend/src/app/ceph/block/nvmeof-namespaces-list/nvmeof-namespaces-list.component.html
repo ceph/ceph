@@ -25,6 +25,7 @@
   <cd-table [data]="namespaces"
             columnMode="flex"
             (fetchData)="fetchData()"
+            [autoReload]="false"
             [columns]="namespacesColumns"
             selectionType="single"
             (updateSelection)="updateSelection($event)"

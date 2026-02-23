@@ -23,7 +23,7 @@ export interface NvmeofSubsystem {
   enable_ha?: boolean;
   gw_group?: string;
   initiator_count?: number;
-  psk?: string;
+  has_dhchap_key: boolean;
 }
 
 export interface NvmeofSubsystemData extends NvmeofSubsystem {
@@ -33,7 +33,7 @@ export interface NvmeofSubsystemData extends NvmeofSubsystem {
 
 export interface NvmeofSubsystemInitiator {
   nqn: string;
-  dhchap_key?: string;
+  use_dhchap?: string;
 }
 
 export interface NvmeofListener {
@@ -96,10 +96,6 @@ export function getSubsystemAuthStatus(
   const UNIDIRECTIONAL = 'Unidirectional';
   const BIDIRECTIONAL = 'Bi-directional';
 
-  if (subsystem.psk) {
-    return BIDIRECTIONAL;
-  }
-
   let hostsList: NvmeofSubsystemInitiator[] = [];
   if (_initiators && 'hosts' in _initiators && Array.isArray(_initiators.hosts)) {
     hostsList = _initiators.hosts;
@@ -107,12 +103,19 @@ export function getSubsystemAuthStatus(
     hostsList = _initiators as NvmeofSubsystemInitiator[];
   }
 
-  const hasDhchapKey = hostsList.some((host) => !!host.dhchap_key);
-  if (hasDhchapKey) {
-    return UNIDIRECTIONAL;
+  let auth = NO_AUTH;
+
+  const hostHasDhchapKey = hostsList.some((host) => !!host.use_dhchap);
+
+  if (hostHasDhchapKey) {
+    auth = UNIDIRECTIONAL;
   }
 
-  return NO_AUTH;
+  if (subsystem.has_dhchap_key && hostHasDhchapKey) {
+    auth = BIDIRECTIONAL;
+  }
+
+  return auth;
 }
 
 // Form control names for NvmeofNamespacesFormComponent

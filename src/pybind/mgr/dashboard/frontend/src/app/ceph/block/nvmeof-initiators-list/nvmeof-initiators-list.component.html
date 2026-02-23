@@ -26,6 +26,7 @@
           (fetchData)="listInitiators()"
           [columns]="initiatorColumns"
           selectionType="multiClick"
+          [autoReload]="false"
           (updateSelection)="updateSelection($event)">
   <div class="table-actions">
     <cd-table-actions [permission]="permission"

@@ -206,11 +206,18 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
   }
 
   updateGroupSelectionState() {
-    if (!this.group && this.gwGroups.length) {
-      this.onGroupSelection(this.gwGroups[0]);
+    if (this.gwGroups.length) {
+      if (!this.group) {
+        this.onGroupSelection(this.gwGroups[0]);
+      } else {
+        this.gwGroups = this.gwGroups.map((g) => ({
+          ...g,
+          selected: g.content === this.group
+        }));
+      }
       this.gwGroupsEmpty = false;
       this.gwGroupPlaceholder = DEFAULT_PLACEHOLDER;
-    } else if (!this.gwGroups.length) {
+    } else {
       this.gwGroupsEmpty = true;
       this.gwGroupPlaceholder = $localize`No groups available`;
     }

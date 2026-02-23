@@ -1,6 +1,7 @@
   <cd-table [data]="namespaces"
             columnMode="flex"
             (fetchData)="listNamespaces()"
+            [autoReload]="true"
             [columns]="namespacesColumns"
             selectionType="single"
             (updateSelection)="updateSelection($event)"

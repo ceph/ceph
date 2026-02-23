@@ -11,6 +11,7 @@
           (fetchData)="listListeners()"
           [columns]="listenerColumns"
           identifier="id"
+          [autoReload]="true"
           forceIdentifier="true"
           selectionType="single"
           (updateSelection)="updateSelection($event)">
