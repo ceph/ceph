@@ -104,7 +104,7 @@ int main(int argc, const char* argv[])
   INFO("early config parsed successfully");
 
   auto seastar_n_early_args = early_config.get_early_args();
-  auto config_proxy_args = early_config.get_ceph_args();
+  auto config_proxy_args = early_config.ceph_args;
 
   INFO("initializing seastar app_template");
   seastar::app_template::config app_cfg;
