@@ -72,8 +72,8 @@ class TestPrometheus(MgrTestCase):
             if r.status_code != 200:
                 failures.append(url)
 
-            log.info("{0}: {1} ({2} bytes)".format(
-                url, r.status_code, len(r.content)
+            log.info("{0}: {1} ({2} bytes) - Content: {3}".format(
+                url, r.status_code, len(r.content), r.text
             ))
 
         self.assertListEqual(failures, [])
