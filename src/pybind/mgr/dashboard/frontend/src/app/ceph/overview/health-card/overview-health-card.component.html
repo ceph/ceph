@@ -103,9 +103,10 @@
   }
   <!-- SYSTEM TAB -->
   @if(vm?.overallSystemSev) {
-    <div [ngClass]="{'overview-health-card-tab-selected': activeSection === 'system'}">
-      <cd-icon
-        [type]="vm?.overallSystemSev"></cd-icon>
+    <div class="overview-health-card-tab"
+         [ngClass]="{'overview-health-card-tab-selected': activeSection === 'system'}">
+      <div class="cds-mb-1"><cd-icon
+        [type]="vm?.overallSystemSev"></cd-icon></div>
       <cds-tooltip-definition
         [highContrast]="true"
         [openOnHover]="true"
@@ -113,9 +114,11 @@
         class="cds-ml-2"
         [caret]="true"
         (click)="toggleSection('system')"
-        description="Click to view health incidents"
+        description=""
         i18n-description>
         <span
+          class="cds-mr-1"
+          [ngClass]="{'cds--type-heading-compact-01': activeSection === 'system'}"
           i18n>
           Systems
         </span>
@@ -137,31 +140,31 @@
           <div class="overview-health-card-tab-content-item cds-pr-8">
             <span>
               <cd-icon [type]="vm?.mon?.severity"></cd-icon>
-              <span class="cds--type-body-compact-01 cds-ml-2">Monitor</span>
+              <span class="cds--type-body-compact-01 cds-ml-3">Monitor</span>
             </span>
-            <p class="cds--type-label-01 cds-mt-3 overview-health-card-secondary-text">Quorum: {{vm?.mon?.value}}</p>
+            <p class="cds--type-label-01 cds-mt-3 cds-mb-0 overview-health-card-secondary-text">Quorum: {{vm?.mon?.value}}</p>
           </div>
           <div class="overview-health-card-tab-content-item cds-pr-8">
             <span>
               <cd-icon [type]="vm?.mgr?.severity"></cd-icon>
-              <span class="cds--type-body-compact-01 cds-ml-2">Manager</span>
+              <span class="cds--type-body-compact-01 cds-ml-3">Manager</span>
             </span>
-            <p class="cds--type-label-01 cds-mt-3 overview-health-card-secondary-text">{{vm?.mgr?.value}}</p>
+            <p class="cds--type-label-01 cds-mt-3 cds-mb-0 overview-health-card-secondary-text">{{vm?.mgr?.value}}</p>
           </div>
           <div class="overview-health-card-tab-content-item cds-pr-8">
             <span>
               <cd-icon [type]="vm?.osd?.severity"></cd-icon>
-              <span class="cds--type-body-compact-01 cds-ml-2"
+              <span class="cds--type-body-compact-01 cds-ml-3"
                     i18n>OSD</span>
             </span>
-            <p class="cds--type-label-01 cds-mt-3 overview-health-card-secondary-text">{{vm?.osd?.value}}</p>
+            <p class="cds--type-label-01 cds-mt-3 cds-mb-0 overview-health-card-secondary-text">{{vm?.osd?.value}}</p>
           </div>
           <div>
             <span>
               <cd-icon [type]="vm?.hosts?.severity"></cd-icon>
-              <span class="cds--type-body-compact-01 cds-ml-2">Nodes</span>
+              <span class="cds--type-body-compact-01 cds-ml-3">Nodes</span>
             </span>
-            <p class="cds--type-label-01 cds-mt-3 overview-health-card-secondary-text">{{vm?.hosts?.value}}</p>
+            <p class="cds--type-label-01 cds-mt-3 cds-mb-0 overview-health-card-secondary-text">{{vm?.hosts?.value}}</p>
           </div>
         </div>
       </div>

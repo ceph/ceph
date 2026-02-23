@@ -143,7 +143,7 @@ export class OverviewComponent {
   );
 
   readonly storageVm$ = this.healthData$.pipe(
-    map((data) => ({
+    map((data: HealthSnapshotMap) => ({
       total: data.pgmap?.bytes_total ?? 0,
       used: data.pgmap?.bytes_used ?? 0
     })),

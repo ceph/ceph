@@ -391,7 +391,7 @@ class Health(BaseController):
         if self._has_permissions(Permission.READ, Scope.MONITOR):
             summary['monmap'] = {
                 'num_mons': data.get('monmap', {}).get('num_mons'),
-                'quorum': data.get('monmap', {}).get('quorum')
+                'quorum': data.get('quorum', {})
             }
 
         if self._has_permissions(Permission.READ, Scope.OSD):
