@@ -98,7 +98,7 @@ describe('OverviewComponent', () => {
 
       expect(vm.mon).toEqual(
         expect.objectContaining({
-          value: '3/3',
+          value: 'Quorum: 3/3',
           severity: expect.any(String)
         })
       );
