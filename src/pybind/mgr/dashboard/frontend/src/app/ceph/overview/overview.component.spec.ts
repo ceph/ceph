@@ -15,6 +15,9 @@ import { OverviewHealthCardComponent } from './health-card/overview-health-card.
 import { OverviewStorageCardComponent } from './storage-card/overview-storage-card.component';
 import { HealthMap, SeverityIconMap } from '~/app/shared/models/overview';
 import { OverviewAlertsCardComponent } from './alerts-card/overview-alerts-card.component';
+import { HardwareService } from '~/app/shared/api/hardware.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 describe('OverviewComponent', () => {
   let component: OverviewComponent;
@@ -22,6 +25,18 @@ describe('OverviewComponent', () => {
 
   let mockHealthService: { getHealthSnapshot: jest.Mock };
   let mockRefreshIntervalService: { intervalData$: Subject<void> };
+
+  const mockAuthStorageService = {
+    getPermissions: jest.fn(() => ({ configOpt: { read: false } }))
+  };
+
+  const mockMgrModuleService = {
+    getConfig: jest.fn(() => of({ hw_monitoring: false }))
+  };
+
+  const mockHardwareService = {
+    getSummary: jest.fn(() => of(null))
+  };
 
   beforeEach(async () => {
     mockHealthService = { getHealthSnapshot: jest.fn() };
@@ -43,6 +58,9 @@ describe('OverviewComponent', () => {
         provideRouter([]),
         { provide: HealthService, useValue: mockHealthService },
         { provide: RefreshIntervalService, useValue: mockRefreshIntervalService },
+        { provide: AuthStorageService, useValue: mockAuthStorageService },
+        { provide: MgrModuleService, useValue: mockMgrModuleService },
+        { provide: HardwareService, useValue: mockHardwareService },
         provideRouter([])
       ]
     }).compileComponents();

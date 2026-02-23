@@ -1,7 +1,12 @@
 @let data=(data$ | async);
+@let hwEnabled = (enabled$ | async);
+@let hwSections = (sections$ | async);
+
 @let colorClass="overview-health-card-status--" + vm?.health?.icon;
+
+
 <cd-productive-card class="overview-health-card">
-  <!-- HEALTH CARD Title -->
+  <!-- ----------------------HEALTH CARD HEADER ---------------->
   @if(vm?.fsid) {
   <ng-template #header>
     <div class="overview-health-card-header">
@@ -35,7 +40,7 @@
     [maxLineWidth]="400"
     [minLineWidth]="400"></cds-skeleton-text>
   }
-  <!-- HEALTH CARD BODY -->
+  <!------------------------- HEALTH CARD CLUSTER STATUS ------------------>
   @if(vm?.health){
   <p class="cds--type-heading-05 cds-mb-0"
      [ngClass]="colorClass">
@@ -67,7 +72,9 @@
     [lines]="1"
     [maxLineWidth]="250"></cds-skeleton-text>
   }
-  <!-- TABS -->
+
+  <!-----------------------------------TABS -------------------------------------->
+
   <div cdsStack="horizontal"
        [gap]="4">
   <!-- HEALTH CHECKS -->
@@ -127,10 +134,35 @@
   } @else {
   <cds-skeleton-text [lines]="1"></cds-skeleton-text>
   }
+  <!-- HARDWARE TAB -->
+  @if(hwEnabled && hwSections) {
+    <div class="overview-health-card-tab"
+         [class.overview-health-card-tab-selected]="activeSection === 'hardware'">
+      <div class="cds-mb-1"><cd-icon
+        [type]="vm?.overallSystemSev"></cd-icon></div>
+      <cds-tooltip-definition
+        [highContrast]="true"
+        [openOnHover]="true"
+        [dropShadow]="true"
+        class="cds-ml-2"
+        [caret]="true"
+        (click)="toggleSection('hardware')"
+        description=""
+        i18n-description>
+        <span
+          class="cds-mr-1"
+          [class.cds--type-heading-compact-01]="activeSection === 'hardware'"
+          i18n>
+          Hardware
+        </span>
+      </cds-tooltip-definition>
+    </div>
+  }
   </div>
 
   <!-- TAB CONTENT -->
   <div  [ngSwitch]="activeSection">
+    <!-- SYSTEM TAB CONTENT -->
     <ng-container *ngSwitchCase="'system'">
       <div class="overview-health-card-tab-content">
         <p class="overview-health-card-secondary-text cds--type-body-compact-01"
@@ -152,6 +184,49 @@
           </div>
           }
         </div>
+      </div>
+    </ng-container>
+    <!-- HARDWARE TAB CONTENT -->
+    <ng-container *ngSwitchCase="'hardware'">
+      <div class="overview-health-card-tab-content">
+        <p class="overview-health-card-secondary-text cds--type-body-compact-01"
+           i18n>
+          Some cluster components are degraded and may require attention.
+        </p>
+
+        @if (hwEnabled && hwSections) {
+          <div class="overview-health-card-hardware-sections">
+          @for (section of sections; track $index) {
+            <div class="overview-health-card-hardware-section">
+            @for (row of section; track row.key) {
+            <div class="overview-health-card-hardware-row">
+              <span class="overview-health-card-icon-and-text">
+                <cd-icon [type]="row.key"></cd-icon>
+                <span class="cds--type-body-compact-01">
+                  {{ row.label }}
+                </span>
+              </span>
+
+              <span class="overview-health-card-hardware-status">
+              @if (row.error > 0) {
+              <cd-icon type="warningAlt"></cd-icon>
+              <span class="cds--type-body-compact-01">
+                {{ row.error }}
+              </span>
+              }
+              <cd-icon type="checkMarkOutline"></cd-icon>
+              <span class="cds--type-body-compact-01">
+                {{ row.ok }}
+              </span>
+              </span>
+            </div>
+            }
+            </div>
+          }
+          </div>
+        } @else {
+        <cds-skeleton-placeholder></cds-skeleton-placeholder>
+        }
       </div>
     </ng-container>
 

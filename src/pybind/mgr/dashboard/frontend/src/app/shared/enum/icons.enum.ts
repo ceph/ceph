@@ -107,7 +107,15 @@ export enum Icons {
   upgrade = 'upgrade',
   warningAltFilled = 'warning--alt--filled',
   help = 'help',
-  incidentReporter = 'incident-reporter'
+  incidentReporter = 'incident-reporter',
+  ibmStreamSets = 'ibm--streamsets',
+  dataEnrichment = 'data-enrichment',
+  network1 = 'network--1',
+  chip = 'chip',
+  plug = 'plug',
+  vmdkDisk = 'vmdk-disk',
+  checkMarkOutline = 'checkmark--outline',
+  warningAlt = 'warning--alt'
 }
 
 export enum IconSize {
@@ -136,5 +144,13 @@ export const ICON_TYPE = {
   upgrade: 'upgrade',
   warningAltFilled: 'warning--alt--filled',
   help: 'help',
-  incidentReporter: 'incident-reporter'
+  incidentReporter: 'incident-reporter',
+  ibmStreamSets: 'ibm--streamsets',
+  dataEnrichment: 'data-enrichment',
+  network1: 'network--1',
+  chip: 'chip',
+  plug: 'plug',
+  vmdkDisk: 'vmdk-disk',
+  warningAlt: 'warning--alt',
+  checkMarkOutline: 'checkmark--outline'
 } as const;

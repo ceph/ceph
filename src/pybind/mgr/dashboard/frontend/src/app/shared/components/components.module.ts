@@ -109,6 +109,14 @@ import Close16 from '@carbon/icons/es/close/16';
 import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
 import Help16 from '@carbon/icons/es/help/16';
 import IncidentReporter16 from '@carbon/icons/es/incident-reporter/16';
+import IbmStreamSets16 from '@carbon/icons/es/ibm--streamsets/16';
+import DataEnrichment16 from '@carbon/icons/es/data-enrichment/16';
+import Network116 from '@carbon/icons/es/network--1/16';
+import Chip16 from '@carbon/icons/es/chip/16';
+import Plug16 from '@carbon/icons/es/plug/16';
+import VmdkDisk16 from '@carbon/icons/es/vmdk-disk/16';
+import WarningAlt16 from '@carbon/icons/es/warning--alt/16';
+import CheckMarkOutline16 from '@carbon/icons/es/checkmark--outline/16';
 
 @NgModule({
   imports: [
@@ -264,7 +272,15 @@ export class ComponentsModule {
       Upgrade16,
       WarningAltFilled16,
       Help16,
-      IncidentReporter16
+      IncidentReporter16,
+      IbmStreamSets16,
+      DataEnrichment16,
+      Network116,
+      Chip16,
+      Plug16,
+      VmdkDisk16,
+      WarningAlt16,
+      CheckMarkOutline16
     ]);
   }
 }

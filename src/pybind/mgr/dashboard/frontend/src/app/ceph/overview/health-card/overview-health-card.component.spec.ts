@@ -10,6 +10,9 @@ import { SkeletonModule, ButtonModule, LinkModule } from 'carbon-components-angu
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { HardwareService } from '~/app/shared/api/hardware.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 describe('OverviewStorageCardComponent (Jest)', () => {
   let component: OverviewHealthCardComponent;
@@ -24,6 +27,18 @@ describe('OverviewStorageCardComponent (Jest)', () => {
 
   const upgradeServiceMock = {
     listCached: jest.fn(() => of({ versions: [] }))
+  };
+
+  const mockAuthStorageService = {
+    getPermissions: jest.fn(() => ({ configOpt: { read: false } }))
+  };
+
+  const mockMgrModuleService = {
+    getConfig: jest.fn(() => of({ hw_monitoring: false }))
+  };
+
+  const mockHardwareService = {
+    getSummary: jest.fn(() => of(null))
   };
 
   beforeEach(async () => {
@@ -42,6 +57,9 @@ describe('OverviewStorageCardComponent (Jest)', () => {
       providers: [
         { provide: SummaryService, useValue: summaryServiceMock },
         { provide: UpgradeService, useValue: upgradeServiceMock },
+        { provide: AuthStorageService, useValue: mockAuthStorageService },
+        { provide: MgrModuleService, useValue: mockMgrModuleService },
+        { provide: HardwareService, useValue: mockHardwareService },
         provideRouter([])
       ]
     }).compileComponents();
