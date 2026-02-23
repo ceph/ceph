@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Params, Router } from '@angular/router';
 import {
@@ -67,6 +67,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     private rbdService: RbdService,
     private router: Router,
     private route: ActivatedRoute,
+    private cdr: ChangeDetectorRef,
     public formatterService: FormatterService,
     public dimlessBinaryPipe: DimlessBinaryPipe
   ) {
@@ -83,7 +84,9 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     this.description = $localize`Namespaces define the storage volumes that subsystems present to hosts.`;
 
     this.route.params.subscribe((params: Params) => {
-      this.subsystemNQN = params['subsystem_nqn'];
+      if (params['subsystem_nqn']) {
+        this.subsystemNQN = params['subsystem_nqn'];
+      }
       this.nsid = params['nsid'];
       if (params['group']) {
         this.group = params['group'];
@@ -117,15 +120,18 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     });
     if (this.group) {
       this.fetchUsedImages();
-      this.nvmeofService.listSubsystems(this.group).subscribe((subsystems: NvmeofSubsystem[]) => {
-        this.subsystems = subsystems;
-        if (this.subsystemNQN) {
-          const selectedSubsystem = this.subsystems.find((s) => s.nqn === this.subsystemNQN);
-          if (selectedSubsystem) {
-            this.nsForm.get('subsystem').setValue(selectedSubsystem.nqn);
+      this.nvmeofService
+        .listSubsystems(this.group)
+        .subscribe((res: NvmeofSubsystem[] | NvmeofSubsystem) => {
+          this.subsystems = Array.isArray(res) ? res : [res];
+          this.cdr.detectChanges();
+          if (this.subsystemNQN) {
+            const selectedSubsystem = this.subsystems.find((s) => s.nqn === this.subsystemNQN);
+            if (selectedSubsystem) {
+              this.nsForm.get('subsystem').setValue(selectedSubsystem.nqn);
+            }
           }
-        }
-      });
+        });
     }
   }
 
@@ -302,9 +308,12 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     return Math.random().toString(36).substring(2);
   }
 
-  private normalizeImageSizeInput(value: string): string {
-    const input = (value || '').trim();
+  private normalizeImageSizeInput(value: string | number): string {
+    const input = String(value ?? '').trim();
     if (!input) {
+      return input;
+    }
+    if (typeof value === 'number') {
       return input;
     }
     // Accept plain numeric values as GiB (e.g. "45" => "45GiB").
@@ -337,15 +346,20 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       }
 
       if (isGatewayProvisioned) {
-        request.rbd_image_name = `nvme_${pool}_${this.group}_${this.randomString()}`;
+        const rbdImageName = this.nsForm.getValue('rbd_image_name');
+        if (rbdImageName) {
+          request.rbd_image_name = loopCount > 1 ? `${rbdImageName}-${i}` : rbdImageName;
+        } else {
+          request.rbd_image_name = `nvme_${pool}_${this.group}_${this.randomString()}`;
+        }
         if (rbdImageSize) {
           request['rbd_image_size'] = rbdImageSize;
         }
-      }
-
-      const rbdImageName = this.nsForm.getValue('rbd_image_name');
-      if (rbdImageName) {
-        request['rbd_image_name'] = rbdImageName;
+      } else {
+        const rbdImageName = this.nsForm.getValue('rbd_image_name');
+        if (rbdImageName) {
+          request['rbd_image_name'] = rbdImageName;
+        }
       }
 
       const subsystemNQN = this.nsForm.getValue('subsystem') || this.subsystemNQN;
@@ -429,7 +443,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       },
       complete: () => {
         this.router.navigate([this.pageURL], {
-          queryParams: { group: this.group }
+          queryParams: { group: this.group, tab: 'namespace' }
         });
       }
     });

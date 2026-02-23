@@ -26,6 +26,8 @@
             columnMode="flex"
             (fetchData)="fetchData()"
             [columns]="namespacesColumns"
+            identifier="unique_id"
+            [forceIdentifier]="true"
             selectionType="single"
             (updateSelection)="updateSelection($event)"
             emptyStateTitle="No namespaces created."

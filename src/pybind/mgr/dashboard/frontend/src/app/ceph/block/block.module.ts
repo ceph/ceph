@@ -184,9 +184,9 @@ import { NvmeofSubsystemPerformanceComponent } from './nvmeof-subsystem-performa
     NvmeofNamespaceExpandModalComponent,
     NvmeSubsystemViewComponent,
     NvmeofEditHostKeyModalComponent,
+    NvmeofSubsystemsStepFourComponent,
     NvmeofSubsystemOverviewComponent,
-    NvmeofSubsystemPerformanceComponent,
-    NvmeofSubsystemsStepFourComponent
+    NvmeofSubsystemPerformanceComponent
   ],
 
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
@@ -346,6 +346,7 @@ const routes: Routes = [
       {
         path: 'gateways',
         component: NvmeofGatewayComponent,
+        data: { breadcrumbs: 'Gateways' },
         children: [
           {
             path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,

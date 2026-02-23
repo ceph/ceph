@@ -90,7 +90,12 @@ describe('NvmeofNamespacesListComponent', () => {
   it('should retrieve namespaces', (done) => {
     component.group = 'g1';
     component.namespaces$.pipe(take(1)).subscribe((namespaces) => {
-      expect(namespaces).toEqual(mockNamespaces);
+      expect(namespaces).toEqual(
+        mockNamespaces.map((ns) => ({
+          ...ns,
+          unique_id: `${ns.nsid}_${ns['ns_subsystem_nqn']}`
+        }))
+      );
       done();
     });
     component.listNamespaces();
