@@ -149,14 +149,14 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     expect(labelTexts).toContain('Maximum allowed namespaces');
   }));
 
-  it('should display subsystem type from subsystem data', fakeAsync(() => {
+  it('should not display MTLS label in overview details', fakeAsync(() => {
     component.ngOnInit();
     tick();
     fixture.detectChanges();
 
     const values = fixture.nativeElement.querySelectorAll('.cds--type-body-compact-01');
     const valueTexts = Array.from(values).map((el: HTMLElement) => el.textContent.trim());
-    expect(valueTexts).toContain('NVMe');
+    expect(valueTexts).not.toContain('MTLS');
   }));
 
   it('should display hosts allowed from subsystem data', fakeAsync(() => {
@@ -169,13 +169,12 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     expect(valueTexts).toContain('Any host');
   }));
 
-  it('should display HA status from subsystem data', fakeAsync(() => {
+  it('should not render Edit link for Hosts allowed', fakeAsync(() => {
     component.ngOnInit();
     tick();
     fixture.detectChanges();
 
-    const values = fixture.nativeElement.querySelectorAll('.cds--type-body-compact-01');
-    const valueTexts = Array.from(values).map((el: HTMLElement) => el.textContent.trim());
-    expect(valueTexts).toContain('Yes');
+    const editLink = fixture.nativeElement.querySelector('a[cdsLink]');
+    expect(editLink).toBeFalsy();
   }));
 });

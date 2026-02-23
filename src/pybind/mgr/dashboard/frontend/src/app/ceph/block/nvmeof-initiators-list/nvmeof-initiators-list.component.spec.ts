@@ -65,6 +65,7 @@ describe('NvmeofInitiatorsListComponent', () => {
     component.subsystemNQN = 'nqn.2016-06.io.spdk:cnode1';
     component.group = 'group1';
     component.ngOnInit();
+    fixture.detectChanges();
   });
 
   it('should create', () => {

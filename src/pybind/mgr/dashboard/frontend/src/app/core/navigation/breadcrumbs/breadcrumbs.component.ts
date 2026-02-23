@@ -27,7 +27,7 @@ import { Title } from '@angular/platform-browser';
 import { ActivatedRouteSnapshot, NavigationEnd, NavigationStart, Router } from '@angular/router';
 
 import { concat, from, Observable, of, Subscription } from 'rxjs';
-import { distinct, filter, first, mergeMap, toArray } from 'rxjs/operators';
+import { distinct, filter, first, mergeMap, toArray, take } from 'rxjs/operators';
 import { AppConstants } from '~/app/shared/constants/app.constants';
 
 import { BreadcrumbsResolver, IBreadcrumb } from '~/app/shared/models/breadcrumbs';
@@ -52,7 +52,6 @@ export class BreadcrumbsComponent implements OnDestroy {
   private tabCrumbSubscription: Subscription;
   private defaultResolver = new BreadcrumbsResolver();
   private baseCrumbs: IBreadcrumb[] = [];
-  private currentTabCrumb: IBreadcrumb = null;
 
   constructor(
     private router: Router,
@@ -64,12 +63,12 @@ export class BreadcrumbsComponent implements OnDestroy {
       .pipe(filter((x) => x instanceof NavigationStart))
       .subscribe(() => {
         this.finished = false;
+        this.breadcrumbService.clearTabCrumb();
       });
 
     this.subscription = this.router.events
       .pipe(filter((x) => x instanceof NavigationEnd))
       .subscribe(() => {
-        this.breadcrumbService.clearTabCrumb();
         const currentRoot = router.routerState.snapshot.root;
 
         this._resolveCrumbs(currentRoot)
@@ -85,16 +84,17 @@ export class BreadcrumbsComponent implements OnDestroy {
           .subscribe((x) => {
             this.finished = true;
             this.baseCrumbs = x;
-            this.crumbs = this.currentTabCrumb ? [...x, this.currentTabCrumb] : [...x];
-            const title = this.getTitleFromCrumbs(this.crumbs);
-            this.titleService.setTitle(title);
+            this.breadcrumbService.tabCrumb$.pipe(take(1)).subscribe((tabCrumb) => {
+              this.crumbs = tabCrumb && x.length > 0 ? [...x.slice(0, -1), tabCrumb] : [...x];
+              const title = this.getTitleFromCrumbs(this.crumbs);
+              this.titleService.setTitle(title);
+            });
           });
       });
 
     this.tabCrumbSubscription = this.breadcrumbService.tabCrumb$.subscribe((tabCrumb) => {
-      this.currentTabCrumb = tabCrumb;
-      if (tabCrumb) {
-        this.crumbs = [...this.baseCrumbs, tabCrumb];
+      if (tabCrumb && this.baseCrumbs.length > 0) {
+        this.crumbs = [...this.baseCrumbs.slice(0, -1), tabCrumb];
       } else {
         this.crumbs = [...this.baseCrumbs];
       }

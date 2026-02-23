@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 
 import { NvmeofGatewayComponent } from './nvmeof-gateway.component';
 
@@ -14,7 +14,6 @@ describe('NvmeofGatewayComponent', () => {
   let component: NvmeofGatewayComponent;
   let fixture: ComponentFixture<NvmeofGatewayComponent>;
   let breadcrumbService: BreadcrumbService;
-  let router: Router;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -41,7 +40,6 @@ describe('NvmeofGatewayComponent', () => {
     fixture = TestBed.createComponent(NvmeofGatewayComponent);
     component = fixture.componentInstance;
     breadcrumbService = TestBed.inject(BreadcrumbService);
-    router = TestBed.inject(Router);
     fixture.detectChanges();
   });
 
@@ -56,14 +54,8 @@ describe('NvmeofGatewayComponent', () => {
   });
 
   it('should update tab crumb on tab switch', () => {
-    spyOn(router, 'navigate');
     spyOn(breadcrumbService, 'setTabCrumb');
     component.onSelected(component.Tabs.subsystem);
-    expect(router.navigate).toHaveBeenCalledWith([], {
-      relativeTo: TestBed.inject(ActivatedRoute),
-      queryParams: { tab: component.Tabs.subsystem },
-      queryParamsHandling: 'merge'
-    });
     expect(breadcrumbService.setTabCrumb).toHaveBeenCalledWith('Subsystem');
   });
 

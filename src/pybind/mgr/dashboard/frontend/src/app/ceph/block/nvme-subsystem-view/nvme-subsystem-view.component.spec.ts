@@ -43,28 +43,37 @@ describe('NvmeSubsystemViewComponent', () => {
   });
 
   it('should build sidebar items correctly', () => {
-    expect(component.sidebarItems.length).toBe(3);
+    expect(component.sidebarItems.length).toBe(5);
 
-    // Verify first item (Initiators)
     expect(component.sidebarItems[0].route).toEqual([
+      '/block/nvmeof/subsystems',
+      'nqn.test',
+      'overview'
+    ]);
+    expect(component.sidebarItems[0].routeExtras).toEqual({ queryParams: { group: 'my-group' } });
+
+    expect(component.sidebarItems[1].route).toEqual([
       '/block/nvmeof/subsystems',
       'nqn.test',
       'hosts'
     ]);
-    expect(component.sidebarItems[0].routeExtras).toEqual({ queryParams: { group: 'my-group' } });
 
-    // Verify second item (Namespaces)
-    expect(component.sidebarItems[1].route).toEqual([
+    expect(component.sidebarItems[2].route).toEqual([
       '/block/nvmeof/subsystems',
       'nqn.test',
       'namespaces'
     ]);
 
-    // Verify third item (Listeners)
-    expect(component.sidebarItems[2].route).toEqual([
+    expect(component.sidebarItems[3].route).toEqual([
       '/block/nvmeof/subsystems',
       'nqn.test',
       'listeners'
+    ]);
+
+    expect(component.sidebarItems[4].route).toEqual([
+      '/block/nvmeof/subsystems',
+      'nqn.test',
+      'performance'
     ]);
   });
 });

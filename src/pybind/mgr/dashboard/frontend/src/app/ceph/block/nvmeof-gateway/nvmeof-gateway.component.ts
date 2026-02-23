@@ -1,7 +1,5 @@
 import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
-import { Subject } from 'rxjs';
-import { filter, takeUntil } from 'rxjs/operators';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
 
@@ -29,7 +27,6 @@ const TAB_LABELS: Record<TABS, string> = {
 export class NvmeofGatewayComponent implements OnInit, OnDestroy {
   selectedTab: TABS;
   activeTab: TABS = TABS.gateways;
-  private readonly destroy$ = new Subject<void>();
 
   @ViewChild('statusTpl', { static: true })
   statusTpl: TemplateRef<any>;
@@ -43,39 +40,28 @@ export class NvmeofGatewayComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
-    this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe((params) => {
+    this.route.queryParams.subscribe((params) => {
       if (params['tab'] && Object.values(TABS).includes(params['tab'])) {
         this.activeTab = params['tab'] as TABS;
       }
       this.breadcrumbService.setTabCrumb(TAB_LABELS[this.activeTab]);
     });
-
-    this.router.events
-      .pipe(
-        filter((event) => event instanceof NavigationEnd),
-        takeUntil(this.destroy$)
-      )
-      .subscribe(() => {
-        // Run after NavigationEnd handlers so tab crumb is not cleared by global breadcrumb reset.
-        setTimeout(() => this.breadcrumbService.setTabCrumb(TAB_LABELS[this.activeTab]));
-      });
   }
 
   ngOnDestroy() {
-    this.destroy$.next();
-    this.destroy$.complete();
     this.breadcrumbService.clearTabCrumb();
   }
 
   onSelected(tab: TABS) {
     this.selectedTab = tab;
     this.activeTab = tab;
+    this.breadcrumbService.setTabCrumb(TAB_LABELS[tab]);
     this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { tab },
-      queryParamsHandling: 'merge'
+      queryParamsHandling: 'merge',
+      replaceUrl: true
     });
-    this.breadcrumbService.setTabCrumb(TAB_LABELS[tab]);
   }
 
   public get Tabs(): typeof TABS {
