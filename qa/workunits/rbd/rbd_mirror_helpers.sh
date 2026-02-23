@@ -1233,6 +1233,70 @@ wait_for_snapshot_sync_complete()
     return 1
 }
 
+get_image_snap_peers()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap_id=$4
+    local -n _peers=$5
+
+    run_cmd "rbd --cluster ${cluster} snap list -a ${pool}/${image} --format xml --pretty-format"
+    _peers=$(xmlstarlet sel -t -v "//snapshots/snapshot/namespace[primary_snap_id='${snap_id}']/mirror_peer_uuids/peer_uuid" "$CMD_STDOUT")
+}
+
+test_peer_uuid_in_image_snap_peers()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap_id=$4
+    local peer_uuid=$5
+
+    test -n "${peer_uuid}" || { fail "peer_uuid is empty"; return 1; }
+    local peers
+    get_image_snap_peers "${cluster}" "${pool}" "${image}" "${snap_id}" peers
+    echo "${peers}" | grep -qxF "${peer_uuid}" || { fail; return 1; }
+}
+
+wait_for_image_snap_peer_uuid_present()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local primary_snap_id=$4
+    local peer_uuid=$5
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        test_peer_uuid_in_image_snap_peers "${cluster}" "${pool}" "${image}" "${primary_snap_id}" "${peer_uuid}" && return 0
+    done
+
+    fail "wait for presence of peer uuid ${peer_uuid} in peer uuid list of primary snap id ${primary_snap_id} on cluster ${cluster} failed"
+    return 1
+}
+
+wait_for_image_snap_peer_uuid_not_present()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local primary_snap_id=$4
+    local peer_uuid=$5
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        if ! test_peer_uuid_in_image_snap_peers "${cluster}" "${pool}" "${image}" "${primary_snap_id}" "${peer_uuid}"; then
+            return 0
+        fi
+    done
+
+    fail "wait for absense of peer uuid ${peer_uuid} in peer uuid list of primary snap id ${primary_snap_id} on cluster ${cluster} failed"
+    return 1
+}
+
 wait_for_replay_complete()
 {
     local local_cluster=$1 #sec
@@ -2886,12 +2950,18 @@ test_group_snap_sync_state()
     local group_spec=$2
     local group_snap_id=$3
     local expected_state=$4
+    local has_complete_field=$5
 
     run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format"
 
     # Get <state> and <snaps_synced> for the given group snapshot ID
     local state snaps_synced
     state=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT")
+    if ! $has_complete_field; then
+        test "$state" = "created" || { fail; return 1; }
+        return 0
+    fi
+
     snaps_synced=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/namespace/complete" < "$CMD_STDOUT")
 
     if [ "$expected_state" = "complete" ]; then
@@ -2932,8 +3002,9 @@ test_group_snap_sync_complete()
     local cluster=$1
     local group_spec=$2
     local group_snap_id=$3
+    local has_complete_field=$4
 
-    test_group_snap_sync_state "${cluster}" "${group_spec}" "${group_snap_id}" 'complete'
+    test_group_snap_sync_state "${cluster}" "${group_spec}" "${group_snap_id}" 'complete' "${has_complete_field}"
 }
 
 test_group_snap_sync_incomplete()
@@ -2961,11 +3032,12 @@ wait_for_test_group_snap_sync_complete()
     local cluster=$1
     local group_spec=$2
     local group_snap_id=$3
+    local has_complete_field=$4
     local s
 
     for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32 32 32 64 64 64 64 64; do
         sleep ${s}
-        test_group_snap_sync_complete "${cluster}" "${group_spec}" "${group_snap_id}" && return 0
+        test_group_snap_sync_complete "${cluster}" "${group_spec}" "${group_snap_id}" "${has_complete_field}" && return 0
 
         if  (( $(bc <<<"$s > 32") )); then
             # query the snap progress for each image in the group - debug info to check that sync is progressing
@@ -2983,8 +3055,13 @@ wait_for_group_snap_sync_complete()
     local cluster=$1
     local group_spec=$2
     local group_snap_id=$3
+    local snap_type=${4:-}
+    local has_complete_field=true
+    if [ "${snap_type}" = "user" ]; then
+        has_complete_field=false
+    fi
 
-    wait_for_test_group_snap_sync_complete "${cluster}" "${group_spec}" "${group_snap_id}"
+    wait_for_test_group_snap_sync_complete "${cluster}" "${group_spec}" "${group_snap_id}" "${has_complete_field}"
 }
 
 test_group_replay_state()
@@ -3139,6 +3216,11 @@ mirror_group_snapshot_and_wait_for_sync_complete()
     mirror_group_snapshot "${primary_cluster}" "${group_spec}" group_snap_id
     wait_for_group_snap_present "${secondary_cluster}" "${group_spec}" "${group_snap_id}"
     wait_for_group_snap_sync_complete "${secondary_cluster}" "${group_spec}" "${group_snap_id}"
+
+    if [ "$#" -gt 3 ]; then
+        local -n _group_snap_id=$4
+        _group_snap_id="${group_snap_id}"
+    fi
 }
 
 test_group_synced_image_status()
