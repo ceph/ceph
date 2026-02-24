@@ -255,8 +255,10 @@ struct seastore_test_t :
 
     auto get_omaps(
       SeaStoreShard &sharded_seastore,
-      std::string start) {
-      ObjectStore::omap_iter_seek_t start_from{"", ObjectStore::omap_iter_seek_t::LOWER_BOUND};
+      std::string start,
+      decltype(ObjectStore::omap_iter_seek_t::seek_type) bound =
+	ObjectStore::omap_iter_seek_t::LOWER_BOUND) {
+      ObjectStore::omap_iter_seek_t start_from{start, bound};
       std::map<std::string, bufferlist> kvs;
       std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
         [&kvs] (std::string_view key, std::string_view value)
@@ -1903,6 +1905,9 @@ TEST_P(seastore_test_t, pgmeta_io)
 
     auto it = std::next(key_for_test_obj.begin(), 2);
     auto target_value = *it;  
+    kvs = test_obj.get_omaps(*sharded_seastore, target_value,
+      ObjectStore::omap_iter_seek_t::UPPER_BOUND);
+    EXPECT_EQ(kvs.size(), 3);
     test_obj.rm_omap_range(*sharded_seastore, std::string(), target_value);
     kvs = test_obj.get_omaps(*sharded_seastore, std::string());
     EXPECT_EQ(kvs.size(), log_count - 3);

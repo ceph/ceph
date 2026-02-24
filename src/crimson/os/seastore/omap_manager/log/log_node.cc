@@ -182,7 +182,7 @@ void LogNode::for_each_live_entry(F&& fn) {
 void LogNode::list(const std::optional<std::string> &first,
   const std::optional<std::string> &last,
   std::map<std::string, bufferlist> &kvs) {
-  std::string_view s(*first);
+  std::string_view s = first ? std::string_view(*first) : std::string_view{""};
   std::string_view e = last ? std::string_view(*last) : std::string_view{};
   for_each_live_entry([&](const auto& ent, uint32_t index) -> bool {
     const auto k = ent.get_key();
