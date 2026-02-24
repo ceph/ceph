@@ -6654,6 +6654,22 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_POST_BUCKET_LOGGING:
         case RGW_OP_GET_BUCKET_LOGGING: 
         case RGW_OP_PUT_BUCKET_OWNERSHIP_CONTROLS:
+        case RGW_OP_S3VECTOR_CREATE_INDEX:
+        case RGW_OP_S3VECTOR_CREATE_VECTOR_BUCKET:
+        case RGW_OP_S3VECTOR_DELETE_INDEX:
+        case RGW_OP_S3VECTOR_DELETE_VECTOR_BUCKET:
+        case RGW_OP_S3VECTOR_DELETE_VECTOR_BUCKET_POLICY:
+        case RGW_OP_S3VECTOR_DELETE_VECTORS:
+        case RGW_OP_S3VECTOR_GET_INDEX:
+        case RGW_OP_S3VECTOR_GET_VECTOR_BUCKET:
+        case RGW_OP_S3VECTOR_GET_VECTOR_BUCKET_POLICY:
+        case RGW_OP_S3VECTOR_GET_VECTORS:
+        case RGW_OP_S3VECTOR_LIST_INDEXES:
+        case RGW_OP_S3VECTOR_LIST_VECTOR_BUCKETS:
+        case RGW_OP_S3VECTOR_LIST_VECTORS:
+        case RGW_OP_S3VECTOR_PUT_VECTOR_BUCKET_POLICY:
+        case RGW_OP_S3VECTOR_PUT_VECTORS:
+        case RGW_OP_S3VECTOR_QUERY_VECTORS:
           break;
         default:
           ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;
