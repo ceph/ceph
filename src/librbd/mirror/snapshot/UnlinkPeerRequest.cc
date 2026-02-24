@@ -79,10 +79,13 @@ void UnlinkPeerRequest<I>::unlink_peer() {
     }
   }
 
-  if (r == -ENOENT) {
-    ldout(cct, 15) << "missing snapshot: snap_id=" << m_snap_id << dendl;
+  if (r == -ENOENT ||
+      std::holds_alternative<cls::rbd::TrashSnapshotNamespace>(
+        snap_namespace)) {
+    ldout(cct, 15) << "missing or trashed snapshot: snap_id=" << m_snap_id
+                   << dendl;
     m_image_ctx->image_lock.unlock_shared();
-    finish(r);
+    finish(-ENOENT);
     return;
   }
 
