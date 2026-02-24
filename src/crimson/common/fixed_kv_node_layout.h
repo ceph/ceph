@@ -310,6 +310,12 @@ public:
     void clear() {
       buffer.clear();
     }
+    template <typename Func>
+    void for_each(Func &&f) {
+      for (auto &i : buffer) {
+        std::invoke(std::forward<Func>(f), i);
+      }
+    }
   };
 
   void journal_insert(
