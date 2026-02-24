@@ -1948,6 +1948,17 @@ TEST_P(seastore_test_t, pgmeta_io)
       }
     }
     ASSERT_TRUE(crimson::os::seastore::log_manager::is_continuous_fixed_width(keys));
+
+    {
+      CTransaction t;
+      bufferlist bl;
+      std::string key = "missing/0000000000000003.E915304E.head.benchmark%udata%utrial165%u44927%uobject62";
+      bl.append(std::string(128, 'f'));
+      test_obj.set_omap(t, key, bl);
+      do_transaction(std::move(t));
+      test_obj.check_omap_key(*sharded_seastore, key);
+      test_obj.rm_omap_range(*sharded_seastore, key, key);
+    }
   });
 }
 

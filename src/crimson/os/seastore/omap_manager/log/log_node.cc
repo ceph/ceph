@@ -211,6 +211,7 @@ LogNode::get_value_ret LogNode::get_value(const std::string &key)
     const auto k = ent.get_key();
     if (k == key) {
       bl = ent.get_val();
+      found = true;
       /* If key is time-series log,
        * duplicate does not exist. In this case, return latest one */
       if (is_log_key(k)) {
@@ -235,6 +236,7 @@ bool LogNode::remove_entry(const std::string key)
 {
   auto iter = iter_begin();
   uint32_t index = 0;
+  bool removed = false;
   while(iter != iter_end()) {
     if (iter->get_key() == key) {
       set_cur_bitmap(index, index);
@@ -243,11 +245,12 @@ bool LogNode::remove_entry(const std::string key)
       if (is_log_key(key)) {
 	return true;
       }
+      removed = true;
     }
     index++;
     iter++;
   };
-  return false;
+  return removed;
 }
 
 bool LogNode::log_less_than(std::string_view str) const
