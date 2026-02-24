@@ -1,5 +1,5 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
 
@@ -26,12 +26,18 @@ export class NvmeofGatewayComponent implements OnInit {
   statusTpl: TemplateRef<any>;
   selection = new CdTableSelection();
 
-  constructor(public actionLabels: ActionLabelsI18n, private route: ActivatedRoute) {}
+  constructor(
+    public actionLabels: ActionLabelsI18n,
+    private route: ActivatedRoute,
+    private router: Router
+  ) {}
 
   ngOnInit() {
     this.route.queryParams.subscribe((params) => {
       if (params['tab'] && Object.values(TABS).includes(params['tab'])) {
-        this.activeTab = params['tab'] as TABS;
+        setTimeout(() => {
+          this.activeTab = params['tab'] as TABS;
+        }, 0);
       }
     });
   }
@@ -39,6 +45,11 @@ export class NvmeofGatewayComponent implements OnInit {
   onSelected(tab: TABS) {
     this.selectedTab = tab;
     this.activeTab = tab;
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { tab: tab },
+      queryParamsHandling: 'merge'
+    });
   }
 
   public get Tabs(): typeof TABS {

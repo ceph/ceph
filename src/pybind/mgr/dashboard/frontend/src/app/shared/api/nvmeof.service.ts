@@ -4,7 +4,7 @@ import { HttpClient } from '@angular/common/http';
 import _ from 'lodash';
 import { Observable, forkJoin, of as observableOf } from 'rxjs';
 import { catchError, map, mapTo, mergeMap } from 'rxjs/operators';
-import { NvmeofSubsystemNamespace } from '../models/nvmeof';
+import { NvmeofSubsystemNamespace, ListenerItem } from '../models/nvmeof';
 import { CephServiceSpec } from '../models/service.interface';
 import { HostService } from './host.service';
 import { OrchestratorService } from './orchestrator.service';
@@ -93,6 +93,35 @@ export class NvmeofService {
             host.status === HostStatus.AVAILABLE || host.status === HostStatus.RUNNING;
           return !usedHosts.has(host.hostname) && isAvailable;
         });
+      })
+    );
+  }
+
+  getHostsForGroup(groupName: string): Observable<Host[]> {
+    return forkJoin({
+      gwGroups: this.listGatewayGroups(),
+      allHosts: this.hostService.getAllHosts()
+    }).pipe(
+      map(({ gwGroups, allHosts }) => {
+        const group = gwGroups?.[0]?.find(
+          (gwGroup: CephServiceSpec) => gwGroup?.spec?.group === groupName
+        );
+        const placement = group?.placement || { hosts: [], label: [] };
+        const { hosts, label } = placement;
+
+        if (hosts?.length) {
+          return allHosts.filter((host: Host) => hosts.includes(host.hostname));
+        } else if (label?.length) {
+          if (typeof label === 'string') {
+            return allHosts.filter((host: Host) => host?.labels?.includes(label));
+          }
+          return allHosts.filter(
+            (host: Host) =>
+              host?.labels?.length === label?.length &&
+              _.isEqual([...host.labels].sort(), [...label].sort())
+          );
+        }
+        return [];
       })
     );
   }
@@ -222,6 +251,18 @@ export class NvmeofService {
     return this.http.post(`${API_PATH}/subsystem/${subsystemNQN}/listener`, request, {
       observe: 'response'
     });
+  }
+
+  createListeners(subsystemNQN: string, gwGroup: string, listeners: ListenerItem[]) {
+    const listenerCalls = listeners.map((listener: ListenerItem) =>
+      this.createListener(subsystemNQN, {
+        gw_group: gwGroup,
+        host_name: listener.content,
+        traddr: listener.addr,
+        trsvcid: 4420
+      })
+    );
+    return forkJoin(listenerCalls);
   }
 
   deleteListener(

@@ -156,8 +156,8 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
       this.nvmeofService
         .listNamespaces(this.group, this.subsystemNQN)
         .pipe(takeUntil(this.destroy$))
-        .subscribe((res: NvmeofSubsystemNamespace[]) => {
-          this.namespaces = res || [];
+        .subscribe((res: any) => {
+          this.namespaces = Array.isArray(res) ? res : res?.namespaces || [];
         });
     } else {
       this.namespaces = [];

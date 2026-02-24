@@ -83,32 +83,25 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     this.description = $localize`Namespaces define the storage volumes that subsystems present to hosts.`;
 
     this.route.params.subscribe((params: Params) => {
-      this.subsystemNQN = params['subsystem_nqn'];
-      this.nsid = params['nsid'];
-      if (params['group']) {
-        this.group = params['group'];
-      }
-      if (this.subsystemNQN && this.group) {
-        this.pageURL = `block/nvmeof/subsystems/${this.subsystemNQN}/${this.group}`;
-        this.action = this.actionLabels.ADD;
-        this.title = this.action + ' ' + this.resource;
-        this.description = $localize`Create a new namespace associated with this subsystem.`;
-      }
+      this.subsystemNQN = params['subsystem_nqn'] || this.subsystemNQN;
+      this.nsid = params['nsid'] || this.nsid;
+      this.group = params['group'] || this.group;
+      this.updateTitleAndAction();
     });
     this.route.queryParams.subscribe((params: Params) => {
-      if (params['group']) {
-        this.group = params['group'];
-      }
-      if (params['subsystem_nqn']) {
-        this.subsystemNQN = params['subsystem_nqn'];
-      }
-      if (this.subsystemNQN && this.group) {
-        this.pageURL = `block/nvmeof/subsystems/${this.subsystemNQN}/namespaces`;
-        this.action = this.actionLabels.ADD;
-        this.title = this.action + ' ' + this.resource;
-        this.description = $localize`Create a new namespace associated with this subsystem.`;
-      }
+      this.subsystemNQN = params['subsystem_nqn'] || this.subsystemNQN;
+      this.group = params['group'] || this.group;
+      this.updateTitleAndAction();
     });
+  }
+
+  updateTitleAndAction() {
+    if (this.subsystemNQN && this.group) {
+      this.pageURL = `block/nvmeof/subsystems/${this.subsystemNQN}/namespaces`;
+      this.action = this.actionLabels.ADD;
+      this.title = this.action + ' ' + this.resource;
+      this.description = $localize`Create a new namespace associated with this subsystem.`;
+    }
   }
 
   initForCreate() {
@@ -415,7 +408,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       },
       complete: () => {
         this.router.navigate([this.pageURL], {
-          queryParams: { group: this.group }
+          queryParams: { group: this.group, tab: 'namespace' }
         });
       }
     });

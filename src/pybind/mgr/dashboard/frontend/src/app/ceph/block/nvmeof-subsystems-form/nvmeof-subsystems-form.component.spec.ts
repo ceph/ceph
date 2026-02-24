@@ -25,6 +25,7 @@ import {
 import { NvmeofSubsystemsStepThreeComponent } from './nvmeof-subsystem-step-3/nvmeof-subsystem-step-3.component';
 import { HOST_TYPE } from '~/app/shared/models/nvmeof';
 import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystem-step-2/nvmeof-subsystem-step-2.component';
+import { NvmeofSubsystemsStepFourComponent } from './nvmeof-subsystem-step-4/nvmeof-subsystem-step-4.component';
 import { of } from 'rxjs';
 
 describe('NvmeofSubsystemsFormComponent', () => {
@@ -49,7 +50,8 @@ describe('NvmeofSubsystemsFormComponent', () => {
         NvmeofSubsystemsFormComponent,
         NvmeofSubsystemsStepOneComponent,
         NvmeofSubsystemsStepThreeComponent,
-        NvmeofSubsystemsStepTwoComponent
+        NvmeofSubsystemsStepTwoComponent,
+        NvmeofSubsystemsStepFourComponent
       ],
       providers: [
         NgbActiveModal,
