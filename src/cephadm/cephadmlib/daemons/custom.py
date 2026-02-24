@@ -206,11 +206,17 @@ class CustomContainer(ContainerDaemonForm):
     ) -> None:
         envs.extend(self.get_container_envs())
 
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        # Container args are podman/docker arguments that go before the image name
+        args.extend(self.get_container_args())
+
     def customize_process_args(
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
+        # Process args are entrypoint arguments that go after the image name
         args.extend(self.get_daemon_args())
-        args.extend(self.get_container_args())
 
     def default_entrypoint(self) -> str:
         return self.entrypoint or ''
