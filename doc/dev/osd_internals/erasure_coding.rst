@@ -88,3 +88,4 @@ Table of contents
    Erasure coding enhancements design document <erasure_coding/enhancements>
    Direct reads design document <erasure_coding/direct_reads>
    EC Stretch Cluster design document <erasure_coding/ec_stretch_cluster>
+   Client support (RBD, RGW, CephFS) <erasure_coding/client_support>
