@@ -261,6 +261,34 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   if (rate_limit(driver, s)) {
     return -ERR_RATE_LIMITED;
   }
+
+  bool is_health_request = (op->get_type() == RGW_OP_GET_HEALTH_CHECK);
+  {
+    if (!is_health_request) {
+      std::string script;
+      auto rc = rgw::lua::read_script(s, s->penv.lua.manager.get(),
+                                      s->bucket_tenant, s->yield,
+                                      rgw::lua::context::postAuth, script);
+      if (rc == -ENOENT) {
+        // no script, nothing to do
+      } else if (rc < 0) {
+        ldpp_dout(op, 5) <<
+          "WARNING: failed to execute post authorization script. "
+          "error: " << rc << dendl;
+      } else {
+        int script_return_code = 0;
+        rc = rgw::lua::request::execute(s->penv.rest, s->penv.olog.get(), s, op, script, script_return_code);
+        if (rc < 0) {
+          ldpp_dout(op, 5) <<
+            "WARNING: failed to execute post authorization script. "
+            "error: " << rc << dendl;
+        }
+        if (script_return_code == -EPERM) {
+          return script_return_code;
+        }
+      }
+    }
+  }
   ldpp_dout(op, 2) << "executing" << dendl;
   {
     auto span = tracing::rgw::tracer.add_span("execute", s->trace);
