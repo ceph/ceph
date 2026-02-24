@@ -411,12 +411,12 @@ class TestSubvolumeMetrics(CephFSTestCase):
         self.assertEqual(counters_after_delete["quota_bytes"], quota_bytes,
                          "Quota should remain unchanged after deletions")
 
-        # wait for metrics to expire after inactivity
-        sleep(30)
-
         # verify that metrics are not present anymore
-        subvolume_metrics = self.get_subvolume_metrics()
-        self.assertFalse(subvolume_metrics, "Subvolume metrics should be gone after inactivity window")
+        with safe_while(sleep=1, tries=60, action='wait for empty subvolume metrics after inactivity window') as proceed:
+            while proceed():
+                subvolume_metrics = self.get_subvolume_metrics()
+                if not subvolume_metrics:
+                    break
 
     def test_subvolume_quota_resize_update(self):
         """
