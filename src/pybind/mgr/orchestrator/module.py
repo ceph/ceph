@@ -2117,10 +2117,23 @@ Usage:
 
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
+    def _is_module_enabled(self, module: str) -> bool:
+        mgr_map = self.get('mgr_map')
+        return (
+            module in mgr_map.get('modules', [])
+            or module in mgr_map.get('always_on_modules', []).get(self.release_name, [])
+        )
+
+    def _create_nvmeof_metadata_pool_if_needed(self) -> None:
+        if not self._is_module_enabled('nvmeof'):
+            raise OrchestratorError('nvmeof module must be enabled to use .nvmeof pool')
+        self.remote('nvmeof', 'create_pool_if_not_exists')
+
     @OrchestratorCLICommand.Write('orch apply nvmeof')
     def _apply_nvmeof(self,
-                      pool: str,
-                      group: str,
+                      _end_positional_: int = 0,
+                      pool: str = ".nvmeof",
+                      group: str = '',
                       placement: Optional[str] = None,
                       unmanaged: bool = False,
                       dry_run: bool = False,
@@ -2128,11 +2141,18 @@ Usage:
                       no_overwrite: bool = False,
                       inbuf: Optional[str] = None) -> HandleCommandResult:
         """Scale an nvmeof service"""
+        if group == '':
+            raise OrchestratorValidationError('The --group argument is required')
+
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
+        if pool == ".nvmeof":
+            self._create_nvmeof_metadata_pool_if_needed()
+
+        cleanpool = pool.lstrip('.')
         spec = NvmeofServiceSpec(
-            service_id=f'{pool}.{group}' if group else pool,
+            service_id=f'{cleanpool}.{group}' if group else cleanpool,
             pool=pool,
             group=group,
             placement=PlacementSpec.from_string(placement),
