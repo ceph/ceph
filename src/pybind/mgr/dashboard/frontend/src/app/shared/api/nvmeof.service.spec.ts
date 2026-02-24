@@ -247,7 +247,9 @@ describe('NvmeofService', () => {
     const mockNsid = '1';
     it('should call listNamespaces', () => {
       service.listNamespaces(mockGroupName).subscribe();
-      const req = httpTesting.expectOne(`${API_PATH}/subsystem/*/namespace?gw_group=${mockGroupName}`);
+      const req = httpTesting.expectOne(
+        `${API_PATH}/subsystem/*/namespace?gw_group=${mockGroupName}`
+      );
       expect(req.request.method).toBe('GET');
     });
     it('should call getNamespace', () => {

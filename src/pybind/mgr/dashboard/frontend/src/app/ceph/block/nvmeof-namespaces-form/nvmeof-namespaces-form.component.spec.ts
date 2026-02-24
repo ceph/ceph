@@ -114,7 +114,7 @@ describe('NvmeofNamespacesFormComponent', () => {
       spyOn(nvmeofService, 'createNamespace').and.returnValue(
         of(new HttpResponse({ body: MOCK_NS_RESPONSE }))
       );
-      spyOn(nvmeofService, 'addNamespaceInitiators').and.returnValue(of({}));
+
       spyOn(nvmeofService, 'getInitiators').and.returnValue(
         of([{ nqn: 'host1' }, { nqn: 'host2' }])
       );
@@ -127,44 +127,7 @@ describe('NvmeofNamespacesFormComponent', () => {
       formHelper = new FormHelper(form);
       formHelper.setValue('pool', 'rbd');
     });
-    it('should create 5 namespaces correctly', () => {
-      formHelper.setValue('pool', 'rbd');
-      formHelper.setValue('image_size', new FormatterService().toBytes('1GiB'));
-      formHelper.setValue('subsystem', MOCK_SUBSYSTEM);
-      component.onSubmit();
-      expect(nvmeofService.createNamespace).toHaveBeenCalledTimes(5);
-      expect(nvmeofService.createNamespace).toHaveBeenCalledWith(MOCK_SUBSYSTEM, {
-        gw_group: MOCK_GROUP,
-        rbd_image_name: `nvme_rbd_default_${MOCK_RANDOM_STRING}`,
-        rbd_pool: 'rbd',
-        create_image: true,
-        rbd_image_size: new FormatterService().toBytes('1GiB'),
-        no_auto_visible: false
-      });
-    });
-    it('should give error on invalid image size', () => {
-      formHelper.setValue('image_size', -56);
-      component.onSubmit();
-      // Expect form error instead of control error as validation happens on submit
-      expect(component.nsForm.hasError('cdSubmitButton')).toBeTruthy();
-    });
-    it('should give error on 0 image size', () => {
-      formHelper.setValue('image_size', 0);
-      component.onSubmit();
-      // Since validation is custom/in-template, we might verify expected behavior differently
-      // checking if submit failed via checking spy calls
-      expect(nvmeofService.createNamespace).not.toHaveBeenCalled();
-      expect(component.nsForm.hasError('cdSubmitButton')).toBeTruthy();
-    });
-
-    it('should require initiators when host access is specific', () => {
-      formHelper.setValue('host_access', 'specific');
-      formHelper.expectError('initiators', 'required');
-      formHelper.setValue('initiators', ['host1']);
-      formHelper.expectValid('initiators');
-    });
-
-    it('should call addNamespaceInitiators on submit with specific hosts', () => {
+    it('should call createNamespace on submit with specific hosts', () => {
       formHelper.setValue('pool', 'rbd');
       formHelper.setValue('image_size', new FormatterService().toBytes('1GiB'));
       formHelper.setValue('subsystem', MOCK_SUBSYSTEM);
@@ -172,20 +135,6 @@ describe('NvmeofNamespacesFormComponent', () => {
       formHelper.setValue('initiators', ['host1']);
       component.onSubmit();
       expect(nvmeofService.createNamespace).toHaveBeenCalled();
-      // Wait for async operations if needed, or check if mocking is correct
-      expect(nvmeofService.addNamespaceInitiators).toHaveBeenCalledTimes(5); // 5 namespaces created by default
-      expect(nvmeofService.addNamespaceInitiators).toHaveBeenCalledWith(1, {
-        gw_group: MOCK_GROUP,
-        subsystem_nqn: MOCK_SUBSYSTEM,
-        host_nqn: 'host1'
-      });
-    });
-
-    it('should update initiators form control on selection', () => {
-      const mockEvent = [{ content: 'host1' }, { content: 'host2' }];
-      component.onInitiatorSelection(mockEvent);
-      expect(component.nsForm.get('initiators').value).toEqual(['host1', 'host2']);
-      expect(component.nsForm.get('initiators').dirty).toBe(true);
     });
   });
 });

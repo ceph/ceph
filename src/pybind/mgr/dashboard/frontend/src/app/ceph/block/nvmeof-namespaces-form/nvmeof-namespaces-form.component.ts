@@ -281,9 +281,12 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     return Math.random().toString(36).substring(2);
   }
 
-  private normalizeImageSizeInput(value: string): string {
-    const input = (value || '').trim();
+  private normalizeImageSizeInput(value: string | number): string {
+    const input = String(value ?? '').trim();
     if (!input) {
+      return input;
+    }
+    if (typeof value === 'number') {
       return input;
     }
     // Accept plain numeric values as GiB (e.g. "45" => "45GiB").
