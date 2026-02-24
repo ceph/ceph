@@ -195,7 +195,7 @@ protected:
    ...we need to fit in with the previous parser, which was more tolerant of
    invalid data than boost.json is out of the box. Therefore, we employ the stream
    parser, which is slightly more complicated but more flexible; we also try to reinterpret
-   certain kinds of failures as strings, which IMO is fairly naughty... */
+   certain kinds of failures as strings to match established behavior: */
    static bool parse_json(std::string_view input, boost::json::value& data_out)
    {
     boost::json::stream_parser p;
@@ -245,15 +245,6 @@ fmt::println("JFW: from extra data, trying again...");
 
         return true;
       }
-/* JFW:
-      boost::system::result<std::string> r = boost::json::try_value_to<std::string>(sv);
-
-      if(r) {
-       ec = {};
-       data_out = *r;
-       return true; 
-      }
-*/
    } 
 
   throw std::runtime_error(fmt::format(
