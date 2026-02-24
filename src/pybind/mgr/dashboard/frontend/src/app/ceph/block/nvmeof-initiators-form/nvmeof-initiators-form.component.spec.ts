@@ -21,6 +21,7 @@ describe('NvmeofInitiatorsFormComponent', () => {
   let fixture: ComponentFixture<NvmeofInitiatorsFormComponent>;
   let nvmeofService: NvmeofService;
   const mockTimestamp = 1720693470789;
+  const mockGroupName = 'default';
 
   beforeEach(async () => {
     spyOn(Date, 'now').and.returnValue(mockTimestamp);
@@ -54,6 +55,7 @@ describe('NvmeofInitiatorsFormComponent', () => {
     component = fixture.componentInstance;
     component.ngOnInit();
     fixture.detectChanges();
+    component.group = mockGroupName;
   });
 
   it('should create', () => {

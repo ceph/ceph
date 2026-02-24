@@ -78,7 +78,8 @@
       </div>
       }
       <div cdsRow
-           class="form-item step-3-form-item">
+           class="form-item step-3-form-item"
+           formArrayName="hostDchapKeyList">
         <div class="step-3-heading">
           <h1
             class="cds--type-heading-compact-01"
@@ -86,19 +87,22 @@
           <p class="cds--type-label-01 text-helper"
              i18n>{{formGroup.get('authType').value === AUTHENTICATION.Bidirectional ? 'All fields are required.' : 'Optional fields.'}}</p>
         </div>
-        @for(hostDchapKeyItem of hostDchapKeyList.controls; track hostDchapKeyItem; let i = $index) {
-        <cds-text-label
-          [formGroupName]="i"
-          i18n>
-          DHCHAP Key | {{hostNQN}}
-          <input cdsPassword
-                 formControlName="key"
-                 type="password"
-                 placeholder="Enter DHCHAP key"
-                 class="step-3-form-item"
-                 i18n-placeholder
-                 autocomplete>
-        </cds-text-label>
+        @for (hostDchapKeyItem of hostDchapKeyList.controls; track hostDchapKeyItem.get('host_nqn')?.value; let i = $index) {
+        <div [formGroupName]="i">
+          <cds-text-label
+            class="cds-mb-3">
+            <span
+              class="cds-mb-3"
+              i18n>DHCHAP Key | {{hostDchapKeyItem.get('host_nqn')?.value }}</span>
+            <input cdsPassword
+                   formControlName="dhchap_key"
+                   type="password"
+                   placeholder="Enter DHCHAP key"
+                   class="step-3-form-item"
+                   i18n-placeholder
+                   autocomplete>
+          </cds-text-label>
+        </div>
         }
       </div>
     </div>

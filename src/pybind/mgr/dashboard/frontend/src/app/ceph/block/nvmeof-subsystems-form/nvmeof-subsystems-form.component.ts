@@ -5,9 +5,10 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Step } from 'carbon-components-angular';
-import { InitiatorRequest, NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { NvmeofService, SubsystemInitiatorRequest } from '~/app/shared/api/nvmeof.service';
 import { TearsheetComponent } from '~/app/shared/components/tearsheet/tearsheet.component';
 import { HOST_TYPE, ListenerItem, AUTHENTICATION } from '~/app/shared/models/nvmeof';
+import { AUTHENTICATION, HOST_TYPE, StepTwoType } from '~/app/shared/models/nvmeof';
 import { from, Observable, of } from 'rxjs';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -21,6 +22,8 @@ export type SubsystemPayload = {
   addedHosts: string[];
   hostType: string;
   listeners: ListenerItem[];
+  authType: AUTHENTICATION.Bidirectional | AUTHENTICATION.Unidirectional;
+  hostDchapKeyList: Array<{ dhchap_key: string; host_nqn: string }>;
 };
 
 type StepResult = { step: string; success: boolean; error?: string };
@@ -33,29 +36,13 @@ type StepResult = { step: string; success: boolean; error?: string };
 export class NvmeofSubsystemsFormComponent implements OnInit {
   action: string;
   group: string;
-  steps: Step[] = [
-    {
-      label: $localize`Subsystem details`,
-      complete: false,
-      invalid: false
-    },
-    {
-      label: $localize`Host access control`,
-      invalid: false
-    },
-    {
-      label: $localize`Authentication`,
-      complete: false
-    },
-    {
-      label: $localize`Review`,
-      complete: false
-    }
-  ];
+  steps: Step[] = [];
   title: string = $localize`Create Subsystem`;
   description: string = $localize`Subsytems define how hosts connect to NVMe namespaces and ensure secure access to storage.`;
   isSubmitLoading: boolean = false;
   private lastCreatedNqn: string;
+  stepTwoValue: StepTwoType = null;
+  showAuthStep = true;
 
   @ViewChild(TearsheetComponent) tearsheet!: TearsheetComponent;
 
@@ -83,6 +70,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     this.route.queryParams.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       this.group = params?.['group'];
     });
+    this.rebuildSteps();
   }
 
   populateReviewData() {
@@ -110,6 +98,33 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
       this.reviewSubsystemDchapKey = step3Form.get('subsystemDchapKey')?.value || '';
       const hostKeys = step3Form.get('hostDchapKeyList')?.value || [];
       this.reviewHostDchapKeyCount = hostKeys.filter((k: any) => k?.key).length;
+  
+      }  }
+  onStepChanged(_e: { current: number }) {
+    const stepTwo = this.tearsheet?.getStepValue(1);
+    this.stepTwoValue = stepTwo;
+
+    this.showAuthStep = stepTwo?.hostType !== HOST_TYPE.ALL;
+
+    this.rebuildSteps();
+  }
+
+  rebuildSteps() {
+    const steps: Step[] = [
+      { label: 'Subsystem details', invalid: false },
+      { label: 'Host access control', invalid: false }
+    ];
+
+    if (this.showAuthStep) {
+      steps.push({ label: 'Authentication', invalid: false });
+    }
+
+    steps.push({ label: 'Review', invalid: false });
+
+    this.steps = steps;
+
+    if (this.tearsheet?.currentStep >= steps.length) {
+      this.tearsheet.currentStep = steps.length - 1;
     }
   }
 
@@ -117,8 +132,9 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     this.isSubmitLoading = true;
     this.lastCreatedNqn = payload.nqn;
     const stepResults: StepResult[] = [];
-    const initiatorRequest: InitiatorRequest = {
-      host_nqn: payload.hostType === HOST_TYPE.ALL ? '*' : payload.addedHosts.join(','),
+    const initiatorRequest: SubsystemInitiatorRequest = {
+      allow_all: payload.hostType === HOST_TYPE.ALL,
+      hosts: payload.hostType === HOST_TYPE.SPECIFIC ? payload.hostDchapKeyList : [],
       gw_group: this.group
     };
     this.nvmeofService

@@ -50,6 +50,11 @@ export type InitiatorRequest = NvmeofRequest & {
   dhchap_key?: string;
 };
 
+export type SubsystemInitiatorRequest = NvmeofRequest & {
+  hosts: Array<{ dhchap_key: string; host_nqn: string }>;
+  allow_all: boolean;
+};
+
 export type NamespaceInitiatorRequest = InitiatorRequest & {
   subsystem_nqn: string;
 };
@@ -211,7 +216,7 @@ export class NvmeofService {
     return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/host?gw_group=${group}`);
   }
 
-  addInitiators(subsystemNQN: string, request: InitiatorRequest) {
+  addSubsystemInitiators(subsystemNQN: string, request: SubsystemInitiatorRequest) {
     return this.http.post(`${UI_API_PATH}/subsystem/${subsystemNQN}/host`, request, {
       observe: 'response'
     });

@@ -1277,7 +1277,8 @@ else:
         @EndpointDoc("Add one or more initiator hosts to an NVMeoF subsystem",
                      parameters={
                          'subsystem_nqn': (str, 'Subsystem NQN'),
-                         "host_nqn": Param(str, 'Comma separated list of NVMeoF host NQNs'),
+                         "allow_all": Param(bool, 'Allow all hosts. Default is True.'),
+                         "hosts": Param(List, 'List containg host nqn and dhchap key'),
                          "gw_group": Param(str, "NVMeoF gateway group")
                      })
         @empty_response
@@ -1285,19 +1286,36 @@ else:
         @CreatePermission
         def add(self, subsystem_nqn: str,
                 gw_group: str,
-                host_nqn: str = "",
+                hosts: Optional[list[dict]] = None,
+                allow_all: bool = True,
                 server_address: Optional[str] = None):
             response = None
-            all_host_nqns = host_nqn.split(',')
 
-            for nqn in all_host_nqns:
+            if allow_all:
+                return NVMeoFClient(gw_group=gw_group,
+                                    server_address=server_address).stub.add_host(
+                    NVMeoFClient.pb2.add_host_req(
+                        subsystem_nqn=subsystem_nqn,
+                        host_nqn="*",
+                        dhchap_key=None
+                    ))
+
+            for h in (hosts or []):
+                nqn = h["host_nqn"]
+                key = h.get("dhchap_key")
+
                 response = NVMeoFClient(gw_group=gw_group,
                                         server_address=server_address).stub.add_host(
-                    NVMeoFClient.pb2.add_host_req(subsystem_nqn=subsystem_nqn, host_nqn=nqn)
+                    NVMeoFClient.pb2.add_host_req(
+                        subsystem_nqn=subsystem_nqn,
+                        host_nqn=nqn,
+                        dhchap_key=key
+                    )
                 )
                 if response.status != 0:
                     return response
             return response
+
         # UI API for deleting one or more than one hosts to subsystem
 
         @Endpoint(method='DELETE', path="/subsystem/{subsystem_nqn}/host/{host_nqn}")

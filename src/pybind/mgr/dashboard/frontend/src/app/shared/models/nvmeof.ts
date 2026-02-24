@@ -148,3 +148,9 @@ export type NvmeofInitiatorCandidate = {
   content: string;
   selected: boolean;
 };
+
+export type StepTwoType = {
+  addedHosts: Array<string>;
+  hostname: string;
+  hostType: string;
+};

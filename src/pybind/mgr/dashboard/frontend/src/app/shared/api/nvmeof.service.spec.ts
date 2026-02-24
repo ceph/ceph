@@ -191,6 +191,7 @@ describe('NvmeofService', () => {
 
   describe('test initiators APIs', () => {
     let request = { host_nqn: '', gw_group: mockGroupName };
+    let addRequest = { hosts: [], allow_all: true, gw_group: mockGroupName };
     it('should call getInitiators', () => {
       service.getInitiators(mockNQN, mockGroupName).subscribe();
       const req = httpTesting.expectOne(
@@ -199,7 +200,7 @@ describe('NvmeofService', () => {
       expect(req.request.method).toBe('GET');
     });
     it('should call addInitiators', () => {
-      service.addInitiators(mockNQN, request).subscribe();
+      service.addSubsystemInitiators(mockNQN, addRequest).subscribe();
       const req = httpTesting.expectOne(`${UI_API_PATH}/subsystem/${mockNQN}/host`);
       expect(req.request.method).toBe('POST');
     });

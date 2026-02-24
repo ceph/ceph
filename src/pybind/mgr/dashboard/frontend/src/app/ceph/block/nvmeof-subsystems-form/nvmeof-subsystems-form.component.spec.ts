@@ -23,7 +23,7 @@ import {
   TagModule
 } from 'carbon-components-angular';
 import { NvmeofSubsystemsStepThreeComponent } from './nvmeof-subsystem-step-3/nvmeof-subsystem-step-3.component';
-import { HOST_TYPE } from '~/app/shared/models/nvmeof';
+import { AUTHENTICATION, HOST_TYPE } from '~/app/shared/models/nvmeof';
 import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystem-step-2/nvmeof-subsystem-step-2.component';
 import { NvmeofSubsystemsStepFourComponent } from './nvmeof-subsystem-step-4/nvmeof-subsystem-step-4.component';
 import { of } from 'rxjs';
@@ -40,7 +40,9 @@ describe('NvmeofSubsystemsFormComponent', () => {
     subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY=',
     addedHosts: [],
     hostType: HOST_TYPE.ALL,
-    listeners: []
+    listeners: [],
+    hostDchapKeyList: [],
+    authType: AUTHENTICATION.Bidirectional
   };
 
   beforeEach(async () => {
@@ -113,14 +115,25 @@ describe('NvmeofSubsystemsFormComponent', () => {
         addedHosts: [],
         hostType: HOST_TYPE.ALL,
         subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY=',
+<<<<<<< HEAD
         listeners: []
+=======
+        authType: AUTHENTICATION.Bidirectional,
+        hostDchapKeyList: []
+>>>>>>> 6d877ea7101 (mgr/dashboard: Allow adding authentication to subsystem flow)
       };
 
       component.group = mockGroupName;
       component.onSubmit(payload);
 
+<<<<<<< HEAD
       expect(nvmeofService.addInitiators).toHaveBeenCalledWith('test-nqn.default', {
         host_nqn: '*',
+=======
+      expect(nvmeofService.addSubsystemInitiators).toHaveBeenCalledWith('test-nqn.default', {
+        allow_all: true,
+        hosts: [],
+>>>>>>> 6d877ea7101 (mgr/dashboard: Allow adding authentication to subsystem flow)
         gw_group: mockGroupName
       });
     });
