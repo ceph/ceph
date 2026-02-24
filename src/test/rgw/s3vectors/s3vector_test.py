@@ -67,7 +67,7 @@ def connection(service_name='s3vectors'):
         scheme = 'http://'
 
     if service_name == 's3vectors':
-        config = Config(signature_version='s3')
+        config = Config(signature_version='s3v4')
     else:
         config = None
 
@@ -97,7 +97,7 @@ def connection2(service_name='s3vectors'):
         scheme = 'http://'
 
     if service_name == 's3vectors':
-        config = Config(signature_version='s3')
+        config = Config(signature_version='s3v4')
     else:
         config = None
 
@@ -133,7 +133,7 @@ def another_user(tenant=None):
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             region_name=get_config_zonegroup(),
-            config=Config(signature_version='s3'))
+            config=Config(signature_version='s3v4'))
 
     return client
 
