@@ -223,7 +223,7 @@ public:
     return parent->is_waiter_for(mask << get_wait_shift());
   }
   bool has_any_waiter() const {
-    return is_waiter_for(std::numeric_limits<uint64_t>::max());
+    return parent->is_waiter_for(WAIT_ALL << get_wait_shift(), WAIT_RD << get_wait_shift());
   }
 
   bool is_cached() const {
