@@ -65,7 +65,9 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() submitButtonLoadingLabel: string = $localize`Creating`;
   @Input() isSubmitLoading: boolean = true;
 
-  @Output() submitRequested = new EventEmitter<any[]>();
+  @Output() submitRequested = new EventEmitter<void>();
+  @Output() closeRequested = new EventEmitter<void>();
+  @Output() stepChanged = new EventEmitter<number>();
 
   @ContentChildren(TearsheetStepComponent)
   stepContents!: QueryList<TearsheetStepComponent>;
@@ -107,6 +109,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onStepSelect(event: { step: Step; index: number }) {
     this.currentStep = event.index;
+    this.stepChanged.emit(this.currentStep);
   }
 
   closeTearsheet() {
@@ -129,6 +132,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   onPrevious() {
     if (this.currentStep !== 0) {
       this.currentStep = this.currentStep - 1;
+      this.stepChanged.emit(this.currentStep);
     }
   }
 
@@ -137,6 +141,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     formEl?.dispatchEvent(new Event('submit', { bubbles: true }));
     if (this.currentStep !== this.lastStep && !this.steps[this.currentStep].invalid) {
       this.currentStep = this.currentStep + 1;
+      this.stepChanged.emit(this.currentStep);
     }
   }
 

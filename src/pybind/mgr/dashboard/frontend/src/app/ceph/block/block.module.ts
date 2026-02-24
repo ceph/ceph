@@ -54,6 +54,7 @@ import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystems-form/nvmeo
 import { NvmeofGatewayNodeComponent } from './nvmeof-gateway-node/nvmeof-gateway-node.component';
 import { NvmeofGroupFormComponent } from './nvmeof-group-form/nvmeof-group-form.component';
 import { NvmeofEditHostKeyModalComponent } from './nvmeof-edit-host-key-modal/nvmeof-edit-host-key-modal.component';
+import { NvmeofSubsystemsStepFourComponent } from './nvmeof-subsystems-form/nvmeof-subsystem-step-4/nvmeof-subsystem-step-4.component';
 
 import {
   ButtonModule,
@@ -184,7 +185,8 @@ import { NvmeofSubsystemPerformanceComponent } from './nvmeof-subsystem-performa
     NvmeSubsystemViewComponent,
     NvmeofEditHostKeyModalComponent,
     NvmeofSubsystemOverviewComponent,
-    NvmeofSubsystemPerformanceComponent
+    NvmeofSubsystemPerformanceComponent,
+    NvmeofSubsystemsStepFourComponent
   ],
 
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
