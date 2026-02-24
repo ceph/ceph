@@ -192,7 +192,7 @@ protected:
   /* While basic parsing is straightforward:
 	data_out = boost::json::parse(input, boost::json::storage_ptr(), 
 				     { .allow_invalid_utf8 = true });
-   ...we need to fit in with the previous parser, which was frankly more tolerant of
+   ...we need to fit in with the previous parser, which was more tolerant of
    invalid data than boost.json is out of the box. Therefore, we employ the stream
    parser, which is slightly more complicated but more flexible; we also try to reinterpret
    certain kinds of failures as strings, which IMO is fairly naughty... */
