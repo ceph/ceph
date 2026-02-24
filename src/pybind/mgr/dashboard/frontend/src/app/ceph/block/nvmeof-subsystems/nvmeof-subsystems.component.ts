@@ -24,7 +24,6 @@ import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { BehaviorSubject, forkJoin, Observable, of, Subject } from 'rxjs';
 import { catchError, map, switchMap, takeUntil, tap } from 'rxjs/operators';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
-import { TableComponent } from '~/app/shared/datatable/table/table.component';
 
 const BASE_URL = 'block/nvmeof/subsystems';
 const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
@@ -47,8 +46,6 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
 
   @ViewChild('customTableItemTemplate', { static: true })
   customTableItemTemplate: TemplateRef<any>;
-
-  @ViewChild('table') table: TableComponent;
 
   subsystems: (NvmeofSubsystem & { gw_group?: string; initiator_count?: number })[] = [];
   pendingNqn: string = null;
@@ -83,7 +80,6 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
 
   ngOnInit() {
     this.route.queryParams.pipe(takeUntil(this.destroy$)).subscribe((params) => {
-      if (params?.['nqn']) this.pendingNqn = params['nqn'];
       if (params?.['group']) this.onGroupSelection({ content: params?.['group'] });
     });
     this.setGatewayGroups();
