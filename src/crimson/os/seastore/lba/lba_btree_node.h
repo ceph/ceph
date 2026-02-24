@@ -288,46 +288,95 @@ struct LBALeafNode
 
   std::ostream &print_detail(std::ostream &out) const final;
 
+  std::map<laddr_t, pladdr_t> merge_content_to(
+    Transaction &t,
+    LBALeafNode &pending_version,
+    iterator &iter)
+  {
+    LOG_PREFIX(LBALeafNode::merge_content_to);
+    std::map<laddr_t, pladdr_t> modified;
+    auto it = pending_version.begin();
+    while (it != pending_version.end() && iter != this->end()) {
+      const auto &v1 = iter->get_val();
+      if (v1.pladdr.is_laddr() ||
+          v1.pladdr.get_paddr().is_zero()) {
+        iter++;
+        continue;
+      }
+      const auto &v2 = it->get_val();
+      if (v2.pladdr.is_laddr() || v2.pladdr.get_paddr().is_zero()) {
+        it++;
+        continue;
+      }
+      auto child = pending_version.children[it->get_offset()];
+      if (unlikely(is_reserved_ptr(child))) {
+        SUBERRORT(seastore_lba, "unexpected reserved ptr for {}, {}",
+          t, it->get_key(), pending_version);
+        ceph_abort();
+      }
+      if (is_valid_child_ptr(child) &&
+          (child->_is_mutable() || child->_is_pending_io())) {
+        // skip the ones that the pending version is also modifying
+        it++;
+        continue;
+      }
+      auto pending_key = it->get_key();
+      auto stable_key = iter->get_key();
+      auto stable_end = stable_key + v1.len;
+      if (pending_key < stable_end && pending_key >= stable_key) {
+        auto pending_end = pending_key + v2.len;
+        assert(pending_end <= stable_end);
+        if (pending_key != stable_key) {
+          assert(v2.pladdr != v1.pladdr);
+          assert(!is_valid_child_ptr(child) ||
+                 !child->_is_exist_clean() ||
+                 !child->_is_exist_mutation_pending());
+        }
+        if (v2.pladdr != v1.pladdr) {
+          auto m_v2 = v2;
+          auto off = pending_key.get_byte_distance<extent_len_t>(stable_key);
+          auto paddr = v1.pladdr.get_paddr();
+          paddr = paddr + off;
+          m_v2.pladdr = paddr;
+          SUBTRACET(seastore_lba, "merging to {}, paddr: {} -> {}",
+            t, pending_version, m_v2.pladdr, paddr);
+          if (!is_valid_child_ptr(child) ||
+              (!child->_is_exist_clean() &&
+               !child->_is_exist_mutation_pending())) {
+            // exclude the mappings whose children are EXIST_CLEAN ones
+            SUBTRACET(seastore_lba, "merging to {}, checksum: {} -> {}",
+              t, pending_version, m_v2.checksum, v1.checksum);
+            m_v2.checksum = v1.checksum;
+          }
+          it->set_val(m_v2);
+          auto [_it, inserted] = modified.emplace(it->get_key(), paddr);
+          ceph_assert(inserted);
+        }
+        it++;
+        if (pending_end == stable_end) {
+          iter++;
+        }
+      } else if (pending_key > stable_key) {
+        iter++;
+      } else {
+        it++;
+      }
+    }
+    if (pending_version.is_initial_pending() &&
+        pending_version.get_last_committed_crc()) {
+      // if pending_version has already calculated its crc,
+      // calculate it again.
+      pending_version.set_last_committed_crc(pending_version.calc_crc32c());
+    }
+    return modified;
+  }
+
   template <template <typename...> typename Container, typename... T>
   void merge_content_to(Transaction &t, Container<T...> &container) {
     auto iter = this->begin();
     for (auto &copy_dest : container) {
       auto &pending_version = static_cast<LBALeafNode&>(*copy_dest);
-      auto it = pending_version.begin();
-      while (it != pending_version.end() && iter != this->end()) {
-        const auto &v1 = iter->get_val();
-        if (v1.pladdr.is_laddr() ||
-            v1.pladdr.get_paddr().is_zero()) {
-          iter++;
-          continue;
-        }
-        if (const auto &v2 = it->get_val();
-            v2.pladdr.is_laddr() || v2.pladdr.get_paddr().is_zero()) {
-          it++;
-          continue;
-        }
-        if (auto child = pending_version.children[it->get_offset()];
-            is_valid_child_ptr(child) &&
-            (child->_is_mutable() || child->_is_pending_io())) {
-          // skip the ones that the pending version is also modifying
-          it++;
-          continue;
-        }
-        if (it->get_key() == iter->get_key()) {
-          it->set_val(v1);
-          it++;
-          iter++;
-        } else if (it->get_key() > iter->get_key()) {
-          iter++;
-        } else {
-          it++;
-        }
-      }
-      if (pending_version.get_last_committed_crc()) {
-        // if pending_version has already calculated its crc,
-        // calculate it again.
-        pending_version.set_last_committed_crc(pending_version.calc_crc32c());
-      }
+      std::ignore = this->merge_content_to(t, pending_version, iter);
     }
   }
 
@@ -342,6 +391,12 @@ struct LBALeafNode
 #endif
       this->merge_content_to(t, copy_dests.dests_by_key);
     });
+  }
+
+  template <typename Func>
+  void adjust_delta(Func &&f) {
+    ceph_assert(this->is_mutation_pending());
+    this->delta_buffer.for_each(std::forward<Func>(f));
   }
 };
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;

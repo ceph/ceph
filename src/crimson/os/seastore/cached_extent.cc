@@ -434,12 +434,37 @@ void ExtentCommitter::_share_prior_data_to_mutations() {
   ceph_assert(is_lba_backref_node(extent.get_type()));
   auto &prior = *extent.prior_instance;
   for (auto &mext : prior.mutation_pending_extents) {
-    auto &mextent = static_cast<CachedExtent&>(mext);
-    TRACE("{} -> {}", extent, mextent);
-    extent.get_bptr().copy_out(
-      0, extent.get_length(), mextent.get_bptr().c_str());
-    mextent.on_data_commit();
-    mextent.reapply_delta();
+    if (extent.get_type() == extent_types_t::LADDR_LEAF) {
+      // LBA leaf mappings contains other fields than just pladdr, which
+      // may also be modified. In this case, we can just overwrite the
+      // whole contents of the leaf node and reapply deltas like what
+      // we do for internal nodes.
+      auto &mextent = static_cast<lba::LBALeafNode&>(mext);
+      auto &me = static_cast<lba::LBALeafNode&>(extent);
+      TRACE("{} -> {}", me, mextent);
+      auto iter = me.begin();
+      auto merged = me.merge_content_to(t, mextent, iter);
+      mextent.adjust_delta([&](auto &buf) {
+        if (buf.op == lba::LBALeafNode::delta_t::op_t::UPDATE ||
+            // only remapping extents can create a delta with op
+            // INSERT and the corresponding mapping in "merged"
+            buf.op == lba::LBALeafNode::delta_t::op_t::INSERT) {
+          auto it = merged.find(buf.key);
+          if (it != merged.end()) {
+            TRACE("{} -> {}, {} -> {}",
+              me, mextent, (pladdr_t)buf.val.pladdr, it->second);
+            buf.val.pladdr = pladdr_le_t(it->second);
+          }
+        }
+      });
+    } else {
+      auto &mextent = static_cast<CachedExtent&>(mext);
+      TRACE("{} -> {}", extent, mextent);
+      extent.get_bptr().copy_out(
+        0, extent.get_length(), mextent.get_bptr().c_str());
+      mextent.on_data_commit();
+      mextent.reapply_delta();
+    }
   }
 }
 
