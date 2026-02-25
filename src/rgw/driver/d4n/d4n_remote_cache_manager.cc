@@ -5,13 +5,80 @@
 
 namespace rgw { namespace d4n {
 
-//placeholder for any initialization that is needed
-int RemoteCachePut::init(CephContext* cct, const DoutPrefixProvider* dpp)
+int RemoteCacheOp::init(CephContext* cct, const DoutPrefixProvider* dpp)
 {
   return 0;
 }
 
-int RemoteCachePut::send_request(const DoutPrefixProvider* dpp, bufferlist& bl, optional_yield& y)
+int RemoteCacheOp::complete_request(const DoutPrefixProvider* dpp, optional_yield& y)
+{
+  if (!sender) {
+    return -EINVAL;
+  }
+
+  int ret = sender->complete_request(dpp, y);
+  sender.reset();
+  return ret;
+}
+
+int RemoteCacheDeleteOp::send_request(const DoutPrefixProvider* dpp, bufferlist& bl, optional_yield& y)
+{
+  in_bl.clear();
+  cb = std::make_unique<RemoteGetCB>(&in_bl);
+
+  RGWAccessKey accessKey;
+  std::string findKey;
+
+  std::unique_ptr<rgw::sal::User> c_user = driver->get_user(op.bucket_owner);
+  int ret = c_user->load_user(dpp, y);
+  if (ret < 0) {
+    return -EPERM;
+  }
+
+  if (c_user->get_info().access_keys.empty()) {
+    return -EINVAL;
+  }
+
+  accessKey.id = c_user->get_info().access_keys.begin()->second.id;
+  accessKey.key = c_user->get_info().access_keys.begin()->second.key;
+
+  HostStyle host_style = PathStyle;
+  std::map<std::string, std::string> extra_headers;
+  extra_headers["x-rgw-remote-cache-request"] = "true";
+  extra_headers["x-rgw-cache-object-version"] = op.version;
+  extra_headers["x-rgw-cache-blk-offset"] = std::to_string(op.offset);
+  extra_headers["x-rgw-cache-blk-len"] = std::to_string(op.len);
+  extra_headers["x-rgw-cache-obj-size"] = std::to_string(op.obj_size);
+
+  auto resource = get_resource(op.bucket_name, op.oid);
+  sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "DELETE", op.remote_addr, cb.get(), nullptr, nullptr, "", host_style);
+
+  ret = sender->send_request(dpp, &accessKey, extra_headers, resource, nullptr, &bl);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
+int RemoteCacheDeleteOp::send_and_complete_request(const DoutPrefixProvider* dpp, bufferlist& bl, optional_yield& y)
+{
+  auto ret = send_request(dpp, bl, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << "RemoteCacheDeleteOp:: " << __func__ << "(): send_request failed with ret: " << ret << dendl;
+    return ret;
+  }
+
+  ret = complete_request(dpp, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << "RemoteCacheDeleteOp:: " << __func__ << "(): complete_request failed with ret: " << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int RemoteCachePutOp::send_request(const DoutPrefixProvider* dpp, bufferlist& bl, optional_yield& y)
 {
   in_bl.clear();
   cb = std::make_unique<RemoteGetCB>(&in_bl);
@@ -46,27 +113,17 @@ int RemoteCachePut::send_request(const DoutPrefixProvider* dpp, bufferlist& bl, 
   return sender->send_request(dpp, &accessKey, extra_headers, resource, nullptr, &bl);
 }
 
-int RemoteCachePut::complete_request(const DoutPrefixProvider* dpp, optional_yield& y)
-{
-  if (!sender) {
-    return -EINVAL;
-  }
-
-  int ret = sender->complete_request(dpp, y);
-  return ret;
-}
-
-int RemoteCachePut::send_and_complete_request(const DoutPrefixProvider* dpp, bufferlist& bl, optional_yield& y)
+int RemoteCachePutOp::send_and_complete_request(const DoutPrefixProvider* dpp, bufferlist& bl, optional_yield& y)
 {
   auto ret = send_request(dpp, bl, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 20) << "RemoteCachePut:: " << __func__ <<  " send_request failed with ret: " << ret << dendl;
+    ldpp_dout(dpp, 20) << "RemoteCachePutOp:: " << __func__ <<  "(): send_request failed with ret: " << ret << dendl;
     return ret;
   }
 
   ret = complete_request(dpp, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 20) << "RemoteCachePut:: " << __func__ <<  " complete_request failed with ret: " << ret << dendl;
+    ldpp_dout(dpp, 20) << "RemoteCachePutOp:: " << __func__ << "(): complete_request failed with ret: " << ret << dendl;
     return ret;
   }
 
@@ -75,29 +132,29 @@ int RemoteCachePut::send_and_complete_request(const DoutPrefixProvider* dpp, buf
 
 int RemoteCachePutBatch::send(const DoutPrefixProvider* dpp,
                               optional_yield y,
-                              RemoteCachePut::RemoteCachePutOp& op,
+                              RemoteCachePutOp::RemoteCachePutOpData& op,
                               bufferlist& bl)
 {
   // Drain one if at capacity
   while (in_flight.size() >= max_in_flight) {
     int ret = complete_next(dpp, y);
     if (ret < 0) {
-      ldpp_dout(dpp, 5) << "RemoteCachePut request failed for oid=" << op.oid << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 5) << "RemoteCachePutOp request failed for oid=" << op.oid << " ret=" << ret << dendl;
     }
   }
 
   // Create and initialize the put operation
-  auto put_op = std::make_unique<RemoteCachePut>(driver, op);
+  auto put_op = std::make_unique<RemoteCachePutOp>(driver, op);
   int ret = put_op->init(cct, dpp);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Failed to init RemoteCachePut for oid=" << op.oid << " ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "Failed to init RemoteCachePutOp for oid=" << op.oid << " ret=" << ret << dendl;
     return ret;
   }
 
   // Send the request
   ret = put_op->send_request(dpp, bl, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Failed to send RemoteCachePut for oid=" << op.oid << " ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "Failed to send RemoteCachePutOp for oid=" << op.oid << " ret=" << ret << dendl;
     return ret;
   }
 
@@ -109,7 +166,7 @@ int RemoteCachePutBatch::send(const DoutPrefixProvider* dpp,
   };
   in_flight.push_back(std::move(result));
 
-  ldpp_dout(dpp, 20) << "RemoteCachePut queued: oid=" << op.oid << " offset=" << op.offset << " len=" << op.len << dendl;
+  ldpp_dout(dpp, 20) << "RemoteCachePutOp queued: oid=" << op.oid << " offset=" << op.offset << " len=" << op.len << dendl;
 
   return 0;
 }
