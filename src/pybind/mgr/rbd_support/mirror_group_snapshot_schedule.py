@@ -1,6 +1,7 @@
 import errno
 import json
 import rados
+import random
 import rbd
 import traceback
 
@@ -446,7 +447,8 @@ class MirrorGroupSnapshotScheduleHandler:
                     pool_id, namespace, group_id))
             return
 
-        schedule_time = schedule.next_run(now)
+        schedule_time = schedule.next_run(
+            now, "{}/{}/{}".format(pool_id, namespace, group_id))
         if schedule_time not in self.queue:
             self.queue[schedule_time] = []
         self.log.debug(
@@ -467,7 +469,8 @@ class MirrorGroupSnapshotScheduleHandler:
             return None, (schedule_time - now).total_seconds()
 
         groups = self.queue[schedule_time]
-        group = groups.pop(0)
+        rng = random.Random(schedule_time.timestamp())
+        group = groups.pop(rng.randrange(len(groups)))
         if not groups:
             del self.queue[schedule_time]
         return group, 0.0
