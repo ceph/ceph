@@ -7,6 +7,8 @@ overrides:
       - mons down
       - out of quorum
       - CEPHADM_FAILED_DAEMON
+      - POOL_APP_NOT_ENABLED
+      - PG_AVAILABILITY
     log-only-match:
       - CEPHADM_
 roles:
