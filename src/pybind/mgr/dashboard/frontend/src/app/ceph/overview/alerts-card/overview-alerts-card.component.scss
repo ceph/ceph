@@ -2,16 +2,17 @@
   &-badge {
     display: inline-flex;
     align-items: center;
+    padding-right: var(--cds-spacing-04);
   }
 
   &-badge-with-border--right {
     border-right: 1px solid var(--cds-border-subtle);
-    padding: 0 var(--cds-spacing-04);
+    margin-right: var(--cds-spacing-04);
   }
 
   &-badge-with-border--bottom {
     border-bottom: 1px solid var(--cds-border-subtle);
-    padding-bottom: var(--cds-spacing-03);
+    padding: var(--cds-spacing-03) 0;
   }
 
   &-need-attention {
