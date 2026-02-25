@@ -20,6 +20,16 @@
   flex-direction: column;
 }
 
+:host ::ng-deep .cds--modal-container.cds--modal-container--sm {
+  inset-block-start: 88px;
+  block-size: 50vh;
+  max-block-size: 50vh;
+  inset-inline-start: 35%;
+  inset-inline-end: 35%;
+  inline-size: auto;
+  max-inline-size: none;
+}
+
 // FULL TEARSHEET
 .tearsheet--full {
   height: 100%;

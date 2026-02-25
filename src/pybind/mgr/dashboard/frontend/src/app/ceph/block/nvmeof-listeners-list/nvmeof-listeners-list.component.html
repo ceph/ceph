@@ -14,6 +14,11 @@
           [autoReload]="true"
           forceIdentifier="true"
           selectionType="single"
+          emptyStateTitle="No listener found."
+          i18n-emptyStateTitle
+          emptyStateMessage="No listeners found. Add listeners to define network endpoints for hosts"
+          i18n-emptyStateMessage
+          [emptyStateIcon]="iconType.emptySearch"
           (updateSelection)="updateSelection($event)">
   <div class="table-actions">
     <cd-table-actions [permission]="permission"

@@ -12,12 +12,16 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystem-step-1.component';
 import { FormHelper } from '~/testing/unit-test-helper';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
-import { GridModule, InputModule } from 'carbon-components-angular';
+import { ComboBoxModule, GridModule, InputModule } from 'carbon-components-angular';
+
+import { of } from 'rxjs';
 
 describe('NvmeofSubsystemsStepOneComponent', () => {
   let component: NvmeofSubsystemsStepOneComponent;
   let fixture: ComponentFixture<NvmeofSubsystemsStepOneComponent>;
+
   let nvmeofService: NvmeofService;
+
   let form: CdFormGroup;
   let formHelper: FormHelper;
   const mockGroupName = 'default';
@@ -25,21 +29,27 @@ describe('NvmeofSubsystemsStepOneComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [NvmeofSubsystemsStepOneComponent],
-      providers: [NgbActiveModal],
       imports: [
         HttpClientTestingModule,
-        NgbTypeaheadModule,
+        SharedModule,
         ReactiveFormsModule,
         RouterTestingModule,
-        SharedModule,
+        NgbTypeaheadModule,
         InputModule,
         GridModule,
+        ComboBoxModule,
         ToastrModule.forRoot()
-      ]
+      ],
+      providers: [NgbActiveModal]
     }).compileComponents();
+  });
 
+  beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofSubsystemsStepOneComponent);
     component = fixture.componentInstance;
+
+    nvmeofService = TestBed.inject(NvmeofService);
+    spyOn(nvmeofService, 'getHostsForGroup').and.returnValue(of([]));
     component.ngOnInit();
     form = component.formGroup;
     formHelper = new FormHelper(form);

@@ -1,11 +1,4 @@
-import {
-  Component,
-  OnDestroy,
-  OnInit,
-  TemplateRef,
-  ViewChild,
-  ChangeDetectorRef
-} from '@angular/core';
+import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -81,8 +74,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     private router: Router,
     private route: ActivatedRoute,
     private modalService: ModalCdsService,
-    private taskWrapper: TaskWrapperService,
-    private cdRef: ChangeDetectorRef
+    private taskWrapper: TaskWrapperService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -160,7 +152,6 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
       }),
       tap((subs) => {
         this.subsystems = subs;
-        this.expandPendingSubsystem();
       }),
       takeUntil(this.destroy$)
     );
@@ -257,19 +248,6 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
       error?.preventDefault?.();
     }
     this.context?.error?.(error);
-  }
-
-  private expandPendingSubsystem() {
-    if (!this.pendingNqn) return;
-    const match = this.subsystems.find((s) => s.nqn === this.pendingNqn);
-    if (match && this.table) {
-      setTimeout(() => {
-        this.table.expanded = match;
-        this.table.toggleExpandRow();
-        this.cdRef.detectChanges();
-      });
-    }
-    this.pendingNqn = null;
   }
 
   private enrichSubsystemWithInitiators(sub: NvmeofSubsystem) {

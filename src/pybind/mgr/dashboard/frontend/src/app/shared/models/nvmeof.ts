@@ -59,8 +59,7 @@ export interface NvmeofSubsystemNamespace {
   rw_mbytes_per_second: number | string;
   r_mbytes_per_second: number | string;
   w_mbytes_per_second: number | string;
-  ns_subsystem_nqn?: string; // Field from JSON
-  subsystem_nqn?: string; // Keep for compatibility if needed, but JSON has ns_subsystem_nqn
+  subsystem_nqn?: string; // Field from JSON (mapped from ns_subsystem_nqn if needed)
 }
 
 export interface NvmeofGatewayGroup extends CephServiceSpec {
@@ -82,6 +81,11 @@ export const HOST_TYPE = {
   ALL: 'all',
   SPECIFIC: 'specific'
 };
+
+export interface ListenerItem {
+  content: string;
+  addr: string;
+}
 
 /**
  * Determines the authentication status of a subsystem based on PSK and initiators.

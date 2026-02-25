@@ -79,9 +79,8 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
         call: this.nvmeofService.addInitiators(this.subsystemNQN, request)
       })
       .subscribe({
-        error: (err) => {
+        error: () => {
           this.isSubmitLoading = false;
-          err.preventDefault();
         },
         complete: () => {
           this.isSubmitLoading = false;
