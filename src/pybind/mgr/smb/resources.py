@@ -647,6 +647,9 @@ class Cluster(_RBase):
     # connect the smb cluster and all its shares to cephfs file systems
     # hosted on an external ceph cluster
     external_ceph_cluster: Optional[ExternalCephClusterSource] = None
+    # debug_level can be used to change the smb services
+    # default debugging levels
+    debug_level: Optional[dict[str, str]] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -678,11 +681,13 @@ class Cluster(_RBase):
             raise ValueError(
                 'bind_addrs must have at least one value or not be set'
             )
+        validation.check_debug_level(self.debug_level)
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.on_condition(_present)
         rc.on_construction_error(InvalidResourceError.wrap)
+        rc.debug_level.quiet = True
         return rc
 
     @property
