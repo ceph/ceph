@@ -50,6 +50,10 @@
   synchronized using full copy, as blockdiff is not efficient for small files. The threshold is
   controlled by the new configuration option cephfs_mirror_blockdiff_min_file_size (default: 16_M).
   For more information, see https://tracker.ceph.com/issues/73452
+* CephFS Mirroring: Improved mirror daemon status reporting. The command
+  ``ceph fs snapshot mirror daemon status`` now shows the remote cluster's
+  monitor addresses and cluster ID for each configured peer, making it easier
+  to verify peer connectivity and troubleshoot mirroring issues.
 
 >=20.0.0
 
