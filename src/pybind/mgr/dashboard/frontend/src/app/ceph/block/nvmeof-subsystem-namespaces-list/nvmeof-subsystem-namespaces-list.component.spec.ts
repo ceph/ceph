@@ -8,10 +8,6 @@ import { NvmeofSubsystemNamespacesListComponent } from './nvmeof-subsystem-names
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-<<<<<<< HEAD
-import { provideAnimations } from '@angular/platform-browser/animations';
-=======
->>>>>>> 50177830211 (mgr/dashboard: NVMe – Fix host,listeners namespace list display on Subsystem resource page)
 
 describe('NvmeofSubsystemNamespacesListComponent', () => {
   let component: NvmeofSubsystemNamespacesListComponent;
@@ -50,10 +46,6 @@ describe('NvmeofSubsystemNamespacesListComponent', () => {
       declarations: [NvmeofSubsystemNamespacesListComponent],
       imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
       providers: [
-<<<<<<< HEAD
-        provideAnimations(),
-=======
->>>>>>> 50177830211 (mgr/dashboard: NVMe – Fix host,listeners namespace list display on Subsystem resource page)
         {
           provide: ActivatedRoute,
           useValue: {
@@ -96,12 +88,9 @@ describe('NvmeofSubsystemNamespacesListComponent', () => {
     expect(component.namespaces.length).toEqual(2);
     expect(component.namespaces[0].nsid).toEqual(1);
   }));
-<<<<<<< HEAD
   it('should have table actions defined', () => {
     component.ngOnInit();
     expect(component.tableActions).toBeDefined();
     expect(component.tableActions.length).toBeGreaterThan(0);
   });
-=======
->>>>>>> 50177830211 (mgr/dashboard: NVMe – Fix host,listeners namespace list display on Subsystem resource page)
 });

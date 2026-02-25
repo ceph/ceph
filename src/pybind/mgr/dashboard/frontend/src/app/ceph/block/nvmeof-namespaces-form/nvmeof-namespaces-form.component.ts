@@ -207,8 +207,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
         validators: [Validators.required]
       }),
       image_size: new UntypedFormControl(null, {
-        validators: [Validators.required],
-        updateOn: 'blur'
+        validators: [Validators.required]
       }),
       nsCount: new UntypedFormControl(this.MAX_NAMESPACE_CREATE, [
         Validators.required,
@@ -282,6 +281,15 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     return Math.random().toString(36).substring(2);
   }
 
+  private normalizeImageSizeInput(value: string): string {
+    const input = (value || '').trim();
+    if (!input) {
+      return input;
+    }
+    // Accept plain numeric values as GiB (e.g. "45" => "45GiB").
+    return /^\d+(\.\d+)?$/.test(input) ? `${input}GiB` : input;
+  }
+
   buildCreateRequest(
     rbdImageSize: number,
     nsCount: number,
@@ -344,7 +352,13 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     let rbdImageSize: number = null;
 
     if (image_size) {
-      rbdImageSize = this.formatterService.toBytes(image_size);
+      const normalizedSize = this.normalizeImageSizeInput(image_size);
+      rbdImageSize = this.formatterService.toBytes(normalizedSize);
+      if (rbdImageSize === null) {
+        this.nsForm.get('image_size').setErrors({ invalid: true });
+        this.nsForm.setErrors({ cdSubmitButton: true });
+        return;
+      }
     }
 
     const subsystemNQN = this.nsForm.getValue('subsystem');

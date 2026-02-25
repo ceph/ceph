@@ -448,6 +448,11 @@ const routes: Routes = [
             path: `${URLVerbs.ADD}/initiator`,
             component: NvmeofInitiatorsFormComponent,
             outlet: 'modal'
+          },
+          {
+            path: `${URLVerbs.ADD}/listener`,
+            component: NvmeofListenersFormComponent,
+            outlet: 'modal'
           }
         ]
       }
