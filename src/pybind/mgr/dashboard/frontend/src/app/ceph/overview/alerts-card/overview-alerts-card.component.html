@@ -36,17 +36,18 @@
         class="overview-alerts-card-badge"
         [class.overview-alerts-card-badge-with-border--right]="!last && compact"
         [class.overview-alerts-card-badge-with-border--bottom]="!compact">
-        <cd-icon [type]="b.icon"></cd-icon>
         <a
           cdsLink
-          class="cds-ml-3"
           [routerLink]="['/monitoring/active-alerts']"
           [queryParams]="{ severity: b.key }">
+          <cd-icon [type]="b.icon"></cd-icon>
+          <span class="cds-ml-3">
           @if(compact) {
           {{ b.count }}
           } @else {
            {{b.key | upperFirst}} ({{ b.count }})
           }
+          </span>
         </a>
       </span>
       }
