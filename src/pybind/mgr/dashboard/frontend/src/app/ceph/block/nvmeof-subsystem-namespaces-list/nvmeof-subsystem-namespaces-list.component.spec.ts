@@ -88,4 +88,9 @@ describe('NvmeofSubsystemNamespacesListComponent', () => {
     expect(component.namespaces.length).toEqual(2);
     expect(component.namespaces[0].nsid).toEqual(1);
   }));
+  it('should have table actions defined', () => {
+    component.ngOnInit();
+    expect(component.tableActions).toBeDefined();
+    expect(component.tableActions.length).toBeGreaterThan(0);
+  });
 });

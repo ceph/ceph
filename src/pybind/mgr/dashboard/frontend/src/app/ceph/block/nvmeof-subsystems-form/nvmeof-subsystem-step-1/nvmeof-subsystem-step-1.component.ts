@@ -1,4 +1,5 @@
 import { Component, Input, OnInit } from '@angular/core';
+import { forkJoin, of } from 'rxjs';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
@@ -8,6 +9,8 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
+import { Host } from '~/app/shared/models/host.interface';
+import { ListenerItem } from '~/app/shared/models/nvmeof';
 
 @Component({
   selector: 'cd-nvmeof-subsystem-step-one',
@@ -17,6 +20,8 @@ import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
 })
 export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
   @Input() group!: string;
+  @Input() subsystemNQN: string;
+  @Input() listenersOnly = false;
   formGroup: CdFormGroup;
   action: string;
   pageURL: string;
@@ -26,6 +31,8 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
     notUnique: $localize`This NQN is already in use`,
     maxLength: $localize`An NQN may not be more than 223 bytes in length.`
   };
+
+  hosts: ListenerItem[] = [];
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -45,29 +52,63 @@ export class NvmeofSubsystemsStepOneComponent implements OnInit, TearsheetStep {
 
   ngOnInit() {
     this.createForm();
+    this.setHosts();
+  }
+
+  setHosts() {
+    const hosts$ = this.nvmeofService.getHostsForGroup(this.group);
+    const listeners$ =
+      this.listenersOnly && this.subsystemNQN
+        ? this.nvmeofService.listListeners(this.subsystemNQN, this.group)
+        : of(null);
+
+    forkJoin([hosts$, listeners$]).subscribe(
+      ([nvmeofGwNodes, existingListeners]: [Host[], any]) => {
+        const listeners = Array.isArray(existingListeners)
+          ? existingListeners
+          : existingListeners?.listeners || [];
+        const consumedHosts = new Set(listeners.map((l: any) => l.host_name));
+        this.hosts = nvmeofGwNodes
+          .map((h) => ({ content: h.hostname, addr: h.addr }))
+          .filter((h) => !consumedHosts.has(h.content));
+      }
+    );
   }
 
   createForm() {
-    this.formGroup = new CdFormGroup({
-      nqn: new UntypedFormControl(this.DEFAULT_NQN, {
-        validators: [
-          this.customNQNValidator,
-          Validators.required,
-          CdValidators.custom(
-            'maxLength',
-            (nqnInput: string) => new TextEncoder().encode(nqnInput).length > 223
-          )
-        ],
-        asyncValidators: [
-          CdValidators.unique(
-            this.nvmeofService.isSubsystemPresent,
-            this.nvmeofService,
-            null,
-            null,
-            this.group
-          )
-        ]
-      })
-    });
+    if (this.listenersOnly) {
+      this.formGroup = new CdFormGroup({
+        listeners: new UntypedFormControl([])
+      });
+    } else {
+      this.formGroup = new CdFormGroup({
+        nqn: new UntypedFormControl(this.DEFAULT_NQN, {
+          validators: [
+            this.customNQNValidator,
+            Validators.required,
+            CdValidators.custom(
+              'maxLength',
+              (nqnInput: string) => new TextEncoder().encode(nqnInput).length > 223
+            )
+          ],
+          asyncValidators: [
+            CdValidators.unique(
+              this.nvmeofService.isSubsystemPresent,
+              this.nvmeofService,
+              null,
+              null,
+              this.group
+            )
+          ]
+        }),
+        listeners: new UntypedFormControl([])
+      });
+    }
+  }
+
+  removeListener(index: number) {
+    const listeners = this.formGroup.get('listeners').value;
+    listeners.splice(index, 1);
+    this.formGroup.get('listeners').setValue([...listeners]);
   }
 }

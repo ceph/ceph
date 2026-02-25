@@ -61,6 +61,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() steps!: Array<Step>;
   @Input() description!: string;
   @Input() type: 'full' | 'wide' = 'wide';
+  @Input() size: 'xs' | 'sm' | 'md' | 'lg' = 'lg';
   @Input() submitButtonLabel: string = $localize`Create`;
   @Input() submitButtonLoadingLabel: string = $localize`Creating`;
   @Input() isSubmitLoading: boolean = true;

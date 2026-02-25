@@ -78,7 +78,7 @@
 @else {
 <!-- Wide Tearsheet -->
 <cds-modal
-  size="lg"
+  [size]="size"
   [open]="isOpen"
   (overlaySelected)="closeTearsheet()">
   <!-- Tearsheet Header -->

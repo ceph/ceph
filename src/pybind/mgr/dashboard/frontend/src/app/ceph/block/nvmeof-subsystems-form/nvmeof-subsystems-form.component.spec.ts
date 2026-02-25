@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
@@ -14,7 +15,13 @@ import {
 } from './nvmeof-subsystems-form.component';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystem-step-1/nvmeof-subsystem-step-1.component';
-import { GridModule, InputModule, RadioModule, TagModule } from 'carbon-components-angular';
+import {
+  ComboBoxModule,
+  GridModule,
+  InputModule,
+  RadioModule,
+  TagModule
+} from 'carbon-components-angular';
 import { NvmeofSubsystemsStepThreeComponent } from './nvmeof-subsystem-step-3/nvmeof-subsystem-step-3.component';
 import { HOST_TYPE } from '~/app/shared/models/nvmeof';
 import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystem-step-2/nvmeof-subsystem-step-2.component';
@@ -31,7 +38,8 @@ describe('NvmeofSubsystemsFormComponent', () => {
     gw_group: mockGroupName,
     subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY=',
     addedHosts: [],
-    hostType: HOST_TYPE.ALL
+    hostType: HOST_TYPE.ALL,
+    listeners: []
   };
 
   beforeEach(async () => {
@@ -43,7 +51,15 @@ describe('NvmeofSubsystemsFormComponent', () => {
         NvmeofSubsystemsStepThreeComponent,
         NvmeofSubsystemsStepTwoComponent
       ],
-      providers: [NgbActiveModal],
+      providers: [
+        NgbActiveModal,
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            queryParams: of({ group: mockGroupName })
+          }
+        }
+      ],
       imports: [
         HttpClientTestingModule,
         NgbTypeaheadModule,
@@ -54,7 +70,8 @@ describe('NvmeofSubsystemsFormComponent', () => {
         GridModule,
         RadioModule,
         TagModule,
-        ToastrModule.forRoot()
+        ToastrModule.forRoot(),
+        ComboBoxModule
       ]
     }).compileComponents();
 
@@ -62,7 +79,6 @@ describe('NvmeofSubsystemsFormComponent', () => {
     component = fixture.componentInstance;
     component.ngOnInit();
     fixture.detectChanges();
-    component.group = mockGroupName;
   });
 
   it('should create', () => {
@@ -94,7 +110,8 @@ describe('NvmeofSubsystemsFormComponent', () => {
         gw_group: mockGroupName,
         addedHosts: [],
         hostType: HOST_TYPE.ALL,
-        subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY='
+        subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY=',
+        listeners: []
       };
 
       component.group = mockGroupName;
