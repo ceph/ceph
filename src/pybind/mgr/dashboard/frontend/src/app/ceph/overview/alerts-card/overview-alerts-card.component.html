@@ -16,6 +16,7 @@
     </button>
   </ng-template>
   <!-- TOTAL COUNT -->
+  @if (vm?.total) {
   <div>
     <span class="cds--type-heading-07">{{ vm.total }}</span>
     <cd-icon [type]="vm.icon"></cd-icon>
@@ -26,7 +27,6 @@
     i18n>
     {{ vm.statusText }}
   </small>
-
   <!-- SUB TOTAL COUNTS -->
   <div class="cds-mt-6">
   @if (vm.badges.length) {
@@ -53,5 +53,11 @@
     </div>
   }
   </div>
+  }@else {
+  <cds-skeleton-placeholder></cds-skeleton-placeholder>
+  <div class="cds-mt-3">
+    <cds-skeleton-text [lines]="1"></cds-skeleton-text>
+  </div>
+  }
 }
 </cd-productive-card>
