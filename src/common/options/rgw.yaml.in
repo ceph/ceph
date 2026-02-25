@@ -3974,6 +3974,15 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_d4n_l1_datacache_free_threshold
+  type: uint
+  level: advanced
+  desc: amount of free disk space to decide if an object should be deleted or wait for cleaning
+  long_desc: Upon receiving a delete request, D4N uses this option to decide if an object should be deleted right away or wait for cleaning process to delete the object later.
+  default: 1073741824
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_d4n_l1_evict_cache_on_start
   type: bool
   level: advanced
@@ -4060,6 +4069,22 @@ options:
   - rgw
   flags:
   - startup
+  with_legacy: true
+- name: rgw_d4n_remote_delete_enabled
+  type: bool
+  level: advanced
+  desc: option to enable/diasble remote delete operations
+  default: true
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_remote_requests_num
+  type: int
+  level: advanced
+  desc: specifies the maximum number of simultaneous I/O requests that can be sent to a remote cache.
+  default: 10
+  services:
+  - rgw
   with_legacy: true
 - name: rgw_d4n_async_remote_put
   type: bool
