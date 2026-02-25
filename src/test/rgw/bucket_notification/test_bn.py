@@ -17,7 +17,20 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from random import randint
 import hashlib
 # XXX this should be converted to use pytest
-from nose.plugins.attrib import attr
+import pytest
+
+# Compatibility helpers to allow running these tests under pytest
+def attr(*names, **kwargs):
+    def decorator(fn):
+        for name in names:
+            try:
+                marker = getattr(pytest.mark, name)
+                fn = marker(fn)
+            except Exception:
+                # fallback: leave function unchanged
+                pass
+        return fn
+    return decorator
 import boto3
 from boto.s3.connection import S3Connection
 import datetime
@@ -43,8 +56,26 @@ from .api import PSTopicS3, \
     set_rgw_config_option, \
     bash
 
-from nose import SkipTest
-from nose.tools import assert_not_equal, assert_equal, assert_in, assert_not_in, assert_true
+def SkipTest(msg=None):
+    pytest.skip(msg or "skipped")
+
+def assert_equal(a, b, msg=None):
+    assert a == b, msg or f"{a} != {b}"
+
+def assert_not_equal(a, b, msg=None):
+    assert a != b, msg or f"{a} == {b}"
+
+def assert_in(a, b, msg=None):
+    assert a in b, msg or f"{a} not in {b}"
+
+def assert_not_in(a, b, msg=None):
+    assert a not in b, msg or f"{a} unexpectedly in {b}"
+
+def assert_true(a, msg=None):
+    assert bool(a), msg or f"Expected truthy value, got {a}"
+
+def eq_(a, b):
+    assert a == b, f"{a} != {b}"
 import boto.s3.tagging
 
 # configure logging for the tests module

@@ -30,5 +30,8 @@
     "lib": ["es2017", "dom"],
     "allowJs": true
   },
+  "angularCompilerOptions": {
+    "strictTemplates": true
+  },
   "exclude": ["coverage", "dist", "node_modules", "cypress"]
 }

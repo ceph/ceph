@@ -6,6 +6,8 @@ import {
   ToastContent,
   NotificationType as CarbonNotificationType
 } from 'carbon-components-angular';
+import { DomSanitizer } from '@angular/platform-browser';
+import { SecurityContext } from '@angular/core';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
@@ -49,7 +51,8 @@ export class NotificationService {
   constructor(
     private taskMessageService: TaskMessageService,
     private cdDatePipe: CdDatePipe,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private domSanitizer: DomSanitizer
   ) {
     this._loadStoredNotifications();
     this._loadMutedState();
@@ -238,10 +241,17 @@ export class NotificationService {
     const carbonType = this.NOTIFICATION_TYPE_MAP[notification.type] || 'info';
     const lowContrast = notification.options?.lowContrast || false;
 
+    // sanitize subtitle and caption because Carbon's toast uses innerHTML internally
+    const sanitizedSubtitle = notification.message
+      ? this.domSanitizer.sanitize(SecurityContext.HTML, notification.message) || ''
+      : '';
+    const rawCaption = this._renderTimeAndApplicationHtml(notification);
+    const sanitizedCaption = this.domSanitizer.sanitize(SecurityContext.HTML, rawCaption) || '';
+
     const toast: ToastContent = {
       title: notification.title,
-      subtitle: notification.message || '',
-      caption: this._renderTimeAndApplicationHtml(notification),
+      subtitle: sanitizedSubtitle,
+      caption: sanitizedCaption,
       type: carbonType,
       lowContrast: lowContrast,
       showClose: true,

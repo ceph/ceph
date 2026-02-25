@@ -285,5 +285,21 @@ describe('NotificationService', () => {
       expect(toasts[0].caption).not.toContain('Prometheus');
       flush();
     }));
+
+    it('sanitizes HTML in notification message before passing to Carbon toast', fakeAsync(() => {
+      const malicious = '<img src=x onerror="alert(1)">Hello <strong>bold</strong><script>alert(2)</script>';
+      service.show(new CdNotificationConfig(NotificationType.error, 'XSS test', malicious));
+      tick(510);
+      const toasts = service['activeToastsSource'].getValue();
+      expect(toasts.length).toBe(1);
+      const subtitle = toasts[0].subtitle as string;
+      expect(subtitle).toContain('Hello');
+      // dangerous content/attributes must be removed
+      expect(subtitle).not.toContain('onerror');
+      expect(subtitle).not.toContain('<script>');
+      // allowed formatting tags (like <strong>) may remain
+      expect(subtitle).toContain('bold');
+      flush();
+    }));
   });
 });
