@@ -7,14 +7,16 @@
        [fullWidth]="true">
     <div cdsCol
          [columnNumbers]="{sm: 4, md: 8}">
+      @if (!listenersOnly) {
       <div cdsRow
            class="form-heading">
         <h3 class="cds--type-heading-03"
             i18n>Subsystem details</h3>
-        <p
-          class="cds--type-label-02"
-          i18n>Enter identifying and network details for this subsystem.</p>
+        <p class="cds--type-label-02"
+           i18n>Enter identifying and network details for this subsystem.</p>
       </div>
+      }
+      @if (!listenersOnly) {
       <div cdsRow
            class="form-item">
         <cds-text-label
@@ -28,6 +30,9 @@
                  cdValidate
                  #nqnRef="cdValidate"
                  type="text"
+                 placeholder="nqn.2001-07.com.ceph:1722347201377"
+                 id="nqn"
+                 name="nqn"
                  formControlName="nqn"
                  [invalid]="nqnRef.isInvalid">
         </cds-text-label>
@@ -47,12 +52,50 @@
                  [skeleton]="!group">
         </cds-text-label>
       </div>
+      }
+      <div cdsRow
+           class="form-item">
+        <cds-combo-box i18n
+                       [invalid]="formGroup.get('listeners').invalid && (formGroup.get('listeners').dirty || formGroup.get('listeners').touched)"
+                       [invalidText]="listenersInvalidText"
+                       [label]="listenersLabel"
+                       [helperText]="listenersHelperText"
+                       [title]="listenersLabel"
+                       [items]="hosts"
+                       [type]="'multi'"
+                       formControlName="listeners"
+                       name="listeners">
+          <cds-dropdown-list></cds-dropdown-list>
+        </cds-combo-box>
+        @if (formGroup.get('listeners').value?.length) {
+          <div>
+          @for (listener of formGroup.get('listeners').value; track listener.content; let i = $index) {
+            <cds-tag-filter type="blue"
+                            [title]="listener.content"
+                            (close)="removeListener(i)">
+              {{ listener.content }}
+            </cds-tag-filter>
+          }
+          </div>
+        }
+        <ng-template #listenersLabel>
+          <span i18n>Listeners</span>
+        </ng-template>
+        <ng-template #listenersHelperText>
+          <span i18n>Select listeners for this subsystem.</span>
+        </ng-template>
+        <ng-template #listenersInvalidText>
+          <span i18n>This field is required.</span>
+        </ng-template>
+      </div>
     </div>
   </div>
 </form>
 
+@if (!listenersOnly) {
 <ng-template #nqnInvalidTemplate>
 @for (err of formGroup.get('nqn').errors | keyvalue; track err.key) {
 <span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
 }
 </ng-template>
+}

@@ -394,6 +394,9 @@ export class TaskMessageService {
     'nvmeof/listener/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofListener(metadata)
     ),
+    'nvmeof/listener/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
+      this.nvmeofListenerPlural(metadata)
+    ),
     'nvmeof/listener/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nvmeofListener(metadata)
     ),
@@ -608,7 +611,11 @@ export class TaskMessageService {
     return $localize`hosts to gateway group '${metadata.group_name}'`;
   }
   nvmeofListener(metadata: any) {
-    return $localize`listener '${metadata.host_name} for subsystem ${metadata.nqn}`;
+    return $localize`listener '${metadata.host_name}' for subsystem ${metadata.nqn}`;
+  }
+
+  nvmeofListenerPlural(metadata: { count: number; nqn: string }) {
+    return $localize`${this.pluralize('listener', metadata.count)} to subsystem ${metadata.nqn}`;
   }
 
   nvmeofNamespace(metadata: { nqn: string; nsCount?: number; nsid?: string }) {
