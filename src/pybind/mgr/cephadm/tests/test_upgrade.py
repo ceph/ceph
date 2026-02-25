@@ -199,6 +199,192 @@ def test_upgrade_state_null(cephadm_module: CephadmOrchestrator):
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@pytest.mark.parametrize(
+    "prior_autoscale,pg_autoscale_during_upgrade,autoscale_during_upgrade",
+    [
+        # Decision table: prior_autoscale, pg_autoscale_during_upgrade -> autoscale_during_upgrade
+        (False, False, False),  # prior off, no opt-in -> autoscale off during upgrade
+        (False, True, True),   # prior off, opt-in -> autoscale on during upgrade
+        (True, False, False),  # prior on, no opt-in -> autoscale off during upgrade
+        (True, True, True),    # prior on, opt-in -> autoscale on during upgrade
+    ],
+)
+def test_pg_autoscale_decision_table(
+    prior_autoscale,
+    pg_autoscale_during_upgrade,
+    autoscale_during_upgrade,
+    cephadm_module: CephadmOrchestrator,
+):
+    """Test PG autoscaling decision table at upgrade start.
+    Verifies that prior_autoscale and pg_autoscale_during_upgrade produce the
+    expected autoscale_during_upgrade decision, and that _set_noautoscale is
+    called only when autoscale_during_upgrade is False.
+    """
+    expect_set_noautoscale = not autoscale_during_upgrade
+    with with_host(cephadm_module, 'host1'):
+        with with_host(cephadm_module, 'host2'):
+            with with_service(
+                cephadm_module,
+                ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*', count=2)),
+                status_running=True,
+            ):
+                cephadm_module.pg_autoscale_during_upgrade = pg_autoscale_during_upgrade
+
+                with mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_is_upgrade_autoscaling_allowed',
+                    return_value=prior_autoscale,
+                ), mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_set_noautoscale',
+                    return_value=True,
+                ) as mock_set_noautoscale:
+                    result = wait(
+                        cephadm_module,
+                        cephadm_module.upgrade_start('image_id', None),
+                    )
+                    assert result == 'Initiating upgrade to image_id'
+
+                    # Decision: autoscale_during_upgrade=False -> set noautoscale
+                    if expect_set_noautoscale:
+                        mock_set_noautoscale.assert_called_once()
+                        assert cephadm_module.upgrade.upgrade_state.noautoscale_set is True
+                    else:
+                        mock_set_noautoscale.assert_not_called()
+                        assert getattr(
+                            cephadm_module.upgrade.upgrade_state,
+                            'noautoscale_set',
+                            False,
+                        ) is False
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.serve.CephadmServe._get_container_image_info")
+@pytest.mark.parametrize(
+    "daemon_types,expect_set_noautoscale",
+    [
+        (['mon', 'mgr'], False),        # excludes OSDs -> noautoscale not set
+        (['mon', 'mgr', 'osd'], True),  # includes OSDs, prior_autoscale=False -> noautoscale set
+    ],
+)
+def test_pg_autoscale_skipped_when_upgrade_excludes_osds(
+    _get_container_image_info, cephadm_module: CephadmOrchestrator,
+    daemon_types, expect_set_noautoscale
+):
+    """When upgrade excludes OSDs, _set_noautoscale should not be called.
+    When it includes OSDs and prior_autoscale=False, _set_noautoscale should be called.
+    """
+    _get_container_image_info.side_effect = async_side_effect(
+        ('img_id', 'ceph version 18.2.0 (hash)', ['digest'])
+    )
+    with with_host(cephadm_module, 'host1'):
+        with with_host(cephadm_module, 'host2'):
+            with with_service(
+                cephadm_module,
+                ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*', count=2)),
+                status_running=True,
+            ):
+                cephadm_module.pg_autoscale_during_upgrade = False
+
+                with mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_is_upgrade_autoscaling_allowed',
+                    return_value=False,
+                ), mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_set_noautoscale',
+                    return_value=True,
+                ) as mock_set_noautoscale:
+                    result = wait(
+                        cephadm_module,
+                        cephadm_module.upgrade_start(
+                            'image_id', None,
+                            daemon_types=daemon_types,
+                        ),
+                    )
+                    assert result == 'Initiating upgrade to image_id'
+                    if expect_set_noautoscale:
+                        mock_set_noautoscale.assert_called_once()
+                    else:
+                        mock_set_noautoscale.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "prior_autoscale,opt_in,autoscale_after",
+    [
+        # Decision table: prior_autoscale, opt-in -> autoscale_after
+        (False, False, False),  # Case 1: prior off, no opt-in -> autoscale off after
+        (False, True, False),   # Case 2: prior off, opt-in -> autoscale off after (revert)
+        (True, False, True),   # Case 3: prior on, no opt-in -> autoscale on after (revert)
+        (True, True, True),    # Case 4: prior on, opt-in -> autoscale on after
+    ],
+)
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.serve.CephadmServe._get_container_image_info")
+@mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+def test_pg_autoscale_revert_after_upgrade(
+    check_mon_command,
+    _get_container_image_info,
+    prior_autoscale,
+    opt_in,
+    autoscale_after,
+    cephadm_module: CephadmOrchestrator,
+):
+    """Test autoscale_after per decision table: prior_autoscale, opt-in -> autoscale_after.
+    Cases 1,3: we set noautoscale during upgrade, so we restore to prior on stop.
+    Cases 2,4: we never set noautoscale, so no restore; cluster stays as prior.
+    """
+    _get_container_image_info.side_effect = async_side_effect(
+        ('img_id', 'ceph version 18.2.0 (hash)', ['digest'])
+    )
+    check_mon_command.return_value = (0, '', '')
+
+    with with_host(cephadm_module, 'host1'):
+        with with_host(cephadm_module, 'host2'):
+            with with_service(
+                cephadm_module,
+                ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*', count=2)),
+                status_running=True,
+            ):
+                cephadm_module.pg_autoscale_during_upgrade = opt_in
+
+                with mock.patch.object(
+                    cephadm_module.upgrade,
+                    '_is_upgrade_autoscaling_allowed',
+                    return_value=prior_autoscale,
+                ):
+                    wait(
+                        cephadm_module,
+                        cephadm_module.upgrade_start(
+                            'image_id', None,
+                            daemon_types=['mon', 'mgr', 'osd'],
+                        ),
+                    )
+
+                # upgrade_stop triggers _unset_noautoscale when noautoscale_set
+                check_mon_command.reset_mock()
+                wait(cephadm_module, cephadm_module.upgrade_stop())
+
+                # Verify autoscale_after: restore path (cases 1,3) vs no restore (cases 2,4)
+                config_calls = [
+                    c for c in check_mon_command.call_args_list
+                    if isinstance(c[0][0], dict)
+                    and c[0][0].get('name') == 'osd_pool_default_pg_autoscale_mode'
+                ]
+                if not opt_in:
+                    # Cases 1,3: we set noautoscale, so we restore
+                    assert len(config_calls) >= 1
+                    expected_value = 'on' if autoscale_after else 'off'
+                    assert any(
+                        c[0][0].get('value') == expected_value
+                        for c in config_calls
+                    )
+                else:
+                    # Cases 2,4: we never set noautoscale, so no restore calls
+                    assert len(config_calls) == 0
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 def test_not_enough_mgrs(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1'):
         with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=1)), CephadmOrchestrator.apply_mgr, ''):

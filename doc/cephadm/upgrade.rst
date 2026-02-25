@@ -43,6 +43,23 @@ The automated upgrade process follows Ceph best practices.  For example:
    If the new release changes the above target value, there may be splitting
    or merging of PGs when unsetting after the upgrade.
 
+   Ceph cluster automatically pauses and resumes the PG autoscaler activity 
+   during upgrade unless opted-in by setting:
+
+   .. prompt:: bash #
+
+     ceph config set mgr mgr/cephadm/pg_autoscale_during_upgrade true
+
+   To view the current value:
+
+   .. prompt:: bash #
+
+     ceph config get mgr mgr/cephadm/pg_autoscale_during_upgrade
+
+   If autoscaling was already off before the upgrade, cephadm does not change
+   it unless you have set ``pg_autoscale_during_upgrade`` to ``true`` (opt-in
+   to turn autoscaling on for the duration of the upgrade).
+
 
 Starting the Upgrade
 ====================
