@@ -614,6 +614,7 @@ class SMB(ContainerDaemonForm):
         cluster_lock_uri = configs.get('cluster_lock_uri', '')
         cluster_public_addrs = configs.get('cluster_public_addrs', [])
         bind_networks = configs.get('bind_networks', [])
+        tunables = configs.get('tunables', {})
 
         if not instance_id:
             raise Error('invalid instance (cluster) id')
@@ -682,6 +683,7 @@ class SMB(ContainerDaemonForm):
             proxy_image=proxy_image,
             bind_to=self._network_mapper.bind_interfaces(bind_networks),
             remote_control=remote_control_cfg,
+            ctdb_log_level=tunables.get('log_level.ctdb', ''),
         )
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
         logger.debug('Configured files: %s', self._files)
