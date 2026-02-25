@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { Step } from 'carbon-components-angular';
-import { InitiatorRequest, NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { NvmeofService, SubsystemInitiatorRequest } from '~/app/shared/api/nvmeof.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { HOST_TYPE, NvmeofSubsystemInitiator } from '~/app/shared/models/nvmeof';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -67,8 +67,9 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
     this.isSubmitLoading = true;
     const taskUrl = `nvmeof/initiator/add`;
 
-    const request: InitiatorRequest = {
-      host_nqn: payload.hostType === HOST_TYPE.ALL ? '*' : payload.addedHosts.join(','),
+    const request: SubsystemInitiatorRequest = {
+      allow_all: payload.hostType === HOST_TYPE.ALL,
+      hosts: payload.hostType === HOST_TYPE.SPECIFIC ? payload.hostDchapKeyList : [],
       gw_group: this.group
     };
     this.taskWrapperService
@@ -76,7 +77,7 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
         task: new FinishedTask(taskUrl, {
           nqn: this.subsystemNQN
         }),
-        call: this.nvmeofService.addInitiators(this.subsystemNQN, request)
+        call: this.nvmeofService.addSubsystemInitiators(this.subsystemNQN, request)
       })
       .subscribe({
         error: () => {

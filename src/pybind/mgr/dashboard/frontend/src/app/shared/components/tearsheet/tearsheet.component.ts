@@ -89,6 +89,16 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     return wrapper?.stepComponent?.formGroup?.value ?? null;
   }
 
+  getStepIndexByLabel(label: string): number {
+    return this.steps?.findIndex((s) => s.label === label) ?? -1;
+  }
+
+  getStepValueByLabel<T = any>(label: string): T | null {
+    const idx = this.getStepIndexByLabel(label);
+    if (idx < 0) return null;
+    return this.getStepValue<T>(idx);
+  }
+
   currentStep: number = 0;
   lastStep: number = null;
   isOpen: boolean = true;
@@ -158,7 +168,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   handleSubmit() {
-    if (this.steps[this.currentStep].invalid) return;
+    if (this.steps.some((step) => step?.invalid)) return;
 
     const mergedPayloads = this.getMergedPayload();
 

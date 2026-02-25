@@ -33,7 +33,7 @@ export interface NvmeofSubsystemData extends NvmeofSubsystem {
 
 export interface NvmeofSubsystemInitiator {
   nqn: string;
-  use_dhchap?: string;
+  use_dhchap?: boolean;
 }
 
 export interface NvmeofListener {
@@ -74,8 +74,11 @@ export interface NvmeofGatewayGroup extends CephServiceSpec {
 
 export enum AUTHENTICATION {
   Unidirectional = 'unidirectional',
-  Bidirectional = 'bidirectional'
+  Bidirectional = 'bidirectional',
+  None = 'none'
 }
+
+export const NO_AUTH = 'No authentication';
 
 export const HOST_TYPE = {
   ALL: 'all',
@@ -96,9 +99,10 @@ export function getSubsystemAuthStatus(
   _initiators: NvmeofSubsystemInitiator[] | { hosts?: NvmeofSubsystemInitiator[] }
 ): string {
   // Import enum value strings to avoid circular dependency
-  const NO_AUTH = 'No authentication';
   const UNIDIRECTIONAL = 'Unidirectional';
   const BIDIRECTIONAL = 'Bi-directional';
+
+  let auth = NO_AUTH;
 
   let hostsList: NvmeofSubsystemInitiator[] = [];
   if (_initiators && 'hosts' in _initiators && Array.isArray(_initiators.hosts)) {
@@ -106,8 +110,6 @@ export function getSubsystemAuthStatus(
   } else if (Array.isArray(_initiators)) {
     hostsList = _initiators as NvmeofSubsystemInitiator[];
   }
-
-  let auth = NO_AUTH;
 
   const hostHasDhchapKey = hostsList.some((host) => !!host.use_dhchap);
 
@@ -149,8 +151,22 @@ export type NvmeofInitiatorCandidate = {
   selected: boolean;
 };
 
-export type StepTwoType = {
+export type HostStepType = {
   addedHosts: Array<string>;
   hostname: string;
   hostType: string;
+};
+
+export type AuthStepType = {
+  authType: AUTHENTICATION;
+  subsystemDchapKey: string;
+  hostDchapKeyList: Array<{
+    dhchap_key: string;
+    host_nqn: string;
+  }>;
+};
+
+export type DetailsStepType = {
+  nqn: string;
+  listeners: Array<string>;
 };

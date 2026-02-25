@@ -1,9 +1,10 @@
 import { Component, Input, OnInit } from '@angular/core';
-import { FormArray, UntypedFormControl } from '@angular/forms';
+import { FormArray, UntypedFormControl, Validators } from '@angular/forms';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { AUTHENTICATION, StepTwoType } from '~/app/shared/models/nvmeof';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { AUTHENTICATION, HostStepType } from '~/app/shared/models/nvmeof';
 import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
 
 @Component({
@@ -14,7 +15,7 @@ import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
 })
 export class NvmeofSubsystemsStepThreeComponent implements OnInit, TearsheetStep {
   @Input() group!: string;
-  @Input() set stepTwoValue(value: StepTwoType | null) {
+  @Input() set stepTwoValue(value: HostStepType | null) {
     this._addedHosts = value?.addedHosts ?? [];
     if (this.formGroup) {
       this.syncHostList();
@@ -56,7 +57,11 @@ export class NvmeofSubsystemsStepThreeComponent implements OnInit, TearsheetStep
   private createForm() {
     this.formGroup = new CdFormGroup({
       authType: new UntypedFormControl(AUTHENTICATION.Unidirectional),
-      subsystemDchapKey: new UntypedFormControl(null),
+      subsystemDchapKey: new UntypedFormControl(null, [
+        CdValidators.requiredIf({
+          authType: AUTHENTICATION.Bidirectional
+        })
+      ]),
       hostDchapKeyList: new FormArray([])
     });
 
@@ -65,7 +70,9 @@ export class NvmeofSubsystemsStepThreeComponent implements OnInit, TearsheetStep
 
   private createHostDhchapKeyFormGroup(hostNQN: string = '', key: string | null = null) {
     return new CdFormGroup({
-      dhchap_key: new UntypedFormControl(key),
+      dhchap_key: new UntypedFormControl(key, {
+        validators: [Validators.required]
+      }),
       host_nqn: new UntypedFormControl(hostNQN)
     });
   }
@@ -76,6 +83,10 @@ export class NvmeofSubsystemsStepThreeComponent implements OnInit, TearsheetStep
 
   get hostDchapKeyList() {
     return this.formGroup.get('hostDchapKeyList') as FormArray;
+  }
+
+  hostDhchapKeyCtrl(i: number) {
+    return (this.hostDchapKeyList.at(i) as CdFormGroup).get('dhchap_key');
   }
 
   trackByIndex = (i: number) => i;

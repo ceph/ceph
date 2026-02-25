@@ -15,7 +15,7 @@ import { NvmeofInitiatorsListComponent } from './nvmeof-initiators-list.componen
 const mockInitiators = [
   {
     nqn: '*',
-    use_dhchap: ''
+    use_dhchap: false
   }
 ];
 
@@ -82,17 +82,18 @@ describe('NvmeofInitiatorsListComponent', () => {
   }));
 
   it('should update authStatus when initiator has dhchap_key', fakeAsync(() => {
-    const initiatorsWithKey = [{ nqn: 'nqn1', use_dhchap: 'key1' }];
+    const initiatorsWithKey = [{ nqn: 'nqn1', use_dhchap: true }];
     spyOn(TestBed.inject(NvmeofService), 'getInitiators').and.returnValue(of(initiatorsWithKey));
     component.listInitiators();
     tick();
     expect(component.authStatus).toBe('Unidirectional');
   }));
 
-  it('should update authStatus when subsystem has psk', fakeAsync(() => {
-    const subsystemWithPsk = { ...mockSubsystem, has_dhchap_key: true };
-    component.initiators = [{ nqn: 'nqn1', use_dhchap: 'key1' }];
-    spyOn(TestBed.inject(NvmeofService), 'getSubsystem').and.returnValue(of(subsystemWithPsk));
+  it('should update authStatus when subsystem has dhchap_key', fakeAsync(() => {
+    const initiatorsWithKey = [{ nqn: 'nqn1', use_dhchap: true }];
+    component.initiators = initiatorsWithKey;
+    const subsystemWithKey = { ...mockSubsystem, has_dhchap_key: true };
+    spyOn(TestBed.inject(NvmeofService), 'getSubsystem').and.returnValue(of(subsystemWithKey));
     component.getSubsystem();
     tick();
     expect(component.authStatus).toBe('Bi-directional');

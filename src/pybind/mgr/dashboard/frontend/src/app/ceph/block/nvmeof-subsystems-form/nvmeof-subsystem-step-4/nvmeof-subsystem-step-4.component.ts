@@ -3,7 +3,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { AUTHENTICATION, HOST_TYPE } from '~/app/shared/models/nvmeof';
+import { AUTHENTICATION, HOST_TYPE, NO_AUTH } from '~/app/shared/models/nvmeof';
 import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
 
 @Component({
@@ -45,6 +45,7 @@ export class NvmeofSubsystemsStepFourComponent implements OnInit, TearsheetStep 
   }
 
   get authTypeLabel(): string {
+    if (this.authType === AUTHENTICATION.None) return NO_AUTH;
     return this.authType === AUTHENTICATION.Bidirectional
       ? $localize`Bidirectional`
       : $localize`Unidirectional`;

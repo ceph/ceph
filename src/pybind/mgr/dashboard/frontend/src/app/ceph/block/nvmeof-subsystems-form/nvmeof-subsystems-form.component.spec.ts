@@ -93,7 +93,7 @@ describe('NvmeofSubsystemsFormComponent', () => {
     beforeEach(() => {
       nvmeofService = TestBed.inject(NvmeofService);
       spyOn(nvmeofService, 'createSubsystem').and.returnValue(of({}));
-      spyOn(nvmeofService, 'addInitiators').and.returnValue(of({}));
+      spyOn(nvmeofService, 'addSubsystemInitiators').and.returnValue(of({}));
     });
 
     it('should be creating request correctly', () => {
@@ -115,25 +115,17 @@ describe('NvmeofSubsystemsFormComponent', () => {
         addedHosts: [],
         hostType: HOST_TYPE.ALL,
         subsystemDchapKey: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY=',
-<<<<<<< HEAD
-        listeners: []
-=======
+        listeners: [],
         authType: AUTHENTICATION.Bidirectional,
         hostDchapKeyList: []
->>>>>>> 6d877ea7101 (mgr/dashboard: Allow adding authentication to subsystem flow)
       };
 
       component.group = mockGroupName;
       component.onSubmit(payload);
 
-<<<<<<< HEAD
-      expect(nvmeofService.addInitiators).toHaveBeenCalledWith('test-nqn.default', {
-        host_nqn: '*',
-=======
       expect(nvmeofService.addSubsystemInitiators).toHaveBeenCalledWith('test-nqn.default', {
         allow_all: true,
         hosts: [],
->>>>>>> 6d877ea7101 (mgr/dashboard: Allow adding authentication to subsystem flow)
         gw_group: mockGroupName
       });
     });

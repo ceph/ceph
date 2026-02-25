@@ -4,12 +4,7 @@
  [description]="description"
  [isSubmitLoading]="isSubmitLoading"
  (submitRequested)="onSubmit($event)"
-<<<<<<< HEAD
- (stepChanged)="populateReviewData()"
-=======
- (stepChanged)="onStepChanged($event)"
->>>>>>> 6d877ea7101 (mgr/dashboard: Allow adding authentication to subsystem flow)
- >
+ (stepChanged)="populateReviewData()">
   <cd-tearsheet-step>
     <cd-nvmeof-subsystem-step-one
      #tearsheetStep
@@ -27,7 +22,7 @@
      [stepTwoValue]="stepTwoValue"
      [group]="group"></cd-nvmeof-subsystem-step-three>
   </cd-tearsheet-step>
-<<<<<<< HEAD
+  }
   <cd-tearsheet-step>
     <cd-nvmeof-subsystem-step-four
      #tearsheetStep
@@ -40,8 +35,5 @@
      [subsystemDchapKey]="reviewSubsystemDchapKey"
      [hostDchapKeyCount]="reviewHostDchapKeyCount"></cd-nvmeof-subsystem-step-four>
   </cd-tearsheet-step>
-=======
-  }
->>>>>>> 6d877ea7101 (mgr/dashboard: Allow adding authentication to subsystem flow)
 </cd-tearsheet>
 

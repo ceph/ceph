@@ -7,8 +7,14 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { Step } from 'carbon-components-angular';
 import { NvmeofService, SubsystemInitiatorRequest } from '~/app/shared/api/nvmeof.service';
 import { TearsheetComponent } from '~/app/shared/components/tearsheet/tearsheet.component';
-import { HOST_TYPE, ListenerItem, AUTHENTICATION } from '~/app/shared/models/nvmeof';
-import { AUTHENTICATION, HOST_TYPE, StepTwoType } from '~/app/shared/models/nvmeof';
+import {
+  AUTHENTICATION,
+  HOST_TYPE,
+  HostStepType,
+  ListenerItem,
+  AuthStepType,
+  DetailsStepType
+} from '~/app/shared/models/nvmeof';
 import { from, Observable, of } from 'rxjs';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -28,6 +34,13 @@ export type SubsystemPayload = {
 
 type StepResult = { step: string; success: boolean; error?: string };
 
+const STEP_LABELS = {
+  DETAILS: 'Subsystem details',
+  HOSTS: 'Host access control',
+  AUTH: 'Authentication',
+  REVIEW: 'Review'
+} as const;
+
 @Component({
   selector: 'cd-nvmeof-subsystems-form',
   templateUrl: './nvmeof-subsystems-form.component.html',
@@ -41,7 +54,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   description: string = $localize`Subsytems define how hosts connect to NVMe namespaces and ensure secure access to storage.`;
   isSubmitLoading: boolean = false;
   private lastCreatedNqn: string;
-  stepTwoValue: StepTwoType = null;
+  stepTwoValue: HostStepType = null;
   showAuthStep = true;
 
   @ViewChild(TearsheetComponent) tearsheet!: TearsheetComponent;
@@ -73,53 +86,61 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     this.rebuildSteps();
   }
 
-  populateReviewData() {
-    if (!this.tearsheet?.stepContents) return;
-    const steps = this.tearsheet.stepContents.toArray();
-
-    // Step 1: Subsystem details
-    const step1Form = steps[0]?.stepComponent?.formGroup;
-    if (step1Form) {
-      this.reviewNqn = step1Form.get('nqn')?.value || '';
-      this.reviewListeners = step1Form.get('listeners')?.value || [];
-    }
-
-    // Step 2: Host access control
-    const step2Form = steps[1]?.stepComponent?.formGroup;
-    if (step2Form) {
-      this.reviewHostType = step2Form.get('hostType')?.value || HOST_TYPE.SPECIFIC;
-      this.reviewAddedHosts = step2Form.get('addedHosts')?.value || [];
-    }
-
-    // Step 3: Authentication
-    const step3Form = steps[2]?.stepComponent?.formGroup;
-    if (step3Form) {
-      this.reviewAuthType = step3Form.get('authType')?.value || AUTHENTICATION.Unidirectional;
-      this.reviewSubsystemDchapKey = step3Form.get('subsystemDchapKey')?.value || '';
-      const hostKeys = step3Form.get('hostDchapKeyList')?.value || [];
-      this.reviewHostDchapKeyCount = hostKeys.filter((k: any) => k?.key).length;
-  
-      }  }
-  onStepChanged(_e: { current: number }) {
-    const stepTwo = this.tearsheet?.getStepValue(1);
-    this.stepTwoValue = stepTwo;
-
-    this.showAuthStep = stepTwo?.hostType !== HOST_TYPE.ALL;
-
+  private setAuthStepVisibility(nextShowAuth: boolean) {
+    if (this.showAuthStep === nextShowAuth) return;
+    this.showAuthStep = nextShowAuth;
     this.rebuildSteps();
+  }
+
+  populateReviewData() {
+    if (!this.tearsheet) return;
+
+    const step1 = this.tearsheet.getStepValueByLabel<DetailsStepType>(STEP_LABELS.DETAILS);
+    const step2 = this.tearsheet.getStepValueByLabel<HostStepType>(STEP_LABELS.HOSTS);
+
+    if (step1) {
+      this.reviewNqn = step1.nqn ?? '';
+      this.reviewListeners = step1.listeners ?? [];
+    }
+
+    if (step2) {
+      this.reviewHostType = step2.hostType ?? HOST_TYPE.SPECIFIC;
+      this.reviewAddedHosts = step2.addedHosts ?? [];
+      this.stepTwoValue = step2;
+    }
+
+    const nextShowAuth = (step2?.hostType ?? HOST_TYPE.SPECIFIC) === HOST_TYPE.SPECIFIC;
+
+    if (nextShowAuth !== this.showAuthStep) {
+      this.setAuthStepVisibility(nextShowAuth);
+      return;
+    }
+
+    const authStep = this.tearsheet.getStepValueByLabel<AuthStepType>(STEP_LABELS.AUTH);
+
+    if (this.showAuthStep && authStep) {
+      this.reviewAuthType = authStep.authType ?? AUTHENTICATION.Unidirectional;
+      this.reviewSubsystemDchapKey = authStep.subsystemDchapKey ?? '';
+      const hostKeyList = authStep.hostDchapKeyList ?? [];
+      this.reviewHostDchapKeyCount = hostKeyList.filter((item) => !!item?.dhchap_key)?.length;
+    } else {
+      this.reviewAuthType = null;
+      this.reviewSubsystemDchapKey = '';
+      this.reviewHostDchapKeyCount = 0;
+    }
   }
 
   rebuildSteps() {
     const steps: Step[] = [
-      { label: 'Subsystem details', invalid: false },
-      { label: 'Host access control', invalid: false }
+      { label: STEP_LABELS.DETAILS, invalid: false },
+      { label: STEP_LABELS.HOSTS, invalid: false }
     ];
 
     if (this.showAuthStep) {
-      steps.push({ label: 'Authentication', invalid: false });
+      steps.push({ label: STEP_LABELS.AUTH, invalid: false });
     }
 
-    steps.push({ label: 'Review', invalid: false });
+    steps.push({ label: STEP_LABELS.REVIEW, invalid: false });
 
     this.steps = steps;
 
@@ -164,7 +185,10 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
           sequentialSteps.push({
             step: this.steps[1].label,
             call: () =>
-              this.nvmeofService.addInitiators(`${payload.nqn}.${this.group}`, initiatorRequest)
+              this.nvmeofService.addSubsystemInitiators(
+                `${payload.nqn}.${this.group}`,
+                initiatorRequest
+              )
           });
 
           this.runSequentialSteps(sequentialSteps, stepResults).subscribe({
