@@ -1584,10 +1584,6 @@ ostream& operator<<(ostream& out, const pool_opts_t& opts)
 
 // -- pg_pool_t --
 
-const char *pg_pool_t::APPLICATION_NAME_CEPHFS("cephfs");
-const char *pg_pool_t::APPLICATION_NAME_RBD("rbd");
-const char *pg_pool_t::APPLICATION_NAME_RGW("rgw");
-
 void pg_pool_t::dump(Formatter *f) const
 {
   f->dump_stream("create_time") << get_create_time();
@@ -4874,8 +4870,6 @@ void ObjectModDesc::decode(ceph::buffer::list::const_iterator &_bl)
   bl.reassign_to_mempool(mempool::mempool_osd_pglog);
   DECODE_FINISH(_bl);
 }
-
-std::atomic<uint32_t> ObjectCleanRegions::max_num_intervals = {10};
 
 void ObjectCleanRegions::set_max_num_intervals(uint32_t num)
 {

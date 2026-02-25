@@ -1278,9 +1278,9 @@ class OSDMap;
  * pg_pool
  */
 struct pg_pool_t {
-  static const char *APPLICATION_NAME_CEPHFS;
-  static const char *APPLICATION_NAME_RBD;
-  static const char *APPLICATION_NAME_RGW;
+  inline static constexpr const char *APPLICATION_NAME_CEPHFS = "cephfs";
+  inline static constexpr const char *APPLICATION_NAME_RBD = "rbd";
+  inline static constexpr const char *APPLICATION_NAME_RGW = "rgw";
 
   enum {
     TYPE_REPLICATED = 1,     // replication
@@ -4270,7 +4270,7 @@ private:
   bool new_object;
   bool clean_omap;
   interval_set<uint64_t> clean_offsets;
-  static std::atomic<uint32_t> max_num_intervals;
+  inline static std::atomic<uint32_t> max_num_intervals{10};
 
   /**
    * trim the number of intervals if clean_offsets.num_intervals()

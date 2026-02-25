@@ -181,12 +181,6 @@ public:
     }
   };
 
-  static const std::string LEGACY_MAPPING_PREFIX;
-  static const std::string MAPPING_PREFIX;
-  static const std::string OBJECT_PREFIX;
-  static const char *PURGED_SNAP_EPOCH_PREFIX;
-  static const char *PURGED_SNAP_PREFIX;
-
 #ifndef WITH_CRIMSON
   struct Scrubber {
     CephContext *cct;
