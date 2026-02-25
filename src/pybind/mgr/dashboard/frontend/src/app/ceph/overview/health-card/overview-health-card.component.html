@@ -158,6 +158,32 @@
       </cds-tooltip-definition>
     </div>
   }
+  <!-- RESILIENCY TAB -->
+   @if(vm?.overallSystemSev) {
+    <div class="overview-health-card-tab"
+         [class.overview-health-card-tab-selected]="activeSection === 'resiliency'">
+      <div class="cds-mb-1"><cd-icon
+        [type]="vm?.overallSystemSev"></cd-icon></div>
+      <cds-tooltip-definition
+        [highContrast]="true"
+        [openOnHover]="true"
+        [dropShadow]="true"
+        class="cds-ml-2"
+        [caret]="true"
+        (click)="toggleSection('resiliency')"
+        description=""
+        i18n-description>
+        <span
+          class="cds-mr-1"
+          [class.cds--type-heading-compact-01]="activeSection === 'resiliency'"
+          i18n>
+          Data resiliency
+        </span>
+      </cds-tooltip-definition>
+    </div>
+  } @else {
+  <cds-skeleton-text [lines]="1"></cds-skeleton-text>
+  }
   </div>
 
   <!-- TAB CONTENT -->
@@ -229,7 +255,20 @@
         }
       </div>
     </ng-container>
-
+    <!-- RESILIENCY TAB CONTENT -->
+    <ng-container *ngSwitchCase="'resiliency'">
+      <div class="overview-health-card-tab-content">
+        <span class="overview-health-card-icon-and-text">
+          <cd-icon type="warningAltFilled"></cd-icon>
+          <span class="cds--type-body-compact-01">
+            Status unavailable for some data
+          </span>
+        </span>
+        <p
+          class="overview-health-card-secondary-text cds--type-label-01"
+          i18n>Ceph cannot reliably determine the current state of some data. Availability may be affected.</p>
+      </div>
+    </ng-container>
     <ng-container *ngSwitchDefault></ng-container>
   </div>
 </cd-productive-card>
