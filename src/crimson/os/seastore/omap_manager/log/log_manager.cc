@@ -68,14 +68,24 @@ LogManager::omap_set_keys(
   std::pair<std::string, ceph::bufferlist> ow_kv;
   // To prevent missing remove_kv even when overwritten is not done
   bool ow_done = false;
-  auto f = [&](const std::string &k, const bufferlist &v, bool has_ow_key) 
-    -> omap_set_key_ret {
+  auto resync_node = [&](LogNodeRef e)
+    -> log_load_extent_iertr::future<CachedExtentRef> {
     CachedExtentRef node;
     Transaction::get_extent_ret ret;
     // To find mutable extent in the same transaction
-    ret = t.get_extent(ext->get_paddr(), &node);
+    ret = t.get_extent(e->get_paddr(), &node);
     assert(ret == Transaction::get_extent_ret::PRESENT);
-    assert(node);
+    if (!node) {
+      // Do full reload if not cached
+      node = co_await log_load_extent<LogNode>(
+	t, e->get_laddr(), BEGIN_KEY, END_KEY);
+    }
+    ceph_assert(node);
+    co_return std::move(node);
+  };
+  auto f = [&](const std::string &k, const bufferlist &v, bool has_ow_key) 
+    -> omap_set_key_ret {
+    CachedExtentRef node = co_await resync_node(ext);
     LogNodeRef log_node = node->template cast<LogNode>();
     bool can_ow = has_ow_key && log_node->can_ow();
     if (can_ow) {
@@ -142,11 +152,7 @@ LogManager::omap_set_keys(
       if (!is_log_key(p.first)) {
 	co_await remove_kv(t, log_root.addr, p.first, nullptr);
 	// reload latest log list e because e was updated if the key is in e
-	CachedExtentRef node;
-	Transaction::get_extent_ret ret;
-	ret = t.get_extent(e->get_paddr(), &node);
-	assert(ret == Transaction::get_extent_ret::PRESENT);
-	assert(node);
+	CachedExtentRef node = co_await resync_node(e);
 	e = node->template cast<LogNode>();
       }
       LogNodeRef cur = e;
