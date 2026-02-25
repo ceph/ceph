@@ -23,7 +23,7 @@ class PeerReplayer {
 public:
   PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
                RadosRef local_cluster, const Filesystem &filesystem,
-               const Peer &peer, const std::set<std::string, std::less<>> &directories,
+               const Peer &peer, const std::unordered_map<std::string, std::string> &directories,
                MountRef mount, ServiceDaemon *service_daemon);
   ~PeerReplayer();
 
@@ -34,7 +34,7 @@ public:
   void shutdown();
 
   // add a directory to mirror queue
-  void add_directory(std::string_view dir_root);
+  void add_directory(std::string_view dir_root, std::string_view prio_mode);
 
   // remove a directory from queue
   void remove_directory(std::string_view dir_root);
@@ -91,8 +91,26 @@ private:
       return 0;
     }
 
-  private:
+  protected:
     PeerReplayer *m_peer_replayer;
+  };
+
+  class PerDirectorySnapshotReplayerThread: public SnapshotReplayerThread {
+  public:
+    PerDirectorySnapshotReplayerThread(PeerReplayer *peer_replayer,
+                                       const std::string &dir_root)
+      : SnapshotReplayerThread(peer_replayer),
+        m_dir_root(dir_root) {
+    }
+
+    void *entry() override {
+      m_peer_replayer->run(this, m_dir_root);
+      return 0;
+    }
+
+  private:
+    std::string m_dir_root;
+    bool stopping = false;
   };
 
   struct DirRegistry {
@@ -333,7 +351,14 @@ private:
     auto &sync_stat = m_snap_sync_stats.at(dir_root);
     sync_stat.sync_bytes += b;
   }
-  bool should_backoff(const std::string &dir_root, int *retval) {
+  bool should_backoff(boost::optional<std::string> dir_root,
+                      int *retval, std::unique_lock<ceph::mutex> &locker) {
+    locker.unlock();
+    auto b = should_backoff(dir_root, retval);
+    locker.lock();
+    return b;
+  }
+  bool should_backoff(boost::optional<std::string> dir_root, int *retval) {
     if (m_fs_mirror->is_blocklisted()) {
       *retval = -EBLOCKLISTED;
       return true;
@@ -346,10 +371,12 @@ private:
       *retval = -EINPROGRESS;
       return true;
     }
-    auto &dr = m_registered.at(dir_root);
-    if (dr.canceled) {
-      *retval = -ECANCELED;
-      return true;
+    if (dir_root) {
+      auto &dr = m_registered.at(*dir_root);
+      if (dr.canceled) {
+        *retval = -ECANCELED;
+        return true;
+      }
     }
 
     *retval = 0;
@@ -365,7 +392,11 @@ private:
   Peer m_peer;
   // probably need to be encapsulated when supporting cancelations
   std::map<std::string, DirRegistry> m_registered;
+  // superset vs. subset of directories
   std::vector<std::string> m_directories;
+  std::vector<std::string> m_per_thread_directories;
+  std::unordered_map<std::string, std::unique_ptr<SnapshotReplayerThread>> m_per_directory_replayer;
+
   std::map<std::string, SnapSyncStat> m_snap_sync_stats;
   MountRef m_local_mount;
   ServiceDaemon *m_service_daemon;
@@ -383,6 +414,8 @@ private:
   PerfCounters *m_perf_counters;
 
   void run(SnapshotReplayerThread *replayer);
+  void run(SnapshotReplayerThread *replayer, const std::string &dir_root);
+  void sync(const std::string &dir_root, std::unique_lock<ceph::mutex> &locker);
 
   boost::optional<std::string> pick_directory();
   int register_directory(const std::string &dir_root, SnapshotReplayerThread *replayer);
