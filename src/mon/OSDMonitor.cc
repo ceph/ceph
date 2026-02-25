@@ -8356,7 +8356,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 
   if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
     // This will fail if the pool cannot support ec optimizations.
-    enable_pool_ec_optimizations(*pi, nullptr, true);
+    enable_pool_ec_optimizations(*pi, nullptr, true, false);
   }
 
   enable_pool_ec_direct_reads(*pi);
@@ -8392,7 +8392,7 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
 }
 
 int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
-    stringstream *ss, bool enable) {
+    stringstream *ss, bool enable, bool yes_i_really_mean_it) {
   if (!p.is_erasure()) {
     if (ss) {
       *ss << "allow_ec_optimizations can only be enabled for an erasure coded pool";
@@ -8421,8 +8421,15 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
       }
       return -EINVAL;
     }
-    if ((erasure_code->get_supported_optimizations() &
-        ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0) {
+    if (yes_i_really_mean_it && (erasure_code->get_supported_optimizations() &
+        ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_EXPERIMENTAL) != 0) {
+        if (ss) {
+          *ss << "This is experimental for use in test and development and is "
+                  "not a supported configuration.";
+        }
+    }
+    else if ((erasure_code->get_supported_optimizations() &
+        ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0)  {
       if (ss) {
         *ss << "ec optimizations not currently supported for pool profile.";
       }
@@ -9007,7 +9014,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     bool was_enabled = p.allows_ecoptimizations();
-    int r = enable_pool_ec_optimizations(p, &ss, enable);
+    bool force = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", force);
+    int r = enable_pool_ec_optimizations(p, &ss, enable, force);
     if (r != 0) {
       return r;
     }
@@ -15667,7 +15676,7 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     ss << "the 2 " << dividing_bucket
        << "instances in the cluster have differing weights "
        << weight1 << " and " << weight2
-       << " but stretch mode currently" 
+       << " but stretch mode currently"
        <<" requires the difference to be no greater than "
        << stretch_max_weight_delta * 100 << "%";
     *errcode = -EINVAL;
