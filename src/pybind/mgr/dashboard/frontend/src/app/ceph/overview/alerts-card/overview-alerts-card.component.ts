@@ -15,6 +15,7 @@ import {
   GridModule,
   LayoutModule,
   LinkModule,
+  SkeletonModule,
   TilesModule
 } from 'carbon-components-angular';
 import { RouterModule } from '@angular/router';
@@ -42,7 +43,8 @@ const AlertIcon = {
     ButtonModule,
     LinkModule,
     LayoutModule,
-    PipesModule
+    PipesModule,
+    SkeletonModule
   ],
   templateUrl: './overview-alerts-card.component.html',
   styleUrl: './overview-alerts-card.component.scss',
@@ -58,11 +60,11 @@ export class OverviewAlertsCardComponent implements OnInit {
   }
 
   readonly vm$ = combineLatest([
-    this.prometheusAlertService.totalAlerts$.pipe(startWith(0)),
     this.prometheusAlertService.criticalAlerts$.pipe(startWith(0)),
     this.prometheusAlertService.warningAlerts$.pipe(startWith(0))
   ]).pipe(
-    map(([total, critical, warning]) => {
+    map(([critical, warning]) => {
+      const total = (critical ?? 0) + (warning ?? 0);
       const hasAlerts = total > 0;
       const hasCritical = critical > 0;
       const hasWarning = warning > 0;
