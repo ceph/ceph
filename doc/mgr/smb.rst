@@ -683,6 +683,13 @@ external_ceph_cluster:
     Optional object. The fields are described in :ref:`external Ceph cluster
     source fields<external-ceph-cluster-source-fields>`. This is an
     advanced option and should be used with caution.
+debug_level:
+    Optional object. Specify subsystem based default logging level values.
+    Supported keys are ``samba`` and ``ctdb``. Supported values include
+    numbers (``1`` through ``10`` typically) or level names such as ``INFO``
+    or ``DEBUG``. The system will translate names to numbers (for ``samba``)
+    or vice-versa as needed. Example YAML snippet:
+    ``debug_level: {smb: 8, ctdb: INFO}``.
 custom_smb_global_options
     Optional mapping. Specify key-value pairs that will be directly added to
     the global ``smb.conf`` options (or equivalent) of a Samba server.  Do
