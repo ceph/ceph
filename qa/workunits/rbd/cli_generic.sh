@@ -1897,6 +1897,16 @@ test_mirror_group_snapshot_schedule() {
 
     test "$(rbd group snap ls rbd2/ns1/gp1 | grep -c mirror.primary)" = '1'
 
+    rbd mirror group snapshot schedule add -p rbd2/ns1 1h 2100-01-01T19:00Z
+    test "$(rbd mirror group snapshot schedule ls -p rbd2/ns1)" = 'every 1h starting at 2100-01-01 19:00:00'
+    for i in `seq 12`; do
+        rbd mirror group snapshot schedule status -p rbd2/ns1 | grep '2100-01-01 19:00:00' && break
+        sleep 10
+    done
+    test "$(rbd mirror group snapshot schedule status -p rbd2/ns1 --format xml |
+        xmlstarlet sel -t -v '//scheduled_groups/group/schedule_time')" = '2100-01-01 19:00:00'
+    rbd mirror group snapshot schedule rm -p rbd2/ns1
+
     rbd mirror group snapshot schedule add -p rbd2/ns1 --group gp1 1m
     expect_fail rbd mirror group snapshot schedule ls
     rbd mirror group snapshot schedule ls -R | grep 'rbd2 *ns1 *gp1 *every 1m'
@@ -1948,21 +1958,21 @@ test_mirror_group_snapshot_schedule() {
     done
     rbd mirror group snapshot schedule status | grep 'rbd2/ns1/gp1'
 
-    rbd mirror group snapshot schedule add 1h 00:15
-    test "$(rbd mirror group snapshot schedule ls)" = 'every 1h starting at 00:15:00'
-    rbd mirror group snapshot schedule ls -R | grep 'every 1h starting at 00:15:00'
+    rbd mirror group snapshot schedule add 1h 2020-01-14T04:30+05:30
+    test "$(rbd mirror group snapshot schedule ls)" = 'every 1h starting at 2020-01-13 23:00:00'
+    rbd mirror group snapshot schedule ls -R | grep 'every 1h starting at 2020-01-13 23:00:00'
     rbd mirror group snapshot schedule ls -R | grep 'rbd2 *ns1 *gp1 *every 1m'
     expect_fail rbd mirror group snapshot schedule ls -p rbd2
-    rbd mirror group snapshot schedule ls -p rbd2 -R | grep 'every 1h starting at 00:15:00'
+    rbd mirror group snapshot schedule ls -p rbd2 -R | grep 'every 1h starting at 2020-01-13 23:00:00'
     rbd mirror group snapshot schedule ls -p rbd2 -R | grep 'rbd2 *ns1 *gp1 *every 1m'
     expect_fail rbd mirror group snapshot schedule ls -p rbd2/ns1
-    rbd mirror group snapshot schedule ls -p rbd2/ns1 -R | grep 'every 1h starting at 00:15:00'
+    rbd mirror group snapshot schedule ls -p rbd2/ns1 -R | grep 'every 1h starting at 2020-01-13 23:00:00'
     rbd mirror group snapshot schedule ls -p rbd2/ns1 -R | grep 'rbd2 *ns1 *gp1 *every 1m'
     test "$(rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1)" = 'every 1m'
 
     rbd mirror group snapshot schedule remove -p rbd2/ns1 --group gp1 1m
     test "$(rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1)" = ""
-    test "$(rbd mirror group snapshot schedule ls)" = 'every 1h starting at 00:15:00'
+    test "$(rbd mirror group snapshot schedule ls)" = 'every 1h starting at 2020-01-13 23:00:00'
 
     rbd mirror group snapshot schedule add -p rbd2/ns1 --group gp1 1m
 
@@ -1971,7 +1981,14 @@ test_mirror_group_snapshot_schedule() {
     expect_fail rbd mirror group snapshot schedule add -p rbd2/ns1 --group gp1 dummy
     expect_fail rbd mirror group snapshot schedule remove dummy
     expect_fail rbd mirror group snapshot schedule remove -p rbd2/ns1 --group gp1 dummy
-    test "$(rbd mirror group snapshot schedule ls)" = 'every 1h starting at 00:15:00'
+    expect_fail rbd mirror group snapshot schedule add 30m 04:30
+    expect_fail rbd mirror group snapshot schedule add 30m 04:30+05:30
+    expect_fail rbd mirror group snapshot schedule add 30m 2020-13-14T04:30+05:30
+    expect_fail rbd mirror group snapshot schedule add 30m 2020-01-32T04:30+05:30
+    expect_fail rbd mirror group snapshot schedule add 30m 2020-01-14T25:30+05:30
+    expect_fail rbd mirror group snapshot schedule add 30m 2020-01-14T04:60+05:30
+    expect_fail rbd mirror group snapshot schedule add 30m 2020-01-14T04:30+24:00
+    test "$(rbd mirror group snapshot schedule ls)" = 'every 1h starting at 2020-01-13 23:00:00'
     test "$(rbd mirror group snapshot schedule ls -p rbd2/ns1 --group gp1)" = 'every 1m'
 
     rbd group rm rbd2/ns1/gp1
@@ -2037,6 +2054,153 @@ test_mirror_group_snapshot_schedule_recovery() {
     rbd snap purge rbd2/ns1/img1
     rbd snap purge rbd2/ns1/img1
     rbd group rm rbd2/ns1/gp1
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
+}
+
+test_mirror_group_snapshot_schedule_staggering() {
+    echo "Testing mirror group snapshot schedule staggering..."
+
+    remove_images
+    ceph osd pool create rbd2 8
+    rbd pool init rbd2
+    rbd mirror pool enable rbd2 image
+    rbd mirror pool peer add rbd2 cluster1
+
+    # Initial empty check
+    test "$(ceph rbd mirror group snapshot schedule list)" = "{}"
+    ceph rbd mirror group snapshot schedule status | fgrep '"scheduled_groups": []'
+
+    # Create 80 groups
+    for i in {1..80}; do
+        rbd group create "rbd2/test$i"
+        rbd mirror group enable "rbd2/test$i" snapshot
+    done
+
+    # Helper to get status JSON and verify all groups are scheduled
+    get_mirror_group_snapshot_schedule_status() {
+        local num_scheduled=$1
+        local -n status_ref=$2
+
+        # Verify number of groups in list output
+        local list_json
+        list_json=$(rbd mirror group snapshot schedule ls -p rbd2 -R --format json)
+        [ "$(jq 'length' <<< "$list_json")" -eq "$num_scheduled" ] || return 1
+
+        # Poll status until it reflects the same number of scheduled groups
+        for ((j=0; j<12; j++)); do
+            status_ref=$(rbd mirror group snapshot schedule status -p rbd2 --format json)
+            [ "$(jq 'length' <<< "$status_ref")" -eq "$num_scheduled" ] && break
+            sleep 10
+        done
+        [ "$(jq 'length' <<< "$status_ref")" -eq "$num_scheduled" ] || return 1
+
+        # Verify groups in list and status outputs match
+        local list_groups
+        list_groups=$(jq -r 'sort_by(.group) | .[].group' <<< "$list_json")
+        # In status JSON, '.group' contains full group spec, not just the name
+        local status_groups
+        status_groups=$(
+            jq -r 'sort_by(.group) | .[].group | split("/")[-1]' <<< "$status_ref"
+        )
+        [ "$list_groups" = "$status_groups" ] || return 1
+        return 0
+    }
+
+    # Verify that `schedule add/rm` maintains proper staggering
+    local interval_min=5
+    local status_json
+    # Schedule groups test1..test60
+    for ((i=1; i<=60; i++)); do
+        rbd mirror group snapshot schedule add -p rbd2 --group "test$i" "${interval_min}m"
+    done
+    get_mirror_group_snapshot_schedule_status 60 status_json
+    are_schedules_staggered "$status_json" "$interval_min"
+
+    # Modify scheduling range to test61..test70 (add 10 groups)
+    for ((i=61; i<=70; i++)); do
+        rbd mirror group snapshot schedule add -p rbd2 --group "test$i" "${interval_min}m"
+    done
+    get_mirror_group_snapshot_schedule_status 70 status_json
+    are_schedules_staggered "$status_json" "$interval_min"
+
+    # Modify scheduling range to test71..test80 (add 10 more groups)
+    for ((i=70; i<=80; i++)); do
+        rbd mirror group snapshot schedule add -p rbd2 --group "test$i" "${interval_min}m"
+    done
+    get_mirror_group_snapshot_schedule_status 80 status_json
+    are_schedules_staggered "$status_json" "$interval_min"
+
+    # Split into:
+    #   first half = test1..test40
+    #   second half = test41..test80
+    local first_half_json
+    first_half_json=$(jq '
+        map(select(.group | test("^rbd2/test([1-9]|[1-3][0-9]|40)$")))
+    ' <<< "$status_json")
+    [ "$(jq 'length' <<< "$first_half_json")" -eq 40 ] || return 1
+    local second_half_json
+    second_half_json=$(jq '
+        map(select(.group | test("^rbd2/test(4[1-9]|[5-7][0-9]|80)$")))
+    ' <<< "$status_json")
+    [ "$(jq 'length' <<< "$second_half_json")" -eq 40 ] || return 1
+    # Both halves must be staggered
+    are_schedules_staggered "$first_half_json" "$interval_min"
+    are_schedules_staggered "$second_half_json" "$interval_min"
+
+    # Modify scheduling range to test41..test80 (drop first half)
+    for ((i=1; i<=40; i++)); do
+        rbd mirror group snapshot schedule rm -p rbd2 --group "test$i"
+    done
+    get_mirror_group_snapshot_schedule_status 40 status_json
+    are_schedules_staggered "$status_json" "$interval_min"
+
+    # Re-add schedules for first half with explicit start time.
+    # These should all share the same next schedule_time.
+    for ((i=1; i<=40; i++)); do
+        rbd mirror group snapshot schedule add -p rbd2 --group "test$i" "${interval_min}m" 2020-01-01
+    done
+    # Get updated status
+    get_mirror_group_snapshot_schedule_status 80 status_json
+
+    # Verify first half share the same next schedule_time
+    first_half_json=$(jq '
+        map(select(.group | test("^rbd2/test([1-9]|[1-3][0-9]|40)$")))
+    ' <<< "$status_json")
+    [ "$(jq 'length' <<< "$first_half_json")" -eq 40 ] || return 1
+    local anchored_times=()
+    mapfile -t anchored_times < <(
+        jq -r '.[].schedule_time' <<< "$first_half_json" | sort -u
+    )
+    (( ${#anchored_times[@]} == 1 )) || return 1
+
+    # Verify second half remains staggered
+    second_half_json=$(jq '
+        map(select(.group | test("^rbd2/test(4[1-9]|[5-7][0-9]|80)$")))
+    ' <<< "$status_json")
+    [ "$(jq 'length' <<< "$second_half_json")" -eq 40 ] || return 1
+    are_schedules_staggered "$second_half_json" "$interval_min"
+
+    # Cleanup: remove all schedules
+    for ((i=1; i<=80; i++)); do
+        rbd mirror group snapshot schedule rm -p rbd2 --group "test$i"
+    done
+
+    # Wait until schedule status becomes empty
+    for ((j=0; j<12; j++)); do
+        status_json=$(rbd mirror group snapshot schedule status -p rbd2 --format json)
+        [ "$(jq 'length' <<< "$status_json")" -eq 0 ] && break
+        sleep 10
+    done
+    [ "$(jq 'length' <<< "$status_json")" -eq 0 ] || {
+        echo "Error: mirror group snapshot schedule status not empty after removals"
+        return 1
+    }
+
+    # Remove groups
+    for ((i=1; i<=80; i++)); do
+        rbd group rm "rbd2/test$i"
+    done
+
     ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
 }
 
@@ -2304,6 +2468,7 @@ test_mirror_snapshot_schedule_recovery
 test_mirror_snapshot_schedule_staggering
 test_mirror_group_snapshot_schedule
 test_mirror_group_snapshot_schedule_recovery
+test_mirror_group_snapshot_schedule_staggering
 test_perf_image_iostat
 test_perf_image_iostat_recovery
 test_mirror_pool_peer_bootstrap_create
