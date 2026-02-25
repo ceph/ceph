@@ -3837,6 +3837,9 @@ class SMBSpec(ServiceSpec):
         # typically external to the current cluster that the smb services
         # may be permitted to connect to
         ceph_cluster_configs: Optional[List[SMBExternalCephCluster]] = None,
+        # tunables - fine grained options/overrides to be used when deploying
+        # smb services
+        tunables: Optional[Dict[str, str]] = None,
         # --- general tweaks ---
         extra_container_args: Optional[GeneralArgList] = None,
         extra_entrypoint_args: Optional[GeneralArgList] = None,
@@ -3877,6 +3880,7 @@ class SMBSpec(ServiceSpec):
         self.ceph_cluster_configs = SMBExternalCephCluster.convert_list(
             ceph_cluster_configs
         )
+        self.tunables = tunables or {}
         self.validate()
 
     def validate(self) -> None:
