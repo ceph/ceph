@@ -79,6 +79,28 @@ int list(
     std::string_view tenant,
     std::vector<RGWOIDCProviderInfo>& providers);
 
+/// List OIDC provider URLs for an account (paginated).
+int list_oidc_urls(
+    const DoutPrefixProvider* dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    const RGWZoneParams& zone,
+    std::string_view account_id,
+    std::string_view marker,
+    uint32_t max_items,
+    std::vector<std::string>& urls,
+    std::string& next_marker);
+
+/// List all OIDC providers for an account using optimized account index.
+int list_account_oidcs(
+    const DoutPrefixProvider* dpp,
+    optional_yield y,
+    RGWSI_SysObj& sysobj,
+    librados::Rados& rados,
+    const RGWZoneParams& zone,
+    std::string_view account_id,
+    std::vector<RGWOIDCProviderInfo>& providers);
+
 /// OIDC provider metadata handler factory.
 auto create_metadata_handler(
     librados::Rados& rados,

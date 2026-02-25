@@ -15,7 +15,12 @@
 
 #include "oidc.h"
 
+#include <limits>
+
+#include "account.h"
+#include "oidcs.h"
 #include "common/errno.h"
+#include "rgw_account.h"
 #include "rgw_common.h"
 #include "rgw_metadata.h"
 #include "rgw_metadata_lister.h"
@@ -151,6 +156,17 @@ write(
     return r;
   }
 
+  if (rgw::account::validate_id(info.tenant)) {
+    // link the OIDC provider to its account
+    const auto& oidcs = account::get_oidcs_obj(zone, info.tenant);
+    r = oidcs::add(
+        dpp, y, rados, oidcs, info, false,
+        std::numeric_limits<uint32_t>::max());
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "WARNING: could not link OIDC provider to account "
+          << info.tenant << ": " << cpp_strerror(r) << dendl;
+    } // not fatal
+  }
 
   // record in the mdlog on success
   if (mdlog) {
@@ -183,6 +199,15 @@ remove(
     return r;
   }
 
+  if (rgw::account::validate_id(tenant)) {
+    // unlink the OIDC provider from its account
+    const auto& oidcs = account::get_oidcs_obj(zone, std::string(tenant));
+    r = oidcs::remove(dpp, y, rados, oidcs, url);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not unlink OIDC provider from account "
+          << tenant << ": " << cpp_strerror(r) << dendl;
+    } // not fatal
+  }
 
   // record in the mdlog on success
   if (mdlog) {
@@ -201,6 +226,11 @@ list(
     std::string_view tenant,
     std::vector<RGWOIDCProviderInfo>& providers)
 {
+  // Use optimized account index if tenant is an account
+  if (rgw::account::validate_id(tenant)) {
+    return list_account_oidcs(dpp, y, sysobj, rados, zone, tenant, providers);
+  }
+
   // Prefix format: "{tenant}oidc_url." to match original implementation
   std::string prefix = string_cat_reserve(tenant, oidc_url_oid_prefix);
   auto& pool = zone.oidc_pool;
@@ -249,6 +279,69 @@ list(
       providers.push_back(std::move(info));
     }
   } while (truncated);
+
+  return 0;
+}
+
+int
+list_oidc_urls(
+    const DoutPrefixProvider* dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    const RGWZoneParams& zone,
+    std::string_view account_id,
+    std::string_view marker,
+    uint32_t max_items,
+    std::vector<std::string>& urls,
+    std::string& next_marker)
+{
+  const rgw_raw_obj obj = account::get_oidcs_obj(zone, account_id);
+  return oidcs::list(dpp, y, rados, obj, marker, max_items, urls, next_marker);
+}
+
+int
+list_account_oidcs(
+    const DoutPrefixProvider* dpp,
+    optional_yield y,
+    RGWSI_SysObj& sysobj,
+    librados::Rados& rados,
+    const RGWZoneParams& zone,
+    std::string_view account_id,
+    std::vector<RGWOIDCProviderInfo>& providers)
+{
+  // Use the account index to get OIDC provider URLs
+  std::vector<std::string> urls;
+  std::string marker;
+  std::string next_marker;
+
+  do {
+    urls.clear();
+    int r = list_oidc_urls(dpp, y, rados, zone, account_id, marker,
+                           1000, urls, next_marker);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to list OIDC provider URLs for account "
+          << account_id << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    for (const auto& url : urls) {
+      RGWOIDCProviderInfo info;
+      r = read(dpp, y, sysobj, zone, account_id, url, info);
+      if (r == -ENOENT) {
+        // OIDC provider was deleted, skip it
+        ldpp_dout(dpp, 10) << "OIDC provider " << url << " not found, skipping" << dendl;
+        continue;
+      }
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: failed to read OIDC provider " << url
+            << ": " << cpp_strerror(r) << dendl;
+        return r;
+      }
+      providers.push_back(std::move(info));
+    }
+
+    marker = next_marker;
+  } while (!next_marker.empty());
 
   return 0;
 }
