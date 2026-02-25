@@ -81,7 +81,8 @@ container_gwcli /iscsi-targets create iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw
 # I've seen this give a nonzero error code with an error message even when
 # creating the gateway successfully, so this command is allowed to fail
 # If it actually failed to make the gateway, some of the follow up commands will fail
-container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways create ${FQDN} ${NODE_IP} || true
+container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways create ${FQDN} ${NODE_IP}  2>&1 | tee /tmp/gw_create.log || true
+cat /tmp/gw_create.log
 
 # verify gateway shows up
 if ! wait_for_ls_contains /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways "${FQDN}" 30 1; then
