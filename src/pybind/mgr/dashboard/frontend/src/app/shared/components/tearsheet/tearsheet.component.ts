@@ -1,5 +1,4 @@
 import {
-  ChangeDetectorRef,
   Component,
   ContentChildren,
   EventEmitter,
@@ -7,7 +6,11 @@ import {
   OnInit,
   Output,
   QueryList,
-  AfterViewChecked
+  AfterViewInit,
+  DestroyRef,
+  OnDestroy,
+  ChangeDetectionStrategy,
+  TemplateRef
 } from '@angular/core';
 import { FormBuilder } from '@angular/forms';
 import { Step } from 'carbon-components-angular';
@@ -16,20 +19,55 @@ import { ModalCdsService } from '../../services/modal-cds.service';
 import { ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
 import { ConfirmationModalComponent } from '../confirmation-modal/confirmation-modal.component';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Subject } from 'rxjs';
+
+/**
+<cd-tearsheet
+    [steps]="steps"
+    [title]="title"
+    [isSubmitLoading]="isSubmitLoading"
+    [description]="description"
+    (submitRequested)="onSubmit()">
+  <cd-tearsheet-step>
+      <cd-step #tearsheetStep>
+      </cds-step>
+  </cd-tearsheet-step>
+   <cd-tearsheet-step>
+      step 2 form
+  <cd-tearsheet-step>
+</cd-tearsheet>
+
+-----------------
 
 @Component({
-  selector: 'cd-tearsheet',
-  templateUrl: './tearsheet.component.html',
-  styleUrls: ['./tearsheet.component.scss']
+  selector: 'cd-step',
+  template: `<form></form>,
+  standalone: false
 })
-export class TearsheetComponent implements OnInit, AfterViewChecked {
+export class StepComponent implements TearsheetStep {
+formgroup: CdFormGroup;
+}
+**/
+@Component({
+  selector: 'cd-tearsheet',
+  standalone: false,
+  templateUrl: './tearsheet.component.html',
+  styleUrls: ['./tearsheet.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() title!: string;
   @Input() steps!: Array<Step>;
   @Input() description!: string;
-  @Input() submitButtonLabel: string = $localize`Create`;
   @Input() type: 'full' | 'wide' = 'wide';
+  @Input() size: 'xs' | 'sm' | 'md' | 'lg' = 'lg';
+  @Input() submitButtonLabel: string = $localize`Create`;
+  @Input() submitButtonLoadingLabel: string = $localize`Creating`;
+  @Input() isSubmitLoading: boolean = true;
 
   @Output() submitRequested = new EventEmitter<void>();
+  @Output() closeRequested = new EventEmitter<void>();
 
   @ContentChildren(TearsheetStepComponent)
   stepContents!: QueryList<TearsheetStepComponent>;
@@ -38,22 +76,35 @@ export class TearsheetComponent implements OnInit, AfterViewChecked {
     return this.stepContents?.toArray()[this.currentStep]?.template;
   }
 
+  get rightInfluencerTemplate(): TemplateRef<any> | null {
+    return this.stepContents?.toArray()[this.currentStep]?.rightInfluencer ?? null;
+  }
+
+  get showRightInfluencer(): boolean {
+    return this.stepContents?.toArray()[this.currentStep]?.showRightInfluencer;
+  }
+
   currentStep: number = 0;
   lastStep: number = null;
   isOpen: boolean = true;
   hasModalOutlet: boolean = false;
+  private destroy$ = new Subject<void>();
 
   constructor(
     protected formBuilder: FormBuilder,
-    private changeDetectorRef: ChangeDetectorRef,
     private cdsModalService: ModalCdsService,
     private route: ActivatedRoute,
-    private location: Location
+    private location: Location,
+    private destroyRef: DestroyRef
   ) {}
 
   ngOnInit() {
     this.lastStep = this.steps.length - 1;
     this.hasModalOutlet = this.route.outlet === 'modal';
+  }
+
+  private _updateStepInvalid(index: number, invalid: boolean) {
+    this.steps = this.steps.map((step, i) => (i === index ? { ...step, invalid } : step));
   }
 
   onStepSelect(event: { step: Step; index: number }) {
@@ -69,6 +120,7 @@ export class TearsheetComponent implements OnInit, AfterViewChecked {
   }
 
   closeWideTearsheet() {
+    this.closeRequested.emit();
     this.isOpen = false;
     if (this.hasModalOutlet) {
       this.location.back();
@@ -84,15 +136,26 @@ export class TearsheetComponent implements OnInit, AfterViewChecked {
   }
 
   onNext() {
+    const formEl = document.querySelector('form');
+    formEl?.dispatchEvent(new Event('submit', { bubbles: true }));
     if (this.currentStep !== this.lastStep && !this.steps[this.currentStep].invalid) {
       this.currentStep = this.currentStep + 1;
     }
   }
 
-  onSubmit() {
-    if (!this.steps[this.currentStep].invalid) {
-      this.submitRequested.emit();
-    }
+  getMergedPayload(): any {
+    return this.stepContents.toArray().reduce((acc, wrapper) => {
+      const stepFormValue = wrapper.stepComponent.formGroup.value;
+      return { ...acc, ...stepFormValue };
+    }, {});
+  }
+
+  handleSubmit() {
+    if (this.steps[this.currentStep].invalid) return;
+
+    const mergedPayloads = this.getMergedPayload();
+
+    this.submitRequested.emit(mergedPayloads);
   }
 
   closeFullTearsheet() {
@@ -111,7 +174,24 @@ export class TearsheetComponent implements OnInit, AfterViewChecked {
     });
   }
 
-  ngAfterViewChecked() {
-    this.changeDetectorRef.detectChanges();
+  ngAfterViewInit() {
+    if (!this.stepContents?.length) return;
+
+    this.stepContents.forEach((wrapper, index) => {
+      const form = wrapper.stepComponent?.formGroup;
+      if (!form) return;
+
+      // initial state
+      this._updateStepInvalid(index, form.invalid);
+
+      form.statusChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+        this._updateStepInvalid(index, form.invalid);
+      });
+    });
+  }
+
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 }

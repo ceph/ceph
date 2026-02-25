@@ -3,12 +3,11 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Step } from 'carbon-components-angular';
 import { InitiatorRequest, NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { TearsheetComponent } from '~/app/shared/components/tearsheet/tearsheet.component';
-import { HOST_TYPE } from '~/app/shared/models/nvmeof';
+import { HOST_TYPE, ListenerItem } from '~/app/shared/models/nvmeof';
 import { from, Observable, of } from 'rxjs';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -21,6 +20,7 @@ export type SubsystemPayload = {
   subsystemDchapKey: string;
   addedHosts: string[];
   hostType: string;
+  listeners: ListenerItem[];
 };
 
 type StepResult = { step: string; success: boolean; error?: string };
@@ -32,7 +32,6 @@ type StepResult = { step: string; success: boolean; error?: string };
   standalone: false
 })
 export class NvmeofSubsystemsFormComponent implements OnInit {
-  subsystemForm: CdFormGroup;
   action: string;
   group: string;
   steps: Step[] = [
@@ -91,16 +90,27 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
       .subscribe({
         next: () => {
           stepResults.push({ step: this.steps[0].label, success: true });
-          this.runSequentialSteps(
-            [
-              {
-                step: this.steps[1].label,
-                call: () =>
-                  this.nvmeofService.addInitiators(`${payload.nqn}.${this.group}`, initiatorRequest)
-              }
-            ],
-            stepResults
-          ).subscribe({
+          const sequentialSteps: { step: string; call: () => Observable<any> }[] = [];
+
+          if (payload.listeners && payload.listeners.length > 0) {
+            sequentialSteps.push({
+              step: $localize`Listeners`,
+              call: () =>
+                this.nvmeofService.createListeners(
+                  `${payload.nqn}.${this.group}`,
+                  this.group,
+                  payload.listeners
+                )
+            });
+          }
+
+          sequentialSteps.push({
+            step: this.steps[1].label,
+            call: () =>
+              this.nvmeofService.addInitiators(`${payload.nqn}.${this.group}`, initiatorRequest)
+          });
+
+          this.runSequentialSteps(sequentialSteps, stepResults).subscribe({
             complete: () => this.showFinalNotification(stepResults)
           });
         },
