@@ -17,6 +17,7 @@ import dataclasses
 import logging
 import time
 
+import ceph.smb.constants
 from ceph.deployment.service_spec import SMBExternalCephCluster, SMBSpec
 from ceph.fs.earmarking import EarmarkTopScope
 
@@ -944,6 +945,7 @@ def _generate_config(conf: _ClusterConf) -> Dict[str, Any]:
         cluster_global_opts['idmap config * : backend'] = 'autorid'
         cluster_global_opts['idmap config * : range'] = '2000-9999999'
     cluster_global_opts['smb ports'] = str(_smb_port(cluster))
+    _set_debug_level(cluster_global_opts, conf)
 
     share_configs = {
         share.resource.name: _generate_share(share) for share in conf.shares
@@ -1069,6 +1071,7 @@ def _generate_smb_service_spec(
         remote_control_ssl_key=rc_key,
         remote_control_ca_cert=rc_ca_cert,
         ceph_cluster_configs=ceph_cluster_configs,
+        tunables=_service_spec_tunables(cluster),
     )
 
 
@@ -1235,3 +1238,61 @@ def _tls_uri(
         return None
     uri = tls_credential_entries[src.ref].uri
     return f'URI:{uri}'
+
+
+def _get_log_level(cluster: resources.Cluster, key: str) -> str:
+    if not cluster.debug_level:
+        return ''
+    return str(cluster.debug_level.get(key) or '').upper()
+
+
+def _smb_log_level(cluster: resources.Cluster) -> str:
+    level = orig = _get_log_level(cluster, 'samba')
+    if not level:
+        return ''
+    if level.isdigit():
+        return level
+    # tier mapping
+    for word, low, hi in ceph.smb.constants.DEBUG_LEVEL_TIERS:
+        if level == word:
+            level = str(hi)
+    if not level:
+        level = '1'
+    log.info('Mapped debug level %s to %s', orig, level)
+    return level
+
+
+def _ctdb_log_level(cluster: resources.Cluster) -> str:
+    level = orig = _get_log_level(cluster, 'ctdb')
+    if not level:
+        return ''
+    if level in ceph.smb.constants.DEBUG_LEVEL_TERMS:
+        return level
+    # tier mapping
+    for word, low, hi in ceph.smb.constants.DEBUG_LEVEL_TIERS:
+        try:
+            lval = int(level)
+        except ValueError:
+            continue
+        if lval in range(low, hi + 1):
+            level = word
+    if not level:
+        level = 'INFO'
+    log.info('Mapped debug level %s to %s', orig, level)
+    return level
+
+
+def _set_debug_level(opts: Dict[str, Any], conf: _ClusterConf) -> None:
+    level = _smb_log_level(conf.resource)
+    if not level:
+        return
+    opts['log level'] = level
+
+
+def _service_spec_tunables(
+    cluster: resources.Cluster,
+) -> Optional[Dict[str, str]]:
+    level = _ctdb_log_level(cluster)
+    if not level:
+        return None
+    return {'log_level.ctdb': level}
