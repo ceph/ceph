@@ -1907,7 +1907,10 @@ TEST_P(seastore_test_t, pgmeta_io)
     auto target_value = *it;  
     kvs = test_obj.get_omaps(*sharded_seastore, target_value,
       ObjectStore::omap_iter_seek_t::UPPER_BOUND);
-    EXPECT_EQ(kvs.size(), 3);
+    EXPECT_EQ(kvs.size(), test_obj.omap.size() - 3);
+    kvs = test_obj.get_omaps(*sharded_seastore, "",
+      ObjectStore::omap_iter_seek_t::UPPER_BOUND);
+    EXPECT_EQ(kvs.size(), test_obj.omap.size());
     test_obj.rm_omap_range(*sharded_seastore, std::string(), target_value);
     kvs = test_obj.get_omaps(*sharded_seastore, std::string());
     EXPECT_EQ(kvs.size(), log_count - 3);

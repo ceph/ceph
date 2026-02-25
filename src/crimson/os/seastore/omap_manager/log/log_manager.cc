@@ -824,21 +824,17 @@ LogManager::omap_iterate(
 
   std::string s = start_from.seek_position;
   std::map<std::string, bufferlist> kvs;
-  if (start_from.seek_type == ObjectStore::omap_iter_seek_t::LOWER_BOUND) {
-    co_await find_kvs(t, log_root.addr, std::optional<std::string>(s),
-      std::optional<std::string>(std::nullopt), kvs);
-    co_await find_kvs(t,
-      co_await get_dup_addr_from_root(t, log_root.addr),
-      std::optional<std::string>(s),
-      std::optional<std::string>(std::nullopt), kvs);
-  } else {
-    assert(start_from.seek_type == ObjectStore::omap_iter_seek_t::UPPER_BOUND);
-    co_await find_kvs(t, log_root.addr, std::optional<std::string>(std::nullopt),
-      std::optional<std::string>(s), kvs);
-    co_await find_kvs(t, 
-      co_await get_dup_addr_from_root(t, log_root.addr),
-      std::optional<std::string>(std::nullopt),
-      std::optional<std::string>(s), kvs);
+  co_await find_kvs(t, log_root.addr, std::optional<std::string>(s),
+    std::optional<std::string>(std::nullopt), kvs);
+  co_await find_kvs(t,
+    co_await get_dup_addr_from_root(t, log_root.addr),
+    std::optional<std::string>(s),
+    std::optional<std::string>(std::nullopt), kvs);
+  if (start_from.seek_type == ObjectStore::omap_iter_seek_t::UPPER_BOUND) {
+    auto it = kvs.find(s);
+    if (it != kvs.end()) {
+      kvs.erase(it);
+    }
   }
 
   ObjectStore::omap_iter_ret_t ret;
