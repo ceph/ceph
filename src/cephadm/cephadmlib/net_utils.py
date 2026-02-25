@@ -22,11 +22,11 @@ class EndPoint:
     """EndPoint representing an ip:port format"""
 
     def __init__(self, ip: str, port: int) -> None:
-        self.ip = ip
+        self.ip = ip.strip('[]')  # normalize: always store bare IP
         self.port = port
         self.is_ipv4 = True
         try:
-            if ip and ipaddress.ip_network(ip).version == 6:
+            if self.ip and ipaddress.ip_network(self.ip).version == 6:
                 self.is_ipv4 = False
         except Exception:
             logger.exception('Failed to check ip address version')
