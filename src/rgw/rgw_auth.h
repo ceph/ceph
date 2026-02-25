@@ -10,6 +10,8 @@
 #include <system_error>
 #include <utility>
 
+#include <fmt/ostream.h>
+
 #include "include/expected.hpp"
 #include "include/function2.hpp"
 
@@ -989,6 +991,7 @@ protected:
 } /* namespace auth */
 } /* namespace rgw */
 
+template <> struct fmt::formatter<rgw::auth::Identity> : ostream_formatter {};
 
 uint32_t rgw_perms_from_aclspec_default_strategy(
   const std::string& uid,
