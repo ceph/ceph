@@ -64,7 +64,11 @@ const std::string old_header_name(const std::string &image_name)
 }
 
 std::string unique_lock_name(const std::string &name, void *address) {
+#ifdef CEPH_LOCKSTAT
+  return name;
+#else
   return name + " (" + stringify(address) + ")";
+#endif
 }
 
 librados::AioCompletion *create_rados_callback(Context *on_finish) {
