@@ -195,10 +195,7 @@ def setup_venv(ctx, config):
             ])
 
         run_in_keystone_venv(ctx, client,
-            [   'pip', 'install',
-                'python-openstackclient==5.2.1',
-                'osc-lib==2.0.0'
-             ])
+            [   'pip', 'install', 'python-openstackclient'])
     try:
         yield
     finally:
