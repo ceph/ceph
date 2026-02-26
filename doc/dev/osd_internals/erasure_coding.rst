@@ -87,3 +87,4 @@ Table of contents
    High level design document <erasure_coding/ecbackend>
    Erasure coding enhancements design document <erasure_coding/enhancements>
    Direct reads design document <erasure_coding/direct_reads>
+   EC Stretch Cluster design document <erasure_coding/ec_stretch_cluster>
