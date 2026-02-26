@@ -118,7 +118,9 @@ export enum Icons {
   plug = 'plug',
   vmdkDisk = 'vmdk-disk',
   checkMarkOutline = 'checkmark--outline',
-  warningAlt = 'warning--alt'
+  warningAlt = 'warning--alt',
+  arrowUpRight = 'arrow--up-right',
+  inProgress = 'in-progress'
 }
 
 export enum IconSize {
@@ -155,5 +157,7 @@ export const ICON_TYPE = {
   plug: 'plug',
   vmdkDisk: 'vmdk-disk',
   warningAlt: 'warning--alt',
-  checkMarkOutline: 'checkmark--outline'
+  checkMarkOutline: 'checkmark--outline',
+  arrowUpRight: ' arrow--up-right',
+  inProgress: 'in-progress'
 } as const;

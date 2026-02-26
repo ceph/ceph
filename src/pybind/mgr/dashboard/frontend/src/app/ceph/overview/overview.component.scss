@@ -15,4 +15,32 @@
   &-check-description {
     color: var(--cds-text-secondary);
   }
+
+  &-pg-side-panel-rw {
+    padding: var(--cds-spacing-04);
+    background-color: var(--cds-layer-01);
+    width: 100%;
+  }
+
+  &-pg-side-panel-rw-item {
+    max-block-size: fit-content;
+    padding-left: var(--cds-spacing-04);
+  }
+
+  &-pg-side-panel-rw-item--border {
+    border-right: 1px solid var(--cds-border-subtle-01);
+  }
+
+  // Overrides
+  cds-panel .cds--header-panel {
+    background-color: var(--cds-background);
+  }
+
+  cds-panel .panel-content {
+    padding: 0 !important;
+  }
+
+  cds-panel .panel-header {
+    margin-bottom: var(--cds-spacing-03);
+  }
 }
