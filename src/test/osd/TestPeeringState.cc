@@ -1619,9 +1619,9 @@ protected:
         continue;
       }
       for (auto it = ls.begin(); it != ls.end();) {
-        auto m = *it;
+        MessageRef m = *it;
         it = ls.erase(it);
-        MOSDPeeringOp *pm = static_cast<MOSDPeeringOp*>(m.detach());
+        MOSDPeeringOp *pm = static_cast<MOSDPeeringOp*>(m.get());
         dout(0) << __func__ << " sending from osd." << fromosd << " to osd." << osd << " " << *pm << dendl;
         ceph_msg_header h = pm->get_header();
         h.src.num = fromosd;
@@ -1629,10 +1629,11 @@ protected:
 #if WITH_CRIMSON
         pm->set_features(CEPH_FEATURES_ALL);
 #else
-        ConnectionRef c = new MockConnection();
+        ConnectionRef c = ceph::make_ref<MockConnection>();
         pm->set_connection(c);
 #endif
         get_ps(osd)->handle_event(PGPeeringEventRef(pm->get_event()), get_ctx(osd));
+        // MessageRef m goes out of scope here, automatically releasing the reference
         did_work = true;
         if (num_messages > 0 && --num_messages == 0) {
           return did_work;
@@ -1673,13 +1674,12 @@ protected:
         continue;
       }
       for (auto it = ls.begin(); it != ls.end();) {
-        auto mr = *it;
-        auto m = mr.detach();
+        MessageRef m = *it;
         it = ls.erase(it);
         // TODO : Should handle messages other than MOSDPeeringOp events, however
         // for now this seems to be sufficient
         dout(0) << __func__ << " message type = " << m->get_type() << dendl;
-        MOSDPeeringOp *pm = static_cast<MOSDPeeringOp*>(m);
+        MOSDPeeringOp *pm = static_cast<MOSDPeeringOp*>(m.get());
         dout(0) << __func__ << " sending from osd." << fromosd << " to osd." << osd << " " << *pm << dendl;
         ceph_msg_header h = pm->get_header();
         h.src.num = fromosd;
@@ -1687,10 +1687,11 @@ protected:
 #if WITH_CRIMSON
         pm->set_features(CEPH_FEATURES_ALL);
 #else
-        ConnectionRef c = new MockConnection();
+        ConnectionRef c = ceph::make_ref<MockConnection>();
         pm->set_connection(c);
 #endif
         get_ps(osd)->handle_event(PGPeeringEventRef(pm->get_event()), get_ctx(osd));
+        // MessageRef m goes out of scope here, automatically releasing the reference
         did_work = true;
         if (num_messages > 0 && --num_messages == 0) {
           return did_work;
@@ -2427,7 +2428,17 @@ protected:
   void TearDown() override
   {
     osd_peeringstate.clear();
+    // Clear any undispatched messages in PeeringCtx to prevent leaks
+    for (auto& [osd, ctx] : osd_peeringctx) {
+      ctx->message_map.clear();
+    }
     osd_peeringctx.clear();
+    // Clear any undispatched messages and events to prevent leaks
+    for (auto& [osd, listener] : listeners) {
+      listener->messages.clear();
+      listener->events.clear();
+      listener->stalled_events.clear();
+    }
     listeners.clear();
     dpp.clear();
   }
