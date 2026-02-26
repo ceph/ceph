@@ -1066,7 +1066,7 @@ class RedmineUpkeep:
             if current_status_id != REDMINE_STATUS_ID_RESOLVED:
                 issue_update.logger.info("No backports defined. Setting status to 'Resolved'.")
 
-                if self.pull_request_id:
+                if self.pull_request_id and issue_update.issue.tracker.id != REDMINE_TRACKER_ID_BACKPORT:
                     comment_body = f"""
                         This is an automated message by src/script/redmine-upkeep.py.
 
