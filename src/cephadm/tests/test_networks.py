@@ -285,3 +285,20 @@ fe80000000000000505400fffe04c154 03 40 20 80     eth1
             assert json.loads(capsys.readouterr().out) == {
                 '10.4.0.1/32': {'tun0': ['10.4.0.2']}
             }
+
+    def test_build_addrv_params_brackets_ipv6_endpoints_correctly(self):
+        from cephadmlib.net_utils import build_addrv_params, EndPoint
+
+        # IPv6 must be emitted as vX:[ip]:port (NOT vX:ip:port).
+        eps = [EndPoint('2001:db8:100::10', 3300), EndPoint('2001:db8:100::10', 6789)]
+        arg = build_addrv_params(eps)
+
+        assert arg == '[v2:[2001:db8:100::10]:3300,v1:[2001:db8:100::10]:6789]'
+
+    def test_build_addrv_params_ipv4_is_not_bracketed(self):
+        from cephadmlib.net_utils import build_addrv_params, EndPoint
+
+        eps = [EndPoint('192.168.100.100', 3300), EndPoint('192.168.100.100', 6789)]
+        arg = build_addrv_params(eps)
+
+        assert arg == '[v2:192.168.100.100:3300,v1:192.168.100.100:6789]'

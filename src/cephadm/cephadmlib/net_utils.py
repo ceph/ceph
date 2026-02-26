@@ -307,7 +307,8 @@ def build_addrv_params(addrv: List[EndPoint]) -> str:
         else:
             ver = 'v2'  # default mon protocol version if port is not provided
             logger.warning(f'Using msgr2 protocol for unrecognized port {ep}')
-        addr_arg_list.append(f'{ver}:{ep.ip}:{ep.port}')
+        ip = wrap_ipv6(ep.ip) if is_ipv6(ep.ip) else ep.ip
+        addr_arg_list.append(f'{ver}:{ip}:{ep.port}')
 
     addr_arg = '[{0}]'.format(','.join(addr_arg_list))
     return addr_arg
