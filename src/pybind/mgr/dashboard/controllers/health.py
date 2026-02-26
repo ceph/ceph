@@ -403,7 +403,8 @@ class Health(BaseController):
             summary['pgmap'] = {
                 'pgs_by_state': data.get('pgmap', {}).get('pgs_by_state', []),
                 'num_pools': data.get('pgmap', {}).get('num_pools'),
-                'num_pgs': data.get('pgmap', {}).get('num_pgs'),
+                'write_bytes_sec': data.get('pgmap', {}).get('write_bytes_sec'),
+                'read_bytes_sec': data.get('pgmap', {}).get('read_bytes_sec'),
                 'bytes_used': data.get('pgmap', {}).get('bytes_used'),
                 'bytes_total': data.get('pgmap', {}).get('bytes_total'),
             }

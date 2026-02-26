@@ -114,7 +114,7 @@ describe('OverviewComponent', () => {
       );
       expect(vm.checks[0].icon).toEqual(expect.any(String));
 
-      expect(vm.health).toEqual(HealthMap['HEALTH_OK']);
+      expect(vm.clusterHealth).toEqual(HealthMap['HEALTH_OK']);
 
       expect(vm.mon).toEqual(
         expect.objectContaining({
@@ -198,9 +198,9 @@ describe('OverviewComponent', () => {
   // -----------------------------
   it('should toggle panel open/close', () => {
     expect(component.isHealthPanelOpen).toBe(false);
-    component.togglePanel();
+    component.toggleHealthPanel();
     expect(component.isHealthPanelOpen).toBe(true);
-    component.togglePanel();
+    component.toggleHealthPanel();
     expect(component.isHealthPanelOpen).toBe(false);
   });
 
