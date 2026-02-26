@@ -220,7 +220,8 @@ fmt::println("JFW: JSON error -- bytes_written = {}, input.size() = {}. Input:\n
    if (boost::json::error::syntax == ec && 0 == bytes_written) {
 fmt::println(" JFW: from syntax, trying again...");
     // This feels very uncomforable, but it's what the old library basically always did as far as I can tell!
-    // In this case, we don't try to parse a JSON value out of it:
+    // In this case, we don't try to parse a JSON value out of it as it would simply fail (there are still no
+    // delimiters):
     data_out = input;
 
     return true; 
