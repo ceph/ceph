@@ -86,7 +86,7 @@ namespace io_sequence {
 namespace tester {
 // Choices for min and max object size
 inline static constexpr size_t object_size_array_size = 10;
-inline static constexpr std::array<std::pair<int, int>, object_size_array_size>
+inline constexpr std::array<std::pair<int, int>, object_size_array_size>
     object_size_choices = {{{1, 32},  // Default - best for boundary checking
                           {12, 14},
                           {28, 30},
@@ -105,13 +105,13 @@ using SelectObjectSize =
 
 // Choices for block size
 inline static constexpr int block_size_array_size = 5;
-inline static constexpr std::array<uint64_t, block_size_array_size> block_size_choices = {
+inline constexpr std::array<uint64_t, block_size_array_size> block_size_choices = {
     {2048,  // Default - test boundaries for EC 4K chunk size
      512, 3767, 4096, 32768}};
 
 // Choices for block size
 inline static constexpr int block_size_array_size_stable = 2;
-inline static constexpr std::array<uint64_t, block_size_array_size_stable> block_size_choices_stable = {
+inline constexpr std::array<uint64_t, block_size_array_size_stable> block_size_choices_stable = {
   {2048,  // Default - test boundaries for EC 4K chunk size
    32768}};
 
@@ -125,7 +125,7 @@ using SelectBlockSize =
 
 // Choices for number of threads
 inline static constexpr int thread_array_size = 4;
-inline static constexpr std::array<int, thread_array_size> thread_count_choices = {
+inline constexpr std::array<int, thread_array_size> thread_count_choices = {
     {1,  // Default
      2, 4, 8}};
 
@@ -145,11 +145,11 @@ class SelectSeqRange
 
 // Choices for plugin
 inline static constexpr int plugin_array_size = 5;
-inline static constexpr std::array<std::string_view, plugin_array_size>
+inline constexpr std::array<std::string_view, plugin_array_size>
     plugin_choices = {{"jerasure", "isa", "clay", "shec", "lrc"}};
 
 inline static constexpr int plugin_array_size_stable = 2;
-inline static constexpr std::array<std::string_view, plugin_array_size_stable>
+inline constexpr std::array<std::string_view, plugin_array_size_stable>
     plugin_choices_stable = {{"jerasure", "isa"}};
 
 using SelectErasurePlugin =
