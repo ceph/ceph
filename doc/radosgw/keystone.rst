@@ -181,6 +181,12 @@ S3 API (with AWS-like access and secret keys), if the ``rgw s3 auth
 use keystone`` option is set. For details, see
 :doc:`s3/authentication`.
 
+Requests authenticated via Keystone expose the Keystone role names in the
+IAM policy environment as the condition key ``keystone:role``. It can be
+used in bucket policies and idenitity policies to allow or deny access by
+role (e.g. ``StringEquals`` on ``keystone:role``).
+See :doc:`bucketpolicy` for list of supported condition keys.
+
 Service Token Support
 ---------------------
 
