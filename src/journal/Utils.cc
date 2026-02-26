@@ -13,7 +13,11 @@ std::string get_object_name(const std::string &prefix, uint64_t number) {
 }
 
 std::string unique_lock_name(const std::string &name, void *address) {
+#ifdef CEPH_LOCKSTAT
+  return name;
+#else
   return name + " (" + stringify(address) + ")";
+#endif
 }
 
 void rados_ctx_callback(rados_completion_t c, void *arg) {
