@@ -188,6 +188,8 @@ list<rgw_bucket_dir_entry_meta> rgw_bucket_dir_entry_meta::generate_test_instanc
   m.owner = "owner";
   m.owner_display_name = "display name";
   m.content_type = "content/type";
+  m.restore_status = 2; // CloudRestored
+  m.restore_expiry_date = ceph::real_time{std::chrono::seconds(1234567890)};
   o.push_back(std::move(m));
   o.emplace_back();
   return o;
@@ -209,6 +211,8 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   encode_json("accounted_size", accounted_size, f);
   encode_json("user_data", user_data, f);
   encode_json("appendable", appendable, f);
+  encode_json("restore_status", static_cast<int>(restore_status), f);
+  encode_json("restore_expiry_date", restore_expiry_date, f);
 }
 
 void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
@@ -227,6 +231,10 @@ void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("accounted_size", accounted_size, obj);
   JSONDecoder::decode_json("user_data", user_data, obj);
   JSONDecoder::decode_json("appendable", appendable, obj);
+  int rs_val = 0;
+  JSONDecoder::decode_json("restore_status", rs_val, obj);
+  restore_status = static_cast<uint8_t>(rs_val);
+  JSONDecoder::decode_json("restore_expiry_date", restore_expiry_date, obj);
 }
 
 list<rgw_bucket_dir_entry> rgw_bucket_dir_entry::generate_test_instances()
