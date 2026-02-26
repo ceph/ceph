@@ -24,7 +24,7 @@ void dump_metric_value(
 {
   f->open_object_section(full_name);
   for (const auto& [key, value] : labels) {
-    f->dump_string(key, value);
+    f->dump_string(key, value.value());
   }
   auto value_name = "value";
   switch (auto v = metric(); v.type()) {
