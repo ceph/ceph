@@ -16,7 +16,7 @@
     </button>
   </ng-template>
   <!-- TOTAL COUNT -->
-  @if (vm?.total) {
+  @if (vm?.total || vm?.total === 0) {
   <div>
     <span class="cds--type-heading-07">{{ vm.total }}</span>
     <cd-icon [type]="vm.icon"></cd-icon>

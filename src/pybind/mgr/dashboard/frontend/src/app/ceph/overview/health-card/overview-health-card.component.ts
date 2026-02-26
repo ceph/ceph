@@ -54,34 +54,6 @@ type HwRowVM = {
   error: number;
 };
 
-const DATA_RESILIENCY = {
-  ok: {
-    icon: 'success',
-    title: $localize`Data is fully replicated and available.`,
-    description: $localize`All replicas are in place and I/O is operating normally. No action is required.`
-  },
-  progress: {
-    icon: 'sync',
-    title: $localize`Data integrity checks in progress`,
-    description: $localize`Ceph is running routine consistency checks on stored data and metadata to ensure data integrity. Data remains safe and accessible.`
-  },
-  warn: {
-    icon: 'warning',
-    title: $localize`Restoring data redundancy`,
-    description: $localize`Some data replicas are missing or not yet in their final location. Ceph is actively rebalancing data to return to a healthy state.`
-  },
-  warnDataLoss: {
-    icon: 'warning',
-    title: $localize`Status unavailable for some data`,
-    description: $localize`Ceph cannot reliably determine the current state of some data. Availability may be affected.`
-  },
-  error: {
-    icon: 'error',
-    title: $localize`Data unavailable or inconsistent, manual intervention required`,
-    description: $localize`Some data is currently unavailable or inconsistent. Ceph could not automatically restore these resources, and manual intervention is required to restore data availability and consistency.`
-  }
-};
-
 @Component({
   selector: 'cd-overview-health-card',
   imports: [
@@ -113,10 +85,10 @@ export class OverviewHealthCardComponent {
 
   @Input({ required: true }) vm!: HealthCardVM;
   @Output() viewIncidents = new EventEmitter<void>();
+  @Output() viewPGStates = new EventEmitter<void>();
   @Output() activeSectionChange = new EventEmitter<HealthCardTabSection | null>();
 
-  activeSection: HealthCardTabSection | null = null;
-  data = DATA_RESILIENCY;
+  activeSection: HealthCardTabSection | null = 'resiliency';
 
   healthItems: HealthItemConfig[] = [
     { key: 'mon', label: $localize`Monitor` },
@@ -130,6 +102,14 @@ export class OverviewHealthCardComponent {
     this.activeSectionChange.emit(this.activeSection);
   }
 
+  onViewIncidentsClick() {
+    this.viewIncidents.emit();
+  }
+
+  onViewPGStatesClick() {
+    this.viewPGStates.emit();
+  }
+
   readonly data$: Observable<OverviewHealthData> = combineLatest([
     this.summaryService.summaryData$.pipe(filter((summary): summary is Summary => !!summary)),
     this.upgradeService.listCached().pipe(
@@ -137,10 +117,6 @@ export class OverviewHealthCardComponent {
       catchError(() => of(null))
     )
   ]).pipe(map(([summary, upgrade]) => ({ summary, upgrade })));
-
-  onViewIncidentsClick() {
-    this.viewIncidents.emit();
-  }
 
   private readonly permissions = this.authStorageService.getPermissions();
 

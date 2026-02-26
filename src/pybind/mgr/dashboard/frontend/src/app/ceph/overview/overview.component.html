@@ -3,14 +3,15 @@
 <div cdsGrid
      [fullWidth]="true"
      [narrow]="true"
-     class="cds-mt-5 cds-mb-5">
+     class="cds-mt-5 cds-mb-5 overview">
   <div cdsRow>
     <div cdsCol
          class="cds-mb-5"
          [columnNumbers]="{lg: 11}">
       <cd-overview-health-card
           [vm]="health"
-          (viewIncidents)="togglePanel()"
+          (viewIncidents)="toggleHealthPanel()"
+          (viewPGStates)="togglePGStatesPanel()"
           (activeSectionChange)="activeHealthTab = $event"
         ></cd-overview-health-card>
     </div>
@@ -43,13 +44,13 @@
     [headerText]="'Health incidents ('+ health?.incidents +')'"
     [expanded]="isHealthPanelOpen"
     size="md"
-    (closed)="togglePanel()">
+    (closed)="toggleHealthPanel()">
     <div panel-header-description
          class="cds--type-body-01">
       <span i18n>Health incidents are Ceph health checks warnings indicating conditions that require attention and remain until resolved.</span>
     </div>
     <div class="panel-content">
-      @for (check of health?.checks; track key) {
+      @for (check of health?.checks; track check.name) {
       <div>
         <div class="overview-check-header">
           <cd-icon [type]="check?.icon"></cd-icon>
@@ -60,6 +61,40 @@
         <p class="cds--type-body-compact-01 overview-check-description">{{ check?.description }}</p>
       </div>
       }
+    </div>
+  </cd-side-panel>
+}
+@if (isPGStatePanelOpen) {
+  <cd-side-panel
+    [headerText]="'Placement groups  ('+ health?.pgs?.total +')'"
+    [expanded]="isPGStatePanelOpen"
+    size="md"
+    (closed)="togglePGStatesPanel()">
+    <div panel-header-description
+         class="cds--type-body-01">
+      <span i18n>
+        Placement groups are how Ceph groups and distributes data across storage devices to manage replication, recovery, and performance.
+      </span>
+    </div>
+    <div class="panel-content">
+      <div
+        class="overview-pg-side-panel-rw cds-mb-4"
+        cdsStack="horizontal"
+        gap="4">
+        @for (data of health?.pgs?.io; track $index ; let isLast = $last) {
+        <div
+          class="overview-pg-side-panel-rw-item"
+          [class.overview-pg-side-panel-rw-item--border]="!isLast">
+          <p class="cds--type-label-01 cds-mb-2">{{data.label}}</p>
+          <p class="cds--type-heading-03 cds-mb-0">{{data.value}}</p>
+        </div>
+        }
+      </div>
+      <cd-table
+         [data]="health?.pgs?.states"
+         [columns]="tableColumns"
+         size="xs">
+      </cd-table>
     </div>
   </cd-side-panel>
 }

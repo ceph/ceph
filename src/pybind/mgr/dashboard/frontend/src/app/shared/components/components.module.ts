@@ -117,6 +117,8 @@ import Plug16 from '@carbon/icons/es/plug/16';
 import VmdkDisk16 from '@carbon/icons/es/vmdk-disk/16';
 import WarningAlt16 from '@carbon/icons/es/warning--alt/16';
 import CheckMarkOutline16 from '@carbon/icons/es/checkmark--outline/16';
+import ArrowUpRight16 from '@carbon/icons/es/arrow--up-right/16';
+import InProgress16 from '@carbon/icons/es/in-progress/16';
 
 @NgModule({
   imports: [
@@ -280,7 +282,9 @@ export class ComponentsModule {
       Plug16,
       VmdkDisk16,
       WarningAlt16,
-      CheckMarkOutline16
+      CheckMarkOutline16,
+      ArrowUpRight16,
+      InProgress16
     ]);
   }
 }
