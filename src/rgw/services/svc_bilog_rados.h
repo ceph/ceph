@@ -153,7 +153,7 @@ class RGWSI_BILog_RADOS_FIFO : public RGWSI_BILog_RADOS
 
   // helper method to create FIFO wrapper
   std::unique_ptr<RGWBILogFIFO> get_or_create_fifo(const DoutPrefixProvider *dpp, 
-                                                   const RGWBucketInfo& bucket_info) const;
+                                                   const RGWBucketInfo& bucket_info);
 
 public:
   RGWSI_BILog_RADOS_FIFO(CephContext *cct, neorados::RADOS r) : RGWSI_BILog_RADOS(cct), rados(std::move(r)) {}

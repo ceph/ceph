@@ -8803,8 +8803,10 @@ static RGWBILogUpdateBatch get_or_create_fifo_bilog_op(const DoutPrefixProvider 
     throw std::system_error(-ret, std::system_category(), "Failed to open bucket index");
   }
 
+  maybe_warn_about_blocking(dpp);
+  rgw_pool pool(index_pool.get_pool_name()); 
   try {
-    auto loc = rgw::init_iocontext(dpp, r, index_pool,
+    auto loc = rgw::init_iocontext(dpp, r, pool,
                                    rgw::create, ceph::async::use_blocked);
     
     return RGWBILogUpdateBatch{dpp, r, std::move(loc), bucket_info};
@@ -11396,8 +11398,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
        * marked as !exists and got deleted */
     if (list_state.exists) {
       ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ << ": index list state exists" << dendl_bitx;
-      /* FIXME: what should happen now? 
-      /* should we add bilog here?
+      /* FIXME: what should happen now? should we add bilog here?
         if (suggest_flag) {
           bilog_handler.add_maybe_flush(CLS_RGW_OP_ADD, list_state,
                                       get_zones_trace(svc.zone->get_zone(),

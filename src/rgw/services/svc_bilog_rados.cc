@@ -412,7 +412,7 @@ void RGWSI_BILog_RADOS_FIFO::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
 
 std::unique_ptr<RGWBILogFIFO>
 RGWSI_BILog_RADOS_FIFO::get_or_create_fifo(const DoutPrefixProvider *dpp,
-                                          const RGWBucketInfo& bucket_info) const {
+                                          const RGWBucketInfo& bucket_info) {
   librados::IoCtx index_pool;
   std::string bucket_oid;
   int ret = svc.bi->open_bucket_index(dpp, bucket_info, &index_pool, &bucket_oid);
@@ -421,12 +421,12 @@ RGWSI_BILog_RADOS_FIFO::get_or_create_fifo(const DoutPrefixProvider *dpp,
                            "Failed to open bucket index");
   }
 
+  rgw_pool pool(index_pool.get_pool_name());
   try {
-    
-    auto loc = rgw::init_iocontext(dpp, rados, index_pool,
+    auto loc = rgw::init_iocontext(dpp, rados, pool,
                                    rgw::create, ceph::async::use_blocked);
     
-    return std::make_unique<RGWBILogFIFO>(rados, std::move(loc), bucket_info);
+    return std::make_unique<RGWBILogFIFO>(dpp, rados, std::move(loc), bucket_info);
   } catch (const std::exception& e) {
     ldpp_dout(dpp, 0) << "ERROR: failed to initialize ioctx: "
                       << e.what() << dendl;
