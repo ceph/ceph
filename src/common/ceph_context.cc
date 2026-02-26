@@ -72,6 +72,10 @@
 #include "common/cputrace.h"
 #endif
 
+#ifdef CEPH_LOCKSTAT
+#include "common/lockstat.h"
+#endif
+
 #include <iostream>
 #include <pthread.h>
 
@@ -708,8 +712,78 @@ int CephContext::_do_command(
       cputrace_reset(f);
     }
 #endif
+#ifdef CEPH_LOCKSTAT
+    else if (command == "lockstat start") {
+      if (!lockstat_detail::LockStatTraits::lockstat_global_enable()) {
+        f->dump_format(
+            "status",
+            "Error: lockstat is not enabled. Is environment variable "
+            "ENABLE_LOCKSTAT=true?");
+      } else {
+        if (!lockstat_detail::LockStat::is_lockstat_enabled()) {
+          lockstat_detail::lockstat_clock::duration threshold{0};
+          std::string threshold_str;
+
+          if (cmd_getval(cmdmap, "threshold", threshold_str)) {
+            threshold = std::chrono::duration_cast<lockstat_detail::lockstat_clock::duration>(
+                std::chrono::microseconds(std::stoi(threshold_str)));
+          }
+          lockstat_detail::LockStatEntry::start(threshold);
+          f->dump_format("status", "lockstat is started with threshold %lld(us)",
+            std::chrono::duration_cast<std::chrono::microseconds>(threshold).count());
+        } else {
+          f->dump_format("status", "Error: lockstat is already started");
+        }
+      }
+    } else if (command == "lockstat stop") {
+      if (!lockstat_detail::LockStatTraits::lockstat_global_enable()) {
+        f->dump_format(
+            "status",
+            "Error: lockstat is not enabled. Is environment variable "
+            "ENABLE_LOCKSTAT=true?");
+      } else {
+        if (lockstat_detail::LockStat::is_lockstat_enabled()) {
+          lockstat_detail::LockStatEntry::stop();
+          f->dump_format("status", "lockstat is stopped");
+        } else {
+          f->dump_format("status", "Error: lockstat is not started");
+        }
+      }
+    } else if (command == "lockstat reset") {
+      if (!lockstat_detail::LockStatTraits::lockstat_global_enable()) {
+        f->dump_format(
+            "status",
+            "Error: lockstat is not enabled. Is environment variable "
+            "ENABLE_LOCKSTAT=true?");
+      } else {
+        if (lockstat_detail::LockStat::is_lockstat_enabled()) {
+          lockstat_detail::LockStatEntry::reset_data();
+          f->dump_format("status", "lockstat reset");
+        } else {
+          f->dump_format("status", "Error: lockstat is not started");
+        }
+      }
+    } else if (command == "lockstat dump") {
+      if (!lockstat_detail::LockStatTraits::lockstat_global_enable()) {
+        f->dump_format(
+            "status",
+            "Error: lockstat is not enabled. Is environment variable "
+            "ENABLE_LOCKSTAT=true?");
+      } else {
+        if (lockstat_detail::LockStat::is_lockstat_enabled()) {
+          std::string logger;
+          cmd_getval(cmdmap, "logger", logger);
+          lockstat_detail::LockStatEntry::dump_formatted(f);
+        } else {
+          f->dump_format("status", "Error: lockstat is not started");
+        }
+      }
+
+    }
+
+#endif
     else {
-      ceph_abort_msg("registered under wrong command?");    
+      ceph_abort_msg("registered under wrong command?");
     }
     f->close_section();
   }
@@ -809,6 +883,19 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command("cputrace stop", _admin_hook, "stop cpu profiling");
   _admin_socket->register_command("cputrace reset", _admin_hook, "reset cpu profiling");
   _admin_socket->register_command("cputrace dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump cpu profiling results");
+#endif
+#ifdef CEPH_LOCKSTAT
+  _admin_socket->register_command(
+      "lockstat start name=threshold,type=CephString,req=false", _admin_hook,
+      "start lockstat profiling optional threshold in microseconds");
+  _admin_socket->register_command(
+      "lockstat stop", _admin_hook, "stop lockstat profiling");
+  _admin_socket->register_command(
+      "lockstat reset", _admin_hook, "reset lockstat profiling");
+  _admin_socket->register_command(
+      "lockstat dump name=logger,type=CephString,req=false "
+      "name=counter,type=CephString,req=false",
+      _admin_hook, "dump lockstat profiling results");
 #endif
   _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
   _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);

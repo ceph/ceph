@@ -43,6 +43,7 @@ in the body of the message.
    :glob:
 
    *
+   lockstat
    osd_internals/index*
    mds_internals/index*
    radosgw/index*

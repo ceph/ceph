@@ -15,8 +15,6 @@
 
 #include "common/mutex_debug.h"
 
-#include <cstdint>
-
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/perf_counters.h"
@@ -29,52 +27,43 @@ enum {
   l_mutex_last
 };
 
-
-#ifdef CEPH_LOCKSTAT
-
-mutex_debugging_base::mutex_debugging_base(
-    lockstat_detail::LockStatTraits::LockStatType lockType,
-    const ceph::lockstat_detail::LockStatTraits* traits,
-    bool ld,
-    bool bt) :
-  LockStat(lockType, traits),
-  group(traits->get_unique_name(reinterpret_cast<uintptr_t>(this))),
-  lockdep(ld),
-  backtrace(bt)
+mutex_debugging_base::mutex_debugging_base(std::string group, bool ld, bool bt) :
+  group(std::move(group)), lockdep(ld), backtrace(bt)
 {
   if (_enable_lockdep()) {
     _register();
   }
 }
-#else
-mutex_debugging_base::mutex_debugging_base(std::string group, bool ld, bool bt)
-  : group(std::move(group)),
-    lockdep(ld),
-    backtrace(bt)
-{
-  if (_enable_lockdep()) {
-    _register();
-  }
-}
-#endif
 
-mutex_debugging_base::~mutex_debugging_base() {
+mutex_debugging_base::~mutex_debugging_base()
+{
   ceph_assert(nlock == 0);
   if (_enable_lockdep()) {
     lockdep_unregister(id);
   }
 }
 
-void mutex_debugging_base::_register() {
+void
+mutex_debugging_base::_register()
+{
   id = lockdep_register(group.c_str());
 }
-void mutex_debugging_base::_will_lock(bool recursive) { // about to lock
+
+void
+mutex_debugging_base::_will_lock(bool recursive)
+{ // about to lock
   id = lockdep_will_lock(group.c_str(), id, backtrace, recursive);
 }
-void mutex_debugging_base::_locked() {    // just locked
+
+void
+mutex_debugging_base::_locked()
+{ // just locked
   id = lockdep_locked(group.c_str(), id, backtrace);
 }
-void mutex_debugging_base::_will_unlock() {  // about to unlock
+
+void
+mutex_debugging_base::_will_unlock()
+{ // about to unlock
   id = lockdep_will_unlock(group.c_str(), id);
 }
 
