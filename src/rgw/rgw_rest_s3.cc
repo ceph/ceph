@@ -4,6 +4,7 @@
 #include <boost/algorithm/string/case_conv.hpp>
 #include <cstdint>
 #include <errno.h>
+#include <algorithm>
 #include <array>
 #include <string.h>
 #include <string_view>
@@ -1883,6 +1884,15 @@ int RGWListBucket_ObjStore_S3::get_common_params()
      shard_id = s->bucket_instance_shard_id;
     }
   }
+
+  // Parse x-amz-optional-object-attributes header.
+  const char* opt_attrs = s->info.env->get("HTTP_X_AMZ_OPTIONAL_OBJECT_ATTRIBUTES");
+  if (opt_attrs) {
+    auto tokens = ceph::split(opt_attrs, ", ");
+    fetch_restore_status =
+        std::find(tokens.begin(), tokens.end(), "RestoreStatus") != tokens.end();
+  }
+
   return 0;
 }
 
@@ -1916,6 +1926,30 @@ if(!continuation_token_exist) {
   marker = continuation_token;
 }
 return 0;
+}
+
+/**
+ * Emit <RestoreStatus> XML element for a listing entry.
+ * Only emits for RestoreAlreadyInProgress and CloudRestored states.
+ */
+static void dump_restore_status(req_state* s,
+                                const rgw_bucket_dir_entry_meta& meta)
+{
+  using RGWRestoreStatus = rgw::sal::RGWRestoreStatus;
+  auto status = static_cast<RGWRestoreStatus>(meta.restore_status);
+
+  if (status != RGWRestoreStatus::RestoreAlreadyInProgress &&
+      status != RGWRestoreStatus::CloudRestored) {
+    return;
+  }
+
+  bool in_progress = (status == RGWRestoreStatus::RestoreAlreadyInProgress);
+  s->formatter->open_object_section("RestoreStatus");
+  s->formatter->dump_bool("IsRestoreInProgress", in_progress);
+  if (!in_progress && meta.restore_expiry_date != ceph::real_time{}) {
+    dump_time(s, "RestoreExpiryDate", meta.restore_expiry_date);
+  }
+  s->formatter->close_section(); // RestoreStatus
 }
 
 void RGWListBucket_ObjStore_S3::send_common_versioned_response()
@@ -1999,6 +2033,9 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
         s->formatter->dump_int("Size", iter->meta.accounted_size);
         auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
         s->formatter->dump_string("StorageClass", storage_class.c_str());
+        if (fetch_restore_status) {
+          dump_restore_status(s, iter->meta);
+        }
       }
       dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (iter->meta.appendable) {
@@ -2091,6 +2128,9 @@ void RGWListBucket_ObjStore_S3::send_response()
       s->formatter->dump_int("Size", iter->meta.accounted_size);
       auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
       s->formatter->dump_string("StorageClass", storage_class.c_str());
+      if (fetch_restore_status) {
+        dump_restore_status(s, iter->meta);
+      }
       dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (s->system_request) {
 	s->formatter->dump_string("RgwxTag", iter->tag);
@@ -2166,6 +2206,9 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
         s->formatter->dump_int("Size", iter->meta.accounted_size);
         auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
         s->formatter->dump_string("StorageClass", storage_class.c_str());
+        if (fetch_restore_status) {
+          dump_restore_status(s, iter->meta);
+        }
       }
       if (fetchOwner == true) {
         dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
@@ -2235,6 +2278,9 @@ void RGWListBucket_ObjStore_S3v2::send_response()
       s->formatter->dump_int("Size", iter->meta.accounted_size);
       auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
       s->formatter->dump_string("StorageClass", storage_class.c_str());
+      if (fetch_restore_status) {
+        dump_restore_status(s, iter->meta);
+      }
       if (fetchOwner == true) {
         dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       }
