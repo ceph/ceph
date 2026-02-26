@@ -112,6 +112,7 @@ class DistroKind(StrEnum):
     UBUNTU2004 = "ubuntu20.04"
     UBUNTU2204 = "ubuntu22.04"
     UBUNTU2404 = "ubuntu24.04"
+    UBUNTU2604 = "ubuntu26.04"
     DEBIAN12 = "debian12"
     DEBIAN13 = "debian13"
 
@@ -162,6 +163,9 @@ class DistroKind(StrEnum):
             str(cls.UBUNTU2404): cls.UBUNTU2404,
             "ubuntu-noble": cls.UBUNTU2404,
             "noble": cls.UBUNTU2404,
+            str(cls.UBUNTU2604): cls.UBUNTU2604,
+            "ubuntu-resolute": cls.UBUNTU2604,
+            "resolute": cls.UBUNTU2604,
             # debian
             str(cls.DEBIAN12): cls.DEBIAN12,
             "debian-bookworm": cls.DEBIAN12,
@@ -196,6 +200,7 @@ class DefaultImage(StrEnum):
     UBUNTU2004 = "docker.io/ubuntu:20.04"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
     UBUNTU2404 = "docker.io/ubuntu:24.04"
+    UBUNTU2604 = "docker.io/ubuntu:26.04"
     # debian
     DEBIAN12 = "docker.io/debian:bookworm"
     DEBIAN13 = "docker.io/debian:trixie"
