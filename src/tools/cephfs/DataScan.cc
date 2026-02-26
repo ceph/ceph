@@ -600,13 +600,8 @@ int DataScan::scan_extents()
   progress_tracker->set_enable_progress_update(true);
   progress_tracker->start(total_objects);
 
-  if (total_objects == 0) {
-    dout(4) << "No objects found in data pools" << dendl;
-    return 0;
-  }
-
   for (auto ioctx : data_ios) {
-    int r = forall_objects(*ioctx, false, [this, ioctx, &progress_tracker](
+    int r = forall_objects(*ioctx, false, [this, ioctx, &progress_tracker, &total_objects](
         std::string const &oid,
         uint64_t obj_name_ino,
         uint64_t obj_name_offset) -> int
@@ -650,6 +645,11 @@ int DataScan::scan_extents()
       }
 
       progress_tracker->increment();
+      uint64_t _total_objects = get_pool_objects({&data_io});
+      if (_total_objects > total_objects) {
+        progress_tracker->set_total(_total_objects);
+        total_objects = _total_objects;
+        }
       progress_tracker->display_progress();
 
       return r;
@@ -864,14 +864,9 @@ int DataScan::scan_inodes()
   progress_tracker->set_enable_progress_update(true);
   progress_tracker->start(total_objects);
 
-  if (total_objects == 0) {
-    dout(4) << "No objects found in data pool" << dendl;
-    return 0;
-  }
-
   r = forall_objects(
       data_io, true,
-      [this, &progress_tracker](
+      [this, &progress_tracker, &total_objects](
           std::string const& oid, uint64_t obj_name_ino,
           uint64_t obj_name_offset) -> int {
         int r = 0;
@@ -1148,6 +1143,11 @@ int DataScan::scan_inodes()
         }
 
         progress_tracker->increment();
+        uint64_t _total_objects = get_pool_objects({&data_io});
+        if (_total_objects > total_objects) {
+          progress_tracker->set_total(_total_objects);
+          total_objects = _total_objects;
+        }
         progress_tracker->display_progress();
 
         return r;
@@ -1162,15 +1162,10 @@ int DataScan::cleanup()
   progress_tracker->set_enable_progress_update(true);
   progress_tracker->start(total_objects);
 
-  if (total_objects == 0) {
-    dout(4) << "No objects found in data pool" << dendl;
-    return 0;
-  }
-
   // We are looking for only zeroth object
   return forall_objects(
       data_io, true,
-      [this, &progress_tracker](
+      [this, &progress_tracker, &total_objects](
           std::string const& oid, uint64_t obj_name_ino,
           uint64_t obj_name_offset) -> int {
         int r = ClsCephFSClient::delete_inode_accumulate_result(data_io, oid);
@@ -1180,6 +1175,11 @@ int DataScan::cleanup()
         }
 
         progress_tracker->increment();
+        uint64_t _total_objects = get_pool_objects({&data_io});
+        if (_total_objects > total_objects) {
+          progress_tracker->set_total(_total_objects);
+          total_objects = _total_objects;
+        }
         progress_tracker->display_progress();
 
         return r;
@@ -1744,10 +1744,6 @@ int DataScan::scan_frags()
   auto progress_tracker = std::make_unique<ProgressTracker>(get_progress_operation_name("scan_frags"));
   progress_tracker->set_enable_progress_update(true);
   progress_tracker->start(total_objects);
-  if (total_objects == 0) {
-    dout(4) << "No objects found in metadata pool" << dendl;
-    return 0;
-  }
 
   bool roots_present;
   int r = driver->check_roots(&roots_present);
@@ -1763,7 +1759,7 @@ int DataScan::scan_frags()
     return -EIO;
   }
 
-  return forall_objects(metadata_io, true, [this, &progress_tracker](
+  return forall_objects(metadata_io, true, [this, &progress_tracker, &total_objects](
         std::string const &oid,
         uint64_t obj_name_ino,
         uint64_t obj_name_offset) -> int
@@ -1903,7 +1899,12 @@ int DataScan::scan_frags()
       }
     }
 
-    progress_tracker->increment();
+    uint64_t total_objects = get_metadata_pool_objects(metadata_io, true);
+    uint64_t _total_objects = get_pool_objects({&metadata_io});
+    if (_total_objects > total_objects) {
+      progress_tracker->set_total(_total_objects);
+      total_objects = _total_objects;
+    }
     progress_tracker->display_progress();
 
     return r;
