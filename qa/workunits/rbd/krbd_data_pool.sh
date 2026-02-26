@@ -109,10 +109,14 @@ rbd pool init ecdata
 ceph osd pool set ecdata allow_ec_overwrites true
 ceph osd pool create rbdnonzero 24 24
 rbd pool init rbdnonzero
+ceph osd pool create rbdec 24 24 erasure teuthologyprofile
+ceph osd pool set rbdec allow_ec_overwrites true || return 1
+ceph osd pool set rbdec allow_ec_optimizations true || return 1
+rbd pool init rbdec
 ceph osd pool create clonesonly 24 24
 rbd pool init clonesonly
 
-for pool in rbd rbdnonzero; do
+for pool in rbd rbdnonzero rbdec; do
     rbd create --size 200 --image-format 1 $pool/img0
     rbd create --size 200 $pool/img1
     rbd create --size 200 --data-pool repdata $pool/img2
