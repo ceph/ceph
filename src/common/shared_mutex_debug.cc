@@ -6,7 +6,20 @@
 #include "common/valgrind.h"
 
 namespace ceph {
-
+#ifdef CEPH_LOCKSTAT
+shared_mutex_debug::shared_mutex_debug(
+    const lockstat_detail::LockStatTraits* traits,
+    bool track_lock,
+    bool enable_lock_dep,
+    bool prioritize_write) :
+  mutex_debugging_base{
+      LockType, traits, enable_lock_dep,
+      false /* backtrace */},
+  track(track_lock)
+{
+  _init(prioritize_write);
+}
+#else
 shared_mutex_debug::shared_mutex_debug(std::string group,
                                        bool track_lock,
                                        bool enable_lock_dep,
@@ -15,6 +28,13 @@ shared_mutex_debug::shared_mutex_debug(std::string group,
                          enable_lock_dep,
                          false /* backtrace */},
     track(track_lock)
+{
+  _init(prioritize_write);
+}
+#endif
+
+void
+shared_mutex_debug::_init(bool prioritize_write)
 {
 #ifdef HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
   if (prioritize_write) {
@@ -49,9 +69,21 @@ void shared_mutex_debug::lock()
   if (_enable_lockdep()) {
     _will_lock();
   }
+#ifdef CEPH_LOCKSTAT
+  const auto wait_start_clock =
+      unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+          ? lockstat_detail::lockstat_clock::now()
+          : lockstat_detail::lockstat_clock::zero();
+#endif
   if (int r = pthread_rwlock_wrlock(&rwlock); r != 0) {
     throw std::system_error(r, std::generic_category());
   }
+#ifdef CEPH_LOCKSTAT
+  if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
+    record_wait_time(
+        lockstat_detail::lockstat_clock::now() - wait_start_clock, lockstat_detail::LockMode::WRITE);
+  }
+#endif
   if (_enable_lockdep()) {
     _locked();
   }
@@ -60,9 +92,23 @@ void shared_mutex_debug::lock()
 
 bool shared_mutex_debug::try_lock()
 {
+#ifdef CEPH_LOCKSTAT
+  const auto wait_start_clock =
+      unlikely(
+          g_start_cycles.load(std::memory_order_relaxed) != lockstat_detail::lockstat_clock::zero())
+          ? lockstat_detail::lockstat_clock::now()
+          : lockstat_detail::lockstat_clock::zero();
+#endif
   int r = pthread_rwlock_trywrlock(&rwlock);
   switch (r) {
   case 0:
+#ifdef CEPH_LOCKSTAT
+    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
+      record_wait_time(
+          lockstat_detail::lockstat_clock::now() - wait_start_clock,
+          lockstat_detail::LockMode::TRY_WRITE);
+    }
+#endif
     if (_enable_lockdep()) {
       _locked();
     }
@@ -92,9 +138,21 @@ void shared_mutex_debug::lock_shared()
   if (_enable_lockdep()) {
     _will_lock();
   }
+#ifdef CEPH_LOCKSTAT
+  const auto wait_start_clock =
+      unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+          ? lockstat_detail::lockstat_clock::now()
+          : lockstat_detail::lockstat_clock::zero();
+#endif
   if (int r = pthread_rwlock_rdlock(&rwlock); r != 0) {
     throw std::system_error(r, std::generic_category());
   }
+#ifdef CEPH_LOCKSTAT
+  if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
+    record_wait_time(
+        lockstat_detail::lockstat_clock::now() - wait_start_clock, lockstat_detail::LockMode::READ);
+  }
+#endif
   if (_enable_lockdep()) {
     _locked();
   }
@@ -106,8 +164,22 @@ bool shared_mutex_debug::try_lock_shared()
   if (_enable_lockdep()) {
     _will_unlock();
   }
+#ifdef CEPH_LOCKSTAT
+  const auto wait_start_clock =
+      unlikely(
+          g_start_cycles.load(std::memory_order_relaxed) != lockstat_detail::lockstat_clock::zero())
+          ? lockstat_detail::lockstat_clock::now()
+          : lockstat_detail::lockstat_clock::zero();
+#endif
   switch (int r = pthread_rwlock_rdlock(&rwlock); r) {
   case 0:
+#ifdef CEPH_LOCKSTAT
+    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
+      record_wait_time(
+          lockstat_detail::lockstat_clock::now() - wait_start_clock,
+          lockstat_detail::LockMode::TRY_READ);
+    }
+#endif
     if (_enable_lockdep()) {
       _locked();
     }

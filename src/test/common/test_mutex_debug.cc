@@ -32,7 +32,7 @@ static bool test_try_lock(Mutex* m) {
 
 template<typename Mutex>
 static void test_lock() {
-  Mutex m("mutex");
+  Mutex m(LOCKSTAT("mutex"));
   auto ttl = &test_try_lock<Mutex>;
 
   m.lock();
@@ -59,7 +59,7 @@ TEST(MutexDebug, Lock) {
 }
 
 TEST(MutexDebugDeathTest, NotRecursive) {
-  ceph::mutex_debug m("foo");
+  ceph::mutex_debug m(LOCKSTAT("foo"));
   // avoid assert during test cleanup where the mutex is locked and cannot be
   // pthread_mutex_destroy'd
   std::unique_lock locker{m};
@@ -73,7 +73,7 @@ TEST(MutexRecursiveDebug, Lock) {
 
 
 TEST(MutexRecursiveDebug, Recursive) {
-  ceph::mutex_recursive_debug m("m");
+  ceph::mutex_recursive_debug m(LOCKSTAT("m"));
   auto ttl = &test_try_lock<mutex_recursive_debug>;
 
   ASSERT_NO_THROW(m.lock());

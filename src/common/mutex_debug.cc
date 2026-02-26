@@ -14,9 +14,12 @@
  */
 
 #include "common/mutex_debug.h"
-#include "common/perf_counters.h"
+
+#include <cstdint>
+
 #include "common/ceph_context.h"
 #include "common/config.h"
+#include "common/perf_counters.h"
 
 namespace ceph {
 namespace mutex_debug_detail {
@@ -26,6 +29,24 @@ enum {
   l_mutex_last
 };
 
+
+#ifdef CEPH_LOCKSTAT
+
+mutex_debugging_base::mutex_debugging_base(
+    lockstat_detail::LockStatTraits::LockStatType lockType,
+    const ceph::lockstat_detail::LockStatTraits* traits,
+    bool ld,
+    bool bt) :
+  LockStat(lockType, traits),
+  group(traits->get_name()),
+  lockdep(ld),
+  backtrace(bt)
+{
+  if (_enable_lockdep()) {
+    _register();
+  }
+}
+#else
 mutex_debugging_base::mutex_debugging_base(std::string group, bool ld, bool bt)
   : group(std::move(group)),
     lockdep(ld),
@@ -35,6 +56,7 @@ mutex_debugging_base::mutex_debugging_base(std::string group, bool ld, bool bt)
     _register();
   }
 }
+#endif
 
 mutex_debugging_base::~mutex_debugging_base() {
   ceph_assert(nlock == 0);
