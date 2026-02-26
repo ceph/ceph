@@ -50,7 +50,7 @@ target_link_libraries(ceph_test_rgw_d4n_directory PRIVATE
   ${EXTRALIBS}
   )
 install(TARGETS ceph_test_rgw_d4n_directory DESTINATION ${CMAKE_INSTALL_BINDIR})
-  
+
 add_executable(ceph_test_rgw_d4n_policy
   test_d4n_policy.cc
   )
@@ -447,3 +447,20 @@ target_link_libraries(unittest_rgw_asio_frontend_timer
   ceph-common
   Boost::context
   ${UNITTEST_LIBS})
+
+if(WITH_TSAN)
+  add_executable(tsan_rgw_timeout_race tsan_rgw_timeout_race.cc)
+  target_include_directories(tsan_rgw_timeout_race
+    SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+  target_link_libraries(tsan_rgw_timeout_race
+    ceph-common
+    Boost::context)
+  # Add TSAN flags only to this target
+  target_compile_options(tsan_rgw_timeout_race PRIVATE -fsanitize=thread -g -O1)
+  target_link_options(tsan_rgw_timeout_race PRIVATE -fsanitize=thread)
+  add_test(NAME tsan_rgw_timeout_race
+    COMMAND tsan_rgw_timeout_race 50 8)
+  set_tests_properties(tsan_rgw_timeout_race PROPERTIES
+    LABELS "tsan"
+    TIMEOUT 120)
+endif()
