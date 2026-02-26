@@ -19,3 +19,5 @@ overrides:
         rgw keystone admin user: admin
         rgw keystone admin password: ADMIN
         rgw keystone admin project: admin
+  install:
+    extra_system_packages: [uwsgi-plugin-python3]
