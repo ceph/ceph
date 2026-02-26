@@ -28,12 +28,18 @@
 #include "ceph_time.h"
 #include "likely.h"
 #include "lockdep.h"
-
+#ifdef CEPH_LOCKSTAT
+#include "lockstat.h"
+#endif
 namespace ceph {
 namespace mutex_debug_detail {
 
 class mutex_debugging_base
+#ifdef CEPH_LOCKSTAT
+  : public lockstat_detail::LockStat
+#endif
 {
+
 protected:
   std::string group;
   int id = -1;
@@ -51,7 +57,15 @@ protected:
   void _locked(); // just locked
   void _will_unlock(); // about to unlock
 
+#ifdef CEPH_LOCKSTAT
+  mutex_debugging_base(
+      lockstat_detail::LockStatTraits::LockStatType lockType,
+      const lockstat_detail::LockStatTraits* traits,
+      bool ld = true,
+      bool bt = false);
+#else
   mutex_debugging_base(std::string group, bool ld = true, bool bt = false);
+#endif
   ~mutex_debugging_base();
 
 public:
@@ -104,11 +118,25 @@ private:
 public:
   static constexpr bool recursive = Recursive;
 
+
+#ifdef CEPH_LOCKSTAT
+  static constexpr lockstat_detail::LockStatTraits::LockStatType LockType =
+      lockstat_detail::LockStatTraits::LockStatType::MUTEX;
+
+  mutex_debug_impl(
+      const lockstat_detail::LockStatTraits* traits,
+      bool ld = true,
+      bool bt = false) :
+    mutex_debugging_base(LockType, traits, ld, bt)
+  {
+    _init();
+  }
+#else
   mutex_debug_impl(std::string group, bool ld = true, bool bt = false)
     : mutex_debugging_base(group, ld, bt) {
     _init();
   }
-
+#endif
   // Mutex is Destructible
   ~mutex_debug_impl() {
     int r = pthread_mutex_destroy(&m);
@@ -124,6 +152,12 @@ public:
   mutex_debug_impl& operator =(mutex_debug_impl&&) = delete;
 
   void lock_impl() {
+#ifdef CEPH_LOCKSTAT
+    const auto wait_start_clock =
+        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+            ? mono_clock::now()
+            : mono_clock::zero();
+#endif
     int r = pthread_mutex_lock(&m);
     // Allowed error codes for Mutex concept
     if (unlikely(r == EPERM ||
@@ -132,6 +166,13 @@ public:
       throw std::system_error(r, std::generic_category());
     }
     ceph_assert(r == 0);
+#ifdef CEPH_LOCKSTAT
+    if (unlikely(wait_start_clock != mono_clock::zero())) {
+      record_wait_time(
+          mono_clock::now() - wait_start_clock,
+          lockstat_detail::LockMode::WRITE);
+    }
+#endif
   }
 
   void unlock_impl() noexcept {
@@ -140,9 +181,22 @@ public:
   }
 
   bool try_lock_impl() {
+#ifdef CEPH_LOCKSTAT
+    const auto wait_start_clock =
+        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+            ? mono_clock::now()
+            : mono_clock::zero();
+#endif
     int r = pthread_mutex_trylock(&m);
     switch (r) {
     case 0:
+#ifdef CEPH_LOCKSTAT
+      if (unlikely(wait_start_clock != mono_clock::zero())) {
+        record_wait_time(
+            mono_clock::now() - wait_start_clock,
+            lockstat_detail::LockMode::TRY_WRITE);
+      }
+#endif
       return true;
     case EBUSY:
       return false;
