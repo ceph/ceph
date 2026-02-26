@@ -17,11 +17,26 @@ class shared_mutex_debug :
   const bool track;
   std::atomic<unsigned> nrlock{0};
 
+  void _init(bool prioritize_write);
+
 public:
-  shared_mutex_debug(std::string group,
-		     bool track_lock=true,
-		     bool enable_lock_dep=true,
-		     bool prioritize_write=false);
+#ifdef CEPH_LOCKSTAT
+  static constexpr lockstat_detail::LockStatTraits::LockStatType LockType =
+      lockstat_detail::LockStatTraits::LockStatType::RW_LOCK;
+
+  shared_mutex_debug(
+      const lockstat_detail::LockStatTraits* traits,
+      bool track_lock = true,
+      bool enable_lock_dep = true,
+      bool prioritize_write = false);
+#else
+  shared_mutex_debug(
+      std::string group,
+      bool track_lock = true,
+      bool enable_lock_dep = true,
+      bool prioritize_write = false);
+#endif
+
   ~shared_mutex_debug();
   // exclusive locking
   void lock();
