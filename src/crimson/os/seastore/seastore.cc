@@ -445,7 +445,7 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     // hmm?
     auto lister = rdir.experimental_list_directory();
     while (auto de = co_await lister()) {
-      auto& entry = de->get();
+      auto& entry = *de;
       DEBUG("found file: {}", entry.name);
       if (entry.name.find("block.") == 0 && entry.name.length() > 6 ) {
       // 6 for "block."
