@@ -254,71 +254,72 @@ ObjectDataHandler::write_ret do_zero(
     assert(data.tailbl->length() < ctx.tm.get_block_size());
     data.tailbl->prepend_zero(
       ctx.tm.get_block_size() - data.tailbl->length());
-    fut = ctx.tm.alloc_data_extents<ObjectDataBlock>(
+    auto extents = co_await ctx.tm.alloc_data_extents<ObjectDataBlock>(
       ctx.t,
       (overwrite_range.aligned_end - ctx.tm.get_block_size()).checked_to_laddr(),
       ctx.tm.get_block_size(),
       std::move(zero_pos)
-    ).si_then([ctx, &data](auto extents) {
-      assert(extents.size() == 1);
-      auto &extent = extents.back();
-      auto iter = data.tailbl->cbegin();
-      iter.copy(extent->get_length(), extent->get_bptr().c_str());
-      return ctx.tm.get_pin(ctx.t, *extent);
-    }).si_then([](auto zero_pos) {
-      return std::make_optional<LBAMapping>(std::move(zero_pos));
-    }).handle_error_interruptible(
+    ).handle_error_interruptible(
       crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
       TransactionManager::get_pin_iertr::pass_further{}
+    ).handle_error_interruptible(
+      ObjectDataHandler::write_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error"}
+    );
+    assert(extents.size() == 1);
+    auto &extent = extents.back();
+    auto iter = data.tailbl->cbegin();
+    iter.copy(extent->get_length(), extent->get_bptr().c_str());
+    zero_pos = co_await ctx.tm.get_pin(ctx.t, *extent
+    ).handle_error_interruptible(
+      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      TransactionManager::get_pin_iertr::pass_further{}
+    ).handle_error_interruptible(
+      ObjectDataHandler::write_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error"}
     );
   }
-  fut = fut.si_then([ctx, &overwrite_range, zero_pos=std::move(zero_pos),
-		    &data](auto pin) mutable {
-    if (pin) {
-      zero_pos = std::move(*pin);
-    }
-    auto laddr =
-      (overwrite_range.aligned_begin +
-       (data.headbl ? ctx.tm.get_block_size() : 0)
-      ).checked_to_laddr();
-    auto end =
-      (overwrite_range.aligned_end -
-       (data.tailbl ? ctx.tm.get_block_size() : 0)
-      ).checked_to_laddr();
-    auto len = end.get_byte_distance<extent_len_t>(laddr);
-    return ctx.tm.reserve_region(ctx.t, std::move(zero_pos), laddr, len);
-  }).si_then([](auto zero_pos) {
-    return std::make_optional<LBAMapping>(std::move(zero_pos));
-  }).handle_error_interruptible(
+
+  auto laddr =
+    (overwrite_range.aligned_begin +
+     (data.headbl ? ctx.tm.get_block_size() : 0)
+    ).checked_to_laddr();
+  auto end =
+    (overwrite_range.aligned_end -
+     (data.tailbl ? ctx.tm.get_block_size() : 0)
+    ).checked_to_laddr();
+  auto len = end.get_byte_distance<extent_len_t>(laddr);
+  zero_pos = co_await ctx.tm.reserve_region(ctx.t, std::move(zero_pos), laddr, len
+  ).handle_error_interruptible(
     crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
     TransactionManager::get_pin_iertr::pass_further{}
+  ).handle_error_interruptible(
+    ObjectDataHandler::write_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error"}
   );
+
   if (data.headbl) {
     assert(data.headbl->length() < ctx.tm.get_block_size());
     data.headbl->append_zero(
       ctx.tm.get_block_size() - data.headbl->length());
-    fut = fut.si_then([ctx, &overwrite_range](auto zero_pos) {
-      return ctx.tm.alloc_data_extents<ObjectDataBlock>(
+    auto extents = co_await ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	ctx.t,
 	overwrite_range.aligned_begin,
 	ctx.tm.get_block_size(),
-	std::move(*zero_pos));
-    }).si_then([&data](auto extents) {
-      assert(extents.size() == 1);
-      auto &extent = extents.back();
-      auto iter = data.headbl->cbegin();
-      iter.copy(extent->get_length(), extent->get_bptr().c_str());
-      return TransactionManager::get_pin_iertr::make_ready_future<
-	std::optional<LBAMapping>>();
-    }).handle_error_interruptible(
+	std::move(zero_pos)
+    ).handle_error_interruptible(
       crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
       TransactionManager::get_pin_iertr::pass_further{}
+    ).handle_error_interruptible(
+      ObjectDataHandler::write_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error"}
     );
+    assert(extents.size() == 1);
+    auto &extent = extents.back();
+    auto iter = data.headbl->cbegin();
+    iter.copy(extent->get_length(), extent->get_bptr().c_str());
   }
-  return fut.discard_result().handle_error_interruptible(
-    ObjectDataHandler::write_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected error"}
-  );
+  co_return;
 }
 
 ObjectDataHandler::clone_ret do_clonerange(
