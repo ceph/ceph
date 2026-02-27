@@ -17,3 +17,4 @@ overrides:
       - OSD_OUT_OF_ORDER_FULL
       - OSD_NEARFULL
       - OSD_FULL
+      - MGR_DOWN
