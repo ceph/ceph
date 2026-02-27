@@ -342,12 +342,20 @@ def _hash_sources(bsize=4096):
     hh = hashlib.sha256()
     buf = bytearray(bsize)
     for path in sorted(_CONTAINER_SOURCES):
-        with open(path, "rb") as fh:
-            while True:
-                rlen = fh.readinto(buf)
-                hh.update(buf[:rlen])
-                if rlen < len(buf):
-                    break
+        source = pathlib.Path(path)
+        if not source.exists():
+            continue
+        paths = [source]
+        if source.is_dir():
+            paths = sorted(p for p in source.rglob("*") if p.is_file())
+        for fpath in paths:
+            hh.update(str(fpath).encode("utf8"))
+            with open(fpath, "rb") as fh:
+                while True:
+                    rlen = fh.readinto(buf)
+                    hh.update(buf[:rlen])
+                    if rlen < len(buf):
+                        break
     return f"sha256:{hh.hexdigest()}"
 
 
