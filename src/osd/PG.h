@@ -626,8 +626,8 @@ public:
   void on_backfill_suspended() override;
   void on_recovery_cancelled() override {}
   void on_recovery_reserved() override;
-  void on_pool_migration_suspended() override;
-  void on_pool_migration_reserved() override;
+  void on_pool_migration_source_suspended() override;
+  void on_pool_migration_source_reserved() override;
 
   bool is_forced_recovery_or_backfill() const {
     return recovery_state.is_forced_recovery_or_backfill();
@@ -1296,6 +1296,7 @@ protected:
   bool is_down() const { return recovery_state.is_down(); }
   bool is_recovery_unfound() const { return recovery_state.is_recovery_unfound(); }
   bool is_backfill_unfound() const { return recovery_state.is_backfill_unfound(); }
+  bool is_migration_unfound() const { return recovery_state.is_migration_unfound(); }
   bool is_incomplete() const { return recovery_state.is_incomplete(); }
   bool is_clean() const { return recovery_state.is_clean(); }
   bool is_undersized() const { return recovery_state.is_undersized(); }

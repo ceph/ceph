@@ -1411,6 +1411,14 @@ protected:
   uint64_t recover_pool_migration(uint64_t max, ThreadPool::TPHandle &handle,
 			          bool *work_started);
 
+  void start_target_pool_migration(int64_t num_bytes, int64_t num_objects);
+  void stop_target_pool_migration();
+  void stop_pool_migration_unfound();
+  void stop_pool_migration_toofull();
+  void stop_pool_migration_revoked();
+  void on_pool_migration_target_reserved() override;
+  void on_pool_migration_target_suspended(bool toofull) override;
+
   // -- copyfrom --
   std::map<hobject_t, CopyOpRef> copy_ops;
 

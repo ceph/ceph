@@ -452,11 +452,17 @@ public:
     recovery_handler->backfill_suspended();
   }
 
-  void on_pool_migration_reserved() final {
-    recovery_handler->on_pool_migration_reserved();
+  void on_pool_migration_source_reserved() final {
+    recovery_handler->on_pool_migration_source_reserved();
   }
-  void on_pool_migration_suspended() final {
-    recovery_handler->on_pool_migration_suspended();
+  void on_pool_migration_source_suspended() final {
+    recovery_handler->on_pool_migration_source_suspended();
+  }
+  void on_pool_migration_target_reserved() final {
+    recovery_handler->on_pool_migration_target_reserved();
+  }
+  void on_pool_migration_target_suspended(bool toofull) final {
+    recovery_handler->on_pool_migration_target_suspended(toofull);
   }
 
   void on_recovery_cancelled() final {

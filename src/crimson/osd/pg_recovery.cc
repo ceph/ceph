@@ -713,16 +713,30 @@ void PGRecovery::on_backfill_reserved()
     BackfillState::Triggered{}.intrusive_from_this());
 }
 
-void PGRecovery::on_pool_migration_suspended()
+void PGRecovery::on_pool_migration_source_suspended()
 {
-  LOG_PREFIX(PGRecovery::on_pool_migration_suspended);
+  LOG_PREFIX(PGRecovery::on_pool_migration_source_suspended);
   DEBUGDPP("", pg->get_dpp());
   // TODO
 }
 
-void PGRecovery::on_pool_migration_reserved()
+void PGRecovery::on_pool_migration_source_reserved()
 {
-  LOG_PREFIX(PGRecovery::on_pool_migration_reserved);
+  LOG_PREFIX(PGRecovery::on_pool_migration_source_reserved);
+  DEBUGDPP("", pg->get_dpp());
+  // TODO
+}
+
+void PGRecovery::on_pool_migration_target_suspended(bool toofull)
+{
+  LOG_PREFIX(PGRecovery::on_pool_migration_target_suspended);
+  DEBUGDPP("", pg->get_dpp());
+  // TODO
+}
+
+void PGRecovery::on_pool_migration_target_reserved()
+{
+  LOG_PREFIX(PGRecovery::on_pool_migration_target_reserved);
   DEBUGDPP("", pg->get_dpp());
   // TODO
 }

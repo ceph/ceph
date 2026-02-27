@@ -1077,12 +1077,21 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     recovery_cancelled = true;
   }
 
-  void on_pool_migration_reserved() override {
-    pool_migration_reserved = true;
+  void on_pool_migration_source_reserved() override {
+    pool_migration_source_reserved = true;
   }
 
-  void on_pool_migration_suspended() override {
-    pool_migration_suspended = true;
+  void on_pool_migration_source_suspended() override {
+    pool_migration_source_suspended = true;
+  }
+
+  void on_pool_migration_target_reserved() override {
+    pool_migration_target_reserved = true;
+  }
+
+  void on_pool_migration_target_suspended(bool toofull) override {
+    pool_migration_target_suspended = true;
+    pool_migration_target_suspended_toofull = toofull;
   }
 
   bool try_reserve_recovery_space(
@@ -1230,8 +1239,11 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   bool ready_to_merge_source_set = false;
   bool backfill_suspended = false;
   bool recovery_cancelled = false;
-  bool pool_migration_reserved = false;
-  bool pool_migration_suspended = false;
+  bool pool_migration_source_reserved = false;
+  bool pool_migration_source_suspended = false;
+  bool pool_migration_target_reserved = false;
+  bool pool_migration_target_suspended = false;
+  bool pool_migration_target_suspended_toofull = false;
   bool recovery_space_reserved = false;
   bool recovery_space_unreserved = false;
   bool missing_set_rebuilt = false;
@@ -1518,10 +1530,10 @@ protected:
   }
 
   // Create a 2nd pool as an EC pool and set up migration from the old pool
-  void migrate_to_ec_pool(int k = 2, int m = 2, bool fast_ec = true)
+  // Test cases run on the target pool
+  void migrate_to_ec_pool_target(int k = 2, int m = 2, bool fast_ec = true)
   {
     uint64_t old_pool_id = pool_id;
-    int old_pool_size = pool_size;
     create_ec_pool(k, m, fast_ec);
     OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
     const pg_pool_t *sp = osdmap->get_pg_pool(old_pool_id);
@@ -1535,10 +1547,19 @@ protected:
     spi->migrating_pgs.emplace(pg_t(0, old_pool_id));
     spi->lowest_migrated_pg = 1;
     apply_incremental(pending_inc);
+    setup_up_acting();
+  }
+
+  // Create a 2nd pool as an EC pool and set up migration from the old pool
+  // Test cases run on the source pool
+  void migrate_to_ec_pool_source(int k = 2, int m = 2, bool fast_ec = true)
+  {
+    uint64_t old_pool_id = pool_id;
+    int old_pool_size = pool_size;
+    migrate_to_ec_pool_target(k, m, fast_ec);
     // Reset to the source pool
     pool_id = old_pool_id;
     pool_size = old_pool_size;
-    setup_up_acting();
   }
 
   // Helper to swap an OSD in the up and acting set
@@ -2087,7 +2108,7 @@ protected:
     get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
   }
 
-// Helper - migration done
+  // Helper - migration done
   void test_event_migration_done()
   {
     dout(0) << "= test_event_migration_done =" << dendl;
@@ -2095,6 +2116,68 @@ protected:
       osdmap->get_epoch(),
       osdmap->get_epoch(),
       PeeringState::PoolMigrationDone());
+
+    get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
+  }
+
+  // Helper - start pool migration on target
+  void test_event_start_target_pool_migration(int64_t num_bytes, int64_t num_objects)
+  {
+    dout(0) << "= test_event_start_target_pool_migration =" << dendl;
+    auto evt = std::make_shared<PGPeeringEvent>(
+      osdmap->get_epoch(),
+      osdmap->get_epoch(),
+      StartTargetPoolMigration(
+        num_bytes,
+        num_objects));
+
+    get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
+  }
+
+  // Helper - stop pool migration on target
+  void test_event_stop_target_pool_migration()
+  {
+    dout(0) << "= test_event_stop_target_pool_migration =" << dendl;
+    auto evt = std::make_shared<PGPeeringEvent>(
+      osdmap->get_epoch(),
+      osdmap->get_epoch(),
+      PeeringState::StopTargetPoolMigration());
+
+    get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
+  }
+
+  // Helper - stop pool migration on source - unfound object
+  void test_event_stop_pool_migration_unfound()
+  {
+    dout(0) << "= test_event_stop_pool_migration_unfound =" << dendl;
+    auto evt = std::make_shared<PGPeeringEvent>(
+      osdmap->get_epoch(),
+      osdmap->get_epoch(),
+      PeeringState::PoolMigrationStoppedUnfound());
+
+    get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
+  }
+
+  // Helper - stop pool migration on source - too full
+  void test_event_stop_pool_migration_toofull()
+  {
+    dout(0) << "= test_event_stop_pool_migration_toofull =" << dendl;
+    auto evt = std::make_shared<PGPeeringEvent>(
+      osdmap->get_epoch(),
+      osdmap->get_epoch(),
+      PeeringState::PoolMigrationStoppedTooFull());
+
+    get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
+  }
+
+  // Helper - stop pool migration on source - revoked
+  void test_event_stop_pool_migration_revoked()
+  {
+    dout(0) << "= test_event_stop_pool_migration_revoked =" << dendl;
+    auto evt = std::make_shared<PGPeeringEvent>(
+      osdmap->get_epoch(),
+      osdmap->get_epoch(),
+      PeeringState::PoolMigrationStoppedRevoked());
 
     get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
   }
@@ -3005,7 +3088,7 @@ TEST_F(PeeringStateTest, Backfill) {
 TEST_F(PeeringStateTest, PoolMigration) {
   dout(0) << "== PoolMigration ==" << dendl;
   // Configure pool migration to an EC pool
-  migrate_to_ec_pool();
+  migrate_to_ec_pool_source();
   // Init
   test_create_peering_state();
   test_init();
@@ -3013,6 +3096,11 @@ TEST_F(PeeringStateTest, PoolMigration) {
   // Full peering cycle
   test_peering();
   // Verify pool migration started
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_source_reserved);
+  // Remote reservations successful
+  get_ps(acting[0])->state_set(PG_STATE_MIGRATING);
+  get_ps(acting[0])->state_clear(PG_STATE_MIGRATION_TOOFULL);
+  get_ps(acting[0])->state_clear(PG_STATE_MIGRATION_WAIT);
   verify_all_active_migrating(eversion_t(), eversion_t());
   // Signal migration complete
   test_event_migration_done();
@@ -3023,33 +3111,57 @@ TEST_F(PeeringStateTest, PoolMigration) {
 
 // Multi-OSD test of peering with pool migration too full
 TEST_F(PeeringStateTest, PoolMigrationTooFull) {
-  dout(0) << "== PoolMigration ==" << dendl;
+  dout(0) << "== PoolMigrationTooFull ==" << dendl;
   // Configure pool migration to an EC pool
-  migrate_to_ec_pool();
+  migrate_to_ec_pool_target();
   // Init
   test_create_peering_state();
   test_init();
   test_event_initialize();
-  // Fail reservation on OSD 1
-  get_listener(acting[1])->inject_fail_reserve_recovery_space = true;
   // Full peering cycle
   test_peering();
+  // Verify that we got to active+clean
+  verify_all_active_clean(eversion_t(), eversion_t());
+
+  // Start target pool migration - Fail reservation on OSD 1
+  get_listener(acting[1])->inject_fail_reserve_recovery_space = true;
+  test_event_start_target_pool_migration(102400, 10);
+  dispatch_all();
+  // Verify that pool migration is stalled with too full
+  EXPECT_EQ(get_listener(acting[0])->events_scheduled, 0);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_target_suspended);
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_target_suspended_toofull);
+  EXPECT_TRUE(get_ps(acting[0])->state_test(PG_STATE_MIGRATION_TOOFULL));
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/Clean");
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+  EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+  EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
+
+  // Try again - this time rety should be scheduled locally
+  get_listener(acting[0])->pool_migration_target_suspended = false;
+  test_event_start_target_pool_migration(102400, 10);
+  dispatch_all();
   // Verify that pool migration is stalled with too full
   EXPECT_EQ(get_listener(acting[0])->events_scheduled, 1);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended);
   EXPECT_TRUE(get_ps(acting[0])->state_test(PG_STATE_MIGRATION_TOOFULL));
-  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/NotMigrating");
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/Clean");
   EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
   EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
   EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
 
   // Fail reservation on OSD 2 as well
   get_listener(acting[2])->inject_fail_reserve_recovery_space = true;
-  dispatch_all_events(true); // run stalled schedule_after event to retry migration
+  dispatch_all_events(true);  // run stalled schedule_after event to retry migration
   dispatch_all();
   // Verify that pool migration is stalled with too full
   EXPECT_EQ(get_listener(acting[0])->events_scheduled, 2);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended);
   EXPECT_TRUE(get_ps(acting[0])->state_test(PG_STATE_MIGRATION_TOOFULL));
-  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/NotMigrating");
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/Clean");
   EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
   EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
   EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
@@ -3060,30 +3172,36 @@ TEST_F(PeeringStateTest, PoolMigrationTooFull) {
   dispatch_all_events(true);  // run stalled schedule_after event to retry migration
   dispatch_all();
   // Verify pool migration started
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended);
   verify_all_active_migrating(eversion_t(), eversion_t());
   // Signal migration complete
-  test_event_migration_done();
+  test_event_stop_target_pool_migration();
   // Verify that we got to active+clean
   verify_all_active_clean(eversion_t(), eversion_t());
-  EXPECT_TRUE(get_listener(acting[0])->pg_migrated_pool_sent);
 }
 
 // Multi-OSD test of peering with pool migration reservtion preempt
-TEST_F(PeeringStateTest, PoolMigrationPrempt) {
+TEST_F(PeeringStateTest, PoolMigrationPreempt) {
   dout(0) << "== PoolMigration ==" << dendl;
   // Configure pool migration to an EC pool
-  migrate_to_ec_pool();
+  migrate_to_ec_pool_target();
   // Init
   test_create_peering_state();
   test_init();
   test_event_initialize();
-  // Keep preempt reservation event on OSD 1
-  get_listener(acting[1])->inject_keep_preempt = true;
   // Full peering cycle
   test_peering();
+  // Verify that we got to active+clean
+  verify_all_active_clean(eversion_t(), eversion_t());
+
+  // Start target pool migration - Keep preempt reservation event on OSD 1
+  get_listener(acting[1])->inject_keep_preempt = true;
+  test_event_start_target_pool_migration(102400, 10);
+  dispatch_all();
   // Verify pool migration started
   verify_all_active_migrating(eversion_t(), eversion_t());
-  EXPECT_EQ(get_listener(acting[0])->io_reservations_requested, 1);
+  EXPECT_EQ(get_listener(acting[0])->remote_recovery_reservations_requested, 1);
   EXPECT_EQ(get_listener(acting[1])->remote_recovery_reservations_requested, 1);
   EXPECT_EQ(get_listener(acting[2])->remote_recovery_reservations_requested, 1);
   EXPECT_EQ(get_listener(acting[3])->remote_recovery_reservations_requested, 1);
@@ -3091,21 +3209,30 @@ TEST_F(PeeringStateTest, PoolMigrationPrempt) {
   EXPECT_EQ(get_listener(acting[1])->stalled_events.size(), 1); // captured preempt event
   EXPECT_EQ(get_listener(acting[2])->stalled_events.size(), 0);
   EXPECT_EQ(get_listener(acting[3])->stalled_events.size(), 0);
-  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingSource");
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingTarget");
   EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepRecovering");
   EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepRecovering");
   EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
-  dout(0) << "= PoolMigration prempt reservation osd 1 =" << dendl;
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended);
+  get_listener(acting[0])->pool_migration_target_reserved = false;
+  dout(0) << "= PoolMigration preempt reservation osd 1 =" << dendl;
   dispatch_all_events(true); // preempt reservation on OSD 1
-  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingSource");
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingTarget");
   EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
   EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepRecovering");
   EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
-  // Keep preempt reservation event on OSD 2 as well
-  get_listener(acting[2])->inject_keep_preempt = true;
   dispatch_all();
-  verify_all_active_migrating(eversion_t(), eversion_t());
-  EXPECT_EQ(get_listener(acting[0])->io_reservations_requested, 2);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_target_suspended);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended_toofull);
+  get_listener(acting[0])->pool_migration_target_suspended = false;
+  verify_all_active_clean(eversion_t(), eversion_t());
+  // Start target pool migration - Keep preempt reservation event on OSD 2 as well
+  get_listener(acting[2])->inject_keep_preempt = true;
+  test_event_start_target_pool_migration(102400, 10);
+  dispatch_all();
+  EXPECT_EQ(get_listener(acting[0])->remote_recovery_reservations_requested, 2);
   EXPECT_EQ(get_listener(acting[1])->remote_recovery_reservations_requested, 2);
   EXPECT_EQ(get_listener(acting[2])->remote_recovery_reservations_requested, 2);
   EXPECT_EQ(get_listener(acting[3])->remote_recovery_reservations_requested, 2);
@@ -3113,21 +3240,31 @@ TEST_F(PeeringStateTest, PoolMigrationPrempt) {
   EXPECT_EQ(get_listener(acting[1])->stalled_events.size(), 1); // captured preempt event
   EXPECT_EQ(get_listener(acting[2])->stalled_events.size(), 1); // captured preempt event
   EXPECT_EQ(get_listener(acting[3])->stalled_events.size(), 0);
-  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingSource");
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingTarget");
   EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepRecovering");
   EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepRecovering");
   EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
-  dout(0) << "= PoolMigration prempt reservation osd 1 and 2 =" << dendl;
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended);
+  get_listener(acting[0])->pool_migration_target_reserved = false;
+  dout(0) << "= PoolMigration preempt reservation osd 1 and 2 =" << dendl;
   dispatch_all_events(true); // preempt reservation on OSD 1 and 2
-  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingSource");
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingTarget");
   EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
   EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
   EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
-  // Keep preempt reservation event on OSD 0 (primary) as well
+  dispatch_all();
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_target_suspended);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended_toofull);
+  get_listener(acting[0])->pool_migration_target_suspended = false;
+  verify_all_active_clean(eversion_t(), eversion_t());
+  // Start target pool migration - Keep preempt reservation event on OSD 0 (primary) as well
   get_listener(acting[0])->inject_keep_preempt = true;
+  test_event_start_target_pool_migration(102400, 10);
   dispatch_all();
   verify_all_active_migrating(eversion_t(), eversion_t());
-  EXPECT_EQ(get_listener(acting[0])->io_reservations_requested, 3);
+  EXPECT_EQ(get_listener(acting[0])->remote_recovery_reservations_requested, 3);
   EXPECT_EQ(get_listener(acting[1])->remote_recovery_reservations_requested, 3);
   EXPECT_EQ(get_listener(acting[2])->remote_recovery_reservations_requested, 3);
   EXPECT_EQ(get_listener(acting[3])->remote_recovery_reservations_requested, 3);
@@ -3135,25 +3272,36 @@ TEST_F(PeeringStateTest, PoolMigrationPrempt) {
   EXPECT_EQ(get_listener(acting[1])->stalled_events.size(), 1); // captured preempt event
   EXPECT_EQ(get_listener(acting[2])->stalled_events.size(), 1); // captured preempt event
   EXPECT_EQ(get_listener(acting[3])->stalled_events.size(), 0);
-  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingSource");
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingTarget");
   EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepRecovering");
   EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepRecovering");
   EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
-  dout(0) << "= PoolMigration prempt reservation osd 0, 1 and 2 =" << dendl;
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended);
+  get_listener(acting[0])->pool_migration_target_reserved = false;
+  dout(0) << "= PoolMigration preempt reservation osd 0, 1 and 2 =" << dendl;
   // 0 Sends RELEASE first, then 1,2 send REVOKE
   dispatch_events(acting[0], true , 1);
   dispatch_events(acting[1], true , 1);
   dispatch_events(acting[2], true , 1);
   dispatch_all();
   dispatch_events(acting[0], true , 1);
-  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/WaitLocalPoolMigrationReserved");
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/Clean");
   EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
   EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
   EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepNotRecovering");
   dispatch_all();
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_target_suspended);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended_toofull);
+  get_listener(acting[0])->pool_migration_target_suspended = false;
+  verify_all_active_clean(eversion_t(), eversion_t());
+  // Start target pool migration - Still capturing premept events
+  test_event_start_target_pool_migration(102400, 10);
+  dispatch_all();
   // Verify pool migration started
   verify_all_active_migrating(eversion_t(), eversion_t());
-  EXPECT_EQ(get_listener(acting[0])->io_reservations_requested, 4);
+  EXPECT_EQ(get_listener(acting[0])->remote_recovery_reservations_requested, 4);
   EXPECT_EQ(get_listener(acting[1])->remote_recovery_reservations_requested, 4);
   EXPECT_EQ(get_listener(acting[2])->remote_recovery_reservations_requested, 4);
   EXPECT_EQ(get_listener(acting[3])->remote_recovery_reservations_requested, 4);
@@ -3161,30 +3309,45 @@ TEST_F(PeeringStateTest, PoolMigrationPrempt) {
   EXPECT_EQ(get_listener(acting[1])->stalled_events.size(), 1); // captured preempt event
   EXPECT_EQ(get_listener(acting[2])->stalled_events.size(), 1); // captured preempt event
   EXPECT_EQ(get_listener(acting[3])->stalled_events.size(), 0);
-  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingSource");
+  EXPECT_EQ(get_listener(acting[0])->last_state_entered, "Started/Primary/Active/MigratingTarget");
   EXPECT_EQ(get_listener(acting[1])->last_state_entered, "Started/ReplicaActive/RepRecovering");
   EXPECT_EQ(get_listener(acting[2])->last_state_entered, "Started/ReplicaActive/RepRecovering");
   EXPECT_EQ(get_listener(acting[3])->last_state_entered, "Started/ReplicaActive/RepRecovering");
-  dout(0) << "= PoolMigration prempt reservation osd 0, 1 and 2 race hazard =" << dendl;
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended);
+  get_listener(acting[0])->pool_migration_target_reserved = false;
+  dout(0) << "= PoolMigration preempt reservation osd 0, 1 and 2 race hazard =" << dendl;
   // 1,2 send REVOKE first, then 0 sends RELEASE
   get_listener(acting[0])->inject_keep_preempt = false;
   get_listener(acting[1])->inject_keep_preempt = false;
   get_listener(acting[2])->inject_keep_preempt = false;
-  // 1 and 2 prempt reservation and send messages to osd 0
+  // 1 and 2 preempt reservation and send messages to osd 0
   dispatch_events(acting[1], true);
   dispatch_events(acting[2], true);
   dispatch_cluster_messages(1);
   dispatch_cluster_messages(2);
-  // 0 prempt reservation is slow
+  // 0 preempt reservation is slow
   dispatch_events(acting[0], true);
+  dispatch_all();
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_target_suspended);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended_toofull);
+  get_listener(acting[0])->pool_migration_target_suspended = false;
+  verify_all_active_clean(eversion_t(), eversion_t());
+  // Start target pool migration
+  test_event_start_target_pool_migration(102400, 10);
   dispatch_all();
   // Verify pool migration started
   verify_all_active_migrating(eversion_t(), eversion_t());
+  EXPECT_TRUE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended);
+  get_listener(acting[0])->pool_migration_target_reserved = false;
   // Signal migration complete
-  test_event_migration_done();
+  test_event_stop_target_pool_migration();
   // Verify that we got to active+clean
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_reserved);
+  EXPECT_FALSE(get_listener(acting[0])->pool_migration_target_suspended);
   verify_all_active_clean(eversion_t(), eversion_t());
-  EXPECT_TRUE(get_listener(acting[0])->pg_migrated_pool_sent);
 }
 
 // ============================================================================

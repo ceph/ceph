@@ -1583,12 +1583,16 @@ void PG::on_recovery_reserved()
   queue_recovery();
 }
 
-void PG::on_pool_migration_reserved()
+void PG::on_pool_migration_source_reserved()
 {
+  //BILL:FIXME: Wait for reply from Jamies message before doing this
+  state_set(PG_STATE_MIGRATING);
+  state_clear(PG_STATE_MIGRATION_TOOFULL);
+  state_clear(PG_STATE_MIGRATION_WAIT);
   queue_recovery();
 }
 
-void PG::on_pool_migration_suspended()
+void PG::on_pool_migration_source_suspended()
 {
   //BILL:FIXME: need to clean up async work here - see on_backfill_suspended for example
 }

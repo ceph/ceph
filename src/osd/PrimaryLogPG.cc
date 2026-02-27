@@ -12940,6 +12940,13 @@ void PrimaryLogPG::mark_all_unfound_lost(
 	      get_osdmap_epoch(),
 	      get_osdmap_epoch(),
 	      PeeringState::RequestBackfill())));
+	} else if (is_migration_unfound()) {
+	  queue_peering_event(
+	    PGPeeringEventRef(
+	      std::make_shared<PGPeeringEvent>(
+	      get_osdmap_epoch(),
+	      get_osdmap_epoch(),
+	      PeeringState::DoPoolMigration())));
 	} else {
 	  queue_recovery();
 	}
@@ -15060,6 +15067,71 @@ uint64_t PrimaryLogPG::recover_pool_migration(
   }
 
   return ops;
+}
+
+void PrimaryLogPG::start_target_pool_migration(int64_t num_bytes, int64_t num_objects)
+{
+  queue_peering_event(
+    PGPeeringEventRef(
+      std::make_shared<PGPeeringEvent>(
+        get_osdmap_epoch(),
+        get_osdmap_epoch(),
+        StartTargetPoolMigration(
+          num_bytes,
+	  num_objects))));
+}
+
+void PrimaryLogPG::stop_target_pool_migration()
+{
+  queue_peering_event(
+    PGPeeringEventRef(
+      std::make_shared<PGPeeringEvent>(
+        get_osdmap_epoch(),
+        get_osdmap_epoch(),
+        PeeringState::StopTargetPoolMigration())));
+}
+
+void PrimaryLogPG::stop_pool_migration_unfound()
+{
+  queue_peering_event(
+    PGPeeringEventRef(
+      std::make_shared<PGPeeringEvent>(
+        get_osdmap_epoch(),
+        get_osdmap_epoch(),
+        PeeringState::PoolMigrationStoppedUnfound())));
+}
+
+void PrimaryLogPG::stop_pool_migration_toofull()
+{
+  queue_peering_event(
+    PGPeeringEventRef(
+      std::make_shared<PGPeeringEvent>(
+        get_osdmap_epoch(),
+        get_osdmap_epoch(),
+        PeeringState::PoolMigrationStoppedTooFull())));
+}
+
+void PrimaryLogPG::stop_pool_migration_revoked()
+{
+  queue_peering_event(
+    PGPeeringEventRef(
+      std::make_shared<PGPeeringEvent>(
+        get_osdmap_epoch(),
+        get_osdmap_epoch(),
+        PeeringState::PoolMigrationStoppedRevoked())));
+}
+
+void PrimaryLogPG::on_pool_migration_target_reserved()
+{
+  //BILL:FIXME - Kick Jamies message reply (must be one waiting)
+  //BILL:FIXME - Reminder: If on_change happens need to drop Jamies message reply
+  //BILL:FIXME - Set flag indicating we have reservations and copy_from is allowed
+}
+
+void PrimaryLogPG::on_pool_migration_target_suspended(bool toofull)
+{
+  //BILL:FIXME - Kick Jamies message reply (may be one waiting)
+  //BILL:FIXME - Set flag indicating copy_from must be failed
 }
 
 // ===========================
