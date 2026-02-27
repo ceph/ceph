@@ -289,14 +289,16 @@ ObjectDataHandler::write_ret do_zero(
      (data.tailbl ? ctx.tm.get_block_size() : 0)
     ).checked_to_laddr();
   auto len = end.get_byte_distance<extent_len_t>(laddr);
-  zero_pos = co_await ctx.tm.reserve_region(ctx.t, std::move(zero_pos), laddr, len
-  ).handle_error_interruptible(
-    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
-    TransactionManager::get_pin_iertr::pass_further{}
-  ).handle_error_interruptible(
-    ObjectDataHandler::write_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected error"}
-  );
+  if (len != 0) {
+    zero_pos = co_await ctx.tm.reserve_region(ctx.t, std::move(zero_pos), laddr, len
+    ).handle_error_interruptible(
+      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      TransactionManager::get_pin_iertr::pass_further{}
+    ).handle_error_interruptible(
+      ObjectDataHandler::write_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error"}
+    );
+  }
 
   if (data.headbl) {
     assert(data.headbl->length() < ctx.tm.get_block_size());
