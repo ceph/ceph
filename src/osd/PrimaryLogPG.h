@@ -1196,6 +1196,21 @@ protected:
   hobject_t last_backfill_started;
   bool new_backfill;
 
+  /// current source PG reservation TID. Not 0 means source PG is waiting for a response
+  ceph_tid_t pool_migration_reservation_tid = 0;
+  /// increased whenever an outstanding reservation attempt is abandoned (release /
+  /// on_change); async reservation continuations that captured an older value
+  /// are stale and must not touch pool_migration_reservation_tid
+  uint64_t pool_migration_reservation_gen = 0;
+  /// source PG has received reservation granted response from target PG
+  bool pool_migration_reservations_granted_source = false;
+  /// target PG has taken reservations and replied to the source PG
+  bool pool_migration_reservations_granted_target = false;
+  /// current migration target pg
+  std::optional<pg_t> pool_migration_target_pg;
+  /// pending reservation requests for target to reply to
+  std::vector<OpRequestRef> pending_pool_migration_reservation_ops;
+
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h,
 				 bool *work_started);
@@ -1379,6 +1394,21 @@ protected:
   void _committed_pushed_object(epoch_t epoch, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
 
+  pg_t get_source_pg_from_hash(const hobject_t &hobj);
+  pg_t get_target_pg_from_hash(const hobject_t &hobj);
+  uint16_t count_remaining_target_pgs(const hobject_t &hobj);
+  void pool_migration_request_target_reservation() override;
+  void pool_migration_release_target_reservation() override;
+  void cancel_pool_migration_reservation_op();
+
+  void start_target_pool_migration(int64_t num_bytes, int64_t num_objects);
+  void stop_target_pool_migration();
+  void stop_pool_migration_toofull();
+  void stop_pool_migration_revoked();
+  void on_pool_migration_target_reserved() override;
+  void on_pool_migration_target_suspended(bool toofull) override;
+  void on_pool_migration_source_reserved() override;
+
   // -- copyfrom --
   std::map<hobject_t, CopyOpRef> copy_ops;
 
@@ -1545,6 +1575,7 @@ protected:
   friend struct C_SetDedupChunks;
   friend struct C_SetManifestRefCountDone;
   friend struct SetManifestFinisher;
+  friend struct C_PoolMigrationReservationCallback;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
@@ -1601,6 +1632,8 @@ public:
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
+
+  void pool_migration_target_delete(const pg_t& source_pg, const hobject_t& watermark);
 
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
