@@ -206,6 +206,20 @@ struct RemotePoolMigrationRequest : boost::statechart::event<RemotePoolMigration
   }
 };
 
+struct StartTargetPoolMigration : boost::statechart::event<StartTargetPoolMigration> {
+  int64_t source_num_bytes;
+  int64_t source_num_objects;
+  explicit StartTargetPoolMigration(int64_t sbytes, int64_t sobjs) :
+    boost::statechart::event< StartTargetPoolMigration >(),
+    source_num_bytes(sbytes),
+    source_num_objects(sobjs) {}
+  void print(std::ostream *out) const {
+    *out << "StartTargetPoolMigration:"
+         << " source bytes " << source_num_bytes
+         << " source objects " << source_num_objects;
+  }
+};
+
 #define TrivialEvent(T) struct T : boost::statechart::event< T > { \
     T() : boost::statechart::event< T >() {}			   \
     void print(std::ostream *out) const {			   \
