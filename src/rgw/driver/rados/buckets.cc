@@ -18,6 +18,7 @@
 #include "common/async/yield_context.h"
 #include "common/dout.h"
 #include "cls/user/cls_user_client.h"
+#include "cls/rgw/cls_rgw_types.h"
 #include "rgw_common.h"
 #include "rgw_sal.h"
 #include "rgw_tools.h"
@@ -185,15 +186,26 @@ int read_stats(const DoutPrefixProvider* dpp, optional_yield y,
   stats.size = header.stats.total_bytes;
   stats.size_rounded = header.stats.total_bytes_rounded;
   stats.num_objects = header.stats.total_entries;
-  uint64_t total_size = stats.size;
-  for (auto it = header.storage_class_stats.begin(); it != header.storage_class_stats.end(); ++it) {
-    std::string storage_class = it->first;
-    total_size -= it->second.total_bytes;
-    stats.storage_class_stats[storage_class].size = it->second.total_bytes;
-    stats.storage_class_stats[storage_class].size_rounded = it->second.total_bytes_rounded;
-    stats.storage_class_stats[storage_class].num_objects = it->second.total_entries;
+  // Initialize storage class stats for new buckets
+  if (!header.storage_class_stats.has_value()) {
+    if (header.stats.total_entries == 0) {
+      // New empty bucket - initialize as converted
+      header.storage_class_stats = std::unordered_map<std::string, cls_user_stats>();
+    }
+    // If has objects but no storage_class_stats, it's legacy - leave as nullopt
   }
-  if (total_size != 0){
+
+  // Only process if bucket has storage class support
+  if (header.storage_class_stats.has_value()) {
+    for (auto it = header.storage_class_stats->begin(); it != header.storage_class_stats->end(); ++it) {
+      std::string storage_class = it->first;
+      
+      stats.storage_class_stats[storage_class].size = it->second.total_bytes;
+      stats.storage_class_stats[storage_class].size_rounded = it->second.total_bytes_rounded;
+      stats.storage_class_stats[storage_class].num_objects = it->second.total_entries;
+    }
+  } else {
+    // Legacy bucket - clear storage class stats
     stats.storage_class_stats.clear();
   }
 

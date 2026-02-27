@@ -9759,8 +9759,10 @@ next:
       Formatter::ObjectSection os(*formatter, "result");
       encode_json("stats", stats, formatter.get());
       formatter->open_object_section("stats.storage-classes");
+      if (!stats.storage_class_stats.empty()) {
       for(auto it = stats.storage_class_stats.begin(); it != stats.storage_class_stats.end(); ++it){
         encode_json(it->first.c_str(), it->second, formatter.get());
+      }
       }
       formatter->close_section();
       utime_t last_sync_ut(last_stats_sync);

@@ -170,12 +170,15 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   if (stats) {
     encode_json("stats", *stats, f);
     f->open_object_section("stats.storage-classes");
+    if (!stats->storage_class_stats.empty()) {
     for(auto it = stats->storage_class_stats.begin(); it != stats->storage_class_stats.end(); ++it){
+
       encode_json(it->first.c_str(), it->second, f);
     }
     f->close_section();
   }
   f->close_section();
+}
 }
 
 static int user_add_helper(RGWUserAdminOpState& op_state, std::string *err_msg)

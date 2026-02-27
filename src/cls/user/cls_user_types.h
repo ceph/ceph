@@ -198,7 +198,7 @@ WRITE_CLASS_ENCODER(cls_user_stats)
  */
 struct cls_user_header {
   cls_user_stats stats;
-  std::unordered_map<std::string, cls_user_stats> storage_class_stats;
+  std::optional<std::unordered_map<std::string, cls_user_stats>> storage_class_stats;
   ceph::real_time last_stats_sync;     /* last time a full stats sync completed */
   ceph::real_time last_stats_update;   /* last time a stats update was done */
 

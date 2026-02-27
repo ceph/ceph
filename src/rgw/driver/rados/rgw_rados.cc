@@ -9917,7 +9917,7 @@ int RGWRados::get_bucket_storage_classes_stats(const DoutPrefixProvider *dpp, op
   BucketIndexShardsManager master_ver_mgr;
   BucketIndexShardsManager marker_mgr;
   for(; iter != headers.end(); ++iter, ++viter) {
-    if (iter->storage_class_stats.empty() && !iter->stats.empty()){
+    if ((!iter->storage_class_stats.has_value() || iter->storage_class_stats->empty()) && !iter->stats.empty()){
       sc_stats.clear();
       return 0;
     }
@@ -9925,7 +9925,8 @@ int RGWRados::get_bucket_storage_classes_stats(const DoutPrefixProvider *dpp, op
     for (auto it = iter->stats.begin(); it != iter->stats.end(); ++it) {
       stats_total_size += it->second.total_size;
     }
-    for (auto it = iter->storage_class_stats.begin(); it != iter->storage_class_stats.end(); ++it) {
+    if (iter->storage_class_stats.has_value()){
+    for (auto it = iter->storage_class_stats->begin(); it != iter->storage_class_stats->end(); ++it) {
       std::string storage_class = it->first;
       rgw_bucket_category_stats stats = it->second;
       RGWStorageStats& s = sc_stats[storage_class];
@@ -9936,6 +9937,7 @@ int RGWRados::get_bucket_storage_classes_stats(const DoutPrefixProvider *dpp, op
       s.num_objects += stats.num_entries;
       stats_total_size -= stats.total_size;
     }
+  }
     if (stats_total_size != 0) {
       sc_stats.clear();
       return 0;

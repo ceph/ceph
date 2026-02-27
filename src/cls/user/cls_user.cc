@@ -162,10 +162,12 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     header.stats.total_entries = 0;
     header.stats.total_bytes = 0;
     header.stats.total_bytes_rounded = 0;
-    for(auto &idx: header.storage_class_stats){
-      header.storage_class_stats[idx.first].total_entries = 0;
-      header.storage_class_stats[idx.first].total_bytes = 0;
-      header.storage_class_stats[idx.first].total_bytes_rounded = 0;
+    if (header.storage_class_stats.has_value()) {
+      for(auto &idx: *header.storage_class_stats){
+        (*header.storage_class_stats)[idx.first].total_entries = 0;
+        (*header.storage_class_stats)[idx.first].total_bytes = 0;
+        (*header.storage_class_stats)[idx.first].total_bytes_rounded = 0;
+      }
     }
     bufferlist bl;
     encode(header, bl);
@@ -201,7 +203,8 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
       // creation date may have changed (ie delete/recreate bucket)
       entry.creation_time = update_entry.creation_time;
       // updating bucket id for storage classes entries
-      for (auto& idx: header.storage_class_stats) {
+      if (header.storage_class_stats.has_value()) {
+        for (auto& idx: *header.storage_class_stats) {
         cls_user_bucket_entry storage_class_entry;
         string storage_class_key = old_key + "-" + idx.first;
         int s_ret = get_existing_bucket_entry(hctx, storage_class_key, storage_class_entry);
@@ -219,20 +222,25 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
         }
       }
     }
+    }
 
     if (ret < 0) {
       CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
       return ret;
     } else if (ret >= 0 && entry.user_stats_sync) {
       if (storage_class){
-        if ((header.storage_class_stats[*storage_class].total_entries - entry.count) > header.storage_class_stats[*storage_class].total_entries) { // unsigned long overflow
-          header.storage_class_stats[*storage_class].total_entries = 0;
-          header.storage_class_stats[*storage_class].total_bytes = 0;
-          header.storage_class_stats[*storage_class].total_bytes_rounded = 0;
+        // Initialize storage class stats if needed
+        if (!header.storage_class_stats.has_value()) {
+          header.storage_class_stats = std::unordered_map<std::string, cls_user_stats>();
+        }
+        if (((*header.storage_class_stats)[*storage_class].total_entries - entry.count) > (*header.storage_class_stats)[*storage_class].total_entries) {
+          (*header.storage_class_stats)[*storage_class].total_entries = 0;
+          (*header.storage_class_stats)[*storage_class].total_bytes = 0;
+          (*header.storage_class_stats)[*storage_class].total_bytes_rounded = 0;
         } else {
-          header.storage_class_stats[*storage_class].total_entries -= entry.count;
-          header.storage_class_stats[*storage_class].total_bytes -= entry.size;
-          header.storage_class_stats[*storage_class].total_bytes_rounded -= entry.size_rounded;
+          (*header.storage_class_stats)[*storage_class].total_entries -= entry.count;
+          (*header.storage_class_stats)[*storage_class].total_bytes -= entry.size;
+          (*header.storage_class_stats)[*storage_class].total_bytes_rounded -= entry.size_rounded;
         }
       } else {
         dec_header_stats(&header.stats, entry);
@@ -255,9 +263,14 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
       return ret;
 
     if (storage_class){
-      header.storage_class_stats[*storage_class].total_entries += entry.count;
-      header.storage_class_stats[*storage_class].total_bytes += entry.size;
-      header.storage_class_stats[*storage_class].total_bytes_rounded += entry.size_rounded;
+      // Initialize storage class stats if needed
+      if (!header.storage_class_stats.has_value()) {
+        header.storage_class_stats = std::unordered_map<std::string, cls_user_stats>();
+      }
+
+      (*header.storage_class_stats)[*storage_class].total_entries += entry.count;
+      (*header.storage_class_stats)[*storage_class].total_bytes += entry.size;
+      (*header.storage_class_stats)[*storage_class].total_bytes_rounded += entry.size_rounded;
     } else {
       add_header_stats(&header.stats, entry);
     }
@@ -344,10 +357,12 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     CLS_LOG(0, "ERROR: get existing bucket entry, key=%s ret=%d", key.c_str(), ret);
     return ret;
   }
-  for(auto it = header.storage_class_stats.begin(); it != header.storage_class_stats.end(); ++it){
-    auto new_key = key + "-" + it->first;
-    CLS_LOG(20, "removing entry at %s", new_key.c_str());
-    remove_entry(hctx, new_key);
+  if (header.storage_class_stats.has_value()) {
+    for(auto it = header.storage_class_stats->begin(); it != header.storage_class_stats->end(); ++it){
+      auto new_key = key + "-" + it->first;
+      CLS_LOG(20, "removing entry at %s", new_key.c_str());
+      remove_entry(hctx, new_key);
+    }
   }
   CLS_LOG(20, "removing entry at %s", key.c_str());
 

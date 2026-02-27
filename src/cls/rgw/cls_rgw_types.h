@@ -842,7 +842,8 @@ struct rgw_bucket_dir_header {
   cls_rgw_bucket_instance_entry new_instance;
   bool syncstopped;
   uint32_t reshardlog_entries;
-  std::unordered_map<std::string, rgw_bucket_category_stats> storage_class_stats;
+  std::optional<std::unordered_map<std::string, rgw_bucket_category_stats>> storage_class_stats;
+
 
   rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0), syncstopped(false),
                             reshardlog_entries(0) {}
