@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,12 +13,16 @@
  * 
  */
 
+#include "PurgeQueue.h"
+#include "BatchOp.h"
+#include "mds/MDSMap.h"
+
 #include "common/debug.h"
+#include "common/Formatter.h"
 #include "mds/mdstypes.h"
 #include "mds/CInode.h"
-#include "mds/MDCache.h"
-
-#include "PurgeQueue.h"
+#include "osdc/Objecter.h"
+#include "osdc/Striper.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_mds
@@ -99,17 +104,36 @@ void PurgeItem::decode(bufferlist::const_iterator &p)
   DECODE_FINISH(p);
 }
 
-void PurgeItem::generate_test_instances(std::list<PurgeItem*>& ls) {
-  ls.push_back(new PurgeItem());
-  ls.push_back(new PurgeItem());
-  ls.back()->action = PurgeItem::PURGE_FILE;
-  ls.back()->ino = 1;
-  ls.back()->size = 2;
-  ls.back()->layout = file_layout_t();
-  ls.back()->old_pools = {1, 2};
-  ls.back()->snapc = SnapContext();
-  ls.back()->stamp = utime_t(3, 4);
+void PurgeItem::dump(Formatter *f) const
+{
+  f->dump_int("action", action);
+  f->dump_int("ino", ino);
+  f->dump_int("size", size);
+  f->open_object_section("layout");
+  layout.dump(f);
+  f->close_section();
+  f->open_object_section("SnapContext");
+  snapc.dump(f);
+  f->close_section();
+  f->open_object_section("fragtree");
+  fragtree.dump(f);
+  f->close_section();
 }
+
+std::list<PurgeItem> PurgeItem::generate_test_instances() {
+  std::list<PurgeItem> ls;
+  ls.push_back(PurgeItem());
+  ls.push_back(PurgeItem());
+  ls.back().action = PurgeItem::PURGE_FILE;
+  ls.back().ino = 1;
+  ls.back().size = 2;
+  ls.back().layout = file_layout_t();
+  ls.back().old_pools = {1, 2};
+  ls.back().snapc = SnapContext();
+  ls.back().stamp = utime_t(3, 4);
+  return ls;
+}
+
 // if Objecter has any slow requests, take that as a hint and
 // slow down our rate of purging
 PurgeQueue::PurgeQueue(

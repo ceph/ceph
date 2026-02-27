@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_common.h"
 #include "rgw_rest_client.h"
@@ -47,7 +47,6 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
   unique_lock guard(out_headers_lock);
 
   char line[len + 1];
-
   char *s = (char *)ptr, *end = (char *)ptr + len;
   char *p = line;
   ldpp_dout(this, 30) << "receive_http_header" << dendl;
@@ -58,22 +57,27 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
       continue;
     }
     if (*s == '\n') {
+      if (p == line) {
+        // End of headers (empty line "\r\n")
+        ldpp_dout(this, 30) << "All headers received" << dendl;
+        return handle_headers(out_headers, http_status);
+      }
       *p = '\0';
-      ldpp_dout(this, 30) << "received header:" << line << dendl;
+      ldpp_dout(this, 30) << "received header: " << line << dendl;
       // TODO: fill whatever data required here
       char *l = line;
       char *tok = strsep(&l, " \t:");
       if (tok && l) {
         while (*l == ' ')
           l++;
- 
+
         if (strcmp(tok, "HTTP") == 0 || strncmp(tok, "HTTP/", 5) == 0) {
           http_status = atoi(l);
           if (http_status == 100) /* 100-continue response */
             continue;
           status = rgw_http_error_to_errno(http_status);
         } else {
-          /* convert header field name to upper case  */
+          /* convert header field name to upper case */
           char *src = tok;
           char buf[len + 1];
           size_t i;
@@ -93,10 +97,12 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
             return r;
         }
       }
+      p = line;
     }
     if (s != end)
       *p++ = *s++;
   }
+
   return 0;
 }
 
@@ -105,18 +111,13 @@ static void get_new_date_str(string& date_str)
   date_str = rgw_to_asctime(ceph_clock_now());
 }
 
-static void get_gmt_date_str(string& date_str)
+static std::string get_gmt_date_str()
 {
   auto now_time = ceph::real_clock::now();
   time_t rawtime = ceph::real_clock::to_time_t(now_time);
 
-  char buffer[80];
-
-  struct tm timeInfo;
-  gmtime_r(&rawtime, &timeInfo);
-  strftime(buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S %z", &timeInfo);  
-  
-  date_str = buffer;
+  // Fri, 21 Dec 2012 00:00:00 GMT
+  return fmt::format("{:%a, %d %b %Y %T %Z}", fmt::gmtime(rawtime));
 }
 
 int RGWHTTPSimpleRequest::send_data(void *ptr, size_t len, bool* pause)
@@ -364,7 +365,8 @@ static void scope_from_api_name(const DoutPrefixProvider *dpp,
   }
 }
 
-int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service)
+auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service)
+  -> tl::expected<int, int>
 {
 
   string date_str;
@@ -410,7 +412,7 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
   int ret = sign_request(dpp, key, region, s, new_env, new_info, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to sign request" << dendl;
-    return ret;
+    return tl::unexpected(ret);
   }
 
   if (s == "iam") {
@@ -452,13 +454,11 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
   method = new_info.method;
   url = new_url;
 
-  int r = process(dpp, y);
-  if (r < 0){
-    if (r == -EINVAL){
-      // curl_easy has errored, generally means the service is not available
-      r = -ERR_SERVICE_UNAVAILABLE;
-    }
-    return r;
+  std::ignore = process(dpp, y);
+
+  if (http_status == 0) {
+    // no http status, generally means the service is not available
+    return tl::unexpected(-ERR_SERVICE_UNAVAILABLE);
   }
 
   response.append((char)0); /* NULL terminate response */
@@ -467,7 +467,7 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
     *outbl = std::move(response);
   }
 
-  return status;
+  return http_status;
 }
 
 class RGWRESTStreamOutCB : public RGWGetDataCB {
@@ -582,14 +582,14 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
 
   /* merge params with extra args so that we can sign correctly */
   for (auto iter = params.begin(); iter != params.end(); ++iter) {
-    new_info->args.append(iter->first, iter->second);
+    constexpr bool encode_slash = false; // not for query params
+    new_info->args.append(url_encode(iter->first, encode_slash),
+                          url_encode(iter->second, encode_slash));
   }
 
   url = _url + resource + params_str;
 
-  string date_str;
-  get_gmt_date_str(date_str);
-
+  const std::string date_str = get_gmt_date_str();
   new_env->set("HTTP_DATE", date_str.c_str());
   new_env->set("HTTP_HOST", host);
 
@@ -699,7 +699,7 @@ void RGWRESTStreamS3PutObj::send_init(const rgw_obj& obj)
   if (host_style == VirtualStyle) {
     resource_str = obj.get_oid();
 
-    new_url = bucket_name + "."  + new_url;
+    new_url = protocol + "://" + bucket_name + "." + host;
     new_host = bucket_name + "." + new_host;
   } else {
     resource_str = bucket_name + "/" + obj.get_oid();
@@ -710,6 +710,8 @@ void RGWRESTStreamS3PutObj::send_init(const rgw_obj& obj)
 
   if (new_url[new_url.size() - 1] != '/')
     new_url.append("/");
+
+  ldpp_dout(this, 20) << __func__ << "(): host = " << host << " , resource = " << resource << " , new_host = " << new_host << " , new_url = " << new_url  << dendl;
 
   method = "PUT";
   headers_gen.init(method, new_host, resource_prefix, new_url, resource, params, api_name);
@@ -836,6 +838,7 @@ int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAc
   string new_resource;
   string bucket_name;
   string old_resource = resource;
+  string new_host = host;
 
   if (resource[0] == '/') {
     new_resource = resource.substr(1);
@@ -858,11 +861,17 @@ int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAc
     } else {
       new_resource = new_resource.substr(pos+1);
     }
+    new_host = bucket_name + "." + host;
   }
+
+  if (new_url[new_url.size() - 1] != '/')
+    new_url.append("/");
 
   headers_gen.emplace(cct, &new_env, &new_info);
 
-  headers_gen->init(method, host, resource_prefix, new_url, new_resource, params, api_name);
+  ldpp_dout(this, 20) << __func__ << "(): host = " << host << " , resource = " << resource << " , new_host = " << new_host << " , new_url = " << new_url  << " , new_resource = " << new_resource << dendl;
+
+  headers_gen->init(method, new_host, resource_prefix, new_url, new_resource, params, api_name);
 
   headers_gen->set_http_attrs(extra_headers);
 
@@ -897,7 +906,7 @@ int RGWRESTStreamRWRequest::send_request(const DoutPrefixProvider *dpp, RGWAcces
 int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
 {
   if (!headers_gen) {
-    ldpp_dout(this, 0) << "ERROR: " << __func__ << "(): send_prepare() was not called: likey a bug!" << dendl;
+    ldpp_dout(this, 0) << "ERROR: " << __func__ << "(): send_prepare() was not called: likely a bug!" << dendl;
     return -EINVAL;
   }
 
@@ -990,6 +999,15 @@ int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
     *pheaders = std::move(out_headers);
   }
   return status;
+}
+
+int RGWHTTPStreamRWRequest::handle_headers(const map<string, string>& headers, int http_status)
+{
+  if (cb) {
+    return cb->handle_headers(headers, http_status);
+  }
+
+  return 0;
 }
 
 int RGWHTTPStreamRWRequest::handle_header(const string& name, const string& val)

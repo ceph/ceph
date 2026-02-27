@@ -635,7 +635,9 @@ void rgw_sync_pipe_params::dump(Formatter *f) const
       s = "user";
   }
   encode_json("mode", s, f);
-  encode_json("user", user, f);
+  if (user) {
+    encode_json("user", *user, f);
+  }
 }
 
 void rgw_sync_pipe_params::decode_json(JSONObj *obj)
@@ -787,10 +789,11 @@ void rgw_sync_policy_info::dump(Formatter *f) const
   }
 }
 
-void rgw_sync_policy_info::generate_test_instances(list<rgw_sync_policy_info*>& o)
+list<rgw_sync_policy_info> rgw_sync_policy_info::generate_test_instances()
 {
-  rgw_sync_policy_info *info = new rgw_sync_policy_info;
-  o.push_back(info);
+  list<rgw_sync_policy_info> o;
+  o.emplace_back();
+  return o;
 }
 
 void rgw_sync_policy_info::decode_json(JSONObj *obj)

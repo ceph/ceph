@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph distributed storage system
  *
@@ -617,7 +618,7 @@ TEST(ErasureCodeLrc, encode_decode)
   profile["layers"] = description_string;
   EXPECT_EQ(0, lrc.init(profile, &cerr));
   EXPECT_EQ(4U, lrc.get_data_chunk_count());
-  unsigned int chunk_size = g_conf().get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
+  unsigned int chunk_size = 4096;
   unsigned int stripe_width = lrc.get_data_chunk_count() * chunk_size;
   EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
   shard_id_set want_to_encode;
@@ -757,7 +758,7 @@ TEST(ErasureCodeLrc, encode_decode_2)
   profile["layers"] = description_string;
   EXPECT_EQ(0, lrc.init(profile, &cerr));
   EXPECT_EQ(4U, lrc.get_data_chunk_count());
-  unsigned int chunk_size = g_conf().get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
+  unsigned int chunk_size = 4096;
   unsigned int stripe_width = lrc.get_data_chunk_count() * chunk_size;
   EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
   shard_id_set want_to_encode;

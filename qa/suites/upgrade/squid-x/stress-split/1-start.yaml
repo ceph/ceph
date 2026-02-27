@@ -20,11 +20,23 @@ overrides:
       - FS_DEGRADED
       - OSDMAP_FLAGS
       - OSD_UPGRADE_FINISHED
+      - Replacing daemon mds
+      - MDS_ALL_DOWN
+      - MDS_UP_LESS_THAN_MAX
+      - filesystem is offline
+      - with fewer MDS than max_mds
+      - filesystem is degraded
+      - osds down
+      - osd down
+      - OBJECT_UNFOUND
+      - pg .* is stuck peering
 tasks:
 - install:
     branch: squid
     exclude_packages:
+      - ceph-osd-classic
       - ceph-volume
+      - ceph-osd-crimson
 
 - cephadm:
     image: quay.ceph.io/ceph-ci/ceph:squid

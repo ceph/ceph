@@ -85,7 +85,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         """ Path to user data directory within a subvolume snapshot named 'snapname' """
         return self.snapshot_path(snapname)
 
-    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, case_insensitive):
+    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive, enctag):
         subvolume_type = SubvolumeTypes.TYPE_NORMAL
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
@@ -106,7 +106,8 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 'quota': size,
                 'earmark': earmark,
                 'normalization': normalization,
-                'case_insensitive': case_insensitive,
+                'casesensitive': casesensitive,
+                'enctag': enctag,
             }
             self.set_attrs(subvol_path, attrs)
 
@@ -135,11 +136,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             self.metadata_mgr.update_section("source", "group", subvolume.group_name)
         self.metadata_mgr.update_section("source", "subvolume", subvolume.subvol_name)
         self.metadata_mgr.update_section("source", "snapshot", snapname)
-        if flush:
-            self.metadata_mgr.flush()
-
-    def remove_clone_source(self, flush=False):
-        self.metadata_mgr.remove_section("source")
         if flush:
             self.metadata_mgr.flush()
 
@@ -656,30 +652,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                       )
                 log.error(msg)
                 raise EvictionError(msg)
-
-    def _get_clone_source(self):
-        try:
-            clone_source = {
-                'volume'   : self.metadata_mgr.get_option("source", "volume"),
-                'subvolume': self.metadata_mgr.get_option("source", "subvolume"),
-                'snapshot' : self.metadata_mgr.get_option("source", "snapshot"),
-            }
-
-            try:
-                clone_source["group"] = self.metadata_mgr.get_option("source", "group")
-            except MetadataMgrException as me:
-                if me.errno == -errno.ENOENT:
-                    pass
-                else:
-                    raise
-        except MetadataMgrException:
-            raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
-        return clone_source
-
-    def get_clone_source(self):
-        src = self._get_clone_source()
-        return (src['volume'], src.get('group', None), src['subvolume'],
-                src['snapshot'])
 
     def _get_clone_failure(self):
         clone_failure = {

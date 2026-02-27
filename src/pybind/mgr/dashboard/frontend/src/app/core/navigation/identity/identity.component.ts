@@ -7,7 +7,8 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 @Component({
   selector: 'cd-identity',
   templateUrl: './identity.component.html',
-  styleUrls: ['./identity.component.scss']
+  styleUrls: ['./identity.component.scss'],
+  standalone: false
 })
 export class IdentityComponent implements OnInit {
   sso: boolean;

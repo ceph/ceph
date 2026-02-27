@@ -117,7 +117,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "(ceph_pool_stored{cluster=~\"$cluster\", } / (ceph_pool_stored{cluster=~\"$cluster\", } + ceph_pool_max_avail{cluster=~\"$cluster\", })) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster\", }\n",
+               "expr": "(ceph_pool_stored{cluster=~\"$cluster|\", } / (ceph_pool_stored{cluster=~\"$cluster|\", } + ceph_pool_max_avail{cluster=~\"$cluster|\", })) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster|\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -199,7 +199,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "(ceph_pool_max_avail{cluster=~\"$cluster\", } / deriv(ceph_pool_stored{cluster=~\"$cluster\", }[6h])) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster\", } > 0\n",
+               "expr": "(ceph_pool_max_avail{cluster=~\"$cluster|\", } / deriv(ceph_pool_stored{cluster=~\"$cluster|\", }[6h])) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster|\", } > 0\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -221,6 +221,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -287,7 +288,7 @@
          "seriesOverrides": [ ],
          "targets": [
             {
-               "expr": "deriv(ceph_pool_objects{cluster=~\"$cluster\", }[1m]) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster\", }\n",
+               "expr": "deriv(ceph_pool_objects{cluster=~\"$cluster|\", }[1m]) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster|\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Objects per second",
@@ -299,6 +300,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -370,14 +372,14 @@
          ],
          "targets": [
             {
-               "expr": "rate(ceph_pool_rd{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster\", }\n",
+               "expr": "rate(ceph_pool_rd{cluster=~\"$cluster|\", }[$__rate_interval]) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster|\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "reads",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster\", }\n",
+               "expr": "rate(ceph_pool_wr{cluster=~\"$cluster|\", }[$__rate_interval]) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster|\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "writes",
@@ -389,6 +391,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -460,14 +463,14 @@
          ],
          "targets": [
             {
-               "expr": "rate(ceph_pool_rd_bytes{cluster=~\"$cluster\", }[$__rate_interval]) +\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster\", }\n",
+               "expr": "rate(ceph_pool_rd_bytes{cluster=~\"$cluster|\", }[$__rate_interval]) +\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster|\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "reads",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_pool_wr_bytes{cluster=~\"$cluster\", }[$__rate_interval]) +\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster\", }\n",
+               "expr": "rate(ceph_pool_wr_bytes{cluster=~\"$cluster|\", }[$__rate_interval]) +\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster|\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "writes",
@@ -479,6 +482,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -545,7 +549,7 @@
          "seriesOverrides": [ ],
          "targets": [
             {
-               "expr": "ceph_pool_objects{cluster=~\"$cluster\", } *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster\", }\n",
+               "expr": "ceph_pool_objects{cluster=~\"$cluster|\", } *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster|\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Number of Objects",
@@ -609,7 +613,7 @@
             "multi": false,
             "name": "pool_name",
             "options": [ ],
-            "query": "label_values(ceph_pool_metadata{cluster=~\"$cluster\", }, name)",
+            "query": "label_values(ceph_pool_metadata{cluster=~\"$cluster|\", }, name)",
             "refresh": 1,
             "regex": "",
             "sort": 1,
@@ -651,7 +655,7 @@
       ]
    },
    "timezone": "",
-   "title": "Ceph Pool Details",
+   "title": "Ceph Pool - Details",
    "uid": "-xyV8KCiz",
    "version": 0
 }

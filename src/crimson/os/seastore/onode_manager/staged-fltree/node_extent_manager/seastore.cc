@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "seastore.h"
 
@@ -27,7 +27,7 @@ static DeltaRecorderURef create_replay_recorder(
     } else if (field_type == field_type_t::N3) {
       return DeltaRecorderT<leaf_fields_3_t, node_type_t::LEAF>::create_for_replay();
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
   } else if (node_type == node_type_t::INTERNAL) {
     if (field_type == field_type_t::N0) {
@@ -39,10 +39,10 @@ static DeltaRecorderURef create_replay_recorder(
     } else if (field_type == field_type_t::N3) {
       return DeltaRecorderT<internal_fields_3_t, node_type_t::INTERNAL>::create_for_replay();
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
   } else {
-    ceph_abort("impossible path");
+    ceph_abort_msg("impossible path");
   }
 }
 
@@ -68,7 +68,7 @@ void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl)
     auto field_type = header.get_field_type();
     if (!field_type.has_value()) {
       ERROR("replay got invalid node -- {}", *this);
-      ceph_abort("fatal error");
+      ceph_abort_msg("fatal error");
     }
     auto node_type = header.get_node_type();
     recorder = create_replay_recorder(node_type, *field_type);

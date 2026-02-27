@@ -49,15 +49,15 @@ Alternatively, you may use the ``CEPH_ARGS`` environment variable to avoid
 re-entry of the user name and secret.
 
 For details on configuring the Ceph Storage Cluster to use authentication, see
-`Cephx Config Reference`_. For details on the architecture of Cephx, see
-`Architecture - High Availability Authentication`_.
+:ref:`rados-cephx-config-ref`. For details on the architecture of Cephx, see
+:ref:`arch_high_availability_authentication`.
 
 Background
 ==========
 
 No matter what type of Ceph client is used (for example: Block Device, Object
 Storage, Filesystem, native API), Ceph stores all data as RADOS objects within
-`pools`_.  Ceph users must have access to a given pool in order to read and
+:ref:`rados_pools`.  Ceph users must have access to a given pool in order to read and
 write data, and Ceph users must have execute permissions in order to use Ceph's
 administrative commands. The following concepts will help you understand
 Ceph['s] user management.
@@ -335,6 +335,17 @@ The following entries describe valid capability profiles:
 :Description: Gives a user read-only access to monitors. Used in conjunction
               with the manager ``crash`` module to upload daemon crash
               dumps into monitor storage for later analysis.
+
+.. important:: If you run the command ``ceph auth caps client.admin mgr
+   'allow*'``, you will remove necessary capabilities from ``client.admin``. To
+   repair this, run a command of the following form from within the
+   ``/var/lib/ceph/mon/<monitor_name>`` directory:
+
+      .. prompt:: bash #
+
+         ceph -n mon. --keyring keyring auth caps client.admin mds 'allow *' osd 'allow *' mon 'allow *'
+
+
 
 Pool
 ----
@@ -811,8 +822,6 @@ Ceph supports the following usage for user name and secret:
                  sudo rbd map --id foo --keyring /path/to/keyring mypool/myimage
 
 
-.. _pools: ../pools
-
 Limitations
 ===========
 
@@ -854,5 +863,3 @@ encryption. Anyone storing sensitive data in Ceph should consider
 encrypting their data before providing it to the Ceph system.
 
 
-.. _Architecture - High Availability Authentication: ../../../architecture#high-availability-authentication
-.. _Cephx Config Reference: ../../configuration/auth-config-ref

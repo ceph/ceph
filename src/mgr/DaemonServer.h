@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -53,7 +54,8 @@ struct MDSPerfMetricQuery;
 
 
 struct offline_pg_report {
-  std::set<int> osds;
+  using ContainerType = std::variant<std::vector<int>, std::set<int>>;
+  ContainerType osds;
   std::set<pg_t> ok, not_ok, unknown;
   std::set<pg_t> ok_become_degraded, ok_become_more_degraded;             // ok
   std::set<pg_t> bad_no_pool, bad_already_inactive, bad_become_inactive;  // not ok
@@ -65,9 +67,11 @@ struct offline_pg_report {
   void dump(Formatter *f) const {
     f->dump_bool("ok_to_stop", ok_to_stop());
     f->open_array_section("osds");
-    for (auto o : osds) {
-      f->dump_int("osd", o);
-    }
+    std::visit([&f](auto&& container) {
+      for (const auto& o : container) {
+        f->dump_int("osd", o);
+      }
+    }, osds);
     f->close_section();
     f->dump_unsigned("num_ok_pgs", ok.size());
     f->dump_unsigned("num_not_ok_pgs", not_ok.size());
@@ -122,6 +126,22 @@ struct offline_pg_report {
   }
 };
 
+struct upgrade_osd_report {
+  std::vector<int> osds;
+  std::vector<int> ok_upgrade, ok_upgraded, bad_no_version;
+
+  bool ok_to_upgrade() const {
+    return !ok_upgrade.empty() && bad_no_version.empty();
+  }
+
+  bool all_osds_upgraded() const {
+    return ((osds.size() == ok_upgraded.size()) &&
+            ok_upgrade.empty() && bad_no_version.empty());
+  }
+
+  void dump(Formatter *f) const;
+};
+
 /**
  * Server used in ceph-mgr to communicate with Ceph daemons like
  * MDSs and OSDs.
@@ -172,6 +192,7 @@ protected:
   class DaemonServerHook *asok_hook;
 
 private:
+  using ContainerType = std::variant<std::vector<int>, std::set<int>>;
   friend class ReplyOnFinish;
   bool _reply(MCommand* m,
 	      int ret, const std::string& s, const bufferlist& payload);
@@ -179,7 +200,7 @@ private:
   void _prune_pending_service_map();
 
   void _check_offlines_pgs(
-    const std::set<int>& osds,
+    const ContainerType& osds,
     const OSDMap& osdmap,
     const PGMap& pgmap,
     offline_pg_report *report);
@@ -189,6 +210,32 @@ private:
     const OSDMap& osdmap,
     const PGMap& pgmap,
     offline_pg_report *report);
+  void _maximize_ok_to_upgrade_set(
+    const std::vector<int>& orig_osds,
+    unsigned max,
+    const OSDMap& osdmap,
+    const PGMap& pgmap,
+    std::string_view ceph_version_new,
+    upgrade_osd_report *osd_report,
+    offline_pg_report *pg_report,
+    std::ostream *ss);
+  std::optional<std::string> get_osd_metadata(
+    const std::string& name,
+    const std::string& osd_id);
+  void _update_upgraded_osds(
+    const std::vector<int>& orig_osds,
+    const std::vector<int>& to_upgrade,
+    const std::vector<int>& upgraded,
+    const std::vector<int>& version_unknown,
+    upgrade_osd_report *osd_report);
+  bool _valid_bucket_type_for_upgrade_check(
+    std::string_view bucket_type_str);
+  int _populate_crush_bucket_osds(
+    const int item_id,
+    const OSDMap& osdmap,
+    const PGMap& pgmap,
+    std::vector<int>& crush_bucket_osds,
+    std::ostream *ss = nullptr);
 
   utime_t started_at;
   std::atomic<bool> pgmap_ready;

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef CEPH_CLS_LOG_TYPES_H
 #define CEPH_CLS_LOG_TYPES_H
 
@@ -69,16 +70,18 @@ struct entry {
     JSONDecoder::decode_json("id", id, obj);
   }
 
-  static void generate_test_instances(std::list<cls::log::entry *>& l) {
-    l.push_back(new cls::log::entry{});
-    l.push_back(new cls::log::entry);
-    l.back()->id = "test_id";
-    l.back()->section = "test_section";
-    l.back()->name = "test_name";
-    l.back()->timestamp = ceph::real_time{};
+  static std::list<cls::log::entry> generate_test_instances() {
+    std::list<cls::log::entry> l;
+    l.emplace_back();
+    l.emplace_back();
+    l.back().id = "test_id";
+    l.back().section = "test_section";
+    l.back().name = "test_name";
+    l.back().timestamp = ceph::real_time{};
     ceph::buffer::list bl;
     ceph::encode(std::string("Test"), bl, 0);
-    l.back()->data = bl;
+    l.back().data = bl;
+    return l;
   }
 };
 WRITE_CLASS_ENCODER(entry)
@@ -105,11 +108,13 @@ struct header {
     f->dump_string("max_marker", max_marker);
     f->dump_stream("max_time") << max_time;
   }
-  static void generate_test_instances(std::list<header*>& o) {
-    o.push_back(new header);
-    o.push_back(new header);
-    o.back()->max_marker = "test_marker";
-    o.back()->max_time = ceph::real_clock::zero();
+  static std::list<header> generate_test_instances() {
+    std::list<header> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().max_marker = "test_marker";
+    o.back().max_time = ceph::real_clock::zero();
+    return o;
   }
   friend auto operator <=>(const header&, const header&) = default;
 };

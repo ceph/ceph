@@ -18,7 +18,8 @@ import { PasswordPolicyService } from '~/app/shared/services/password-policy.ser
 @Component({
   selector: 'cd-user-password-form',
   templateUrl: './user-password-form.component.html',
-  styleUrls: ['./user-password-form.component.scss']
+  styleUrls: ['./user-password-form.component.scss'],
+  standalone: false
 })
 export class UserPasswordFormComponent {
   userForm: CdFormGroup;
@@ -28,6 +29,12 @@ export class UserPasswordFormComponent {
   passwordStrengthLevelClass: string;
   passwordValuation: string;
   icons = Icons;
+  INVALID_TEXTS = {
+    required: 'This field is required',
+    notmatch: 'The old and new passwords must be different',
+    match: "Password confirmation doesn't match the new password.",
+    passwordPolicy: ''
+  };
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -76,11 +83,17 @@ export class UserPasswordFormComponent {
             CdValidators.passwordPolicy(
               this.userService,
               () => this.authStorageService.getUsername(),
-              (_valid: boolean, credits: number, valuation: string) => {
+              (_valid: boolean, credits, valuation: string) => {
+                /* `passwordStrengthLevelClass` and `passwordValuation` is used in LoginPasswordFormComponent
+                 * These values are not needed in this component after carbonization.
+                 * @TODO: Need to remove once the LoginPasswordFormComponent is carbonized.
+                 */
                 this.passwordStrengthLevelClass = this.passwordPolicyService.mapCreditsToCssClass(
                   credits
                 );
                 this.passwordValuation = _.defaultTo(valuation, '');
+
+                this.INVALID_TEXTS['passwordPolicy'] = _.defaultTo(valuation, '');
               }
             )
           ]

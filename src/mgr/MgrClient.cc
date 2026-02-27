@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -330,15 +331,8 @@ void MgrClient::_send_report()
   {
     // Helper for checking whether a counter should be included
     auto include_counter = [this](
-        const PerfCounters::perf_counter_data_any_d &ctr,
-        const PerfCounters &perf_counters)
-    {
-      // FIXME: We don't send labeled perf counters to the mgr currently.
-      auto labels = ceph::perf_counters::key_labels(perf_counters.get_name());
-      if (labels.begin() != labels.end()) {
-        return false;
-      }
-
+			       const PerfCounters::perf_counter_data_any_d &ctr,
+			       const PerfCounters &perf_counters) {
       return perf_counters.get_adjusted_priority(ctr.prio) >= (int)stats_threshold;
     };
 
@@ -472,7 +466,7 @@ bool MgrClient::handle_mgr_configure(ref_t<MMgrConfigure> m)
     handle_config_payload(m->osd_perf_metric_queries);
   } else if (m->metric_config_message) {
     const MetricConfigMessage &message = *m->metric_config_message;
-    boost::apply_visitor(HandlePayloadVisitor(this), message.payload);
+    std::visit(HandlePayloadVisitor(this), message.payload);
   }
 
   bool starting = (stats_period == 0) && (m->stats_period != 0);
@@ -491,7 +485,7 @@ bool MgrClient::handle_mgr_close(ref_t<MMgrClose> m)
   return true;
 }
 
-int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
+int MgrClient::start_command(vector<string>&& cmd, bufferlist&& inbl,
 			     bufferlist *outbl, string *outs,
 			     Context *onfinish)
 {
@@ -505,8 +499,8 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
   }
 
   auto &op = command_table.start_command();
-  op.cmd = cmd;
-  op.inbl = inbl;
+  op.cmd = std::move(cmd);
+  op.inbl = std::move(inbl);
   op.outbl = outbl;
   op.outs = outs;
   op.on_finish = onfinish;
@@ -525,8 +519,8 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 }
 
 int MgrClient::start_tell_command(
-  const string& name,
-  const vector<string>& cmd, const bufferlist& inbl,
+  string&& name,
+  vector<string>&& cmd, bufferlist&& inbl,
   bufferlist *outbl, string *outs,
   Context *onfinish)
 {
@@ -541,9 +535,9 @@ int MgrClient::start_tell_command(
 
   auto &op = command_table.start_command();
   op.tell = true;
-  op.name = name;
-  op.cmd = cmd;
-  op.inbl = inbl;
+  op.name = std::move(name);
+  op.cmd = std::move(cmd);
+  op.inbl = std::move(inbl);
   op.outbl = outbl;
   op.outs = outs;
   op.on_finish = onfinish;

@@ -15,21 +15,16 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitThis": true,
     "noImplicitReturns": true,
-    "noImplicitAny": true,
+    "noImplicitAny": false,
     "ignoreDeprecations": "5.0",
-    "suppressImplicitAnyIndexErrors": true,
     "target": "ES2022",
     "module": "ES2022",
     "baseUrl": "./",
     "resolveJsonModule": true,
     "paths": {
-      "~/*": ["src/*"],
-      "timers": [
-          "node_modules/timers-browserify"
-        ],
-        "stream": [
-          "node_modules/stream-browserify"
-        ]
+      "stream": ["node_modules/stream-browserify"],
+      "timers": ["node_modules/timers-browserify"],
+      "~/*": ["src/*"]
     },
     "typeRoots": ["node_modules/@types"],
     "lib": ["es2017", "dom"],

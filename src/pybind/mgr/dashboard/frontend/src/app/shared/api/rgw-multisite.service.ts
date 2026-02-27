@@ -2,7 +2,11 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { RgwRealm, RgwZone, RgwZonegroup } from '~/app/ceph/rgw/models/rgw-multisite';
 import { RgwDaemonService } from './rgw-daemon.service';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { MgrModuleInfo } from '../models/mgr-modules.interface';
+import { RGW } from '~/app/ceph/rgw/utils/constants';
+import { MgrModuleService } from './mgr-module.service';
 
 @Injectable({
   providedIn: 'root'
@@ -14,7 +18,11 @@ export class RgwMultisiteService {
   private restartGatewayMessageSource = new BehaviorSubject<boolean>(null);
   restartGatewayMessage$ = this.restartGatewayMessageSource.asObservable();
 
-  constructor(private http: HttpClient, public rgwDaemonService: RgwDaemonService) {}
+  constructor(
+    private http: HttpClient,
+    public rgwDaemonService: RgwDaemonService,
+    private mgrModuleService: MgrModuleService
+  ) {}
 
   migrate(realm: RgwRealm, zonegroup: RgwZonegroup, zone: RgwZone, username: string) {
     return this.rgwDaemonService.request((params: HttpParams) => {
@@ -24,7 +32,8 @@ export class RgwMultisiteService {
         zone_name: zone.name,
         zonegroup_endpoints: zonegroup.endpoints,
         zone_endpoints: zone.endpoints,
-        username: username
+        username: username,
+        tier_type: zone.tier_type
       });
       return this.http.put(`${this.uiUrl}/migrate`, null, { params: params });
     });
@@ -82,17 +91,20 @@ export class RgwMultisiteService {
     zonegroupName: string,
     zonegroupEndpoints: string,
     zoneName: string,
+    tierType: string,
     zoneEndpoints: string,
     username: string,
     cluster?: string,
     replicationZoneName?: string,
-    clusterDetailsArray?: any
+    clusterDetailsArray?: any,
+    selectedRealmName?: string
   ) {
     let params = new HttpParams()
       .set('realm_name', realmName)
       .set('zonegroup_name', zonegroupName)
       .set('zonegroup_endpoints', zonegroupEndpoints)
       .set('zone_name', zoneName)
+      .set('tier_type', tierType)
       .set('zone_endpoints', zoneEndpoints)
       .set('username', username);
 
@@ -106,6 +118,10 @@ export class RgwMultisiteService {
 
     if (replicationZoneName) {
       params = params.set('replication_zone_name', replicationZoneName);
+    }
+
+    if (selectedRealmName) {
+      params = params.set('selectedRealmName', selectedRealmName);
     }
 
     return this.http.post(`${this.uiUrl}/multisite-replications`, null, { params: params });
@@ -152,5 +168,14 @@ export class RgwMultisiteService {
 
   setRestartGatewayMessage(value: boolean): void {
     this.restartGatewayMessageSource.next(value);
+  }
+
+  getRgwModuleStatus(): Observable<boolean> {
+    return this.mgrModuleService.list().pipe(
+      map((moduleData: MgrModuleInfo[]) => {
+        const rgwModule = moduleData.find((module) => module.name === RGW);
+        return !!rgwModule?.enabled;
+      })
+    );
   }
 }

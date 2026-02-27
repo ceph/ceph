@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 /*
  * Ceph - scalable distributed file system
  *
@@ -19,6 +19,7 @@
 
 #include <boost/tuple/tuple.hpp>
 #include "include/ceph_assert.h"
+#include "include/types.h" // for client_t
 #include "DynamicPerfStats.h"
 #include "OSD.h"
 #include "PG.h"
@@ -392,6 +393,9 @@ public:
   const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
     return get_acting_recovery_backfill();
   }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const override {
+    return PG::get_acting_recovery_backfill_shard_id_set();
+  }
   const std::set<pg_shard_t> &get_acting_shards() const override {
     return recovery_state.get_actingset();
   }
@@ -531,15 +535,15 @@ public:
       projected_log.skip_can_rollback_to_to_head();
       projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
     }
-    if (!is_primary() && !is_ec_pg()) {
-      replica_clear_repop_obc(logv, t);
+    if (!is_primary()) {
+      clear_repop_obc(logv, t);
     }
     recovery_state.append_log(
       std::move(logv), trim_to, roll_forward_to, pg_committed_to,
       t, transaction_applied, async);
   }
 
-  void replica_clear_repop_obc(
+  void clear_repop_obc(
     const std::vector<pg_log_entry_t> &logv,
     ObjectStore::Transaction &t);
 
@@ -610,6 +614,13 @@ public:
     osd->send_message_osd_cluster(peer, m, from_epoch);
   }
   void send_message_osd_cluster(
+    int osd, MOSDPGPush* msg, epoch_t from_epoch) override {
+    std::vector wrapped_msg {
+      std::make_pair(osd, static_cast<Message*>(msg))
+    };
+    send_message_osd_cluster(wrapped_msg, from_epoch);
+  }
+  void send_message_osd_cluster(
     std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) override {
     osd->send_message_osd_cluster(messages, from_epoch);
   }
@@ -622,10 +633,10 @@ public:
     osd->send_message_osd_cluster(m, con);
   }
   void start_mon_command(
-    const std::vector<std::string>& cmd, const bufferlist& inbl,
+    std::vector<std::string>&& cmd, bufferlist&& inbl,
     bufferlist *outbl, std::string *outs,
     Context *onfinish) override {
-    osd->monc->start_mon_command(cmd, inbl, outbl, outs, onfinish);
+    osd->monc->start_mon_command(std::move(cmd), std::move(inbl), outbl, outs, onfinish);
   }
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) override;
   entity_name_t get_cluster_msgr_name() override {
@@ -1138,7 +1149,7 @@ protected:
     }
     {
       f->open_array_section("peer_backfill_info");
-      for (std::map<pg_shard_t, BackfillInterval>::const_iterator pbi =
+      for (std::map<pg_shard_t, ReplicaBackfillInterval>::const_iterator pbi =
 	     peer_backfill_info.begin();
           pbi != peer_backfill_info.end(); ++pbi) {
         f->dump_stream("osd") << pbi->first;
@@ -1327,14 +1338,20 @@ protected:
    * @bi.begin first item should be >= this value
    * @bi [out] resulting std::map of objects to eversion_t's
    */
-  void scan_range(
-    int min, int max, BackfillInterval *bi,
+  void scan_range_replica(
+    int min, int max, ReplicaBackfillInterval *bi,
     ThreadPool::TPHandle &handle
+    );
+
+  void scan_range_primary(
+    int min, int max, PrimaryBackfillInterval *bi,
+    ThreadPool::TPHandle &handle,
+    const std::set<pg_shard_t> &backfill_targets
     );
 
   /// Update a hash range to reflect changes since the last scan
   void update_range(
-    BackfillInterval *bi,        ///< [in,out] interval to update
+    PrimaryBackfillInterval *bi, ///< [in,out] interval to update
     ThreadPool::TPHandle &handle ///< [in] tp handle
     );
 
@@ -1525,7 +1542,8 @@ public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
 	       const PGPool &_pool,
 	       const std::map<std::string,std::string>& ec_profile,
-	       spg_t p);
+	       spg_t p,
+               ECExtentCache::LRU &ec_extent_cache_lru);
   ~PrimaryLogPG() override;
 
   void do_command(
@@ -1881,6 +1899,9 @@ public:
     return is_missing_object(oid) ||
       !recovery_state.get_missing_loc().readable_with_acting(
 	oid, get_actingset());
+  }
+  bool is_missing_any_head_or_clone_of(const hobject_t &hoid) {
+    return recovery_state.is_missing_any_head_or_clone_of(hoid);
   }
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);

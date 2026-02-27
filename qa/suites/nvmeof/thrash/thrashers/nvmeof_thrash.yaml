@@ -1,6 +1,12 @@
 overrides:
   ceph:
     log-ignorelist:  
+      # general ignorelist
+      - OSD_DOWN
+      - osds down
+      - OSD_HOST_DOWN
+      - OSD_ROOT_DOWN
+      - PG_DEGRADED
       # nvmeof daemon thrashing
       - CEPHADM_FAILED_DAEMON
       - NVMEOF_SINGLE_GATEWAY
@@ -9,6 +15,8 @@ overrides:
       - is unavailable
       - is in error state
       - failed cephadm daemon
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_DAEMON_PLACE_FAIL
 
 tasks:
 - nvmeof.thrash:

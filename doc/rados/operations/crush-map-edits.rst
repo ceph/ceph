@@ -1,3 +1,5 @@
+.. _rados-crush-map-edits:
+
 Manually editing the CRUSH Map
 ==============================
 
@@ -17,8 +19,8 @@ To edit an existing CRUSH map, carry out the following procedure:
 #. `Recompile`_ the CRUSH map.
 #. `Set the CRUSH map`_.
 
-For details on setting the CRUSH map rule for a specific pool, see `Set Pool
-Values`_.
+For details on setting the CRUSH map rule for a specific pool,
+see :ref:`setpoolvalues`.
 
 .. _Get the CRUSH map: #getcrushmap
 .. _Decompile: #decompilecrushmap
@@ -27,7 +29,6 @@ Values`_.
 .. _Rules: #crushmaprules
 .. _Recompile: #compilecrushmap
 .. _Set the CRUSH map: #setcrushmap
-.. _Set Pool Values: ../pools#setpoolvalues
 
 .. _getcrushmap:
 
@@ -265,7 +266,7 @@ all of the
 chassis's hosts and their associated OSDs will be in the ``down``
 state and thus unavailable.  It is important to avoid placing multiple replicas
 or shards of data within a single such chassis, which in this case is
-a _failure domain_.
+a *failure domain*.
 
 To declare a bucket instance, do the following: specify its type, give it a
 unique name (an alphanumeric string), assign it a unique ID expressed as a

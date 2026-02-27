@@ -528,7 +528,8 @@ def cephfs_setup(ctx, config):
 @contextlib.contextmanager
 def watchdog_setup(ctx, config):
     ctx.ceph[config['cluster']].thrashers = []
-    ctx.ceph[config['cluster']].watchdog = DaemonWatchdog(ctx, config, ctx.ceph[config['cluster']].thrashers)
+    ctx.ceph[config['cluster']].watched_processes = []
+    ctx.ceph[config['cluster']].watchdog = DaemonWatchdog(ctx, config)
     ctx.ceph[config['cluster']].watchdog.start()
     yield
 
@@ -666,8 +667,7 @@ def create_simple_monmap(ctx, remote, conf, mons,
 
 
 def is_crimson(config):
-    return config.get('flavor', 'default') == 'crimson'
-
+    return config.get('crimson_compat', False)
 
 def maybe_redirect_stderr(config, type_, args, log_path):
     if type_ == 'osd' and is_crimson(config):
@@ -1198,11 +1198,11 @@ def cluster(ctx, config):
             """
             args = [
                 'sudo',
-                'egrep', pattern,
+                'grep', '-E', pattern,
                 '/var/log/ceph/{cluster}.log'.format(cluster=cluster_name),
             ]
             for exclude in excludes:
-                args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+                args.extend([run.Raw('|'), 'grep', '-E', '-v', exclude])
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
@@ -1680,7 +1680,7 @@ def restart(ctx, config):
             cluster, type_, id_ = teuthology.split_role(role)
             remote.run(
                args = ['sudo',
-                       'egrep', expected_fail,
+                       'grep', '-E', expected_fail,
                        '/var/log/ceph/{cluster}-{type_}.{id_}.log'.format(cluster=cluster, type_=type_, id_=id_),
                 ])
     yield

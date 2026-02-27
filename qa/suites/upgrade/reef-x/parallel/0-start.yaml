@@ -47,8 +47,12 @@ overrides:
       - Reduced data availability
       - Degraded data redundancy
       - pg .* is stuck inactive
-      - pg .* is stuck peering
       - pg .* is .*degraded
       - FS_DEGRADED
       - OSDMAP_FLAGS
       - OSD_UPGRADE_FINISHED
+      - filesystem is degraded
+      - filesystem is offline
+      - osds down
+      - osd down
+      - OBJECT_UNFOUND

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -17,10 +18,12 @@
 #ifndef RECOVERY_QUEUE_H
 #define RECOVERY_QUEUE_H
 
-#include <set>
-
 #include "include/common_fwd.h"
+#include "include/elist.h"
 #include "osdc/Filer.h"
+
+#include <cstddef>
+#include <map>
 
 class CInode;
 class MDSRank;

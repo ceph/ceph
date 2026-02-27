@@ -41,9 +41,10 @@ export class RgwUserService {
    * Get the list of usernames.
    * @return {Observable<string[]>}
    */
-  enumerate() {
+  enumerate(detailed: boolean = false) {
     return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.get(this.url, { params: params });
+      params = params.append('detailed', detailed);
+      return this.http.get(this.url, { params });
     });
   }
 
@@ -68,6 +69,9 @@ export class RgwUserService {
   create(args: Record<string, any>) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       _.keys(args).forEach((key) => {
+        if (typeof args[key] === 'object') {
+          args[key] = JSON.stringify(args[key]);
+        }
         params = params.append(key, args[key]);
       });
       return this.http.post(this.url, null, { params: params });
@@ -77,6 +81,9 @@ export class RgwUserService {
   update(uid: string, args: Record<string, any>) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       _.keys(args).forEach((key) => {
+        if (typeof args[key] === 'object') {
+          args[key] = JSON.stringify(args[key]);
+        }
         params = params.append(key, args[key]);
       });
       return this.http.put(`${this.url}/${uid}`, null, { params: params });

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -66,13 +67,16 @@ SUBSYS(rgw_access, 1, 5)
 SUBSYS(rgw_dbstore, 1, 5)
 SUBSYS(rgw_flight, 1, 5)
 SUBSYS(rgw_lifecycle, 1, 5)
+SUBSYS(rgw_restore, 1, 5)
 SUBSYS(rgw_notification, 1, 5)
+SUBSYS(rgw_bucket_logging, 1, 5)
 SUBSYS(javaclient, 1, 5)
 SUBSYS(asok, 1, 5)
 SUBSYS(throttle, 1, 1)
 SUBSYS(refs, 0, 0)
 SUBSYS(compressor, 1, 5)
 SUBSYS(bluestore, 1, 5)
+SUBSYS(bluestore_compression, 1, 5)
 SUBSYS(bluefs, 1, 5)
 SUBSYS(bdev, 1, 3)
 SUBSYS(kstore, 1, 5)
@@ -103,6 +107,7 @@ SUBSYS(seastore_device, 0, 5)
 SUBSYS(seastore_backref, 0, 5)
 SUBSYS(alienstore, 0, 5)
 SUBSYS(mclock, 1, 5)
+SUBSYS(rgw_dedup, 1, 5)
 SUBSYS(cyanstore, 0, 5)
 SUBSYS(ceph_exporter, 1, 5)
 SUBSYS(memstore, 1, 5)

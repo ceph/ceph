@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,46 +16,57 @@
 #ifndef CEPH_CINODE_H
 #define CEPH_CINODE_H
 
+#include <dirent.h> // for IFTODT()
+
 #include <list>
 #include <map>
 #include <set>
+#include <sstream>
 #include <string_view>
+#include <vector>
 
 #include "common/config.h"
-#include "common/RefCountedObj.h"
+#include "common/ref.h" // for cref_t
 #include "include/compat.h"
+#include "include/Context.h" // for C_GatherBuilder
 #include "include/counter.h"
 #include "include/elist.h"
+#include "include/filepath.h"
 #include "include/types.h"
-#include "include/lru.h"
 #include "include/compact_set.h"
 
 #include "MDSCacheObject.h"
-#include "MDSContext.h"
+#include "mdstypes.h" // for old_inode_t
 #include "flock.h"
+#include "inode_backtrace.h" // for inode_backtrace_t
 
-#include "BatchOp.h"
-#include "CDentry.h"
+#include "ScrubHeader.h"
 #include "SimpleLock.h"
 #include "ScatterLock.h"
 #include "LocalLockC.h"
 #include "Capability.h"
-#include "SnapRealm.h"
-#include "Mutation.h"
+#include "LogSegmentRef.h"
 
-#include "messages/MClientCaps.h"
+#include <boost/intrusive_ptr.hpp>
 
-#define dout_context g_ceph_context
-
+struct sr_t;
+class BatchOp;
 class Context;
+class CDentry;
 class CDir;
 class CInode;
 class MDCache;
+class MDSContext;
 class LogSegment;
 struct SnapRealm;
 class Session;
 struct ObjectOperation;
 class EMetaBlob;
+class MClientCaps;
+struct MutationImpl;
+struct MDRequestImpl;
+typedef boost::intrusive_ptr<MutationImpl> MutationRef;
+typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 
 struct cinode_lock_info_t {
   int lock;
@@ -213,7 +225,7 @@ public:
     InodeStoreBase::decode_bare(bl, snap_blob);
   }
 
-  static void generate_test_instances(std::list<InodeStore*>& ls);
+  static std::list<InodeStore> generate_test_instances();
 
   using InodeStoreBase::inode;
   using InodeStoreBase::xattrs;
@@ -234,7 +246,7 @@ public:
   void decode(ceph::buffer::list::const_iterator &bl) {
     InodeStore::decode_bare(bl);
   }
-  static void generate_test_instances(std::list<InodeStoreBare*>& ls);
+  static std::list<InodeStoreBare> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(InodeStoreBare)
 
@@ -410,16 +422,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // ---------------------------
   CInode() = delete;
   CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP);
-  ~CInode() override {
-    close_dirfrags();
-    close_snaprealm();
-    clear_file_locks();
-    ceph_assert(num_projected_srnodes == 0);
-    ceph_assert(num_caps_notable == 0);
-    ceph_assert(num_subtree_roots == 0);
-    ceph_assert(num_exporting_dirs == 0);
-    ceph_assert(batch_ops.empty());
-  }
+  ~CInode() override;
 
   std::map<int, std::unique_ptr<BatchOp>> batch_ops;
 
@@ -469,6 +472,16 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     return scrub_infop->queued_frags;
   }
 
+  bool has_dirty_remote_dirfrag_scrubbed() {
+    return dirty_remote_dirfrag_scrubbed;
+  }
+  void mark_dirty_remote_dirfrag_scrubbed() {
+    dirty_remote_dirfrag_scrubbed = true;
+  }
+  void clear_dirty_remote_dirfrag_scrubbed() {
+    dirty_remote_dirfrag_scrubbed = false;
+  }
+
   bool is_multiversion() const {
     return snaprealm ||  // other snaprealms will link to me
       get_inode()->is_dir() ||  // links to me in other snaps
@@ -514,7 +527,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   projected_inode project_inode(const MutationRef& mut,
 				bool xattr = false, bool snap = false);
 
-  void pop_and_dirty_projected_inode(LogSegment *ls, const MutationRef& mut);
+  void pop_and_dirty_projected_inode(LogSegmentRef const& ls, const MutationRef& mut);
 
   version_t get_projected_version() const {
     if (projected_nodes.empty())
@@ -670,7 +683,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_symlink() const { return get_inode()->is_symlink(); }
   bool is_dir() const     { return get_inode()->is_dir(); }
   bool is_quiesced() const;
-  bool will_block_for_quiesce(const MDRequestRef& mdr = MDRequestRef {});
+  bool will_block_for_quiesce(const MDRequestRef& mdr);
 
   bool is_head() const { return last == CEPH_NOSNAP; }
 
@@ -685,7 +698,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void set_ambiguous_auth() {
     state_set(STATE_AMBIGUOUSAUTH);
   }
-  void clear_ambiguous_auth(MDSContext::vec& finished);
+  void clear_ambiguous_auth(std::vector<MDSContext*>& finished);
   void clear_ambiguous_auth();
 
   const inode_const_ptr& get_inode() const {
@@ -730,16 +743,22 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_ancestor_of(const CInode *other, std::unordered_map<CInode const*,bool>* visited=nullptr) const;
   bool is_projected_ancestor_of(const CInode *other) const;
 
-  void make_path_string(std::string& s, bool projected=false, const CDentry *use_parent=NULL) const;
-  void make_path(filepath& s, bool projected=false) const;
+  void make_path_string(std::string& s, bool projected=false,
+		        const CDentry *use_parent=NULL,
+		        int path_comp_count=-1) const;
+  void make_trimmed_path_string(std::string& s, bool projected=false,
+				const CDentry *use_parent=NULL,
+				int path_comp_count=10) const;
+  void make_path(filepath& s, bool projected=false,
+		 int path_comp_count=-1) const;
   void name_stray_dentry(std::string& dname);
   
   // -- dirtyness --
   version_t get_version() const { return get_inode()->version; }
 
   version_t pre_dirty();
-  void _mark_dirty(LogSegment *ls);
-  void mark_dirty(LogSegment *ls);
+  void _mark_dirty(LogSegmentRef const& ls);
+  void mark_dirty(LogSegmentRef const& ls);
   void mark_clean();
 
   void store(MDSContext *fin);
@@ -767,7 +786,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void _stored_backtrace(int r, version_t v, Context *fin);
   void fetch_backtrace(Context *fin, ceph::buffer::list *backtrace);
 
-  void mark_dirty_parent(LogSegment *ls, bool dirty_pool=false);
+  void mark_dirty_parent(LogSegmentRef const& ls, bool dirty_pool=false);
   void clear_dirty_parent();
   void verify_diri_backtrace(ceph::buffer::list &bl, int err);
   bool is_dirty_parent() { return state_test(STATE_DIRTYPARENT); }
@@ -779,12 +798,12 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void decode_store(ceph::buffer::list::const_iterator& bl);
 
   void add_dir_waiter(frag_t fg, MDSContext *c);
-  void take_dir_waiting(frag_t fg, MDSContext::vec& ls);
+  void take_dir_waiting(frag_t fg, std::vector<MDSContext*>& ls);
   bool is_waiting_for_dir(frag_t fg) {
     return waiting_on_dir.count(fg);
   }
   void add_waiter(uint64_t tag, MDSContext *c) override;
-  void take_waiting(uint64_t tag, MDSContext::vec& ls) override;
+  void take_waiting(uint64_t tag, std::vector<MDSContext*>& ls) override;
 
   // -- encode/decode helpers --
   void _encode_base(ceph::buffer::list& bl, uint64_t features);
@@ -794,7 +813,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void _encode_locks_state_for_replica(ceph::buffer::list& bl, bool need_recover);
   void _encode_locks_state_for_rejoin(ceph::buffer::list& bl, int rep);
   void _decode_locks_state_for_replica(ceph::buffer::list::const_iterator& p, bool is_new);
-  void _decode_locks_rejoin(ceph::buffer::list::const_iterator& p, MDSContext::vec& waiters,
+  void _decode_locks_rejoin(ceph::buffer::list::const_iterator& p, std::vector<MDSContext*>& waiters,
 			    std::list<SimpleLock*>& eval_locks, bool survivor);
 
   // -- import/export --
@@ -806,7 +825,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     state_clear(STATE_EXPORTINGCAPS);
     put(PIN_EXPORTINGCAPS);
   }
-  void decode_import(ceph::buffer::list::const_iterator& p, LogSegment *ls);
+  void decode_import(ceph::buffer::list::const_iterator& p, LogSegmentRef const& ls);
   
   // for giving to clients
   int encode_inodestat(ceph::buffer::list& bl, Session *session, SnapRealm *realm,
@@ -959,34 +978,15 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   /* Freeze the inode. auth_pin_allowance lets the caller account for any
    * auth_pins it is itself holding/responsible for. */
   bool freeze_inode(int auth_pin_allowance=0);
-  void unfreeze_inode(MDSContext::vec& finished);
+  void unfreeze_inode(std::vector<MDSContext*>& finished);
   void unfreeze_inode();
 
   void freeze_auth_pin();
   void unfreeze_auth_pin();
 
   // -- reference counting --
-  void bad_put(int by) override {
-    generic_dout(0) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref
-#ifdef MDS_REF_SET
-		    << " (" << ref_map << ")"
-#endif
-		    << dendl;
-#ifdef MDS_REF_SET
-    ceph_assert(ref_map[by] > 0);
-#endif
-    ceph_assert(ref > 0);
-  }
-  void bad_get(int by) override {
-    generic_dout(0) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref
-#ifdef MDS_REF_SET
-		    << " (" << ref_map << ")"
-#endif
-		    << dendl;
-#ifdef MDS_REF_SET
-    ceph_assert(ref_map[by] >= 0);
-#endif
-  }
+  void bad_put(int by) override;
+  void bad_get(int by) override;
   void first_get() override;
   void last_put() override;
   void _put() override;
@@ -1158,7 +1158,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * @returns a pool ID >=0
    */
   int64_t get_backtrace_pool() const;
-
+  inodeno_t get_subvolume_id() const;
 protected:
   ceph_lock_state_t *get_fcntl_lock_state() {
     if (!fcntl_locks)
@@ -1228,7 +1228,7 @@ protected:
   ceph_lock_state_t *flock_locks = nullptr;
 
   // -- waiting --
-  mempool::mds_co::compact_map<frag_t, MDSContext::vec > waiting_on_dir;
+  mempool::mds_co::compact_map<frag_t, std::vector<MDSContext*>> waiting_on_dir;
 
 
   // -- freezing inode --
@@ -1276,6 +1276,7 @@ private:
 
   int stickydir_ref = 0;
   std::unique_ptr<scrub_info_t> scrub_infop;
+  bool dirty_remote_dirfrag_scrubbed = false;
   /** @} Scrubbing and fsck */
 };
 
@@ -1283,5 +1284,5 @@ std::ostream& operator<<(std::ostream& out, const CInode& in);
 
 extern cinode_lock_info_t cinode_lock_info[];
 extern int num_cinode_locks;
-#undef dout_context
+
 #endif

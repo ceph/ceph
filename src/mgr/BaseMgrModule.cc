@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -24,6 +25,7 @@
 
 #include "mon/MonClient.h"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 #include "common/version.h"
 #include "mgr/Types.h"
 
@@ -178,7 +180,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
     self->py_modules->get_monc().start_mon_command(
         name,
         {cmd_json},
-        inbuf,
+        std::move(inbuf),
         &command_c->outbl,
         &command_c->outs,
         new C_OnFinisher(c, &self->py_modules->cmd_finisher));
@@ -198,7 +200,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
     self->py_modules->get_objecter().osd_command(
         osd_id,
         {cmd_json},
-        inbuf,
+        std::move(inbuf),
         &tid,
 	[command_c, f = &self->py_modules->cmd_finisher]
 	(boost::system::error_code ec, std::string s, ceph::buffer::list bl) {
@@ -227,7 +229,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
     self->py_modules->get_objecter().pg_command(
         pgid,
         {cmd_json},
-        inbuf,
+        std::move(inbuf),
         &tid,
 	[command_c, f = &self->py_modules->cmd_finisher]
 	(boost::system::error_code ec, std::string s, ceph::buffer::list bl) {
@@ -640,16 +642,30 @@ ceph_get_context(BaseMgrModule *self)
 }
 
 static PyObject*
-get_counter(BaseMgrModule *self, PyObject *args)
+get_unlabeled_counter(BaseMgrModule *self, PyObject *args)
 {
   char *svc_name = nullptr;
   char *svc_id = nullptr;
   char *counter_path = nullptr;
-  if (!PyArg_ParseTuple(args, "sss:get_counter", &svc_name,
+  if (!PyArg_ParseTuple(args, "sss:get_unlabeled_counter", &svc_name,
                                                   &svc_id, &counter_path)) {
     return nullptr;
   }
-  return self->py_modules->get_counter_python(
+  return self->py_modules->get_unlabeled_counter_python(
+      svc_name, svc_id, counter_path);
+}
+
+static PyObject*
+get_latest_unlabeled_counter(BaseMgrModule *self, PyObject *args)
+{
+  char *svc_name = nullptr;
+  char *svc_id = nullptr;
+  char *counter_path = nullptr;
+  if (!PyArg_ParseTuple(args, "sss:get_latest_unlabeled_counter", &svc_name,
+                                                  &svc_id, &counter_path)) {
+    return nullptr;
+  }
+  return self->py_modules->get_latest_unlabeled_counter_python(
       svc_name, svc_id, counter_path);
 }
 
@@ -658,22 +674,56 @@ get_latest_counter(BaseMgrModule *self, PyObject *args)
 {
   char *svc_name = nullptr;
   char *svc_id = nullptr;
-  char *counter_path = nullptr;
-  if (!PyArg_ParseTuple(args, "sss:get_counter", &svc_name,
-                                                  &svc_id, &counter_path)) {
+  char *counter_name = nullptr;
+  char *sub_counter_name = nullptr;
+  PyObject *labels_list = nullptr; //labels = [("level", "deep"), ("pooltype", "ec")]
+  if (!PyArg_ParseTuple(args, "ssssO:get_latest_counter", &svc_name,
+                                                  &svc_id, &counter_name, &sub_counter_name,
+                                                  &labels_list)) {
     return nullptr;
   }
+
+  if (!PyList_Check(labels_list)) {
+    derr << __func__ << " labels_list not a list" << dendl;
+    Py_RETURN_FALSE;
+  }
+
+  std::vector<std::pair<std::string_view, std::string_view>> labels;
+  for (int i = 0; i < PyList_Size(labels_list); ++i) {
+    // Get the tuple element of labels list ("level", "deep")
+    PyObject *label_key_value = PyList_GET_ITEM(labels_list, i);
+
+    char *label_key = nullptr;
+    char *label_value = nullptr;
+    if (!PyArg_ParseTuple(label_key_value, "ss:label_pair", &label_key, &label_value)) {
+      derr << fmt::format("{} list item {} not a size 2 tuple", __func__, i) << dendl;
+      continue;
+    }
+    labels.push_back(std::make_pair<std::string_view, std::string_view>(label_key, label_value));
+  }
+
   return self->py_modules->get_latest_counter_python(
-      svc_name, svc_id, counter_path);
+      svc_name, svc_id, counter_name, sub_counter_name, labels);
 }
 
 static PyObject*
-get_perf_schema(BaseMgrModule *self, PyObject *args)
+get_unlabeled_perf_schema(BaseMgrModule *self, PyObject *args)
 {
   char *type_str = nullptr;
   char *svc_id = nullptr;
-  if (!PyArg_ParseTuple(args, "ss:get_perf_schema", &type_str,
+  if (!PyArg_ParseTuple(args, "ss:get_unlabeled_perf_schema", &type_str,
                                                     &svc_id)) {
+    return nullptr;
+  }
+
+  return self->py_modules->get_unlabeled_perf_schema_python(type_str, svc_id);
+}
+
+static PyObject* get_perf_schema(BaseMgrModule *self, PyObject *args)
+{
+  char *type_str = nullptr;
+  char *svc_id = nullptr;
+  if (!PyArg_ParseTuple(args, "ss:get_perf_schema", &type_str, &svc_id)) {
     return nullptr;
   }
 
@@ -1102,6 +1152,7 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
   static const std::map<std::string, MDSPerfMetricSubKeyType> sub_key_types = {
     {"mds_rank", MDSPerfMetricSubKeyType::MDS_RANK},
     {"client_id", MDSPerfMetricSubKeyType::CLIENT_ID},
+    {"subvolume_path", MDSPerfMetricSubKeyType::SUBVOLUME_PATH},
   };
   static const std::map<std::string, MDSPerformanceCounterType> counter_types = {
     {"cap_hit", MDSPerformanceCounterType::CAP_HIT_METRIC},
@@ -1120,6 +1171,12 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
     {"stdev_write_latency", MDSPerformanceCounterType::STDEV_WRITE_LATENCY_METRIC},
     {"avg_metadata_latency", MDSPerformanceCounterType::AVG_METADATA_LATENCY_METRIC},
     {"stdev_metadata_latency", MDSPerformanceCounterType::STDEV_METADATA_LATENCY_METRIC},
+    {"subv_read_iops", MDSPerformanceCounterType::SUBV_READ_IOPS_METRIC},
+    {"subv_write_iops", MDSPerformanceCounterType::SUBV_WRITE_IOPS_METRIC},
+    {"subv_read_throughput", MDSPerformanceCounterType::SUBV_READ_THROUGHPUT_METRIC},
+    {"subv_write_throughput", MDSPerformanceCounterType::SUBV_WRITE_THROUGHPUT_METRIC},
+    {"subv_avg_read_latency", MDSPerformanceCounterType::SUBV_AVG_READ_LATENCY_METRIC},
+    {"subv_avg_write_latency", MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC},
   };
 
   PyObject *py_query = nullptr;
@@ -1481,14 +1538,20 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_set_store", (PyCFunction)ceph_store_set, METH_VARARGS,
    "Set a stored field"},
 
-  {"_ceph_get_counter", (PyCFunction)get_counter, METH_VARARGS,
-    "Get a performance counter"},
+  {"_ceph_get_unlabeled_counter", (PyCFunction)get_unlabeled_counter, METH_VARARGS,
+   "Get a performance counter"},
+
+  {"_ceph_get_latest_unlabeled_counter", (PyCFunction)get_latest_unlabeled_counter, METH_VARARGS,
+   "Fetch (or get) the latest (or updated) value of an unlabeled counter"},
 
   {"_ceph_get_latest_counter", (PyCFunction)get_latest_counter, METH_VARARGS,
-    "Get the latest performance counter"},
+   "Fetch (or get) the latest (or updated) value of a performance counter"},
+
+  {"_ceph_get_unlabeled_perf_schema", (PyCFunction)get_unlabeled_perf_schema, METH_VARARGS,
+   "Get the unlabeled performance counter schema"},
 
   {"_ceph_get_perf_schema", (PyCFunction)get_perf_schema, METH_VARARGS,
-    "Get the performance counter schema"},
+   "Get the performance counter schema"},
 
   {"_ceph_get_rocksdb_version", (PyCFunction)ceph_get_rocksdb_version, METH_NOARGS,
     "Get the current RocksDB version number"},

@@ -2,15 +2,18 @@ import { Component, ContentChild, Input, OnInit, TemplateRef } from '@angular/co
 import { UntypedFormArray, UntypedFormControl, NgForm, Validators } from '@angular/forms';
 
 import _ from 'lodash';
+import validator from 'validator';
 
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 
 @Component({
   selector: 'cd-nfs-form-client',
   templateUrl: './nfs-form-client.component.html',
-  styleUrls: ['./nfs-form-client.component.scss']
+  styleUrls: ['./nfs-form-client.component.scss'],
+  standalone: false
 })
 export class NfsFormClientComponent implements OnInit {
   @Input()
@@ -59,14 +62,36 @@ export class NfsFormClientComponent implements OnInit {
     return $localize`-- Select what kind of user id squashing is performed --`;
   }
 
+  isValidClientAddress(value: string): boolean {
+    if (_.isEmpty(value)) {
+      return false;
+    }
+
+    const addressList = value.includes(',')
+      ? value.split(',').map((addr) => addr.trim())
+      : [value.trim()];
+    const invalidAddresses = addressList.filter(
+      (address: string) =>
+        !validator.isFQDN(address, {
+          allow_underscores: true,
+          require_tld: true
+        }) &&
+        !validator.isIP(address) &&
+        !validator.isIPRange(address)
+    );
+
+    return invalidAddresses.length > 0;
+  }
+
   addClient() {
     this.clientsFormArray = this.form.get('clients') as UntypedFormArray;
 
-    const REGEX_IP = `(([0-9]{1,3})\\.([0-9]{1,3})\\.([0-9]{1,3})\.([0-9]{1,3})([/](\\d|[1-2]\\d|3[0-2]))?)`;
-    const REGEX_LIST_IP = `${REGEX_IP}([ ,]{1,2}${REGEX_IP})*`;
     const fg = new CdFormGroup({
       addresses: new UntypedFormControl('', {
-        validators: [Validators.required, Validators.pattern(REGEX_LIST_IP)]
+        validators: [
+          Validators.required,
+          CdValidators.custom('invalidAddress', this.isValidClientAddress)
+        ]
       }),
       access_type: new UntypedFormControl(''),
       squash: new UntypedFormControl('')

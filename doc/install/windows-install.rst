@@ -13,6 +13,9 @@ Prerequisites
 
 Supported platforms
 -------------------
+.. note::
+
+  Please see the `OS recommendations`_ regarding client package support.
 
 Windows Server 2019 and Windows Server 2016 are supported. Previous Windows
 Server versions, including Windows client versions such as Windows 10, might
@@ -76,13 +79,13 @@ Further reading
 ===============
 
 * `RBD Windows documentation`_
-* `CephFS Windows documentation`_
+* :ref:`CephFS Windows documentation <ceph-dokan>`
 * `Windows troubleshooting`_
 
-.. _CephFS Windows documentation: ../../cephfs/ceph-dokan
 .. _Windows configuration sample: ../windows-basic-config
 .. _RBD Windows documentation: ../../rbd/rbd-windows/
 .. _Windows troubleshooting: ../windows-troubleshooting
 .. _General CephFS Prerequisites: ../../cephfs/mount-prerequisites
 .. _Client Authentication: ../../cephfs/client-auth
 .. _Windows testing: ../dev/tests-windows
+.. _OS recommendations: ../../start/os-recommendations

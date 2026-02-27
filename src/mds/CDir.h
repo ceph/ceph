@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -22,22 +23,25 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <vector>
 
-#include "common/bloom_filter.hpp"
 #include "common/config.h"
 #include "include/buffer_fwd.h"
 #include "include/counter.h"
 #include "include/types.h"
 
+#include "snap.h" // for struct sr_t
 #include "CInode.h"
 #include "MDSCacheObject.h"
-#include "MDSContext.h"
-#include "cephfs_features.h"
-#include "SessionMap.h"
-#include "messages/MClientReply.h"
+#include "Mutation.h" // for struct MDLockCache
+#include "LogSegmentRef.h"
 
+struct DirStat;
+struct session_info_t;
+class bloom_filter;
 class CDentry;
 class MDCache;
+class MDSContext;
 
 std::ostream& operator<<(std::ostream& out, const class CDir& dir);
 
@@ -204,6 +208,7 @@ public:
   static const int DUMP_DEFAULT          = DUMP_ALL & (~DUMP_ITEMS);
 
   CDir(CInode *in, frag_t fg, MDCache *mdc, bool auth);
+  ~CDir() noexcept;
 
   std::string_view pin_name(int p) const override {
     switch (p) {
@@ -277,21 +282,21 @@ public:
 
   fnode_ptr project_fnode(const MutationRef& mut);
 
-  void pop_and_dirty_projected_fnode(LogSegment *ls, const MutationRef& mut);
+  void pop_and_dirty_projected_fnode(LogSegmentRef const& ls, const MutationRef& mut);
   bool is_projected() const { return !projected_fnode.empty(); }
   version_t pre_dirty(version_t min=0);
-  void _mark_dirty(LogSegment *ls);
+  void _mark_dirty(LogSegmentRef const& ls);
   void _set_dirty_flag() {
     if (!state_test(STATE_DIRTY)) {
       state_set(STATE_DIRTY);
       get(PIN_DIRTY);
     }
   }
-  void mark_dirty(LogSegment *ls, version_t pv=0);
+  void mark_dirty(LogSegmentRef const& ls, version_t pv=0);
   void mark_clean();
 
   bool is_new() { return item_new.is_on_list(); }
-  void mark_new(LogSegment *ls);
+  void mark_new(LogSegmentRef const& ls);
 
   bool is_bad() { return state_test(STATE_BADFRAG); }
 
@@ -348,6 +353,7 @@ public:
   dentry_key_map::iterator begin() { return items.begin(); }
   dentry_key_map::iterator end() { return items.end(); }
   dentry_key_map::iterator lower_bound(dentry_key_t key) { return items.lower_bound(key); }
+  dentry_key_map::iterator upper_bound(dentry_key_t key) { return items.upper_bound(key); }
 
   unsigned get_num_head_items() const { return num_head_items; }
   unsigned get_num_head_null() const { return num_head_null; }
@@ -396,15 +402,13 @@ public:
   void add_to_bloom(CDentry *dn);
   bool is_in_bloom(std::string_view name);
   bool has_bloom() { return (bloom ? true : false); }
-  void remove_bloom() {
-    bloom.reset();
-  }
+  void remove_bloom();
 
   void try_remove_dentries_for_stray();
   bool try_trim_snap_dentry(CDentry *dn, const std::set<snapid_t>& snaps);
 
-  void split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, bool replay);
-  void merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool replay);
+  void split(int bits, std::vector<CDir*>* subs, std::vector<MDSContext*>& waiters, bool replay);
+  void merge(const std::vector<CDir*>& subs, std::vector<MDSContext*>& waiters, bool replay);
 
   bool should_split() const;
   bool should_split_fast() const;
@@ -508,10 +512,10 @@ public:
     return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
   void add_dentry_waiter(std::string_view dentry, snapid_t snap, MDSContext *c);
-  void take_dentry_waiting(std::string_view dentry, snapid_t first, snapid_t last, MDSContext::vec& ls);
+  void take_dentry_waiting(std::string_view dentry, snapid_t first, snapid_t last, std::vector<MDSContext*>& ls);
 
   void add_waiter(uint64_t mask, MDSContext *c) override;
-  void take_waiting(uint64_t mask, MDSContext::vec& ls) override;  // may include dentry waiters
+  void take_waiting(uint64_t mask, std::vector<MDSContext*>& ls) override;  // may include dentry waiters
   void finish_waiting(uint64_t mask, int result = 0);    // ditto
 
   // -- import/export --
@@ -523,7 +527,7 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegment *ls);
+  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegmentRef const& ls);
   void abort_import();
 
   // -- auth pins --
@@ -755,10 +759,10 @@ protected:
   /* If you set up the bloom filter, you must keep it accurate!
    * It's deleted when you mark_complete() and is deliberately not serialized.*/
 
-  mempool::mds_co::compact_map<version_t, MDSContext::vec_alloc<mempool::mds_co::pool_allocator> > waiting_for_commit;
+  mempool::mds_co::compact_map<version_t, std::vector<MDSContext*, mempool::mds_co::pool_allocator<MDSContext*>>> waiting_for_commit;
 
   // -- waiters --
-  mempool::mds_co::map< string_snap_t, MDSContext::vec_alloc<mempool::mds_co::pool_allocator> > waiting_on_dentry; // FIXME string_snap_t not in mempool
+  mempool::mds_co::map< string_snap_t, std::vector<MDSContext*, mempool::mds_co::pool_allocator<MDSContext*>>> waiting_on_dentry; // FIXME string_snap_t not in mempool
 
 private:
   friend std::ostream& operator<<(std::ostream& out, const class CDir& dir);
@@ -779,11 +783,12 @@ private:
   void remove_null_dentries();
 
   void prepare_new_fragment(bool replay);
-  void prepare_old_fragment(std::map<string_snap_t, MDSContext::vec >& dentry_waiters, bool replay);
+  void prepare_old_fragment(std::map<string_snap_t, std::vector<MDSContext*> >& dentry_waiters, bool replay);
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
-  void finish_old_fragment(MDSContext::vec& waiters, bool replay);
+  void finish_old_fragment(std::vector<MDSContext*>& waiters, bool replay);
   void init_fragment_pins();
-  std::string get_path() const;
+  std::string get_trimmed_path() const;
+  std::string get_path(bool trim_path=false) const;
 
   // -- authority --
   /*

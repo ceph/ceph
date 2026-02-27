@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph distributed storage system
  *
@@ -20,6 +21,7 @@
 
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "common/TableFormatter.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 #include "include/btree_map.h"

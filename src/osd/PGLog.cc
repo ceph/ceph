@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -224,7 +225,9 @@ void PGLog::proc_replica_log(
   pg_info_t &oinfo,
   const pg_log_t &olog,
   pg_missing_t& omissing,
-  pg_shard_t from) const
+  pg_shard_t from,
+  const pg_shard_t &to,
+  bool ec_optimizations_enabled) const
 {
   dout(10) << "proc_replica_log for osd." << from << ": "
 	   << oinfo << " " << olog << " " << omissing << dendl;
@@ -300,7 +303,9 @@ void PGLog::proc_replica_log(
     oinfo,
     olog.get_can_rollback_to(),
     omissing,
-    0,
+    nullptr,
+    ec_optimizations_enabled,
+    to.shard,
     this);
 
   if (lu < oinfo.last_update) {
@@ -333,7 +338,9 @@ void PGLog::proc_replica_log(
  */
 void PGLog::rewind_divergent_log(eversion_t newhead,
 				 pg_info_t &info, LogEntryHandler *rollbacker,
-				 bool &dirty_info, bool &dirty_big_info)
+				 bool &dirty_info, bool &dirty_big_info,
+				 bool ec_optimizations_enabled,
+				 const pg_shard_t &shard)
 {
   dout(10) << "rewind_divergent_log truncate divergent future " <<
     newhead << dendl;
@@ -346,10 +353,18 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
   if (info.last_complete > newhead)
     info.last_complete = newhead;
 
-  auto divergent = log.rewind_from_head(newhead);
+  bool need_dirty_log;
+  auto divergent = log.rewind_from_head(newhead, &need_dirty_log);
   if (!divergent.empty()) {
     mark_dirty_from(divergent.front().version);
+  } else if (need_dirty_log) {
+    // can_rollback_to and/or rollback_info_trimmed_to have been modified
+    // and need checkpointing
+    dout(10) << "rewind_divergent_log crt = "
+	     << log.get_can_rollback_to() << dendl;
+    dirty_log = true;
   }
+
   for (auto &&entry: divergent) {
     dout(10) << "rewind_divergent_log future divergent " << entry << dendl;
   }
@@ -362,6 +377,8 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
     original_crt,
     missing,
     rollbacker,
+    ec_optimizations_enabled,
+    shard.shard,
     this);
 
   dirty_info = true;
@@ -369,8 +386,10 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
 }
 
 void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
-                      pg_info_t &info, LogEntryHandler *rollbacker,
-                      bool &dirty_info, bool &dirty_big_info)
+                      pg_info_t &info, const pg_pool_t &pool, pg_shard_t toosd,
+		      LogEntryHandler *rollbacker,
+                      bool &dirty_info, bool &dirty_big_info,
+		      bool ec_optimizations_enabled)
 {
   dout(10) << "merge_log " << olog << " from osd." << fromosd
            << " into " << log << dendl;
@@ -428,7 +447,9 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
 
   // do we have divergent entries to throw out?
   if (olog.head < log.head) {
-    rewind_divergent_log(olog.head, info, rollbacker, dirty_info, dirty_big_info);
+    rewind_divergent_log(olog.head, info, rollbacker,
+			 dirty_info, dirty_big_info, ec_optimizations_enabled,
+			 toosd);
     changed = true;
   }
 
@@ -465,7 +486,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
     for (auto &&oe: divergent) {
       dout(10) << "merge_log divergent " << oe << dendl;
     }
-    log.roll_forward_to(log.head, rollbacker);
+    log.roll_forward_to(log.head, &info, rollbacker);
 
     mempool::osd_pglog::list<pg_log_entry_t> new_entries;
     new_entries.splice(new_entries.end(), olog.log, from, to);
@@ -476,6 +497,8 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
       &log,
       missing,
       rollbacker,
+      pool,
+      toosd.shard,
       this);
 
     _merge_divergent_entries(
@@ -485,6 +508,8 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
       original_crt,
       missing,
       rollbacker,
+      ec_optimizations_enabled,
+      toosd.shard,
       this);
 
     info.last_update = log.head = olog.head;
@@ -1145,41 +1170,37 @@ namespace {
       on_disk_can_rollback_to = info.last_update;
       missing.may_include_deletes = false;
 
-      return seastar::do_with(
-        std::move(ch),
-        std::move(pgmeta_oid),
-        std::make_optional<std::string>(),
-        [this](crimson::os::CollectionRef &ch,
-               ghobject_t &pgmeta_oid,
-               std::optional<std::string> &start) {
-          return seastar::repeat([this, &ch, &pgmeta_oid, &start]() {
-            return store.omap_get_values(
-              ch, pgmeta_oid, start
-            ).safe_then([this, &start](const auto& ret) {
-              const auto& [done, kvs] = ret;
-              for (const auto& [key, value] : kvs) {
-                process_entry(key, value);
-                start = key;
-              }
-              return seastar::make_ready_future<seastar::stop_iteration>(
-                done ? seastar::stop_iteration::yes : seastar::stop_iteration::no
-              );
-            }, crimson::os::FuturizedStore::Shard::read_errorator::assert_all{});
-          }).then([this] {
-            if (info.pgid.is_no_shard()) {
-              // replicated pool pg does not persist this key
-              assert(on_disk_rollback_info_trimmed_to == eversion_t());
-              on_disk_rollback_info_trimmed_to = info.last_update;
-            }
-            log = PGLog::IndexedLog(
-                 info.last_update,
-                 info.log_tail,
-                 on_disk_can_rollback_to,
-                 on_disk_rollback_info_trimmed_to,
-                 std::move(entries),
-                 std::move(dups));
-          });
-        });
+      ObjectStore::omap_iter_seek_t start_from{"", ObjectStore::omap_iter_seek_t::UPPER_BOUND};
+
+      std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
+        [this] (std::string_view key, std::string_view value)
+      {
+        ceph::bufferlist bl;
+        bl.append(value);
+        process_entry(key, bl);
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      };
+
+      co_await store.omap_iterate(
+        ch, pgmeta_oid, start_from, callback
+      ).safe_then([] (auto ret) {
+        ceph_assert (ret == ObjectStore::omap_iter_ret_t::NEXT);
+      }).handle_error(
+        crimson::os::FuturizedStore::Shard::read_errorator::assert_all{}
+      );
+
+      if (info.pgid.is_no_shard()) {
+        // replicated pool pg does not persist this key
+        ceph_assert(on_disk_rollback_info_trimmed_to == eversion_t());
+        on_disk_rollback_info_trimmed_to = info.last_update;
+      }
+      log = PGLog::IndexedLog(
+        info.last_update,
+        info.log_tail,
+        on_disk_can_rollback_to,
+        on_disk_rollback_info_trimmed_to,
+        std::move(entries),
+        std::move(dups));
     }
   };
 }

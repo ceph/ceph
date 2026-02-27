@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -16,7 +16,7 @@
 #include <boost/format.hpp>
 
 #include "common/escape.h"
-#include "common/Formatter.h"
+#include "common/XMLFormatter.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_formats.h"
 #include "rgw/rgw_rest.h"

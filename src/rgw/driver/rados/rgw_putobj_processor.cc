@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -394,7 +394,7 @@ int AtomicObjectProcessor::complete(
     return r;
   }
 
-  obj_ctx.set_atomic(head_obj);
+  obj_ctx.set_atomic(head_obj, true);
 
   RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
 
@@ -560,6 +560,8 @@ int MultipartObjectProcessor::complete(
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
+  obj_op.meta.if_match = if_match;
+  obj_op.meta.if_nomatch = if_nomatch;
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
                         writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
@@ -768,7 +770,7 @@ int AppendObjectProcessor::complete(
   if (r < 0) {
     return r;
   }
-  obj_ctx.set_atomic(head_obj);
+  obj_ctx.set_atomic(head_obj, true);
   RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
   //For Append obj, disable versioning
   op_target.set_versioning_disabled(true);
@@ -791,6 +793,8 @@ int AppendObjectProcessor::complete(
   obj_op.meta.modify_tail = true;
   obj_op.meta.keep_tail = keep_tail;
   obj_op.meta.appendable = true;
+  obj_op.meta.if_match = if_match;
+  obj_op.meta.if_nomatch = if_nomatch;
   //Add the append part number
   bufferlist cur_part_num_bl;
   using ceph::encode;

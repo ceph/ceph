@@ -1,0 +1,17 @@
+@use '@carbon/layout';
+
+.scroll-overflow {
+  max-height: 70vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.requirements-list {
+  list-style-type: disc;
+  padding-left: var(--cds-spacing-05);
+  margin-left: layout.$spacing-02;
+}
+
+.list-disc {
+  list-style-type: disc;
+}

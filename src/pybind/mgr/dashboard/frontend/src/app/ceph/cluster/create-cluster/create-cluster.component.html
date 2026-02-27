@@ -1,33 +1,101 @@
-<div class="container h-75"
-     *ngIf="startClusterCreation">
-  <div class="h-100 justify-content-center align-items-center"
-       cdsRow>
-    <div class="blank-page">
-      <!-- htmllint img-req-src="false" -->
-      <img [src]="projectConstants.cephLogo"
-           alt="Ceph"
-           class="img-fluid mx-auto d-block">
-      <h3 class="text-center m-2"
-          i18n>Welcome to {{ projectConstants.projectName }}</h3>
+<div class="container-fluid">
+  @if (startClusterCreation) {
+  <div cdsRow
+       class="cds-ml-5 cds-mt-5">
+    <div cdsCol
+         [columnNumbers]="{'lg': 8, 'md': 8, 'sm': 4}">
+      <div class="mb-5">
+        <!-- htmllint img-req-src="false" -->
+        <img [src]="projectConstants.cephLogo"
+             alt="Ceph"
+             class="img-fluid">
+      </div>
 
-      <div class="m-4">
-        <h4 class="text-center"
-            i18n>Please expand your cluster first</h4>
-        <div class="text-center">
-          <button cdsButton="primary"
-                  name="expand-cluster"
-                  (click)="createCluster()"
-                  aria-label="Expand Cluster"
-                  i18n>Expand Cluster</button>
-          <button cdsButton="secondary"
-                  name="skip-cluster-creation"
-                  aria-label="Skip"
-                  (click)="skipClusterCreation()"
-                  i18n>Skip</button>
+      <div class="mb-5">
+        <span class="cds--type-fluid-heading-05"
+              i18n>Welcome to {{ projectConstants.projectName }}
+        </span>
+      </div>
+
+      <div class="mb-5">
+        <span class="cds--type-fluid-heading-04"
+              i18n>Finish cluster setup!
+        </span>
+      </div>
+
+      <div class="mb-5">
+        <span class="cds--type-body-compact-01"
+              i18n>
+          <cd-icon type="success"
+                   [size]="icons.size20">
+          </cd-icon>
+          You've successfully initialised your ceph cluster
+        </span>
+      </div>
+
+      <div class="mb-4 cds--type-body-compact-01"
+           i18n>A few setup steps are still pending before the cluster can store data and serve workloads. You can complete these now or skip and configure services later</div>
+
+      <div class="mb-5">
+        <div class="mb-3">
+          <cd-icon type="checkmarkOutline"
+                   class="cds-info-color"
+                   [size]="icons.size20">
+          </cd-icon>
+          <span class="cds--type-body-compact-01 cds-ml-3"
+                i18n>Add hosts</span>
         </div>
+        <div class="mb-3">
+          <cd-icon type="circleDash"
+                   class="cds-info-color"
+                   [size]="icons.size20">
+          </cd-icon>
+          <span class="cds--type-body-compact-01 cds-ml-3"
+                i18n>Add storage</span>
+        </div>
+        <div>
+          <cd-icon type="circleDash"
+                   class="cds-info-color"
+                   [size]="icons.size20">
+          </cd-icon>
+          <span class="cds--type-body-compact-01 cds-ml-3"
+                i18n>Create data services (optional)</span>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <button cdsButton="primary"
+                class="me-3"
+                (click)="createCluster()"
+                aria-label="Add Storage"
+                i18n>
+          Add storage
+          <svg [cdsIcon]="icons.add"
+               [size]="icons.size20"
+               class="cds--btn__icon">
+          </svg>
+        </button>
+        <button cdsButton="tertiary"
+                (click)="skipClusterCreation()"
+                i18n>
+          Skip to cluster overview
+          <svg [cdsIcon]="icons.right"
+               [size]="icons.size20"
+               class="cds--btn__icon">
+          </svg>
+        </button>
+      </div>
+
+      <div class="cds--type-label-01"
+           i18n>
+        <cd-icon type="infoCircle"
+                 [size]="icons.size20">
+        </cd-icon>
+        Skipping setup does not affect the cluster. The cluster will remain available, but it cannot store data until storage is added
       </div>
     </div>
   </div>
+ }
 </div>
 
 <div cdsRow

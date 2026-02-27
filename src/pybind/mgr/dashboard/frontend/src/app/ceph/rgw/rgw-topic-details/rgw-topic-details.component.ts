@@ -1,0 +1,30 @@
+import { Component, Input, SimpleChanges, OnChanges } from '@angular/core';
+
+import { Topic } from '~/app/shared/models/topic.model';
+import * as _ from 'lodash';
+
+@Component({
+  selector: 'cd-rgw-topic-details',
+  templateUrl: './rgw-topic-details.component.html',
+  styleUrls: ['./rgw-topic-details.component.scss'],
+  standalone: false
+})
+export class RgwTopicDetailsComponent implements OnChanges {
+  @Input()
+  selection: Topic;
+  policy: string | object = '{}';
+  constructor() {}
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['selection'] && this.selection) {
+      if (_.isString(this.selection.policy)) {
+        try {
+          this.policy = JSON.parse(this.selection.policy);
+        } catch (e) {
+          this.policy = '{}';
+        }
+      } else {
+        this.policy = this.selection.policy || {};
+      }
+    }
+  }
+}

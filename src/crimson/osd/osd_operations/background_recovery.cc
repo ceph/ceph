@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sleep.hh>
@@ -37,7 +37,7 @@ BackgroundRecoveryT<T>::BackgroundRecoveryT(
   Ref<PG> pg,
   ShardServices &ss,
   epoch_t epoch_started,
-  crimson::osd::scheduler::scheduler_class_t scheduler_class,
+  SchedulerClass scheduler_class,
   float delay)
   : pg(pg),
     epoch_started(epoch_started),
@@ -81,14 +81,8 @@ seastar::future<> BackgroundRecoveryT<T>::start()
       return interruptor::with_interruption([this] {
        return do_recovery();
       }, [](std::exception_ptr) {
-       return seastar::make_ready_future<bool>(false);
-      }, pg, epoch_started).then([](bool recovery_done) {
-       if (recovery_done) {
-         return seastar::stop_iteration::yes;
-       } else {
-         return seastar::stop_iteration::no;
-       }
-      });
+       return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
+      }, pg, epoch_started);
     });
   });
 }
@@ -100,18 +94,18 @@ UrgentRecovery::UrgentRecovery(
     ShardServices& ss,
     epoch_t epoch_started)
   : BackgroundRecoveryT{pg, ss, epoch_started,
-                        crimson::osd::scheduler::scheduler_class_t::immediate},
+                        SchedulerClass::immediate},
     soid{soid}, need(need)
 {
 }
 
-UrgentRecovery::interruptible_future<bool>
+UrgentRecovery::interruptible_future<seastar::stop_iteration>
 UrgentRecovery::do_recovery()
 {
   LOG_PREFIX(UrgentRecovery::do_recovery);
   DEBUGDPPI("{}: {}", *pg, __func__, *this);
   if (pg->has_reset_since(epoch_started)) {
-    return seastar::make_ready_future<bool>(false);
+    return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
   }
 
   return pg->find_unfound(epoch_started
@@ -121,7 +115,7 @@ UrgentRecovery::do_recovery()
       return pg->get_recovery_handler()->recover_missing(
 	trigger, soid, need, false);
     }).then_interruptible([] {
-      return seastar::make_ready_future<bool>(false);
+      return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
     });
   });
 }
@@ -153,17 +147,17 @@ PglogBasedRecovery::PglogBasedRecovery(
       std::move(pg),
       ss,
       epoch_started,
-      crimson::osd::scheduler::scheduler_class_t::background_recovery,
+      SchedulerClass::background_recovery,
       delay)
 {}
 
-PglogBasedRecovery::interruptible_future<bool>
+PglogBasedRecovery::interruptible_future<seastar::stop_iteration>
 PglogBasedRecovery::do_recovery()
 {
   LOG_PREFIX(PglogBasedRecovery::do_recovery);
   DEBUGDPPI("{}: {}", *pg, __func__, *this);
   if (pg->has_reset_since(epoch_started)) {
-    return seastar::make_ready_future<bool>(false);
+    return seastar::make_ready_future<seastar::stop_iteration>(seastar::stop_iteration::yes);
   }
   return pg->find_unfound(epoch_started
   ).then_interruptible([this] {

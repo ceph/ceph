@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -14,11 +14,11 @@
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/transaction_interruptor.h"
 
 namespace crimson::os::seastore::onode {
 
-using eagain_iertr = trans_iertr<
-  crimson::errorator<crimson::ct_error::input_output_error> >;
+using eagain_iertr = base_iertr;
 template <class ValueT=void>
 using eagain_ifuture = eagain_iertr::future<ValueT>;
 

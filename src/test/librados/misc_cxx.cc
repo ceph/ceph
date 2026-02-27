@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #include <errno.h>
 #include <map>
 #include <sstream>
@@ -549,7 +550,7 @@ TEST_F(LibRadosTwoPoolsECPP, CopyFrom) {
 
 TEST_F(LibRadosMiscPP, CopyScrubPP) {
   SKIP_IF_CRIMSON();
-  bufferlist inbl, bl, x;
+  bufferlist bl, x;
   for (int i=0; i<100; ++i)
     x.append("barrrrrrrrrrrrrrrrrrrrrrrrrr");
   bl.append(buffer::create(g_conf()->osd_copyfrom_max_chunk * 3));
@@ -590,7 +591,7 @@ TEST_F(LibRadosMiscPP, CopyScrubPP) {
       ss << "{\"prefix\": \"pg deep-scrub\", \"pgid\": \""
 	 << ioctx.get_id() << "." << i
 	 << "\"}";
-      cluster.mon_command(ss.str(), inbl, NULL, NULL);
+      cluster.mon_command(ss.str(), {}, NULL, NULL);
     }
 
     // give it a few seconds to go.  this is sloppy but is usually enough time
@@ -630,7 +631,7 @@ TEST_F(LibRadosMiscPP, CopyScrubPP) {
       ss << "{\"prefix\": \"pg deep-scrub\", \"pgid\": \""
 	 << ioctx.get_id() << "." << i
 	 << "\"}";
-      cluster.mon_command(ss.str(), inbl, NULL, NULL);
+      cluster.mon_command(ss.str(), {}, NULL, NULL);
     }
 
     // give it a few seconds to go.  this is sloppy but is usually enough time
@@ -822,10 +823,10 @@ TEST_F(LibRadosMiscPP, CmpExtPP) {
 }
 
 TEST_F(LibRadosMiscPP, Applications) {
-  bufferlist inbl, outbl;
+  bufferlist outbl;
   string outs;
   ASSERT_EQ(0, cluster.mon_command("{\"prefix\": \"osd dump\"}",
-				   inbl, &outbl, &outs));
+				   {}, &outbl, &outs));
   ASSERT_LT(0u, outbl.length());
   ASSERT_LE(0u, outs.length());
   if (!std::regex_search(outbl.to_str(),
@@ -922,4 +923,40 @@ TEST_F(LibRadosMiscPP, Conf) {
   std::string actual;
   ASSERT_EQ(0, cluster.conf_get(option, actual));
   ASSERT_EQ(expected, actual);
+}
+
+TEST_F(LibRadosMiscPP, NoVer) {
+  bufferlist bl;
+  bl.append("ceph");
+  ObjectWriteOperation write, write2;
+  ObjectReadOperation read, read2;
+
+  write.write_full(bl);
+  ASSERT_EQ(0, ioctx.operate("foo", &write));
+  uint64_t version = ioctx.get_last_version();
+
+  ioctx.set_no_version_on_read(true);
+  bl.append("moreceph");
+  write2.write_full(bl);
+  ASSERT_EQ(0, ioctx.operate("foo", &write2));
+
+  // Write versioning should still work.
+  ASSERT_EQ(++version, ioctx.get_last_version());
+
+  // Asserting the version should still work.
+  read.assert_version(version);
+  read.read(0, bl.length(), NULL, NULL);
+  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+
+  // However, version read should be invalid.
+  ASSERT_EQ(std::numeric_limits<version_t>::max(), ioctx.get_last_version());
+
+  // Re-enable versioning and check we can re-establish the version on a read.
+  ioctx.set_no_version_on_read(false);
+  read2.read(0, bl.length(), NULL, NULL);
+  ASSERT_EQ(0, ioctx.operate("foo", &read2, &bl));
+  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
+
+  // last version should now have been corrected.
+  ASSERT_EQ(version, ioctx.get_last_version());
 }

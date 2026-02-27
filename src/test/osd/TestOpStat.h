@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "include/rados/librados.hpp"

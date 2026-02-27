@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -178,7 +178,7 @@ struct string_key_view_t {
     } else if (dedup_type == Type::MAX) {
       len = MARKER_MAX;
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
     std::memcpy(p_append, &len, sizeof(string_size_t));
   }

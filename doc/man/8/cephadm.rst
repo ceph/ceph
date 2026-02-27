@@ -250,7 +250,7 @@ Arguments:
 * [--allow-overwrite]             allow overwrite of existing --output-* config/keyring/ssh files
 * [--allow-fqdn-hostname]         allow hostname that is fully-qualified (contains ".")
 * [--skip-prepare-host]           Do not prepare host
-* [--orphan-initial-daemons]      Do not create initial mon, mgr, and crash service specs
+* [--orphan-initial-daemons]      Set mon and mgr service to unmanaged and do not create the crash service
 * [--skip-monitoring-stack]       Do not automatically provision monitoring stack] (prometheus, grafana, alertmanager, node-exporter)
 * [--apply-spec APPLY_SPEC]       Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)
 * [--registry-url REGISTRY_URL]   url of custom registry to login to. e.g. docker.io, quay.io
@@ -437,6 +437,23 @@ Can also use a JSON file containing the login info formatted as::
        "username":"REGISTRY_USERNAME",
        "password":"REGISTRY_PASSWORD"
       }
+
+For multiple registry logins, refer to the format below::
+
+    {
+      "registry_credentials": [
+        {
+          "url": "REGISTRY_URL1",
+          "username": "REGISTRY_USERNAME1",
+          "password": "REGISTRY_PASSWORD1"
+        },
+        {
+          "url": "REGISTRY_URL2",
+          "username": "REGISTRY_USERNAME2",
+          "password": "REGISTRY_PASSWORD2"
+        }
+      ]
+    }
 
 and turn it in with command::
 

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -130,11 +131,16 @@ void MDSCapMatch::normalize_path()
   // drop ..
 }
 
-bool MDSCapMatch::match(string_view target_path,
+bool MDSCapMatch::match(string_view fs_name,
+                        string_view target_path,
 			const int caller_uid,
 			const int caller_gid,
 			const vector<uint64_t> *caller_gid_list) const
 {
+  if (!match_fs(fs_name)) {
+    return false;
+  }
+
   if (uid != MDS_AUTH_UID_ANY) {
     if (uid != caller_uid)
       return false;
@@ -221,16 +227,19 @@ bool MDSAuthCaps::path_capable(string_view inode_path) const
  * This is true if any of the 'grant' clauses in the capability match the
  * requested path + op.
  */
-bool MDSAuthCaps::is_capable(string_view inode_path,
+bool MDSAuthCaps::is_capable(string_view fs_name,
+                             string_view inode_path,
 			     uid_t inode_uid, gid_t inode_gid,
 			     unsigned inode_mode,
 			     uid_t caller_uid, gid_t caller_gid,
 			     const vector<uint64_t> *caller_gid_list,
 			     unsigned mask,
 			     uid_t new_uid, gid_t new_gid,
-			     const entity_addr_t& addr) const
+			     const entity_addr_t& addr,
+			     string_view trimmed_inode_path) const
 {
-  ldout(g_ceph_context, 10) << __func__ << " inode(path /" << inode_path
+  ldout(g_ceph_context, 10) << __func__ << " fs_name " << fs_name
+		 << " inode(path /" << trimmed_inode_path
 		 << " owner " << inode_uid << ":" << inode_gid
 		 << " mode 0" << std::oct << inode_mode << std::dec
 		 << ") by caller " << caller_uid << ":" << caller_gid
@@ -248,7 +257,7 @@ bool MDSAuthCaps::is_capable(string_view inode_path,
       continue;
     }
 
-    if (grant.match.match(inode_path, caller_uid, caller_gid, caller_gid_list) &&
+    if (grant.match.match(fs_name, inode_path, caller_uid, caller_gid, caller_gid_list) &&
 	grant.spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
       if (grant.match.root_squash && ((caller_uid == 0) || (caller_gid == 0)) &&
           (mask & MAY_WRITE)) {

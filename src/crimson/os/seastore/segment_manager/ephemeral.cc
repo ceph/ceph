@@ -1,10 +1,8 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <sys/mman.h>
 #include <string.h>
-
-#include "seastar/core/sleep.hh"
 
 #include "crimson/common/log.h"
 
@@ -93,7 +91,7 @@ segment_off_t EphemeralSegment::get_write_capacity() const
 Segment::close_ertr::future<> EphemeralSegment::close()
 {
   return manager.segment_close(id).safe_then([] {
-    return seastar::sleep(std::chrono::milliseconds(1));
+    return seastar::yield();
   });
 }
 
@@ -123,7 +121,7 @@ Segment::close_ertr::future<> EphemeralSegmentManager::segment_close(segment_id_
 
   segment_state[s_id] = segment_state_t::CLOSED;
   return Segment::close_ertr::now().safe_then([] {
-    return seastar::sleep(std::chrono::milliseconds(1));
+    return seastar::yield();
   });
 }
 
@@ -157,7 +155,7 @@ Segment::write_ertr::future<> EphemeralSegmentManager::segment_write(
 
   bl.begin().copy(bl.length(), buffer + get_offset(addr));
   return Segment::write_ertr::now().safe_then([] {
-    return seastar::sleep(std::chrono::milliseconds(1));
+    return seastar::yield();
   });
 }
 
@@ -177,12 +175,9 @@ EphemeralSegmentManager::init_ertr::future<> EphemeralSegmentManager::init()
     return crimson::ct_error::invarg::make();
   }
 
-  void* addr = ::mmap(
-    nullptr,
-    config.size,
-    PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS,
-    -1,
-    0);
+  // memset 0 is not needed: anonymous mapping is zero-filled
+  void* addr = ::mmap(nullptr, config.size, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
   segment_state.resize(config.size / config.segment_size, segment_state_t::EMPTY);
 
@@ -191,9 +186,8 @@ EphemeralSegmentManager::init_ertr::future<> EphemeralSegmentManager::init()
 
   buffer = (char*)addr;
 
-  ::memset(buffer, 0, config.size);
   return init_ertr::now().safe_then([] {
-    return seastar::sleep(std::chrono::milliseconds(1));
+    return seastar::yield();
   });
 }
 
@@ -253,7 +247,7 @@ SegmentManager::release_ertr::future<> EphemeralSegmentManager::release(
   ::memset(buffer + get_offset(paddr_t::make_seg_paddr(id, 0)), 0, config.segment_size);
   segment_state[s_id] = segment_state_t::EMPTY;
   return release_ertr::now().safe_then([] {
-    return seastar::sleep(std::chrono::milliseconds(1));
+    return seastar::yield();
   });
 }
 
@@ -292,7 +286,7 @@ SegmentManager::read_ertr::future<> EphemeralSegmentManager::read(
     bl.begin().crc32c(len, 1));
 
   return read_ertr::now().safe_then([] {
-    return seastar::sleep(std::chrono::milliseconds(1));
+    return seastar::yield();
   });
 }
 

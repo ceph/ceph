@@ -16,16 +16,25 @@ overrides:
       - Reduced data availability
       - Degraded data redundancy
       - pg .* is stuck inactive
-      - pg .* is stuck peering
       - pg .* is .*degraded
       - FS_DEGRADED
       - OSDMAP_FLAGS
       - OSD_UPGRADE_FINISHED
+      - Replacing daemon mds
+      - MDS_ALL_DOWN
+      - MDS_UP_LESS_THAN_MAX
+      - filesystem is offline
+      - with fewer MDS than max_mds
+      - filesystem is degraded
+      - osds down
+      - osd down
+      - OBJECT_UNFOUND
 tasks:
 - install:
     branch: reef
     exclude_packages:
       - ceph-volume
+      - ceph-osd-classic
 
 - cephadm:
     image: quay.ceph.io/ceph-ci/ceph:reef

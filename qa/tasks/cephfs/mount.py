@@ -88,7 +88,7 @@ class CephFSMountBase(object):
         self._netns_name = None
         self.nsid = -1
         if brxnet is None:
-            self.ceph_brx_net = '192.168.0.0/16'
+            self.ceph_brx_net = '192.168.144.0/20'
         else:
             self.ceph_brx_net = brxnet
 
@@ -264,6 +264,13 @@ class CephFSMountBase(object):
             if 'permission denied' in stderr.getvalue().lower():
                 pass
 
+    def _default_gateway(self):
+        routes = self.client_remote.sh('ip r', timeout=(5*60))
+        defaults = re.findall(r'^default .*', routes)
+        if defaults == False:
+            raise RuntimeError("No default gw found")
+        return defaults[0].split()[4]
+
     def _setup_brx_and_nat(self):
         # The ip for ceph-brx should be
         ip = IP(self.ceph_brx_net)[-2]
@@ -296,12 +303,7 @@ class CephFSMountBase(object):
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
         
         # Setup the NAT
-        p = self.client_remote.run(args=['route'], stderr=StringIO(),
-                                   stdout=StringIO(), timeout=(5*60))
-        p = re.findall(r'default .*', p.stdout.getvalue())
-        if p == False:
-            raise RuntimeError("No default gw found")
-        gw = p[0].split()[7]
+        gw = self._default_gateway()
 
         self.run_shell_payload(f"""
             set -e
@@ -441,12 +443,8 @@ class CephFSMountBase(object):
         ip = IP(self.ceph_brx_net)[-2]
         mask = self.ceph_brx_net.split('/')[1]
 
-        p = self.client_remote.run(args=['route'], stderr=StringIO(),
-                                   stdout=StringIO(), timeout=(5*60))
-        p = re.findall(r'default .*', p.stdout.getvalue())
-        if p == False:
-            raise RuntimeError("No default gw found")
-        gw = p[0].split()[7]
+        gw = self._default_gateway()
+
         self.run_shell_payload(f"""
             set -e
             sudo iptables -D FORWARD -o {gw} -i ceph-brx -j ACCEPT
@@ -516,14 +514,12 @@ class CephFSMountBase(object):
         log.debug(f'Force/lazy unmounting on client.{self.client_id}')
 
         try:
-            proc = self.client_remote.run(
+            self.client_remote.run(
                 args=f'sudo umount --lazy --force {self.hostfs_mntpt}',
                 timeout=UMOUNT_TIMEOUT, omit_sudo=False)
         except CommandFailedError:
             if self.is_mounted():
                 raise
-
-        return proc
 
     def umount(self):
         raise NotImplementedError()
@@ -719,7 +715,7 @@ class CephFSMountBase(object):
             if r.exitstatus != 0:
                 raise RuntimeError("Expected file {0} not found".format(suffix))
 
-    def write_file(self, path, data, perms=None):
+    def write_file_ex(self, path, data, **kwargs):
         """
         Write the given data at the given path and set the given perms to the
         file on the path.
@@ -727,12 +723,22 @@ class CephFSMountBase(object):
         if path.find(self.hostfs_mntpt) == -1:
             path = os.path.join(self.hostfs_mntpt, path)
 
-        write_file(self.client_remote, path, data)
+        self.client_remote.write_file(path, data, **kwargs)
+
+    def write_file(self, path, data, perms=None, **kwargs):
+        """
+        Write the given data at the given path and set the given perms to the
+        file on the path.
+        """
+        if path.find(self.hostfs_mntpt) == -1:
+            path = os.path.join(self.hostfs_mntpt, path)
+
+        write_file(self.client_remote, path, data, **kwargs)
 
         if perms:
             self.run_shell(args=f'chmod {perms} {path}')
 
-    def read_file(self, path, sudo=False):
+    def read_file(self, path, sudo=False, offset=None, length=None):
         """
         Return the data from the file on given path.
         """
@@ -742,7 +748,13 @@ class CephFSMountBase(object):
         args = []
         if sudo:
             args.append('sudo')
-        args += ['cat', path]
+        args.append('dd')
+        args.append(f'if={path}')
+        args.append('bs=1')
+        if offset:
+            args.append(f'skip={offset}')
+        if length:
+            args.append(f'count={length}')
 
         return self.run_shell(args=args, omit_sudo=False).stdout.getvalue().strip()
 
@@ -1494,6 +1506,84 @@ class CephFSMountBase(object):
         else:
             return proc
 
+    def lchown(self, fs_path, uid, gid):
+        """
+        Change the ownership of a link with the provided UID and GID.
+        """
+
+        abs_path = os.path.join(self.hostfs_mntpt, fs_path)
+        pyscript = dedent(f"""
+            import os
+            import sys
+
+            try:
+                os.lchown("{abs_path}", {uid}, {gid})
+            except OSError as e:
+                sys.exit(e.errno)
+            """)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
+    def symlink(self, fs_path, symlink_path):
+        """
+        Create a symlink to the provided file/path with the provided name.
+        """
+
+        src_path = os.path.join(self.hostfs_mntpt, fs_path)
+        sym_path = os.path.join(self.hostfs_mntpt, symlink_path)
+        pyscript = dedent(f"""
+            import os
+            import sys
+
+            try:
+                os.symlink("{src_path}", "{sym_path}")
+            except OSError as e:
+                sys.exit(e.errno)
+            """)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
+    def copy_file_range(self, src, dest, length):
+        """
+        Copy a portion of data from src file to dest file.
+        """
+
+        src_path = os.path.join(self.hostfs_mntpt, src)
+        dest_path = os.path.join(self.hostfs_mntpt, dest)
+        pyscript = dedent(f"""
+            import os
+            import sys
+
+            try:
+                src_fd = os.open("{src_path}", os.O_RDONLY)
+                dest_fd = os.open("{dest_path}", os.O_WRONLY|os.O_TRUNC)
+                os.copy_file_range(src_fd, dest_fd, {length})
+                os.close(src_fd)
+                os.close(dest_fd)
+            except OSError as e:
+                sys.exit(e.errno)
+            """)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
+    def truncate(self, fs_path, size):
+        """
+        Truncate a file of certain size
+        """
+
+        abs_path = os.path.join(self.hostfs_mntpt, fs_path)
+        pyscript = dedent(f"""
+            import os
+            import sys
+
+            try:
+                os.truncate("{abs_path}", {size})
+            except OSError as e:
+                sys.exit(e.errno)
+            """)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
     def touch(self, fs_path):
         """
         Create a dentry if it doesn't already exist.  This python
@@ -1511,6 +1601,28 @@ class CephFSMountBase(object):
             try:
                 f = open("{path}", "w")
                 f.close()
+            except IOError as e:
+                sys.exit(errno.EIO)
+            """).format(path=abs_path)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
+    def touch_os(self, fs_path):
+        """
+        Create a dentry if it doesn't already exist. Uses the open method in the os module.
+
+        :param fs_path:
+        :return:
+        """
+        abs_path = os.path.join(self.hostfs_mntpt, fs_path)
+        pyscript = dedent("""
+            import os
+            import sys
+            import errno
+
+            try:
+                fd = os.open("{path}", os.O_RDONLY | os.O_CREAT)
+                os.close(fd)
             except IOError as e:
                 sys.exit(errno.EIO)
             """).format(path=abs_path)
@@ -1714,5 +1826,8 @@ class CephFSMountBase(object):
             subvol_paths = self.ctx.created_subvols[self.cephfs_name]
             path_to_mount = subvol_paths[mount_subvol_num]
             self.cephfs_mntpt = path_to_mount
+
+    def get_mount_point(self):
+        return self.hostfs_mntpt
 
 CephFSMount = CephFSMountBase

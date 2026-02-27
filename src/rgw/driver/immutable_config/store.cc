@@ -1,4 +1,4 @@
-// vim: ts=8 sw=2 smarttab ft=cpp
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -12,8 +12,8 @@
  *
  */
 
-#include "rgw_zone.h"
 #include "store.h"
+#include "rgw_realm_watcher.h"
 
 namespace rgw::sal {
 
@@ -94,6 +94,14 @@ int ImmutableConfigStore::realm_notify_new_period(const DoutPrefixProvider* dpp,
   return -ENOTSUP;
 }
 
+auto ImmutableConfigStore::create_realm_watcher(const DoutPrefixProvider* dpp,
+                                                optional_yield y,
+                                                const RGWRealm& realm)
+  -> std::unique_ptr<RGWRealmWatcher>
+{
+  return nullptr;
+}
+
 int ImmutableConfigStore::list_realm_names(const DoutPrefixProvider* dpp,
                                            optional_yield y, const std::string& marker,
                                            std::span<std::string> entries,
@@ -135,6 +143,12 @@ int ImmutableConfigStore::list_period_ids(const DoutPrefixProvider* dpp,
   result.next.clear();
   result.entries = entries.first(0);
   return 0;
+}
+
+int ImmutableConfigStore::update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
+                                              std::string_view period_id, uint32_t epoch)
+{
+  return -EROFS;
 }
 
 

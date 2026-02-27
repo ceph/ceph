@@ -5,7 +5,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsDetailComponent } from './cephfs-detail.component';
 
-@Component({ selector: 'cd-cephfs-chart', template: '' })
+@Component({ selector: 'cd-cephfs-chart', template: '', standalone: false })
 class CephfsChartStubComponent {
   @Input()
   mdsCounter: any;

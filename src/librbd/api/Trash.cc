@@ -1,8 +1,9 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/api/Trash.h"
 #include "include/rados/librados.hpp"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Cond.h"
@@ -217,6 +218,13 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
       ictx->state->close();
       return -EBUSY;
     }
+    if (ictx->group_spec.is_valid() &&
+        source != RBD_TRASH_IMAGE_SOURCE_MIGRATION) {
+      lderr(cct) << "image is in a group - not moving to trash" << dendl;
+      ictx->image_lock.unlock_shared();
+      ictx->state->close();
+      return -EMLINK;
+    }
     ictx->image_lock.unlock_shared();
 
     if (mirror_r >= 0 &&
@@ -399,12 +407,11 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
       return -EINVAL;
     }
 
-    librados::bufferlist inbl;
     librados::bufferlist outbl;
     std::string pool_name = io_ctx.get_pool_name();
 
     librados::Rados rados(io_ctx);
-    rados.mon_command(R"({"prefix": "df", "format": "json"})", inbl,
+    rados.mon_command(R"({"prefix": "df", "format": "json"})", {},
                       &outbl, nullptr);
 
     json_spirit::mValue json;

@@ -315,12 +315,12 @@ Feature: Ceph Cluster Dashboard
       | {job="ceph", cluster="mycluster", name="pool2", pool_id="2"}       | 30000 |
       | {job="ceph", cluster="mycluster", name="pool3", pool_id="3"}       | 45000|
 
-  Scenario: "Test OSD Type Count"
+  Scenario: "Test RADOS Object Count"
     Given the following series:
       | metrics                          | values |
       | ceph_pool_objects{job="ceph", cluster="mycluster", osd="osd.0"} | 10 |
       | ceph_pool_objects{job="ceph", cluster="mycluster", osd="osd.1"} | 20 |
-    Then Grafana panel `OSD Type Count` with legend `Total` shows:
+    Then Grafana panel `RADOS Object Count` with legend `Total` shows:
       | metrics | values |
       | {}      | 30 |
 

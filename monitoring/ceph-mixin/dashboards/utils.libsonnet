@@ -245,7 +245,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
     },
 
   matchers()::
-    local clusterMatcher = '%s=~"$cluster"' % $._config.clusterLabel;
+    local clusterMatcher = '%s=~"$cluster|"' % $._config.clusterLabel;
     {
       // Common labels
       matchers: (if $._config.showMultiCluster then clusterMatcher + ', ' else ''),
@@ -486,7 +486,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
                     refresh=0,
                     label='Interval',
                     auto_count=10,
-                    auto_min='2m',
+                    auto_min='1m',
                     options=[],
                     auto=null)::
     g.template.interval(name=name,
@@ -513,6 +513,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
                 steps=[],
                 max=1,
                 min=0,
+                decimals=null,
                 maxDataPoints=100,
                 interval='1m')::
     g.gaugePanel.new(title=title,
@@ -523,7 +524,8 @@ local timeSeries = import 'timeseries_panel.libsonnet';
                      unit=unit,
                      reducerFunction=reducerFunction,
                      max=max,
-                     min=min) + {
+                     min=min,
+                     decimals=decimals) + {
       gridPos: gridPosition,
       maxDataPoints: maxDataPoints,
       interval: interval,
@@ -543,7 +545,6 @@ local timeSeries = import 'timeseries_panel.libsonnet';
     datasource=null,
     description=null,
     sort=null,
-    styles='',
     transform=null,
     pluginVersion='9.1.3',
     options=null,
@@ -558,7 +559,6 @@ local timeSeries = import 'timeseries_panel.libsonnet';
     g.tablePanel.new(datasource=datasource,
                      description=description,
                      sort=sort,
-                     styles=styles,
                      title=title,
                      transform=transform) + {
       pluginVersion: pluginVersion,

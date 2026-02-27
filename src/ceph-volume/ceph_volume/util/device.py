@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import os
+import re
 from functools import total_ordering
 from ceph_volume import sys_info, allow_loop_devices, BEING_REPLACED_HEADER
 from ceph_volume.api import lvm
@@ -9,9 +10,7 @@ from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
 from typing import Any, Dict, List, Tuple, Optional, Union
 
-
 logger = logging.getLogger(__name__)
-
 
 report_template = """
 {dev:<25} {size:<12} {device_nodes:<15} {rot!s:<7} {available!s:<9} {model}"""
@@ -319,29 +318,33 @@ class Device(object):
         Please keep this implementation in sync with get_device_id() in
         src/common/blkdev.cc
         """
-        props = ['ID_VENDOR', 'ID_MODEL', 'ID_MODEL_ENC', 'ID_SERIAL_SHORT', 'ID_SERIAL',
-                 'ID_SCSI_SERIAL']
-        p = disk.udevadm_property(self.path, props)
-        if p.get('ID_MODEL','').startswith('LVM PV '):
-            p['ID_MODEL'] = p.get('ID_MODEL_ENC', '').replace('\\x20', ' ').strip()
-        if 'ID_VENDOR' in p and 'ID_MODEL' in p and 'ID_SCSI_SERIAL' in p:
-            dev_id = '_'.join([p['ID_VENDOR'], p['ID_MODEL'],
-                              p['ID_SCSI_SERIAL']])
-        elif 'ID_MODEL' in p and 'ID_SERIAL_SHORT' in p:
-            dev_id = '_'.join([p['ID_MODEL'], p['ID_SERIAL_SHORT']])
-        elif 'ID_SERIAL' in p:
-            dev_id = p['ID_SERIAL']
+
+        udev_data = disk.UdevData(self.path)
+        env = udev_data.environment
+        parts: list[str] = []
+        model = env.get('ID_MODEL', '')
+        if model.startswith('LVM PV '):
+            model = env.get('ID_MODEL_ENC', '').replace('\\x20', ' ').strip()
+
+        if 'ID_VENDOR' in env and 'ID_SCSI_SERIAL' in env:
+            parts = [env['ID_VENDOR'], model, env['ID_SCSI_SERIAL']]
+        elif 'ID_SERIAL_SHORT' in env:
+            parts = [model, env['ID_SERIAL_SHORT']]
+        elif 'ID_SERIAL' in env:
+            dev_id = env['ID_SERIAL']
             if dev_id.startswith('MTFD'):
-                # Micron NVMes hide the vendor
                 dev_id = 'Micron_' + dev_id
+            parts = [dev_id]
         else:
             # the else branch should fallback to using sysfs and ioctl to
             # retrieve device_id on FreeBSD. Still figuring out if/how the
             # python ioctl implementation does that on FreeBSD
             dev_id = ''
+
+        dev_id = '_'.join(parts)
         dev_id = dev_id.replace(' ', '_')
-        while '__' in dev_id:
-            dev_id = dev_id.replace('__', '_')
+        dev_id = re.sub(r'_+', '_', dev_id)
+
         return dev_id
 
     def _set_lvm_membership(self) -> None:

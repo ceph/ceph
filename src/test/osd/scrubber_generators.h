@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #pragma once
 
 /// \file generating scrub-related maps & objects for unit tests
@@ -103,12 +104,19 @@ class MockLog : public LoggerSinkSet {
 // ///////////////////////////////////////////////////////////////////////// //
 // ///////////////////////////////////////////////////////////////////////// //
 
+struct erasure_code_profile_conf_t {
+  std::string erasure_code_profile_name{"erasure_code_profile"};
+  std::map<std::string, std::string> erasure_code_profile{};
+};
+
 struct pool_conf_t {
   int pg_num{3};
   int pgp_num{3};
   int size{3};
   int min_size{3};
   std::string name{"rep_pool"};
+  uint8_t type{pg_pool_t::TYPE_REPLICATED};
+  std::optional<erasure_code_profile_conf_t> erasure_code_profile;
 };
 
 using attr_t = std::map<std::string, std::string>;
@@ -203,6 +211,13 @@ static inline RealObj crpt_do_nothing(const RealObj& s, int osdn)
   return s;
 }
 
+static inline RealObj crpt_object_hash(const RealObj& s,
+                                       [[maybe_unused]] int osdn) {
+  RealObj ret = s;
+  ret.data.hash = s.data.hash + 1;
+  return ret;
+}
+
 struct SmapEntry {
   ghobject_t ghobj;
   ScrubMap::object smobj;
@@ -223,6 +238,10 @@ struct RealObjsConf {
   std::vector<RealObj> objs;
 };
 
+RealObjsConf make_erasure_code_configuration(int8_t k, int8_t m);
+
+CorruptFuncList make_erasure_code_hash_corruption_functions(int num_osds);
+
 using RealObjsConfRef = std::unique_ptr<RealObjsConf>;
 
 // RealObjsConf will be "developed" into the following of per-osd sets,
@@ -231,8 +250,10 @@ using RealObjsConfRef = std::unique_ptr<RealObjsConf>;
 using RealObjsConfList = std::map<int, RealObjsConfRef>;
 
 RealObjsConfList make_real_objs_conf(int64_t pool_id,
-				     const RealObjsConf& blueprint,
-				     std::vector<int32_t> active_osds);
+                                     const RealObjsConf& blueprint,
+                                     std::vector<int32_t> active_osds,
+                                     std::set<pg_shard_t> active_shards,
+                                     bool erasure_coded_pool);
 
 /**
  * create the snap-ids set for all clones appearing in the head

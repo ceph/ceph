@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -16,7 +16,7 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
 
-#include "crimson/os/seastore/btree/btree_range_pin.h"
+#include "crimson/os/seastore/btree/btree_types.h"
 #include "crimson/os/seastore/btree/fixed_kv_btree.h"
 #include "crimson/os/seastore/root_block.h"
 
@@ -49,6 +49,10 @@ struct FixedKVNode : CachedExtent {
   virtual ~FixedKVNode() = default;
   virtual void do_on_rewrite(Transaction &t, CachedExtent &extent) = 0;
 
+  bool is_in_range(const node_key_t key) const {
+    return get_node_meta().is_in_range(key);
+  }
+
   void on_rewrite(Transaction &t, CachedExtent &extent, extent_len_t off) final {
     assert(get_type() == extent.get_type());
     assert(off == 0);
@@ -64,12 +68,14 @@ struct FixedKVNode : CachedExtent {
      * Upon commit, these now block relative addresses will be interpretted
      * against the real final address.
      */
-    if (!get_paddr().is_absolute()) {
+    if (get_paddr().is_record_relative()) {
       // backend_type_t::SEGMENTED
-      assert(get_paddr().is_record_relative());
       resolve_relative_addrs(
 	make_record_relative_paddr(0).block_relative_to(get_paddr()));
-    } // else: backend_type_t::RANDOM_BLOCK
+    } else {
+      // backend_type_t::RANDOM_BLOCK
+      assert(get_paddr().is_absolute());
+    }
   }
 
   void on_delta_write(paddr_t record_block_offset) final {
@@ -139,7 +145,7 @@ struct FixedKVInternalNode
     node_size,
     node_type_t>;
   using parent_node_t = ParentNode<node_type_t, NODE_KEY>;
-  using base_child_node_t = BaseChildNode<node_type_t, NODE_KEY>;
+  using base_child_t = BaseChildNode<node_type_t, NODE_KEY>;
   using child_node_t = ChildNode<node_type_t, node_type_t, NODE_KEY>;
   using root_node_t = RootChildNode<RootBlock, node_type_t>;
 
@@ -176,7 +182,7 @@ struct FixedKVInternalNode
   }
 
   virtual ~FixedKVInternalNode() {
-    if (this->is_valid() && !this->is_pending()) {
+    if (this->is_stable()) {
       if (this->is_btree_root()) {
 	this->root_node_t::destroy();
       } else {
@@ -236,7 +242,7 @@ struct FixedKVInternalNode
   void update(
     internal_const_iterator_t iter,
     paddr_t addr,
-    base_child_node_t* nextent) {
+    base_child_t* nextent) {
     LOG_PREFIX(FixedKVInternalNode::update);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, {}",
       this->pending_for_transaction,
@@ -253,7 +259,7 @@ struct FixedKVInternalNode
     internal_const_iterator_t iter,
     NODE_KEY pivot,
     paddr_t addr,
-    base_child_node_t* nextent) {
+    base_child_t* nextent) {
     LOG_PREFIX(FixedKVInternalNode::insert);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}, {}",
       this->pending_for_transaction,
@@ -284,7 +290,7 @@ struct FixedKVInternalNode
     internal_const_iterator_t iter,
     NODE_KEY pivot,
     paddr_t addr,
-    base_child_node_t* nextent) {
+    base_child_t* nextent) {
     LOG_PREFIX(FixedKVInternalNode::replace);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, old key {}, key {}, {}",
       this->pending_for_transaction,
@@ -301,7 +307,7 @@ struct FixedKVInternalNode
   }
 
   std::tuple<Ref, Ref, NODE_KEY>
-  make_split_children(op_context_t<NODE_KEY> c) {
+  make_split_children(op_context_t c) {
     auto left = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     auto right = c.cache.template alloc_new_non_data_extent<node_type_t>(
@@ -318,7 +324,7 @@ struct FixedKVInternalNode
   }
 
   Ref make_full_merge(
-    op_context_t<NODE_KEY> c,
+    op_context_t c,
     Ref &right) {
     auto replacement = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
@@ -333,9 +339,9 @@ struct FixedKVInternalNode
 
   std::tuple<Ref, Ref, NODE_KEY>
   make_balanced(
-    op_context_t<NODE_KEY> c,
+    op_context_t c,
     Ref &_right,
-    bool prefer_left) {
+    uint32_t pivot_idx) {
     ceph_assert(_right->get_type() == this->get_type());
     auto &right = *_right->template cast<node_type_t>();
     auto replacement_left = c.cache.template alloc_new_non_data_extent<node_type_t>(
@@ -343,17 +349,19 @@ struct FixedKVInternalNode
     auto replacement_right = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
 
+    // We should do full merge if pivot_idx == right.get_size().
+    ceph_assert(pivot_idx != right.get_size());
     this->balance_child_ptrs(
       c.trans,
       static_cast<node_type_t&>(*this),
       right,
-      prefer_left,
+      pivot_idx,
       *replacement_left,
       *replacement_right);
     auto pivot = this->balance_into_new_nodes(
       *this,
       right,
-      prefer_left,
+      pivot_idx,
       *replacement_left,
       *replacement_right);
     replacement_left->range = replacement_left->get_meta();
@@ -362,7 +370,7 @@ struct FixedKVInternalNode
       c.trans,
       static_cast<node_type_t&>(*this),
       right,
-      prefer_left,
+      pivot_idx,
       *replacement_left,
       *replacement_right);
     return std::make_tuple(
@@ -432,7 +440,11 @@ struct FixedKVInternalNode
   }
 
   ceph::bufferlist get_delta() {
-    ceph::buffer::ptr bptr(delta_buffer.get_bytes());
+    auto buffer_len = delta_buffer.get_bytes();
+    if (buffer_len == 0) {
+      return ceph::bufferlist();
+    }
+    ceph::buffer::ptr bptr(buffer_len);
     delta_buffer.copy_out(bptr.c_str(), bptr.length());
     ceph::bufferlist bl;
     bl.push_back(bptr);
@@ -515,6 +527,7 @@ struct FixedKVLeafNode
   using base_t = FixedKVNode<NODE_KEY>;
   using child_node_t = ChildNode<internal_node_type_t, node_type_t, NODE_KEY>;
   using root_node_t = RootChildNode<RootBlock, node_type_t>;
+  using base_child_t = BaseChildNode<node_type_t, NODE_KEY>;
   explicit FixedKVLeafNode(ceph::bufferptr &&ptr)
     : FixedKVNode<NODE_KEY>(std::move(ptr)) {
     this->set_layout_buf(this->get_bptr().c_str());
@@ -564,7 +577,7 @@ struct FixedKVLeafNode
   }
 
   virtual ~FixedKVLeafNode() {
-    if (this->is_valid() && !this->is_pending()) {
+    if (this->is_stable()) {
       if (this->is_btree_root()) {
 	this->root_node_t::destroy();
       } else {
@@ -639,7 +652,7 @@ struct FixedKVLeafNode
     node_type_t &right) = 0;
 
   std::tuple<Ref, Ref, NODE_KEY>
-  make_split_children(op_context_t<NODE_KEY> c) {
+  make_split_children(op_context_t c) {
     auto left = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     auto right = c.cache.template alloc_new_non_data_extent<node_type_t>(
@@ -665,7 +678,7 @@ struct FixedKVLeafNode
     node_type_t &right) = 0;
 
   Ref make_full_merge(
-    op_context_t<NODE_KEY> c,
+    op_context_t c,
     Ref &right) {
     auto replacement = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
@@ -681,22 +694,22 @@ struct FixedKVLeafNode
     Transaction &t,
     node_type_t &left,
     node_type_t &right,
-    bool prefer_left,
+    uint32_t pivot_idx,
     node_type_t &replacement_left,
     node_type_t &replacement_right) = 0;
   virtual void adjust_copy_src_dest_on_balance(
     Transaction &t,
     node_type_t &left,
     node_type_t &right,
-    bool prefer_left,
+    uint32_t pivot_idx,
     node_type_t &replacement_left,
     node_type_t &replacement_right) = 0;
 
   std::tuple<Ref, Ref, NODE_KEY>
   make_balanced(
-    op_context_t<NODE_KEY> c,
+    op_context_t c,
     Ref &_right,
-    bool prefer_left) {
+    uint32_t pivot_idx) {
     ceph_assert(_right->get_type() == this->get_type());
     auto &right = *_right->template cast<node_type_t>();
     auto replacement_left = c.cache.template alloc_new_non_data_extent<node_type_t>(
@@ -708,13 +721,13 @@ struct FixedKVLeafNode
       c.trans,
       static_cast<node_type_t&>(*this),
       right,
-      prefer_left,
+      pivot_idx,
       *replacement_left,
       *replacement_right);
     auto pivot = this->balance_into_new_nodes(
       *this,
       right,
-      prefer_left,
+      pivot_idx,
       *replacement_left,
       *replacement_right);
     replacement_left->range = replacement_left->get_meta();
@@ -723,7 +736,7 @@ struct FixedKVLeafNode
       c.trans,
       static_cast<node_type_t&>(*this),
       right,
-      prefer_left,
+      pivot_idx,
       *replacement_left,
       *replacement_right);
     return std::make_tuple(

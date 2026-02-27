@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/common/coroutine.h"
 #include "crimson/osd/osd_operations/snaptrim_event.h"
@@ -412,19 +412,20 @@ SnapTrimObjSubEvent::start()
     obc_manager, RWState::RWWRITE
   ).handle_error_interruptible(
     remove_or_update_iertr::pass_further{},
-    crimson::ct_error::assert_all{"unexpected error in SnapTrimObjSubEvent"}
+    crimson::ct_error::assert_all{fmt::format(
+      "{} error SnapTrimObjSubEvent::snap_trim_obj_subevent_ret_t with {}", *this, coid).c_str()}
   );
 
   logger().debug("{}: got obc={}", *this, obc_manager.get_obc()->get_oid());
 
   auto all_completed = interruptor::now();
   {
-    // as with PG::submit_executer, we need to build the pg log entries
-    // and submit the transaction atomically
-    co_await interruptor::make_interruptible(pg->submit_lock.lock());
     auto unlocker = seastar::defer([this] {
       pg->submit_lock.unlock();
     });
+    // as with PG::submit_executer, we need to build the pg log entries
+    // and submit the transaction atomically
+    co_await interruptor::make_interruptible(pg->submit_lock.lock());
 
     logger().debug("{}: calling remove_or_update obc={}",
 		   *this, obc_manager.get_obc()->get_oid());

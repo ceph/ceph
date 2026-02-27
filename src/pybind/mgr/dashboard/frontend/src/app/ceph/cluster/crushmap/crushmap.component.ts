@@ -35,13 +35,14 @@ export interface CrushmapNode {
 @Component({
   selector: 'cd-crushmap',
   templateUrl: './crushmap.component.html',
-  styleUrls: ['./crushmap.component.scss']
+  styleUrls: ['./crushmap.component.scss'],
+  standalone: false
 })
 export class CrushmapComponent implements OnDestroy, OnInit {
   private sub = new Subscription();
 
   @ViewChild('tree') tree: TreeViewComponent;
-  @ViewChild('badge') labelTpl: TemplateRef<any>;
+  @ViewChild('tag') labelTpl: TemplateRef<any>;
 
   icons = Icons;
   loadingIndicator = true;
@@ -133,5 +134,15 @@ export class CrushmapComponent implements OnDestroy, OnInit {
       delete this.metadata;
       delete this.metadataTitle;
     }
+  }
+
+  getStatusClasses(status: string): string {
+    if (['in', 'up'].includes(status)) {
+      return 'tag-success ';
+    }
+    if (['down', 'out', 'destroyed'].includes(status)) {
+      return 'tag-danger';
+    }
+    return '';
   }
 }

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
@@ -120,10 +120,9 @@ int query_iostats(librados::Rados& rados, const std::string& pool_spec,
       "format": "json"
     }")";
 
-  bufferlist in_bl;
   bufferlist out_bl;
   std::string outs;
-  int r = rados.mgr_command(cmd, in_bl, &out_bl, &outs);
+  int r = rados.mgr_command(std::move(cmd), {}, &out_bl, &outs);
   if (r == -EOPNOTSUPP) {
     err_os << "rbd: 'rbd_support' mgr module is not enabled."
            << std::endl << std::endl

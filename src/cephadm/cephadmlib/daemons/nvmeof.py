@@ -90,6 +90,13 @@ class CephNvmeof(ContainerDaemonForm):
             mounts['/dev/vfio/vfio'] = '/dev/vfio/vfio'
         return mounts
 
+    def _get_dsa_mounts(self, files: Dict[str, str]) -> Dict[str, str]:
+        mounts = dict()
+        if 'enable_dsa_acceleration' in files:
+            mounts['/dev/dsa'] = '/dev/dsa'
+            mounts['/dev/char'] = '/dev/char'
+        return mounts
+
     def _get_tls_cert_key_mounts(
         self, data_dir: str, files: Dict[str, str]
     ) -> Dict[str, str]:
@@ -123,6 +130,7 @@ class CephNvmeof(ContainerDaemonForm):
         else:
             mounts.update(self._get_container_mounts(data_dir, log_dir))
         mounts.update(self._get_huge_pages_mounts(self.files))
+        mounts.update(self._get_dsa_mounts(self.files))
         mounts.update(self._get_tls_cert_key_mounts(data_dir, self.files))
 
     def customize_container_binds(
@@ -194,6 +202,21 @@ class CephNvmeof(ContainerDaemonForm):
         # populate files from the config-json
         populate_files(data_dir, self.files, uid, gid)
 
+        # create /dev/dsa if DSA acceleration is enabled and the device doesn't exist
+        if (
+            'enable_dsa_acceleration' in self.files
+            and self.files['enable_dsa_acceleration'] == 'True'
+        ):
+            if not os.path.exists('/dev/dsa'):
+                try:
+                    # create a /dev/dsa as a directory to avoid podman start failure
+                    os.mkdir('/dev/dsa', mode=0o755)
+                    logger.info(
+                        'Created /dev/dsa directory, device file was not found'
+                    )
+                except Exception:
+                    logger.exception('Failed to create /dev/dsa')
+
     @staticmethod
     def configfs_mount_umount(data_dir, mount=True):
         # type: (str, bool) -> List[str]
@@ -211,12 +234,29 @@ class CephNvmeof(ContainerDaemonForm):
         return cmd.split()
 
     def get_sysctl_settings(self) -> List[str]:
-        if 'spdk_mem_size' not in self.files:
-            return [
-                'vm.nr_hugepages = 4096',
-            ]
-        else:
+        if 'spdk_mem_size' in self.files:
             return []
+
+        if 'spdk_huge_pages' in self.files:
+            try:
+                val = self.files['spdk_huge_pages']
+                huge_pages_value = int(val)
+                logger.debug(
+                    f'Found SPDK huge pages value {huge_pages_value}'
+                )
+                return [
+                    f'vm.nr_hugepages = {huge_pages_value}',
+                ]
+            except KeyError:
+                logger.exception('Failure getting SPDK huge pages value')
+            except ValueError:
+                logger.error(
+                    f'Invalid SPDK huge pages value {self.files[val]}'
+                )
+
+        return [
+            'vm.nr_hugepages = 4096',
+        ]
 
     def container(self, ctx: CephadmContext) -> CephContainer:
         ctr = daemon_to_container(ctx, self)
@@ -237,5 +277,17 @@ class CephNvmeof(ContainerDaemonForm):
         args.extend(['--ulimit', 'memlock=-1:-1'])
         args.extend(['--ulimit', 'nofile=10240'])
         args.extend(['--cap-add=CAP_SYS_NICE'])
+        # idxd/dsa
+        if 'enable_dsa_acceleration' in self.files:
+            args.extend(['--privileged'])
+            args.extend(['--cap-add=SYS_RAWIO'])
         if 'spdk_mem_size' not in self.files:
             args.extend(['--cap-add=SYS_ADMIN'])
+            if 'spdk_huge_pages' in self.files:
+                try:
+                    huge_pages_value = int(self.files['spdk_huge_pages'])
+                    args.extend(['-e', f'HUGEPAGES={huge_pages_value}'])
+                except KeyError:
+                    pass
+                except ValueError:
+                    pass

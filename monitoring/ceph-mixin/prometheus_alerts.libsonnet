@@ -928,21 +928,21 @@
         {
           alert: 'NVMeoFTooManySubsystems',
           'for': '1m',
-          expr: 'count by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_metadata,"gateway_host","$1","instance","(.*?)(?::.*)?")) > %.2f' % [$._config.NVMeoFMaxSubsystemsPerGateway],
+          expr: 'count by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_metadata,"gateway_host","$1","instance","(.*?)(?::.*)?")) >= %.2f' % [$._config.NVMeoFMaxSubsystemsPerGateway],
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'The number of subsystems defined to the gateway exceeds supported values%(cluster)s' % $.MultiClusterSummary(),
-            description: 'Although you may continue to create subsystems in {{ $labels.gateway_host }}, the configuration may not be supported',
+            summary: 'The number of subsystems defined to the NVMeoF gateway reached or exceeded the supported values%(cluster)s' % $.MultiClusterSummary(),
+            description: 'NVMeoF gateway {{ $labels.gateway_host }} has reached or exceeded the supported maximum of %(NVMeoFMaxSubsystemsPerGateway)d subsystems. Current count: {{ $value }}.' % $._config,
           },
         },
         {
           alert: 'NVMeoFTooManyNamespaces',
           'for': '1m',
-          expr: 'sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,"gateway_host","$1","instance","(.*?)(?::.*)?")) > %.2f' % [$._config.NVMeoFMaxNamespaces],
+          expr: 'sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,"gateway_host","$1","instance","(.*?)(?::.*)?")) >= %.2f' % [$._config.NVMeoFMaxNamespaces],
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'The number of namespaces defined to the gateway exceeds supported values%(cluster)s' % $.MultiClusterSummary(),
-            description: 'Although you may continue to create namespaces in {{ $labels.gateway_host }}, the configuration may not be supported',
+            summary: 'The number of namespaces defined to the NVMeoF gateway reached or exceeded supported values%(cluster)s' % $.MultiClusterSummary(),
+            description: 'NVMeoF gateway {{ $labels.gateway_host }} has reached or exceeded the supported maximum of %(NVMeoFMaxNamespaces)d namespaces. Current count: {{ $value }}.' % $._config,
           },
         },
         {
@@ -1033,6 +1033,41 @@
           annotations: {
             summary: 'The average write latency over the last 5 mins has reached %(NVMeoFHighClientWriteLatency)d ms or more on {{ $labels.gateway }}' % $._config,
             description: 'High latencies may indicate a constraint within the cluster e.g. CPU, network. Please investigate',
+          },
+        },
+        {
+          alert: 'NVMeoFHostKeepAliveTimeout',
+          'for': '1m',
+          expr: 'ceil(changes(ceph_nvmeof_host_keepalive_timeout[%(NVMeoFHostKeepAliveTimeoutTrackDurationHours)dh:]) / 2) > 0' % $._config,
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Host ({{ $labels.host_nqn }}) was disconnected {{ $value }} times from subsystem ({{ $labels.nqn }}) in last %(NVMeoFHostKeepAliveTimeoutTrackDurationHours)d hours' % $._config,
+            description: 'Host was disconnected due to host keep alive timeout',
+          },
+        },
+      ],
+    },
+    {
+      name: 'certmgr',
+      rules: [
+        {
+          alert: 'CephCertificateError',
+          'for': '1m',
+          expr: 'ceph_health_detail{name="CEPHADM_CERT_ERROR"} == 1',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.15.1' },
+          annotations: {
+            summary: 'Ceph certificate error detected%(cluster)s' % $.MultiClusterSummary(),
+            description: "{{ $labels.message }}. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue.",
+          },
+        },
+        {
+          alert: 'CephCertificateWarning',
+          'for': '1m',
+          expr: 'ceph_health_detail{name="CEPHADM_CERT_WARNING"} == 1',
+          labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.15.2' },
+          annotations: {
+            summary: 'Ceph certificate warning detected%(cluster)s' % $.MultiClusterSummary(),
+            description: "{{ $labels.message }}. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue.",
           },
         },
       ],

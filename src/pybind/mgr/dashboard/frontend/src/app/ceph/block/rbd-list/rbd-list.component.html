@@ -37,26 +37,38 @@
 <ng-template #mirroringTpl
              let-value="data.value"
              let-row="data.row">
-  <span *ngIf="value?.length === 3; else probb"
-        class="badge badge-info">{{ value[0] }}</span>&nbsp;
-  <span *ngIf="value?.length === 3"
-        class="badge badge-info">{{ value[1] }}</span>&nbsp;
-  <span *ngIf="row?.primary === true"
-        class="badge badge-info"
-        i18n>primary</span>
-  <span *ngIf="row?.primary === false"
-        class="badge badge-info"
-        i18n>secondary</span>
+  <cds-tag *ngIf="value?.length === 3; else probb"
+           class="tag-info">
+    {{ value[0] }}
+  </cds-tag>&nbsp;
+  <cds-tag *ngIf="value?.length === 3"
+           class="tag-info">
+    {{ value[1] }}
+  </cds-tag>&nbsp;
+  <cds-tag *ngIf="row?.primary === true"
+           class="tag-info"
+           i18n>
+    primary
+  </cds-tag>
+  <cds-tag *ngIf="row?.primary === false"
+           class="tag-info"
+           i18n>
+    secondary
+  </cds-tag>
   <ng-template #probb>
-    <span class="badge badge-info">{{ value }}</span>
+    <cds-tag class="tag-info">
+      {{ value }}
+    </cds-tag >
   </ng-template>
 </ng-template>
 
 <ng-template #ScheduleTpl
              let-value="data.value"
              let-row="data.row">
-  <span *ngIf="value?.length === 3"
-        class="badge badge-info">{{ value[2] | cdDate  }}</span>
+  <cds-tag *ngIf="value?.length === 3"
+           class="tag-info">
+  {{ value[2] | cdDate  }}
+  </cds-tag>
 </ng-template>
 
 <ng-template #flattenTpl
@@ -90,10 +102,9 @@
              let-column="data.column"
              let-value="data.value"
              let-row="data.row">
-
   <i [ngClass]="[icons.spinner, icons.spin]"
      *ngIf="row.cdExecuting"></i>
-  <span [ngClass]="column?.customTemplateConfig?.valueClass">
+    <span [ngClass]="column?.customTemplateConfig?.valueClass">
     {{ value }}
   </span>
   <span *ngIf="row.cdExecuting"
@@ -102,10 +113,12 @@
         'text-muted italic'">
     ({{ row.cdExecuting }})
   </span>
-  <i *ngIf="row.source && row.source === 'REMOVING'"
-     i18n-title
-     title="RBD in status 'Removing'"
-     class="{{ icons.warning }} warn"></i>
+  <svg  *ngIf="row.source && row.source === 'REMOVING'"
+        i18n-title
+        title="RBD in status 'Removing'"
+        [cdsIcon]="icons.warning"
+        [size]="icons.size16"
+        class="cds-warning-color"></svg>
 </ng-template>
 
 <ng-template #forcePromoteConfirmation>
@@ -120,7 +133,7 @@
 
 <ng-template #imageUsageTpl
              let-row="data.row">
-  <span *ngIf="row.features_name && (!row.features_name.includes('fast-diff') || row.mirror_mode === 'snapshot') ; else usageBar"
+  <span *ngIf="row.features_name && !row.features_name.includes('fast-diff') ; else usageBar"
         [ngbTooltip]="usageTooltip">
     <span>-</span>
   </span>
@@ -132,7 +145,6 @@
                   decimals="2">
   </cd-usage-bar>
   </ng-template>
-
 </ng-template>
 
 <ng-template #usageTooltip>

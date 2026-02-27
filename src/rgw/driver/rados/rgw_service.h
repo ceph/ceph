@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -11,8 +11,11 @@
 
 #include "rgw_common.h"
 
-namespace rgw::sal {
-class RadosStore;
+namespace rgw {
+  class SiteConfig;
+  namespace sal {
+    class RadosStore;
+  }
 }
 
 struct RGWServices_Def;
@@ -50,7 +53,6 @@ public:
   }
 };
 
-class RGWSI_Finisher;
 class RGWSI_Bucket;
 class RGWSI_Bucket_SObj;
 class RGWSI_Bucket_Sync;
@@ -81,7 +83,6 @@ struct RGWServices_Def
   bool can_shutdown{false};
   bool has_shutdown{false};
 
-  std::unique_ptr<RGWSI_Finisher> finisher;
   std::unique_ptr<RGWSI_Bucket_SObj> bucket_sobj;
   std::unique_ptr<RGWSI_Bucket_Sync_SObj> bucket_sync_sobj;
   std::unique_ptr<RGWSI_BucketIndex_RADOS> bi_rados;
@@ -106,7 +107,7 @@ struct RGWServices_Def
 
   int init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
 	   bool raw_storage, bool run_sync, bool background_tasks,
-	   optional_yield y, const DoutPrefixProvider *dpp);
+	   optional_yield y, const DoutPrefixProvider *dpp, rgw::sal::ConfigStore* cfgstore, const rgw::SiteConfig* site);
   void shutdown();
 };
 
@@ -119,7 +120,6 @@ struct RGWServices
   CephContext *cct;
   const rgw::SiteConfig* site{nullptr};
 
-  RGWSI_Finisher *finisher{nullptr};
   RGWSI_Bucket *bucket{nullptr};
   RGWSI_Bucket_SObj *bucket_sobj{nullptr};
   RGWSI_Bucket_Sync *bucket_sync{nullptr};
@@ -132,7 +132,6 @@ struct RGWServices
   RGWSI_ConfigKey *config_key{nullptr};
   RGWDataChangesLog *datalog_rados{nullptr};
   RGWSI_MDLog *mdlog{nullptr};
-  RGWSI_Notify *notify{nullptr};
   RGWSI_Zone *zone{nullptr};
   RGWSI_ZoneUtils *zone_utils{nullptr};
   RGWSI_Quota *quota{nullptr};
@@ -145,19 +144,19 @@ struct RGWServices
 
   int do_init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
 	      bool raw_storage, bool run_sync, bool background_tasks, optional_yield y,
-	      const DoutPrefixProvider *dpp, const rgw::SiteConfig& site);
+	      const DoutPrefixProvider *dpp, const rgw::SiteConfig& site, rgw::sal::ConfigStore* cfgstore);
 
   int init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
 	   bool run_sync, bool background_tasks, optional_yield y, const DoutPrefixProvider *dpp,
-	   const rgw::SiteConfig& site) {
-    return do_init(cct, store, have_cache, false, run_sync, background_tasks, y, dpp, site);
+	   const rgw::SiteConfig& site, rgw::sal::ConfigStore* cfgstore) {
+    return do_init(cct, store, have_cache, false, run_sync, background_tasks, y, dpp, site, cfgstore);
   }
 
   int init_raw(CephContext *cct, rgw::sal::RadosStore* store,
 	       bool have_cache, optional_yield y,
 	       const DoutPrefixProvider *dpp,
-	       const rgw::SiteConfig& site) {
-    return do_init(cct, store, have_cache, true, false, false, y, dpp, site);
+	       const rgw::SiteConfig& site, rgw::sal::ConfigStore* cfgstore) {
+    return do_init(cct, store, have_cache, true, false, false, y, dpp, site, cfgstore);
   }
   void shutdown() {
     _svc.shutdown();

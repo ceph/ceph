@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,8 +19,10 @@
 #include <map>
 #include <set>
 #include <string_view>
+#include <vector>
 
 #include "MDSTableClient.h"
+#include "mds_table_types.h" // for TABLE_SNAP
 #include "snap.h"
 
 class MDSContext;
@@ -37,44 +40,14 @@ public:
   void notify_commit(version_t tid) override;
 
   void prepare_create(inodeno_t dirino, std::string_view name, utime_t stamp,
-		      version_t *pstid, bufferlist *pbl, MDSContext *onfinish) {
-    bufferlist bl;
-    __u32 op = TABLE_OP_CREATE;
-    encode(op, bl);
-    encode(dirino, bl);
-    encode(name, bl);
-    encode(stamp, bl);
-    _prepare(bl, pstid, pbl, onfinish);
-  }
+		      version_t *pstid, bufferlist *pbl, MDSContext *onfinish);
 
-  void prepare_create_realm(inodeno_t ino, version_t *pstid, bufferlist *pbl, MDSContext *onfinish) {
-    bufferlist bl;
-    __u32 op = TABLE_OP_CREATE;
-    encode(op, bl);
-    encode(ino, bl);
-    _prepare(bl, pstid, pbl, onfinish);
-  }
+  void prepare_create_realm(inodeno_t ino, version_t *pstid, bufferlist *pbl, MDSContext *onfinish);
 
-  void prepare_destroy(inodeno_t ino, snapid_t snapid, version_t *pstid, bufferlist *pbl, MDSContext *onfinish) {
-    bufferlist bl;
-    __u32 op = TABLE_OP_DESTROY;
-    encode(op, bl);
-    encode(ino, bl);
-    encode(snapid, bl);
-    _prepare(bl, pstid, pbl, onfinish);
-  }
+  void prepare_destroy(inodeno_t ino, snapid_t snapid, version_t *pstid, bufferlist *pbl, MDSContext *onfinish);
 
   void prepare_update(inodeno_t ino, snapid_t snapid, std::string_view name, utime_t stamp,
-		      version_t *pstid, MDSContext *onfinish) {
-    bufferlist bl;
-    __u32 op = TABLE_OP_UPDATE;
-    encode(op, bl);
-    encode(ino, bl);
-    encode(snapid, bl);
-    encode(name, bl);
-    encode(stamp, bl);
-    _prepare(bl, pstid, NULL, onfinish);
-  }
+		      version_t *pstid, MDSContext *onfinish);
 
   version_t get_cached_version() const { return cached_version; }
   void refresh(version_t want, MDSContext *onfinish);
@@ -107,7 +80,7 @@ private:
 
   std::set<version_t> committing_tids;
 
-  std::map<version_t, MDSContext::vec > waiting_for_version;
+  std::map<version_t, std::vector<MDSContext*> > waiting_for_version;
 
   uint64_t sync_reqid = 0;
   bool synced = false;

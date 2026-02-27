@@ -18,6 +18,7 @@ import { configureTestBed, TabHelper } from '~/testing/unit-test-helper';
 import { RgwDaemonDetailsComponent } from '../rgw-daemon-details/rgw-daemon-details.component';
 import { RgwDaemonListComponent } from './rgw-daemon-list.component';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 
 describe('RgwDaemonListComponent', () => {
   let component: RgwDaemonListComponent;
@@ -29,7 +30,7 @@ describe('RgwDaemonListComponent', () => {
   const daemon: RgwDaemon = {
     id: '8000',
     service_map_id: '4803',
-    version: 'ceph version',
+    version: VERSION_PREFIX,
     server_hostname: 'ceph',
     realm_name: 'realm1',
     zonegroup_name: 'zg1-realm1',

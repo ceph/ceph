@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-ignorelist:
       - \(MON_DOWN\)
+      - pgs peering
 tasks:
 - install:
     branch: squid
@@ -10,6 +11,8 @@ tasks:
       - ceph-mgr-diskprediction-local
       - ceph-mgr-rook
       - ceph-mgr-cephadm
+      - ceph-osd-classic
+      - ceph-osd-crimson
       - ceph-base-debuginfo
       - ceph-common-debuginfo
       - ceph-immutable-object-cache-debuginfo

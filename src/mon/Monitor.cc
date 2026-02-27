@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -375,28 +376,45 @@ int Monitor::do_admin_command(
     start_election();
     elector.stop_participating();
     out << "stopped responding to quorum, initiated new election";
-  } else if (command == "ops") {
-    (void)op_tracker.dump_ops_in_flight(f);
   } else if (command == "sessions") {
     f->open_array_section("sessions");
     for (auto p : session_map.sessions) {
       f->dump_object("session", *p);
     }
     f->close_section();
-  } else if (command == "dump_historic_ops") {
-    if (!op_tracker.dump_historic_ops(f)) {
-      err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-        please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
-    }
-  } else if (command == "dump_historic_ops_by_duration" ) {
-    if (op_tracker.dump_historic_ops(f, true)) {
-      err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-        please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
-    }
-  } else if (command == "dump_historic_slow_ops") {
-    if (op_tracker.dump_historic_slow_ops(f, {})) {
-      err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-        please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+  } else if (command == "dump_ops_in_flight" ||
+             command == "ops" ||
+             command == "dump_historic_ops" ||
+             command == "dump_historic_ops_by_duration" ||
+             command == "dump_historic_slow_ops") {
+    const string error_str = "op_tracker tracking is not enabled now, so no ops are tracked currently, \
+even those get stuck. Please enable \"mon_enable_op_tracker\", and the tracker \
+will start to track new ops received afterwards.";
+    if (command == "dump_historic_ops") {
+      if (!op_tracker.dump_historic_ops(f)) {
+        err << error_str;
+        r = -EINVAL;
+        goto abort;
+      }
+    } else if (command == "dump_historic_ops_by_duration" ) {
+      if (!op_tracker.dump_historic_ops(f, true)) {
+        err << error_str;
+        r = -EINVAL;
+        goto abort;
+      }
+    } else if (command == "dump_historic_slow_ops") {
+      if (!op_tracker.dump_historic_slow_ops(f, {})) {
+        err << error_str;
+        r = -EINVAL;
+        goto abort;
+      }
+    } else if (command == "ops" ||
+               command == "dump_ops_in_flight") {
+      if (!op_tracker.dump_ops_in_flight(f)) {
+        err << error_str;
+        r = -EINVAL;
+        goto abort;
+      }
     }
   } else if (command == "quorum") {
     string quorumcmd;
@@ -546,6 +564,9 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_REEF);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SQUID);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_TENTACLE);
+
+  // Release-independent features
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NVMEOF_BEACON_DIFF);
   return compat;
 }
 
@@ -647,7 +668,8 @@ std::vector<std::string> Monitor::get_tracked_keys() const noexcept
     "mon_osdmap_full_prune_txsize"s,
     // debug options - observed, not handled
     "mon_debug_extra_checks"s,
-    "mon_debug_block_osdmap_trim"s
+    "mon_debug_block_osdmap_trim"s,
+    "mon_enable_op_tracker"s,
   };
 }
 
@@ -686,6 +708,10 @@ void Monitor::handle_conf_change(const ConfigProxy& conf,
       std::lock_guard l{lock};
       scrub_update_interval(scrub_interval);
     }});
+  }
+  
+  if (changed.count("mon_enable_op_tracker")) {
+    op_tracker.set_tracking(conf.get_val<bool>("mon_enable_op_tracker"));
   }
 }
 
@@ -2296,7 +2322,7 @@ void Monitor::win_election(epoch_t epoch, const set<int>& active, uint64_t featu
     encode(m, bl);
     t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
   }
-
+  elector.process_pending_pings();
   finish_election();
   if (monmap->size() > 1 &&
       monmap->get_epoch() > 0) {
@@ -2349,7 +2375,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
   _finish_svc_election();
 
   logger->inc(l_mon_election_lose);
-
+  elector.process_pending_pings();
   finish_election();
 }
 
@@ -2550,6 +2576,16 @@ void Monitor::apply_monmap_to_compatset_features()
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_TENTACLE);
   }
 
+
+  // Release-independent features
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF)) {
+    ceph_assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF));
+    // this feature should only ever be set if the quorum supports it.
+    ceph_assert(HAVE_FEATURE(quorum_con_features, NVMEOF_BEACON_DIFF));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NVMEOF_BEACON_DIFF);
+  }
+
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
 }
@@ -2612,6 +2648,13 @@ void Monitor::calc_quorum_requirements()
     required_features |= CEPH_FEATUREMASK_SERVER_NAUTILUS |
       CEPH_FEATUREMASK_CEPHX_V2;
   }
+
+  // Release-independent features
+  if (monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF)) {
+    required_features |= CEPH_FEATUREMASK_NVMEOF_BEACON_DIFF;
+  }
+
   dout(10) << __func__ << " required_features " << required_features << dendl;
 }
 
@@ -3118,23 +3161,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
     {
       size_t maxlen = 3;
       auto& service_map = mgrstatmon()->get_service_map();
-      std::map<NvmeGroupKey, std::set<std::string>> nvmeof_services;
       for (auto& p : service_map.services) {
-        if (p.first == "nvmeof") {
-          auto daemons = p.second.daemons;
-          for (auto& d : daemons) {
-            auto group = d.second.metadata.find("group");
-            auto pool = d.second.metadata.find("pool_name"); 
-            auto gw_id = d.second.metadata.find("id");
-            NvmeGroupKey group_key = std::make_pair(pool->second,  group->second); 
-            nvmeof_services[group_key].insert(gw_id->second);
-            maxlen = std::max(maxlen, 
-                p.first.size() + group->second.size() + pool->second.size() + 4
-              ); // nvmeof (pool.group):
-          }
-        } else {
-          maxlen = std::max(maxlen, p.first.size());
-        }
+	maxlen = std::max(maxlen, p.first.size());
       }
       string spacing(maxlen - 3, ' ');
       const auto quorum_names = get_quorum_names();
@@ -3181,31 +3209,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
         if (ServiceMap::is_normal_ceph_entity(service)) {
           continue;
         }
-        if (p.first == "nvmeof") {
-          auto created_gws = nvmegwmon()->get_map().created_gws;
-          for (const auto& created_map_pair: created_gws) {
-            const auto& group_key = created_map_pair.first;
-            const NvmeGwMonStates& gw_created_map = created_map_pair.second;
-            const int total = gw_created_map.size();
-            auto& active_gws = nvmeof_services[group_key];
-
-            ss << "    " << p.first << " (" << group_key.first << "." << group_key.second << "): ";
-            ss << string(maxlen - p.first.size() - group_key.first.size() 
-                    - group_key.second.size() - 4, ' ');
-            ss << total << " gateway" << (total > 1 ? "s" : "") << ": " 
-               << active_gws.size() << " active (";
-            for (auto gw = active_gws.begin(); gw != active_gws.end(); ++gw){
-              if (gw != active_gws.begin()) {
-	              ss << ", ";
-              }
-              ss << *gw; 
-            }
-            ss << ") \n";
-          }
-        } else {
 	ss << "    " << p.first << ": " << string(maxlen - p.first.size(), ' ')
 	   << p.second.get_summary() << "\n";
-        }
       }
     }
 
@@ -3616,8 +3621,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     dout(10) << __func__ << " proxying mgr command (+" << size
 	     << " -> " << mgr_proxy_bytes << ")" << dendl;
     C_MgrProxyCommand *fin = new C_MgrProxyCommand(this, op, size);
-    mgr_client.start_command(m->cmd,
-			     m->get_data(),
+    mgr_client.start_command(std::move(m->cmd),
+			     std::move(m->get_data()),
 			     &fin->outbl,
 			     &fin->outs,
 			     new C_OnFinisher(fin, &finisher));
@@ -6545,7 +6550,7 @@ int Monitor::handle_auth_request(
 	dout(1) << __func__ << " invalid mode " << (int)mode << dendl;
 	return -EACCES;
       }
-      assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
+      ceph_assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
       decode(entity_name, p);
       decode(con->peer_global_id, p);
     } catch (ceph::buffer::error& e) {
@@ -6677,7 +6682,7 @@ bool Monitor::ms_handle_fast_authentication(Connection *con)
       entity_name_t(con->get_peer_type(), -1),  // we don't know yet
       con->get_peer_addrs(),
       con);
-    assert(s);
+    ceph_assert(s);
     dout(10) << __func__ << " adding session " << s << " to con " << con
 	     << dendl;
     con->set_priv(s);

@@ -11,7 +11,6 @@ add_library(radostest STATIC
 target_link_libraries(radostest PUBLIC
   GTest::GTest
   ceph-common
-  json_spirit
   ${GSSAPI_LIBRARIES} ${EXTRALIBS})
 add_library(radostest-cxx STATIC
   testcase_cxx.cc
@@ -125,16 +124,6 @@ add_executable(ceph_test_rados_api_service_pp
 target_link_libraries(ceph_test_rados_api_service_pp
   librados global ${UNITTEST_LIBS} radostest-cxx)
 
-add_executable(ceph_test_rados_api_tier_pp
-  tier_cxx.cc
-  $<TARGET_OBJECTS:unit-main>)
-target_include_directories(ceph_test_rados_api_tier_pp
-  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
-  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
-target_link_libraries(ceph_test_rados_api_tier_pp
-  librados global ${UNITTEST_LIBS} Boost::system radostest-cxx cls_cas_internal
-  cls_cas_client Boost::context)
-
 add_executable(ceph_test_rados_api_snapshots
   snapshots.cc)
 target_link_libraries(ceph_test_rados_api_snapshots
@@ -174,7 +163,6 @@ install(TARGETS
   ceph_test_rados_api_snapshots_pp
   ceph_test_rados_api_stat
   ceph_test_rados_api_stat_pp
-  ceph_test_rados_api_tier_pp
   ceph_test_rados_api_watch_notify
   ceph_test_rados_api_watch_notify_pp
   DESTINATION ${CMAKE_INSTALL_BINDIR})

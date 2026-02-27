@@ -8,6 +8,8 @@ overrides:
         cephx require version: 1
         cephx service require version: 1
         ms bind msgr2: false
+      client:
+        rbd default map options: ms_mode=legacy
 tasks:
 - install:
 - ceph:

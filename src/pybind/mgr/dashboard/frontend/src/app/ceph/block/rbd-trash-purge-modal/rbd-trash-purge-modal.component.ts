@@ -16,7 +16,8 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 @Component({
   selector: 'cd-rbd-trash-purge-modal',
   templateUrl: './rbd-trash-purge-modal.component.html',
-  styleUrls: ['./rbd-trash-purge-modal.component.scss']
+  styleUrls: ['./rbd-trash-purge-modal.component.scss'],
+  standalone: false
 })
 export class RbdTrashPurgeModalComponent extends BaseModal implements OnInit {
   poolPermission: Permission;

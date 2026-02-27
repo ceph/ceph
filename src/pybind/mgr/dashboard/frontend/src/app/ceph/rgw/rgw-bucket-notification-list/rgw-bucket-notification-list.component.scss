@@ -1,0 +1,5 @@
+@use '@carbon/layout';
+
+::ng-deep.cds--type-mono {
+  margin-right: layout.$spacing-02;
+}

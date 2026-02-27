@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2
 /*
  * Ceph - scalable distributed file system
@@ -12,6 +12,7 @@
  */
 
 #include <boost/algorithm/string/replace.hpp>
+#include <fmt/format.h>
 
 #include "common/errno.h"
 #include "common/signal.h"
@@ -19,6 +20,7 @@
 #include "include/compat.h"
 
 #include "include/stringify.h"
+#include "include/ceph_features.h"
 #include "global/global_context.h"
 #include "global/signal_handler.h"
 
@@ -28,6 +30,7 @@
 #include "NVMeofGwMonitorClient.h"
 #include "NVMeofGwClient.h"
 #include "NVMeofGwMonitorGroupClient.h"
+#include "nvmeof/NVMeofGwUtils.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
@@ -39,6 +42,10 @@ NVMeofGwMonitorClient::NVMeofGwMonitorClient(int argc, const char **argv) :
   osdmap_epoch(0),
   gwmap_epoch(0),
   last_map_time(std::chrono::steady_clock::now()),
+  reset_timestamp(std::chrono::steady_clock::now()),
+  start_time(last_map_time),
+  cluster_beacon_diff_included(0),
+  poolctx(),
   monc{g_ceph_context, poolctx},
   client_messenger(Messenger::create(g_ceph_context, "async", entity_name_t::CLIENT(-1), "client", getpid())),
   objecter{g_ceph_context, client_messenger.get(), &monc, poolctx},
@@ -137,8 +144,7 @@ int NVMeofGwMonitorClient::init()
   }
 
   monc.sub_want("NVMeofGw", 0, 0);
-  monc.set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD
-      |CEPH_ENTITY_TYPE_MDS|CEPH_ENTITY_TYPE_MGR);
+  monc.set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD);
   monc.set_messenger(client_messenger.get());
 
   // We must register our config callback before calling init(), so
@@ -183,7 +189,10 @@ int NVMeofGwMonitorClient::init()
 
   {
     std::lock_guard bl(beacon_lock);
-    tick();
+    // Initialize timer state for exact frequency timing
+    next_tick_time = ceph::mono_clock::now();
+    // Start the timer after full initialization is complete
+    schedule_next_tick();
   }
 
   dout(10) << "Complete." << dendl;
@@ -210,7 +219,7 @@ void NVMeofGwMonitorClient::send_beacon()
 {
   ceph_assert(ceph_mutex_is_locked_by_me(beacon_lock));
   gw_availability_t gw_availability = gw_availability_t::GW_CREATED;
-  BeaconSubsystems subs;
+  BeaconSubsystems current_subsystems;
   NVMeofGwClient gw_client(
      grpc::CreateChannel(gateway_address, gw_creds()));
   subsystems_info gw_subsystems;
@@ -230,26 +239,43 @@ void NVMeofGwMonitorClient::send_beacon()
         BeaconListener bls = { ls.adrfam(), ls.traddr(), ls.trsvcid() };
         bsub.listeners.push_back(bls);
       }
-      subs.push_back(bsub);
+      current_subsystems.push_back(bsub);
     }
   }
+
+  // Determine change descriptors by comparing with previous beacon's subsystems
+  BeaconSubsystems subsystem_diff = current_subsystems;
+  determine_subsystem_changes(prev_beacon_subsystems, subsystem_diff);
 
   auto group_key = std::make_pair(pool, group);
   NvmeGwClientState old_gw_state;
   // if already got gateway state in the map
   if (first_beacon == false && get_gw_state("old map", map, group_key, name, old_gw_state))
     gw_availability = ok ? gw_availability_t::GW_AVAILABLE : gw_availability_t::GW_UNAVAILABLE;
-  dout(10) << "sending beacon as gid " << monc.get_global_id() << " availability " << (int)gw_availability <<
+  dout(1) << "sending beacon as gid " << monc.get_global_id() << " availability " << (int)gw_availability <<
     " osdmap_epoch " << osdmap_epoch << " gwmap_epoch " << gwmap_epoch << dendl;
+
+  // Check if NVMEOF_BEACON_DIFF feature is supported by the cluster
+  dout(10) << fmt::format("NVMEOF_BEACON_DIFF supported: {}",  cluster_beacon_diff_included ? "yes" : "no") << dendl;
+
+  // Send beacon with appropriate version based on cluster features
   auto m = ceph::make_message<MNVMeofGwBeacon>(
       name,
       pool,
       group,
-      subs,
+      cluster_beacon_diff_included ? subsystem_diff : current_subsystems,
       gw_availability,
       osdmap_epoch,
-      gwmap_epoch);
+      gwmap_epoch,
+      beacon_sequence,
+      // Pass affected features to the constructor
+      cluster_beacon_diff_included ? CEPH_FEATUREMASK_NVMEOF_BEACON_DIFF : 0
+  );
+  dout(10) << "sending beacon with diff support: " << (cluster_beacon_diff_included ? "enabled" : "disabled") << dendl;
+  
   monc.send_mon_message(std::move(m));
+  ++beacon_sequence;
+  prev_beacon_subsystems = std::move(current_subsystems);
 }
 
 void NVMeofGwMonitorClient::disconnect_panic()
@@ -263,20 +289,73 @@ void NVMeofGwMonitorClient::disconnect_panic()
   }
 }
 
+void NVMeofGwMonitorClient::connect_panic()
+{
+  // Return immediately if the gateway was assigned group ID by the monitor
+  if (set_group_id) {
+    return;
+  }
+  // If the gateway has not been assigned a group ID, panic after timeout
+  auto connect_panic_duration = g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_connect_panic").count();
+  auto now = std::chrono::steady_clock::now();
+  auto elapsed_seconds = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
+  if (elapsed_seconds > connect_panic_duration) {
+    dout(4) << "Triggering a panic: did not receive initial map from monitor, elapsed " << elapsed_seconds << ", configured connect panic duration " << connect_panic_duration << " seconds." << dendl;
+    throw std::runtime_error("Did not receive initial map from monitor (connect panic).");
+  }
+}
+
 void NVMeofGwMonitorClient::tick()
 {
   dout(10) << dendl;
-
+  auto start_time = ceph::mono_clock::now();
+  connect_panic();
   disconnect_panic();
   send_beacon();
   first_beacon = false;
-  timer.add_event_after(
-      g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_tick_period").count(),
-      new LambdaContext([this](int r){
-          tick();
-      }
-  ));
+
+  // Log tick execution duration
+  log_tick_execution_duration(start_time);
+
+  // Schedule next tick with exact frequency timing
+  schedule_next_tick();
 }
+
+void NVMeofGwMonitorClient::schedule_next_tick()
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(beacon_lock));
+
+  // Calculate next tick time based on configured interval
+  auto tick_period = g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_tick_period");
+  next_tick_time += tick_period;
+
+  // Get current time to check for drift
+  auto now = ceph::mono_clock::now();
+
+  // If we're behind schedule, adjust next_tick_time to prevent drift accumulation
+  if (next_tick_time < now) {
+    dout(1) << "Timer drift detected, adjusting next_tick_time from "
+             << next_tick_time << " to " << now << dendl;
+    next_tick_time = now;
+  }
+
+  // Schedule the next tick
+  auto callback = new LambdaContext([this](int r) {
+    tick();
+  });
+
+  auto tick_time = next_tick_time;
+  if (!timer.add_event_at(tick_time, callback)) {
+    throw std::runtime_error("Failed to schedule timer event (timer shutting down)");
+  }
+
+  // Log scheduling information for frequency analysis
+  auto delay_ns = (next_tick_time - now).count();
+  dout(10) << "Scheduled next tick at " << next_tick_time
+          << " (delay: " << delay_ns << " ns, "
+          << (delay_ns / 1000000.0) << " ms)" << dendl;
+}
+
 
 void NVMeofGwMonitorClient::shutdown()
 {
@@ -305,27 +384,57 @@ void NVMeofGwMonitorClient::shutdown()
 
 void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
 {
-  last_map_time = std::chrono::steady_clock::now(); // record time of last monitor message
+  auto now = std::chrono::steady_clock::now();
+  last_map_time = now; // record time of last monitor message
 
   auto &new_map = nmap->get_map();
   gwmap_epoch = nmap->get_gwmap_epoch();
   auto group_key = std::make_pair(pool, group);
   dout(10) << "handle nvmeof gw map: " << new_map << dendl;
-
+  uint64_t reset_elapsed_seconds =
+      std::chrono::duration_cast<std::chrono::seconds>(now - reset_timestamp).count();
   NvmeGwClientState old_gw_state;
+  uint64_t ignore_wrong_map_interval_sec =
+       g_conf().get_val<uint64_t>("mon_nvmeofgw_wrong_map_ignore_sec");
   auto got_old_gw_state = get_gw_state("old map", map, group_key, name, old_gw_state); 
   NvmeGwClientState new_gw_state;
   auto got_new_gw_state = get_gw_state("new map", new_map, group_key, name, new_gw_state); 
 
+  /*It is possible that wrong second map would be sent by monitor in rear cases when several GWs doing reboot
+  * and entity_address of the monitor client changes. So Monitor may send the unicast map to the wrong destination
+  * since this "old" address still appears in its map. It is asynchronous process in the monitor, better to protect
+  * from this scenario by silently ignoring the wrong map. This can happen just in the first several seconds after restart
+  */
+  if ( (reset_elapsed_seconds < ignore_wrong_map_interval_sec) &&
+        !got_new_gw_state && got_old_gw_state) {
+    dout(4) << "Wrong map received, Ignore it" << dendl;
+    return;
+  }
   // ensure that the gateway state has not vanished
   ceph_assert(got_new_gw_state || !got_old_gw_state);
+
+  // Check if the last_beacon_seq_number in the received map doesn't match our last sent beacon_sequence
+  // beacon_sequence is incremented after sending, so we compare with (beacon_sequence - 1)
+  {
+    std::lock_guard bl(beacon_lock);
+    if (got_new_gw_state && new_gw_state.last_beacon_seq_ooo) {
+        //new_gw_state.last_beacon_seq_number != (beacon_sequence - 1)) {
+      dout(4) << "Beacon sequence mismatch detected. Expected: " << (beacon_sequence - 1)
+               << ", received: " << new_gw_state.last_beacon_seq_number
+               << ". Truncating previous subsystems list." << dendl;
+      beacon_sequence = new_gw_state.last_beacon_seq_number + 1;
+      prev_beacon_subsystems.clear();
+      dout(4) << "OOO map received, Ignore it" << dendl;
+      return;
+    }
+  }
 
   if (!got_old_gw_state) {
     if (!got_new_gw_state) {
       dout(10) << "Can not find new gw state" << dendl;
       return;
     }
-    bool set_group_id = false;
+    ceph_assert(!set_group_id);
     while (!set_group_id) {
       NVMeofGwMonitorGroupClient monitor_group_client(
           grpc::CreateChannel(monitor_address, gw_creds()));
@@ -354,10 +463,29 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
     }
   }
 
+  // Combined subsystems
+  const auto initial_ana_state = std::make_pair(gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE, (epoch_t)0);
+  GwSubsystems combined_subsystems = new_gw_state.subsystems;
+  for (const auto& nqn_state_pair: old_gw_state.subsystems) {
+    const auto& nqn = nqn_state_pair.first;
+    auto& old_nqn_state = nqn_state_pair.second;
+
+    // The monitor might remove active subsystems from the new distributed GwSubsystems.
+    // In such cases, ensure an INACCESSIBLE state is generated for subsystems
+    // that were present in the old state but are now missing.
+    if (new_gw_state.subsystems.find(nqn) == new_gw_state.subsystems.end()) {
+      ana_state_t all_disabled(old_nqn_state.ana_state.size(), initial_ana_state);
+      dout(4) << "set all groups to Inacccessible stat for " << nqn << dendl;
+      NqnState    nqn_state(nqn, all_disabled);
+
+      combined_subsystems.insert({nqn, nqn_state});
+    }
+  }
+
   // Gather all state changes
   ana_info ai;
   epoch_t max_blocklist_epoch = 0;
-  for (const auto& nqn_state_pair: new_gw_state.subsystems) {
+  for (const auto& nqn_state_pair: combined_subsystems) {
     auto& sub = nqn_state_pair.second;
     const auto& nqn = nqn_state_pair.first;
     nqn_ana_states nas;
@@ -371,7 +499,6 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
        sub.ana_state.size();
 
     for (NvmeAnaGrpId  ana_grp_index = 0; ana_grp_index < ana_state_size; ana_grp_index++) {
-      const auto initial_ana_state = std::make_pair(gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE, (epoch_t)0);
       auto new_group_state = (ana_grp_index < sub.ana_state.size()) ?
 	sub.ana_state[ana_grp_index] :
 	initial_ana_state;
@@ -425,11 +552,18 @@ Dispatcher::dispatch_result_t NVMeofGwMonitorClient::ms_dispatch2(const ref_t<Me
   std::lock_guard l(lock);
   dout(10) << "got map type " << m->get_type() << dendl;
 
+  // print connection features for all incoming messages and update cluster features
+  if (m->get_connection()) {
+    cluster_beacon_diff_included = monc.get_monmap_required_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF);
+    dout(10) << fmt::format("Updated cluster features: 0x{:x}", cluster_beacon_diff_included) << dendl;
+  }
+
   if (m->get_type() == MSG_MNVMEOF_GW_MAP) {
     handle_nvmeof_gw_map(ref_cast<MNVMeofGwMap>(m));
+    return Dispatcher::HANDLED();
+
   }
-  bool handled = false;
-  return handled;
+  return Dispatcher::ACKNOWLEDGED();
 }
 
 int NVMeofGwMonitorClient::main(std::vector<const char *> args)
@@ -441,4 +575,20 @@ int NVMeofGwMonitorClient::main(std::vector<const char *> args)
   shutdown_async_signal_handler();
 
   return 0;
+}
+
+void NVMeofGwMonitorClient::log_tick_execution_duration(const ceph::mono_clock::time_point& start_time)
+{
+  auto execution_time = ceph::mono_clock::now() - start_time;
+  auto tick_period = g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_tick_period");
+  auto max_allowed_time = tick_period * 0.1; // 10% of tick period
+
+  dout(10) << "Tick execution took " << execution_time.count() / 1000000.0
+          << "ms" << dendl;
+
+  if (execution_time > max_allowed_time) {
+    dout(1) << "WARNING: Tick execution took " << execution_time.count() / 1000000.0
+            << "ms, exceeding 10% of tick period (" << max_allowed_time.count() / 1000000.0
+            << "ms)" << dendl;
+  }
 }

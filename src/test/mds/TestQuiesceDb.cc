@@ -509,9 +509,16 @@ void cartesian_apply(F func, std::array<V, S> const & ... array_args) {
 
     // we use parameter pack expansion as part of the brace initializer
     // to perform sequential calculation of the 
-    auto apply_tuple = std::tuple<V const &...> { 
-      (q = div(q.quot, array_args.size()), array_args.at(q.rem)) 
-      ... 
+
+    // Lambda returns reference to avoid copying and ensure lifetime validity
+    auto f = [&q](const auto &args) -> decltype(auto) {
+      q = div(q.quot, args.size());
+      return args.at(q.rem);
+    };
+
+    auto apply_tuple = std::tuple<V const &...> {
+      f(array_args)
+      ...
     };
 
     if (!std::apply(func, apply_tuple)) {
@@ -1774,7 +1781,7 @@ TEST_F(QuiesceDbTest, QuiesceRootMerge)
     managers.at(mds_gid_t(1))->reset_agent_callback([&agent_map_promise](QuiesceMap& map) -> bool {
       try {
         agent_map_promise.set_value(map);
-      } catch (std::future_error) {
+      } catch (const std::future_error&) {
         // ignore this if we accidentally get called more than once
       }
       return false;

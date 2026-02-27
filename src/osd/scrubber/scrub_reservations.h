@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #pragma once
 
 #include <cassert>
@@ -90,9 +91,8 @@ class ReplicaReservations {
    */
   reservation_nonce_t& m_last_request_sent_nonce;
 
-  /// access to the performance counters container relevant to this scrub
-  /// parameters
-  PerfCounters& m_perf_set;
+  /// the performance counters relevant to this scrub
+  const ScrubCounterSet& m_perf_indices;
 
   /// used only for the 'duration of the reservation process' perf counter.
   /// discarded once the success or failure are recorded
@@ -102,7 +102,7 @@ class ReplicaReservations {
   ReplicaReservations(
       ScrubMachineListener& scrubber,
       reservation_nonce_t& nonce,
-      PerfCounters& pc);
+      const ScrubCounterSet& pc);
 
   ~ReplicaReservations();
 

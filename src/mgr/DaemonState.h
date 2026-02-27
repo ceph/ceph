@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -21,12 +22,17 @@
 #include <set>
 #include <boost/circular_buffer.hpp>
 
+#include "common/ceph_mutex.h"
+#include "common/perf_counters.h" // for enum perfcounter_type_d
+#include "common/RefCountedObj.h"
 #include "include/str_map.h"
+#include "include/utime.h"
 
 #include "msg/msg_types.h"
 
 // For PerfCounterType
 #include "messages/MMgrReport.h"
+#include "DaemonHealthMetric.h"
 #include "DaemonKey.h"
 
 namespace ceph {
@@ -261,9 +267,12 @@ public:
   template<typename Callback, typename...Args>
   auto with_daemons_by_server(Callback&& cb, Args&&... args) const ->
     decltype(cb(by_server, std::forward<Args>(args)...)) {
-    std::shared_lock l{lock};
-    
-    return std::forward<Callback>(cb)(by_server, std::forward<Args>(args)...);
+    const decltype(by_server) by_server_copy = [&] {
+      // Don't hold the lock any longer than necessary
+      std::shared_lock l{lock};
+      return by_server;
+    }();
+    return std::forward<Callback>(cb)(by_server_copy, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>

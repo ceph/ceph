@@ -11,14 +11,7 @@ import { map } from 'rxjs/operators';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 
-import {
-  Filesystem,
-  PROVIDER,
-  SHARE_RESOURCE,
-  SHARE_URL,
-  ShareRequestModel,
-  SMBShare
-} from '../smb.model';
+import { Filesystem, PROVIDER, SHARE_RESOURCE, ShareRequestModel, SMBShare } from '../smb.model';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 import { CephfsSubvolume } from '~/app/shared/models/cephfs-subvolume.model';
 
@@ -27,11 +20,14 @@ import { NfsService } from '~/app/shared/api/nfs.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
+import { CLUSTER_PATH } from '../smb-cluster-list/smb-cluster-list.component';
+import { SHARE_PATH } from '../smb-share-list/smb-share-list.component';
 
 @Component({
   selector: 'cd-smb-share-form',
   templateUrl: './smb-share-form.component.html',
-  styleUrls: ['./smb-share-form.component.scss']
+  styleUrls: ['./smb-share-form.component.scss'],
+  standalone: false
 })
 export class SmbShareFormComponent extends CdForm implements OnInit {
   smbShareForm: CdFormGroup;
@@ -58,7 +54,7 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
   ) {
     super();
     this.resource = $localize`Share`;
-    this.isEdit = this.router.url.startsWith(`${SHARE_URL}${URLVerbs.EDIT}`);
+    this.isEdit = this.router.url.startsWith(`/${SHARE_PATH}/${URLVerbs.EDIT}`);
     this.action = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
   }
   ngOnInit() {
@@ -75,10 +71,14 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
         this.shareResponse = resp;
         this.smbShareForm.get('share_id').setValue(this.shareResponse.share_id);
         this.smbShareForm.get('share_id').disable();
-        this.smbShareForm.get('volume').setValue(this.shareResponse.cephfs.volume);
-        this.smbShareForm.get('subvolume_group').setValue(this.shareResponse.cephfs.subvolumegroup);
-        this.smbShareForm.get('subvolume').setValue(this.shareResponse.cephfs.subvolume);
-        this.smbShareForm.get('inputPath').setValue(this.shareResponse.cephfs.path);
+        this.smbShareForm.get('name').setValue(this.shareResponse.name);
+        this.smbShareForm.get('name').disable();
+        this.smbShareForm.get('volume').setValue(this.shareResponse?.cephfs?.volume);
+        this.smbShareForm
+          .get('subvolume_group')
+          .setValue(this.shareResponse?.cephfs?.subvolumegroup);
+        this.smbShareForm.get('subvolume').setValue(this.shareResponse?.cephfs?.subvolume);
+        this.smbShareForm.get('inputPath').setValue(this.shareResponse?.cephfs?.path);
         if (this.shareResponse.readonly) {
           this.smbShareForm.get('readonly').setValue(this.shareResponse.readonly);
         }
@@ -86,9 +86,15 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
           this.smbShareForm.get('browseable').setValue(this.shareResponse.browseable);
         }
 
-        this.getSubVolGrp(this.shareResponse.cephfs.volume);
+        this.getSubVolGrp(this.shareResponse?.cephfs?.volume);
       });
     }
+    this.smbShareForm.get('share_id')?.valueChanges.subscribe((value) => {
+      const shareName = this.smbShareForm.get('name');
+      if (shareName && !shareName.dirty) {
+        shareName.setValue(value, { emitEvent: false });
+      }
+    });
     this.loadingReady();
   }
 
@@ -97,6 +103,7 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
       share_id: new FormControl('', {
         validators: [Validators.required]
       }),
+      name: new FormControl(''),
       volume: new FormControl('', {
         validators: [Validators.required]
       }),
@@ -200,11 +207,13 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
     const rawFormValue = _.cloneDeep(this.smbShareForm.value);
     const correctedPath = rawFormValue.inputPath;
     const shareId = this.smbShareForm.get('share_id')?.value;
+    const shareName = this.smbShareForm.get('name').value;
     const requestModel: ShareRequestModel = {
       share_resource: {
         resource_type: SHARE_RESOURCE,
         cluster_id: this.clusterId,
         share_id: shareId,
+        name: shareName,
         cephfs: {
           volume: rawFormValue.volume,
           path: correctedPath,
@@ -216,7 +225,6 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
         readonly: rawFormValue.readonly
       }
     };
-
     return requestModel;
   }
 
@@ -230,18 +238,17 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
 
   handleTaskRequest(urlVerb: string) {
     const requestModel = this.buildRequest();
-    const BASE_URL = 'smb/share';
     const component = this;
     const share_id = this.smbShareForm.get('share_id').value;
 
     this.taskWrapperService
       .wrapTaskAroundCall({
-        task: new FinishedTask(`${BASE_URL}/${urlVerb}`, { share_id }),
+        task: new FinishedTask(`${SHARE_PATH}/${urlVerb}`, { share_id }),
         call: this.smbService.createShare(requestModel)
       })
       .subscribe({
         complete: () => {
-          this.router.navigate([`cephfs/smb`]);
+          this.router.navigate([CLUSTER_PATH]);
         },
         error: () => {
           component.smbShareForm.setErrors({ cdSubmitButton: true });

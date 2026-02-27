@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -159,6 +160,10 @@ public:
     librbd::mirror_image_info_t mirror_image;
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
+
+    librbd::mirror_image_mode_t mirror_image_mode;
+    ASSERT_EQ(mirror_state != RBD_MIRROR_IMAGE_DISABLED ? 0 : -EINVAL,
+              image.mirror_image_get_mode(&mirror_image_mode));
 
     librbd::mirror_image_global_status_t status;
     ASSERT_EQ(0, image.mirror_image_get_global_status(&status, sizeof(status)));
@@ -1472,6 +1477,10 @@ TEST_F(TestMirroring, SnapshotPromoteDemote)
   ASSERT_EQ(0, image.mirror_image_promote(false));
   ASSERT_EQ(0, image.mirror_image_demote());
   ASSERT_EQ(0, image.mirror_image_promote(false));
+
+  ASSERT_EQ(0, image.mirror_image_disable(false));
+  ASSERT_EQ(-EINVAL, image.mirror_image_promote(false));
+  ASSERT_EQ(-EINVAL, image.mirror_image_demote());
 
   ASSERT_EQ(0, image.close());
   ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));

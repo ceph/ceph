@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -14,7 +14,9 @@ namespace crimson::osd {
 class PG;
 
 template <typename T>
-class RemoteScrubEventBaseT : public PhasedOperationT<T> {
+class RemoteScrubEventBaseT :
+    public PhasedOperationT<T>,
+    public RemoteOperation {
   T* that() {
     return static_cast<T*>(this);
   }
@@ -23,9 +25,6 @@ class RemoteScrubEventBaseT : public PhasedOperationT<T> {
   }
 
   PipelineHandle handle;
-
-  crimson::net::ConnectionRef l_conn;
-  crimson::net::ConnectionXcoreRef r_conn;
 
   spg_t pgid;
 
@@ -40,40 +39,13 @@ protected:
 public:
   RemoteScrubEventBaseT(
     crimson::net::ConnectionRef conn, epoch_t epoch, spg_t pgid)
-    : l_conn(std::move(conn)), pgid(pgid), epoch(epoch) {}
+    : RemoteOperation(std::move(conn)), pgid(pgid), epoch(epoch) {}
 
   PGPeeringPipeline &get_peering_pipeline(PG &pg);
 
   ConnectionPipeline &get_connection_pipeline();
 
   PerShardPipeline &get_pershard_pipeline(ShardServices &);
-
-  crimson::net::Connection &get_local_connection() {
-    assert(l_conn);
-    assert(!r_conn);
-    return *l_conn;
-  };
-
-  crimson::net::Connection &get_foreign_connection() {
-    assert(r_conn);
-    assert(!l_conn);
-    return *r_conn;
-  };
-
-  crimson::net::ConnectionFFRef prepare_remote_submission() {
-    assert(l_conn);
-    assert(!r_conn);
-    auto ret = seastar::make_foreign(std::move(l_conn));
-    l_conn.reset();
-    return ret;
-  }
-
-  void finish_remote_submission(crimson::net::ConnectionFFRef conn) {
-    assert(conn);
-    assert(!l_conn);
-    assert(!r_conn);
-    r_conn = make_local_shared_foreign(std::move(conn));
-  }
 
   static constexpr bool can_create() { return false; }
 

@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #include <seastar/core/future.hh>
 
@@ -64,8 +64,8 @@ InternalClientRequest::with_interruption()
 
   co_await enter_stage<interruptor>(obc_orderer->obc_pp().process);
 
-  bool unfound = co_await do_recover_missing(
-    pg, get_target_oid(), osd_reqid_t());
+  bool unfound = co_await pg->do_recover_missing(
+    get_target_oid(), osd_reqid_t());
 
   if (unfound) {
     throw std::system_error(
@@ -86,7 +86,8 @@ InternalClientRequest::with_interruption()
   co_await pg->obc_loader.load_and_lock(
     obc_manager, pg->get_lock_type(op_info)
   ).handle_error_interruptible(
-    crimson::ct_error::assert_all("unexpected error")
+    crimson::ct_error::assert_all(
+      fmt::format("{} {} {} error when loading {}",*pg, FNAME, *this, get_target_oid()).c_str())
   );
 
   auto params = get_do_osd_ops_params();
@@ -96,12 +97,8 @@ InternalClientRequest::with_interruption()
   co_await pg->run_executer(
     ox, obc_manager.get_obc(), op_info, osd_ops
   ).handle_error_interruptible(
-    crimson::ct_error::all_same_way(
-      [this, FNAME](auto e) {
-	ERRORDPPI("{}: got unexpected error {}", *pg, *this, e);
-	ceph_assert(0 == "should not return an error");
-	return interruptor::now();
-      })
+    crimson::ct_error::assert_all(
+      fmt::format("{} {} {}: got unexpected error {}", *pg, FNAME, *this, get_target_oid()).c_str())
   );
 
   auto [submitted, completed] = co_await pg->submit_executer(

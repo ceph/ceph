@@ -3,16 +3,13 @@ import { Pipe, PipeTransform } from '@angular/core';
 import _ from 'lodash';
 
 @Pipe({
-  name: 'mgrSummary'
+  name: 'mgrSummary',
+  standalone: false
 })
 export class MgrSummaryPipe implements PipeTransform {
   transform(value: any): any {
     if (!value) {
-      return {
-        success: 0,
-        info: 0,
-        total: 0
-      };
+      return null;
     }
 
     let activeCount: number;

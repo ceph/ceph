@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      global:
-        osd_async_recovery_min_cost: 1

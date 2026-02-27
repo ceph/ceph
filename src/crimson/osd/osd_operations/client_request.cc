@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -60,8 +60,8 @@ void ClientRequest::complete_request(PG &pg)
 ClientRequest::ClientRequest(
   ShardServices &_shard_services, crimson::net::ConnectionRef conn,
   Ref<MOSDOp> &&m)
-  : shard_services(&_shard_services),
-    l_conn(std::move(conn)),
+  : RemoteOperation(std::move(conn)),
+    shard_services(&_shard_services),
     m(std::move(m)),
     begin_time(std::chrono::steady_clock::now()),
     instance_handle(new instance_handle_t)
@@ -180,7 +180,12 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
       pg.wait_for_active_blocker,
       &decltype(pg.wait_for_active_blocker)::wait));
 
+  DEBUGDPP("{}.{}: waited for active, entering get_obc stage ",
+           pg, *this, this_instance_id);
+
   co_await ihref.enter_stage<interruptor>(client_pp(pg).get_obc, *this);
+
+  DEBUGDPP("{}.{}: entered get_obc stage", pg, *this, this_instance_id);
 
   if (int res = op_info.set_from_op(&*m, *pg.get_osdmap());
       res != 0) {
@@ -190,7 +195,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 
   if (!pg.is_primary()) {
     // primary can handle both normal ops and balanced reads
-    if (is_misdirected(pg)) {
+    if (is_misdirected_replica_read(pg)) {
       DEBUGDPP("{}.{}: dropping misdirected op",
 	       pg, *this, this_instance_id);
       co_return;
@@ -204,8 +209,8 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
       pg.get_perf_logger().inc(l_osd_replica_read_redirect_missing);
       co_await reply_op_error(pgref, -EAGAIN);
       co_return;
-    } else if (!pg.get_peering_state().can_serve_replica_read(m->get_hobj())) {
-      // Note: can_serve_replica_read checks for writes on the head object
+    } else if (!pg.get_peering_state().can_serve_read(m->get_hobj())) {
+      // Note: can_serve_read checks for writes on the head object
       //       as writes can only occur to head.
       DEBUGDPP("{}.{}: unstable write on replica, bouncing to primary",
 	       pg, *this, this_instance_id);
@@ -316,12 +321,12 @@ ClientRequest::recover_missing_snaps(
     }
     return seastar::now();
   }).handle_error_interruptible(
-    crimson::ct_error::assert_all("unexpected error")
+    crimson::ct_error::assert_all(fmt::format("{} {} error", *pg, FNAME).c_str())
   );
   co_await std::move(resolve_oids);
 
   for (auto &oid : ret) {
-    auto unfound = co_await do_recover_missing(pg, oid, m->get_reqid());
+    auto unfound = co_await pg->do_recover_missing(oid, m->get_reqid());
     if (unfound) {
       DEBUGDPP("{} unfound, hang it for now", *pg, oid);
       co_await interruptor::make_interruptible(
@@ -347,8 +352,8 @@ ClientRequest::process_op(
       "Skipping recover_missings on non primary pg for soid {}",
       *pg, m->get_hobj());
   } else {
-    auto unfound = co_await do_recover_missing(
-      pg, m->get_hobj().get_head(), m->get_reqid());
+    auto unfound = co_await pg->do_recover_missing(
+      m->get_hobj().get_head(), m->get_reqid());
     if (unfound) {
       DEBUGDPP("{} unfound, hang it for now", *pg, m->get_hobj().get_head());
       co_await interruptor::make_interruptible(
@@ -356,8 +361,7 @@ ClientRequest::process_op(
     }
 
     std::set<snapid_t> snaps = snaps_need_to_recover();
-    if (!snaps.empty() &&
-        pg->is_missing_head_and_clones(m->get_hobj().get_head())) {
+    if (!snaps.empty()) {
       co_await recover_missing_snaps(pg, snaps);
     }
   }
@@ -486,7 +490,7 @@ ClientRequest::do_process(
     co_return;
   }
 
-  OpsExecuter ox(pg, obc, op_info, *m, r_conn, snapc);
+  OpsExecuter ox(pg, obc, op_info, *m, get_remote_connection(), snapc);
   auto ret = co_await pg->run_executer(
     ox, obc, op_info, m->ops
   ).si_then([]() -> std::optional<std::error_code> {
@@ -620,24 +624,28 @@ ClientRequest::do_process(
   }
 }
 
-bool ClientRequest::is_misdirected(const PG& pg) const
+bool ClientRequest::is_misdirected_replica_read(const PG& pg) const
 {
+  LOG_PREFIX(ClientRequest::is_misdirected_replica_read);
   // otherwise take a closer look
   if (const int flags = m->get_flags();
       flags & CEPH_OSD_FLAG_BALANCE_READS ||
       flags & CEPH_OSD_FLAG_LOCALIZE_READS) {
+    if (op_info.rwordered()) {
+      DEBUGDPP("{}: dropping - rwoedered with balanced/localize read {}", pg, *this);
+      return true;
+    }
     if (!op_info.may_read()) {
-      // no read found, so it can't be balanced read
+      DEBUGDPP("{}: dropping - no read found with balanced/localize read", pg, *this);
       return true;
     }
     if (op_info.may_write() || op_info.may_cache()) {
-      // write op, but i am not primary
+      DEBUGDPP("{}: dropping - can't write to replica", pg, *this);
       return true;
     }
-    // balanced reads; any replica will do
     return false;
   }
-  // neither balanced nor localize reads
+  DEBUGDPP("{}: dropping - not a balanced/localize read ", pg, *this);
   return true;
 }
 

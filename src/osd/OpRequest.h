@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -47,6 +48,8 @@ public:
   bool need_skip_handle_cache() const { return op_info.need_skip_handle_cache(); }
   bool need_skip_promote() const { return op_info.need_skip_promote(); }
   bool allows_returnvec() const { return op_info.allows_returnvec(); }
+  bool ec_direct_read() const { return op_info.ec_direct_read(); }
+  void set_ec_direct_read() { return op_info.set_ec_direct_read(); }
 
   std::vector<OpInfo::ClassInfo> classes() const {
     return op_info.get_classes();

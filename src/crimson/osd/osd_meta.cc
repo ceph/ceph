@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "osd_meta.h"
 
@@ -10,6 +10,8 @@
 #include "crimson/os/futurized_store.h"
 #include "os/Transaction.h"
 #include "osd/OSDMap.h"
+
+SET_SUBSYS(osd);
 
 using std::string;
 
@@ -68,11 +70,15 @@ void OSDMeta::store_superblock(ceph::os::Transaction& t,
 
 OSDMeta::load_superblock_ret OSDMeta::load_superblock()
 {
+  LOG_PREFIX(OSDMeta::load_superblock);
+  DEBUG("");
   return store.read(
     coll, superblock_oid(), 0, 0
-  ).safe_then([] (bufferlist&& bl) {
+  ).safe_then([FNAME] (bufferlist&& bl) {
+    DEBUG("successfully read superblock");
     auto p = bl.cbegin();
     OSDSuperblock superblock;
+    DEBUG("decoding superblock bufferlist");
     decode(superblock, p);
     return seastar::make_ready_future<OSDSuperblock>(std::move(superblock));
   });
@@ -153,5 +159,5 @@ ghobject_t OSDMeta::final_pool_info_oid(int64_t pool)
 
 ghobject_t OSDMeta::superblock_oid()
 {
-  return ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), 0)));
+  return ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), CEPH_NOSNAP)));
 }

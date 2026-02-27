@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -110,7 +111,7 @@ public:
     void encode(ceph::buffer::list &bl) const;
     void decode(ceph::buffer::list::const_iterator& bl);
     void dump(ceph::Formatter *f) const;
-    static void generate_test_instances(std::list<HitSet::Params*>& o);
+    static std::list<HitSet::Params> generate_test_instances();
 
     friend std::ostream& operator<<(std::ostream& out, const HitSet::Params& p);
   };
@@ -163,7 +164,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<HitSet*>& o);
+  static std::list<HitSet> generate_test_instances();
 
 private:
   void reset_to_type(impl_type_t type);
@@ -190,8 +191,10 @@ public:
     HitSet::Impl *get_new_impl() const override {
       return new ExplicitHashHitSet;
     }
-    static void generate_test_instances(std::list<Params*>& o) {
-      o.push_back(new Params);
+    static std::list<Params> generate_test_instances() {
+      std::list<Params> o;
+      o.emplace_back();
+      return o;
     }
   };
 
@@ -236,12 +239,14 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const override;
-  static void generate_test_instances(std::list<ExplicitHashHitSet*>& o) {
-    o.push_back(new ExplicitHashHitSet);
-    o.push_back(new ExplicitHashHitSet);
-    o.back()->insert(hobject_t());
-    o.back()->insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
-    o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
+  static std::list<ExplicitHashHitSet> generate_test_instances() {
+    std::list<ExplicitHashHitSet> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().insert(hobject_t());
+    o.back().insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
+    o.back().insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(ExplicitHashHitSet)
@@ -261,8 +266,10 @@ public:
     HitSet::Impl *get_new_impl() const override {
       return new ExplicitObjectHitSet;
     }
-    static void generate_test_instances(std::list<Params*>& o) {
-      o.push_back(new Params);
+    static std::list<Params> generate_test_instances() {
+      std::list<Params> o;
+      o.emplace_back();
+      return o;
     }
   };
 
@@ -307,12 +314,14 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const override;
-  static void generate_test_instances(std::list<ExplicitObjectHitSet*>& o) {
-    o.push_back(new ExplicitObjectHitSet);
-    o.push_back(new ExplicitObjectHitSet);
-    o.back()->insert(hobject_t());
-    o.back()->insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
-    o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
+  static std::list<ExplicitObjectHitSet> generate_test_instances() {
+    std::list<ExplicitObjectHitSet> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().insert(hobject_t());
+    o.back().insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
+    o.back().insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(ExplicitObjectHitSet)
@@ -378,12 +387,14 @@ public:
 	<< get_fpp() << ", target_size: " << target_size
 	<< ", seed: " << seed;
     }
-    static void generate_test_instances(std::list<Params*>& o) {
-      o.push_back(new Params);
-      o.push_back(new Params);
-      (*o.rbegin())->fpp_micro = 123456;
-      (*o.rbegin())->target_size = 300;
-      (*o.rbegin())->seed = 99;
+    static std::list<Params> generate_test_instances() {
+      std::list<Params> o;
+      o.emplace_back();
+      o.emplace_back();
+      o.back().fpp_micro = 123456;
+      o.back().target_size = 300;
+      o.back().seed = 99;
+      return o;
     }
   };
 
@@ -442,12 +453,14 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const override;
-  static void generate_test_instances(std::list<BloomHitSet*>& o) {
-    o.push_back(new BloomHitSet);
-    o.push_back(new BloomHitSet(10, .1, 1));
-    o.back()->insert(hobject_t());
-    o.back()->insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
-    o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
+  static std::list<BloomHitSet> generate_test_instances() {
+    std::list<BloomHitSet> o;
+    o.emplace_back();
+    o.push_back(BloomHitSet(10, .1, 1));
+    o.back().insert(hobject_t());
+    o.back().insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
+    o.back().insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(BloomHitSet)

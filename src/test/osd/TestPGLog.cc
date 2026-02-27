@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -120,6 +121,16 @@ struct PGLogTestBase {
     const hobject_t &hoid, eversion_t v, eversion_t pv) {
     return mk_ple_dt_rb(hoid, v, pv, osd_reqid_t());
   }
+  static pg_log_entry_t mk_ple_clone(
+    const hobject_t &hoid, eversion_t v, eversion_t pv) {
+    pg_log_entry_t e;
+    e.mark_unrollbackable();
+    e.op = pg_log_entry_t::CLONE;
+    e.soid = hoid;
+    e.version = v;
+    e.prior_version = pv;
+    return e;
+  }
   static pg_log_entry_t mk_ple_err(
     const hobject_t &hoid, eversion_t v) {
     return mk_ple_err(hoid, v, osd_reqid_t());
@@ -233,6 +244,11 @@ public:
     }
     void trim(
       const pg_log_entry_t &entry) override {}
+    void partial_write(
+        pg_info_t *info,
+        eversion_t previous_version,
+        const pg_log_entry_t &entry
+      ) override {}
   };
 
   template <typename missing_t>
@@ -291,7 +307,7 @@ public:
     bool dirty_big_info = false;
     merge_log(
       oinfo, std::move(olog), pg_shard_t(1, shard_id_t(0)), info,
-      &h, dirty_info, dirty_big_info);
+      pg_pool_t(), pg_shard_t(), &h, dirty_info, dirty_big_info, false);
 
     ASSERT_EQ(info.last_update, oinfo.last_update);
     verify_missing(tcase, missing);
@@ -310,7 +326,8 @@ public:
     pg_info_t oinfo = tcase.get_divinfo();
 
     proc_replica_log(
-      oinfo, olog, omissing, pg_shard_t(1, shard_id_t(0)));
+      oinfo, olog, omissing, pg_shard_t(1, shard_id_t(0)),
+      pg_shard_t(0, shard_id_t(1)), false);
 
     ceph_assert(oinfo.last_update >= log.tail);
 
@@ -325,7 +342,7 @@ public:
 	if (i->is_delete() && tcase.deletes_during_peering) {
 	  omissing.rm(i->soid, i->version);
 	} else {
-	  omissing.add_next_event(*i);
+	  omissing.add_next_event(*i, pg_pool_t(), shard_id_t());
 	}
       }
     }
@@ -356,6 +373,11 @@ struct TestHandler : public PGLog::LogEntryHandler {
   }
   void trim(
     const pg_log_entry_t &entry) override {}
+  void partial_write(
+      pg_info_t *info,
+      eversion_t previous_version,
+      const pg_log_entry_t &entry
+    ) override {}
 };
 
 TEST_F(PGLogTest, rewind_divergent_log) {
@@ -428,7 +450,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     TestHandler h(remove_snap);
     rewind_divergent_log(newhead, info, &h,
-			 dirty_info, dirty_big_info);
+			 dirty_info, dirty_big_info, false, pg_shard_t());
 
     EXPECT_TRUE(log.objects.count(divergent));
     EXPECT_TRUE(missing.is_missing(divergent_object));
@@ -493,7 +515,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     TestHandler h(remove_snap);
     rewind_divergent_log(newhead, info, &h,
-			 dirty_info, dirty_big_info);
+			 dirty_info, dirty_big_info, false, pg_shard_t());
 
     EXPECT_TRUE(missing.is_missing(divergent_object));
     EXPECT_EQ(0U, log.objects.count(divergent_object));
@@ -530,11 +552,11 @@ TEST_F(PGLogTest, rewind_divergent_log) {
       add(e);
     }
     TestHandler h(remove_snap);
-    roll_forward_to(eversion_t(1, 6), &h);
+    roll_forward_to(eversion_t(1, 6), &info, &h);
     rewind_divergent_log(eversion_t(1, 5), info, &h,
-			 dirty_info, dirty_big_info);
+			 dirty_info, dirty_big_info, false, pg_shard_t());
     pg_log_t log;
-    reset_backfill_claim_log(log, &h);
+    reset_backfill_claim_log(log, &info, &h);
   }
 }
 
@@ -607,7 +629,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     {
       pg_log_entry_t &ne = log.log.front();
       ne.op = pg_log_entry_t::MODIFY;
-      missing.add_next_event(ne);
+      missing.add_next_event(ne, pg_pool_t(), shard_id_t());
       pg_log_entry_t oe;
       oe.mark_unrollbackable();
       oe.version = eversion_t(1,1);
@@ -686,7 +708,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     oe.version = eversion_t(2,1);
     oe.op = pg_log_entry_t::MODIFY;
-    missing.add_next_event(oe);
+    missing.add_next_event(oe, pg_pool_t(), shard_id_t());
 
     missing.flush();
     EXPECT_FALSE(is_dirty());
@@ -891,8 +913,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
@@ -941,8 +963,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h,dirty_info, dirty_big_info, false);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
@@ -1046,8 +1068,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(3U, log.log.size());
@@ -1155,8 +1177,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     /* When the divergent entry is a DELETE and the authoritative
        entry is a MODIFY, the object will be added to missing : it is
@@ -1274,8 +1296,8 @@ TEST_F(PGLogTest, merge_log) {
 
     TestHandler h(remove_snap);
     missing.may_include_deletes = false;
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     /* When the divergent entry is a DELETE and the authoritative
        entry is a MODIFY, the object will be added to missing : it is
@@ -1376,8 +1398,8 @@ TEST_F(PGLogTest, merge_log) {
 
     TestHandler h(remove_snap);
     missing.may_include_deletes = false;
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(2U, log.log.size());
@@ -1411,7 +1433,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(last_complete, oinfo.last_complete);
 
     missing.may_include_deletes = false;
-    proc_replica_log(oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from,
+      pg_shard_t(0, shard_id_t(1)), false);
 
     EXPECT_FALSE(omissing.have_missing());
     EXPECT_EQ(last_update, oinfo.last_update);
@@ -1485,7 +1508,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
     missing.may_include_deletes = false;
-    proc_replica_log(oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from,
+      pg_shard_t(0, shard_id_t(1)), false);
 
     EXPECT_FALSE(omissing.have_missing());
   }
@@ -1587,7 +1611,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
     missing.may_include_deletes = false;
-    proc_replica_log(oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from,
+      pg_shard_t(0, shard_id_t(1)), false);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
@@ -1674,7 +1699,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
     missing.may_include_deletes = false;
-    proc_replica_log(oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from,
+      pg_shard_t(0, shard_id_t(1)), false);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
@@ -1764,7 +1790,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
     missing.may_include_deletes = false;
-    proc_replica_log(oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from,
+      pg_shard_t(0, shard_id_t(1)), false);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
@@ -1858,7 +1885,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
     missing.may_include_deletes = false;
-    proc_replica_log(oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from,
+      pg_shard_t(0, shard_id_t(1)), false);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.get_items().begin()->second.need == eversion_t(1, 1));
@@ -2477,7 +2505,7 @@ public:
     clear();
     ostringstream err;
     read_log_and_missing(store.get(), ch, log_oid,
-			 pg_info_t(), err, false);
+			 pg_info_t(), err, false, false);
     ASSERT_EQ(orig_dups.size(), log.dups.size());
     ASSERT_EQ(orig_dups, log.dups);
     auto dups_it = log.dups.begin();
@@ -2938,7 +2966,7 @@ TEST_F(PGLogTest, _merge_object_divergent_entries) {
                                     orig_entries, oinfo,
                                     log.get_can_rollback_to(),
                                     missing, &rollbacker,
-                                    this);
+                                    false, shard_id_t(0), this);
     // No core dump
   }
   {
@@ -2964,10 +2992,540 @@ TEST_F(PGLogTest, _merge_object_divergent_entries) {
                                     orig_entries, oinfo,
                                     log.get_can_rollback_to(),
                                     missing, &rollbacker,
-                                    this);
+                                    false, shard_id_t(0), this);
     // No core dump
   }
 }
+
+TEST_F(PGLogTest, merge_object_divergent_entries_partial_writes) {
+  {
+    // Test case 1: Partial write on shard that did NOT participate
+    // - should NOT remove object
+    clear();
+    hobject_t hoid = mk_obj(1);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    pg_log_entry_t entry = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    // Partial write: only shards 0 and 1 were written
+    entry.written_shards.insert(shard_id_t(0));
+    entry.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(entry);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Shard 2 did NOT participate in the partial write
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(2), this);
+    
+    // Object should NOT be removed
+    EXPECT_EQ(0U, rollbacker.removed.size());
+  }
+  
+  {
+    // Test case 2: Partial write on shard that DID participate
+    // - SHOULD remove object
+    clear();
+    hobject_t hoid = mk_obj(2);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    pg_log_entry_t entry = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    entry.written_shards.insert(shard_id_t(0));
+    entry.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(entry);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Shard 1 DID participate in the partial write
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(1), this);
+    
+    // Object SHOULD be removed (Case 1: more recent entry in log)
+    EXPECT_EQ(1U, rollbacker.removed.size());
+    EXPECT_TRUE(rollbacker.removed.count(hoid));
+    // Object should be in missing with have=eversion_t()
+    EXPECT_TRUE(missing.is_missing(hoid));
+    EXPECT_EQ(eversion_t(), missing.get_items().at(hoid).have);
+  }
+  
+  {
+    // Test case 3: Empty written_shards (full write)
+    // - SHOULD remove object on any shard
+    clear();
+    hobject_t hoid = mk_obj(3);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    pg_log_entry_t entry = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    // Empty written_shards = full write to all shards
+    orig_entries.push_back(entry);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Any shard should remove for full writes
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(5), this);
+    
+    // Object SHOULD be removed (Case 1: more recent entry in log)
+    EXPECT_EQ(1U, rollbacker.removed.size());
+    EXPECT_TRUE(rollbacker.removed.count(hoid));
+    // Object should be in missing with have=eversion_t()
+    EXPECT_TRUE(missing.is_missing(hoid));
+    EXPECT_EQ(eversion_t(), missing.get_items().at(hoid).have);
+  }
+  
+  {
+    // Test case 4: Multiple entries, shard participated in one
+    clear();
+    hobject_t hoid = mk_obj(4);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    
+    // First entry: partial write to shards 0, 1
+    pg_log_entry_t entry1 = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    entry1.written_shards.insert(shard_id_t(0));
+    entry1.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(entry1);
+    
+    // Second entry: partial write to shards 2, 3
+    pg_log_entry_t entry2 = mk_ple_mod(hoid, eversion_t(10, 101), eversion_t(10, 100));
+    entry2.written_shards.insert(shard_id_t(2));
+    entry2.written_shards.insert(shard_id_t(3));
+    orig_entries.push_back(entry2);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Shard 2 participated in second entry
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(2), this);
+    
+    // Object SHOULD be removed (Case 1: more recent entry in log)
+    EXPECT_EQ(1U, rollbacker.removed.size());
+    EXPECT_TRUE(rollbacker.removed.count(hoid));
+    // Object should be in missing with have=eversion_t()
+    EXPECT_TRUE(missing.is_missing(hoid));
+    EXPECT_EQ(eversion_t(), missing.get_items().at(hoid).have);
+  }
+  
+  {
+    // Test case 5: Multiple entries, shard participated in none
+    clear();
+    hobject_t hoid = mk_obj(5);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    
+    pg_log_entry_t entry1 = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    entry1.written_shards.insert(shard_id_t(0));
+    entry1.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(entry1);
+    
+    pg_log_entry_t entry2 = mk_ple_mod(hoid, eversion_t(10, 101), eversion_t(10, 100));
+    entry2.written_shards.insert(shard_id_t(2));
+    entry2.written_shards.insert(shard_id_t(3));
+    orig_entries.push_back(entry2);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Shard 5 did NOT participate in any entry
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(5), this);
+    
+    // Object should NOT be removed
+    EXPECT_EQ(0U, rollbacker.removed.size());
+  }
+  
+  {
+    // Test case 7: Case 1 - More recent entry in log with partial write
+    // Non-participating shard should NOT remove
+    clear();
+    hobject_t hoid = mk_obj(7);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    pg_log_entry_t entry = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    entry.written_shards.insert(shard_id_t(0));
+    entry.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(entry);
+    
+    // Add more recent entry to log - triggers Case 1
+    log.add(mk_ple_mod(hoid, eversion_t(10, 105), eversion_t(10, 100)));
+    missing.add(hoid, eversion_t(10, 105), eversion_t(), false);
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Shard 2 did NOT participate - Case 1 with partial write check
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(2), this);
+    
+    // Object should NOT be removed (shard didn't participate)
+    EXPECT_EQ(0U, rollbacker.removed.size());
+    // Missing should be updated
+    EXPECT_TRUE(missing.is_missing(hoid));
+    EXPECT_EQ(eversion_t(), missing.get_items().at(hoid).have);
+  }
+  
+  {
+    // Test case 8: Case 3 - Object in missing with have != prior_version
+    // and participating shard - should revise need, not remove
+    clear();
+    hobject_t hoid = mk_obj(8);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    pg_log_entry_t entry = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    entry.written_shards.insert(shard_id_t(0));
+    entry.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(entry);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(10, 105), eversion_t(10, 100)));
+    missing.add(hoid, eversion_t(10, 105), eversion_t(), false);
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Case 3: object in missing, will revise need (not Case 1)
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(1), this);
+    
+    // Object should NOT be removed (Case 3 doesn't remove)
+    EXPECT_EQ(0U, rollbacker.removed.size());
+    // Should revise need
+    EXPECT_TRUE(missing.is_missing(hoid));
+    EXPECT_EQ(eversion_t(10, 99), missing.get_items().at(hoid).need);
+  }
+  
+  {
+    // Test case 9: Case 2 - prior_version is eversion_t() (creation)
+    // Should always remove regardless of shard
+    clear();
+    hobject_t hoid = mk_obj(9);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    pg_log_entry_t entry = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t());
+    // Creation - no partial write, written_shards should be empty
+    orig_entries.push_back(entry);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Case 2: prior_version is eversion_t() - always removes
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(2), this);
+    
+    // Object SHOULD be removed (creation case)
+    EXPECT_EQ(1U, rollbacker.removed.size());
+    EXPECT_TRUE(rollbacker.removed.count(hoid));
+  }
+  
+  {
+    // Test case 10: Case 3 - Object in missing, have == prior_version
+    // Should remove from missing but not call rollbacker->remove()
+    clear();
+    hobject_t hoid = mk_obj(10);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    pg_log_entry_t entry = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    entry.written_shards.insert(shard_id_t(0));
+    entry.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(entry);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+    // Add to missing with have == prior_version - triggers Case 3
+    missing.add(hoid, eversion_t(11, 110), eversion_t(10, 99), false);
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Case 3: missing.have == prior_version, shard participated
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(1), this);
+    
+    // Object should NOT be removed (Case 3 doesn't call remove)
+    EXPECT_EQ(0U, rollbacker.removed.size());
+    // Should be removed from missing
+    EXPECT_FALSE(missing.is_missing(hoid));
+  }
+  
+  {
+    // Test case 11: Case 3 - Object in missing, have != prior_version
+    // Should revise need but not remove object
+    clear();
+    hobject_t hoid = mk_obj(11);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    pg_log_entry_t entry = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    entry.written_shards.insert(shard_id_t(0));
+    entry.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(entry);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+    // Add to missing with have != prior_version
+    missing.add(hoid, eversion_t(11, 110), eversion_t(10, 95), false);
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Case 3: missing.have != prior_version, shard participated
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(1), this);
+    
+    // Object should NOT be removed (Case 3)
+    EXPECT_EQ(0U, rollbacker.removed.size());
+    // Should still be in missing with revised need
+    EXPECT_TRUE(missing.is_missing(hoid));
+    EXPECT_EQ(eversion_t(10, 99), missing.get_items().at(hoid).need);
+  }
+  
+  {
+    // Test case 12: Case 5 - Cannot rollback, partial write, non-participant
+    // Should NOT add to missing and NOT remove object (entry skipped)
+    clear();
+    hobject_t hoid = mk_obj(12);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    pg_log_entry_t entry = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    entry.written_shards.insert(shard_id_t(0));
+    entry.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(entry);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+    // Not in missing - will hit Case 5
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Shard 2 didn't participate - entry will be skipped, function returns early
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(2), this);
+    
+    // Object should NOT be removed (didn't participate)
+    EXPECT_EQ(0U, rollbacker.removed.size());
+    // Should NOT be added to missing (entry was skipped)
+    EXPECT_FALSE(missing.is_missing(hoid));
+  }
+  
+  {
+    // Test case 13: Case 5 - Cannot rollback, full write
+    // Should remove object and add to missing
+    clear();
+    hobject_t hoid = mk_obj(13);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    pg_log_entry_t entry = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    // Empty written_shards = full write
+    orig_entries.push_back(entry);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Case 5: cannot rollback, full write
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(5), this);
+    
+    // Object SHOULD be removed (full write)
+    EXPECT_EQ(1U, rollbacker.removed.size());
+    EXPECT_TRUE(rollbacker.removed.count(hoid));
+    // Should be added to missing
+    EXPECT_TRUE(missing.is_missing(hoid));
+  }
+  
+  {
+    // Test case 14: Multiple divergent entries, first has partial write, second is full
+    // Second entry is full write, so object SHOULD be removed
+    clear();
+    hobject_t hoid = mk_obj(14);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    
+    // First entry: partial write, shard 2 didn't participate
+    pg_log_entry_t entry1 = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    entry1.written_shards.insert(shard_id_t(0));
+    entry1.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(entry1);
+    
+    // Second entry: full write (empty written_shards)
+    pg_log_entry_t entry2 = mk_ple_mod(hoid, eversion_t(10, 101), eversion_t(10, 100));
+    orig_entries.push_back(entry2);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Loop checks all entries - second is full write
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, false, shard_id_t(2), this);
+    
+    // Object SHOULD be removed (Case 1: more recent entry in log, second entry is full write)
+    EXPECT_EQ(1U, rollbacker.removed.size());
+    EXPECT_TRUE(rollbacker.removed.count(hoid));
+    // Object should be in missing with have=eversion_t()
+    EXPECT_TRUE(missing.is_missing(hoid));
+    EXPECT_EQ(eversion_t(), missing.get_items().at(hoid).have);
+  }
+  
+  {
+    // Test case 15: EC optimizations enabled with partial write
+    // Should work correctly with ec_optimizations_enabled flag
+    clear();
+    hobject_t hoid = mk_obj(15);
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    pg_log_entry_t entry = mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99));
+    entry.written_shards.insert(shard_id_t(0));
+    entry.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(entry);
+    
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Test with ec_optimizations_enabled = true
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, true, shard_id_t(2), this);
+    
+    // Object should NOT be removed (shard didn't participate)
+    EXPECT_EQ(0U, rollbacker.removed.size());
+  }
+}
+
+TEST_F(PGLogTest, merge_divergent_entries_clone_with_partial_write) {
+  // Test the scenario where:
+  // 1. Clone head object to snap :1 (creates :1)
+  // 2. Partial write to head object (which also affects :1)
+  // The partial write log entry ends up on a non-primary shard
+  
+  {
+    // Test case 1: Shard did NOT participate in partial write
+    clear();
+    hobject_t head = mk_obj(100);
+    hobject_t snap1 = head;
+    snap1.snap = 1;
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    
+    // Clone head to snap1 - this creates snap1
+    pg_log_entry_t clone_entry = mk_ple_clone(snap1, eversion_t(10, 100), eversion_t());
+    orig_entries.push_back(clone_entry);
+    
+    // Partial write to head (which also affects snap1)
+    pg_log_entry_t partial_write = mk_ple_mod(head, eversion_t(10, 101), eversion_t(10, 100));
+    partial_write.written_shards.insert(shard_id_t(0));
+    partial_write.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(partial_write);
+    
+    // Add divergent entries in log
+    log.add(mk_ple_mod(head, eversion_t(11, 110), eversion_t(10, 99)));
+    log.add(mk_ple_mod(snap1, eversion_t(11, 111), eversion_t()));
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Process for shard 2 which did NOT participate in the partial write
+    // The clone entry should be kept (creates snap1)
+    // The partial write entry should be skipped (shard 2 didn't participate)
+    _merge_divergent_entries(
+      log,
+      orig_entries,
+      oinfo,
+      log.get_can_rollback_to(),
+      missing,
+      &rollbacker,
+      false,
+      shard_id_t(2),
+      this);
+    
+    // snap1 should be removed (it was created by clone, prior_version is eversion_t())
+    EXPECT_TRUE(rollbacker.removed.count(snap1));
+    // head should NOT be removed (shard 2 didn't participate in partial write)
+    EXPECT_FALSE(rollbacker.removed.count(head));
+    // snap1 should NOT be in missing (Case 2: creation, object is simply deleted)
+    EXPECT_FALSE(missing.is_missing(snap1));
+    // head should NOT be in missing (entry was skipped, no divergent entries processed)
+    EXPECT_FALSE(missing.is_missing(head));
+  }
+  
+  {
+    // Test case 2: Shard DID participate in partial write
+    clear();
+    hobject_t head = mk_obj(101);
+    hobject_t snap1 = head;
+    snap1.snap = 1;
+    
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    
+    // Clone head to snap1
+    pg_log_entry_t clone_entry = mk_ple_clone(snap1, eversion_t(10, 100), eversion_t());
+    orig_entries.push_back(clone_entry);
+    
+    // Partial write to head
+    pg_log_entry_t partial_write = mk_ple_mod(head, eversion_t(10, 101), eversion_t(10, 100));
+    partial_write.written_shards.insert(shard_id_t(0));
+    partial_write.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(partial_write);
+    
+    // Add divergent entries in log
+    log.add(mk_ple_mod(head, eversion_t(11, 110), eversion_t(10, 99)));
+    log.add(mk_ple_mod(snap1, eversion_t(11, 111), eversion_t()));
+    
+    pg_info_t oinfo;
+    LogHandler rollbacker;
+    
+    // Process for shard 1 which DID participate in the partial write
+    _merge_divergent_entries(
+      log,
+      orig_entries,
+      oinfo,
+      log.get_can_rollback_to(),
+      missing,
+      &rollbacker,
+      false,
+      shard_id_t(1),
+      this);
+    
+    // Both snap1 and head should be removed
+    EXPECT_TRUE(rollbacker.removed.count(snap1));
+    EXPECT_TRUE(rollbacker.removed.count(head));
+    // snap1 should NOT be in missing (Case 2: creation, object is simply deleted)
+    EXPECT_FALSE(missing.is_missing(snap1));
+    // head should be in missing (Case 1: more recent entry in log)
+    EXPECT_TRUE(missing.is_missing(head));
+    EXPECT_EQ(eversion_t(), missing.get_items().at(head).have);
+  }
+}
+
+
 
 TEST(eversion_t, get_key_name) {
   eversion_t a(1234, 5678);

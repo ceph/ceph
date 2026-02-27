@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_RBD_ARGUMENT_TYPES_H
 #define CEPH_RBD_ARGUMENT_TYPES_H
@@ -67,6 +67,7 @@ static const std::string IMAGE_OBJECT_SIZE("object-size");
 static const std::string IMAGE_FEATURES("image-feature");
 static const std::string IMAGE_SHARED("image-shared");
 static const std::string IMAGE_SIZE("size");
+static const std::string IMAGE_ESTIMATED_SIZE("estimated-size");
 static const std::string IMAGE_STRIPE_UNIT("stripe-unit");
 static const std::string IMAGE_STRIPE_COUNT("stripe-count");
 static const std::string IMAGE_DATA_POOL("data-pool");
@@ -185,6 +186,8 @@ void add_create_journal_options(
   boost::program_options::options_description *opt);
 
 void add_size_option(boost::program_options::options_description *opt);
+
+void add_estimated_size_option(boost::program_options::options_description *opt);
 
 void add_sparse_size_option(boost::program_options::options_description *opt);
 

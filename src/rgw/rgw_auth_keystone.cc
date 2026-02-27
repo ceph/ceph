@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <string>
 #include <vector>
@@ -78,7 +78,12 @@ admin_token_retry:
     throw -EINVAL;
   }
 
-  validate.append_header("X-Auth-Token", admin_token);
+  if (allow_expired) {
+    validate.append_header("X-Auth-Token", admin_token);
+  } else {
+    validate.append_header("X-Auth-Token", token);
+  }
+
   validate.set_send_length(0);
 
   validate.set_url(url);
@@ -159,6 +164,7 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token
     level,
     rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY,
     rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
+    token.get_user_name(),
     TYPE_KEYSTONE
 };
 }
@@ -665,6 +671,7 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
     level,
     access_key_id,
     rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
+    token.get_user_name(),
     TYPE_KEYSTONE
   };
 }

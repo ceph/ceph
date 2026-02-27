@@ -40,7 +40,8 @@ import { OsdFeature } from './osd-feature.interface';
 @Component({
   selector: 'cd-osd-form',
   templateUrl: './osd-form.component.html',
-  styleUrls: ['./osd-form.component.scss']
+  styleUrls: ['./osd-form.component.scss'],
+  standalone: false
 })
 export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
   @ViewChild('dataDeviceSelectionGroups')

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,10 +13,11 @@
  */
 
 
-#include "MDSUtility.h"
-#include "RoleSelector.h"
-
 #include "include/rados/librados.hpp"
+
+#include "MDSUtility.h"
+#include "ProgressTracker.h"
+#include "RoleSelector.h"
 
 /**
  * Command line tool for debugging the backing store of
@@ -30,11 +32,17 @@ class TableTool : public MDSUtility
     librados::Rados rados;
     librados::IoCtx io;
 
+    std::unique_ptr<ProgressTracker> progress_tracker;
+
     int apply_role_fn(std::function<int(mds_role_t, Formatter *)> fptr, Formatter *f);
 
   public:
     static void usage();
     int main(std::vector<const char*> &argv);
 
+    TableTool()
+    {
+      progress_tracker = std::make_unique<ProgressTracker>("Table operations");
+    }
 };
 

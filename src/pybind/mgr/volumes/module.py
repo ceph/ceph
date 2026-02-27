@@ -3,6 +3,8 @@ import logging
 import traceback
 import threading
 
+from .cli import VolumesCLICommand
+
 from mgr_module import MgrModule, Option
 import orchestrator
 
@@ -40,6 +42,7 @@ def mgr_cmd_wrap(f):
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
+    CLICommand = VolumesCLICommand
     COMMANDS = [
         {
             'cmd': 'fs volume ls',
@@ -91,7 +94,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=pool_layout,type=CephString,req=false '
                    'name=uid,type=CephInt,req=false '
                    'name=gid,type=CephInt,req=false '
-                   'name=mode,type=CephString,req=false ',
+                   'name=mode,type=CephString,req=false '
+                   'name=normalization,type=CephChoices,strings=nfd|nfc|nfkd|nfkc,req=false '
+                   'name=casesensitive,type=CephBool,req=false ',
             'desc': "Create a CephFS subvolume group in a volume, and optionally, "
                     "with a specific data pool layout, and a specific numeric mode",
             'perm': 'rw'
@@ -146,7 +151,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=namespace_isolated,type=CephBool,req=false '
                    'name=earmark,type=CephString,req=false '
                    'name=normalization,type=CephChoices,strings=nfd|nfc|nfkd|nfkc,req=false '
-                   'name=case_insensitive,type=CephBool,req=false ',
+                   'name=casesensitive,type=CephBool,req=false '
+                   'name=enctag,type=CephString,req=false ',
             'desc': "Create a CephFS subvolume in a volume, and optionally, "
                     "with a specific size (in bytes), a specific data pool layout, "
                     "a specific mode, in a specific subvolume group and in separate "
@@ -300,6 +306,31 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=sub_name,type=CephString '
                    'name=group_name,type=CephString,req=false ',
             'desc': "Remove earmark from a subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume enctag get '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Get encryption tag for a subvolume",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolume enctag set '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false '
+                   'name=enctag,type=CephString ',
+            'desc': "Set encryption tag for a subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume enctag rm '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Remove encryption tag from a subvolume",
             'perm': 'rw'
         },
         {
@@ -469,6 +500,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolume snapshot getpath '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': 'Get path for a snapshot of a CephFS subvolume located in '
+                    'a specific volume, and optionally, in a specific '
+                    'subvolume group',
+            'perm': 'r'
+        },
+        {
             'cmd': 'fs subvolume resize '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
@@ -562,6 +604,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=group_name,type=CephString,req=false ',
             'desc': "Cancel an pending or ongoing clone operation.",
             'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolume snapshot_visibility set'
+                   ' name=vol_name,type=CephString'
+                   ' name=sub_name,type=CephString'
+                   ' name=value,type=CephString,req=true'
+                   ' name=group_name,type=CephString,req=false',
+            'desc': "Set snapdir visibility for subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume snapshot_visibility get'
+                   ' name=vol_name,type=CephString'
+                   ' name=sub_name,type=CephString'
+                   ' name=group_name,type=CephString,req=false',
+            'desc': "Get snapdir visibility for subvolume",
+            'perm': 'rw'
         },
         # volume ls [recursive]
         # subvolume ls <volume>
@@ -716,7 +775,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.create_subvolume_group(
             vol_name=cmd['vol_name'], group_name=cmd['group_name'], size=cmd.get('size', None),
             pool_layout=cmd.get('pool_layout', None), mode=cmd.get('mode', '755'),
-            uid=cmd.get('uid', None), gid=cmd.get('gid', None))
+            uid=cmd.get('uid', None), gid=cmd.get('gid', None),
+            normalization=cmd.get('normalization', None),
+            casesensitive=cmd.get('casesensitive', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_rm(self, inbuf, cmd):
@@ -763,7 +824,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         namespace_isolated=cmd.get('namespace_isolated', False),
                                         earmark=cmd.get('earmark', None),
                                         normalization=cmd.get('normalization', None),
-                                        case_insensitive=cmd.get('case_insensitive', False))
+                                        casesensitive=cmd.get('casesensitive', None),
+                                        enctag=cmd.get('enctag', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):
@@ -894,6 +956,25 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                       group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
+    def _cmd_fs_subvolume_enctag_get(self, inbuf, cmd):
+        return self.vc.get_enctag(vol_name=cmd['vol_name'],
+                                   sub_name=cmd['sub_name'],
+                                   group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_enctag_set(self, inbuf, cmd):
+        return self.vc.set_enctag(vol_name=cmd['vol_name'],
+                                      sub_name=cmd['sub_name'],
+                                      group_name=cmd.get('group_name', None),
+                                      enctag=cmd['enctag'])
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_enctag_rm(self, inbuf, cmd):
+        return self.vc.clear_enctag(vol_name=cmd['vol_name'],
+                                      sub_name=cmd['sub_name'],
+                                      group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
     def _cmd_fs_quiesce(self, inbuf, cmd):
         return self.vc.quiesce(cmd)
 
@@ -1000,6 +1081,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                                 group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_getpath(self, inbuf, cmd):
+        return self.vc.subvolume_snapshot_getpath(vol_name=cmd['vol_name'],
+                                                  sub_name=cmd['sub_name'],
+                                                  snap_name=cmd['snap_name'],
+                                                  group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
     def _cmd_fs_subvolume_resize(self, inbuf, cmd):
         return self.vc.resize_subvolume(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
                                         new_size=cmd['new_size'], group_name=cmd.get('group_name', None),
@@ -1075,3 +1163,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.subvolume_info(vol_name=vol_name,
                                       sub_name=subvol,
                                       group_name=group_name)
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_visibility_set(self, inbuf, cmd):
+        return self.vc.subvolume_snapshot_visibility_set(vol_name=cmd['vol_name'],
+                                                        sub_name=cmd['sub_name'],
+                                                        value=cmd['value'],
+                                                        group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_visibility_get(self, inbuf, cmd):
+        return self.vc.subvolume_snapshot_visibility_get(vol_name=cmd['vol_name'],
+                                                        sub_name=cmd['sub_name'],
+                                                        group_name=cmd.get('group_name', None))

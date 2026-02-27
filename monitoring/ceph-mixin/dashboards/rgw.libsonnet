@@ -26,7 +26,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       ) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: formatY1, custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: x, y: y, w: w, h: h } };
 
     $.dashboardSchema(
-      'RGW Sync Overview',
+      'Ceph Object - Sync Overview',
       '',
       'rgw-sync-overview',
       'now-1h',
@@ -157,7 +157,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addTargets(
         [
           $.addTargetSchema(
-            expr='rate(ceph_rgw_sync_delta_sync_delta[$__rate_interval])',
+            expr='rate(ceph_rgw_sync_delta_sync_delta{instance_id=~"$rgw_servers", %(matchers)s}[$__rate_interval])',
             datasource='$datasource',
             instant=false,
             legendFormat='{{instance_id}} - {{shard_id}}',
@@ -211,7 +211,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       ) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: formatY1, custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: x, y: y, w: w, h: h } };
 
     $.dashboardSchema(
-      'RGW Overview',
+      'Ceph Object - Overview',
       '',
       'WAkugZpiz',
       'now-1h',
@@ -313,7 +313,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     .addPanels([
       $.addRowSchema(false,
                      true,
-                     'RGW Overview - All Gateways') +
+                     'Object Overview - All Gateways') +
       {
         gridPos: { x: 0, y: 0, w: 24, h: 1 },
       },
@@ -443,7 +443,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         6
       ),
       $.addRowSchema(
-        false, true, 'RGW Overview - HAProxy Metrics'
+        false, true, 'Object Overview - HAProxy Metrics'
       ) + { gridPos: { x: 0, y: 12, w: 9, h: 12 } },
       RgwOverviewPanel(
         'Total responses by HTTP code',
@@ -701,6 +701,46 @@ local g = import 'grafonnet/grafana.libsonnet';
           transform: 'negative-Y',
         },
       ]),
+      $.addRowSchema(false,
+                     true,
+                     'Object Overview - Bucket Notification') +
+      {
+        gridPos: { x: 0, y: 27, w: 24, h: 1 },
+      },
+      RgwOverviewPanel(
+        'Pending Notifications by Topic',
+        'Shows the number of pending notifications in each Object topic queue, indicating how many messages are waiting to be delivered',
+        '',
+        'short',
+        |||
+          (
+           ceph_rgw_topic_persistent_topic_len
+          )
+        |||,
+        '{{topic}}',
+        0,
+        28,
+        12,
+        8
+      )
+      + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'list', placement: 'right', showLegend: true, sortDesc: true } } },
+      RgwOverviewPanel(
+        'Pending Notifications Size by Topic',
+        'Shows the total size of pending notifications stored per Object topic, reflecting how much data is waiting to be delivered.',
+        'bytes',
+        'short',
+        |||
+          (
+           ceph_rgw_topic_persistent_topic_size
+          )
+        |||,
+        '{{topic}}',
+        12,
+        28,
+        12,
+        8
+      )
+      + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'list', placement: 'right', showLegend: true, sortDesc: true } } },
     ]),
   'radosgw-detail.json':
     local RgwDetailsPanel(aliasColors,
@@ -733,7 +773,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       ) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: formatY1, custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: x, y: y, w: w, h: h } };
 
     $.dashboardSchema(
-      'RGW Instance Detail',
+      'Ceph Object - Instance Details',
       '',
       'x5ARzZtmk',
       'now-1h',

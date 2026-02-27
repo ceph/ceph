@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <array>
 #include <algorithm>
@@ -525,7 +525,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   auto apl = apl_factory->create_apl_local(
       cct, s, std::move(user), std::move(account),
       std::move(policies), extract_swift_subuser(swift_user),
-      std::nullopt, LocalApplier::NO_ACCESS_KEY);
+      std::nullopt, LocalApplier::NO_ACCESS_KEY, false /* is_impersonating */);
   return result_t::grant(std::move(apl));
 }
 
@@ -688,7 +688,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   auto apl = apl_factory->create_apl_local(
       cct, s, std::move(user), std::move(account),
       std::move(policies), extract_swift_subuser(swift_user),
-      std::nullopt, LocalApplier::NO_ACCESS_KEY);
+      std::nullopt, LocalApplier::NO_ACCESS_KEY, false /* is_impersonating */);
   return result_t::grant(std::move(apl));
 }
 

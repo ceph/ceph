@@ -1,9 +1,10 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "journal/ObjectPlayer.h"
 #include "journal/Utils.h"
 #include "common/Timer.h"
+#include "include/rados.h" // for CEPH_OSD_OP_FLAG_FADVISE_DONTNEED
 #include <limits>
 
 #define dout_subsys ceph_subsys_journaler

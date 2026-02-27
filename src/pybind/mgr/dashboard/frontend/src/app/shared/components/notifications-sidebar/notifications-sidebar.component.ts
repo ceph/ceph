@@ -35,7 +35,8 @@ import { TaskMessageService } from '~/app/shared/services/task-message.service';
   selector: 'cd-notifications-sidebar',
   templateUrl: './notifications-sidebar.component.html',
   styleUrls: ['./notifications-sidebar.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   @HostBinding('class.active') isSidebarOpened = false;
@@ -102,17 +103,9 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
     );
 
     this.subs.add(
-      this.notificationService.sidebarSubject.subscribe((forceClose) => {
-        if (forceClose) {
-          this.isSidebarOpened = false;
-        } else {
-          this.isSidebarOpened = !this.isSidebarOpened;
-        }
-
-        window.clearTimeout(this.timeout);
-        this.timeout = window.setTimeout(() => {
-          this.cdRef.detectChanges();
-        }, 0);
+      this.notificationService.panelState$.subscribe((state) => {
+        this.isSidebarOpened = state;
+        this.cdRef.detectChanges();
       })
     );
 
@@ -154,7 +147,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   }
 
   private triggerPrometheusAlerts() {
-    this.prometheusAlertService.refresh(true);
+    this.prometheusAlertService.refresh();
     this.prometheusNotificationService.refresh();
   }
 
@@ -167,7 +160,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   }
 
   closeSidebar() {
-    this.isSidebarOpened = false;
+    this.notificationService.togglePanel(false);
   }
 
   trackByFn(index: number) {

@@ -26,7 +26,8 @@ moment.updateLocale('en', {
 
 @Pipe({
   name: 'relativeDate',
-  pure: false
+  pure: false,
+  standalone: false
 })
 export class RelativeDatePipe implements PipeTransform {
   /**

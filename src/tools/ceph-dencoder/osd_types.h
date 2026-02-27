@@ -72,22 +72,15 @@ TYPE(eversion_t)
 //TYPE(compact_interval_t) declared in .cc
 //TYPE(pg_missing_t::item)
 
-#include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 // TYPE(stripe_info_t) non-standard encoding/decoding functions
-TYPE(ECUtil::HashInfo)
+TYPE(ECLegacy::ECUtilL::HashInfo)
 
 #include "osd/ECMsgTypes.h"
 TYPE_NOCOPY(ECSubWrite)
 TYPE(ECSubWriteReply)
 TYPE_FEATUREFUL(ECSubRead)
 TYPE(ECSubReadReply)
-
-#include "osd/HitSet.h"
-TYPE_NONDETERMINISTIC(ExplicitHashHitSet)
-TYPE_NONDETERMINISTIC(ExplicitObjectHitSet)
-TYPE(BloomHitSet)
-TYPE_NONDETERMINISTIC(HitSet)   // because some subclasses are
-TYPE(HitSet::Params)
 
 #include "osd/SnapMapper.h"
 TYPE(SnapMapper::Mapping)
@@ -170,6 +163,7 @@ TYPE(mon_feature_t)
 TYPE_FEATUREFUL(DataStats)
 TYPE_FEATUREFUL(ProgressEvent)
 TYPE(FeatureMap)
+TYPE(PoolAvailability)
 
 #include "mon/CreatingPGs.h"
 TYPE_FEATUREFUL(creating_pgs_t)
@@ -199,7 +193,3 @@ TYPE(ConnectionTracker);
 #include "mon/health_check.h"
 TYPE(health_check_t)
 TYPE(health_check_map_t)
-
-#include "os/kstore/kstore_types.h"
-TYPE(kstore_cnode_t)
-TYPE(kstore_onode_t)

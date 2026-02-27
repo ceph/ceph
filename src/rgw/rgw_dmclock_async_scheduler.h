@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -194,10 +195,12 @@ private:
   int schedule_request_impl(const client_id&, const ReqParams&,
                             const Time&, const Cost&,
                             optional_yield) override {
+    auto c = counters();
+    if (c != nullptr) {
+      c->inc(throttle_counters::l_outstanding);
+    }
     if (outstanding_requests++ >= max_requests) {
-      if (auto c = counters();
-          c != nullptr) {
-        c->inc(throttle_counters::l_outstanding);
+      if (c != nullptr) {
         c->inc(throttle_counters::l_throttle);
       }
       return -EAGAIN;

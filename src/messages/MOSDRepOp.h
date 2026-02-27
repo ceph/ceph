@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -64,7 +65,7 @@ public:
    * Because updates <= pg_committed_to cannot become divergent, replicas
    * may safely serve reads on objects which do not have more recent updates.
    *
-   * See PeeringState::pg_committed_to, PeeringState::can_serve_replica_read
+   * See PeeringState::pg_committed_to, PeeringState::can_serve_read
    *
    * Historical note: Prior to early 2024, this field was named
    * min_last_complete_ondisk.  The replica, however, only actually relied on
@@ -85,6 +86,8 @@ public:
   /// non-empty if this transaction involves a hit_set history update
   std::optional<pg_hit_set_history_t> updated_hit_set_history;
 
+  bufferlist txn_payload;
+
   epoch_t get_map_epoch() const override {
     return map_epoch;
   }
@@ -97,6 +100,11 @@ public:
 
   int get_cost() const override {
     return data.length();
+  }
+
+  void set_txn_payload(bufferlist bl)
+  {
+    txn_payload = bl;
   }
 
   void decode_payload() override {
@@ -159,6 +167,8 @@ public:
     encode(from, payload);
     encode(updated_hit_set_history, payload);
     encode(pg_committed_to, payload);
+    bufferlist middle(txn_payload);
+    set_middle(middle);
   }
 
   MOSDRepOp()

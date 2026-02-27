@@ -325,6 +325,12 @@ export class TaskMessageService {
     'rgw/bucket/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) => {
       return $localize`${metadata.bucket_names[0]}`;
     }),
+    'rgw/bucket/notification/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${metadata.notification_id[0]}`;
+      }
+    ),
     'rgw/accounts': this.newTaskMessage(this.commonOperations.delete, (metadata) => {
       return $localize`${`account '${metadata.account_names[0]}'`}`;
     }),
@@ -369,6 +375,16 @@ export class TaskMessageService {
       this.iscsiTarget(metadata)
     ),
     // nvmeof
+    'nvmeof/gateway/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nvmeofGateway(metadata)
+    ),
+    'nvmeof/gateway/node/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
+      this.nvmeofGatewayNode(metadata)
+    ),
+    'nvmeof/gateway-node/delete': this.newTaskMessage(
+      this.commonOperations.remove,
+      (metadata) => $localize`gateway node '${metadata.hostname}'`
+    ),
     'nvmeof/subsystem/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofSubsystem(metadata)
     ),
@@ -377,6 +393,9 @@ export class TaskMessageService {
     ),
     'nvmeof/listener/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofListener(metadata)
+    ),
+    'nvmeof/listener/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
+      this.nvmeofListenerPlural(metadata)
     ),
     'nvmeof/listener/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nvmeofListener(metadata)
@@ -393,6 +412,9 @@ export class TaskMessageService {
     'nvmeof/initiator/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
       this.nvmeofInitiator(metadata)
     ),
+    'nvmeof/initiator/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.nvmeofInitiator(metadata)
+    ),
     'nvmeof/initiator/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.nvmeofInitiator(metadata)
     ),
@@ -404,27 +426,8 @@ export class TaskMessageService {
     'nfs/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nfs(metadata)
     ),
-    // smb
-    'smb/cluster/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
-      this.smbCluster(metadata)
-    ),
-    'smb/ad/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.smbJoinAuth(metadata)
-    ),
-    'smb/ad/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
-      this.smbJoinAuth(metadata)
-    ),
-    'smb/ad/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
-      this.smbJoinAuth(metadata)
-    ),
-    'smb/standalone/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.smbUsersgroups(metadata)
-    ),
-    'smb/standalone/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
-      this.smbUsersgroups(metadata)
-    ),
-    'smb/standalone/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
-      this.smbUsersgroups(metadata)
+    'rgw/destination/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.destination(metadata)
     ),
     // Grafana tasks
     'grafana/dashboards/update': this.newTaskMessage(
@@ -511,26 +514,57 @@ export class TaskMessageService {
       (metadata) => this.snapshotSchedule(metadata)
     ),
     // smb
-    'smb/cluster/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.smbCluster(metadata)
+    'cephfs/smb/cluster/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata: { cluster_id: string }) => this.smbCluster(metadata)
     ),
-    'smb/share/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.smbShare(metadata)
+    'cephfs/smb/cluster/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      (metadata: { cluster_id: string }) => this.smbCluster(metadata)
     ),
-    'smb/share/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
-      this.smbCluster(metadata)
+    'cephfs/smb/cluster/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata: { cluster_id: string }) => this.smbCluster(metadata)
     ),
-    'smb/share/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
-      this.smbShare(metadata)
+    'cephfs/smb/share/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata: Record<'share_id', string>) => this.smbShare(metadata)
     ),
-    'cephfs/smb/joinauth/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.smbJoinAuth(metadata)
+    'cephfs/smb/share/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      (metadata: Record<'share_id', string>) => this.smbShare(metadata)
     ),
-    'cephfs/smb/standalone/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.smbUsersgroups(metadata)
+    'cephfs/smb/share/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata: Record<'share_id', string>) => this.smbShare(metadata)
     ),
-    'smb/cluster/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
-      this.smbCluster(metadata)
+    'cephfs/smb/active-directory/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
+    ),
+    'cephfs/smb/active-directory/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
+    ),
+    'cephfs/smb/active-directory/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
+    ),
+    'cephfs/smb/standalone/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
+    ),
+    'cephfs/smb/standalone/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
+    ),
+    'cephfs/smb/standalone/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
+    ),
+    'ceph-user/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata: { userEntity: string }) => this.cephUser(metadata)
     )
   };
 
@@ -569,9 +603,19 @@ export class TaskMessageService {
   nvmeofSubsystem(metadata: any) {
     return $localize`subsystem '${metadata.nqn}'`;
   }
+  nvmeofGateway(metadata: any) {
+    return $localize`Gateway group '${metadata.group}'`;
+  }
 
+  nvmeofGatewayNode(metadata: any) {
+    return $localize`hosts to gateway group '${metadata.group_name}'`;
+  }
   nvmeofListener(metadata: any) {
-    return $localize`listener '${metadata.host_name} for subsystem ${metadata.nqn}`;
+    return $localize`listener '${metadata.host_name}' for subsystem ${metadata.nqn}`;
+  }
+
+  nvmeofListenerPlural(metadata: { count: number; nqn: string }) {
+    return $localize`${this.pluralize('listener', metadata.count)} to subsystem ${metadata.nqn}`;
   }
 
   nvmeofNamespace(metadata: { nqn: string; nsCount?: number; nsid?: string }) {
@@ -595,7 +639,11 @@ export class TaskMessageService {
   }
 
   smbCluster(metadata: { cluster_id: string }) {
-    return $localize`SMB Cluster  '${metadata.cluster_id}'`;
+    return $localize`SMB cluster  '${metadata.cluster_id}'`;
+  }
+
+  smbShare(metadata: Record<'share_id', string>) {
+    return $localize`SMB share '${metadata?.share_id}'`;
   }
 
   smbJoinAuth(metadata: { authId: string }) {
@@ -606,12 +654,18 @@ export class TaskMessageService {
     return $localize`SMB users and groups access resource '${metadata.usersGroupsId}'`;
   }
 
+  destination(metadata: any) {
+    return $localize`Notification destination  '${metadata.name}'`;
+  }
+  notification(metadata: any) {
+    return $localize`Notification  '${metadata.name}'`;
+  }
   service(metadata: any) {
     return $localize`service '${metadata.service_name}'`;
   }
 
   rgwStorageClass(metadata: any) {
-    return $localize`Tiering Storage Class  '${metadata.storage_class}'`;
+    return $localize`Storage Class  '${metadata.storage_class}'`;
   }
 
   crudMessage(metadata: any) {
@@ -647,10 +701,6 @@ export class TaskMessageService {
 
   snapshotSchedule(metadata: any) {
     return $localize`snapshot schedule for path '${metadata?.path}'`;
-  }
-
-  smbShare(metadata: Record<'share_id', string>) {
-    return $localize`SMB share '${metadata?.share_id}'`;
   }
 
   crudMessageId(id: string) {
@@ -693,5 +743,9 @@ export class TaskMessageService {
 
   getRunningText(task: Task) {
     return this._getTaskTitle(task).operation.running;
+  }
+
+  cephUser(metadata: { userEntity: string }) {
+    return $localize`Ceph user  '${metadata.userEntity}'`;
   }
 }

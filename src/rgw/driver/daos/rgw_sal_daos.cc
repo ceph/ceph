@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=2 sw=2 expandtab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -509,7 +509,9 @@ int DaosBucket::check_bucket_shards(const DoutPrefixProvider* dpp) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_user,
+int DaosBucket::chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_user,
+                      const std::string& new_owner_name,
                       optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
@@ -940,7 +942,7 @@ int DaosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
   }
 
   // Update object attrs
-  set_atomic();
+  set_atomic(true);
   attrs[attr_name] = attr_val;
 
   ret = set_dir_entry_attrs(dpp, &ent, &attrs);
@@ -1028,15 +1030,14 @@ int DaosObject::transition_to_cloud(
 
 int DaosObject::restore_obj_from_cloud(Bucket* bucket,
           rgw::sal::PlacementTier* tier,
-          rgw_placement_rule& placement_rule,
-          rgw_bucket_dir_entry& o,
 	  CephContext* cct,
           RGWObjTier& tier_config,
           uint64_t olh_epoch,
           std::optional<uint64_t> days,
+	  bool& in_progress,
+	  uint64_t& size,
           const DoutPrefixProvider* dpp, 
-          optional_yield y,
-          uint32_t flags)
+          optional_yield y)
 {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
@@ -1231,7 +1232,7 @@ int DaosObject::copy_object(
     RGWObjCategory category, uint64_t olh_epoch,
     boost::optional<ceph::real_time> delete_at, std::string* version_id,
     std::string* tag, std::string* etag, void (*progress_cb)(off_t, void*),
-    void* progress_data, const DoutPrefixProvider* dpp, optional_yield y) {
+    void* progress_data, rgw::sal::DataProcessorFactory* dp_factory, const DoutPrefixProvider* dpp, optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
@@ -2317,6 +2318,12 @@ int DaosStore::cluster_stat(RGWClusterStat& stats) {
 }
 
 std::unique_ptr<Lifecycle> DaosStore::get_lifecycle(void) {
+  DAOS_NOT_IMPLEMENTED_LOG(nullptr);
+  return 0;
+}
+
+std::unique_ptr<Restore> DaosStore::get_restore(const int n_objs,
+				const std::vector<std::string_view>& obj_names) {
   DAOS_NOT_IMPLEMENTED_LOG(nullptr);
   return 0;
 }

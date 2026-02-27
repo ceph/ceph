@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -9,11 +9,11 @@
 #include <utility>
 
 #include "crimson/common/errorator.h"
+#include "crimson/os/seastore/seastore_types.h"
 #include "crimson/common/interruptible_future.h"
+#include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
-
-class Transaction;
 
 struct TransactionConflictCondition {
   class transaction_conflict final : public std::exception {
@@ -62,6 +62,8 @@ using trans_iertr =
     E
   >;
 
+using base_iertr = trans_iertr<base_ertr>;
+
 template <typename F, typename... Args>
 auto with_trans_intr(Transaction &t, F &&f, Args&&... args) {
   return trans_intr::with_interruption_to_error<crimson::ct_error::eagain>(
@@ -69,6 +71,21 @@ auto with_trans_intr(Transaction &t, F &&f, Args&&... args) {
     TransactionConflictCondition(t),
     t,
     std::forward<Args>(args)...);
+}
+
+template <typename F, typename... Args>
+auto with_repeat_trans_intr(Transaction &t, F &&f, Args&&... args) {
+  return repeat_eagain([&t, f=std::move(f), ... args = std::forward<Args>(args) ] {
+    // Try again with a fresh transaction
+    t.reset_preserve_handle();
+    return trans_intr::with_interruption_to_error<crimson::ct_error::eagain>(
+      std::move(f),
+      TransactionConflictCondition(t),
+      t,
+      std::forward<Args>(args)...);
+  });
+
+
 }
 
 template <typename T>

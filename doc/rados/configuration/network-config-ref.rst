@@ -3,7 +3,7 @@
 =================================
 
 Careful network infrastructure and configuration is critical for building a
-resilieht and high performance  :term:`Ceph Storage Cluster`. The Ceph Storage
+resilient and high performance  :term:`Ceph Storage Cluster`. The Ceph Storage
 Cluster does not perform  request routing or dispatching on behalf of
 the :term:`Ceph Client`. Instead, Ceph clients make requests directly to Ceph
 OSD Daemons. Ceph OSDs perform data replication on behalf of Ceph clients,
@@ -344,9 +344,7 @@ General Settings
 .. confval:: ms_inject_socket_failures
 
 
-.. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
 .. _Hardware Recommendations - Networks: ../../../start/hardware-recommendations#networks
-.. _hardware recommendations: ../../../start/hardware-recommendations
 .. _Monitor / OSD Interaction: ../mon-osd-interaction
 .. _Message Signatures: ../auth-config-ref#signatures
 .. _CIDR: https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing

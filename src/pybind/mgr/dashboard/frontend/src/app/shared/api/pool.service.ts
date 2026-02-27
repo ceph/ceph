@@ -15,6 +15,20 @@ import { RbdConfigurationService } from '../services/rbd-configuration.service';
 export class PoolService {
   apiPath = 'api/pool';
 
+  formTooltips = {
+    compressionModes: {
+      none: $localize`None: Never compress data.`,
+      passive: $localize`Passive: Do not compress data unless the write operation has a compressible hint set.`,
+      aggressive: $localize`Aggressive: Compress data unless the write operation has an incompressible hint set.`,
+      force: $localize`Force: Try to compress data no matter what.`
+    },
+    pgAutoscaleModes: {
+      off: $localize`Disable autoscaling for this pool. PGs distribute data in Ceph, and autoscaling auto-adjusts their count per pool as usage changes.`,
+      on: $localize`Enable automated adjustments of the PG count for the given pool. PGs distribute data in Ceph, and autoscaling auto-adjusts their count per pool as usage changes.`,
+      warn: $localize`Raise health checks when the PG count is in need of adjustment. PGs distribute data in Ceph, and autoscaling auto-adjusts their count per pool as usage changes.`
+    }
+  };
+
   constructor(private http: HttpClient, private rbdConfigurationService: RbdConfigurationService) {}
 
   create(pool: any) {

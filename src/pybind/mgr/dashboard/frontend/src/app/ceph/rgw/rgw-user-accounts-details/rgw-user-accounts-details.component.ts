@@ -4,7 +4,8 @@ import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 @Component({
   selector: 'cd-rgw-user-accounts-details',
   templateUrl: './rgw-user-accounts-details.component.html',
-  styleUrls: ['./rgw-user-accounts-details.component.scss']
+  styleUrls: ['./rgw-user-accounts-details.component.scss'],
+  standalone: false
 })
 export class RgwUserAccountsDetailsComponent implements OnChanges {
   @Input()

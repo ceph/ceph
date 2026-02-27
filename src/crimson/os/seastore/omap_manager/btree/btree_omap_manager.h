@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 #include <boost/intrusive_ptr.hpp>
@@ -93,8 +93,13 @@ public:
     omap_root_t &omap_root,
     Transaction &t,
     const std::string &first,
-    const std::string &last,
-    omap_list_config_t config) final;
+    const std::string &last) final;
+
+  omap_iterate_ret omap_iterate(
+    const omap_root_t &omap_root,
+    Transaction &t,
+    ObjectStore::omap_iter_seek_t &start_from,
+    omap_iterate_cb_t callback) final;
 
   omap_list_ret omap_list(
     const omap_root_t &omap_root,
@@ -106,15 +111,6 @@ public:
   omap_clear_ret omap_clear(
     omap_root_t &omap_root,
     Transaction &t) final;
-
-  static extent_len_t get_leaf_size(omap_type_t type) {
-    if (type == omap_type_t::LOG) {
-      return LOG_LEAF_BLOCK_SIZE;
-    }
-    ceph_assert(type == omap_type_t::OMAP ||
-		type == omap_type_t::XATTR);
-    return OMAP_LEAF_BLOCK_SIZE;
-  }
 };
 using BtreeOMapManagerRef = std::unique_ptr<BtreeOMapManager>;
 

@@ -26,11 +26,7 @@
                 [total]="row.info.bytes_quota"
                 [used]="row.info.bytes_used"
                 [title]="row.name"
-                [showFreeToolTip]="false"
-                customLegend="Quota"
-                [customLegendValue]="row.info.bytes_quota"
                 decimals="2"></cd-usage-bar>
-
   <ng-template #noLimitTpl>
     <span ngbTooltip="Quota limit is not set"
           *ngIf="row.info.bytes_pcent === 'undefined'"
@@ -46,9 +42,9 @@
 
 <ng-template #modeToHumanReadableTpl
              let-value="data.value">
-  <span *ngFor="let result of (value | octalToHumanReadable)"
-        [ngClass]="result.class"
-        [ngbTooltip]="result.toolTip">
+  <cds-tag *ngFor="let result of (value | octalToHumanReadable)"
+           [class]="result.class"
+           [ngbTooltip]="result.toolTip">
     {{ result.content }}
-  </span>
+</cds-tag>
 </ng-template>

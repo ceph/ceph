@@ -1,11 +1,11 @@
-import { DashboardPageHelper } from '../ui/dashboard.po';
+import { DashboardV3PageHelper } from '../ui/dashboard-v3.po';
 
-describe('Dashboard Main Page', { retries: 0 }, () => {
-  const dashboard = new DashboardPageHelper();
+describe('Overview Page', { retries: 0 }, () => {
+  const overview = new DashboardV3PageHelper();
 
   beforeEach(() => {
     cy.login();
-    dashboard.navigateTo();
+    overview.navigateTo();
   });
 
   describe('Dashboard accessibility', () => {

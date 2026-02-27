@@ -20,7 +20,7 @@ export enum CellTemplate {
   // supports an optional custom configuration:
   // {
   //   ...
-  //   cellTransformation: CellTemplate.badge,
+  //   cellTransformation: CellTemplate.tag,
   //   customTemplateConfig: {
   //     class?: string; // Additional class name.
   //     prefix?: any;   // Prefix of the value to be displayed.
@@ -30,7 +30,7 @@ export enum CellTemplate {
   //     }
   //   }
   // }
-  badge = 'badge',
+  tag = 'tag',
   // Maps the value using the given dictionary.
   // {
   //   ...
@@ -79,5 +79,52 @@ export enum CellTemplate {
   //   ...
   //   cellTransformation: CellTemplate.copy,
   */
-  copy = 'copy'
+  copy = 'copy',
+  /*
+  This template will let you edit the cell value inline. You can pass the validators in the
+  customTemplateConfig.
+  // {
+  //    ...
+  //    cellTransformation: CellTemplate.editing,
+  //    customTemplateConfig: {
+  //          validators: [Validators.required, Validators.pattern(/^[A-Za-z ]+$/)],
+  //          asyncValidators: [AsyncValidator]
+  //          errorMessages: {
+  //            required:  $localize`This field is required.`,
+  //            pattern: $localize`The field format is invalid.`
+  //          }
+  //    }
+  //    ...
+  // }
+  Also need to pass forceIdentifer=true and also a unique identifier prop like
+  identifier="uid" to the table in some cases to avoid issues.
+  */
+  editing = 'editing',
+  /*
+  This template let's you provide a redirect url and let you redirect from when you click
+  on the cell item. The redirect link can be provided in the customTemplateConfig
+  // {
+  //    ...
+  //    cellTransformation: CellTemplate.redirect,
+  //    customTemplateConfig: {
+  //          redirectLink: ['overview', 'overview'],
+  //    }
+  //    ...
+  // }
+  // you can also use '::prop' in the redirectLink array to replace it with the cell value.
+  // e.g ['overview', '::prop', 'details']
+  //
+  // if you want to use some other property of the row for redirection instead of the cell value,
+  // you can use the 'customRowProperty' property in the customTemplateConfig to specify
+  // the property name.
+  // {
+  //    ...
+  //    cellTransformation: CellTemplate.redirect,
+  //    customTemplateConfig: {
+  //          customRowProperty: 'otherPropertyName'}
+  //    }
+  //    ...
+  // }
+  */
+  redirect = 'redirect'
 }

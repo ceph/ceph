@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -96,10 +97,9 @@ static ceph::spinlock debug_lock;
       : raw(dataptr, l, mempool) {
     }
 
-    static ceph::unique_leakable_ptr<buffer::raw>
-    create(unsigned len,
-	   unsigned align,
-	   int mempool = mempool::mempool_buffer_anon)
+    static std::pair<char*, size_t> alloc_data_n_controlblock(
+      unsigned len,
+      unsigned align)
     {
       // posix_memalign() requires a multiple of sizeof(void *)
       align = std::max<unsigned>(align, sizeof(void *));
@@ -117,16 +117,64 @@ static ceph::spinlock debug_lock;
 #endif /* DARWIN */
       if (!ptr)
 	throw bad_alloc();
+      return {ptr, datalen};
+    }
 
+    static ceph::unique_leakable_ptr<buffer::raw>
+    create(unsigned len,
+	   unsigned align,
+	   int mempool = mempool::mempool_buffer_anon)
+    {
+      const auto [ptr, datalen] = alloc_data_n_controlblock(len, align);
       // actual data first, since it has presumably larger alignment restriction
       // then put the raw_combined at the end
       return ceph::unique_leakable_ptr<buffer::raw>(
 	new (ptr + datalen) raw_combined(ptr, len, mempool));
     }
 
-    static void operator delete(void *ptr) {
-      raw_combined *raw = (raw_combined *)ptr;
-      aligned_free((void *)raw->data);
+    // Custom delete operator that properly handles cleanup of a combined allocation
+    // where the object is placed after its data buffer. The operator must:
+    // 1. Save the data pointer before the object is destroyed
+    // 2. Explicitly call the destructor to clean up the object's members
+    // 3. Free the entire combined allocation through the data pointer
+    // Uses std::destroying_delete_t to prevent automatic destructor call after delete
+    static void operator delete(raw_combined *raw, std::destroying_delete_t) {
+      char * dataptr = raw->data;
+      raw->~raw_combined();
+      aligned_free(dataptr);
+    }
+  };
+
+  class buffer::raw_zeros : public buffer::raw_combined {
+    raw_zeros(char *dataptr, unsigned l, int mempool)
+      : raw_combined(dataptr, l, mempool) {
+      memset(dataptr, 0, l);
+#ifndef _WIN32
+      if (mprotect(dataptr, l, PROT_READ) != 0) {
+        ceph_abort_msg("mprotect on raw_zeros failed");
+      }
+#endif
+    }
+
+    ~raw_zeros() {
+#ifndef _WIN32
+      if (mprotect(data, len, PROT_WRITE | PROT_READ) != 0) {
+        ceph_abort_msg("mprotect on destroing raw_zeros failed");
+      }
+#endif
+    }
+
+    static constexpr unsigned ZERO_AREA_NUM_PAGES = 4;
+
+  public:
+    static ceph::unique_leakable_ptr<buffer::raw>
+    create(int mempool = mempool::mempool_buffer_anon)
+    {
+      const auto ZERO_AREA_SIZE = ZERO_AREA_NUM_PAGES * CEPH_PAGE_SIZE;
+      const auto [ptr, datalen] = alloc_data_n_controlblock(
+        ZERO_AREA_SIZE, /* align to */CEPH_PAGE_SIZE);
+      return ceph::unique_leakable_ptr<buffer::raw>(
+	new (ptr + datalen) raw_zeros(ptr, ZERO_AREA_SIZE, mempool));
     }
   };
 
@@ -521,9 +569,14 @@ static ceph::spinlock debug_lock;
     return 0;
   }
 
+  bool buffer::ptr::is_zero_fast() const
+  {
+    return dynamic_cast<const buffer::raw_zeros*>(_raw) != nullptr;
+  }
+
   bool buffer::ptr::is_zero() const
   {
-    return mem_is_zero(c_str(), _len);
+    return /*is_zero_fast() ||*/ mem_is_zero(c_str(), _len);
   }
 
   unsigned buffer::ptr::append(char c)
@@ -1292,6 +1345,14 @@ static ceph::spinlock debug_lock;
     return _buffers.back();
   }
 
+  buffer::ptr buffer::list::always_zeroed_bptr() {
+    // See https://en.cppreference.com/w/cpp/language/storage_duration.html
+    // Section on static block variables states that since C++11 this is
+    // lazily evaluated and thread safe.
+    static ptr always_zeroed_bptr = raw_zeros::create();
+    return always_zeroed_bptr;
+  }
+
   void buffer::list::append(const char *data, unsigned len)
   {
     _len += len;
@@ -1427,6 +1488,18 @@ static ceph::spinlock debug_lock;
     _buffers.push_front(*bp.release());
   }
   
+  void buffer::list::append_zero2(unsigned len)
+  {
+    _len += len;
+    while (len > 0) {
+      const auto round_size = std::min(len, always_zeroed_bptr().length());
+      auto bptr = ptr_node::create(always_zeroed_bptr(), 0, round_size);
+      _buffers.push_back(*bptr.release());
+      _num += 1;
+      len -= round_size;
+    }
+  }
+
   void buffer::list::append_zero(unsigned len)
   {
     _len += len;

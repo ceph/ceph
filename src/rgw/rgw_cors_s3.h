@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -20,7 +20,7 @@
 #include <iosfwd>
 
 #include <include/types.h>
-#include <common/Formatter.h>
+#include <common/XMLFormatter.h>
 #include <common/dout.h>
 #include "rgw_xml.h"
 #include "rgw_cors.h"

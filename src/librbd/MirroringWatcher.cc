@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/MirroringWatcher.h"
 #include "include/rbd_types.h"
@@ -108,8 +108,8 @@ void MirroringWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
     return;
   }
 
-  apply_visitor(watcher::util::HandlePayloadVisitor<MirroringWatcher<I>>(
-                  this, notify_id, handle), notify_message.payload);
+  std::visit(watcher::util::HandlePayloadVisitor<MirroringWatcher<I>>(
+      this, notify_id, handle), notify_message.payload);
 }
 
 template <typename I>

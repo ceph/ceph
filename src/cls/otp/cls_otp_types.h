@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_CLS_OTP_TYPES_H
 #define CEPH_CLS_OTP_TYPES_H
@@ -11,6 +11,7 @@
 #define CLS_OTP_MAX_REPO_SIZE 100
 
 class JSONObj;
+namespace ceph { class Formatter; }
 
 namespace rados {
   namespace cls {

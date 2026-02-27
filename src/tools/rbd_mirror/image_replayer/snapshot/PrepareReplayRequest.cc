@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "PrepareReplayRequest.h"
 #include "common/debug.h"
@@ -58,7 +58,10 @@ void PrepareReplayRequest<I>::handle_load_local_image_meta(int r) {
     return;
   }
 
-  *m_resync_requested = m_state_builder->local_image_meta->resync_requested;
+  if (r >= 0 && m_state_builder->local_image_meta->resync_requested &&
+      m_state_builder->is_remote_primary()) {
+    *m_resync_requested = true;
+  }
   finish(0);
 }
 

@@ -12,13 +12,11 @@ ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
   # see http://tracker.ceph.com/issues/25209
   export DEB_LDFLAGS_MAINT_STRIP = -Wl,-Bsymbolic-functions
 endif
-ifeq (,$(findstring WITH_CRIMSON,$(CEPH_EXTRA_CMAKE_ARGS)))
-  export CEPH_OSD_BASENAME = ceph-osd
-else
-  export CEPH_OSD_BASENAME = crimson-osd
-endif
 ifneq ($(filter pkg.ceph.arrow,$(DEB_BUILD_PROFILES)),)
   extraopts += -DWITH_SYSTEM_ARROW=ON
+endif
+ifneq ($(filter pkg.ceph.crimson,$(DEB_BUILD_PROFILES)),)
+  extraopts += -DWITH_CRIMSON=ON
 endif
 
 extraopts += -DWITH_JAEGER=ON
@@ -30,6 +28,7 @@ extraopts += -DWITH_CEPHFS_JAVA=ON
 extraopts += -DWITH_CEPHFS_SHELL=ON
 extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
 extraopts += -DWITH_GRAFANA=ON
+extraopts += -DCEPHADM_BUNDLED_DEPENDENCIES=deb
 ifeq ($(DEB_HOST_ARCH), amd64)
   extraopts += -DWITH_RBD_RWL=ON
 else
@@ -47,6 +46,13 @@ endif
 ifneq (,$(filter with_system_libs,$(DEB_BUILD_OPTIONS)))
   extraopts += -DWITH_SYSTEM_BOOST=ON
   extraopts += -DWITH_SYSTEM_PMDK=ON
+endif
+ifeq ($(SCCACHE), true)
+extraopts += -DWITH_SCCACHE=ON
+endif
+
+ifeq ($(DWZ), false)
+override_dh_dwz:
 endif
 
 # for python3-${pkg} packages

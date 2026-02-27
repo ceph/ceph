@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef RBD_MIRROR_IMAGE_REPLAYER_EVENT_PREPROCESSOR_H
 #define RBD_MIRROR_IMAGE_REPLAYER_EVENT_PREPROCESSOR_H
@@ -9,7 +9,6 @@
 #include "librbd/journal/TypeTraits.h"
 #include <map>
 #include <string>
-#include <boost/variant/static_visitor.hpp>
 
 struct Context;
 namespace journal { class Journaler; }
@@ -72,7 +71,7 @@ private:
 
   typedef std::map<uint64_t, uint64_t> SnapSeqs;
 
-  class PreprocessEventVisitor : public boost::static_visitor<int> {
+  class PreprocessEventVisitor {
   public:
     EventPreprocessor *event_preprocessor;
 

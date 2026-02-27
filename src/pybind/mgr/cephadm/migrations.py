@@ -3,10 +3,11 @@ import re
 import logging
 from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any, List
 
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, RGWSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, RGWSpec, CertificateSource
 from cephadm.schedule import HostAssignment
 from cephadm.utils import SpecialHostLabels
 import rados
+from mgr_util import get_cert_issuer_info
 
 from mgr_module import NFS_POOL_NAME
 from orchestrator import OrchestratorError, DaemonDescription
@@ -14,7 +15,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 7
+LAST_MIGRATION = 8
 
 logger = logging.getLogger(__name__)
 
@@ -82,32 +83,44 @@ class Migrations:
 
     def migrate(self, startup: bool = False) -> None:
         if self.mgr.migration_current == 0:
+            logger.info('Running migration 0 -> 1')
             if self.migrate_0_1():
                 self.set(1)
 
         if self.mgr.migration_current == 1:
+            logger.info('Running migration 1 -> 2')
             if self.migrate_1_2():
                 self.set(2)
 
         if self.mgr.migration_current == 2 and not startup:
+            logger.info('Running migration 2 -> 3')
             if self.migrate_2_3():
                 self.set(3)
 
         if self.mgr.migration_current == 3:
+            logger.info('Running migration 3 -> 4')
             if self.migrate_3_4():
                 self.set(4)
 
         if self.mgr.migration_current == 4:
+            logger.info('Running migration 4 -> 5')
             if self.migrate_4_5():
                 self.set(5)
 
         if self.mgr.migration_current == 5:
+            logger.info('Running migration 5 -> 6')
             if self.migrate_5_6():
                 self.set(6)
 
         if self.mgr.migration_current == 6:
+            logger.info('Running migration 6 -> 7')
             if self.migrate_6_7():
                 self.set(7)
+
+        if self.mgr.migration_current == 7:
+            logger.info('Running migration 7 -> 8')
+            if self.migrate_7_8():
+                self.set(8)
 
     def migrate_0_1(self) -> bool:
         """
@@ -401,7 +414,7 @@ class Migrations:
         Any extra arguments detected on rgw_frontend_type field will be parsed and passed in the
         new spec field rgw_frontend_extra_args.
         """
-        self.mgr.log.debug(f'Starting rgw migration (queue length is {len(self.rgw_migration_queue)})')
+        logger.info(f'Starting rgw migration (queue length is {len(self.rgw_migration_queue)})')
         for s in self.rgw_migration_queue:
             spec = s['spec']
             if self.rgw_spec_needs_migration(spec):
@@ -411,6 +424,7 @@ class Migrations:
                     self.mgr.spec_store.save(rgw_spec)
             else:
                 logger.info(f"No Migration is needed for rgw spec: {spec}")
+
         self.rgw_migration_queue = []
         return True
 
@@ -421,7 +435,8 @@ class Migrations:
                 logger.info(f'Migrating certs/keys for {spec.service_name()} spec to cert store')
                 self.mgr.spec_store._save_certs_and_keys(spec)
 
-        # grafana certs are stored based on the host they are placed on
+        # Grafana certs are stored based on the host they are placed on
+        grafana_cephadm_signed_certs = True
         for grafana_daemon in self.mgr.cache.get_daemons_by_type('grafana'):
             logger.info(f'Checking for cert/key for {grafana_daemon.name()}')
             hostname = grafana_daemon.hostname
@@ -429,18 +444,91 @@ class Migrations:
             grafana_cert_path = f'{hostname}/grafana_crt'
             grafana_key_path = f'{hostname}/grafana_key'
             grafana_cert = self.mgr.get_store(grafana_cert_path)
-            if grafana_cert:
-                logger.info(f'Migrating {grafana_daemon.name()} cert to cert store')
-                self.mgr.cert_mgr.save_cert('grafana_cert', grafana_cert, host=hostname)
             grafana_key = self.mgr.get_store(grafana_key_path)
-            if grafana_key:
-                logger.info(f'Migrating {grafana_daemon.name()} key to cert store')
-                self.mgr.cert_mgr.save_key('grafana_key', grafana_key, host=hostname)
+            if grafana_cert:
+                org, _ = get_cert_issuer_info(grafana_cert)
+                if org != 'Ceph':
+                    logger.info(f'Migrating {grafana_daemon.name()}/{hostname} cert/key to cert store (as custom-certs)')
+                    grafana_cephadm_signed_certs = False
+                    self.mgr.cert_mgr.save_cert('grafana_ssl_cert', grafana_cert, host=hostname, user_made=True, editable=True)
+                    self.mgr.cert_mgr.save_key('grafana_ssl_key', grafana_key, host=hostname, user_made=True, editable=True)
+
+        if not grafana_cephadm_signed_certs:
+            # Update the spec to specify the right certificate source
+            grafana_spec = self.mgr.spec_store['grafana'].spec
+            grafana_spec.certificate_source = CertificateSource.REFERENCE.value
+            self.mgr.spec_store.save(grafana_spec)
 
         # NOTE: prometheus, alertmanager, and node-exporter certs were not stored
         # and appeared to just be generated at daemon deploy time if secure_monitoring_stack
         # was set to true. Therefore we have nothing to migrate for those daemons
         return True
+
+    def migrate_7_8(self) -> bool:
+        """
+        Replace Promtail with Alloy.
+
+        - If mgr daemons are still being upgraded, return True WITHOUT bumping migration_current.
+        - Mark Promtail service unmanaged so cephadm won't redeploy it.
+        - Remove Promtail daemons to free ports.
+        - Deploy Alloy with Promtail's placement.
+        - Once Alloy is confirmed deployed, remove Promtail service spec.
+        """
+        try:
+            target_digests = getattr(self.mgr.upgrade.upgrade_state, "target_digests", [])
+            active_mgr_digests = self.mgr.get_active_mgr_digests()
+
+            if target_digests:
+                if not any(d in target_digests for d in active_mgr_digests):
+                    logger.info(
+                        "Promtail -> Alloy migration: mgr daemons still upgrading. "
+                        "Marking as complete without bumping migration_current."
+                    )
+                    return False
+
+            promtail_spec = self.mgr.spec_store.active_specs.get("promtail")
+            if not promtail_spec:
+                logger.info("Promtail -> Alloy migration: no Promtail \
+                    service found, nothing to do.")
+                return True
+
+            if not promtail_spec.unmanaged:
+                logger.info("Promtail -> Alloy migration: marking promtail unmanaged")
+                self.mgr.spec_store.set_unmanaged("promtail", True)
+
+            daemons = self.mgr.cache.get_daemons()
+            promtail_daemons = [d for d in daemons if d.daemon_type == "promtail"]
+            if promtail_daemons:
+                promtail_names = [d.name() for d in promtail_daemons]
+                logger.info(f"Promtail -> Alloy migration: removing daemons {promtail_names}")
+                self.mgr.remove_daemons(promtail_names)
+
+            daemons = self.mgr.cache.get_daemons()
+            if any(d.daemon_type == "promtail" for d in daemons):
+                logger.info(
+                    "Promtail -> Alloy migration: promtail daemons still present, "
+                    "skipping Alloy deployment until next run."
+                )
+                return False
+
+            alloy_spec = ServiceSpec(
+                service_type="alloy",
+                service_id="alloy",
+                placement=promtail_spec.placement
+            )
+
+            logger.info("Promtail -> Alloy migration: deploying Alloy service")
+            self.mgr.apply_alloy(alloy_spec)
+
+            logger.info("Promtail -> Alloy migration: removing promtail service spec")
+            self.mgr.remove_service("promtail")
+
+            logger.info("Promtail -> Alloy migration completed successfully.")
+            return True
+
+        except Exception as e:
+            logger.error(f"Promtail -> Alloy migration failed: {e}")
+            return False
 
 
 def queue_migrate_rgw_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:
@@ -453,7 +541,7 @@ def queue_migrate_rgw_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]
     ls = json.loads(queued)
     ls.append(spec_dict)
     mgr.set_store('rgw_migration_queue', json.dumps(ls))
-    mgr.log.info(f'Queued rgw.{service_id} for migration')
+    logger.info(f'Queued rgw.{service_id} for migration')
 
 
 def queue_migrate_nfs_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:

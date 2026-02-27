@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <algorithm>
 #include <iterator>
@@ -11,7 +11,7 @@
 #include "rgw_asio_thread.h"
 #include "rgw_bucket.h"
 #include "rgw_zone.h"
-#include "rgw_datalog.h"
+#include "driver/rados/rgw_datalog.h"
 
 #include "driver/rados/shard_io.h"
 #include "cls/rgw/cls_rgw_client.h"

@@ -28,7 +28,10 @@
             i18n-ngbTooltip
             ngbTooltip="Edit"
             (click)="showMatcherModal(index)">
-      <i [ngClass]="[icons.edit]"></i>
+      <svg
+      [cdsIcon]="icons.edit"
+      [size]="icons.size16"
+      class="cds-info-color"></svg>
     </button>
     <button type="button"
             class="btn btn-light"
@@ -36,7 +39,9 @@
             i18n-ngbTooltip
             ngbTooltip="Delete"
             (click)="deleteMatcher(index)">
-      <i [ngClass]="[icons.trash]"></i>
+      <svg [cdsIcon]="icons.trash"
+           [size]="icons.size16"
+           class="cds-info-color"></svg>
     </button>
   </div>
   <span class="help-block"></span>
@@ -171,7 +176,9 @@
                         class="btn btn-light float-end my-3"
                         [ngClass]="{'btn-warning': formDir.submitted && matchers.length === 0 }"
                         (click)="showMatcherModal()">
-                  <i [ngClass]="[icons.add]"></i>
+                  <svg [cdsIcon]="icons.add"
+                       [size]="icons.size16"
+                       ></svg>
                   <ng-container i18n>Add matcher</ng-container>
                 </button>
               </div>

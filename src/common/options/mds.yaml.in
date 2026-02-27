@@ -5,7 +5,7 @@ options:
 - name: mds_alternate_name_max
   type: size
   level: advanced
-  desc: set the maximum length of alternate names for dentries
+  desc: Set the maximum length of alternate names for dentries
   default: 8_K
   services:
   - mds
@@ -14,7 +14,7 @@ options:
 - name: mds_fscrypt_last_block_max_size
   type: size
   level: advanced
-  desc: maximum size of the last block without the header along with a truncate
+  desc: Maximum size of the last block without the header along with a truncate
     request when the fscrypt is enabled.
   default: 4_K
   services:
@@ -38,7 +38,7 @@ options:
 - name: mds_numa_node
   type: int
   level: advanced
-  desc: set mds's cpu affinity to a numa node (-1 for none)
+  desc: Set MDS CPU affinity to a NUMA node (-1 for none)
   default: -1
   services:
   - mds
@@ -47,7 +47,7 @@ options:
 - name: mds_data
   type: str
   level: advanced
-  desc: path to MDS data and keyring
+  desc: Path to MDS data and keyring
   default: /var/lib/ceph/mds/$cluster-$id
   services:
   - mds
@@ -57,8 +57,8 @@ options:
 - name: mds_join_fs
   type: str
   level: basic
-  desc: file system MDS prefers to join
-  long_desc: This setting indicates which file system name the MDS should prefer to
+  desc: File system MDS prefers to join
+  long_desc: This setting indicates which CephFS file system the MDS should prefer to
     join (affinity). The monitors will try to have the MDS cluster safely reach a
     state where all MDS have strong affinity, even via failovers to a standby.
   services:
@@ -68,7 +68,7 @@ options:
 - name: mds_cache_trim_interval
   type: secs
   level: advanced
-  desc: interval in seconds between cache trimming
+  desc: Interval in seconds between cache trims
   default: 1
   services:
   - mds
@@ -77,7 +77,7 @@ options:
 - name: mds_cache_quiesce_delay
   type: millisecs
   level: dev
-  desc: delay before starting recursive quiesce inode operations
+  desc: Delay before starting recursive quiesce inode operations
   default: 0
   services:
   - mds
@@ -86,7 +86,7 @@ options:
 - name: mds_cache_quiesce_splitauth
   type: bool
   level: advanced
-  desc: allow recursive quiesce across auth boundaries
+  desc: Allow recursive quiesce across auth boundaries
   default: true
   services:
   - mds
@@ -95,7 +95,7 @@ options:
 - name: mds_cache_release_free_interval
   type: secs
   level: dev
-  desc: interval in seconds between heap releases
+  desc: Interval in seconds between heap releases
   default: 10
   services:
   - mds
@@ -104,9 +104,9 @@ options:
 - name: mds_cache_memory_limit
   type: size
   level: basic
-  desc: target maximum memory usage of MDS cache
+  desc: Target maximum memory usage of MDS cache
   long_desc: This sets a target maximum memory usage of the MDS cache and is the primary
-    tunable to limit the MDS memory usage. The MDS will try to stay under a reservation
+    tunable to limit MDS memory usage. The MDS will try to stay under a reservation
     of this limit (by default 95%; 1 - mds_cache_reservation) by trimming unused metadata
     in its cache and recalling cached items in the client caches. It is possible for
     the MDS to exceed this limit due to slow recall from clients. The mds_health_cache_threshold
@@ -119,11 +119,12 @@ options:
 - name: mds_cache_reservation
   type: float
   level: advanced
-  desc: amount of memory to reserve for future cached objects
-  fmt_desc: The cache reservation (memory or inodes) for the MDS cache to maintain.
+  desc: Amount of memory to reserve for future cached objects
+  fmt_desc: The percentage of the configured cache size to reserve.
     Once the MDS begins dipping into its reservation, it will recall
     client state until its cache size shrinks to restore the
-    reservation.
+    reservation. In other words, (1 - this value) is a cache fullness
+    high water mark above which client caps will be recalled.
   default: 0.05
   services:
   - mds
@@ -132,14 +133,14 @@ options:
 - name: mds_health_cache_threshold
   type: float
   level: advanced
-  desc: threshold for cache size to generate health warning
+  desc: Threshold for cache size to generate health warning
   default: 1.5
   services:
   - mds
 - name: mds_cache_mid
   type: float
   level: advanced
-  desc: midpoint for MDS cache LRU
+  desc: Midpoint for MDS cache LRU
   fmt_desc: The insertion point for new items in the cache LRU
     (from the top).
   default: 0.7
@@ -148,7 +149,7 @@ options:
 - name: mds_cache_trim_decay_rate
   type: float
   level: advanced
-  desc: decay rate for trimming MDS cache throttle
+  desc: Decay rate for trimming MDS cache throttle
   default: 1
   services:
   - mds
@@ -157,7 +158,7 @@ options:
 - name: mds_cache_trim_threshold
   type: size
   level: advanced
-  desc: threshold for number of dentries that can be trimmed
+  desc: Threshold for number of dentries that can be trimmed
   default: 256_K
   services:
   - mds
@@ -166,7 +167,7 @@ options:
 - name: mds_cache_quiesce_decay_rate
   type: float
   level: advanced
-  desc: decay rate for quiescing inodes throttle
+  desc: Decay rate for quiescing inodes throttle
   default: 1
   services:
   - mds
@@ -175,7 +176,7 @@ options:
 - name: mds_cache_quiesce_threshold
   type: size
   level: advanced
-  desc: threshold for number of inodes that can be quiesced
+  desc: Threshold for number of inodes that can be quiesced
   default: 512_K
   services:
   - mds
@@ -184,7 +185,7 @@ options:
 - name: mds_cache_quiesce_sleep
   type: millisecs
   level: advanced
-  desc: sleep time for request after passing quiesce threshold
+  desc: Sleep time for requests after passing the quiesce threshold
   default: 200
   services:
   - mds
@@ -193,7 +194,7 @@ options:
 - name: mds_max_file_recover
   type: uint
   level: advanced
-  desc: maximum number of files to recover file sizes in parallel
+  desc: Maximum number of files for which to recover file sizes in parallel
   default: 32
   services:
   - mds
@@ -201,8 +202,8 @@ options:
 - name: mds_dir_max_commit_size
   type: int
   level: advanced
-  desc: maximum size in megabytes for a RADOS write to a directory
-  fmt_desc: The maximum size of a directory update before Ceph breaks it into
+  desc: Maximum size in mebibytes for a RADOS write to a directory
+  fmt_desc: The maximum size of a directory update before the MDS splits it into
     smaller transactions (MB).
   default: 10
   services:
@@ -211,7 +212,7 @@ options:
 - name: mds_dir_keys_per_op
   type: int
   level: advanced
-  desc: number of directory entries to read in one RADOS operation
+  desc: Number of directory entries to read in one RADOS operation
   default: 16384
   services:
   - mds
@@ -219,7 +220,7 @@ options:
 - name: mds_decay_halflife
   type: float
   level: advanced
-  desc: rate of decay for temperature counters on each directory for balancing
+  desc: Rate of decay for temperature counters on each directory for balancing
   default: 5
   services:
   - mds
@@ -227,7 +228,7 @@ options:
 - name: mds_beacon_interval
   type: float
   level: advanced
-  desc: interval in seconds between MDS beacon messages sent to monitors
+  desc: Interval in seconds between MDS beacon messages sent to Monitors
   default: 4
   services:
   - mds
@@ -235,9 +236,9 @@ options:
 - name: mds_beacon_grace
   type: float
   level: advanced
-  desc: tolerance in seconds for missed MDS beacons to monitors
+  desc: Tolerance in seconds for missed MDS beacons to monitors
   fmt_desc: The interval without beacons before Ceph declares an MDS laggy
-    (and possibly replace it).
+    (and possibly replaces it).
   default: 15
   services:
   - mds
@@ -245,22 +246,22 @@ options:
 - name: mds_heartbeat_reset_grace
   type: uint
   level: advanced
-  desc: the basic unit of tolerance in how many circles in a loop, which will
-    keep running by holding the mds_lock, it must trigger to reset heartbeat
+  desc: Tolerance in seconds for long-running MDS operations which do not
+    periodically reset the heartbeat timeout.
   default: 1000
   services:
   - mds
 - name: mds_heartbeat_grace
   type: float
   level: advanced
-  desc: tolerance in seconds for MDS internal heartbeat
+  desc: Tolerance in seconds for MDS internal heartbeats
   default: 15
   services:
   - mds
 - name: mds_enforce_unique_name
   type: bool
   level: advanced
-  desc: require MDS name is unique in the cluster
+  desc: Require unique MDS names
   default: true
   services:
   - mds
@@ -269,7 +270,7 @@ options:
 - name: mds_session_blocklist_on_timeout
   type: bool
   level: advanced
-  desc: blocklist clients whose sessions have become stale
+  desc: Blocklist clients whose sessions have become stale
   default: true
   services:
   - mds
@@ -278,7 +279,7 @@ options:
 - name: mds_session_blocklist_on_evict
   type: bool
   level: advanced
-  desc: blocklist clients that have been evicted
+  desc: Blocklist clients that have been evicted
   default: true
   services:
   - mds
@@ -287,7 +288,7 @@ options:
 - name: mds_sessionmap_keys_per_op
   type: uint
   level: advanced
-  desc: number of omap keys to read from the SessionMap in one operation
+  desc: Number of omap keys to read from the SessionMap in one operation
   default: 1_K
   services:
   - mds
@@ -295,7 +296,9 @@ options:
 - name: mds_recall_max_caps
   type: size
   level: advanced
-  desc: maximum number of caps to recall from client session in single recall
+  desc: Maximum number of caps to recall from a client session in single recall.
+    Note that this is an integer, though the default value may be displayed
+    with a B suffix.
   default: 30000
   services:
   - mds
@@ -304,7 +307,7 @@ options:
 - name: mds_recall_max_decay_rate
   type: float
   level: advanced
-  desc: decay rate for throttle on recalled caps on a session
+  desc: Decay rate for throttle on recalled caps on a session
   default: 1.5
   services:
   - mds
@@ -313,7 +316,7 @@ options:
 - name: mds_recall_max_decay_threshold
   type: size
   level: advanced
-  desc: decay threshold for throttle on recalled caps on a session
+  desc: Decay threshold for throttle on recalled caps on a session
   default: 128_K
   services:
   - mds
@@ -322,7 +325,7 @@ options:
 - name: mds_recall_global_max_decay_threshold
   type: size
   level: advanced
-  desc: decay threshold for throttle on recalled caps globally
+  desc: Decay threshold for throttle on recalled caps globally
   default: 128_K
   services:
   - mds
@@ -331,7 +334,7 @@ options:
 - name: mds_recall_warning_threshold
   type: size
   level: advanced
-  desc: decay threshold for warning on slow session cap recall
+  desc: Decay threshold for warning on slow session cap recall
   default: 256_K
   services:
   - mds
@@ -340,7 +343,7 @@ options:
 - name: mds_recall_warning_decay_rate
   type: float
   level: advanced
-  desc: decay rate for warning on slow session cap recall
+  desc: Decay rate for warning on slow session cap recall
   default: 60
   services:
   - mds
@@ -349,7 +352,7 @@ options:
 - name: mds_session_cache_liveness_decay_rate
   type: float
   level: advanced
-  desc: decay rate for session liveness leading to preemptive cap recall
+  desc: Decay rate for session liveness leading to preemptive cap recall
   long_desc: This determines how long a session needs to be quiescent before the MDS
     begins preemptively recalling capabilities. The default of 5 minutes will cause
     10 halvings of the decay counter after 1 hour, or 1/1024. The default magnitude
@@ -365,7 +368,7 @@ options:
 - name: mds_session_cache_liveness_magnitude
   type: size
   level: advanced
-  desc: decay magnitude for preemptively recalling caps on quiet client
+  desc: Decay magnitude for preemptively recalling caps on quiet client
   long_desc: This is the order of magnitude difference (in base 2) of the internal
     liveness decay counter and the number of capabilities the session holds. When
     this difference occurs, the MDS treats the session as quiescent and begins recalling
@@ -380,7 +383,7 @@ options:
 - name: mds_session_cap_acquisition_decay_rate
   type: float
   level: advanced
-  desc: decay rate for session readdir caps leading to readdir throttle
+  desc: Decay rate for session readdir caps leading to readdir throttle
   long_desc: The half-life for the session cap acquisition counter of caps acquired
     by readdir. This is used for throttling readdir requests from clients.
   default: 30
@@ -391,14 +394,14 @@ options:
 - name: mds_session_cap_acquisition_throttle
   type: uint
   level: advanced
-  desc: threshold at which the cap acquisition decay counter throttles
+  desc: Threshold at which the cap acquisition decay counter throttles
   default: 100000
   services:
   - mds
 - name: mds_session_max_caps_throttle_ratio
   type: float
   level: advanced
-  desc: ratio of mds_max_caps_per_client that client must exceed before readdir may
+  desc: Ratio of mds_max_caps_per_client that client must exceed before readdir may
     be throttled by cap acquisition throttle
   default: 1.1
   services:
@@ -406,7 +409,7 @@ options:
 - name: mds_cap_acquisition_throttle_retry_request_timeout
   type: float
   level: advanced
-  desc: timeout in seconds after which a client request is retried due to cap acquisition
+  desc: Timeout in seconds after which a client request is retried due to cap acquisition
     throttling
   default: 0.5
   services:
@@ -423,7 +426,7 @@ options:
 - name: mds_health_summarize_threshold
   type: int
   level: advanced
-  desc: threshold of number of clients to summarize late client recall
+  desc: Threshold number of clients to summarize late client recall
   default: 10
   services:
   - mds
@@ -433,7 +436,7 @@ options:
 - name: mds_reconnect_timeout
   type: float
   level: advanced
-  desc: timeout in seconds to wait for clients to reconnect during MDS reconnect recovery
+  desc: Timeout in seconds to wait for clients to reconnect during MDS reconnect recovery
     state
   default: 45
   services:
@@ -793,6 +796,21 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_allow_batched_ops
+  type: bool
+  level: advanced
+  desc: allow MDS to batch lookup/getattr RPCs
+  long_desc: >
+    The MDS will batch a lookup or getattr RPC on the same inode when
+    possible to avoid repetitive locks on metadata and to bypass other
+    requests acquiring write locks. Generally, this should only
+    improve performance but this switch exists to provide a means to
+    turn this behavior off for comparison.
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
 # multiple of size_max that triggers immediate split
 - name: mds_bal_fragment_fast_factor
   type: float
@@ -1563,6 +1581,28 @@ options:
   max: 4_K
   flags:
   - runtime
+- name: mds_use_global_snaprealm_seq_for_subvol
+  type: bool
+  level: advanced
+  default: true
+  services:
+  - mds
+  fmt_desc: MDS will use the global snaprealm's seq to cow old inodes
+    for the directory. If the option is disabled, MDS will use the
+    respective snaprealm seq number for the subvolume snapshot directory
+    i.e., the directory marked with the 'ceph.dir.subvolume'. This is
+    safe because the hardlinks/renames are contained within the subvolume
+    snaprealm with the marking of 'ceph.dir.subvolume'. For the directories
+    above subvolume, it will use the global snaprealm's seq only if there
+    is at least one snapshot of the directory above the subvolume.
+    If the option is enabled, which is the default, it uses the global
+    snaprealm's seq to cow old inodes across the filesystem. Hence,
+    disabling this option is only suitalbe for the cephfs volumes used
+    purely for subvolume usecase where there are no snapshots in the
+    filesystem apart from the subvolume snapshots. So it's a great
+    optimization for subvolumes.
+  flags:
+  - runtime
 - name: mds_asio_thread_count
   type: uint
   level: advanced
@@ -1748,7 +1788,7 @@ options:
 - name: mds_log_minor_segments_per_major_segment
   type: uint
   level: advanced
-  desc: number of minor segments per major segment.
+  desc: Number of minor segments per major segment.
   long_desc: The number of minor mds log segments since last major segment after which a major segment is started/logged.
   default: 16
   services:
@@ -1757,9 +1797,18 @@ options:
 - name: mds_file_blockdiff_max_concurrent_object_scans
   type: uint
   level: advanced
-  desc: maximum number of concurrent object scans
+  desc: Maximum number of concurrent object scans
   long_desc: Maximum number of concurrent listsnaps operations sent to RADOS.
   default: 16
   services:
   - mds
   min: 1
+- name: subv_metrics_window_interval
+  type: secs
+  level: dev
+  desc: subvolume metrics sliding window interval, seconds
+  long_desc: interval in seconds to hold values in sliding window for subvolume metrics
+  default: 30
+  min: 30
+  services:
+  - mds

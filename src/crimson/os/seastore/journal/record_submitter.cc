@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #include "record_submitter.h"
 
@@ -469,7 +469,7 @@ void RecordSubmitter::update_state()
   } else if (num_outstanding_io == io_depth_limit) {
     state = state_t::FULL;
   } else {
-    ceph_abort("fatal error: io-depth overflow");
+    ceph_abort_msg("fatal error: io-depth overflow");
   }
 }
 

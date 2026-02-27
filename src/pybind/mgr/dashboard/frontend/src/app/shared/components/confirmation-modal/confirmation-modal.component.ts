@@ -11,7 +11,8 @@ import { BaseModal } from 'carbon-components-angular';
     { provide: 'warning', useValue: false },
     { provide: 'showSubmit', useValue: true },
     { provide: 'showCancel', useValue: true }
-  ]
+  ],
+  standalone: false
 })
 export class ConfirmationModalComponent extends BaseModal implements OnInit, OnDestroy {
   // Component only
@@ -21,6 +22,7 @@ export class ConfirmationModalComponent extends BaseModal implements OnInit, OnD
   constructor(
     @Optional() @Inject('titleText') public titleText: string,
     @Optional() @Inject('buttonText') public buttonText: string,
+    @Optional() @Inject('cancelText') public cancelText: string = $localize`Cancel`,
     @Optional() @Inject('onSubmit') public onSubmit: Function,
 
     // One of them is needed
@@ -32,6 +34,7 @@ export class ConfirmationModalComponent extends BaseModal implements OnInit, OnD
     @Optional() @Inject('bodyData') public bodyData?: object,
     @Optional() @Inject('onCancel') public onCancel?: Function,
     @Optional() @Inject('bodyContext') public bodyContext?: object,
+    @Optional() @Inject('submitBtnType') public submitBtnType: string = 'primary',
     @Optional() @Inject('showSubmit') public showSubmit = true,
     @Optional() @Inject('showCancel') public showCancel = true
   ) {

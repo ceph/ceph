@@ -15,7 +15,6 @@ from itertools import zip_longest # type: ignore
 from urllib.parse import urlparse
 
 from .multisite import *
-from .tools import *
 
 log = logging.getLogger(__name__)
 
@@ -310,6 +309,9 @@ class CloudZone(Zone):
         def has_role(self, role_name):
             assert False
 
+        def put_role_policy(self, rolename, policyname, policy_document):
+            assert False
+
         def create_topic(self, topicname, attributes):
             assert False
 
@@ -329,6 +331,9 @@ class CloudZone(Zone):
             assert False
 
         def list_notifications(self, bucket_name):
+            assert False
+
+        def assume_role(self, role_arn, session_name, policy, duration_seconds):
             assert False
 
     def get_conn(self, credentials):

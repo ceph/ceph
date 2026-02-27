@@ -1,8 +1,11 @@
 import logging
 import threading
 from typing import Tuple, Optional, List, Dict, Any
+import yaml
 
-from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
+from .cli import NFSCLICommand
+
+from mgr_module import MgrModule, Option, CLICheckNonemptyFileInput
 import object_format
 import orchestrator
 from orchestrator.module import IngressType
@@ -16,6 +19,7 @@ log = logging.getLogger(__name__)
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
+    CLICommand = NFSCLICommand
     MODULE_OPTIONS: List[Option] = []
 
     def __init__(self, *args: str, **kwargs: Any) -> None:
@@ -27,7 +31,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.nfs = NFSCluster(self)
             self.inited = True
 
-    @CLICommand('nfs export create cephfs', perm='rw')
+    @NFSCLICommand('nfs export create cephfs', perm='rw')
     @object_format.Responder()
     def _cmd_nfs_export_create_cephfs(
             self,
@@ -57,7 +61,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             earmark_resolver=earmark_resolver
         )
 
-    @CLICommand('nfs export create rgw', perm='rw')
+    @NFSCLICommand('nfs export create rgw', perm='rw')
     @object_format.Responder()
     def _cmd_nfs_export_create_rgw(
             self,
@@ -83,37 +87,37 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             sectype=sectype,
         )
 
-    @CLICommand('nfs export rm', perm='rw')
+    @NFSCLICommand('nfs export rm', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_export_rm(self, cluster_id: str, pseudo_path: str) -> None:
         """Remove a cephfs export"""
         return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
-    @CLICommand('nfs export delete', perm='rw')
+    @NFSCLICommand('nfs export delete', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_export_delete(self, cluster_id: str, pseudo_path: str) -> None:
         """Delete a cephfs export (DEPRECATED)"""
         return self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
-    @CLICommand('nfs export ls', perm='r')
+    @NFSCLICommand('nfs export ls', perm='r')
     @object_format.Responder()
     def _cmd_nfs_export_ls(self, cluster_id: str, detailed: bool = False) -> List[Any]:
         """List exports of a NFS cluster"""
         return self.export_mgr.list_exports(cluster_id=cluster_id, detailed=detailed)
 
-    @CLICommand('nfs export info', perm='r')
+    @NFSCLICommand('nfs export info', perm='r')
     @object_format.Responder()
     def _cmd_nfs_export_info(self, cluster_id: str, pseudo_path: str) -> Dict[str, Any]:
         """Fetch a export of a NFS cluster given the pseudo path/binding"""
         return self.export_mgr.get_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
-    @CLICommand('nfs export get', perm='r')
+    @NFSCLICommand('nfs export get', perm='r')
     @object_format.Responder()
     def _cmd_nfs_export_get(self, cluster_id: str, pseudo_path: str) -> Dict[str, Any]:
         """Fetch a export of a NFS cluster given the pseudo path/binding (DEPRECATED)"""
         return self.export_mgr.get_export(cluster_id=cluster_id, pseudo_path=pseudo_path)
 
-    @CLICommand('nfs export apply', perm='rw')
+    @NFSCLICommand('nfs export apply', perm='rw')
     @CLICheckNonemptyFileInput(desc='Export JSON or Ganesha EXPORT specification')
     @object_format.Responder()
     def _cmd_nfs_export_apply(self, cluster_id: str, inbuf: str) -> AppliedExportResults:
@@ -122,7 +126,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.apply_export(cluster_id, export_config=inbuf,
                                             earmark_resolver=earmark_resolver)
 
-    @CLICommand('nfs cluster create', perm='rw')
+    @NFSCLICommand('nfs cluster create', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_create(self,
                                 cluster_id: str,
@@ -130,58 +134,83 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 ingress: Optional[bool] = None,
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
-                                port: Optional[int] = None) -> None:
+                                port: Optional[int] = None,
+                                inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
+        ssl_cert = ssl_key = ssl_ca_cert = tls_min_version = tls_ciphers = None
+        ssl = tls_ktls = tls_debug = False
+        if inbuf:
+            config = yaml.safe_load(inbuf)
+            ssl = config.get('ssl')
+            ssl_cert = config.get('ssl_cert')
+            ssl_key = config.get('ssl_key')
+            ssl_ca_cert = config.get('ssl_ca_cert')
+            tls_min_version = config.get('tls_min_version')
+            tls_ktls = config.get('tls_ktls')
+            tls_debug = config.get('tls_debug')
+            tls_ciphers = config.get('tls_ciphers')
+
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
-                                           ingress_mode=ingress_mode, port=port)
+                                           ingress_mode=ingress_mode, port=port,
+                                           ssl=ssl,
+                                           ssl_cert=ssl_cert,
+                                           ssl_key=ssl_key,
+                                           ssl_ca_cert=ssl_ca_cert,
+                                           tls_ktls=tls_ktls,
+                                           tls_debug=tls_debug,
+                                           tls_min_version=tls_min_version,
+                                           tls_ciphers=tls_ciphers)
 
-    @CLICommand('nfs cluster rm', perm='rw')
+    @NFSCLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_rm(self, cluster_id: str) -> None:
         """Removes an NFS Cluster"""
         return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
 
-    @CLICommand('nfs cluster delete', perm='rw')
+    @NFSCLICommand('nfs cluster delete', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_delete(self, cluster_id: str) -> None:
         """Removes an NFS Cluster (DEPRECATED)"""
         return self.nfs.delete_nfs_cluster(cluster_id=cluster_id)
 
-    @CLICommand('nfs cluster ls', perm='r')
+    @NFSCLICommand('nfs cluster ls', perm='r')
     @object_format.Responder()
     def _cmd_nfs_cluster_ls(self) -> List[str]:
         """List NFS Clusters"""
         return self.nfs.list_nfs_cluster()
 
-    @CLICommand('nfs cluster info', perm='r')
+    @NFSCLICommand('nfs cluster info', perm='r')
     @object_format.Responder()
     def _cmd_nfs_cluster_info(self, cluster_id: Optional[str] = None) -> Dict[str, Any]:
         """Displays NFS Cluster info"""
         return self.nfs.show_nfs_cluster_info(cluster_id=cluster_id)
 
-    @CLICommand('nfs cluster config get', perm='r')
+    @NFSCLICommand('nfs cluster config get', perm='r')
     @object_format.ErrorResponseHandler()
     def _cmd_nfs_cluster_config_get(self, cluster_id: str) -> Tuple[int, str, str]:
         """Fetch NFS-Ganesha config"""
         conf = self.nfs.get_nfs_cluster_config(cluster_id=cluster_id)
         return 0, conf, ""
 
-    @CLICommand('nfs cluster config set', perm='rw')
+    @NFSCLICommand('nfs cluster config set', perm='rw')
     @CLICheckNonemptyFileInput(desc='NFS-Ganesha Configuration')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_config_set(self, cluster_id: str, inbuf: str) -> None:
         """Set NFS-Ganesha config by `-i <config_file>`"""
         return self.nfs.set_nfs_cluster_config(cluster_id=cluster_id, nfs_config=inbuf)
 
-    @CLICommand('nfs cluster config reset', perm='rw')
+    @NFSCLICommand('nfs cluster config reset', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_config_reset(self, cluster_id: str) -> None:
         """Reset NFS-Ganesha Config to default"""
         return self.nfs.reset_nfs_cluster_config(cluster_id=cluster_id)
 
-    def fetch_nfs_export_obj(self) -> ExportMgr:
-        return self.export_mgr
+    def export_apply(self, cluster_id: str, export_config: str) -> AppliedExportResults:
+        """Create or update an export by `export_config` which can be json string or ganesha export specification"""
+        earmark_resolver = CephFSEarmarkResolver(self)
+        return self.export_mgr.apply_export(cluster_id, export_config=export_config,
+                                            earmark_resolver=earmark_resolver)
 
     def export_ls(self, cluster_id: Optional[str] = None, detailed: bool = False) -> List[Dict[Any, Any]]:
         if not (cluster_id):

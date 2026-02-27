@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "kvstore_tool.h"
 
@@ -34,13 +34,8 @@ StoreTool::StoreTool(const string& type,
   }
 
   if (type == "bluestore-kv") {
-#ifdef WITH_BLUESTORE
     if (load_bluestore(path, read_only, to_repair) != 0)
       exit(1);
-#else
-    cerr << "bluestore not compiled in" << std::endl;
-    exit(1);
-#endif
   } else {
     auto db_ptr = KeyValueDB::create(g_ceph_context, type, path);
     if (!to_repair) {
@@ -55,17 +50,24 @@ StoreTool::StoreTool(const string& type,
   }
 }
 
+
 int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair)
 {
+#ifdef WITH_BLUESTORE
     auto bluestore = new BlueStore(g_ceph_context, path);
     KeyValueDB *db_ptr;
     int r = bluestore->open_db_environment(&db_ptr, read_only, to_repair);
     if (r < 0) {
      return -EINVAL;
     }
-    db = decltype(db){db_ptr, Deleter(bluestore)};
+    db = decltype(db){db_ptr, Deleter((ObjectStore*)bluestore)};
     return 0;
+#else
+    cerr << "bluestore not compiled in" << std::endl;
+    return -1;
+#endif // WITH_BLUESTORE
 }
+
 
 uint32_t StoreTool::traverse(const string& prefix,
                              const bool do_crc,

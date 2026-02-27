@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "include/int_types.h"
 
@@ -17,7 +17,8 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <regex>
 
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+#include "common/XMLFormatter.h"
 #include "common/Preforker.h"
 #include "common/TextTable.h"
 #include "common/ceph_argparse.h"

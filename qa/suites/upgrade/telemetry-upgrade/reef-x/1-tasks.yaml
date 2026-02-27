@@ -20,11 +20,18 @@ overrides:
       - TELEMETRY_CHANGED
       - pg .*? is .*?degraded.*?, acting
       - pg .* is stuck peering
+      - filesystem is degraded
+      - filesystem is offline
+      - osds down
+      - osd down
+      - OBJECT_UNFOUND
 tasks:
 - install:
     branch: reef
     exclude_packages:
       - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
 - print: "**** done install task..."
 - print: "**** done start installing reef cephadm ..."
 - cephadm:

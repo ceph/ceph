@@ -38,7 +38,8 @@ import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant'
 @Component({
   selector: 'cd-nfs-form',
   templateUrl: './nfs-form.component.html',
-  styleUrls: ['./nfs-form.component.scss']
+  styleUrls: ['./nfs-form.component.scss'],
+  standalone: false
 })
 export class NfsFormComponent extends CdForm implements OnInit {
   @ViewChild('nfsClients', { static: true })
@@ -188,6 +189,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   async getSubVol() {
     const fs_name = this.nfsForm.getValue('fsal').fs_name;
     const subvolgrp = this.nfsForm.getValue('subvolume_group');
+
     await this.setSubVolGrpPath();
 
     (subvolgrp === this.defaultSubVolGroup
@@ -264,7 +266,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     const subVolumeControl = this.nfsForm.get('subvolume');
 
     // SubVolume is required if SubVolume Group is "_nogroup".
-    if (subvolumeGroup == this.defaultSubVolGroup) {
+    if (subvolumeGroup === DEFAULT_SUBVOLUME_GROUP) {
       subVolumeControl?.setValidators([Validators.required]);
     } else {
       subVolumeControl?.clearValidators();
@@ -401,6 +403,31 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.nfsForm.patchValue(res);
     this.setPathValidation();
     this.clients = res.clients;
+
+    if (this.isEdit) {
+      if (res?.fsal?.name === SUPPORTED_FSAL.CEPH && res?.path) {
+        this.getSubVolGrp(res.fsal.fs_name);
+        this.resolveCephfsPath(res.path, res.fsal.fs_name);
+      }
+    }
+  }
+
+  // Setting up Subvolumegroup and Subvolume for CephFS paths on Edit.
+  resolveCephfsPath(path: string, fsName: string) {
+    if (!path?.startsWith('/volumes/')) return;
+
+    const splitPath = path.split('/');
+    const subvolumeGroup = splitPath[2] ?? null;
+    const subvolume = splitPath[3] ?? null;
+
+    this.nfsForm.patchValue({
+      fsal: {
+        ...this.nfsForm.get('fsal').value,
+        fs_name: fsName
+      },
+      subvolumeGroup,
+      subvolume
+    });
   }
 
   resolveClusters(clusters: string[]) {
@@ -616,8 +643,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   }
 
   private buildRequest() {
-    const requestModel: any = _.cloneDeep(this.nfsForm.value);
-    requestModel.fsal = this.nfsForm.get('fsal').value;
+    const requestModel: any = _.cloneDeep(this.nfsForm.getRawValue());
     if (this.isEdit) {
       requestModel.export_id = _.parseInt(this.export_id);
       requestModel.path = this.nfsForm.get('path').value;

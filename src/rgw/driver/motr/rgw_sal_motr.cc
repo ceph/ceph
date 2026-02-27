@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=2 sw=2 expandtab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -557,12 +557,15 @@ int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, opti
   params.list_versions = true;
   params.allow_unordered = true;
 
+  const bool own_bucket = store->get_zone()->get_zonegroup().get_id() == info.zonegroup;
+
   ListResults results;
+  results.is_truncated = own_bucket; // if we don't have the index, we're done
 
   // 1. Check if Bucket has objects.
   // If bucket contains objects and delete_children is true, delete all objects.
   // Else throw error that bucket is not empty.
-  do {
+  while (results.is_truncated) {
     results.objs.clear();
 
     // Check if bucket has objects.
@@ -591,12 +594,14 @@ int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, opti
 	      return ret;
       }
     }
-  } while(results.is_truncated);
+  }
 
   // 2. Abort Mp uploads on the bucket.
-  ret = abort_multiparts(dpp, store->ctx());
-  if (ret < 0) {
-    return ret;
+  if (own_bucket) {
+    ret = abort_multiparts(dpp, store->ctx());
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   // 3. Remove mp index??
@@ -608,9 +613,11 @@ int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, opti
   }
 
   // 4. Sync user stats.
-  ret = this->sync_owner_stats(dpp, y);
-  if (ret < 0) {
-     ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
+  if (own_bucket) {
+    ret = this->sync_owner_stats(dpp, y);
+    if (ret < 0) {
+      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
+    }
   }
 
   // 5. Remove the bucket from user info index. (unlink user)
@@ -1231,7 +1238,7 @@ int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, op
   if (r < 0) {
     return r;
   }
-  set_atomic();
+  set_atomic(true);
   state.attrset[attr_name] = attr_val;
   return set_obj_attrs(dpp, &state.attrset, nullptr, y, flags);
 }
@@ -1242,7 +1249,7 @@ int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
   Attrs rmattr;
   bufferlist bl;
 
-  set_atomic();
+  set_atomic(true);
   rmattr[attr_name] = bl;
   return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
 }
@@ -1535,6 +1542,7 @@ int MotrObject::copy_object(const ACLOwner& owner,
     std::string* tag,
     std::string* etag,
     void (*progress_cb)(off_t, void *),
+    rgw::sal::DataProcessorFactory* dp_factory,
     void* progress_data,
     const DoutPrefixProvider* dpp,
     optional_yield y)
@@ -2668,7 +2676,9 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				   std::string& tag, ACLOwner& owner,
 				   uint64_t olh_epoch,
 				   rgw::sal::Object* target_obj,
-				   prefix_map_t& processed_prefixes)
+				   prefix_map_t& processed_prefixes,
+           const char *if_match,
+           const char *if_nomatch)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -3325,6 +3335,11 @@ int MotrStore::cluster_stat(RGWClusterStat& stats)
 
 std::unique_ptr<Lifecycle> MotrStore::get_lifecycle(void)
 {
+  return 0;
+}
+
+std::unique_ptr<Restore> MotrStore::get_restore(const int n_objs,
+			const std::vector<std::string_view>& obj_names) {
   return 0;
 }
 

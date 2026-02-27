@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <errno.h>
 
@@ -33,7 +33,7 @@ int RGWRestOIDCProvider::verify_permission(optional_yield y)
 
 int RGWRestOIDCProvider::check_caps(const RGWUserCaps& caps)
 {
-  return caps.check_cap("roles", perm);
+  return caps.check_cap("oidc-provider", perm);
 }
 
 void RGWRestOIDCProvider::send_response()

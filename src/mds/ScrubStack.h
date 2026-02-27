@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,21 +16,19 @@
 #ifndef SCRUBSTACK_H_
 #define SCRUBSTACK_H_
 
-#include "CDir.h"
-#include "CDentry.h"
 #include "CInode.h"
-#include "MDSContext.h"
 #include "ScrubHeader.h"
 
 #include "common/LogClient.h"
 #include "common/Cond.h"
 #include "common/ceph_time.h"
 #include "include/elist.h"
-#include "messages/MMDSScrub.h"
-#include "messages/MMDSScrubStats.h"
 
 class MDCache;
+class MMDSScrub;
+class MMDSScrubStats;
 class Finisher;
+class CDir;
 
 class ScrubStack {
 public:
@@ -213,6 +212,12 @@ private:
    * @param in The inode to scrub
    */
   void scrub_file_inode(CInode *in);
+
+  /**
+   * Scrub a file inode.
+   * @param dn The remote dentry to identify
+   */
+  void identify_remote_link_damage(CDentry *dn);
 
   /**
    * Callback from completion of CInode::validate_disk_state

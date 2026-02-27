@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -70,9 +71,11 @@ public:
       f->dump_int("nestlock", nestlock);
       f->dump_int("dftlock", dftlock);
     }
-    static void generate_test_instances(std::list<inode_strong*>& ls) {
-      ls.push_back(new inode_strong);
-      ls.push_back(new inode_strong(1, 2, 3, 4, 5));
+    static std::list<inode_strong> generate_test_instances() {
+      std::list<inode_strong> ls;
+      ls.emplace_back();
+      ls.push_back(inode_strong(1, 2, 3, 4, 5));
+      return ls;
     }
   };
   WRITE_CLASS_ENCODER(inode_strong)
@@ -92,9 +95,11 @@ public:
       decode(nonce, bl);
       decode(dir_rep, bl);
     }
-    static void generate_test_instances(std::list<dirfrag_strong*>& ls) {
-      ls.push_back(new dirfrag_strong);
-      ls.push_back(new dirfrag_strong(1, 2));
+    static std::list<dirfrag_strong> generate_test_instances() {
+      std::list<dirfrag_strong> ls;
+      ls.emplace_back();
+      ls.push_back(dirfrag_strong(1, 2));
+      return ls;
     }
     void dump(ceph::Formatter *f) const {
       f->dump_unsigned("nonce", nonce);
@@ -137,9 +142,11 @@ public:
       decode(lock, bl);
       decode(alternate_name, bl);
     }
-    static void generate_test_instances(std::list<dn_strong*>& ls) {
-      ls.push_back(new dn_strong);
-      ls.push_back(new dn_strong(1, "alternate_name", 2, 3, 4, 5, 6));
+    static std::list<dn_strong> generate_test_instances() {
+      std::list<dn_strong> ls;
+      ls.emplace_back();
+      ls.push_back(dn_strong(1, "alternate_name", 2, 3, 4, 5, 6));
+      return ls;
     }
     void dump(ceph::Formatter *f) const {
       f->dump_unsigned("first", first);
@@ -193,9 +200,11 @@ public:
       decode(referent_ino, bl);
       DECODE_FINISH(bl);
     }
-    static void generate_test_instances(std::list<dn_strong_new*>& ls) {
-      ls.push_back(new dn_strong_new);
-      ls.push_back(new dn_strong_new(1, "alternate_name", 2, 3, 4, 5, 6, 7));
+    static std::list<dn_strong_new> generate_test_instances() {
+      std::list<dn_strong_new> ls;
+      ls.emplace_back();
+      ls.push_back(dn_strong_new(1, "alternate_name", 2, 3, 4, 5, 6, 7));
+      return ls;
     }
     void dump(ceph::Formatter *f) const {
       f->dump_unsigned("first", first);

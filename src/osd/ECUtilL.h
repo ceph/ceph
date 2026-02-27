@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -172,7 +173,7 @@ public:
   }
   std::pair<uint64_t, uint64_t> offset_length_to_data_chunk_indices(
     uint64_t off, uint64_t len) const {
-    assert(chunk_size > 0);
+    ceph_assert(chunk_size > 0);
     const auto first_chunk_idx = (off / chunk_size);
     const auto last_chunk_idx = (chunk_size - 1 + off + len) / chunk_size;
     return {first_chunk_idx, last_chunk_idx};
@@ -182,7 +183,7 @@ public:
     if (len == 0) {
       return true;
     }
-    assert(chunk_size > 0);
+    ceph_assert(chunk_size > 0);
     const auto first_stripe_idx = off / stripe_width;
     const auto last_inc_stripe_idx = (off + len - 1) / stripe_width;
     return first_stripe_idx == last_inc_stripe_idx;
@@ -229,7 +230,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<HashInfo*>& o);
+  static std::list<HashInfo> generate_test_instances();
   uint32_t get_chunk_hash(int shard) const {
     ceph_assert((unsigned)shard < cumulative_shard_hashes.size());
     return cumulative_shard_hashes[shard];

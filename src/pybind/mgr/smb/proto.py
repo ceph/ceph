@@ -53,17 +53,19 @@ EntryKey = Tuple[str, str]
 FindParams = Dict[str, Any]
 
 
-class ConfigEntry(Protocol):
-    """A protocol for describing a configuration object that can be kept within
-    a configuration store. Has the ability to identify itself either by a
-    relative key or by a global URI value.
+class ResourceKey(Protocol):
+    """An object representing a key for a singular object in a store.
+    This key may be comprised of one or more input values.
     """
 
-    def get(self) -> Simplified:
+    def __str__(self) -> str:
         ...  # pragma: no cover
 
-    def set(self, obj: Simplified) -> None:
-        ...  # pragma: no cover
+
+class BaseEntry(Protocol):
+    """Base protocol class for Entry objects. Entry objects are stored
+    peristently and can by identified by an internal key or URI.
+    """
 
     def remove(self) -> bool:
         ...  # pragma: no cover
@@ -77,6 +79,29 @@ class ConfigEntry(Protocol):
 
     @property
     def full_key(self) -> EntryKey:
+        ...  # pragma: no cover
+
+
+class ConfigEntry(BaseEntry, Protocol):
+    """A protocol for describing a configuration object that can be kept within
+    a configuration store. Has the ability to identify itself either by a
+    relative key or by a global URI value.
+    """
+
+    def get(self) -> Simplified:
+        ...  # pragma: no cover
+
+    def set(self, obj: Simplified) -> None:
+        ...  # pragma: no cover
+
+
+class RawConfigEntry(BaseEntry, Protocol):
+    """Like a ConfigEntry but for opaque data blobs."""
+
+    def get_data(self) -> str:
+        ...  # pragma: no cover
+
+    def set_data(self, obj: Simplified) -> None:
         ...  # pragma: no cover
 
 

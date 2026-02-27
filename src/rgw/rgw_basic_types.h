@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -81,9 +81,11 @@ struct rgw_zone_id {
     f->dump_string("id", id);
   }
 
-  static void generate_test_instances(std::list<rgw_zone_id*>& o) {
-    o.push_back(new rgw_zone_id);
-    o.push_back(new rgw_zone_id("id"));
+  static std::list<rgw_zone_id> generate_test_instances() {
+    std::list<rgw_zone_id> o;
+    o.emplace_back();
+    o.push_back(rgw_zone_id("id"));
+    return o;
   }
 
   void clear() {
@@ -318,6 +320,6 @@ struct RGWUploadPartInfo {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWUploadPartInfo*>& o);
+  static std::list<RGWUploadPartInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)

@@ -91,9 +91,7 @@ corresponding directory. With metavariables fully expressed and a cluster named
 
     /var/lib/ceph/mon/ceph-a
 
-For additional details, see the `Monitor Config Reference`_.
-
-.. _Monitor Config Reference: ../mon-config-ref
+For additional details, see the :ref:`monitor-config-reference`.
 
 
 .. _ceph-osd-config:
@@ -112,10 +110,8 @@ the Ceph configuration file, as shown here:
     auth_service_required = cephx
     auth_client_required = cephx
 
-In addition, you should enable message signing. For details, see `Cephx Config
-Reference`_.
-
-.. _Cephx Config Reference: ../auth-config-ref
+In addition, you should enable message signing. For details,
+see :ref:`rados-cephx-config-ref`.
 
 
 .. _ceph-monitor-config:
@@ -187,6 +183,16 @@ Logging`_.
 
 Example ceph.conf
 =================
+
+Note that since the Mimic release the Monitors maintain a database of option
+settings: the *central config*.  Node-local ``ceph.conf`` files are still
+supported, but in most cases need only contain the first three lines shown
+below.  Maintaining full ``ceph.conf`` files across cluster nodes can be
+tedious and prone to omission and error, especially when daemons are containerized.
+The below file is provided as a reference example. Clusters running recent
+releases are best managed primary by central config, with a minimal ``ceph.conf``
+file that defines only how to reach the Monitors and thus rarely requires
+modification.
 
 .. literalinclude:: demo-ceph.conf
    :language: ini

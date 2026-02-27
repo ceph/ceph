@@ -21,7 +21,7 @@ Synopsis
 | **ceph-bluestore-tool** allocmap    --path *osd path*
 | **ceph-bluestore-tool** restore_cfb --path *osd path*
 | **ceph-bluestore-tool** show-label --dev *device* ...
-| **ceph-bluestore-tool** show-label-at --dev *device* --offset *lba*...
+| **ceph-bluestore-tool** show-label-at --dev *device* --offset *lba* ...
 | **ceph-bluestore-tool** prime-osd-dir --dev *device* --path *osd path*
 | **ceph-bluestore-tool** bluefs-export --path *osd path* --out-dir *dir*
 | **ceph-bluestore-tool** bluefs-bdev-new-wal --path *osd path* --dev-target *new-device*
@@ -35,6 +35,8 @@ Synopsis
 | **ceph-bluestore-tool** trim --path *osd path*
 | **ceph-bluestore-tool** zap-device --dev *dev path*
 | **ceph-bluestore-tool** revert-wal-to-plain --path *osd path*
+| **ceph-bluestore-tool** create-bdev-labels --path *osd path* --dev *device*
+
 
 
 Description
@@ -116,7 +118,7 @@ Commands
    Show device label(s).
    The label may be printed while an OSD is running.
 
-:command:`show-label-at` --dev *device* --offset *lba*[...]
+:command:`show-label-at` --dev *device* --offset *lba* [...]
 
    Show device label at specific disk location. Dedicated DB/WAL volumes have a single label at offset 0.
    Main device could have valid labels at multiple locations: 0/1GiB/10GiB/100GiB/1000GiB.
@@ -170,6 +172,14 @@ Commands
 
    Changes WAL files from envelope mode to the legacy plain mode.
    Useful for downgrades, or if you might want to disable this new feature (bluefs_wal_envelope_mode).
+
+:command:`create-bdev-labels` --path *osd path* --dev *device*
+
+   Writes a bdev label to BlueStore devices that originally did not support labeling.
+   Reads metadata (e.g., fsid, ceph version) from --path and writes it to the device at --dev.
+   Only the main device (block) gets full metadata; block.db or block.wal do not.
+   The --dev path must be inside the --path directory, as its name determines the device role.
+   Use --yes-i-really-really-mean-it to recreate corrupted labels.
 
 Options
 =======

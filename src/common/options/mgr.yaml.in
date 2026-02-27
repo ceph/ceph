@@ -5,7 +5,8 @@ options:
 - name: mgr_data
   type: str
   level: advanced
-  desc: Filesystem path to the ceph-mgr data directory, used to contain keyring.
+  desc: Filesystem path to the Manager's data directory, which contains
+    keyrings and other data 
   fmt_desc: Path to load daemon data (such as keyring)
   default: /var/lib/ceph/mgr/$cluster-$id
   services:
@@ -152,7 +153,7 @@ options:
     first started after installation, to populate the list of enabled manager modules.  Subsequent
     updates are done using the 'mgr module [enable|disable]' commands.  List may be
     comma or space separated.
-  default: iostat nfs
+  default: iostat nfs nvmeof
   services:
   - mon
   - common
@@ -311,11 +312,13 @@ options:
 - name: mon_target_pg_per_osd
   type: uint
   level: advanced
-  desc: Automated PG management creates this many PGs per OSD
-  long_desc: When creating pools, the automated PG management logic will attempt to
-    reach this target.  In some circumstances, it may exceed this target, up to the
+  desc: Target number of PG replicas per OSD
+  long_desc: The placement group (PG) autoscaler will arrange for approximately this number of PG
+    replicas on each OSD as shown by the PGS column of a ``ceph osd df``
+    report. In some circumstances it may exceed this target, up to the
     ``mon_max_pg_per_osd`` limit. Conversely, a lower number of PGs per OSD may be
-    created if the cluster is not yet fully utilised
+    set if the cluster is not yet fully utilized or when the sum of power-of-two
+    per-pool ``pg_num`` values does not permit a perfect fit.
   default: 100
   min: 1
 # min pgs per osd for reweight-by-pg command
@@ -376,3 +379,27 @@ options:
   services:
   - mgr
   with_legacy: true
+- name: mgr_osd_upgrade_check_convergence_factor
+  type: float
+  level: advanced
+  desc: The factor used to converge to a subset of OSDs within a CRUSH bucket
+    that can be upgraded without affecting immediate data availability.
+  fmt_desc: The factor used in calculations to converge to a subset of OSDs that
+    can be safely upgraded simultaneously. Each iteration of the calculation
+    uses this factor until a safe subset is found. The smaller the factor, the
+    lower the number of iterations needed to find a safe set. But the number of
+    OSDs found may not be optimal. Conversely, with a larger factor, a higher
+    number of iterations and time would be consumed to find a safe set. The
+    number of OSDs found in this case would be closer to optimal.
+  default: 0.8
+  min: 0.1
+  max: 0.9
+  services:
+  - mgr
+- name: mgr_test_metadata_error
+  type: bool
+  level: dev
+  desc: Used for simulating errors during operations involving metadata.
+  default: false
+  services:
+  - mgr

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -19,9 +19,8 @@
 #include "osd/recovery_types.h"
 #include "osd/osd_types.h"
 
-namespace crimson::osd{
-  class PG;
-}
+namespace crimson::osd {
+class PG;
 
 class RecoveryBackend {
 public:
@@ -89,7 +88,13 @@ public:
     const hobject_t& soid,
     eversion_t need) = 0;
 
-  interruptible_future<BackfillInterval> scan_for_backfill(
+  interruptible_future<PrimaryBackfillInterval> scan_for_backfill_primary(
+    const hobject_t from,
+    std::int64_t min,
+    std::int64_t max,
+    const std::set<pg_shard_t> &backfill_targets);
+
+  interruptible_future<ReplicaBackfillInterval> scan_for_backfill_replica(
     const hobject_t from,
     std::int64_t min,
     std::int64_t max);
@@ -214,11 +219,9 @@ public:
     }
     void set_pushed(pg_shard_t shard) {
       auto it = pushes.find(shard);
-      if (it != pushes.end()) {
-	auto &push_promise = it->second;
-	push_promise.set_value();
-	pushes.erase(it);
-      }
+      ceph_assert(it != pushes.end());
+      it->second.set_value();
+      pushes.erase(it);
     }
     void set_pulled() {
       if (pulled) {
@@ -302,3 +305,5 @@ private:
     crimson::net::ConnectionXcoreRef conn);
   interruptible_future<> handle_backfill_remove(MOSDPGBackfillRemove& m);
 };
+
+}

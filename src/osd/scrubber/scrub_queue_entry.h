@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #pragma once
 
 #include <compare>
@@ -8,6 +9,10 @@
 #include "include/utime.h"
 #include "osd/osd_types.h"
 #include "osd/scrubber_common.h"
+
+namespace ceph {
+class Formatter;
+}  // namespace ceph
 
 namespace Scrub {
 
@@ -34,8 +39,7 @@ namespace Scrub {
  *
  * 'after_repair' - triggered immediately after a recovery process
  *   ('m_after_repair_scrub_required' was set).
- *   This type of scrub is always deep.
- *   (note: this urgency level is not implemented in this commit)
+ *   This type of scrub is always deep, and never auto-repairs.
  *
  * 'repairing' - the target is currently being deep-scrubbed with the repair
  *   flag set. Triggered by a previous shallow scrub that ended with errors.
@@ -60,10 +64,7 @@ enum class urgency_t {
  * a specific scrub level. Namely - it identifies the [pg,level] combination,
  * the 'urgency' attribute of the scheduled scrub (which determines most of
  * its behavior and scheduling decisions) and the actual time attributes
- * for scheduling (target, deadline, not_before).
- *
- * In this commit - the 'urgency' attribute is not fully used yet, and some
- * of the scrub behavior is still controlled by the 'planned scrub' flags.
+ * for scheduling (target time & not_before).
  */
 struct SchedEntry {
   constexpr SchedEntry(spg_t pgid, scrub_level_t level)
@@ -81,12 +82,14 @@ struct SchedEntry {
 
   urgency_t urgency{urgency_t::periodic_regular};
 
-  /// scheduled_at, not-before & the deadline times
+  /// scheduled_at and not-before times
   Scrub::scrub_schedule_t schedule;
 
   /// either 'none', or the reason for the latest failure/delay (for
   /// logging/reporting purposes)
   delay_cause_t last_issue{delay_cause_t::none};
+
+  void dump(ceph::Formatter& f) const;
 };
 
 
@@ -214,9 +217,9 @@ struct formatter<Scrub::SchedEntry> {
   auto format(const Scrub::SchedEntry& st, FormatContext& ctx) const
   {
     return fmt::format_to(
-	ctx.out(), "{}/{},nb:{:s},({},tr:{:s},dl:{:s})", st.pgid,
+	ctx.out(), "{}/{},nb:{:s},({},tr:{:s})", st.pgid.pgid,
 	(st.level == scrub_level_t::deep ? "dp" : "sh"), st.schedule.not_before,
-	st.urgency, st.schedule.scheduled_at, st.schedule.deadline);
+	st.urgency, st.schedule.scheduled_at);
   }
 };
 }  // namespace fmt

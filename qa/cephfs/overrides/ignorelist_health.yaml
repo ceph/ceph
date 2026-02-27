@@ -26,3 +26,5 @@ overrides:
       - slow operation indications in BlueStore
       - experiencing slow operations in BlueStore
       - MGR_MODULE_ERROR
+      - OSD_DOWN
+      - osd.* is down

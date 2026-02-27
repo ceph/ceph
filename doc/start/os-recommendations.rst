@@ -31,89 +31,56 @@ Linux Kernel
   or CentOS 8.2 is the minimum necessary for reasonable support for RBD image
   features.
 
+- **Ceph MS Windows Client**
+
+  Ceph's MS Windows native client support is "best effort".  There is no
+  full-time maintainer. As of July 2025 there are no plans to remove this
+  client but the future is uncertain.
 
 Platforms
 =========
 
-The chart below shows which Linux platforms Ceph provides packages for, and
-which platforms Ceph has been tested on. 
+The chart below shows the platforms for which Ceph provides packages, and
+the platforms on which Ceph has been tested. 
 
 Ceph does not require a specific Linux distribution. Ceph can run on any
 distribution that includes a supported kernel and supported system startup
 framework, for example ``sysvinit`` or ``systemd``. Ceph is sometimes ported to
 non-Linux systems but these are not supported by the core Ceph effort.
 
-+---------------+----------------+---------------+------------------+------------------+------------------+
-|               | Squid (19.2.z) | Reef (18.2.z) | Quincy (17.2.z)  | Pacific (16.2.z) | Octopus (15.2.z) |
-+===============+================+===============+==================+==================+==================+
-| Centos 7      |                |               |                  |                  |      B           |
-+---------------+----------------+---------------+------------------+------------------+------------------+
-| Centos 8      |                |               |                  |                  |                  |
-+---------------+----------------+---------------+------------------+------------------+------------------+
-| Centos 9      | A              |    A          |     A :sup:`1`   |                  |                  |
-+---------------+----------------+---------------+------------------+------------------+------------------+
-| Debian 10     |                |    C          |                  |         C        |      C           |
-+---------------+----------------+---------------+------------------+------------------+------------------+
-| Debian 11     |                |    C          |     C            |         C        |                  |
-+---------------+----------------+---------------+------------------+------------------+------------------+
-| Debian 12     | C              |    C          |                  |                  |                  |
-+---------------+----------------+---------------+------------------+------------------+------------------+
-| OpenSUSE 15.2 |                |    C          |                  |         C        |      C           |
-+---------------+----------------+---------------+------------------+------------------+------------------+
-| OpenSUSE 15.3 |                |    C          |     C            |                  |                  |
-+---------------+----------------+---------------+------------------+------------------+------------------+
-| Ubuntu 18.04  |                |               |                  |         C        |      C           |
-+---------------+----------------+---------------+------------------+------------------+------------------+
-| Ubuntu 20.04  |                |    A          |     A            |         A        |      A           |
-+---------------+----------------+---------------+------------------+------------------+------------------+
-| Ubuntu 22.04  | A              |    A          |                  |                  |                  |
-+---------------+----------------+---------------+------------------+------------------+------------------+
++---------------+-------------------+----------------+---------------+
+|               | Tentacle (20.2.z) | Squid (19.2.z) | Reef (18.2.z) |
++===============+===================+================+===============+
+| CentOS 9      | A                 | A              |    A          |
++---------------+-------------------+----------------+---------------+
+| Debian 12     | C                 | C              |    C          |
++---------------+-------------------+----------------+---------------+
+| Ubuntu 20.04  |                   |                |    A          |
++---------------+-------------------+----------------+---------------+
+| Ubuntu 22.04  | A                 | A              |    A          |
++---------------+-------------------+----------------+---------------+
+| MS Windows    | D                 | D              | D             |
++---------------+-------------------+----------------+---------------+
 
 - **A**: Ceph provides packages and has done comprehensive tests on the software in them.
 - **B**: Ceph provides packages and has done basic tests on the software in them.
 - **C**: Ceph provides packages only. No tests have been done on these releases.
-- **1**: Testing has been done on Centos 9 starting on version 17.2.8 for Quincy.
+- **D**: Client packages are available from an external site but are not maintained or tested by the core Ceph team.
 
 Container Hosts
 ---------------
 
 This table shows the operating systems that support Ceph's official container images.
 
-+---------------+----------------+------------------+------------------+
-|               | Squid (19.2.z) | Reef (18.2.z)    | Quincy (17.2.z)  |
-+===============+================+==================+==================+
-| Centos 7      |                |                  |                  |
-+---------------+----------------+------------------+------------------+
-| Centos 8      |                |                  |                  |
-+---------------+----------------+------------------+------------------+
-| Centos 9      |      H         |        H         |        H         |
-+---------------+----------------+------------------+------------------+
-| Debian 10     |                |                  |                  |
-+---------------+----------------+------------------+------------------+
-| Debian 11     |                |                  |                  |
-+---------------+----------------+------------------+------------------+
-| OpenSUSE 15.2 |                |                  |                  |
-+---------------+----------------+------------------+------------------+
-| OpenSUSE 15.3 |                |                  |                  |
-+---------------+----------------+------------------+------------------+
-| Ubuntu 18.04  |                |                  |                  |
-+---------------+----------------+------------------+------------------+
-| Ubuntu 20.04  |                |                  |                  |
-+---------------+----------------+------------------+------------------+
-| Ubuntu 22.04  |      H         |        H         |                  |
-+---------------+----------------+------------------+------------------+
++---------------+-------------------+----------------+------------------+
+|               | Tentacle (20.2.z) | Squid (19.2.z) | Reef (18.2.z)    |
++===============+===================+================+==================+
+| CentOS 9      |      H            |      H         |        H         |
++---------------+-------------------+----------------+------------------+
+| Ubuntu 22.04  |      H            |      H         |        H         |
++---------------+-------------------+----------------+------------------+
 
 - **H**: Ceph tests this distribution as a container host.
-
-.. note::
-   **For Centos 7 Users** 
-   
-   ``Btrfs`` is no longer tested on Centos 7 in the Octopus release. We recommend using ``bluestore`` instead.
-
-.. note:: See the list of QAed container hosts in the Ceph repository here:
-   `List of Container Hosts
-   <https://github.com/ceph/ceph/tree/main/qa/distros/supported-container-hosts>`_.
-
 
 .. _CRUSH Tunables: ../../rados/operations/crush-map#tunables
 

@@ -78,8 +78,8 @@ class RbdServiceTest(unittest.TestCase):
             'unique_id': 'test_pool/3c1a5ee60a88',
             'name': 'test_rbd',
             'source': 'REMOVING',
-            'deletion_time': '{}Z'.format(time.isoformat()),
-            'deferment_end_time': '{}Z'.format(time.isoformat()),
+            'deletion_time': time.isoformat(),
+            'deferment_end_time': time.isoformat(),
             'pool_name': 'test_pool',
             'namespace': ''
         })
@@ -124,8 +124,8 @@ class RbdServiceTest(unittest.TestCase):
             'unique_id': 'test_pool/3c1a5ee60a88',
             'name': 'test_rbd',
             'source': 'REMOVING',
-            'deletion_time': '{}Z'.format(time.isoformat()),
-            'deferment_end_time': '{}Z'.format(time.isoformat()),
+            'deletion_time': time.isoformat(),
+            'deferment_end_time': time.isoformat(),
             'pool_name': 'test_pool',
             'namespace': ''
         }
@@ -142,8 +142,8 @@ class RbdServiceTest(unittest.TestCase):
             'unique_id': 'test_pool/3c1a5ee60a88',
             'name': 'test_rbd',
             'source': 'REMOVING',
-            'deletion_time': '{}Z'.format(time.isoformat()),
-            'deferment_end_time': '{}Z'.format(time.isoformat()),
+            'deletion_time': time.isoformat(),
+            'deferment_end_time': time.isoformat(),
             'pool_name': 'test_pool',
             'namespace': ''
         }], 1))

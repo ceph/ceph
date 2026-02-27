@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -15,23 +15,25 @@
 
 #include "osd/object_state.h"
 
+class MOSDPGBackfillRemove;
+
 namespace crimson::osd {
 class UrgentRecovery;
 class PglogBasedRecovery;
-}
-
-class MOSDPGBackfillRemove;
 class PGBackend;
 
 class PGRecovery : public crimson::osd::BackfillState::BackfillListener {
 public:
+  using interruptor =
+    ::crimson::interruptible::interruptor<
+      ::crimson::osd::IOInterruptCondition>;
   template <typename T = void>
   using interruptible_future = RecoveryBackend::interruptible_future<T>;
   PGRecovery(PGRecoveryListener* pg) : pg(pg) {}
   virtual ~PGRecovery() {}
   void start_pglogbased_recovery();
 
-  interruptible_future<bool> start_recovery_ops(
+  interruptible_future<seastar::stop_iteration> start_recovery_ops(
     RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
     crimson::osd::PglogBasedRecovery &recover_op,
     size_t max_to_start);
@@ -100,7 +102,7 @@ private:
   friend class crimson::osd::UrgentRecovery;
 
   interruptible_future<> recover_object_with_throttle(
-    const hobject_t &soid,
+    hobject_t soid,
     eversion_t need);
 
   interruptible_future<> recover_object(
@@ -134,8 +136,16 @@ private:
   void update_peers_last_backfill(
     const hobject_t& new_last_backfill) final;
   bool budget_available() const final;
+
+  template <typename T>
+  void start_peering_event_operation_listener(T &&evt, float delay = 0);
   void backfilled() final;
+  void request_backfill();
+  void all_replicas_recovered();
+
   friend crimson::osd::BackfillState::PGFacade;
   friend crimson::osd::PG;
   // backfill end
 };
+
+}

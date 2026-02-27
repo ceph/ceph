@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -133,6 +133,61 @@ class MapsCollectionStatus {
 };
 
 
+// links to the two sets of I/O performance counters used by PgScrubber
+// (one to be used when in a replicated pool, and one for EC))
+static inline constexpr ScrubCounterSet io_counters_replicated{
+  .getattr_cnt = l_osd_scrub_rppool_getattr_cnt,
+  .stats_cnt = l_osd_scrub_rppool_stats_cnt,
+  .read_cnt = l_osd_scrub_rppool_read_cnt,
+  .read_bytes = l_osd_scrub_rppool_read_bytes,
+  .omapgetheader_cnt = l_osd_scrub_omapgetheader_cnt,
+  .omapgetheader_bytes = l_osd_scrub_omapgetheader_bytes,
+  .omapget_cnt = l_osd_scrub_omapget_cnt,
+  .omapget_bytes = l_osd_scrub_omapget_bytes,
+  .started_cnt = l_osd_scrub_rppool_started,
+  .active_started_cnt = l_osd_scrub_rppool_active_started,
+  .successful_cnt = l_osd_scrub_rppool_successful,
+  .successful_elapsed = l_osd_scrub_rppool_successful_elapsed,
+  .failed_cnt = l_osd_scrub_rppool_failed,
+  .failed_elapsed = l_osd_scrub_rppool_failed_elapsed,
+  .write_intersects = l_osd_scrub_rppool_write_intersects,
+  .write_blocked = l_osd_scrub_rppool_write_blocked,
+  // replica-reservation-related:
+  .rsv_successful_cnt = l_osd_scrub_rppool_reserv_success,
+  .rsv_successful_elapsed = l_osd_scrub_rppool_reserv_successful_elapsed,
+  .rsv_aborted_cnt = l_osd_scrub_rppool_reserv_aborted,
+  .rsv_rejected_cnt = l_osd_scrub_rppool_reserv_rejected,
+  .rsv_skipped_cnt = l_osd_scrub_rppool_reserv_skipped,
+  .rsv_failed_elapsed = l_osd_scrub_rppool_reserv_failed_elapsed,
+  .rsv_secondaries_num = l_osd_scrub_rppool_reserv_secondaries_num
+};
+
+static inline constexpr ScrubCounterSet io_counters_ec{
+  .getattr_cnt = l_osd_scrub_ec_getattr_cnt,
+  .stats_cnt = l_osd_scrub_ec_stats_cnt,
+  .read_cnt = l_osd_scrub_ec_read_cnt,
+  .read_bytes = l_osd_scrub_ec_read_bytes,
+  .omapgetheader_cnt = l_osd_scrub_omapgetheader_cnt,
+  .omapgetheader_bytes = l_osd_scrub_omapgetheader_bytes,
+  .omapget_cnt = l_osd_scrub_omapget_cnt,
+  .omapget_bytes = l_osd_scrub_omapget_bytes,
+  .started_cnt = l_osd_scrub_ec_started,
+  .active_started_cnt = l_osd_scrub_ec_active_started,
+  .successful_cnt = l_osd_scrub_ec_successful,
+  .successful_elapsed = l_osd_scrub_ec_successful_elapsed,
+  .failed_cnt = l_osd_scrub_ec_failed,
+  .failed_elapsed = l_osd_scrub_ec_failed_elapsed,
+  .write_intersects = l_osd_scrub_ec_write_intersects,
+  .write_blocked = l_osd_scrub_ec_write_blocked,
+  // replica-reservation-related:
+  .rsv_successful_cnt = l_osd_scrub_ec_reserv_success,
+  .rsv_successful_elapsed = l_osd_scrub_ec_reserv_successful_elapsed,
+  .rsv_aborted_cnt = l_osd_scrub_ec_reserv_aborted,
+  .rsv_rejected_cnt = l_osd_scrub_ec_reserv_rejected,
+  .rsv_skipped_cnt = l_osd_scrub_ec_reserv_skipped,
+  .rsv_failed_elapsed = l_osd_scrub_ec_reserv_failed_elapsed,
+  .rsv_secondaries_num = l_osd_scrub_ec_reserv_secondaries_num
+};
 }  // namespace Scrub
 
 
@@ -275,7 +330,7 @@ class PgScrubber : public ScrubPgIF,
 
   // managing scrub op registration
 
-  void update_scrub_job(Scrub::delay_ready_t delay_ready) final;
+  void update_scrub_job() final;
 
   void rm_from_osd_scrubbing() final;
 
@@ -284,6 +339,9 @@ class PgScrubber : public ScrubPgIF,
   scrub_level_t scrub_requested(
       scrub_level_t scrub_level,
       scrub_type_t scrub_type) final;
+
+  void on_operator_abort_scrub(
+      ceph::Formatter* f) final;
 
   /**
    * let the scrubber know that a recovery operation has completed.
@@ -391,7 +449,9 @@ class PgScrubber : public ScrubPgIF,
   int get_whoami() const final;
   spg_t get_spgid() const final { return m_pg->get_pgid(); }
   PG* get_pg() const final { return m_pg; }
-  PerfCounters& get_counters_set() const final;
+  PerfCounters* get_osd_perf_counters() const final;
+  const Scrub::ScrubCounterSet& get_unlabeled_counters() const final;
+  PerfCounters* get_labeled_counters() const final;
 
   /// delay next retry of this PG after a replica reservation failure
   void flag_reservations_failure();
@@ -459,6 +519,17 @@ class PgScrubber : public ScrubPgIF,
 
   void on_mid_scrub_abort(Scrub::delay_cause_t issue) final;
 
+  /**
+   *  an auxiliary used by on_mid_scrub_abort()
+   *  If the target has operator-initiated urgency (either 'must_repair' -
+   *  operator-requested repair or 'operator_requested' - operator-requested
+   *  scrub) - downgrade it to regular periodic.
+   *  \retval true: the urgency was downgraded
+   */
+  bool downgrade_on_operator_abort(
+    Scrub::SchedTarget& targ,
+    utime_t scrub_clock_now);
+
   ScrubMachineListener::MsgAndEpoch prep_replica_map_msg(
     Scrub::PreemptionNoted was_preempted) final;
 
@@ -518,8 +589,6 @@ class PgScrubber : public ScrubPgIF,
   std::string_view registration_state() const;
 
   virtual void _scrub_clear_state() {}
-
-  utime_t m_scrub_reg_stamp;		///< stamp we registered for
 
   /// the sub-object that manages this PG's scheduling parameters.
   /// An Optional instead of a regular member, as we wish to directly

@@ -1,10 +1,10 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
-#include "rgw_sal_rados.h"
+#include "driver/rados/rgw_sal_rados.h"
 
 #include "include/types.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 
 // until everything is moved from rgw_common
 #include "rgw_common.h"
@@ -108,5 +108,67 @@ void rgw_get_anon_user(RGWUserInfo& info)
   info.user_id = RGW_USER_ANON_ID;
   info.display_name.clear();
   info.access_keys.clear();
+}
+
+static bool char_is_unreserved_url(char c)
+{
+  if (isalnum(c))
+    return true;
+
+  switch (c) {
+    case '-':
+    case '.':
+    case '_':
+    case '~':
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool validate_access_key(string& key)
+{
+  const char *p = key.c_str();
+  while (*p) {
+    if (!char_is_unreserved_url(*p))
+      return false;
+    p++;
+  }
+  return true;
+}
+
+int rgw_generate_access_key(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            rgw::sal::Driver* driver,
+                            std::string& access_key_id)
+{
+  std::string id;
+  int r = 0;
+
+  do {
+    id.resize(PUBLIC_ID_LEN + 1);
+    gen_rand_alphanumeric_upper(dpp->get_cct(), id.data(), id.size());
+    id.pop_back(); // remove trailing null
+
+    if (!validate_access_key(id))
+      continue;
+
+    std::unique_ptr<rgw::sal::User> duplicate_check;
+    r = driver->get_user_by_access_key(dpp, id, y, &duplicate_check);
+  } while (r == 0);
+
+  if (r == -ENOENT) {
+    access_key_id = std::move(id);
+    return 0;
+  }
+  return r;
+}
+
+void rgw_generate_secret_key(CephContext* cct,
+                             std::string& secret_key)
+{
+  char secret_key_buf[SECRET_KEY_LEN + 1];
+  gen_rand_alphanumeric_plain(cct, secret_key_buf, sizeof(secret_key_buf));
+  secret_key = secret_key_buf;
 }
 

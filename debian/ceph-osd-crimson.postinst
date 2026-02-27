@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        update-alternatives --install /usr/bin/ceph-osd ceph-osd \
+            /usr/bin/ceph-osd-crimson 50
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

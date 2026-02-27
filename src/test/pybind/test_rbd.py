@@ -1,4 +1,4 @@
-# vim: expandtab smarttab shiftwidth=4 softtabstop=4
+# vim: expandtab shiftwidth=4 softtabstop=4
 import base64
 import copy
 import errno
@@ -21,7 +21,7 @@ from rados import (Rados,
                    LIBRADOS_OP_FLAG_FADVISE_RANDOM)
 from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage, ObjectNotFound,
-                 FunctionNotSupported, ArgumentOutOfRange,
+                 FunctionNotSupported, ArgumentOutOfRange, ImageMemberOfGroup,
                  ECANCELED, OperationCanceled,
                  DiskQuotaExceeded, ConnectionShutdown, PermissionError,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
@@ -33,7 +33,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_IMAGE_ENABLED, RBD_MIRROR_IMAGE_DISABLED,
                  MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
                  RBD_MIRROR_IMAGE_MODE_JOURNAL, RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
-                 RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
+                 RBD_LOCK_MODE_EXCLUSIVE, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT,
+                 RBD_OPERATION_FEATURE_GROUP,
                  RBD_OPERATION_FEATURE_CLONE_CHILD,
                  RBD_SNAP_NAMESPACE_TYPE_USER,
                  RBD_SNAP_NAMESPACE_TYPE_GROUP,
@@ -817,7 +818,6 @@ class TestImage(object):
         self._test_copy(features, self.image.stat()['order'],
                         self.image.stripe_unit(), self.image.stripe_count())
 
-    @pytest.mark.skip_if_crimson
     def test_deep_copy(self):
         global ioctx
         global features
@@ -2445,12 +2445,14 @@ class TestExclusiveLock(object):
             for offset in [0, IMG_SIZE // 2]:
                 read = image2.read(offset, 256)
                 eq(data, read)
+
     def test_acquire_release_lock(self):
         with Image(ioctx, image_name) as image:
             image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
             image.lock_release()
+            image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT)
+            image.lock_release()
 
-    @pytest.mark.skip_if_crimson
     def test_break_lock(self):
         blocklist_rados = Rados(conffile='')
         blocklist_rados.connect()
@@ -2678,6 +2680,11 @@ class TestMirroring(object):
         self.image.mirror_image_disable(True)
         info = self.image.mirror_image_get_info()
         self.check_info(info, '', RBD_MIRROR_IMAGE_DISABLED, False)
+        assert_raises(InvalidArgument, self.image.mirror_image_get_mode)
+        assert_raises(InvalidArgument, self.image.mirror_image_promote, False)
+        assert_raises(InvalidArgument, self.image.mirror_image_promote, True)
+        assert_raises(InvalidArgument, self.image.mirror_image_demote)
+        assert_raises(InvalidArgument, self.image.mirror_image_resync)
 
         self.image.mirror_image_enable()
         info = self.image.mirror_image_get_info()
@@ -2835,15 +2842,37 @@ class TestMirroring(object):
         peer_uuid = self.rbd.mirror_peer_add(ioctx, "cluster", "client")
         self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
         self.image.mirror_image_disable(False)
-        self.image.mirror_image_enable(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
 
+        # this is a list so that the local cb() can modify it
+        info = [123]
+        def cb(_, _info):
+            info[0] = _info
+
+        comp = self.image.aio_mirror_image_get_info(cb)
+        comp.wait_for_complete_and_cb()
+        assert_not_equal(info[0], None)
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+        info = info[0]
+        self.check_info(info, "", RBD_MIRROR_IMAGE_DISABLED, False)
+
+        mode = [123]
+        def cb(_, _mode):
+            mode[0] = _mode
+
+        comp = self.image.aio_mirror_image_get_mode(cb)
+        comp.wait_for_complete_and_cb()
+        eq(comp.get_return_value(), -errno.EINVAL)
+        eq(sys.getrefcount(comp), 2)
+        eq(mode[0], None)
+
+        self.image.mirror_image_enable(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)
         snaps = list(self.image.list_snaps())
         eq(1, len(snaps))
         snap = snaps[0]
         eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
         eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
 
-        # this is a list so that the local cb() can modify it
         info = [None]
         def cb(_, _info):
             info[0] = _info
@@ -3069,13 +3098,19 @@ class TestGroups(object):
 
     def test_group_image_list_move_to_trash(self):
         eq([], list(self.group.list_images()))
-        with Image(ioctx, image_name) as image:
-            image_id = image.id()
         self.group.add_image(ioctx, image_name)
         eq([image_name], [img['name'] for img in self.group.list_images()])
-        RBD().trash_move(ioctx, image_name, 0)
+        assert_raises(ImageMemberOfGroup, RBD().trash_move, ioctx, image_name, 0)
+        eq([image_name], [img['name'] for img in self.group.list_images()])
+
+    def test_group_image_list_remove(self):
+        # need a closed image to get ImageMemberOfGroup instead of ImageBusy
+        self.image_names.append(create_image())
         eq([], list(self.group.list_images()))
-        RBD().trash_restore(ioctx, image_id, image_name)
+        self.group.add_image(ioctx, image_name)
+        eq([image_name], [img['name'] for img in self.group.list_images()])
+        assert_raises(ImageMemberOfGroup, RBD().remove, ioctx, image_name)
+        eq([image_name], [img['name'] for img in self.group.list_images()])
 
     def test_group_get_id(self):
         id = self.group.id()

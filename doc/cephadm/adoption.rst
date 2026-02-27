@@ -1,6 +1,7 @@
 .. _cephadm-adoption:
 
-Converting an existing cluster to cephadm
+=========================================
+Converting an Existing Cluster to Cephadm
 =========================================
 
 It is possible to convert some existing clusters so that they can be managed
@@ -11,13 +12,15 @@ This section of the documentation explains how to determine whether your
 clusters can be converted to a state in which they can be managed by
 ``cephadm`` and how to perform those conversions.
 
+
 Limitations
------------
+===========
 
 * Cephadm works only with BlueStore OSDs.
 
+
 Preparation
------------
+===========
 
 #. Make sure that the ``cephadm`` command line tool is available on each host
    in the existing cluster.  See :ref:`get-cephadm` to learn how.
@@ -55,20 +58,20 @@ Preparation
    adopted daemons will appear with the style ``cephadm:v1``.
 
 
-Adoption process
-----------------
+Adoption Process
+================
 
-#. Make sure that the ceph configuration has been migrated to use the cluster's
-   central config database.  If ``/etc/ceph/ceph.conf`` is identical on all
-   hosts, then the following command can be run on one host and will take
-   effect for all hosts:
+#. Make sure that the Ceph configuration has been migrated to use the cluster's
+   central config database (see :ref:`ceph-conf-database`).
+   If ``/etc/ceph/ceph.conf`` is identical on all hosts, then the following
+   command can be run on one host and will take effect for all hosts:
 
    .. prompt:: bash #
 
       ceph config assimilate-conf -i /etc/ceph/ceph.conf
 
    If there are configuration variations between hosts, you will need to repeat
-   this command on each host, taking care that if there are conflicting option
+   this command on each host, taking care that if there are conflicting configuration
    settings across hosts, the values from the last host will be used. During this
    adoption process, view the cluster's central
    configuration to confirm that it is complete by running the following
@@ -120,11 +123,11 @@ Adoption process
      SSH keys.
 
    .. note::
-     It is also possible to arrange for cephadm to use a non-root user to SSH 
+     It is also possible to arrange for cephadm to use a non-root user to SSH
      into cluster hosts. This user needs to have passwordless sudo access.
      Use ``ceph cephadm set-user <user>`` and copy the SSH key to that user's
      home directory on each host.
-     See :ref:`cephadm-ssh-user`
+     See :ref:`cephadm-ssh-user`.
 
 #. Tell cephadm which hosts to manage:
 
@@ -137,7 +140,7 @@ Adoption process
    argument is recommended. If the address is not provided, then the host name
    will be resolved via DNS.
 
-#. Verify that the adopted monitor and manager daemons are visible:
+#. Verify that the adopted Monitor and Manager daemons are visible:
 
    .. prompt:: bash #
 
@@ -158,20 +161,20 @@ Adoption process
 
 #. Redeploy CephFS MDS daemons (if deployed) by telling cephadm how many daemons to run for
    each file system. List CephFS file systems by name with the command ``ceph fs
-   ls``. Run the following command on the master nodes to redeploy the MDS
+   ls``. Run a command of the following form on the master nodes to redeploy the MDS
    daemons:
 
    .. prompt:: bash #
 
       ceph orch apply mds <fs-name> [--placement=<placement>]
 
-   For example, in a cluster with a single file system called `foo`:
+   For example, in a cluster with a single file system called ``foo``:
 
    .. prompt:: bash #
 
       ceph fs ls
 
-   .. code-block:: bash
+   .. code-block:: console
 
       name: foo, metadata pool: foo_metadata, data pools: [foo_data ]
 
@@ -192,16 +195,17 @@ Adoption process
       systemctl stop ceph-mds.target
       rm -rf /var/lib/ceph/mds/ceph-*
 
-#. Redeploy Ceph Object Gateway RGW daemons if deployed. Cephadm manages RGW
+#. Redeploy Ceph Object Gateway (RGW) daemons if deployed. Cephadm manages RGW
    daemons by zone. For each zone, deploy new RGW daemons with cephadm:
 
    .. prompt:: bash #
 
       ceph orch apply rgw <svc_id> [--realm=<realm>] [--zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>]
 
-   where *<placement>* can be a simple daemon count, or a list of
+   where ``<placement>`` can be a simple daemon count, or a list of
    specific hosts (see :ref:`orchestrator-cli-placement-spec`). The
-   zone and realm arguments are needed only for a multisite setup.
+   ``zone`` and ``realm`` arguments are needed only for a multisite setup
+   (see :ref:`multisite`).
 
    After the daemons have started and you have confirmed that they are
    functioning, stop and remove the legacy daemons:

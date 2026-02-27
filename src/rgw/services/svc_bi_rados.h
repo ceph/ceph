@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -16,9 +16,10 @@
 
 #pragma once
 
-#include "rgw_datalog.h"
-#include "rgw_service.h"
-#include "rgw_tools.h"
+#include "driver/rados/rgw_datalog.h"
+#include "driver/rados/rgw_service.h"
+#include "driver/rados/rgw_tools.h"
+#include "rgw_bucket.h"
 
 #include "svc_bi.h"
 #include "svc_tier_rados.h"
@@ -32,12 +33,6 @@ class RGWSI_BILog_RADOS;
 
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
-
-/*
- * Defined Bucket Index Namespaces
- */
-#define RGW_OBJ_NS_MULTIPART "multipart"
-#define RGW_OBJ_NS_SHADOW    "shadow"
 
 class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
 {
@@ -100,15 +95,15 @@ public:
     return rgw_shard_id(key, max_shards);
   }
 
-  static uint32_t bucket_shard_index(const std::string& key,
-                                     int num_shards) {
+  static int32_t bucket_shard_index(const std::string& key,
+				    int num_shards) {
     uint32_t sid = ceph_str_hash_linux(key.c_str(), key.size());
     uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
     return rgw_shards_mod(sid2, num_shards);
   }
 
-  static uint32_t bucket_shard_index(const rgw_obj_key& obj_key,
-				     int num_shards)
+  static int32_t bucket_shard_index(const rgw_obj_key& obj_key,
+				    int num_shards)
   {
     std::string sharding_key;
     if (obj_key.ns == RGW_OBJ_NS_MULTIPART) {

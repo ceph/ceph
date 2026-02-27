@@ -11,25 +11,28 @@ import fnmatch
 import mgr_util
 import json
 
-from mgr_module import CLIReadCommand, MgrModule, HandleCommandResult
+from .cli import StatusCLICommand
+
+from mgr_module import MgrModule, HandleCommandResult
 
 
 class Module(MgrModule):
-    def get_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
-        data = self.get_counter(daemon_type, daemon_name, stat)[stat]
+    CLICommand = StatusCLICommand
+    def get_unlabeled_counter_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
+        data = self.get_unlabeled_counter(daemon_type, daemon_name, stat)[stat]
         if data:
             return data[-1][1]
         else:
             return 0
 
     def get_rate(self, daemon_type: str, daemon_name: str, stat: str) -> int:
-        data = self.get_counter(daemon_type, daemon_name, stat)[stat]
+        data = self.get_unlabeled_counter(daemon_type, daemon_name, stat)[stat]
         if data and len(data) > 1 and (int(data[-1][0] - data[-2][0]) != 0):
             return (data[-1][1] - data[-2][1]) // int(data[-1][0] - data[-2][0])
         else:
             return 0
 
-    @CLIReadCommand("fs status")
+    @StatusCLICommand.Read("fs status")
     def handle_fs_status(self,
                          fs: Optional[str] = None,
                          format: str = 'plain') -> Tuple[int, str, str]:
@@ -69,18 +72,18 @@ class Module(MgrModule):
                 if up:
                     gid = mdsmap['up']["mds_{0}".format(rank)]
                     info = mdsmap['info']['gid_{0}'.format(gid)]
-                    dns = self.get_latest("mds", info['name'], "mds_mem.dn")
-                    inos = self.get_latest("mds", info['name'], "mds_mem.ino")
-                    dirs = self.get_latest("mds", info['name'], "mds_mem.dir")
-                    caps = self.get_latest("mds", info['name'], "mds_mem.cap")
+                    dns = self.get_unlabeled_counter_latest("mds", info['name'], "mds_mem.dn")
+                    inos = self.get_unlabeled_counter_latest("mds", info['name'], "mds_mem.ino")
+                    dirs = self.get_unlabeled_counter_latest("mds", info['name'], "mds_mem.dir")
+                    caps = self.get_unlabeled_counter_latest("mds", info['name'], "mds_mem.cap")
 
                     if rank == 0:
-                        client_count = self.get_latest("mds", info['name'],
+                        client_count = self.get_unlabeled_counter_latest("mds", info['name'],
                                                        "mds_sessions.session_count")
                     elif client_count == 0:
                         # In case rank 0 was down, look at another rank's
                         # sessionmap to get an indication of clients.
-                        client_count = self.get_latest("mds", info['name'],
+                        client_count = self.get_unlabeled_counter_latest("mds", info['name'],
                                                        "mds_sessions.session_count")
 
                     laggy = "laggy_since" in info
@@ -145,10 +148,10 @@ class Module(MgrModule):
                 if daemon_info['state'] != "up:standby-replay":
                     continue
 
-                inos = self.get_latest("mds", daemon_info['name'], "mds_mem.ino")
-                dns = self.get_latest("mds", daemon_info['name'], "mds_mem.dn")
-                dirs = self.get_latest("mds", daemon_info['name'], "mds_mem.dir")
-                caps = self.get_latest("mds", daemon_info['name'], "mds_mem.cap")
+                inos = self.get_unlabeled_counter_latest("mds", daemon_info['name'], "mds_mem.ino")
+                dns = self.get_unlabeled_counter_latest("mds", daemon_info['name'], "mds_mem.dn")
+                dirs = self.get_unlabeled_counter_latest("mds", daemon_info['name'], "mds_mem.dir")
+                caps = self.get_unlabeled_counter_latest("mds", daemon_info['name'], "mds_mem.cap")
 
                 events = self.get_rate("mds", daemon_info['name'], "mds_log.replayed")
                 if output_format not in ('json', 'json-pretty'):
@@ -278,7 +281,7 @@ class Module(MgrModule):
         else:
             return HandleCommandResult(stdout=output)
 
-    @CLIReadCommand("osd status")
+    @StatusCLICommand.Read("osd status")
     def handle_osd_status(self, bucket: Optional[str] = None, format: str = 'plain') -> Tuple[int, str, str]:
         """
         Show the status of OSDs within a bucket, or all

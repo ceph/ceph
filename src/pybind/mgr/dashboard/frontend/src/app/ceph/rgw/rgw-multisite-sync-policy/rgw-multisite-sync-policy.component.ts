@@ -27,7 +27,8 @@ const BASE_URL = 'rgw/multisite/sync-policy';
   selector: 'cd-rgw-multisite-sync-policy',
   templateUrl: './rgw-multisite-sync-policy.component.html',
   styleUrls: ['./rgw-multisite-sync-policy.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })
@@ -74,10 +75,10 @@ export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements 
         cellTransformation: CellTemplate.tooltip,
         customTemplateConfig: {
           map: {
-            Enabled: { class: 'badge-success', tooltip: 'sync is allowed and enabled' },
-            Allowed: { class: 'badge-info', tooltip: 'sync is allowed' },
+            Enabled: { class: 'tag-success', tooltip: 'sync is allowed and enabled' },
+            Allowed: { class: 'tag-info', tooltip: 'sync is allowed' },
             Forbidden: {
-              class: 'badge-warning',
+              class: 'tag-warning',
               tooltip:
                 'sync (as defined by this group) is not allowed and can override other groups'
             }

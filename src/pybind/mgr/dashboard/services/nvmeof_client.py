@@ -1,14 +1,24 @@
+# pylint: disable=unexpected-keyword-arg
+
 import functools
 import logging
-from collections.abc import Iterable
-from typing import Any, Callable, Dict, Generator, List, NamedTuple, Optional, Type
+from typing import Annotated, Any, Callable, Dict, Generator, List, \
+    NamedTuple, Optional, Type, get_args, get_origin
 
 from ..exceptions import DashboardException
-from .nvmeof_conf import NvmeofGatewaysConfig
+from .nvmeof_conf import NvmeofGatewaysConfig, is_mtls_enabled
 
 logger = logging.getLogger("nvmeof_client")
 
 try:
+    # if the protobuf version is newer than what we generated with
+    # proto file import will fail (because of differences between what's
+    # available in centos and ubuntu).
+    # this "hack" should be removed once we update both the
+    # distros; centos and ubuntu.
+    import os
+    os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+
     import grpc  # type: ignore
     import grpc._channel  # type: ignore
     from google.protobuf.json_format import MessageToDict  # type: ignore
@@ -23,46 +33,47 @@ else:
     class NVMeoFClient(object):
         pb2 = pb2
 
-        def __init__(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+        def __init__(self, gw_group: Optional[str] = None, server_address: Optional[str] = None):
             logger.info("Initiating nvmeof gateway connection...")
             try:
                 if not gw_group:
-                    service_name, self.gateway_addr = NvmeofGatewaysConfig.get_service_info()
+                    res = NvmeofGatewaysConfig.get_service_info()
                 else:
-                    service_name, self.gateway_addr = NvmeofGatewaysConfig.get_service_info(
-                        gw_group
-                    )
+                    res = NvmeofGatewaysConfig.get_service_info(gw_group)
+                if res is None:
+                    raise DashboardException("Gateway group does not exist")
+                service_name, self.gateway_addr = res
             except TypeError as e:
                 raise DashboardException(
                     f'Unable to retrieve the gateway info: {e}'
                 )
 
+            self.daemon_name = ''
             # While creating listener need to direct request to the gateway
             # address where listener is supposed to be added.
-            if traddr:
+            if server_address:
                 gateways_info = NvmeofGatewaysConfig.get_gateways_config()
                 matched_gateway = next(
                     (
                         gateway
                         for gateways in gateways_info['gateways'].values()
                         for gateway in gateways
-                        if traddr in gateway['service_url']
+                        if server_address in gateway['service_url']
                     ),
                     None
                 )
                 if matched_gateway:
+                    self.daemon_name = matched_gateway.get('daemon_name')
                     self.gateway_addr = matched_gateway.get('service_url')
                     logger.debug("Gateway address set to: %s", self.gateway_addr)
-
-            root_ca_cert = NvmeofGatewaysConfig.get_root_ca_cert(service_name)
-            if root_ca_cert:
+            enable_auth = is_mtls_enabled(service_name)
+            if enable_auth:
                 client_key = NvmeofGatewaysConfig.get_client_key(service_name)
                 client_cert = NvmeofGatewaysConfig.get_client_cert(service_name)
-
-            if root_ca_cert and client_key and client_cert:
+                server_cert = NvmeofGatewaysConfig.get_ssl_cert(service_name)
                 logger.info('Securely connecting to: %s', self.gateway_addr)
                 credentials = grpc.ssl_channel_credentials(
-                    root_certificates=root_ca_cert,
+                    root_certificates=server_cert,
                     private_key=client_key,
                     certificate_chain=client_cert,
                 )
@@ -71,62 +82,10 @@ else:
                 logger.info("Insecurely connecting to: %s", self.gateway_addr)
                 self.channel = grpc.insecure_channel(self.gateway_addr)
             self.stub = pb2_grpc.GatewayStub(self.channel)
-
-    def make_namedtuple_from_object(cls: Type[NamedTuple], obj: Any) -> NamedTuple:
-        return cls(
-            **{
-                field: getattr(obj, field)
-                for field in cls._fields
-                if hasattr(obj, field)
-            }
-        )  # type: ignore
+            self.service_name = service_name
 
     Model = Dict[str, Any]
-
-    def map_model(
-        model: Type[NamedTuple],
-        first: Optional[str] = None,
-    ) -> Callable[..., Callable[..., Model]]:
-        def decorator(func: Callable[..., Message]) -> Callable[..., Model]:
-            @functools.wraps(func)
-            def wrapper(*args, **kwargs) -> Model:
-                message = func(*args, **kwargs)
-                if first:
-                    try:
-                        message = getattr(message, first)[0]
-                    except IndexError:
-                        raise DashboardException(
-                            msg="Not Found", http_status_code=404, component="nvmeof"
-                        )
-
-                return make_namedtuple_from_object(model, message)._asdict()
-
-            return wrapper
-
-        return decorator
-
     Collection = List[Model]
-
-    def map_collection(
-        model: Type[NamedTuple],
-        pick: str,  # pylint: disable=redefined-outer-name
-        finalize: Optional[Callable[[Message, Collection], Collection]] = None,
-    ) -> Callable[..., Callable[..., Collection]]:
-        def decorator(func: Callable[..., Message]) -> Callable[..., Collection]:
-            @functools.wraps(func)
-            def wrapper(*args, **kwargs) -> Collection:
-                message = func(*args, **kwargs)
-                collection: Iterable = getattr(message, pick)
-                out = [
-                    make_namedtuple_from_object(model, i)._asdict() for i in collection
-                ]
-                if finalize:
-                    return finalize(message, out)
-                return out
-
-            return wrapper
-
-        return decorator
 
     import errno
 
@@ -155,11 +114,14 @@ else:
                     component="nvmeof",
                 )
 
-            if response.status != 0:
+            status = getattr(response, "status", None)
+            error_message = getattr(response, "error_message", None)
+
+            if status not in (None, 0):
                 raise DashboardException(
-                    msg=response.error_message,
-                    code=response.status,
-                    http_status_code=NVMeoFError2HTTP.get(response.status, 400),
+                    msg=error_message or "NVMeoF operation failed",
+                    code=status,
+                    http_status_code=NVMeoFError2HTTP.get(status, 400),  # type: ignore[arg-type]
                     component="nvmeof",
                 )
             return response
@@ -205,10 +167,13 @@ else:
 
     def _lazily_create_namedtuple(data: Any, target_type: Type[NamedTuple],
                                   depth: int, max_depth: int) -> Generator:
+        # pylint: disable=protected-access
         """ Lazily create NamedTuple from a dict """
         field_values = {}
         for field, field_type in zip(target_type._fields,
                                      target_type.__annotations__.values()):
+            if get_origin(field_type) == Annotated:
+                field_type = get_args(field_type)[0]
             # these conditions are complex since we need to navigate between dicts,
             # empty dicts and objects
             if isinstance(data, dict) and data.get(field) is not None:
@@ -224,14 +189,13 @@ else:
                 except StopIteration:
                     return
             else:
-                # If the field is missing assign None
-                field_values[field] = None
+                field_values[field] = target_type._field_defaults.get(field)
 
         namedtuple_instance = target_type(**field_values)  # type: ignore
         yield namedtuple_instance
 
     def obj_to_namedtuple(data: Any, target_type: Type[NamedTuple],
-                          max_depth: int = 4) -> NamedTuple:
+                          max_depth: int = 7) -> NamedTuple:
         """
         Convert an object or dict to a NamedTuple, handling nesting and lists lazily.
         This will raise an error if nesting depth exceeds the max depth (default 4)
@@ -266,21 +230,28 @@ else:
             ]
         return obj
 
-    def convert_to_model(model: Type[NamedTuple]) -> Callable[..., Callable[..., Model]]:
+    def convert_to_model(model: Type[NamedTuple],
+                         finalize: Optional[Callable[[Dict], Dict]] = None
+                         ) -> Callable[..., Callable[..., Model]]:
         def decorator(func: Callable[..., Message]) -> Callable[..., Model]:
             @functools.wraps(func)
             def wrapper(*args, **kwargs) -> Model:
                 message = func(*args, **kwargs)
                 msg_dict = MessageToDict(message, including_default_value_fields=True,
-                                         preserving_proto_field_name=True)
-                return namedtuple_to_dict(obj_to_namedtuple(msg_dict, model))
+                                         preserving_proto_field_name=True)  # type: ignore
+
+                result = namedtuple_to_dict(obj_to_namedtuple(msg_dict, model))
+                if finalize:
+                    return finalize(result)
+                return result
 
             return wrapper
 
         return decorator
 
     # pylint: disable-next=redefined-outer-name
-    def pick(field: str, first: bool = False) -> Callable[..., Callable[..., object]]:
+    def pick(field: str, first: bool = False,
+             ) -> Callable[..., Callable[..., object]]:
         def decorator(func: Callable[..., Dict]) -> Callable[..., object]:
             @functools.wraps(func)
             def wrapper(*args, **kwargs) -> object:

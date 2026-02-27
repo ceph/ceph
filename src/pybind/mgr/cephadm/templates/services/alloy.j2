@@ -1,0 +1,20 @@
+local.file_match "system" {
+	path_targets = [{
+		__address__ = "localhost",
+		__path__    = "/var/log/ceph/**/*.log",
+		job         = "Cluster Logs",
+	}]
+}
+
+loki.source.file "system" {
+	targets               = local.file_match.system.targets
+	forward_to            = [loki.write.default.receiver]
+	legacy_positions_file = "/var/lib/alloy/data/positions.yaml"
+}
+
+loki.write "default" {
+	endpoint {
+		url = "http://{{ client_hostname }}:3100/loki/api/v1/push"
+	}
+	external_labels = {}
+}

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -78,15 +79,15 @@ private:
 
   struct DiscardThread : public Thread {
     KernelDevice *bdev;
-    const uint64_t id;
     bool stop = false;
-    explicit DiscardThread(KernelDevice *b, uint64_t id) : bdev(b), id(id) {}
+    explicit DiscardThread(KernelDevice *b) : bdev(b) {
+    }
     void *entry() override {
-      bdev->_discard_thread(id);
+      bdev->_discard_thread(this);
       return NULL;
     }
   };
-  std::vector<std::shared_ptr<DiscardThread>> discard_threads;
+  std::vector<DiscardThread*> discard_threads;
 
   std::atomic_int injecting_crash;
 
@@ -94,9 +95,11 @@ private:
   virtual void  _pre_close() { }  // hook for child implementations
 
   void _aio_thread();
-  void _discard_thread(uint64_t tid);
+  void _discard_thread(DiscardThread* thr);
   bool _queue_discard(interval_set<uint64_t> &to_release);
-  bool try_discard(interval_set<uint64_t> &to_release, bool async = true) override;
+  bool try_discard(interval_set<uint64_t> &to_release,
+                   bool async = true,
+                   bool force = false) override;
 
   int _aio_start();
   void _aio_stop();

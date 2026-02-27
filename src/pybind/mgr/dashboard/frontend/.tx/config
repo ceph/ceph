@@ -1,0 +1,12 @@
+[main]
+host = https://app.transifex.com
+
+[o:ceph:p:ceph-dashboard:r:main]
+file_filter            = src/locale/messages.<lang>.xlf
+source_file            = src/locale/messages.xlf
+type                   = XLIFF
+minimum_perc           = 0
+resource_name          = Main
+replace_edited_strings = false
+keep_translations      = false
+lang_map               = de_DE: de-DE, es_ES: es-ES, fr_FR: fr-FR, id_ID: id-ID, it_IT: it-IT, ja_JP: ja-JP, ko_KR: ko-KR, pl_PL: pl-PL, pt_BR: pt-BR, zh_CN: zh-CN, zh_TW: zh-TW

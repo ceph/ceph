@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -529,6 +530,23 @@ inline timespan to_timespan(signedspan z) {
 std::string timespan_str(timespan t);
 std::string exact_timespan_str(timespan t);
 std::chrono::seconds parse_timespan(const std::string& s);
+
+/**
+ * Convert a duration to a human-readable string representation.
+ *
+ * Formats the duration using the largest appropriate time unit:
+ *  - seconds (s) for durations < 2 minutes
+ *  - minutes (m) for durations < 2 hours
+ *  - hours (h) for durations < 2 days
+ *  - days (d) for durations < 2 weeks
+ *  - weeks (w) for durations < ~3 months
+ *  - months (M) for durations < 2 years
+ *  - years (y) for durations >= 2 years
+ *
+ *  @param duration The time duration to format
+ *  @return A formatted string (e.g., "90m", "3h", "5d", "2y")
+*/
+std::string to_pretty_timedelta(timespan duration);
 
 // detects presence of Clock::to_timespec() and from_timespec()
 template <typename Clock, typename = std::void_t<>>

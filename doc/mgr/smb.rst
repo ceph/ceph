@@ -53,11 +53,11 @@ Cluster Commands
 Create Cluster
 ++++++++++++++
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>]
+   ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>]
 
-Create a new logical cluster, identified by the cluster id value. The cluster
+Create a new logical cluster, identified by the cluster ID value. The cluster
 create command must specify the authentication mode the cluster will use. This
 may either be one of:
 
@@ -73,21 +73,25 @@ cluster_id
 auth_mode
     One of ``user`` or ``active-directory``
 domain_realm
+    Required for ``active-directory`` clusters and ignored by ``user`` clusters.
     The domain/realm value identifying the AD domain. Required when choosing
     ``active-directory``
 domain_join_user_pass
+    Required for ``active-directory`` clusters and ignored by ``user`` clusters.
     A string in the form ``<username>%<password>`` that will be used to join
     Samba servers to the AD domain.
 define_user_pass
+    Optional. Ignored by ``active-directory`` clusters.
     A string of the form ``<username>%<password>`` that will be used for
-    authentication in ``user`` auth_mode.
+    authentication in ``user`` auth_mode. Can be specified multiple times to
+    define more than one user.
 custom_dns
     Optional. Can be specified multiple times. One or more IP Addresses that
     will be applied to the Samba containers to override the default DNS
     resolver(s). This option is intended to be used when the host Ceph node is
     not configured to resolve DNS entries within AD domain(s).
 placement
-    A Ceph orchestration :ref:`placement specifier <orchestrator-cli-placement-spec>`
+    Optional. A Ceph orchestration :ref:`placement specifier <orchestrator-cli-placement-spec>`
 clustering
     Optional. Control if a cluster abstraction actually uses Samba's clustering
     mechanism.  The value may be one of ``default``, ``always``, or ``never``.
@@ -97,29 +101,77 @@ clustering
     disables clustering regardless of the placement count. If unspecified,
     ``default`` is assumed.
 public_addrs
-    Optional. A string in the form of <ipaddress/prefixlength>[%<destination interface>].
-    Supported only when using Samba's clustering. Assign "virtual" IP
-    addresses that will be managed by the clustering subsystem and may automatically
-    move between nodes running Samba containers.
+    Optional. A string in the form of <ipaddress/prefixlength>[%<destination address>].
+    Supported only when using Samba's clustering. Assign "virtual" IP addresses
+    that will be managed by the clustering subsystem and may automatically move
+    between nodes running Samba containers.  Can be specified multiple times to
+    assign more than one public address to the SMB cluster.
 password_filter
-    One of ``none`` or ``base64``. If the filter is ``none`` the password
-    values on the command line are assumed to be plain text. If the filter is
-    ``base64`` the password values are assumed to be obscured with
+    Optional.  One of ``none`` or ``base64``. If the filter is ``none`` the
+    password values on the command line are assumed to be plain text. If the
+    filter is ``base64`` the password values are assumed to be obscured with
     base64 encoding the string. If ``--password-filter-out`` is not specified
     this filter will also be applied to the output.
 password_filter_out
-    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
-    password fields in the output are emitted as plain text. If the filter is
-    ``base64`` password fields will be obscured by base64 encoding the
-    string.  If the filter is ``hidden`` the password values will be replaced
-    by a invalid generic replacement string containing only asterisks.
+    Optional.  One of ``none``, ``base64``, or ``hidden``. If the filter is
+    ``none`` the password fields in the output are emitted as plain text. If the
+    filter is ``base64`` password fields will be obscured by base64 encoding
+    the string.  If the filter is ``hidden`` the password values will be
+    replaced by an invalid generic replacement string containing only asterisks.
+
+
+Examples
+~~~~~~~~
+
+Create a cluster with two locally defined users:
+
+.. prompt:: bash #
+
+    ceph smb cluster create bob user \
+        --define-user-pass=bob%Passw0rd1 \
+        --define-user-pass=carol%Passw0rd2
+
+Create a cluster with a single user and an explicit placement value for
+cephadm (hosts labeled ``smb``):
+
+.. prompt:: bash #
+
+    ceph smb cluster create test1 user \
+        --define-user-pass=test%Passw0rd1 \
+        --placement="label:smb"
+
+Create a cluster connected to an active directory system. Use a custom DNS
+server:
+
+.. prompt:: bash #
+
+    ceph smb cluster create test2 active-directory \
+        --domain-realm=MYDOM.EXAMPLE.ORG \
+        --domain-join-user-pass=Administrator%Ph0nyPassw0rd \
+        --custom-dns=192.168.76.210
+
+
+Create a cluster connected to an active directory system, similar to the
+previous example. Set three CTDB public address values and a custom placement:
+
+.. prompt:: bash #
+
+    ceph smb cluster create test3 active-directory \
+        --domain-realm=MYDOM.EXAMPLE.ORG \
+        --domain-join-user-pass=Administrator%Ph0nyPassw0rd \
+        --custom-dns=192.168.76.210 \
+        --public-address=192.168.76.110/24 \
+        --public-address=192.168.76.111/24 \
+        --public-address=192.168.76.112/24 \
+        --placement="3 label:smb"
+
 
 Remove Cluster
 ++++++++++++++
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb cluster rm <cluster_id> [--password-filter=<password_filter>]
+   ceph smb cluster rm <cluster_id> [--password-filter=<password_filter>]
 
 Remove a logical SMB cluster from the Ceph cluster.
 
@@ -128,19 +180,20 @@ Options:
 cluster_id
     A ``cluster_id`` value identifying a cluster resource.
 password_filter
-    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
-    password fields in the output are emitted as plain text. If the filter is
-    ``base64`` password fields will be obscured by base64 encoding the
-    string.  If the filter is ``hidden`` the password values will be replaced
-    by a invalid generic replacement string containing only asterisks.
+    Optional. One of ``none``, ``base64``, or ``hidden``. If the filter is
+    ``none`` the password fields in the output are emitted as plain text. If
+    the filter is ``base64`` password fields will be obscured by base64
+    encoding the string.  If the filter is ``hidden`` the password values will
+    be replaced by an invalid generic replacement string containing only
+    asterisks.
 
 
 List Clusters
 ++++++++++++++
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb cluster ls [--format=<format>]
+   ceph smb cluster ls [--format=<format>]
 
 Print a listing of cluster ids. The output defaults to JSON, select YAML
 encoding with the ``--format=yaml`` option.
@@ -152,9 +205,9 @@ Share Commands
 Create Share
 ++++++++++++
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb share create <cluster_id> <share_id> <cephfs_volume> <path> [--share-name=<share_name>] [--subvolume=<subvolume>] [--readonly]
+   ceph smb share create <cluster_id> <share_id> <cephfs_volume> <path> [--share-name=<share_name>] [--subvolume=<subvolume>] [--readonly]
 
 Create a new SMB share, hosted by the named cluster, that maps to the given
 CephFS volume and path.
@@ -166,7 +219,7 @@ cluster_id
 share_id
     A short string uniquely identifying the share
 cephfs_volume
-    The name of the cephfs volume to be shared
+    The name of the CephFS volume to be shared
 path
     A path relative to the root of the volume and/or subvolume
 share_name
@@ -179,12 +232,104 @@ subvolume
 readonly
     Creates a read-only share
 
+
+Examples
+~~~~~~~~
+
+Create a share using the subvolume ``photos`` in the subvolumegroup ``company``:
+
+.. prompt:: bash #
+
+    ceph smb share create test1 pics cephfs --subvolume=company/photos --path=/
+
+Create a share similar to the example above with a customized name:
+
+.. prompt:: bash #
+
+    ceph smb share create test1 pics cephfs \
+        --subvolume=company/photos --path=/  --share-name="Company Photos"
+
+Create a share at the root of a CephFS volume (not generally recommended):
+
+.. prompt:: bash #
+
+    ceph smb share create test1 rootie cephfs --path=/
+
+Create a read-only share at a custom path in the CephFS volume:
+
+.. prompt:: bash #
+
+    ceph smb share create test1 plans cephfs \
+        --path=/qbranch/top/secret/plans --readonly
+Update Share QoS
+++++++++++++++++
+
+.. prompt:: bash #
+
+   ceph smb share update cephfs qos <cluster_id> <share_id> [--read-iops-limit=<int>] [--write-iops-limit=<int>] [--read-bw-limit=<int>] [--write-bw-limit=<int>] [--read-delay-max=<int>] [--write-delay-max=<int>]
+
+Update Quality of Service (QoS) settings for a CephFS-backed share. This allows administrators to apply per-share rate limits on SMB input/output (I/O) operations, specifically limits on IOPS (Input/Output Operations per Second) and bandwidth (in bytes per second) for both read and write operations.
+
+Options:
+
+read_iops_limit
+    Optional integer. Maximum number of read operations per second (0 = disabled).
+    Valid range: ``0`` to ``1,000,000``. Values above this will be capped.
+write_iops_limit
+    Optional integer. Maximum number of write operations per second (0 = disabled).
+    Valid range: ``0`` to ``1,000,000``. Values above this will be capped.
+read_bw_limit
+    Optional integer. Maximum allowed bandwidth for read operations in bytes per second (0 = disabled).
+    Valid range: ``0`` to ``1 << 40`` (≈1 TB/s). Values above this will be capped.
+write_bw_limit
+    Optional integer. Maximum allowed bandwidth for write operations in bytes per second (0 = disabled).
+    Valid range: ``0`` to ``1 << 40`` (≈1 TB/s). Values above this will be capped.
+read_delay_max
+    Optional integer. Maximum allowed delay value in seconds for read operations (default: 30, max: 300).
+    This acts as an upper bound on how long a read request will be delayed if the defined IOPS or bandwidth limits are exceeded.
+write_delay_max
+    Optional integer. Maximum allowed delay value in seconds for write operations (default: 30, max: 300).
+    Similar to `read_delay_max`, but applies to write requests.
+
+Behavior:
+
+- All limits are optional
+- Setting a limit to ``0`` disables that specific QoS limit
+- Setting all four limits to ``0`` completely removes QoS configuration
+
+Examples:
+
+Set QoS limits for a share:
+
+.. prompt:: bash #
+
+   ceph smb share update cephfs qos foo bar \
+     --read-iops-limit=100 \
+     --write-iops-limit=200 \
+     --read-bw-limit=1048576 \
+     --write-bw-limit=2097152 \
+     --read-delay-max=5 \
+     --write-delay-max=5
+
+Disable QoS for a share:
+
+.. prompt:: bash #
+
+   ceph smb share update cephfs qos foo bar \
+     --read-iops-limit=0 \
+     --write-iops-limit=0 \
+     --read-bw-limit=0 \
+     --write-bw-limit=0 \
+     --read-delay-max=0 \
+     --write-delay-max=0
+
+
 Remove Share
 ++++++++++++
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb share rm <cluster_id> <share_id>
+   ceph smb share rm <cluster_id> <share_id>
 
 Remove an SMB Share from the cluster.
 
@@ -192,9 +337,9 @@ Remove an SMB Share from the cluster.
 List Shares
 +++++++++++
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb share ls <cluster_id> [--format=<format>]
+   ceph smb share ls <cluster_id> [--format=<format>]
 
 Print a listing of share ids. The output defaults to JSON, select YAML
 encoding with the ``--format=yaml`` option.
@@ -210,16 +355,16 @@ Resource specifications can be written in either JSON or YAML. These resource
 specifications can be applied to the cluster using the ``ceph smb apply``
 command, for example:
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb apply -i /path/to/resources.yaml
+   ceph smb apply -i /path/to/resources.yaml
 
 In addition to the resource specification the ``apply`` sub-command accepts
 options that control how the input and output of the command behave:
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb apply [--format=<format>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>] -i <input>
+   ceph smb apply [--format=<format>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>] -i <input>
 
 Options:
 
@@ -227,34 +372,35 @@ format
     One of ``json`` (the default) or ``yaml``. Output format can be
     selected independent of the input format.
 password_filter
-    One of ``none`` or ``base64``. If the filter is ``none`` the password
-    fields in the input are assumed to be plain text. If the filter is
+    Optional. One of ``none`` or ``base64``. If the filter is ``none`` the
+    password fields in the input are assumed to be plain text. If the filter is
     ``base64`` the password fields are assumed to be obscured with
     base64 encoding the string. If ``--password-filter-out`` is not specified
     this filter will also be applied to the output.
 password_filter_out
-    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
-    password fields in the output are emitted as plain text. If the filter is
-    ``base64`` password fields will be obscured by base64 encoding the
-    string.  If the filter is ``hidden`` the password values will be replaced
-    by a invalid generic replacement string containing only asterisks.
+    Optional. One of ``none``, ``base64``, or ``hidden``. If the filter is
+    ``none`` the password fields in the output are emitted as plain text. If
+    the filter is ``base64`` password fields will be obscured by base64
+    encoding the string.  If the filter is ``hidden`` the password values will
+    be replaced by an invalid generic replacement string containing only
+    asterisks.
 input
-    A file name or ``-`` to use stdin.
+    A file name or ``-`` to use the standard input (aka ``stdin``).
 
 
 Resources that have already been applied to the Ceph cluster configuration can
 be viewed using the ``ceph smb show`` command. For example:
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb show ceph.smb.cluster.cluster1
+   ceph smb show ceph.smb.cluster.cluster1
 
 The ``show`` command can show all resources, resources of a given type, or specific
 resource items. Options can be provided that control the output of the command.
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb show [resource_name...] [--format=<format>] [--results=<results>] [--password-filter=<password_filter>]
+   ceph smb show [resource_name...] [--format=<format>] [--results=<results>] [--password-filter=<password_filter>]
 
 Options:
 
@@ -269,16 +415,17 @@ results
     single item is found the output will always include a wrapper object like
     (in pseudo-JSON): ``{"resources": [...Resource objects...]}``.
 password_filter
-    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
-    password fields in the output are emitted as plain text. If the filter is
-    ``base64`` password fields will be obscured by base64 encoding the
-    string.  If the filter is ``hidden`` the password values will be replaced
-    by a invalid generic replacement string containing only asterisks.
+    Optional. One of ``none``, ``base64``, or ``hidden``. If the filter is
+    ``none`` the password fields in the output are emitted as plain text. If
+    the filter is ``base64`` password fields will be obscured by base64
+    encoding the string.  If the filter is ``hidden`` the password values will
+    be replaced by an invalid generic replacement string containing only
+    asterisks.
 
 ``resource_name`` arguments can take the following forms:
 
 - ``ceph.smb.cluster``: show all cluster resources
-- ``ceph.smb.cluster.<cluster_id>``: show specific cluster with given cluster id
+- ``ceph.smb.cluster.<cluster_id>``: show specific cluster with given cluster ID
 - ``ceph.smb.share``: show all share resources
 - ``ceph.smb.share.<cluster_id>``: show all share resources part of the given
   cluster
@@ -292,9 +439,9 @@ password_filter
 
 For example:
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb show ceph.smb.cluster.bob ceph.smb.share.bob
+   ceph smb show ceph.smb.cluster.bob ceph.smb.share.bob
 
 Will show one cluster resource (if it exists) for the cluster "bob" as well as
 all share resources associated with the cluster "bob".
@@ -368,7 +515,7 @@ An example YAML based resource list looks like the following:
         # ... other fields skipped for brevity ...
 
 
-An example JSON based resoure list looks like the following:
+An example JSON based resource list looks like the following:
 
 .. code-block:: json
 
@@ -447,6 +594,31 @@ custom_dns
     Optional. List of IP Addresses. IP addresses will be used as DNS
     resolver(s) in Samba containers allowing the containers to use domain DNS
     even if the Ceph host does not
+custom_ports
+    Optional. A mapping of service names to port numbers that will override the
+    default ports used for those services. The service names are:
+    ``smb``, ``smbmetrics``, ``ctdb``, and ``remote-control``. If a service
+    name is not present in the mapping the default port will be used.
+    For example, ``{"smb": 4455, "smbmetrics": 9009}`` will change the
+    ports used by SMB for client access and the metrics exporter, but
+    not change the port used by the CTDB clustering daemon.
+    Note - not all SMB clients are able to use alternate port numbers.
+bind_addrs
+    Optional. A list of objects indicating what IP address or IP network the
+    SMB and related services may bind to. The fields described for these
+    objects are mutually exclusive, but at least one field is required.
+    (The behavior of this option changes when used with clustering and
+    ``public_addrs``. See note below.)
+    Fields:
+
+    address
+        Optional. A single IP address represented as a string. For example,
+        ``192.168.7.50``.
+    network
+        Optional. A single IP network represented as a string. A network
+        can be used to specify a range of many IP addresses. The network
+        string always includes a "/" character before a prefix length.
+        For example, ``192.168.7.0/24``.
 placement
     Optional. A Ceph Orchestration :ref:`placement specifier
     <orchestrator-cli-placement-spec>`.  Defaults to one host if not provided
@@ -463,22 +635,54 @@ public_addrs
     Assign "virtual" IP addresses that will be managed by the clustering
     subsystem and may automatically move between nodes running Samba
     containers.
+    (The behavior of this option changes when used with ``bind_addrs``. See
+    note below.)
     Fields:
 
     address
         Required string. An IP address with a required prefix length (example:
         ``192.168.4.51/24``). This address will be assigned to one of the
-        host's network devices and managed automatically.
+        host's network interfaces and managed automatically.
     destination
         Optional. String or list of strings. A ``destination`` defines where
         the system will assign the managed IPs. Each string value must be a
         network address (example ``192.168.4.0/24``). One or more destinations
         may be supplied. The typical case is to use exactly one destination and
         so the value may be supplied as a string, rather than a list with a
-        single item. Each destination network will be mapped to a device on a
-        host. Run ``cephadm list-networks`` for an example of these mappings.
+        single item. Each destination network will be mapped to an interface on
+        a host. Run ``cephadm list-networks`` for an example of these mappings.
         If destination is not supplied the network is automatically determined
         using the address value supplied and taken as the destination.
+remote_control
+    Optional object. This object configures an SMB cluster to deploy an extra
+    ``remote control`` service. This service provides a gRPC server that
+    can be used to enumerate connected clients and disconnect clients from
+    shares. This service uses mTLS for authentication. By default, this service
+    uses port 54445. The port can be configured using the ``custom_ports``
+    parameter in the cluster resource. If the service is enabled and any of the
+    ``cert``, ``key``, or ``ca_cert`` fields are not populated mTLS will be
+    disabled and the service will operate in a read-only mode. Running the
+    service with mTLS disabled is not recommended.
+    Fields:
+
+    enabled
+        Optional boolean. If explicitly set to ``true`` or ``false`` this
+        field will enable or disable the remote control service. If left
+        unset the TLS fields will be checked - if the TLS fields are filled
+        automatically enable the service.
+    cert
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
+    key
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
+    ca_cert
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
+external_ceph_cluster:
+    Optional object. The fields are described in :ref:`external Ceph cluster
+    source fields<external-ceph-cluster-source-fields>`. This is an
+    advanced option and should be used with caution.
 custom_smb_global_options
     Optional mapping. Specify key-value pairs that will be directly added to
     the global ``smb.conf`` options (or equivalent) of a Samba server.  Do
@@ -503,6 +707,17 @@ custom_smb_global_options
    placement. In particular, be aware that running multiple instances of the
    same ``smb`` service without clustering enabled can cause unexpected behavior.
 
+.. warning::
+    The behavior of the system when combining ``bind_addrs`` and
+    ``public_addrs`` on a cluster could lead to unexpected results. The ``smbd``
+    process can only dynamically add/remove public addresses when assigned to
+    monitor a network interface (e.g. ``eth0``) versus a specific address. If
+    the network interface is assigned multiple addresses and those addresses
+    overlap with a different SMB cluster it is possible the services may fail
+    to start.  Currently, one must manually ensure that the interfaces used by
+    an IP or network is exclusively used for that network to ensure SMB
+    services start properly.
+
 
 .. _join-source-fields:
 
@@ -522,7 +737,28 @@ source_type
     Optional. One of ``resource`` (the default) or ``empty``
 ref
     String. Required for ``source_type: resource``. Must refer to the ID of a
-    ``ceph.smb.join.auth`` resource
+    ``ceph.smb.usersgroups`` resource
+
+.. _tls-source-fields:
+
+A TLS source object supports the following fields:
+
+source_type
+    Optional. Must be ``resource`` if specified.
+ref
+    String. Required for ``source_type: resource``. Must refer to the ID of a
+    ``ceph.smb.tls.credential`` resource
+
+
+.. _external-ceph-cluster-source-fields:
+
+An external Ceph cluster source object supports the following fields:
+
+source_type:
+    Optional. Must be ``resource`` if specified.
+ref:
+    String. Required for ``source_type: resource``. Must refer to the ID of
+    a ``ceph.smb.ext.cluster`` resource
 
 .. note::
    The ``source_type`` ``empty`` is generally only for debugging and testing
@@ -593,6 +829,13 @@ readonly
 browseable
     Optional boolean, defaulting to true. If true the share will be included in
     share listings visible to clients
+comment
+    Optional string. A single line description used to provide human-readable
+    explanation or notes about the share.
+max_connections
+    Optional integer. Specifies the maximum number of simultaneous client
+    connections to a specific share. The default value is 0 and it indicates
+    that there is no limit on the number of connections
 cephfs
     Required object. Fields:
 
@@ -604,12 +847,45 @@ cephfs
         Optional string. Name of a subvolumegroup to share
     subvolume
         Optional string. Name of a subvolume to share. If ``subvolumegroup`` is
-        not set and this value contains a exactly one ``/`` character, the
+        not set and this value contains exactly one ``/`` character, the
         subvolume field will automatically be split into
         ``<subvolumegroup>/<subvolume>`` parts for convenience
     provider
-        Optional. One of ``samba-vfs`` or ``kcephfs`` (``kcephfs`` is not yet
-        supported) . Selects how CephFS storage should be provided to the share
+        Optional. Selects how CephFS storage should be provided to the share.
+        The value may be one of ``samba-vfs``, ``samba-vfs/classic``,
+        ``samba-vfs/new`` or ``samba-vfs/proxied``. If unspecified,
+        ``samba-vfs`` is assumed.
+
+        Selecting ``samba-vfs/new`` selects the new Samba VFS plugin to connect to
+        CephFS and ``samba-vfs/proxied`` uses the new VFS plugin but routes the
+        connections through a proxy. Using the proxy allows for a greater number of
+        simultaneous client connections to the share, but it comes at the cost of
+        performance. ``samba-vfs/classic`` uses the older Samba VFS plugin to
+        connect to CephFS. ``samba-vfs`` automatically selects the preferred VFS
+        based implementation, currently ``samba-vfs/proxied``. This option is
+        suitable for the majority of use cases and can be left unspecified for most
+        shares.
+    qos
+        Optional object. Quality of Service settings for the share. Fields:
+        
+        read_iops_limit
+            Optional integer. Maximum number of read operations per second (0 = disabled).
+            Valid range: ``0`` to ``1,000,000``. Values above this will be capped.
+        write_iops_limit
+            Optional integer. Maximum number of write operations per second (0 = disabled).
+            Valid range: ``0`` to ``1,000,000``. Values above this will be capped.
+        read_bw_limit
+            Optional integer. Maximum allowed bandwidth for read operations in bytes per second (0 = disabled).
+            Valid range: ``0`` to ``1 << 40`` (≈1 TB/s). Values above this will be capped.
+        write_bw_limit
+            Optional integer. Maximum allowed bandwidth for write operations in bytes per second (0 = disabled).
+            Valid range: ``0`` to ``1 << 40`` (≈1 TB/s). Values above this will be capped.
+        read_delay_max
+            Optional integer. Maximum allowed delay value in seconds for read operations (default: 30, max: 300).
+            This acts as an upper bound on how long a read request will be delayed if the defined IOPS or bandwidth limits are exceeded.
+        write_delay_max
+            Optional integer. Maximum allowed delay value in seconds for write operations (default: 30, max: 300).
+            Similar to `read_delay_max`, but applies to write requests.
 restrict_access
     Optional boolean, defaulting to false. If true the share will only permit
     access by users explicitly listed in ``login_control``.
@@ -625,6 +901,23 @@ login_control
         or ``admin``. Specific access level to grant to the user or group when
         logging into this share. The ``none`` value denies access to the share
         regardless of the ``restrict_access`` value.
+hosts_access
+    Optional list of objects. Items in the ``hosts_access`` list are used to
+    restrict the share to use by specific client addresses. If any ``allow``
+    entries are found all other hosts will be denied. Fields:
+
+    access
+        Required string. One of ``allow`` or ``deny``.
+    address
+        Optional string. Required if ``network`` field is not supplied. The
+        string value must be either an IPv4 address or an IPv6 address. The
+        specific host will be allowed or denied access to the share.
+    network
+        Optional string. Required if ``address`` field is not supplied. The
+        string value must be either an IPv4 network or an IPv6 network (for
+        example ``192.0.2.0/24``). If the client's IP address is found within
+        the specified network that host will be allowed or denied access to the
+        share.
 custom_smb_share_options
     Optional mapping. Specify key-value pairs that will be directly added to
     the ``smb.conf`` (or equivalent) of a Samba server.  Do *not* use this
@@ -640,7 +933,7 @@ custom_smb_share_options
     things in ways that the Ceph team can not help with. This special key will
     automatically be removed from the list of options passed to Samba.
 
-The following is an example of a share:
+The following is an example of a share with QoS settings:
 
 .. code-block:: yaml
 
@@ -653,9 +946,34 @@ The following is an example of a share:
       path: /pics
       subvolumegroup: smbshares
       subvolume: staff
+      qos:
+        read_iops_limit: 100    # Max 100 read operations per second
+        write_iops_limit: 50     # Max 50 write operations per second
+        read_bw_limit: 1048576   # 1 MiB/s read bandwidth limit
+        write_bw_limit: 524288   # 512 KiB/s write bandwidth limit
+        read_delay_max: 5        # Max 5 seconds delay for read operations
+        write_delay_max: 5       # Max 5 seconds delay for write operations
 
 
-Another example, this time of a share with an intent to be removed:
+Another example, this time of a share with QoS disabled:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.share
+    cluster_id: tango
+    share_id: sp2
+    cephfs:
+      volume: cephfs
+      path: /data
+      qos:
+        read_iops_limit: 0
+        write_iops_limit: 0
+        read_bw_limit: 0
+        write_bw_limit: 0
+        read_delay_max: 0
+        write_delay_max: 0
+
+And finally, a share with an intent to be removed:
 
 .. code-block:: yaml
 
@@ -685,7 +1003,7 @@ auth
     password
         Required string. The AD user's password
 linked_to_cluster:
-    Optional. A string containing a cluster id. If set, the resource may only
+    Optional. A string containing a cluster ID. If set, the resource may only
     be used with the linked cluster and will automatically be removed when the
     linked cluster is removed.
 
@@ -728,7 +1046,7 @@ values
         name
             The name of the group
 linked_to_cluster:
-    Optional. A string containing a cluster id. If set, the resource may only
+    Optional. A string containing a cluster ID. If set, the resource may only
     be used with the linked cluster and will automatically be removed when the
     linked cluster is removed.
 
@@ -746,6 +1064,93 @@ Example:
         - name: steves
           password: F00Bar123
         groups: []
+
+
+TLS Credential Resource
+------------------------
+
+TLS credential resources store copies of TLS files such as Certificates, Keys,
+or CA Certificates.
+A TLS credential resource supports the following fields:
+
+resource_type
+    A literal string ``ceph.smb.tls.credential``
+tls_credential_id
+    A short string identifying the TLS credential resource
+intent
+    One of ``present`` or ``removed``. If not provided, ``present`` is assumed.
+    If ``removed`` all following fields are optional
+credential_type
+    Required string.  The value may be one of ``cert``, ``key``, or ``ca-cert``.
+    This value indicates what type of TLS credential the value field holds.
+value:
+    A string containing the TLS certificate or key value in PEM encoding.
+linked_to_cluster:
+    Optional. A string containing a cluster ID. If set, the resource may only
+    be used with the linked cluster and will automatically be removed when the
+    linked cluster is removed.
+
+Example:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.tls.credential
+    tls_credential_id: mycert1
+    credential_type: cert
+    # NOTE: The value below is truncated to make the documentation more
+    # consise. A real embedded certificate is expected to be valid and
+    # will be longer than this example.
+    value: |
+      -----BEGIN CERTIFICATE-----
+      MIIFDjCCA/agAwIBAgISBtFQfoXc4RmyVabbv28RClKdMA0GCSqGSIb3DQEBCwUA
+      MDMxCzAJBgNVBAYTAlVTMRYwFAYDVQQKEw1MZXQncyBFbmNyeXB0MQwwCgYDVQQD
+      EwNSMTAwHhcNMjUwNTE5MTAyNzUyWhcNMjUwODE3MTAyNzUxWjASMRAwDgYDVQQD
+      EwdjZXBoLmlvMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx6fif6PQ
+      LOTdnO8d1JHcF7D+oB/mQlplFz4vwq/GB6Y4oWK3uCQ4PPz/qyvE4wyvc5EPhjfg
+      d8XNc4ajEBcSUoRj3UwWwiA4oht0SyoJIfwVGp/kF5jxHhVCLdoaaqAxv7nAghWM
+      6Dg=
+      -----END CERTIFICATE-----
+
+
+External Ceph Cluster Resource
+------------------------------
+
+This resource can be used to configure an SMB Cluster hosted on Ceph cluster to
+use CephFS volumes provided by an external Ceph cluster.  The values provided
+below allow the SMB server to connect to a cluster other than the one it is
+running on.
+
+.. warning::
+   This is an advanced feature that should be used with care. It allows
+   SMB servers to contact CephFS on a different cluster. Because of that, many
+   values provided below can not be validated and other validations that smb
+   mgr module normally does are disabled.
+   In addition, automatic subvolume to path mapping is disabled. Shares in SMB
+   clusters making use of an external Ceph cluster *must* not specify a
+   subvolume by name and *must* specify an absolute path to a subvolume.
+
+An external ceph cluster resource supports the following fields.
+
+resource_type
+    A literal string ``ceph.smb.ext.cluster``
+external_ceph_cluster_id
+    A short string identifying the cluster
+intent
+    One of ``present`` or ``removed``. If not provided, ``present`` is
+    assumed. If ``removed`` all following fields are optional
+fsid
+    String. The UUID/FSID of the external cluster
+mon_host
+    String. The ``mon_host`` string (as sourced from a ceph.conf file)
+cephfs_user
+    Object. Fields:
+
+    name
+        String. A ceph user name indicating the cephx user that will
+        access the CephFS volume(s) on the external cluster
+    key
+        String. The Base64 encoded key value corresponding to the cephx
+        user name provided
 
 
 A Declarative Configuration Example
@@ -807,9 +1212,9 @@ configuration file. First, create the YAML with the contents:
 Save this text to a YAML file named ``resources.yaml`` and make it available
 on a cluster admin host. Then run:
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb apply -i resources.yaml
+   ceph smb apply -i resources.yaml
 
 The command will print a summary of the changes made and begin to automatically
 deploy the needed resources. See `Accessing Shares`_ for more information
@@ -838,9 +1243,9 @@ action with a new file ``removed.yaml`` containing:
 
 By issuing the command:
 
-.. code:: bash
+.. prompt:: bash #
 
-    $ ceph smb apply -i removed.yaml
+   ceph smb apply -i removed.yaml
 
 
 SMB Cluster Management

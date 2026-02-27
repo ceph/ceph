@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,22 +16,32 @@
 #ifndef CEPH_MDS_LOCKER_H
 #define CEPH_MDS_LOCKER_H
 
+#include <map>
+#include <memory>
+#include <set>
+#include <string_view>
+#include <vector>
+
 #include "common/ref.h"
+#include "include/mempool.h"
 #include "include/types.h"
 
-#include "CInode.h"
-#include "MDSContext.h"
+#include "mdstypes.h" // for xattr_map
 #include "Mutation.h"
+#include "SimpleLock.h"
 
 struct LeaseStat;
 struct SnapRealm;
 
+class CInode;
 class MClientCaps;
 class MClientCapRelease;
 class MClientLease;
 class MClientReply;
+class MInodeFileCaps;
 class MDCache;
 class MLock;
+class MDSContext;
 class MDSRank;
 class Session;
 class CDentry;
@@ -38,6 +49,11 @@ class Capability;
 class SimpleLock;
 class ScatterLock;
 class LocalLockC;
+
+template<template<typename> class Allocator> struct inode_t;
+using mempool_inode = inode_t<mempool::mds_co::pool_allocator>;
+using inode_const_ptr = std::shared_ptr<const mempool_inode>;
+using mempool_xattr_map = xattr_map<mempool::mds_co::pool_allocator>; // FIXME bufferptr not in mempool
 
 class Locker {
 public:
@@ -50,7 +66,7 @@ public:
 
   void tick();
 
-  void nudge_log(SimpleLock *lock);
+  bool nudge_log(SimpleLock *lock);
 
   bool acquire_locks(const MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
@@ -66,7 +82,7 @@ public:
   void drop_locks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
   void set_xlocks_done(MutationImpl *mut, bool skip_dentry=false);
   void drop_non_rdlocks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
-  void drop_rdlocks_for_early_reply(MutationImpl *mut);
+  void handle_locks_for_early_reply(MutationImpl *mut);
   void drop_lock(MutationImpl* mut, SimpleLock* what);
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
 
@@ -83,9 +99,9 @@ public:
   void eval_lock_caches(Capability *cap);
   void put_lock_cache(MDLockCache* lock_cache);
 
-  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, MDSContext::vec *pfinishers=0);
+  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, std::vector<MDSContext*> *pfinishers=0);
   void eval(SimpleLock *lock, bool *need_issue);
-  void eval_any(SimpleLock *lock, bool *need_issue, MDSContext::vec *pfinishers=0, bool first=false) {
+  void eval_any(SimpleLock *lock, bool *need_issue, std::vector<MDSContext*> *pfinishers=0, bool first=false) {
     if (!lock->is_stable())
       eval_gather(lock, first, need_issue, pfinishers);
     else if (lock->get_parent()->is_auth())
@@ -223,7 +239,7 @@ protected:
   bool _need_flush_mdlog(CInode *in, int wanted_caps, bool lock_state_any=false);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(const cref_t<MClientCaps> &m);
-  void _update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps> &m, CInode::mempool_inode *pi);
+  void _update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps> &m, mempool_inode *pi);
   void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, const cref_t<MClientCaps> &m, const ref_t<MClientCaps> &ack);
   void _do_null_snapflush(CInode *head_in, client_t client, snapid_t last=CEPH_NOSNAP);
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, const cref_t<MClientCaps> &m,
@@ -247,6 +263,7 @@ protected:
   void file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 			  client_t client, const ref_t<MClientCaps> &ack);
 
+  void maybe_set_subvolume_id(const CInode* head_in, ref_t<MClientCaps>& ack);
   xlist<ScatterLock*> updated_scatterlocks;
 
   // Maintain a global list to quickly find if any caps are late revoking
@@ -268,10 +285,10 @@ private:
 
   void handle_quiesce_failure(const MDRequestRef& mdr, std::string_view& marker);
 
-  uint64_t calc_new_max_size(const CInode::inode_const_ptr& pi, uint64_t size);
-  __u32 get_xattr_total_length(CInode::mempool_xattr_map &xattr);
-  void decode_new_xattrs(CInode::mempool_inode *inode,
-			 CInode::mempool_xattr_map *px,
+  uint64_t calc_new_max_size(const inode_const_ptr& pi, uint64_t size);
+  __u32 get_xattr_total_length(mempool_xattr_map &xattr);
+  void decode_new_xattrs(mempool_inode *inode,
+			 mempool_xattr_map *px,
 			 const cref_t<MClientCaps> &m);
 
   MDSRank *mds;

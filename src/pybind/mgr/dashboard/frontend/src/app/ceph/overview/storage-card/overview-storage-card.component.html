@@ -1,0 +1,56 @@
+<cd-productive-card>
+  <!-- STORAGE CARD HEADER -->
+  <ng-template #header>
+    <h2 class="cds--type-heading-compact-02"
+        i18n>Storage Overview</h2>
+    <cds-dropdown
+      label="Storage type"
+      class="overview-storage-card-dropdown"
+      i18n-label
+      size="sm"
+      [disabled]="!(displayData && usedRaw && totalRaw && usedRawUnit && totalRawUnit)"
+      [placeholder]="selectedStorageType"
+      (selected)="onStorageTypeSelect($event)">
+      <cds-dropdown-list [items]="dropdownItems"></cds-dropdown-list>
+    </cds-dropdown>
+  </ng-template>
+  <!-- CAPACITY USAGE TEXT -->
+  <div class="overview-storage-card-usage-text">
+    @if(displayUsedRaw && totalRaw && usedRawUnit && totalRawUnit) {
+    <h5>
+      <span
+        class="cds--type-heading-05"
+        i18n>{{displayUsedRaw}}&ngsp;</span>
+      <span
+        class="cds--type-body-02"
+        i18n>{{usedRawUnit}} of {{totalRaw}} {{totalRawUnit}} used</span>
+    </h5>
+    }
+    @else {
+    <cds-skeleton-text
+      [lines]="1"
+      [minLineWidth]="400"
+      [maxLineWidth]="400">
+    </cds-skeleton-text>
+    }
+  </div>
+  <!-- CAPACITY CHART -->
+  @if(displayData) {
+  <ibm-meter-chart
+    [options]="options"
+    [data]="displayData"
+    class="overview-storage-card-chart"></ibm-meter-chart>
+  }
+  @else {
+  <cds-skeleton-text
+    [lines]="1"
+    [minLineWidth]="1025"
+    [maxLineWidth]="1025">
+  </cds-skeleton-text>
+  <cds-skeleton-text
+    [lines]="1"
+    [minLineWidth]="200"
+    [maxLineWidth]="200">
+  </cds-skeleton-text>
+  }
+</cd-productive-card>

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/Formatter.h"
@@ -424,34 +424,36 @@ NotifyOp NotifyMessage::get_notify_op() const {
   return payload->get_notify_op();
 }
 
-void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
-  o.push_back(new NotifyMessage(new AcquiredLockPayload(ClientId(1, 2))));
-  o.push_back(new NotifyMessage(new ReleasedLockPayload(ClientId(1, 2))));
-  o.push_back(new NotifyMessage(new RequestLockPayload(ClientId(1, 2), true)));
-  o.push_back(new NotifyMessage(new HeaderUpdatePayload()));
-  o.push_back(new NotifyMessage(new AsyncProgressPayload(AsyncRequestId(ClientId(0, 1), 2), 3, 4)));
-  o.push_back(new NotifyMessage(new AsyncCompletePayload(AsyncRequestId(ClientId(0, 1), 2), 3)));
-  o.push_back(new NotifyMessage(new FlattenPayload(AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(new ResizePayload(AsyncRequestId(ClientId(0, 1), 2), 123, true)));
-  o.push_back(new NotifyMessage(new SnapCreatePayload(AsyncRequestId(ClientId(0, 1), 2),
-                                                      cls::rbd::UserSnapshotNamespace(),
-                                                      "foo", 1)));
-  o.push_back(new NotifyMessage(new SnapRemovePayload(AsyncRequestId(ClientId(0, 1), 2),
-                                                      cls::rbd::UserSnapshotNamespace(), "foo")));
-  o.push_back(new NotifyMessage(new SnapProtectPayload(AsyncRequestId(ClientId(0, 1), 2),
-                                                       cls::rbd::UserSnapshotNamespace(), "foo")));
-  o.push_back(new NotifyMessage(new SnapUnprotectPayload(AsyncRequestId(ClientId(0, 1), 2),
-                                                         cls::rbd::UserSnapshotNamespace(), "foo")));
-  o.push_back(new NotifyMessage(new RebuildObjectMapPayload(AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(new RenamePayload(AsyncRequestId(ClientId(0, 1), 2), "foo")));
-  o.push_back(new NotifyMessage(new UpdateFeaturesPayload(AsyncRequestId(ClientId(0, 1), 2),
-                                                          1, true)));
-  o.push_back(new NotifyMessage(new MigratePayload(AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(new SparsifyPayload(AsyncRequestId(ClientId(0, 1), 2), 1)));
-  o.push_back(new NotifyMessage(new QuiescePayload(AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(new UnquiescePayload(AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(new MetadataUpdatePayload(AsyncRequestId(ClientId(0, 1), 2),
-                                                          "foo", std::optional<std::string>{"xyz"})));
+std::list<NotifyMessage> NotifyMessage::generate_test_instances() {
+  std::list<NotifyMessage> o;
+  o.push_back(NotifyMessage(new AcquiredLockPayload(ClientId(1, 2))));
+  o.push_back(NotifyMessage(new ReleasedLockPayload(ClientId(1, 2))));
+  o.push_back(NotifyMessage(new RequestLockPayload(ClientId(1, 2), true)));
+  o.push_back(NotifyMessage(new HeaderUpdatePayload()));
+  o.push_back(NotifyMessage(new AsyncProgressPayload(AsyncRequestId(ClientId(0, 1), 2), 3, 4)));
+  o.push_back(NotifyMessage(new AsyncCompletePayload(AsyncRequestId(ClientId(0, 1), 2), 3)));
+  o.push_back(NotifyMessage(new FlattenPayload(AsyncRequestId(ClientId(0, 1), 2))));
+  o.push_back(NotifyMessage(new ResizePayload(AsyncRequestId(ClientId(0, 1), 2), 123, true)));
+  o.push_back(NotifyMessage(new SnapCreatePayload(AsyncRequestId(ClientId(0, 1), 2),
+						  cls::rbd::UserSnapshotNamespace(),
+						  "foo", 1)));
+  o.push_back(NotifyMessage(new SnapRemovePayload(AsyncRequestId(ClientId(0, 1), 2),
+						  cls::rbd::UserSnapshotNamespace(), "foo")));
+  o.push_back(NotifyMessage(new SnapProtectPayload(AsyncRequestId(ClientId(0, 1), 2),
+						   cls::rbd::UserSnapshotNamespace(), "foo")));
+  o.push_back(NotifyMessage(new SnapUnprotectPayload(AsyncRequestId(ClientId(0, 1), 2),
+						     cls::rbd::UserSnapshotNamespace(), "foo")));
+  o.push_back(NotifyMessage(new RebuildObjectMapPayload(AsyncRequestId(ClientId(0, 1), 2))));
+  o.push_back(NotifyMessage(new RenamePayload(AsyncRequestId(ClientId(0, 1), 2), "foo")));
+  o.push_back(NotifyMessage(new UpdateFeaturesPayload(AsyncRequestId(ClientId(0, 1), 2),
+						      1, true)));
+  o.push_back(NotifyMessage(new MigratePayload(AsyncRequestId(ClientId(0, 1), 2))));
+  o.push_back(NotifyMessage(new SparsifyPayload(AsyncRequestId(ClientId(0, 1), 2), 1)));
+  o.push_back(NotifyMessage(new QuiescePayload(AsyncRequestId(ClientId(0, 1), 2))));
+  o.push_back(NotifyMessage(new UnquiescePayload(AsyncRequestId(ClientId(0, 1), 2))));
+  o.push_back(NotifyMessage(new MetadataUpdatePayload(AsyncRequestId(ClientId(0, 1), 2),
+						      "foo", std::optional<std::string>{"xyz"})));
+  return o;
 }
 
 void ResponseMessage::encode(bufferlist& bl) const {
@@ -470,8 +472,10 @@ void ResponseMessage::dump(Formatter *f) const {
   f->dump_int("result", result);
 }
 
-void ResponseMessage::generate_test_instances(std::list<ResponseMessage *> &o) {
-  o.push_back(new ResponseMessage(1));
+std::list<ResponseMessage> ResponseMessage::generate_test_instances() {
+  std::list<ResponseMessage> o;
+  o.push_back(ResponseMessage(1));
+  return o;
 }
 
 std::ostream &operator<<(std::ostream &out,

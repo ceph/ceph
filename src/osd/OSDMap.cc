@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -106,16 +107,18 @@ void osd_info_t::decode(ceph::buffer::list::const_iterator& bl)
   decode(lost_at, bl);
 }
 
-void osd_info_t::generate_test_instances(list<osd_info_t*>& o)
+list<osd_info_t> osd_info_t::generate_test_instances()
 {
-  o.push_back(new osd_info_t);
-  o.push_back(new osd_info_t);
-  o.back()->last_clean_begin = 1;
-  o.back()->last_clean_end = 2;
-  o.back()->up_from = 30;
-  o.back()->up_thru = 40;
-  o.back()->down_at = 5;
-  o.back()->lost_at = 6;
+  list<osd_info_t> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().last_clean_begin = 1;
+  o.back().last_clean_end = 2;
+  o.back().up_from = 30;
+  o.back().up_thru = 40;
+  o.back().down_at = 5;
+  o.back().lost_at = 6;
+  return o;
 }
 
 ostream& operator<<(ostream& out, const osd_info_t& info)
@@ -188,14 +191,16 @@ void osd_xinfo_t::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-void osd_xinfo_t::generate_test_instances(list<osd_xinfo_t*>& o)
+list<osd_xinfo_t> osd_xinfo_t::generate_test_instances()
 {
-  o.push_back(new osd_xinfo_t);
-  o.push_back(new osd_xinfo_t);
-  o.back()->down_stamp = utime_t(2, 3);
-  o.back()->laggy_probability = .123;
-  o.back()->laggy_interval = 123456;
-  o.back()->old_weight = 0x7fff;
+  list<osd_xinfo_t> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().down_stamp = utime_t(2, 3);
+  o.back().laggy_probability = .123;
+  o.back().laggy_interval = 123456;
+  o.back().old_weight = 0x7fff;
+  return o;
 }
 
 ostream& operator<<(ostream& out, const osd_xinfo_t& xi)
@@ -369,7 +374,7 @@ bool OSDMap::subtree_type_is_down(
 {
   if (id >= 0) {
     bool is_down_ret = is_down(id);
-    if (!is_out(id)) {
+    if (!is_out(id) && !(osd_state[id] & CEPH_OSD_NEW)) {
       if (is_down_ret) {
         down_in_osds->insert(id);
       } else {
@@ -1387,9 +1392,11 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->close_section();
 }
 
-void OSDMap::Incremental::generate_test_instances(list<Incremental*>& o)
+auto OSDMap::Incremental::generate_test_instances() -> list<Incremental>
 {
-  o.push_back(new Incremental);
+  list<Incremental> o;
+  o.emplace_back();
+  return o;
 }
 
 // ----------------------------------
@@ -2026,10 +2033,32 @@ void OSDMap::clean_temps(CephContext *cct,
     int primary;
     nextmap.pg_to_raw_up(pg.first, &raw_up, &primary);
     bool remove = false;
-    if (raw_up == pg.second) {
-      ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
-		     << pg.second << " that matches raw_up mapping" << dendl;
-      remove = true;
+    const pg_pool_t *pool = nextmap.get_pg_pool(pg.first.pool());
+    auto acting_set = nextmap.pgtemp_undo_primaryfirst(*pool, pg.first, pg.second);
+    if (raw_up == acting_set) {
+      bool keep = false;
+      // Optimized EC pools may set acting to be the same as up to
+      // force a change of primary shard - do not remove pg_temp
+      // if it is being used for this purpose
+      if (pool->allows_ecoptimizations()) {
+        // primary might not be in raw_up - so keep pg_temp unless
+	// proven that the primary is not a non-primary shard
+	keep = true;
+        for (unsigned int i = 0; i < raw_up.size(); ++i) {
+	  if (raw_up[i] == primary) {
+	    if (!pool->is_nonprimary_shard(shard_id_t(i))) {
+	      // pg_temp not required
+	      keep = false;
+	    }
+	    break;
+	  }
+	}
+      }
+      if (!keep) {
+	ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
+		       << pg.second << " that matches raw_up mapping" << dendl;
+	remove = true;
+      }
     }
     // oversized pg_temp?
     if (pg.second.size() > nextmap.get_pg_pool(pg.first.pool())->get_size()) {
@@ -2073,10 +2102,12 @@ void OSDMap::clean_temps(CephContext *cct,
 
 void OSDMap::get_upmap_pgs(vector<pg_t> *upmap_pgs) const
 {
-  upmap_pgs->reserve(pg_upmap.size() + pg_upmap_items.size());
+  upmap_pgs->reserve(pg_upmap.size() + pg_upmap_items.size() + pg_upmap_primaries.size());
   for (auto& p : pg_upmap)
     upmap_pgs->push_back(p.first);
   for (auto& p : pg_upmap_items)
+    upmap_pgs->push_back(p.first);
+  for (auto& p : pg_upmap_primaries)
     upmap_pgs->push_back(p.first);
 }
 
@@ -2084,6 +2115,8 @@ bool OSDMap::check_pg_upmaps(
   CephContext *cct,
   const vector<pg_t>& to_check,
   vector<pg_t> *to_cancel,
+  vector<pg_t> *to_cancel_upmap_primary_only,
+  set<uint64_t> *affected_pools,
   map<pg_t, mempool::osdmap::vector<pair<int,int>>> *to_remap) const
 {
   bool any_change = false;
@@ -2094,12 +2127,14 @@ bool OSDMap::check_pg_upmaps(
       ldout(cct, 0) << __func__ << " pg " << pg << " is gone or merge source"
 		    << dendl;
       to_cancel->push_back(pg);
+      affected_pools->emplace(pg.pool());
       continue;
     }
     if (pi->is_pending_merge(pg, nullptr)) {
       ldout(cct, 0) << __func__ << " pg " << pg << " is pending merge"
 		    << dendl;
       to_cancel->push_back(pg);
+      affected_pools->emplace(pg.pool());
       continue;
     }
     vector<int> raw, up;
@@ -2117,20 +2152,19 @@ bool OSDMap::check_pg_upmaps(
       continue;
     }
     // below we check against crush-topology changing..
-    map<int, float> weight_map;
-    auto it = rule_weight_map.find(crush_rule);
-    if (it == rule_weight_map.end()) {
-      auto r = crush->get_rule_weight_osd_map(crush_rule, &weight_map);
+    auto rule_entry = rule_weight_map.find(crush_rule);
+    if (rule_entry == rule_weight_map.end()) {
+      rule_entry = rule_weight_map.emplace(crush_rule, map<int, float>()).first;
+      auto r = crush->get_rule_weight_osd_map(crush_rule, &rule_entry->second);
       if (r < 0) {
         lderr(cct) << __func__ << " unable to get crush weight_map for "
                    << "crush_rule " << crush_rule
                    << dendl;
+        rule_weight_map.erase(rule_entry);
         continue;
       }
-      rule_weight_map[crush_rule] = weight_map;
-    } else {
-      weight_map = it->second;
     }
+    const map<int, float> &weight_map = rule_entry->second;
     ldout(cct, 10) << __func__ << " pg " << pg
                    << " weight_map " << weight_map
                    << dendl;
@@ -2154,6 +2188,7 @@ bool OSDMap::check_pg_upmaps(
     }
     if (!to_cancel->empty() && to_cancel->back() == pg)
       continue;
+
     // okay, upmap is valid
     // continue to check if it is still necessary
     auto i = pg_upmap.find(pg);
@@ -2206,8 +2241,28 @@ bool OSDMap::check_pg_upmaps(
         any_change = true;
       }
     }
+    // Cancel any pg_upmap_primary mapping where the mapping is set
+    //   to an OSD outside the raw set, or if the mapping is redundant
+    auto k = pg_upmap_primaries.find(pg);
+    if (k != pg_upmap_primaries.end()) {
+      auto curr_prim = k->second;
+      bool valid_prim = false;
+      for (auto osd : raw) {
+        if ((curr_prim == osd) &&
+	    (curr_prim != raw.front())) {
+	  valid_prim = true;
+          break;
+	}
+      }
+      if (!valid_prim) {
+        ldout(cct, 10) << __func__ << " pg_upmap_primary (PG " << pg << " has an invalid or redundant primary: "
+		      << curr_prim << " -> " << raw << ")" << dendl;
+        to_cancel_upmap_primary_only->push_back(pg);
+        any_change = true;
+      }
+    }
   }
-  any_change = any_change || !to_cancel->empty();
+  any_change = any_change || !to_cancel->empty() || !to_cancel_upmap_primary_only->empty();
   return any_change;
 }
 
@@ -2215,6 +2270,8 @@ void OSDMap::clean_pg_upmaps(
   CephContext *cct,
   Incremental *pending_inc,
   const vector<pg_t>& to_cancel,
+  const vector<pg_t>& to_cancel_upmap_primary_only,
+  const set<uint64_t>& affected_pools,
   const map<pg_t, mempool::osdmap::vector<pair<int,int>>>& to_remap) const
 {
   for (auto &pg: to_cancel) {
@@ -2232,6 +2289,21 @@ void OSDMap::clean_pg_upmaps(
                      << j->first << "->" << j->second
                      << dendl;
       pending_inc->old_pg_upmap.insert(pg);
+    }
+    auto k = pending_inc->new_pg_upmap_primary.find(pg);
+    if (k != pending_inc->new_pg_upmap_primary.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pending "
+	             << "pg_upmap_primaries entry "
+		     << k->first << "->" << k->second
+		     << dendl;
+      pending_inc->new_pg_upmap_primary.erase(k);
+    }
+    auto l = pg_upmap_primaries.find(pg);
+    if (l != pg_upmap_primaries.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pg_upmap_primaries entry "
+	             << l->first << "->" << l->second
+		     << dendl;
+      pending_inc->old_pg_upmap_primary.insert(pg);
     }
     auto p = pending_inc->new_pg_upmap_items.find(pg);
     if (p != pending_inc->new_pg_upmap_items.end()) {
@@ -2252,6 +2324,36 @@ void OSDMap::clean_pg_upmaps(
   }
   for (auto& i : to_remap)
     pending_inc->new_pg_upmap_items[i.first] = i.second;
+
+  // Cancel mappings that are only invalid for pg_upmap_primary.
+  //   For example, if a selected primary OSD does not exist
+  //   in that PG's up set, it should be canceled. But this
+  //   could be valid for pg_upmap/pg_upmap_items.
+  for (auto &pg_prim: to_cancel_upmap_primary_only) {
+    auto k = pending_inc->new_pg_upmap_primary.find(pg_prim);
+    if (k != pending_inc->new_pg_upmap_primary.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pending "
+                     << "pg_upmap_primaries entry "
+                     << k->first << "->" << k->second
+                     << dendl;
+      pending_inc->new_pg_upmap_primary.erase(k);
+    }
+    auto l = pg_upmap_primaries.find(pg_prim);
+    if (l != pg_upmap_primaries.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pg_upmap_primaries entry "
+                     << l->first << "->" << l->second
+                     << dendl;
+      pending_inc->old_pg_upmap_primary.insert(pg_prim);
+    }
+  }
+
+  // Clean all pg_upmap_primary entries where the pool size was changed,
+  // as old records no longer make sense optimization-wise.
+  for (auto pid : affected_pools) {
+    ldout(cct, 10) << __func__ << " cancel all pg_upmap_primaries for pool " << pid
+	          << " since pg_num changed" << dendl;
+    rm_all_upmap_prims(cct, pending_inc, pid);
+  }
 }
 
 bool OSDMap::clean_pg_upmaps(
@@ -2261,14 +2363,14 @@ bool OSDMap::clean_pg_upmaps(
   ldout(cct, 10) << __func__ << dendl;
   vector<pg_t> to_check;
   vector<pg_t> to_cancel;
+  vector<pg_t> to_cancel_upmap_primary_only;
+  set<uint64_t> affected_pools;
   map<pg_t, mempool::osdmap::vector<pair<int,int>>> to_remap;
 
   get_upmap_pgs(&to_check);
-  auto any_change = check_pg_upmaps(cct, to_check, &to_cancel, &to_remap);
-  clean_pg_upmaps(cct, pending_inc, to_cancel, to_remap);
-  //TODO: Create these 3 functions for pg_upmap_primaries and so they can be checked 
-  //      and cleaned in the same way as pg_upmap. This is not critical since invalid
-  //      pg_upmap_primaries are never applied, (the final check is in _apply_upmap).
+  auto any_change = check_pg_upmaps(cct, to_check, &to_cancel, &to_cancel_upmap_primary_only,
+		                    &affected_pools, &to_remap);
+  clean_pg_upmaps(cct, pending_inc, to_cancel, to_cancel_upmap_primary_only, affected_pools, to_remap);
   return any_change;
 }
 
@@ -2852,9 +2954,119 @@ void OSDMap::_apply_primary_affinity(ps_t seed,
   }
 }
 
+/* EC pools with allow_ec_optimizations set have some shards that cannot
+ * become the primary because they are not updated on every I/O. To avoid
+ * requiring clients to be upgraded to use these new pools the logic in
+ * OSDMap which selects a primary cannot be changed. Instead choose_acting
+ * is modified to set pgtemp when it is necessary to override the choice
+ * of primary, and this vector is reordered so that shards that are
+ * permitted to be the primary are listed first. The existing OSDMap code
+ * will then choose a suitable shard as primary except when the pg is
+ * incomplete and the choice of primary doesn't matter. This function is
+ * called by OSDMonitor when setting pg_temp to transform the vector.
+ *
+ * Example: Optimized EC pool 4+2
+ * acting_set = {NONE, 6, 7, 8, 9, 10}
+ * non_primary_shards = {1, 2, 3} # data shards other than shard 0
+ * pg_temp = {NONE, 9, 10, 6, 7, 8} # non-primary shards at end
+ * primary will be OSD 9(1)
+ */
+const std::vector<int> OSDMap::pgtemp_primaryfirst(const pg_pool_t& pool,
+			 const std::vector<int>& pg_temp) const
+{
+  // Only perform the transform for pools with allow_ec_optimizations set
+  if (pool.allows_ecoptimizations()) {
+    std::vector<int> result;
+    std::vector<int> nonprimary;
+    int shard = 0;
+    for (auto osd : pg_temp) {
+      if (pool.is_nonprimary_shard(shard_id_t(shard))) {
+	nonprimary.emplace_back(osd);
+      } else {
+	result.emplace_back(osd);
+      }
+      shard++;
+    }
+    result.insert(result.end(), nonprimary.begin(), nonprimary.end());
+    return result;
+  }
+  return pg_temp;
+}
+
+/* The function above reorders the pg_temp vector. This transformation needs
+ * to be reversed by OSDs (but not clients) and is called by PeeringState
+ * when initializing the the acting set.
+ */
+const std::vector<int> OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
+	const pg_t pg, const std::vector<int>& acting) const
+{
+  // Only perform the transform for pools with allow_ec_optimizations set
+  // that also have pg_temp set
+  if (pool.allows_ecoptimizations()) {
+    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
+      std::vector<int> result;
+      int primaryshard = 0;
+      int nonprimaryshard = pool.size - pool.nonprimary_shards.size();
+      ceph_assert(acting.size() == pool.size);
+      for (auto shard = 0; shard < pool.size; shard++) {
+	if (pool.is_nonprimary_shard(shard_id_t(shard))) {
+	  result.emplace_back(acting[nonprimaryshard++]);
+	} else {
+	  result.emplace_back(acting[primaryshard++]);
+	}
+      }
+      return result;
+    }
+  }
+  return acting;
+}
+
+const shard_id_t OSDMap::pgtemp_primaryfirst(const pg_pool_t& pool,
+	const pg_t pg, const shard_id_t shard) const
+{
+  if ((shard == shard_id_t::NO_SHARD) ||
+      (shard == shard_id_t(0))) {
+    return shard;
+  }
+  shard_id_t result = shard;
+  if (pool.allows_ecoptimizations()) {
+    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
+      int num_parity_shards = pool.size - pool.nonprimary_shards.size() - 1;
+      if (shard >= pool.size - num_parity_shards) {
+	result = shard_id_t(result + num_parity_shards + 1 - pool.size);
+      } else {
+	result = shard_id_t(result + num_parity_shards);
+      }
+    }
+  }
+  return result;
+}
+
+shard_id_t OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
+	const pg_t pg, const shard_id_t shard) const
+{
+  if ((shard == shard_id_t::NO_SHARD) ||
+      (shard == shard_id_t(0))) {
+    return shard;
+  }
+  shard_id_t result = shard;
+  if (pool.allows_ecoptimizations()) {
+    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
+      int num_parity_shards = pool.size - pool.nonprimary_shards.size() - 1;
+      if (shard > num_parity_shards) {
+	result = shard_id_t(result - num_parity_shards);
+      } else {
+	result = shard_id_t(result + pool.size - num_parity_shards - 1);
+      }
+    }
+  }
+  return result;
+}
+
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
                             vector<int> *temp_pg, int *temp_primary) const
 {
+  vector<int> temp;
   pg = pool.raw_pg_to_pg(pg);
   const auto p = pg_temp->find(pg);
   temp_pg->clear();
@@ -2864,21 +3076,22 @@ void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
 	if (pool.can_shift_osds()) {
 	  continue;
 	} else {
-	  temp_pg->push_back(CRUSH_ITEM_NONE);
+	  temp.push_back(CRUSH_ITEM_NONE);
 	}
       } else {
-	temp_pg->push_back(p->second[i]);
+	temp.push_back(p->second[i]);
       }
     }
+    *temp_pg = pgtemp_undo_primaryfirst(pool, pg, temp);
   }
   const auto &pp = primary_temp->find(pg);
   *temp_primary = -1;
   if (pp != primary_temp->end()) {
     *temp_primary = pp->second;
-  } else if (!temp_pg->empty()) { // apply pg_temp's primary
-    for (unsigned i = 0; i < temp_pg->size(); ++i) {
-      if ((*temp_pg)[i] != CRUSH_ITEM_NONE) {
-	*temp_primary = (*temp_pg)[i];
+  } else if (!temp.empty()) { // apply pg_temp's primary
+    for (unsigned i = 0; i < temp.size(); ++i) {
+      if (temp[i] != CRUSH_ITEM_NONE) {
+	*temp_primary = temp[i];
 	break;
       }
     }
@@ -3028,6 +3241,9 @@ bool OSDMap::primary_changed_broken(
 uint64_t OSDMap::get_encoding_features() const
 {
   uint64_t f = SIGNIFICANT_FEATURES;
+  if (require_osd_release < ceph_release_t::tentacle) {
+    f &= ~CEPH_FEATURE_SERVER_TENTACLE;
+  }
   if (require_osd_release < ceph_release_t::reef) {
     f &= ~CEPH_FEATURE_SERVER_REEF;
   }
@@ -4123,17 +4339,19 @@ void OSDMap::dump(Formatter *f, CephContext *cct) const
   f->close_section();
 }
 
-void OSDMap::generate_test_instances(list<OSDMap*>& o)
+list<OSDMap> OSDMap::generate_test_instances()
 {
-  o.push_back(new OSDMap);
+  list<OSDMap> o;
+  o.emplace_back();
 
   CephContext *cct = new CephContext(CODE_ENVIRONMENT_UTILITY);
-  o.push_back(new OSDMap);
+  o.emplace_back();
   uuid_d fsid;
-  o.back()->build_simple(cct, 1, fsid, 16);
-  o.back()->created = o.back()->modified = utime_t(1, 2);  // fix timestamp
-  o.back()->blocklist[entity_addr_t()] = utime_t(5, 6);
+  o.back().build_simple(cct, 1, fsid, 16);
+  o.back().created = o.back().modified = utime_t(1, 2);  // fix timestamp
+  o.back().blocklist[entity_addr_t()] = utime_t(5, 6);
   cct->put();
+  return o;
 }
 
 string OSDMap::get_flag_string(unsigned f)
@@ -5203,17 +5421,21 @@ int OSDMap::balance_primaries(
   return num_changes;
 }
 
-void OSDMap::rm_all_upmap_prims(CephContext *cct, OSDMap::Incremental *pending_inc, uint64_t pid) {
+void OSDMap::rm_all_upmap_prims(
+  CephContext *cct,
+  OSDMap::Incremental *pending_inc,
+  uint64_t pid) const
+{
   map<uint64_t,set<pg_t>> prim_pgs_by_osd;
   get_pgs_by_osd(cct, pid, &prim_pgs_by_osd);
   for (auto &[_, pgs] : prim_pgs_by_osd) {
     for (auto &pg : pgs) {
       if (pending_inc->new_pg_upmap_primary.contains(pg)) {
-        ldout(cct,30) << __func__ << "Removing pending pg_upmap_prim for pg " << pg << dendl;
+        ldout(cct, 30) << __func__ << " Removing pending pg_upmap_prim for pg " << pg << dendl;
         pending_inc->new_pg_upmap_primary.erase(pg);
       }
       if (pg_upmap_primaries.contains(pg)) {
-        ldout(cct, 30) << __func__ << "Removing pg_upmap_prim for pg " << pg << dendl;
+        ldout(cct, 30) << __func__ << " Removing pg_upmap_prim for pg " << pg << dendl;
         pending_inc->old_pg_upmap_primary.insert(pg);
       }
     }
@@ -5222,7 +5444,7 @@ void OSDMap::rm_all_upmap_prims(CephContext *cct, OSDMap::Incremental *pending_i
 
 void OSDMap::rm_all_upmap_prims(
   CephContext *cct,
-  OSDMap::Incremental *pending_inc)
+  OSDMap::Incremental *pending_inc) const
 {
   for (const auto& [pg, _] : pg_upmap_primaries) {
     if (pending_inc->new_pg_upmap_primary.contains(pg)) {
@@ -5870,11 +6092,18 @@ map<uint64_t,set<pg_t>> OSDMap::get_pgs_by_osd(
   OSDMap tmp_osd_map;
   tmp_osd_map.deepish_copy_from(*this);
 
+  // Set up map to return
+  map<uint64_t,set<pg_t>> pgs_by_osd;
+
   // Get the pool from the provided pool id
   const pg_pool_t* pool = get_pg_pool(pid);
+  if (!pool) {
+    ldout(cct, 20) << __func__ << " pool " << pid
+	          << " does not exist" << dendl;
+    return pgs_by_osd;
+  }
 
   // build array of pgs from the pool
-  map<uint64_t,set<pg_t>> pgs_by_osd;
   for (unsigned ps = 0; ps < pool->get_pg_num(); ++ps) {
     pg_t pg(ps, pid);
     vector<int> up;
@@ -7818,7 +8047,7 @@ void OSDMap::get_random_up_osds_by_subtree(int n,     // whoami
 float OSDMap::pool_raw_used_rate(int64_t poolid) const
 {
   const pg_pool_t *pool = get_pg_pool(poolid);
-  assert(pool != nullptr);
+  ceph_assert(pool != nullptr);
 
   switch (pool->get_type()) {
   case pg_pool_t::TYPE_REPLICATED:

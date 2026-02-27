@@ -7,6 +7,28 @@ export interface CephServiceStatus {
   created: Date;
 }
 
+export enum CephCertificateStatus {
+  valid = 'valid',
+  expired = 'expired',
+  expiring = 'expiring',
+  expiringSoon = 'expiring_soon',
+  notConfigured = 'not_configured',
+  invalid = 'invalid'
+}
+
+export interface CephServiceCertificate {
+  cert_name: string;
+  scope: string;
+  requires_certificate: boolean;
+  status: CephCertificateStatus | string;
+  days_to_expiration: number;
+  signed_by: string;
+  has_certificate: boolean;
+  certificate_source: string;
+  expiry_date: string;
+  issuer: string;
+  common_name: string;
+}
 // This will become handy when creating arbitrary services
 export interface CephServiceSpec {
   service_name: string;
@@ -14,9 +36,13 @@ export interface CephServiceSpec {
   service_id: string;
   unmanaged: boolean;
   status: CephServiceStatus;
+  certificate?: CephServiceCertificate;
   spec: CephServiceAdditionalSpec;
   placement: CephServicePlacement;
 }
+
+// Type for service spec update payload (excludes read-only status field)
+export type CephServiceSpecUpdate = Omit<CephServiceSpec, 'status'>;
 
 export interface CephServiceAdditionalSpec {
   backend_service: string;
@@ -62,11 +88,22 @@ export interface CephServiceAdditionalSpec {
   client_secret: string;
   oidc_issuer_url: string;
   enable_auth: boolean;
+  qat: QatSepcs;
 }
 
 export interface CephServicePlacement {
   count?: number;
   placement?: string;
   hosts?: string[];
-  label?: string;
+  label?: string | string[];
+}
+
+export interface QatSepcs {
+  [key: string]: string;
+}
+
+export enum QatOptions {
+  hw = 'hw',
+  sw = 'sw',
+  none = 'none'
 }

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,23 +13,25 @@
  * 
  */
 
-
 #ifndef BEACON_STATE_H
 #define BEACON_STATE_H
 
+#include <map>
 #include <mutex>
+#include <string>
 #include <string_view>
 #include <thread>
 
-#include "include/types.h"
-#include "include/Context.h"
+#include "include/common_fwd.h" // for CephContext
+#include "mds/MDSMap.h" // for MDSMap::DaemonState
 #include "msg/Dispatcher.h"
+#include "messages/MMDSBeacon.h" // for struct MDSHealth
 
-#include "messages/MMDSBeacon.h"
-
+class Connection;
+class Message;
 class MonClient;
 class MDSRank;
-
+class MMDSBeacon;
 
 /**
  * One of these per MDS.  Handle beacon logic in this separate class so

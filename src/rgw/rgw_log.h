@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -221,7 +221,7 @@ struct rgw_log_entry {
     DECODE_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<rgw_log_entry*>& o);
+  static std::list<rgw_log_entry> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_log_entry)
 

@@ -66,7 +66,7 @@ Here are some cache configuration settings:
   size is 1 GB.
 
 The above configurations can be set per-host, per-pool, per-image etc. Eg, to
-set per-host, add the overrides to the appropriate `section`_ in the host's
+set per-host, add the overrides to the appropriate :ref:`section <ceph-conf-file>` in the host's
 ``ceph.conf`` file. To set per-pool, per-image, etc, please refer to the
 ``rbd config`` `commands`_.
 
@@ -134,6 +134,5 @@ For example::
 
         $ rbd persistent-cache invalidate rbd/foo
 
-.. _section: ../../rados/configuration/ceph-conf/#configuration-sections
 .. _commands: ../../man/8/rbd#commands
 .. _DAX: https://www.kernel.org/doc/Documentation/filesystems/dax.txt

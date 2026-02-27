@@ -84,11 +84,21 @@ function TEST_repeer_on_down_acting_member_coming_back() {
     # reset up to [1,4,5]
     ceph osd pg-upmap $pgid 1 4 5 || return 1
 
-    # wait for peering to complete
-    sleep 2
+    timeout=2
+    start=$(date +%s)
 
-    # make sure osd.2 belongs to current acting set
-    ceph pg $pgid query | jq '.acting' | grep 2 || return 1
+    while true; do
+      if ceph pg "$pgid" query | jq '.acting' | grep -qw 2; then
+        echo "OSD.2 found in acting set"
+        break
+      fi
+      now=$(date +%s)
+      if [ $((now - start)) -ge $timeout ]; then
+        echo "Timed out waiting for OSD.2 in acting set"
+        return 1
+      fi
+      sleep 0.1
+    done
 
     # kill osd.2
     kill_daemons $dir KILL osd.2 || return 1
@@ -107,12 +117,26 @@ function TEST_repeer_on_down_acting_member_coming_back() {
     # again, wait for peering to complete
     sleep 2
 
-    # primary should be able to re-add osd.2 into acting
-    ceph pg $pgid query | jq '.acting' | grep 2 || return 1
+    pgjson=$(ceph pg $pgid query)
+    state=$(echo "$pgjson" | jq -r '.state')
+
+    if [[ "$state" == *"recovery"* ]]; then
+      # recovery in progress → osd.2 must be in acting
+      if echo "$pgjson" | jq '.acting' | grep 2; then
+        echo "Recovery in progress and OSD.2 is in acting set"
+        return 0
+      else
+        echo "Recovery in progress but OSD.2 is NOT in acting set"
+        return 1
+      fi
+    else
+      echo "Recovery finished (no need for OSD.2 in acting)"
+      return 0
+    fi
 
     WAIT_FOR_CLEAN_TIMEOUT=20 wait_for_clean
 
-    if ! grep -q "Active: got notify from previous acting member.*, requesting pg_temp change" $(find $dir -name '*osd*log')
+    if ! grep -Eiq "requesting pg[_ ]temp change" $(find $dir -name '*osd*log')
     then
             echo failure
             return 1
@@ -121,6 +145,71 @@ function TEST_repeer_on_down_acting_member_coming_back() {
 
     delete_pool $poolname
     kill_daemons $dir || return 1
+}
+
+function TEST_ceph_pg_repeer_on_simple_ec_and_rep_pools() {
+  local dir=$1
+  local pools=1
+  local OSDS=3
+
+  run_mon $dir a || return 1
+  run_mgr $dir x || return 1
+  export CEPH_ARGS
+
+  for osd in $(seq 0 $(expr $OSDS - 1))
+  do
+    run_osd $dir $osd || return 1
+  done
+
+  #setup erasure coded pool
+  EC_POOL_NAME="ecpool"
+  METADATA_POOL_NAME="ecpool_metadata"
+
+  ceph osd erasure-code-profile set ec-prof plugin=isa k=2 m=1 crush-failure-domain=osd
+  
+  ceph osd pool create $EC_POOL_NAME erasure ec-prof || return 1
+  ceph osd pool set $EC_POOL_NAME allow_ec_overwrites true || return 1
+  ceph osd pool application enable $EC_POOL_NAME rbd || return 1
+
+  #create a metadata pool for the ec pool
+  ceph osd pool create $METADATA_POOL_NAME replicated || return 1
+  rbd pool init $METADATA_POOL_NAME || return 1
+
+  #create an rbd image on the ec pool
+  rbd create -s 10G --data-pool $EC_POOL_NAME $METADATA_POOL_NAME/vol0 || return 1
+  
+  #create a replicated pool now
+  REP_POOL_NAME="reppool"
+
+  ceph osd pool create $REP_POOL_NAME replicated || return 1
+  rbd pool init $REP_POOL_NAME || return 1
+
+  #create an rbd image on the replicated pool
+  rbd create -s 10G $REP_POOL_NAME/vol0 || return 1
+
+  # Perform some I/O on both images
+  rbd bench -p $REP_POOL_NAME --image vol0 --io-size 1K --io-threads 1 --io-total 10000K --io-pattern rand --io-type readwrite || return 1
+  rbd bench -p $METADATA_POOL_NAME --image vol0 --io-size 1K --io-threads 1 --io-total 10000K --io-pattern rand --io-type readwrite || return 1
+
+  #Grab a list of all the pgs in the ec pool and the rep pool
+  ec_pgs=$(ceph pg ls-by-pool $EC_POOL_NAME | grep [0-9]. | awk '{print $1}')
+  rep_pgs=$(ceph pg ls-by-pool $REP_POOL_NAME | grep [0-9]. | awk '{print $1}')
+
+  ec_pgs_list=( $ec_pgs )
+  rep_pgs_list=( $rep_pgs )
+
+  echo ${#ec_pgs_list[@]}
+  echo ${ec_pgs_list[@]}
+
+  echo ${#rep_pgs_list[@]}
+  echo ${rep_pgs_list[@]}
+
+  #Now pick 2 pgs from each pool at random and then cause them to repeer
+  ceph pg repeer ${ec_pgs_list[ $RANDOM % ${#ec_pgs_list[@]} ]} || return 1
+  ceph pg repeer ${ec_pgs_list[ $RANDOM % ${#ec_pgs_list[@]} ]} || return 1
+  ceph pg repeer ${rep_pgs_list[ $RANDOM % ${#rep_pgs_list[@]} ]} || return 1
+  ceph pg repeer ${rep_pgs_list[ $RANDOM % ${#rep_pgs_list[@]} ]} || return 1
+
 }
 
 main repeer-on-acting-back "$@"

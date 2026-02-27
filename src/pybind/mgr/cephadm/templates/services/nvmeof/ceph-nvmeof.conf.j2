@@ -7,6 +7,7 @@ port = {{ spec.port }}
 enable_auth = {{ spec.enable_auth }}
 state_update_notify = {{ spec.state_update_notify }}
 state_update_interval_sec = {{ spec.state_update_interval_sec }}
+break_update_interval_sec = {{ spec.break_update_interval_sec }}
 enable_spdk_discovery_controller = {{ spec.enable_spdk_discovery_controller }}
 encryption_key = /encryption.key
 rebalance_period_sec = {{ spec.rebalance_period_sec }}
@@ -16,13 +17,26 @@ enable_prometheus_exporter = {{ spec.enable_prometheus_exporter }}
 prometheus_exporter_ssl = False
 prometheus_port = {{ spec.prometheus_port }}
 prometheus_stats_interval = {{ spec.prometheus_stats_interval }}
+prometheus_frequency_slow_down_factor = {{ spec.prometheus_frequency_slow_down_factor }}
+prometheus_cycles_to_adjust_speed = {{ spec.prometheus_cycles_to_adjust_speed }}
+prometheus_startup_delay = {{ spec.prometheus_startup_delay }}
+prometheus_connection_list_cache_expiration = {{ spec.prometheus_connection_list_cache_expiration }}
 verify_nqns = {{ spec.verify_nqns }}
 verify_keys = {{ spec.verify_keys }}
 verify_listener_ip = {{ spec.verify_listener_ip }}
+# This is a development flag, do not change it
+abort_on_errors = {{ spec.abort_on_errors }}
+# This is a development flag, do not change it
+abort_on_update_error = {{ spec.abort_on_update_error }}
+# This is a development flag, do not change it
+omap_file_ignore_unlock_errors = {{ spec.omap_file_ignore_unlock_errors }}
+# This is a development flag, do not change it
+omap_file_lock_on_read = {{ spec.omap_file_lock_on_read }}
 omap_file_lock_duration = {{ spec.omap_file_lock_duration }}
 omap_file_lock_retries = {{ spec.omap_file_lock_retries }}
 omap_file_lock_retry_sleep_interval = {{ spec.omap_file_lock_retry_sleep_interval }}
 omap_file_update_reloads = {{ spec.omap_file_update_reloads }}
+omap_file_update_attempts = {{ spec.omap_file_update_attempts }}
 allowed_consecutive_spdk_ping_failures = {{ spec.allowed_consecutive_spdk_ping_failures }}
 spdk_ping_interval_in_seconds = {{ spec.spdk_ping_interval_in_seconds }}
 ping_spdk_under_lock = {{ spec.ping_spdk_under_lock }}
@@ -34,6 +48,11 @@ max_hosts = {{ spec.max_hosts }}
 max_namespaces = {{ spec.max_namespaces }}
 max_namespaces_per_subsystem = {{ spec.max_namespaces_per_subsystem }}
 max_hosts_per_subsystem = {{ spec.max_hosts_per_subsystem }}
+subsystem_cache_expiration = {{ spec.subsystem_cache_expiration }}
+force_tls = {{ spec.force_tls }}
+# This is a development flag, do not change it
+max_message_length_in_mb = {{ spec.max_message_length_in_mb }}
+io_stats_enabled = {{ spec.io_stats_enabled }}
 
 [gateway-logs]
 log_level = {{ spec.log_level }}
@@ -48,6 +67,10 @@ log_directory = {{ spec.log_directory }}
 [discovery]
 addr = {{ discovery_addr }}
 port = {{ spec.discovery_port }}
+# This is a development flag, do not change it
+abort_on_errors = {{ spec.abort_discovery_on_errors }}
+bind_retries_limit = {{ spec.discovery_bind_retries_limit }}
+bind_sleep_interval = {{ spec.discovery_bind_sleep_interval }}
 
 [ceph]
 pool = {{ spec.pool }}
@@ -87,11 +110,17 @@ log_file_dir = {{ spec.spdk_log_file_dir }}
 conn_retries = {{ spec.conn_retries }}
 {% if spec.spdk_mem_size %}
 mem_size = {{ spec.spdk_mem_size }}
+{% else %}
+{% if spec.spdk_huge_pages %}
+spdk_huge_pages = {{ spec.spdk_huge_pages }}
+{% endif %}
 {% endif %}
 transports = {{ spec.transports }}
 {% if transport_tcp_options %}
 transport_tcp_options = {{ transport_tcp_options }}
 {% endif %}
+enable_dsa_acceleration = {{ spec.enable_dsa_acceleration }}
+rbd_with_crc32c = {{ spec.rbd_with_crc32c }}
 {% if spec.tgt_cmd_extra_args %}
 tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
 {% endif %}
@@ -99,6 +128,7 @@ tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
 iobuf_options = {{ iobuf_options }}
 {% endif %}
 qos_timeslice_in_usecs = {{ spec.qos_timeslice_in_usecs }}
+notifications_interval = {{ spec.notifications_interval }}
 
 [monitor]
 timeout = {{ spec.monitor_timeout }}

@@ -29,8 +29,7 @@ If you are also adding a new host when adding a new OSD, see `Hardware
 Recommendations`_ for details on minimum recommendations for OSD hardware. To
 add an OSD host to your cluster, begin by making sure that an appropriate 
 version of Linux has been installed on the host machine and that all initial
-preparations for your storage drives have been carried out. For details, see
-`Filesystem Recommendations`_.
+preparations for your storage drives have been carried out.
 
 Next, add your OSD host to a rack in your cluster, connect the host to the
 network, and ensure that the host has network connectivity. For details, see
@@ -38,7 +37,6 @@ network, and ensure that the host has network connectivity. For details, see
 
 
 .. _Hardware Recommendations: ../../../start/hardware-recommendations
-.. _Filesystem Recommendations: ../../configuration/filesystem-recommendations
 .. _Network Configuration Reference: ../../configuration/network-config-ref
 
 Installing the Required Software
@@ -153,7 +151,7 @@ cluster have and therefore might have greater weight as well.
    the CRUSH map, add the OSD to the device list, add the host as a bucket (if
    it is not already in the CRUSH map), add the device as an item in the host,
    assign the device a weight, recompile the CRUSH map, and set the CRUSH map.
-   For details, see `Add/Move an OSD`_. This is rarely necessary with recent
+   For details, see :ref:`addosd`. This is rarely necessary with recent
    releases (this sentence was written the month that Reef was released).
 
 
@@ -249,7 +247,6 @@ The PG states will first change from ``active+clean`` to ``active, some
 degraded objects`` and then return to ``active+clean`` when migration
 completes. When you are finished observing, press Ctrl-C to exit.
 
-.. _Add/Move an OSD: ../crush-map#addosd
 .. _ceph: ../monitoring
 
 
@@ -385,7 +382,7 @@ If your Ceph cluster is older than Luminous, you will be unable to use the
 ``ceph osd purge`` command. Instead, carry out the following procedure:
 
 #. Remove the OSD from the CRUSH map so that it no longer receives data (for
-   more details, see `Remove an OSD`_):
+   more details, see :ref:`removeosd`):
 
    .. prompt:: bash $
 
@@ -416,4 +413,3 @@ If your Ceph cluster is older than Luminous, you will be unable to use the
 
       ceph osd rm 1
 
-.. _Remove an OSD: ../crush-map#removeosd

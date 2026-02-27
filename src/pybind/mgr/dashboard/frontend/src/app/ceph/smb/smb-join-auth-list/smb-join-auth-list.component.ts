@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { Observable, BehaviorSubject, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { SmbService } from '~/app/shared/api/smb.service';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -18,13 +18,14 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
-export const JOINAUTH_URL = '/cephfs/smb/ad';
+export const JOIN_AUTH_PATH = 'cephfs/smb/active-directory';
 
 @Component({
   selector: 'cd-smb-join-auth-list',
   templateUrl: './smb-join-auth-list.component.html',
   styleUrls: ['./smb-join-auth-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(JOINAUTH_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(JOIN_AUTH_PATH) }],
+  standalone: false
 })
 export class SmbJoinAuthListComponent implements OnInit {
   columns: CdTableColumn[];
@@ -114,7 +115,7 @@ export class SmbJoinAuthListComponent implements OnInit {
       itemNames: [authId],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('smb/ad/remove', {
+          task: new FinishedTask(`${JOIN_AUTH_PATH}/${URLVerbs.DELETE}`, {
             authId: authId
           }),
           call: this.smbService.deleteJoinAuth(authId)

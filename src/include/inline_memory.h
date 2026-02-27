@@ -1,9 +1,11 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2025 Sun Yuechi <sunyuechi@iscas.ac.cn>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -165,6 +167,31 @@ static inline bool mem_is_zero(const char *data, size_t len) {
       return false;
     }
     ++data;
+  }
+
+  return true;
+}
+
+#elif defined(__riscv_v_intrinsic)
+
+#include <riscv_vector.h>
+
+static inline bool mem_is_zero(const char *data, size_t len) {
+  const uint8_t *p = reinterpret_cast<const uint8_t *>(data);
+
+  while (len > 0) {
+    size_t vector_len = __riscv_vsetvl_e8m8(len);
+
+    vuint8m8_t v = __riscv_vle8_v_u8m8(p, vector_len);
+    vbool1_t mask = __riscv_vmsne_vx_u8m8_b1(v, 0, vector_len);
+
+    long idx = __riscv_vfirst_m_b1(mask, vector_len);
+    if (idx >= 0) {
+      return false;
+    }
+
+    p += vector_len;
+    len -= vector_len;
   }
 
   return true;

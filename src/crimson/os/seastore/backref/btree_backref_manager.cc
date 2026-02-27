@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/os/seastore/backref/btree_backref_manager.h"
 
@@ -22,7 +22,7 @@ phy_tree_root_t& get_phy_tree_root<
 template<>
 const get_phy_tree_root_node_ret get_phy_tree_root_node<
   crimson::os::seastore::backref::BackrefBtree>(
-  const RootBlockRef &root_block, op_context_t<paddr_t> c) {
+  const RootBlockRef &root_block, op_context_t c) {
   auto backref_root = root_block->backref_root_node;
   if (backref_root) {
     ceph_assert(backref_root->is_initial_pending()
@@ -36,12 +36,10 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node<
       return {true,
               c.cache.get_extent_viewable_by_trans(c.trans, backref_root)};
     } else {
-      c.cache.account_absent_access(c.trans.get_src());
       return {false,
               Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
     }
   } else {
-    c.cache.account_absent_access(c.trans.get_src());
     return {false,
             Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
   }
@@ -93,7 +91,7 @@ BtreeBackrefManager::get_mapping(
   LOG_PREFIX(BtreeBackrefManager::get_mapping);
   TRACET("{}", t, offset);
   auto c = get_context(t);
-  return with_btree_ret<BackrefBtree, BackrefMappingRef>(
+  return with_btree<BackrefBtree>(
     cache,
     c,
     [c, offset](auto &btree) {
@@ -109,7 +107,7 @@ BtreeBackrefManager::get_mapping(
 	       c.trans, offset, iter.get_key(), iter.get_val());
 	return get_mapping_ret(
 	  interruptible::ready_future_marker{},
-	  iter.get_pin(c));
+	  BackrefMapping::create(iter.get_cursor(c)));
       }
     });
   });
@@ -124,7 +122,7 @@ BtreeBackrefManager::get_mappings(
   LOG_PREFIX(BtreeBackrefManager::get_mappings);
   TRACET("{}~{}", t, offset, end);
   auto c = get_context(t);
-  return with_btree_state<BackrefBtree, backref_pin_list_t>(
+  return with_btree_state<BackrefBtree, backref_mapping_list_t>(
     cache,
     c,
     [c, offset, end](auto &btree, auto &ret) {
@@ -143,7 +141,7 @@ BtreeBackrefManager::get_mappings(
 	  TRACET("{}~{} got {}, {}, repeat ...",
 	         c.trans, offset, end, pos.get_key(), pos.get_val());
 	  ceph_assert((pos.get_key().add_offset(pos.get_val().len)) > offset);
-	  ret.emplace_back(pos.get_pin(c));
+	  ret.emplace_back(BackrefMapping::create(pos.get_cursor(c)));
 	  return BackrefBtree::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::no);
@@ -161,7 +159,7 @@ BtreeBackrefManager::new_mapping(
 {
   ceph_assert(
     is_aligned(
-      key.get_addr_type() == paddr_types_t::SEGMENT ?
+      key.is_absolute_segmented() ?
 	key.as_seg_paddr().get_segment_off() :
 	key.as_blk_paddr().get_device_off(),
       cache.get_block_size()));
@@ -218,7 +216,7 @@ BtreeBackrefManager::new_mapping(
                    t, addr, len, key,
                    pos.get_key(), pos.get_val().len,
                    pos.get_val());
-	    ceph_abort("not possible for the backref tree");
+	    ceph_abort_msg("not possible for the backref tree");
 	    return BackrefBtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::no);
@@ -239,8 +237,8 @@ BtreeBackrefManager::new_mapping(
 	  });
 	});
     }).si_then([c](auto &&state) {
-      return new_mapping_iertr::make_ready_future<BackrefMappingRef>(
-	state.ret->get_pin(c));
+      return new_mapping_iertr::make_ready_future<BackrefMapping>(
+	BackrefMapping::create(state.ret->get_cursor(c)));
     });
 }
 
@@ -456,8 +454,8 @@ BtreeBackrefManager::scan_mapped_space(
   });
 }
 
-BtreeBackrefManager::base_iertr::future<> _init_cached_extent(
-  op_context_t<paddr_t> c,
+base_iertr::future<> _init_cached_extent(
+  op_context_t c,
   const CachedExtentRef &e,
   BackrefBtree &btree,
   bool &ret)
@@ -505,7 +503,7 @@ BtreeBackrefManager::remove_mapping(
   paddr_t addr)
 {
   auto c = get_context(t);
-  return with_btree_ret<BackrefBtree, remove_mapping_result_t>(
+  return with_btree<BackrefBtree>(
     cache,
     c,
     [c, addr](auto &btree) mutable {
@@ -528,7 +526,7 @@ BtreeBackrefManager::remove_mapping(
 	return btree.remove(
 	  c,
 	  iter
-	).si_then([ret] {
+	).si_then([ret](auto) {
 	  return ret;
 	});
       });
@@ -576,7 +574,7 @@ BtreeBackrefManager::retrieve_backref_extents_in_range(
 	ent.key);
 
       auto c = get_context(t);
-      return with_btree_ret<BackrefBtree, CachedExtentRef>(
+      return with_btree<BackrefBtree>(
 	cache,
 	c,
 	[c, &ent](auto &btree) {

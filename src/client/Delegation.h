@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef _CEPH_CLIENT_DELEGATION_H
 #define _CEPH_CLIENT_DELEGATION_H
 
@@ -28,6 +29,9 @@ public:
   Fh *get_fh() { return fh; }
   unsigned get_type() { return type; }
   bool is_recalled() { return !recall_time.is_zero(); }
+  bool is_write_delegated() {
+    return type == CEPH_DELEGATION_WR;
+  }
 
   void reinit(unsigned _type, ceph_deleg_cb_t _recall_cb, void *_priv);
   void recall(bool skip_read);

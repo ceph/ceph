@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_obj_manifest.h"
 
@@ -271,23 +271,29 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   return 0;
 }
 
-void RGWObjManifestPart::generate_test_instances(std::list<RGWObjManifestPart*>& o)
+std::list<RGWObjManifestPart> RGWObjManifestPart::generate_test_instances()
 {
-  o.push_back(new RGWObjManifestPart);
+  std::list<RGWObjManifestPart> o;
 
-  RGWObjManifestPart *p = new RGWObjManifestPart;
+  o.emplace_back();
+
+  RGWObjManifestPart p;
   rgw_bucket b;
   init_bucket(&b, "tenant", "bucket", ".pool", ".index_pool", "marker_", "12");
 
-  p->loc = rgw_obj(b, "object");
-  p->loc_ofs = 512 * 1024;
-  p->size = 128 * 1024;
-  o.push_back(p);
+  p.loc = rgw_obj(b, "object");
+  p.loc_ofs = 512 * 1024;
+  p.size = 128 * 1024;
+  o.push_back(std::move(p));
+
+  return o;
 }
 
-void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
+std::list<RGWObjManifest> RGWObjManifest::generate_test_instances()
 {
-  RGWObjManifest *m = new RGWObjManifest;
+  std::list<RGWObjManifest> o;
+
+  RGWObjManifest m;
   map<uint64_t, RGWObjManifestPart> objs;
   uint64_t total_size = 0;
   for (int i = 0; i<10; i++) {
@@ -300,9 +306,10 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
     total_size += p.size;
     objs[total_size] = p;
   }
-  m->set_explicit(total_size, objs);
-  o.push_back(m);
-  o.push_back(new RGWObjManifest);
+  m.set_explicit(total_size, objs);
+  o.push_back(std::move(m));
+  o.emplace_back();
+  return o;
 }
 
 void RGWObjManifestPart::dump(Formatter *f) const
@@ -367,16 +374,18 @@ void RGWObjManifestRule::dump(Formatter *f) const
   encode_json("override_prefix", override_prefix, f);
 }
 
-void RGWObjManifestRule::generate_test_instances(std::list<RGWObjManifestRule*>& o)
+std::list<RGWObjManifestRule> RGWObjManifestRule::generate_test_instances()
 {
-  RGWObjManifestRule *r = new RGWObjManifestRule;
-  r->start_part_num = 0;
-  r->start_ofs = 0;
-  r->part_size = 512 * 1024;
-  r->stripe_max_size = 512 * 1024 * 1024;
-  r->override_prefix = "override_prefix";
-  o.push_back(r);
-  o.push_back(new RGWObjManifestRule);
+  std::list<RGWObjManifestRule> o;
+  RGWObjManifestRule r;
+  r.start_part_num = 0;
+  r.start_ofs = 0;
+  r.part_size = 512 * 1024;
+  r.stripe_max_size = 512 * 1024 * 1024;
+  r.override_prefix = "override_prefix";
+  o.push_back(std::move(r));
+  o.emplace_back();
+  return o;
 }
 
 void rgw_obj_select::dump(Formatter *f) const
@@ -394,18 +403,18 @@ void RGWObjTier::dump(Formatter *f) const
   encode_json("is_multipart_upload", is_multipart_upload, f);
 }
 
-void RGWObjTier::generate_test_instances(std::list<RGWObjTier*>& o)
+std::list<RGWObjTier> RGWObjTier::generate_test_instances()
 {
-  RGWObjTier *t = new RGWObjTier;
-  t->name = "name";
-  std::list<RGWZoneGroupPlacementTier *> tiers;
-  RGWZoneGroupPlacementTier::generate_test_instances(tiers);
-  for (auto iter = tiers.begin(); iter != tiers.end(); ++iter) {
-    t->tier_placement = *(*iter);
+  std::list<RGWObjTier> o;
+  RGWObjTier t;
+  t.name = "name";
+  for (auto& tier : RGWZoneGroupPlacementTier::generate_test_instances()) {
+    t.tier_placement = tier;
   }
-  t->is_multipart_upload = true;
-  o.push_back(t);
-  o.push_back(new RGWObjTier);
+  t.is_multipart_upload = true;
+  o.push_back(std::move(t));
+  o.emplace_back();
+  return o;
 }
 
 // returns true on success, false on failure

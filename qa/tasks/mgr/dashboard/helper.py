@@ -4,10 +4,12 @@ from __future__ import absolute_import
 
 import json
 import logging
+import os
 import random
 import re
 import string
 import time
+import unittest
 from collections import namedtuple
 from functools import wraps
 from typing import List, Optional, Tuple, Type, Union
@@ -756,3 +758,8 @@ def retry(
             raise err
         return wrapper
     return decorator
+
+
+skip_unless_dashboard_pr = unittest.skipUnless(
+    os.environ.get('ghprbPullTitle', '').startswith('mgr/dashboard:'),
+    'Skipping because PR title does not start with mgr/dashboard')

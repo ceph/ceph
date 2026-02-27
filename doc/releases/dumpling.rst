@@ -237,7 +237,7 @@ For more detailed information, see :download:`the complete changelog <../changel
 v0.67.6 "Dumpling"
 ==================
 
-.. note: This release contains a librbd bug that is fixed in v0.67.7.  Please upgrade to v0.67.7 and do not use v0.67.6.
+.. note:: This release contains a librbd bug that is fixed in v0.67.7.  Please upgrade to v0.67.7 and do not use v0.67.6.
 
 This Dumpling point release contains a number of important fixed for
 the OSD, monitor, and radosgw.  Most significantly, a change that

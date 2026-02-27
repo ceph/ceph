@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 /*
  * Copyright (C) 2017 Red Hat Inc.
@@ -281,7 +281,8 @@ namespace crimson {
     //   recent values of rho and delta.
     // U1 determines whether to use client information function dynamically,
     // B is heap branching factor
-    template<typename C, typename R, bool IsDelayed, bool U1, unsigned B>
+    template<typename C, typename R, bool IsDelayed, bool U1, unsigned B,
+	     typename BackgroundJob=RunEvery>
     class PriorityQueueBase {
       // we don't want to include gtest.h just for FRIEND_TEST
       friend class dmclock_server_client_idle_erase_Test;
@@ -354,7 +355,7 @@ namespace crimson {
       // ClientRec could be "protected" with no issue. [See comments
       // associated with function submit_top_request.]
       class ClientRec {
-	friend PriorityQueueBase<C,R,IsDelayed,U1,B>;
+	friend PriorityQueueBase<C,R,IsDelayed,U1,B,BackgroundJob>;
 
 	C                     client;
 	RequestTag            prev_tag;
@@ -806,11 +807,7 @@ namespace crimson {
       RejectThreshold  reject_threshold = 0;
 
       double           anticipation_timeout;
-#ifdef WITH_CRIMSON
-      bool finishing;
-#else
-      std::atomic_bool finishing;
-#endif
+
       // every request creates a tick
       Counter tick = 0;
 
@@ -830,7 +827,7 @@ namespace crimson {
 
       // NB: All threads declared at end, so they're destructed first!
 
-      std::unique_ptr<RunEvery> cleaning_job;
+      BackgroundJob cleaning_job;
 
       // helper function to return the value of a variant if it matches the
       // given type T, or a default value of T otherwise
@@ -853,27 +850,17 @@ namespace crimson {
 	at_limit(get_or_default(at_limit_param, AtLimit::Reject)),
 	reject_threshold(get_or_default(at_limit_param, RejectThreshold{0})),
 	anticipation_timeout(_anticipation_timeout),
-	finishing(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
 	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
 	check_time(std::chrono::duration_cast<Duration>(_check_time)),
-	erase_max(standard_erase_max)
+	erase_max(standard_erase_max),
+	cleaning_job(check_time, std::bind(&PriorityQueueBase::do_clean, this))
       {
 	assert(_erase_age >= _idle_age);
 	assert(_check_time < _idle_age);
 	// AtLimit::Reject depends on ImmediateTagCalc
 	assert(at_limit != AtLimit::Reject || !IsDelayed);
-	cleaning_job =
-	  std::unique_ptr<RunEvery>(
-	    new RunEvery(check_time,
-			 std::bind(&PriorityQueueBase::do_clean, this)));
       }
-
-
-      ~PriorityQueueBase() {
-	finishing = true;
-      }
-
 
       inline const ClientInfo* get_cli_info(ClientRec& client) const {
 	if (is_dynamic_cli_info_f) {
@@ -1204,7 +1191,7 @@ namespace crimson {
 
 
       /*
-       * This is being called regularly by RunEvery. Every time it's
+       * This is being called regularly by cleaning_job. Every time it's
        * called it notes the time and delta counter (mark point) in a
        * deque. It also looks at the deque to find the most recent
        * mark point that is older than clean_age. It then walks the
@@ -1259,7 +1246,7 @@ namespace crimson {
 	    // clean finished, refresh
 	    last_erase_point = 0;
 	  }
-	  cleaning_job->try_update(wperiod);
+	  cleaning_job.try_update(wperiod);
 	} // if
       } // do_clean
 
@@ -1285,9 +1272,11 @@ namespace crimson {
     }; // class PriorityQueueBase
 
 
-    template<typename C, typename R, bool IsDelayed=false, bool U1=false, unsigned B=2>
-    class PullPriorityQueue : public PriorityQueueBase<C,R,IsDelayed,U1,B> {
-      using super = PriorityQueueBase<C,R,IsDelayed,U1,B>;
+    template<typename C, typename R, bool IsDelayed=false, bool U1=false,
+	     unsigned B=2, typename BackgroundJob=RunEvery>
+    class PullPriorityQueue : public PriorityQueueBase<
+      C,R,IsDelayed,U1,B,BackgroundJob> {
+      using super = PriorityQueueBase<C,R,IsDelayed,U1,B,BackgroundJob>;
 
     public:
 
@@ -1534,6 +1523,7 @@ namespace crimson {
       CanHandleRequestFunc can_handle_f;
       HandleRequestFunc    handle_f;
       // for handling timed scheduling
+      bool finishing = false;
       std::mutex  sched_ahead_mtx;
       std::condition_variable sched_ahead_cv;
       Time sched_ahead_when = TimeZero;
@@ -1591,9 +1581,9 @@ namespace crimson {
 
 
       ~PushPriorityQueue() {
-	this->finishing = true;
 	{
 	  std::lock_guard<std::mutex> l(sched_ahead_mtx);
+	  finishing = true;
 	  sched_ahead_cv.notify_one();
 	}
 	sched_ahead_thd.join();

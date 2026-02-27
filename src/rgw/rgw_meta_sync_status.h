@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -41,7 +41,7 @@ struct rgw_meta_sync_info {
 
   void decode_json(JSONObj *obj);
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<rgw_meta_sync_info*>& ls);
+  static std::list<rgw_meta_sync_info> generate_test_instances();
 
   rgw_meta_sync_info() : state((int)StateInit), num_shards(0) {}
 };
@@ -90,7 +90,7 @@ struct rgw_meta_sync_marker {
 
   void decode_json(JSONObj *obj);
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<rgw_meta_sync_marker*>& ls);
+  static std::list<rgw_meta_sync_marker> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_meta_sync_marker)
 
@@ -116,6 +116,6 @@ struct rgw_meta_sync_status {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<rgw_meta_sync_status*>& ls);
+  static std::list<rgw_meta_sync_status> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_meta_sync_status)

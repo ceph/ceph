@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -40,10 +41,11 @@ public:
     ObjectStore *store,
     CephContext *cct,
     ceph::ErasureCodeInterfaceRef ec_impl,
-    uint64_t stripe_width) :
+    uint64_t stripe_width,
+    ECExtentCache::LRU &lru) :
     PGBackend(cct, pg, store, coll, ch),
     legacy(pg, cct, ec_impl, stripe_width, this),
-    optimized(pg, cct, ec_impl, stripe_width, this),
+    optimized(pg, cct, ec_impl, stripe_width, this, lru),
     is_optimized_actual(get_parent()->get_pool().allows_ecoptimizations()) {}
 
   bool is_optimized() const
@@ -265,6 +267,25 @@ public:
     return legacy.objects_read_sync(hoid, off, len, op_flags, bl);
   }
 
+  int objects_readv_sync(const hobject_t &hoid,
+     std::map<uint64_t, uint64_t>& m,
+     uint32_t op_flags,
+     ceph::buffer::list *bl) override
+  {
+    if (is_optimized()) {
+      return optimized.objects_readv_sync(hoid, m, op_flags, bl);
+    }
+    ceph_abort_msg("Sync reads legacy EC");
+  }
+
+  std::pair<uint64_t, uint64_t> extent_to_shard_extent(
+    uint64_t off, uint64_t len) override {
+    if (is_optimized()) {
+      return optimized.extent_to_shard_extent(off, len);
+    }
+    ceph_abort_msg("Extent conversion not supported in legacy EC");
+  }
+
   void objects_read_async(
     const hobject_t &hoid,
     uint64_t object_size,
@@ -291,21 +312,25 @@ public:
     return legacy.auto_repair_supported();
   }
 
-  uint64_t be_get_ondisk_size(uint64_t logical_size) const final
-  {
-    if (is_optimized()) {
-      return optimized.be_get_ondisk_size(logical_size);
+  uint64_t be_get_ondisk_size(uint64_t logical_size,
+                              shard_id_t shard_id,
+                              bool object_is_legacy_ec) const final {
+    if (is_optimized())
+    {
+      return optimized.be_get_ondisk_size(logical_size, shard_id, object_is_legacy_ec);
     }
     return legacy.be_get_ondisk_size(logical_size);
   }
 
-  int be_deep_scrub(const hobject_t &oid, ScrubMap &map, ScrubMapBuilder &pos
-                    , ScrubMap::object &o)
+  int be_deep_scrub(
+      const Scrub::ScrubCounterSet &io_counters,
+      const hobject_t &oid, ScrubMap &map, ScrubMapBuilder &pos,
+      ScrubMap::object &o) override
   {
     if (is_optimized()) {
-      return optimized.be_deep_scrub(oid, map, pos, o);
+      return optimized.be_deep_scrub(io_counters, oid, map, pos, o);
     }
-    return legacy.be_deep_scrub(oid, map, pos, o);
+    return legacy.be_deep_scrub(io_counters, oid, map, pos, o);
   }
 
   unsigned get_ec_data_chunk_count() const override
@@ -322,6 +347,51 @@ public:
       return optimized.get_ec_stripe_chunk_size();
     }
     return legacy.get_ec_stripe_chunk_size();
+  }
+
+  bool get_ec_supports_crc_encode_decode() const override {
+    if (is_optimized()) {
+      return optimized.get_ec_supports_crc_encode_decode();
+    }
+    return legacy.get_ec_supports_crc_encode_decode();
+  }
+
+  bool ec_can_decode(const shard_id_set &available_shards) const override {
+    if (is_optimized()) {
+      return optimized.ec_can_decode(available_shards);
+    }
+
+    return false;
+  }
+
+  shard_id_map<bufferlist> ec_encode_acting_set(
+      const bufferlist &in_bl) const override {
+    if (is_optimized()) {
+      return optimized.ec_encode_acting_set(in_bl);
+    }
+
+    ceph_abort_msg("This interface is not supported by legacy EC");
+    return {0};
+  }
+
+  shard_id_map<bufferlist> ec_decode_acting_set(
+      const shard_id_map<bufferlist> &shard_map,
+      int chunk_size) const override {
+    if (is_optimized()) {
+      return optimized.ec_decode_acting_set(shard_map, chunk_size);
+    }
+
+    ceph_abort_msg("This interface is not supported by legacy EC");
+    return {0};
+  }
+
+  ECUtil::stripe_info_t ec_get_sinfo() const {
+    if (is_optimized()) {
+      return optimized.ec_get_sinfo();
+    }
+
+    ceph_abort_msg("This interface is not supported by legacy EC");
+    return {0, 0, 0};
   }
 
   int objects_get_attrs(
@@ -347,12 +417,24 @@ public:
   }
 
   uint64_t
-  object_size_to_shard_size(const uint64_t size, int shard) const override
+  object_size_to_shard_size(const uint64_t size, shard_id_t shard) const override
   {
     if (is_optimized()) {
       return optimized.object_size_to_shard_size(size, shard);
     }
     return legacy.object_size_to_shard_size(size);
     // All shards are the same size.
+  }
+  bool get_is_nonprimary_shard(shard_id_t shard) const final {
+    if (is_optimized()) {
+      return optimized.get_is_nonprimary_shard(shard);
+    }
+    return false;
+  }
+  bool get_is_hinfo_required() const final {
+    return !is_optimized();
+  }
+  bool get_is_ec_optimized() const final {
+    return is_optimized();
   }
 };

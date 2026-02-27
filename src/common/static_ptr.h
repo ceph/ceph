@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -14,6 +15,7 @@
 
 #pragma once
 
+#include <bit>
 #include <cstddef>
 #include <utility>
 #include <type_traits>
@@ -100,7 +102,10 @@ class static_ptr {
   // difference in semantics between a pointer-to-const and a const
   // pointer.
   //
-  mutable typename std::aligned_storage<Size>::type buf;
+  static constexpr std::size_t Alignment = std::bit_ceil(Size);
+  mutable struct alignas(Alignment) {
+    unsigned char data[sizeof(Base)];
+  } buf;
 
 public:
   using element_type = Base;

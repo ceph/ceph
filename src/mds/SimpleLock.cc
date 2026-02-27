@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,6 +16,56 @@
 
 #include "SimpleLock.h"
 #include "Mutation.h"
+
+SimpleLock::unstable_bits_t *SimpleLock::more() const {
+  if (!_unstable)
+    _unstable.reset(new unstable_bits_t);
+  return _unstable.get();
+}
+
+void SimpleLock::try_clear_more() {
+  if (_unstable && _unstable->empty()) {
+    _unstable.reset();
+  }
+}
+
+void SimpleLock::get_xlock(MutationRef who, client_t client) { 
+  ceph_assert(!has_xlock_by());
+  ceph_assert(state == LOCK_XLOCK || is_locallock() ||
+	      state == LOCK_LOCK /* if we are a peer */);
+  parent->get(MDSCacheObject::PIN_LOCK);
+  more()->num_xlock++;
+  more()->xlock_by = who; 
+  more()->xlock_by_client = client;
+}
+
+void SimpleLock::set_xlock_done() {
+  ceph_assert(more()->xlock_by);
+  ceph_assert(state == LOCK_XLOCK || is_locallock() ||
+	      state == LOCK_LOCK /* if we are a peer */);
+  if (!is_locallock())
+    state = LOCK_XLOCKDONE;
+  more()->xlock_by.reset();
+}
+
+void SimpleLock::put_xlock() {
+  ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
+	      state == LOCK_XLOCKSNAP || state == LOCK_LOCK_XLOCK ||
+	      state == LOCK_LOCK  || /* if we are a leader of a peer */
+	      state == LOCK_PREXLOCK || state == LOCK_SYNC ||
+	      is_locallock());
+  --more()->num_xlock;
+  parent->put(MDSCacheObject::PIN_LOCK);
+  if (more()->num_xlock == 0) {
+    more()->xlock_by.reset();
+    more()->xlock_by_client = -1;
+    try_clear_more();
+  }
+}
+
+MutationRef SimpleLock::get_xlock_by() const {
+  return have_more() ? more()->xlock_by : MutationRef();
+}
 
 void SimpleLock::dump(ceph::Formatter *f) const {
   ceph_assert(f != NULL);
@@ -43,10 +94,12 @@ void SimpleLock::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-void SimpleLock::generate_test_instances(std::list<SimpleLock*>& ls) {
-  ls.push_back(new SimpleLock);
-  ls.push_back(new SimpleLock);
-  ls.back()->set_state(LOCK_SYNC);
+std::list<SimpleLock> SimpleLock::generate_test_instances() {
+  std::list<SimpleLock> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().set_state(LOCK_SYNC);
+  return ls;
 }
 
 
@@ -89,6 +142,8 @@ int SimpleLock::get_cap_mask() const {
 
 SimpleLock::unstable_bits_t::unstable_bits_t() :
   lock_caches(member_offset(MDLockCache::LockItem, item_lock)) {}
+
+SimpleLock::unstable_bits_t::~unstable_bits_t() noexcept = default;
 
 void SimpleLock::add_cache(MDLockCacheItem& item) {
   more()->lock_caches.push_back(&item.item_lock);

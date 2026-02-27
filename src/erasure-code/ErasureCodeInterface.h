@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph distributed storage system
  *
@@ -309,15 +310,13 @@ namespace ceph {
     virtual int minimum_to_decode(const shard_id_set &want_to_read,
                           const shard_id_set &available,
                           shard_id_set &minimum_set,
-                          mini_flat_map<shard_id_t, std::vector<std::pair<int, int>>>
-                          *minimum_sub_chunks) = 0;
+                          mini_flat_map<shard_id_t, std::vector<std::pair<int, int>>> *minimum_sub_chunks) = 0;
 
     // Interface for legacy EC.
     [[deprecated]]
     virtual int minimum_to_decode(const std::set<int> &want_to_read,
                                   const std::set<int> &available,
-                                  std::map<int, std::vector<std::pair<int, int>>> 
-                                  *minimum) = 0;
+                                  std::map<int, std::vector<std::pair<int, int>>> *minimum) = 0;
 
     /**
      * Compute the smallest subset of **available** chunks that needs
@@ -677,6 +676,20 @@ namespace ceph {
        * clay). Other plugins will not process the overhead of stub sub-chunks.
        */
       FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS = 1<<5,
+      /* Optimized EC is supported only if this flag is set. All other flags
+       * are irrelevant if this flag is false.
+       */
+      FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED = 1<<6,
+      /* This plugin supports the ability to encode CRCs of data shards to get
+       * the CRC of a parity shard. This flag also represents the inverse,
+       * to decode a parity CRC to get the CRC of a data shard.
+       */
+      FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT = 1<<7,
+      /* This plugin supports the ability for the client to read directly from
+       * the OSD containing a shard. This currently requires that raw shard ==
+       * shard and that the data shards are simply striped.
+       */
+      FLAG_EC_PLUGIN_DIRECT_READS = 1<<8,
     };
     static const char *get_optimization_flag_name(const plugin_flags flag) {
       switch (flag) {
@@ -686,6 +699,11 @@ namespace ceph {
       case FLAG_EC_PLUGIN_ZERO_PADDING_OPTIMIZATION: return "zeropadding";
       case FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION: return "paritydelta";
       case FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS: return "requiresubchunks";
+      case FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED: return "optimizedsupport";
+      case FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT:
+        return "crcencodedecode";
+      case FLAG_EC_PLUGIN_DIRECT_READS:
+        return "directreads";
       default: return "???";
       }
     }

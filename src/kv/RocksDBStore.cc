@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <filesystem>
 #include <map>
@@ -22,6 +22,7 @@
 #include "rocksdb/utilities/table_properties_collectors.h"
 #include "rocksdb/merge_operator.h"
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
 #include "common/strtol.h"
@@ -30,6 +31,7 @@
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
+#include "include/utime.h"
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
 
@@ -464,11 +466,12 @@ int RocksDBStore::create_and_open(ostream &out,
 }
 
 std::shared_ptr<rocksdb::Cache> RocksDBStore::create_block_cache(
+    const std::string& name,
     const std::string& cache_type, size_t cache_size, double cache_prio_high) {
   std::shared_ptr<rocksdb::Cache> cache;
   auto shard_bits = cct->_conf->rocksdb_cache_shard_bits;
   if (cache_type == "binned_lru") {
-    cache = rocksdb_cache::NewBinnedLRUCache(cct, cache_size, shard_bits, false, cache_prio_high);
+    cache = rocksdb_cache::NewBinnedLRUCache(cct, name, cache_size, shard_bits, false, cache_prio_high);
   } else if (cache_type == "lru") {
     cache = rocksdb::NewLRUCache(cache_size, shard_bits);
   } else if (cache_type == "clock") {
@@ -554,7 +557,7 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   uint64_t row_cache_size = cache_size * cct->_conf->rocksdb_cache_row_ratio;
   uint64_t block_cache_size = cache_size - row_cache_size;
 
-  bbt_opts.block_cache = create_block_cache(cct->_conf->rocksdb_cache_type, block_cache_size);
+  bbt_opts.block_cache = create_block_cache(rocksdb::kDefaultColumnFamilyName, cct->_conf->rocksdb_cache_type, block_cache_size);
   if (!bbt_opts.block_cache) {
     return -EINVAL;
   }
@@ -1013,7 +1016,7 @@ int RocksDBStore::apply_block_cache_options(const std::string& column_name,
     column_bbt_opts.no_block_cache = true;
   } else {
     if (require_new_block_cache) {
-      block_cache = create_block_cache(cache_type, cache_size, high_pri_pool_ratio);
+      block_cache = create_block_cache(column_name, cache_type, cache_size, high_pri_pool_ratio);
       if (!block_cache) {
 	dout(5) << __func__ << " failed to create block cache for params: " << block_cache_opt << dendl;
 	return -EINVAL;
@@ -1248,11 +1251,11 @@ int RocksDBStore::do_open(ostream &out,
   ceph_assert(default_cf != nullptr);
   
   PerfCountersBuilder plb(cct, "rocksdb", l_rocksdb_first, l_rocksdb_last);
-  plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency");
+  plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency", nullptr, PerfCountersBuilder::PRIO_USEFUL);
   plb.add_time_avg(l_rocksdb_submit_latency, "submit_latency", "Submit Latency");
   plb.add_time_avg(l_rocksdb_submit_sync_latency, "submit_sync_latency", "Submit Sync Latency");
   plb.add_u64_counter(l_rocksdb_compact, "compact", "Compactions");
-  plb.add_u64_counter(l_rocksdb_compact_running, "compact_running", "Running compactions");
+  plb.add_u64_counter(l_rocksdb_compact_running, "compact_running", "Running compactions", nullptr, PerfCountersBuilder::PRIO_USEFUL);
   plb.add_u64_counter(l_rocksdb_compact_completed, "compact_completed", "Completed compactions");
   plb.add_time(l_rocksdb_compact_lasted, "compact_lasted", "Last completed compaction duration");
   plb.add_u64_counter(l_rocksdb_compact_queue_merge, "compact_queue_merge", "Mergings of ranges in compaction queue");

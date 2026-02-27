@@ -49,7 +49,8 @@ const BASE_URL = 'osd';
   selector: 'cd-osd-list',
   templateUrl: './osd-list.component.html',
   styleUrls: ['./osd-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class OsdListComponent extends ListWithDetails implements OnInit {
   @ViewChild('osdUsageTpl', { static: true })
@@ -239,7 +240,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
             }
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: Icons.destroyCircle
+        icon: Icons.clearFilters
       },
       {
         name: this.actionLabels.DELETE,
@@ -290,14 +291,14 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         prop: 'collectedStates',
         name: $localize`Status`,
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            in: { class: 'badge-success' },
-            up: { class: 'badge-success' },
-            down: { class: 'badge-danger' },
-            out: { class: 'badge-danger' },
-            destroyed: { class: 'badge-danger' }
+            in: { class: 'tag-success' },
+            up: { class: 'tag-success' },
+            down: { class: 'tag-danger' },
+            out: { class: 'tag-danger' },
+            destroyed: { class: 'tag-danger' }
           }
         }
       },
@@ -305,11 +306,11 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         prop: 'tree.device_class',
         name: $localize`Device class`,
         flexGrow: 1.2,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            hdd: { class: 'badge-hdd' },
-            ssd: { class: 'badge-ssd' }
+            hdd: { class: 'tag-hdd' },
+            ssd: { class: 'tag-ssd' }
           }
         }
       },

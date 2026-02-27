@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
@@ -244,7 +244,7 @@ int get_config_key(librados::Rados& rados, const std::string& uri,
 
   bufferlist in_bl;
   bufferlist out_bl;
-  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  int r = rados.mon_command(std::move(cmd), std::move(in_bl), &out_bl, nullptr);
   if (r < 0) {
     lderr(cct) << "failed to retrieve MON config key " << key << ": "
                << cpp_strerror(r) << dendl;

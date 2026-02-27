@@ -79,3 +79,24 @@ int32_t proxy_hash_hex(char *digest, size_t size,
 
 	return 0;
 }
+
+int32_t proxy_snprintf(char *buffer, int32_t size, const char *fmt, ...)
+{
+	va_list args;
+	int32_t len;
+
+	va_start(args, fmt);
+	len = vsnprintf(buffer, size, fmt, args);
+	va_end(args);
+
+	if (len < 0) {
+		return proxy_log(LOG_ERR, errno, "vsnprintf() failed");
+	}
+
+	if (len >= size) {
+		return proxy_log(LOG_ERR, ENOBUFS,
+				 "vsnprintf() truncated a string");
+	}
+
+	return len;
+}

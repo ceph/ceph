@@ -8,7 +8,7 @@ class string_wrapper {
   std::string s;
   public:
    string_wrapper() = default;
-   string_wrapper(string s1)
+   string_wrapper(std::string s1)
     : s(s1)
    {}
 
@@ -26,11 +26,13 @@ class string_wrapper {
     f->dump_string("s", s);
   }
 
-  static void generate_test_instances(std::list<string_wrapper*>& ls) {
-    ls.push_back(new string_wrapper());
+  static std::list<string_wrapper> generate_test_instances() {
+    std::list<string_wrapper> ls;
+    ls.push_back(string_wrapper());
     // initialize strings that fit in internal storage
     std::string s1 = "abcdef";
-    ls.push_back(new string_wrapper(s1));
+    ls.push_back(string_wrapper(s1));
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(string_wrapper)

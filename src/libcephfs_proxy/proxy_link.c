@@ -5,6 +5,7 @@
 
 #include "proxy_link.h"
 #include "proxy_manager.h"
+#include "proxy_requests.h"
 #include "proxy_helpers.h"
 #include "proxy_log.h"
 
@@ -16,7 +17,8 @@ typedef struct _proxy_version {
 #define DEFINE_VERSION(_num) [_num] = NEG_VERSION_SIZE(_num)
 
 static uint32_t negotiation_sizes[PROXY_LINK_NEGOTIATE_VERSION + 1] = {
-	DEFINE_VERSION(1)
+	DEFINE_VERSION(1),
+	DEFINE_VERSION(2)
 
 	/* NEG_VERSION: Add newly defined versions above this comment. */
 };
@@ -49,14 +51,10 @@ static int32_t proxy_link_prepare(struct sockaddr_un *addr, const char *path)
 
 	memset(addr, 0, sizeof(*addr));
 	addr->sun_family = AF_UNIX;
-	len = snprintf(addr->sun_path, sizeof(addr->sun_path), "%s", path);
+	len = proxy_snprintf(addr->sun_path, sizeof(addr->sun_path), "%s",
+			     path);
 	if (len < 0) {
-		return proxy_log(LOG_ERR, EINVAL,
-				 "Failed to copy Unix socket path");
-	}
-	if (len >= sizeof(addr->sun_path)) {
-		return proxy_log(LOG_ERR, ENAMETOOLONG,
-				 "Unix socket path too long");
+		return len;
 	}
 
 	sd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -89,7 +87,7 @@ static int32_t proxy_link_read(proxy_link_t *link, int32_t sd, void *buffer,
 			return proxy_log(LOG_ERR, EPIPE, "Partial read");
 		}
 
-		buffer += len;
+		buffer = (char *)buffer + len;
 		size -= len;
 	}
 
@@ -117,7 +115,7 @@ static int32_t proxy_link_write(proxy_link_t *link, int32_t sd, void *buffer,
 			return proxy_log(LOG_ERR, EPIPE, "Partial write");
 		}
 
-		buffer += len;
+		buffer = (char *)buffer + len;
 		size -= len;
 	}
 
@@ -235,22 +233,65 @@ int32_t proxy_link_ctrl_recv(int32_t sd, void *data, int32_t size, int32_t type,
 	return len;
 }
 
+static void proxy_link_negotiate_v0_prepare(proxy_link_negotiate_v0_t *v0,
+					    bool legacy)
+{
+	uint16_t version, min_version;
+
+	if (legacy) {
+		version = v0->legacy.version;
+		min_version = v0->legacy.min_version;
+		v0->version = version;
+		v0->min_version = min_version;
+
+		/* This comes from the client. It doesn't support any operation,
+		 * just callbacks. */
+		v0->num_ops = 0;
+		if ((v0->flags & PROXY_NEG_V0_OPS) == 0) {
+			v0->num_cbks = LIBCEPHFSD_CBK_LL_NONBLOCKING_FSYNC + 1;
+			v0->flags = 0;
+		}
+	} else if ((v0->flags & PROXY_NEG_V0_OPS) == 0) {
+		version = v0->legacy.version;
+		min_version = v0->legacy.min_version;
+		v0->version = version;
+		v0->min_version = min_version;
+		v0->num_ops = LIBCEPHFSD_OP_LL_NONBLOCKING_FSYNC + 1;
+		/* This comes from the daemon. It doesn't support any callback,
+		 * just operations. */
+		v0->num_cbks = 0;
+		v0->flags = 0;
+	}
+}
+
+static void proxy_link_negotiate_v0_legacy(proxy_link_negotiate_t *src,
+					   proxy_link_negotiate_t *dst)
+{
+	memcpy(dst, src, sizeof(proxy_link_negotiate_t));
+
+	dst->v0.legacy.version = src->v0.version;
+	dst->v0.legacy.min_version = src->v0.min_version;
+}
+
 static int32_t proxy_link_negotiate_read(proxy_link_t *link, int32_t sd,
-					 proxy_link_negotiate_t *neg)
+					 proxy_link_negotiate_t *neg,
+					 bool legacy)
 {
 	char buffer[128];
-	void *ptr;
+	char *ptr;
 	uint32_t size, len;
 	int32_t err;
 
 	memset(neg, 0, sizeof(proxy_link_negotiate_t));
 
-	ptr = neg;
+	ptr = (char *)neg;
 
 	err = proxy_link_read(link, sd, ptr, sizeof(neg->v0));
 	if (err < 0) {
 		return err;
 	}
+
+	proxy_link_negotiate_v0_prepare(&neg->v0, legacy);
 
 	ptr += sizeof(neg->v0);
 	size = neg->v0.size;
@@ -304,7 +345,8 @@ static int32_t proxy_link_negotiate_read(proxy_link_t *link, int32_t sd,
 
 static int32_t proxy_link_negotiate_check(proxy_link_negotiate_t *local,
 					  proxy_link_negotiate_t *remote,
-					  proxy_link_negotiate_cbk_t cbk)
+					  proxy_link_negotiate_cbk_t cbk,
+					  bool client)
 {
 	uint32_t supported, enabled;
 	int32_t err;
@@ -313,6 +355,14 @@ static int32_t proxy_link_negotiate_check(proxy_link_negotiate_t *local,
 		local->v0.version = remote->v0.version;
 		local->v0.size = remote->v0.size;
 	}
+
+	if (client) {
+		local->v0.num_ops = remote->v0.num_ops;
+	} else {
+		local->v0.num_cbks = remote->v0.num_cbks;
+	}
+
+	local->v0.flags &= remote->v0.flags;
 
 	if (remote->v0.version == 0) {
 		/* Legacy peer. If we require any feature, the peer won't
@@ -323,16 +373,32 @@ static int32_t proxy_link_negotiate_check(proxy_link_negotiate_t *local,
 					 "features");
 		}
 
+		/* NEG_VERSION: Check if there's any incompatibility with new
+		 *              extensions that are not supported by an old
+		 *              peer. */
+
 		/* The peer is running the old version, but it is compatible
 		 * with us, so everything is fine and the connection can be
 		 * completed successfully with all features disabled. */
 
 		local->v1.enabled = 0;
+		local->v2.protocol = 0;
+
+		/* NEG_VERSION: Initialize default values for new extensions. */
 
 		proxy_log(LOG_INFO, 0,
 			  "Connected to legacy peer. No features enabled");
 
 		goto validate;
+	}
+
+	if (local->v2.protocol > remote->v2.protocol) {
+		local->v2.protocol = remote->v2.protocol;
+	}
+
+	if (local->v2.protocol < PROXY_PROTOCOL_V1) {
+		/* Embedded permissions feature requires protocol version 1 */
+		local->v1.supported &= ~PROXY_FEAT_EMBEDDED_PERMS;
 	}
 
 	supported = local->v1.supported & remote->v1.supported;
@@ -373,20 +439,24 @@ static int32_t proxy_link_negotiate_client(proxy_link_t *link, int32_t sd,
 					   proxy_link_negotiate_t *neg,
 					   proxy_link_negotiate_cbk_t cbk)
 {
-	proxy_link_negotiate_t remote;
+	proxy_link_negotiate_t legacy, remote;
 	int32_t err;
 
-	err = proxy_link_write(link, sd, neg, neg->v0.size);
+	/* Convert the negotiation structure to legacy for the first
+	 * nogotiation packet. */
+	proxy_link_negotiate_v0_legacy(neg, &legacy);
+
+	err = proxy_link_write(link, sd, &legacy, legacy.v0.size);
 	if (err < 0) {
 		return err;
 	}
 
-	err = proxy_link_negotiate_read(link, sd, &remote);
+	err = proxy_link_negotiate_read(link, sd, &remote, false);
 	if (err < 0) {
 		return err;
 	}
 
-	err = proxy_link_negotiate_check(neg, &remote, cbk);
+	err = proxy_link_negotiate_check(neg, &remote, cbk, true);
 	if (err < 0) {
 		return err;
 	}
@@ -402,6 +472,20 @@ static int32_t proxy_link_negotiate_client(proxy_link_t *link, int32_t sd,
 		return err;
 	}
 
+	if (remote.v0.version == 1) {
+		return 0;
+	}
+
+	/* For version 2 and higher, send the agreed protocol. */
+	err = proxy_link_write(link, sd, &neg->v2.protocol,
+			       sizeof(neg->v2.protocol));
+	if (err < 0) {
+		return err;
+	}
+
+	/* NEG_VERSION: Send any extension related information to the server.
+	 *              Make the changes above this line. */
+
 	return 0;
 }
 
@@ -409,20 +493,25 @@ static int32_t proxy_link_negotiate_server(proxy_link_t *link, int32_t sd,
 					   proxy_link_negotiate_t *neg,
 					   proxy_link_negotiate_cbk_t cbk)
 {
-	proxy_link_negotiate_t remote;
-	int32_t err, version;
+	proxy_link_negotiate_t remote, legacy;
+	int32_t err;
 
-	version = proxy_link_negotiate_read(link, sd, &remote);
-	if (version < 0) {
-		return version;
-	}
-
-	err = proxy_link_negotiate_check(neg, &remote, cbk);
+	err = proxy_link_negotiate_read(link, sd, &remote, true);
 	if (err < 0) {
 		return err;
 	}
 
-	err = proxy_link_write(link, sd, neg, neg->v0.size);
+	err = proxy_link_negotiate_check(neg, &remote, cbk, false);
+	if (err < 0) {
+		return err;
+	}
+
+	if ((remote.v0.flags & PROXY_NEG_V0_OPS) == 0) {
+		proxy_link_negotiate_v0_legacy(neg, &legacy);
+		err = proxy_link_write(link, sd, &legacy, legacy.v0.size);
+	} else {
+		err = proxy_link_write(link, sd, neg, neg->v0.size);
+	}
 	if (err < 0) {
 		return err;
 	}
@@ -446,6 +535,28 @@ static int32_t proxy_link_negotiate_server(proxy_link_t *link, int32_t sd,
 					 "The client tried to disable a "
 					 "required feature");
 		}
+	}
+
+	if (remote.v0.version > 1) {
+		/* Read the agreed protocol version. */
+		err = proxy_link_read(link, sd, &neg->v2.protocol,
+				      sizeof(neg->v2.protocol));
+		if (err < 0) {
+			return err;
+		}
+
+		if (neg->v2.protocol > PROXY_LINK_PROTOCOL_VERSION) {
+			return proxy_log(LOG_ERR, EINVAL,
+					 "The client tried to use an "
+					 "unsupported protocol");
+		}
+	}
+
+	if (((neg->v1.enabled & PROXY_FEAT_EMBEDDED_PERMS) != 0) &&
+	    (neg->v2.protocol < PROXY_PROTOCOL_V1)) {
+		return proxy_log(LOG_ERR, EINVAL,
+				 "The client tried to enable embedded perms "
+				 "with an unsupported protocol version");
 	}
 
 	/* NEG_VERSION: Implement any required handling for new negotiate
@@ -504,9 +615,10 @@ int32_t proxy_link_handshake_client(proxy_link_t *link, int32_t sd,
 
 	if (version.minor == LIBCEPHFSD_MINOR) {
 		/* The server doesn't support negotiation. */
-		proxy_link_negotiate_init_v0(&legacy, 0, 0);
+		proxy_link_negotiate_init_v0(&legacy, 0, 0,
+			LIBCEPHFSD_OP_LL_NONBLOCKING_FSYNC + 1, 0);
 
-		return proxy_link_negotiate_check(neg, &legacy, cbk);
+		return proxy_link_negotiate_check(neg, &legacy, cbk, true);
 	}
 
 	if (version.minor != LIBCEPHFSD_MINOR_NEG) {
@@ -559,9 +671,10 @@ int32_t proxy_link_handshake_server(proxy_link_t *link, int32_t sd,
 	}
 
 	if (size == 0) {
-		proxy_link_negotiate_init_v0(&legacy, 0, 0);
+		proxy_link_negotiate_init_v0(&legacy, 0, 0, 0,
+			LIBCEPHFSD_CBK_LL_NONBLOCKING_FSYNC + 1);
 
-		err = proxy_link_negotiate_check(neg, &legacy, cbk);
+		err = proxy_link_negotiate_check(neg, &legacy, cbk, false);
 		if (err < 0) {
 			return err;
 		}
@@ -625,15 +738,18 @@ void proxy_link_close(proxy_link_t *link)
 	link->sd = -1;
 }
 
-int32_t proxy_link_server(proxy_link_t *link, const char *path,
+int32_t proxy_link_server(proxy_link_t *link, proxy_settings_t *settings,
 			  proxy_link_start_t start, proxy_link_stop_t stop)
 {
 	struct sockaddr_un addr;
+	const char *path;
 	socklen_t len;
 	int32_t cd, err;
 
 	link->stop = stop;
 	link->sd = -1;
+
+	path = settings->socket_path;
 
 	err = proxy_link_prepare(&addr, path);
 	if (err < 0) {
@@ -667,7 +783,7 @@ int32_t proxy_link_server(proxy_link_t *link, const char *path,
 					  "Failed to accept a connection");
 			}
 		} else {
-			start(link, cd);
+			start(link, settings, cd);
 		}
 	}
 
@@ -706,7 +822,7 @@ int32_t proxy_link_send(int32_t sd, struct iovec *iov, int32_t count)
 		}
 
 		if (count > 0) {
-			iov->iov_base += len;
+			iov->iov_base = (char *)iov->iov_base + len;
 			iov->iov_len -= len;
 		}
 	}
@@ -746,7 +862,7 @@ int32_t proxy_link_recv(int32_t sd, struct iovec *iov, int32_t count)
 		}
 
 		if (count > 0) {
-			iov->iov_base += len;
+			iov->iov_base = (char *)iov->iov_base + len;
 			iov->iov_len -= len;
 		}
 	}
@@ -806,7 +922,7 @@ int32_t proxy_link_req_recv(int32_t sd, struct iovec *iov, int32_t count)
 			return proxy_log(LOG_ERR, ENOBUFS,
 					 "Request is too long");
 		}
-		iov->iov_base += sizeof(proxy_link_req_t);
+		iov->iov_base = (char *)iov->iov_base + sizeof(proxy_link_req_t);
 		iov->iov_len = req->header_len - sizeof(proxy_link_req_t);
 	} else {
 		iov++;
@@ -877,7 +993,7 @@ int32_t proxy_link_ans_recv(int32_t sd, struct iovec *iov, int32_t count)
 			return proxy_log(LOG_ERR, ENOBUFS,
 					 "Answer is too long");
 		}
-		iov->iov_base += sizeof(proxy_link_ans_t);
+		iov->iov_base = (char *)iov->iov_base + sizeof(proxy_link_ans_t);
 		iov->iov_len = ans->header_len - sizeof(proxy_link_ans_t);
 	} else {
 		iov++;

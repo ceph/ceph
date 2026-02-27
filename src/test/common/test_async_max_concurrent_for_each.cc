@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -48,84 +48,6 @@ asio::awaitable<void> wait_for(std::chrono::milliseconds dur)
 struct null_sentinel {};
 bool operator==(const char* c, null_sentinel) { return !*c; }
 static_assert(std::sentinel_for<null_sentinel, const char*>);
-
-TEST(iterator_null_yield, empty)
-{
-  int* end = nullptr;
-  auto cr = [] (int, asio::yield_context) {};
-  max_concurrent_for_each(end, end, 10, null_yield, cr);
-}
-
-TEST(iterator_null_yield, over_limit)
-{
-  int concurrent = 0;
-  int max_concurrent = 0;
-  int completed = 0;
-
-  auto cr = [&] (int, asio::yield_context yield) {
-    ++concurrent;
-    if (max_concurrent < concurrent) {
-      max_concurrent = concurrent;
-    }
-
-    wait_for(1ms, yield);
-
-    --concurrent;
-    ++completed;
-  };
-
-  constexpr auto arr = std::array{1,2,3,4,5,6,7,8,9,10};
-  max_concurrent_for_each(begin(arr), end(arr), 2, null_yield, cr);
-
-  EXPECT_EQ(0, concurrent);
-  EXPECT_EQ(2, max_concurrent);
-  EXPECT_EQ(10, completed);
-}
-
-TEST(iterator_null_yield, sentinel)
-{
-  const char* begin = "hello";
-  null_sentinel end;
-
-  size_t completed = 0;
-  auto cr = [&completed] (char c, asio::yield_context) { ++completed; };
-  max_concurrent_for_each(begin, end, 10, null_yield, cr);
-  EXPECT_EQ(completed, 5);
-}
-
-TEST(range_null_yield, empty)
-{
-  constexpr std::array<int, 0> arr{};
-  auto cr = [] (int, asio::yield_context) {};
-  max_concurrent_for_each(arr, 10, null_yield, cr);
-}
-
-TEST(range_null_yield, over_limit)
-{
-  int concurrent = 0;
-  int max_concurrent = 0;
-  int completed = 0;
-
-  auto cr = [&] (int, asio::yield_context yield) {
-    ++concurrent;
-    if (max_concurrent < concurrent) {
-      max_concurrent = concurrent;
-    }
-
-    wait_for(1ms, yield);
-
-    --concurrent;
-    ++completed;
-  };
-
-  constexpr auto arr = std::array{1,2,3,4,5,6,7,8,9,10};
-  max_concurrent_for_each(arr, 2, null_yield, cr);
-
-  EXPECT_EQ(0, concurrent);
-  EXPECT_EQ(2, max_concurrent);
-  EXPECT_EQ(10, completed);
-}
-
 
 TEST(iterator_yield, empty)
 {

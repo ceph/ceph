@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "include/compat.h"
 #include "include/rados/rgw_file.h"
@@ -20,7 +20,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_os_lib.h"
 #include "rgw_auth_s3.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_zone.h"
 #include "rgw_file_int.h"
@@ -121,10 +121,7 @@ namespace rgw {
 	auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	if (ux_key && ux_attrs) {
-	  DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
-	  if (get<0>(dar) || get<1>(dar)) {
-	    update_fh(rgw_fh);
-          }
+	  [[maybe_unused]] DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
 	}
 	if (! (flags & RGWFileHandle::FLAG_LOCKED)) {
 	  rgw_fh->mtx.unlock();
@@ -213,13 +210,10 @@ namespace rgw {
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
             rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
             rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL)));
-	    if (!(flags & RGWFileHandle::FLAG_IN_CB) &&
-		ux_key && ux_attrs) {
-              DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
-              if (get<0>(dar) || get<1>(dar)) {
-                update_fh(rgw_fh);
-              }
-	    }
+            if (ux_key && ux_attrs) {
+              /* restores unix attrs */
+              [[maybe_unused]] DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
+            }
 	  }
 	  goto done;
 	}
@@ -250,13 +244,11 @@ namespace rgw {
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
             rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
             rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL)));
-	    if (!(flags & RGWFileHandle::FLAG_IN_CB) &&
-		ux_key && ux_attrs) {
-              DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
-              if (get<0>(dar) || get<1>(dar)) {
-                update_fh(rgw_fh);
-              }
-	    }
+            if (ux_key && ux_attrs) {
+              /* restores unix attrs */
+              [[maybe_unused]] DecodeAttrsResult dar =
+                rgw_fh->decode_attrs(ux_key, ux_attrs);
+            } /* ux_key && ux_attrs */
 	  }
 	  goto done;
 	}
@@ -1348,7 +1340,7 @@ namespace rgw {
 	      goto rele;
 	    }
 	    /* maybe clear state */
-	    d = get<directory>(&rgw_fh->variant_type);
+	    d = std::get_if<directory>(&rgw_fh->variant_type);
 	    if (d) {
 	      struct timespec ev_ts = ev.ts;
 	      lock_guard guard(rgw_fh->mtx);
@@ -1456,6 +1448,7 @@ namespace rgw {
     }
   } /* RGWFileHandle::encode_attrs */
 
+  /* called with rgw_fh->mtx held */
   DecodeAttrsResult RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
                                                 const ceph::buffer::list* ux_attrs1)
   {
@@ -1475,25 +1468,28 @@ namespace rgw {
     decode(tmp_fh, bl_iter_unix1);
 
     fh.fh_type = tmp_fh.fh.fh_type;
-    // for file handles that represent files and whose file_ondisk_version
-    // is newer, no updates are need, otherwise, go updating the current
-    // file handle
-    if (!((fh.fh_type == RGW_FS_TYPE_FILE ||
-	    fh.fh_type == RGW_FS_TYPE_SYMBOLIC_LINK) &&
-	  file_ondisk_version >= tmp_fh.file_ondisk_version)) {
-      // make sure the following "encode" always encode a greater version
-      file_ondisk_version = tmp_fh.file_ondisk_version + 1;
-      state.dev = tmp_fh.state.dev;
-      state.size = tmp_fh.state.size;
-      state.nlink = tmp_fh.state.nlink;
-      state.owner_uid = tmp_fh.state.owner_uid;
-      state.owner_gid = tmp_fh.state.owner_gid;
-      state.unix_mode = tmp_fh.state.unix_mode;
-      state.ctime = tmp_fh.state.ctime;
-      state.mtime = tmp_fh.state.mtime;
-      state.atime = tmp_fh.state.atime;
-      state.version = tmp_fh.state.version;
-    }
+    /* XXXX the merged logic for fh versions is not sound--we are decoding
+     * an on-disk handle, so the most basic scenario of restoring an object
+     * with saved attributes fails in the common case:  make object, setattr,
+     * restart nfs, consult attr:  now on lookup the protype filehandle has
+     * version 0, and on-disk version is also 0, and attributes are not
+     * restored.
+     *
+     * It seems likely that the reasoning here was influenced by former calls
+     * to update_fh(...) in stat paths--which in retrospect seems unwise.  The
+     * stat paths (incl. lookups) are reading in attrs, why should we immediately
+     * write them back?
+     */
+    state.dev = tmp_fh.state.dev;
+    state.size = tmp_fh.state.size;
+    state.nlink = tmp_fh.state.nlink;
+    state.owner_uid = tmp_fh.state.owner_uid;
+    state.owner_gid = tmp_fh.state.owner_gid;
+    state.unix_mode = tmp_fh.state.unix_mode;
+    state.ctime = tmp_fh.state.ctime;
+    state.mtime = tmp_fh.state.mtime;
+    state.atime = tmp_fh.state.atime;
+    state.version = tmp_fh.state.version;
 
     if (this->state.version < 2) {
       get<1>(dar) = true;
@@ -1543,8 +1539,7 @@ namespace rgw {
   std::ostream& operator<<(std::ostream &os,
 			   RGWFileHandle::readdir_offset const &offset)
   {
-    using boost::get;
-    if (unlikely(!! get<uint64_t*>(&offset))) {
+    if (unlikely(!!std::get_if<uint64_t*>(&offset))) {
       uint64_t* ioff = get<uint64_t*>(offset);
       os << *ioff;
     }
@@ -1568,7 +1563,7 @@ namespace rgw {
       << object_name()
       << dendl;
 
-    directory* d = get<directory>(&variant_type);
+    directory* d = std::get_if<directory>(&variant_type);
     if (d) {
       (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
       lock_guard guard(mtx);
@@ -1578,7 +1573,7 @@ namespace rgw {
     bool initial_off;
     char* mk{nullptr};
 
-    if (likely(!! get<const char*>(&offset))) {
+    if (likely(!!std::get_if<const char*>(&offset))) {
       mk = const_cast<char*>(get<const char*>(offset));
       initial_off = !mk;
     } else {
@@ -1635,7 +1630,7 @@ namespace rgw {
 
     int rc = 0;
 
-    file* f = get<file>(&variant_type);
+    file* f = std::get_if<file>(&variant_type);
     if (! f)
       return -EISDIR;
 
@@ -1754,7 +1749,7 @@ namespace rgw {
       guard.lock();
     }
 
-    file* f = get<file>(&variant_type);
+    file* f = std::get_if<file>(&variant_type);
     if (f && (f->write_req)) {
       lsubdout(fs->get_context(), rgw, 10)
 	<< __func__
@@ -1790,7 +1785,7 @@ namespace rgw {
 
   void RGWFileHandle::clear_state()
   {
-    directory* d = get<directory>(&variant_type);
+    directory* d = std::get_if<directory>(&variant_type);
     if (d) {
       state.nlink = 2;
       d->last_marker = rgw_obj_key{};
@@ -1823,6 +1818,33 @@ namespace rgw {
     if (fs->invalidate_cb) {
       fs->invalidate_cb(fs->invalidate_arg, get_key().fh_hk);
     }
+  }
+
+  bool RGWListBucketsRequest::eof() {
+    if (unlikely(cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15))) {
+      bool is_offset =
+	unlikely(!std::get_if<const char*>(&offset)) ||
+	!! get<const char*>(offset);
+      lsubdout(cct, rgw, 15) << "READDIR offset: " <<
+	((is_offset) ? offset : "(nil)")
+			     << " is_truncated: " << is_truncated
+			     << dendl;
+    }
+    return !is_truncated && !rcb_eof;
+  }
+
+  bool RGWReaddirRequest::eof() {
+    if (unlikely(cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15))) {
+      bool is_offset =
+	unlikely(!std::get_if<const char*>(&offset)) ||
+	!! get<const char*>(offset);
+      lsubdout(cct, rgw, 15) << "READDIR offset: " <<
+	((is_offset) ? offset : "(nil)")
+			     << " next marker: " << next_marker
+			     << " is_truncated: " << is_truncated
+			     << dendl;
+    }
+    return !is_truncated && !rcb_eof;
   }
 
   int RGWWriteRequest::exec_start() {

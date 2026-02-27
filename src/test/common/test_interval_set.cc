@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -17,6 +18,16 @@
 #include <gtest/gtest.h>
 #include <boost/container/flat_map.hpp>
 
+/* This will override the strict_assert macro in interval set, but leave
+ * all product-asserts as ceph_assert. These asserts are used when strict mode
+ * is on to police some important restrictions.
+ */
+#define strict_mode_assert(expr)                           \
+  do {                                                     \
+    ((expr))                                               \
+    ? _CEPH_ASSERT_VOID_CAST (0) : throw std::exception(); \
+  } while (false)
+
 #include "include/interval_set.h"
 #include "include/btree_map.h"
 
@@ -26,10 +37,7 @@ using namespace ceph;
  * if (interval set has strict=true) expect that ceph will panic.
  * else expect that ceph will not panic and execute the second clause.
  */
-// FIXME: The CI pipeline cannot cope with the core dumps that ASSERT_DEATH
-//        creates, so we need to find a better approach. Disabling to unblock.
-//#define ASSERT_STRICT_DEATH(s, e) if constexpr (ISet::test_strict) ASSERT_DEATH(s, ""); else { s; e; }
-#define ASSERT_STRICT_DEATH(s, e) if constexpr (ISet::test_strict) GTEST_SKIP(); else { s; e; }
+#define ASSERT_STRICT_DEATH(s, e) if constexpr (ISet::test_strict) EXPECT_THROW(s, std::exception); else { s; e; }
 
 typedef uint64_t IntervalValueType;
 

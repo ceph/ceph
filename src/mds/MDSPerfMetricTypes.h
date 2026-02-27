@@ -1,11 +1,14 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_MDS_PERF_METRIC_TYPES_H
 #define CEPH_MDS_PERF_METRIC_TYPES_H
 
 #include <ostream>
+#include <shared_mutex>
 
+#include "common/Formatter.h"
+#include "include/cephfs/types.h" // for mds_rank_t
 #include "include/denc.h"
 #include "include/utime.h"
 #include "mdstypes.h"
@@ -296,6 +299,7 @@ WRITE_CLASS_DENC(PinnedIcapsMetric)
 WRITE_CLASS_DENC(OpenedInodesMetric)
 WRITE_CLASS_DENC(ReadIoSizesMetric)
 WRITE_CLASS_DENC(WriteIoSizesMetric)
+WRITE_CLASS_DENC(SubvolumeMetric)
 
 // metrics that are forwarded to the MDS by client(s).
 struct Metrics {
@@ -372,6 +376,7 @@ struct metrics_message_t {
   version_t seq = 0;
   mds_rank_t rank = MDS_RANK_NONE;
   std::map<entity_inst_t, Metrics> client_metrics_map;
+  std::vector<SubvolumeMetric> subvolume_metrics;
 
   metrics_message_t() {
   }
@@ -381,19 +386,23 @@ struct metrics_message_t {
 
   void encode(bufferlist &bl, uint64_t features) const {
     using ceph::encode;
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(seq, bl);
     encode(rank, bl);
     encode(client_metrics_map, bl, features);
+    encode(subvolume_metrics, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator &iter) {
     using ceph::decode;
-    DECODE_START(1, iter);
+    DECODE_START(2, iter);
     decode(seq, iter);
     decode(rank, iter);
     decode(client_metrics_map, iter);
+    if (struct_v >= 2) {
+      decode(subvolume_metrics, iter);
+    }
     DECODE_FINISH(iter);
   }
 
@@ -404,13 +413,21 @@ struct metrics_message_t {
       f->dump_object("client", client);
       f->dump_object("metrics", metrics);
     }
+    f->open_array_section("subvolume_metrics");
+    for (const auto &metric : subvolume_metrics) {
+      f->open_object_section("metric");
+      metric.dump(f);
+      f->close_section();
+    }
+    f->close_section();
   }
 
-  friend std::ostream& operator<<(std::ostream& os, const metrics_message_t &metrics_message) {
-    os << "[sequence=" << metrics_message.seq << ", rank=" << metrics_message.rank
-       << ", metrics=" << metrics_message.client_metrics_map << "]";
-    return os;
-  }
+    friend std::ostream& operator<<(std::ostream& os, const metrics_message_t &m) {
+      os << "[sequence=" << m.seq << ", rank=" << m.rank
+         << ", client_metrics=" << m.client_metrics_map
+         << ", subvolume_metrics=" << m.subvolume_metrics << "]";
+      return os;
+    }
 };
 
 WRITE_CLASS_ENCODER_FEATURES(metrics_message_t)

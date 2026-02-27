@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -487,7 +487,7 @@ int stats(const DoutPrefixProvider* dpp,
 int list_users(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
                AdminOpState& op_state, const std::string& path_prefix,
                const std::string& marker, bool max_entries_specified,
-               int max_entries, std::string& err_msg,
+               int max_entries, bool root_only, std::string& err_msg,
                RGWFormatterFlusher& flusher, optional_yield y)
 {
   int ret = 0;
@@ -541,6 +541,9 @@ int list_users(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
     }
 
     for (const auto& user : listing.users) {
+      if (root_only && user.type != TYPE_ROOT) {
+        continue; // skip non-root users if requested
+      }
       encode_json("key", user.user_id, formatter);
     }
     flusher.flush();

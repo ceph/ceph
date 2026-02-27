@@ -21,8 +21,9 @@ install(TARGETS
 
 add_executable(ceph_test_rados_io_sequence
   ${CMAKE_CURRENT_SOURCE_DIR}/ceph_test_rados_io_sequence/ceph_test_rados_io_sequence.cc)
+add_dependencies(ceph_test_rados_io_sequence erasure_code_plugins)
 target_link_libraries(ceph_test_rados_io_sequence
-  librados global object_io_exerciser json_structures)
+  librados global object_io_exerciser json_structures ec_consistency)
 install(TARGETS
   ceph_test_rados_io_sequence
   DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -76,6 +77,14 @@ add_executable(unittest_ecbackend
 add_ceph_unittest(unittest_ecbackend)
 target_link_libraries(unittest_ecbackend osd global)
 
+# unittest_ecutil
+add_executable(unittest_ecutil
+        TestECUtil.cc
+        $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_ecutil)
+target_link_libraries(unittest_ecutil osd global)
+
 # unittest_osdscrub
 add_executable(unittest_osdscrub
   TestOSDScrub.cc
@@ -101,7 +110,12 @@ add_executable(unittest_pglog
   )
 add_ceph_unittest(unittest_pglog)
 target_link_libraries(unittest_pglog osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
-
+# unittest_peeringstate
+add_executable(unittest_peeringstate
+  TestPeeringState.cc
+  )
+add_ceph_unittest(unittest_peeringstate)
+target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc

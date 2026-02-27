@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -109,6 +109,7 @@ private:
   int _allocate(
     uint64_t size,
     uint64_t unit,
+    int64_t  hint,
     uint64_t *offset,
     uint64_t *length);
 

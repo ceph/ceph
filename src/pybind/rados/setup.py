@@ -1,5 +1,5 @@
-import pkgutil
-if not pkgutil.find_loader('setuptools'):
+import importlib.util
+if not importlib.util.find_spec('setuptools'):
     from distutils.core import setup
     from distutils.extension import Extension
 else:
@@ -138,7 +138,7 @@ def check_sanity():
 
 
 if 'BUILD_DOC' in os.environ or 'READTHEDOCS' in os.environ:
-    ext_args = {}
+    ext_args = dict(extra_compile_args=['-DBUILD_DOC'])
     cython_constants = dict(BUILD_DOC=True)
 elif check_sanity():
     ext_args = get_python_flags(['rados'])
@@ -150,6 +150,7 @@ cmdclass = {}
 try:
     from Cython.Build import cythonize
     from Cython.Distutils import build_ext
+    from Cython import Tempita
 
     cmdclass = {'build_ext': build_ext}
 except ImportError:
@@ -164,7 +165,27 @@ except ImportError:
 
         source = "rados.c"
 else:
-    source = "rados.pyx"
+    # Process Tempita template
+    source_pyx = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "rados.pyx"
+    )
+
+    # Read the template from source
+    with open(source_pyx) as f:
+        template_content = f.read()
+
+    # Process the template with cython_constants
+    processed = Tempita.sub(template_content, **cython_constants)
+
+    # Write processed output to current working directory
+    # (which is the build directory when invoked by CMake)
+    output_pyx = "rados_processed.pyx"
+
+    with open(output_pyx, 'w') as f:
+        f.write(processed)
+
+    source = output_pyx
 
 # Disable cythonification if we're not really building anything
 if (len(sys.argv) >= 2 and
@@ -185,7 +206,7 @@ setup(
         "the distributed object store using a simple file-like interface."
     ),
     url='https://github.com/ceph/ceph/tree/master/src/pybind/rados',
-    license='LGPLv2+',
+    license='LGPL-2.0-or-later',
     platforms='Linux',
     ext_modules=cythonize(
         [
@@ -195,15 +216,11 @@ setup(
                 **ext_args
             )
         ],
-        # use "3str" when Cython 3.0 is available
-        compiler_directives={'language_level': sys.version_info.major},
-        compile_time_env=cython_constants,
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
     ),
     classifiers=[
         'Intended Audience :: Developers',
         'Intended Audience :: System Administrators',
-        'License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)',
         'Operating System :: POSIX :: Linux',
         'Programming Language :: Cython',
         'Programming Language :: Python :: 3'

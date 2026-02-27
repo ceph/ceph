@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -22,7 +22,9 @@ class ShardServices;
 class OSD;
 class PG;
 
-class LogMissingRequest final : public PhasedOperationT<LogMissingRequest> {
+class LogMissingRequest final :
+    public PhasedOperationT<LogMissingRequest>,
+    public RemoteOperation {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::logmissing_request;
   LogMissingRequest(crimson::net::ConnectionRef&&, Ref<MOSDPGUpdateLogMissing>&&);
@@ -44,33 +46,6 @@ public:
 
   PerShardPipeline &get_pershard_pipeline(ShardServices &);
 
-  crimson::net::Connection &get_local_connection() {
-    assert(l_conn);
-    assert(!r_conn);
-    return *l_conn;
-  };
-
-  crimson::net::Connection &get_foreign_connection() {
-    assert(r_conn);
-    assert(!l_conn);
-    return *r_conn;
-  };
-
-  crimson::net::ConnectionFFRef prepare_remote_submission() {
-    assert(l_conn);
-    assert(!r_conn);
-    auto ret = seastar::make_foreign(std::move(l_conn));
-    l_conn.reset();
-    return ret;
-  }
-
-  void finish_remote_submission(crimson::net::ConnectionFFRef conn) {
-    assert(conn);
-    assert(!l_conn);
-    assert(!r_conn);
-    r_conn = make_local_shared_foreign(std::move(conn));
-  }
-
   seastar::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 
@@ -88,9 +63,6 @@ public:
 
 private:
   PGRepopPipeline &repop_pipeline(PG &pg);
-
-  crimson::net::ConnectionRef l_conn;
-  crimson::net::ConnectionXcoreRef r_conn;
 
   // must be after `conn` to ensure the ConnectionPipeline's is alive
   PipelineHandle handle;

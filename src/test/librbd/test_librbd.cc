@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -19,6 +20,8 @@
 #include "include/rbd/librbd.hpp"
 #include "include/event_type.h"
 #include "include/err.h"
+#include "include/intarith.h" // for round_up_to()
+#include "include/rados.h" // for EBLOCKLISTED
 #include "common/ceph_mutex.h"
 #include "json_spirit/json_spirit.h"
 #include "test/librados/crimson_utils.h"
@@ -6990,199 +6993,6 @@ TEST_F(TestLibRBD, ListChildren)
   rados_ioctx_destroy(ioctx2);
 }
 
-TEST_F(TestLibRBD, ListChildrenTiered)
-{
-  SKIP_IF_CRIMSON();
-  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
-
-  librbd::RBD rbd;
-  string pool_name1 = create_pool(true);
-  string pool_name2 = create_pool(true);
-  string pool_name3 = create_pool(true);
-  ASSERT_NE("", pool_name1);
-  ASSERT_NE("", pool_name2);
-  ASSERT_NE("", pool_name3);
-
-  std::string cmdstr = "{\"prefix\": \"osd tier add\", \"pool\": \"" +
-     pool_name1 + "\", \"tierpool\":\"" + pool_name3 + "\", \"force_nonempty\":\"\"}";
-  char *cmd[1];
-  cmd[0] = (char *)cmdstr.c_str();
-  ASSERT_EQ(0, rados_mon_command(_cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
-
-  cmdstr = "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" +
-     pool_name3 + "\", \"mode\":\"writeback\"}";
-  cmd[0] = (char *)cmdstr.c_str();
-  ASSERT_EQ(0, rados_mon_command(_cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
-
-  cmdstr = "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" +
-     pool_name1 + "\", \"overlaypool\":\"" + pool_name3 + "\"}";
-  cmd[0] = (char *)cmdstr.c_str();
-  ASSERT_EQ(0, rados_mon_command(_cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
-
-  EXPECT_EQ(0, rados_wait_for_latest_osdmap(_cluster));
-
-  string parent_name = get_temp_image_name();
-  string child_name1 = get_temp_image_name();
-  string child_name2 = get_temp_image_name();
-  string child_name3 = get_temp_image_name();
-  string child_name4 = get_temp_image_name();
-
-  char child_id1[4096];
-  char child_id2[4096];
-  char child_id3[4096];
-  char child_id4[4096];
-
-  rbd_image_t image1;
-  rbd_image_t image2;
-  rbd_image_t image3;
-  rbd_image_t image4;
-
-  rados_ioctx_t ioctx1, ioctx2;
-  rados_ioctx_create(_cluster, pool_name1.c_str(), &ioctx1);
-  rados_ioctx_create(_cluster, pool_name2.c_str(), &ioctx2);
-
-  bool old_format;
-  uint64_t features;
-  rbd_image_t parent;
-  int order = 0;
-
-  ASSERT_EQ(0, get_features(&old_format, &features));
-  ASSERT_FALSE(old_format);
-
-  // make a parent to clone from
-  ASSERT_EQ(0, create_image_full(ioctx1, parent_name.c_str(), 4<<20, &order,
-				 false, features));
-  ASSERT_EQ(0, rbd_open(ioctx1, parent_name.c_str(), &parent, NULL));
-  // create a snapshot, reopen as the parent we're interested in
-  ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
-  ASSERT_EQ(0, rbd_snap_set(parent, "parent_snap"));
-  ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
-
-  ASSERT_EQ(0, rbd_close(parent));
-  ASSERT_EQ(0, rbd_open(ioctx1, parent_name.c_str(), &parent, "parent_snap"));
-
-  ASSERT_EQ(0, clone_image(ioctx1, parent, parent_name.c_str(), "parent_snap",
-                           ioctx2, child_name1.c_str(), features, &order));
-  ASSERT_EQ(0, rbd_open(ioctx2, child_name1.c_str(), &image1, NULL));
-  ASSERT_EQ(0, rbd_get_id(image1, child_id1, sizeof(child_id1)));
-  test_list_children(parent, 1, pool_name2.c_str(), child_name1.c_str());
-  test_list_children2(parent, 1,
-                      child_id1, pool_name2.c_str(), child_name1.c_str(), false);
-
-  ASSERT_EQ(0, clone_image(ioctx1, parent, parent_name.c_str(), "parent_snap",
-                           ioctx1, child_name2.c_str(), features, &order));
-  ASSERT_EQ(0, rbd_open(ioctx1, child_name2.c_str(), &image2, NULL));
-  ASSERT_EQ(0, rbd_get_id(image2, child_id2, sizeof(child_id2)));
-  test_list_children(parent, 2, pool_name2.c_str(), child_name1.c_str(),
-		     pool_name1.c_str(), child_name2.c_str());
-  test_list_children2(parent, 2,
-                      child_id1, pool_name2.c_str(), child_name1.c_str(), false,
-                      child_id2, pool_name1.c_str(), child_name2.c_str(), false);
-
-  // read from the cache to populate it
-  rbd_image_t tier_image;
-  ASSERT_EQ(0, rbd_open(ioctx1, child_name2.c_str(), &tier_image, NULL));
-  size_t len = 4 * 1024 * 1024;
-  char* buf = (char*)malloc(len);
-  ssize_t size = rbd_read(tier_image, 0, len, buf);
-  ASSERT_GT(size, 0);
-  free(buf);
-  ASSERT_EQ(0, rbd_close(tier_image));
-
-  ASSERT_EQ(0, clone_image(ioctx1, parent, parent_name.c_str(), "parent_snap",
-                           ioctx2, child_name3.c_str(), features, &order));
-  ASSERT_EQ(0, rbd_open(ioctx2, child_name3.c_str(), &image3, NULL));
-  ASSERT_EQ(0, rbd_get_id(image3, child_id3, sizeof(child_id3)));
-  test_list_children(parent, 3, pool_name2.c_str(), child_name1.c_str(),
-		     pool_name1.c_str(), child_name2.c_str(),
-		     pool_name2.c_str(), child_name3.c_str());
-  test_list_children2(parent, 3,
-                      child_id1, pool_name2.c_str(), child_name1.c_str(), false,
-                      child_id2, pool_name1.c_str(), child_name2.c_str(), false,
-                      child_id3, pool_name2.c_str(), child_name3.c_str(), false);
-
-  librados::IoCtx ioctx3;
-  ASSERT_EQ(0, _rados.ioctx_create(pool_name2.c_str(), ioctx3));
-  ASSERT_EQ(0, rbd_close(image3));
-  ASSERT_EQ(0, rbd.trash_move(ioctx3, child_name3.c_str(), 0));
-  test_list_children(parent, 2, pool_name2.c_str(), child_name1.c_str(),
-		     pool_name1.c_str(), child_name2.c_str());
-  test_list_children2(parent, 3,
-                      child_id1, pool_name2.c_str(), child_name1.c_str(), false,
-                      child_id2, pool_name1.c_str(), child_name2.c_str(), false,
-                      child_id3, pool_name2.c_str(), child_name3.c_str(), true);
-
-  ASSERT_EQ(0, clone_image(ioctx1, parent, parent_name.c_str(), "parent_snap",
-                           ioctx2, child_name4.c_str(), features, &order));
-  ASSERT_EQ(0, rbd_open(ioctx2, child_name4.c_str(), &image4, NULL));
-  ASSERT_EQ(0, rbd_get_id(image4, child_id4, sizeof(child_id4)));
-  test_list_children(parent, 3, pool_name2.c_str(), child_name1.c_str(),
-		     pool_name1.c_str(), child_name2.c_str(),
-		     pool_name2.c_str(), child_name4.c_str());
-  test_list_children2(parent, 4,
-                      child_id1, pool_name2.c_str(), child_name1.c_str(), false,
-                      child_id2, pool_name1.c_str(), child_name2.c_str(), false,
-                      child_id3, pool_name2.c_str(), child_name3.c_str(), true,
-                      child_id4, pool_name2.c_str(), child_name4.c_str(), false);
-
-  ASSERT_EQ(0, rbd.trash_restore(ioctx3, child_id3, ""));
-  test_list_children(parent, 4, pool_name2.c_str(), child_name1.c_str(),
-		     pool_name1.c_str(), child_name2.c_str(),
-		     pool_name2.c_str(), child_name3.c_str(),
-		     pool_name2.c_str(), child_name4.c_str());
-  test_list_children2(parent, 4,
-                      child_id1, pool_name2.c_str(), child_name1.c_str(), false,
-                      child_id2, pool_name1.c_str(), child_name2.c_str(), false,
-                      child_id3, pool_name2.c_str(), child_name3.c_str(), false,
-                      child_id4, pool_name2.c_str(), child_name4.c_str(), false);
-
-  ASSERT_EQ(0, rbd_close(image1));
-  ASSERT_EQ(0, rbd_remove(ioctx2, child_name1.c_str()));
-  test_list_children(parent, 3,
-		     pool_name1.c_str(), child_name2.c_str(),
-		     pool_name2.c_str(), child_name3.c_str(),
-		     pool_name2.c_str(), child_name4.c_str());
-  test_list_children2(parent, 3,
-                     child_id2, pool_name1.c_str(), child_name2.c_str(), false,
-                     child_id3, pool_name2.c_str(), child_name3.c_str(), false,
-                     child_id4, pool_name2.c_str(), child_name4.c_str(), false);
-
-  ASSERT_EQ(0, rbd_remove(ioctx2, child_name3.c_str()));
-  test_list_children(parent, 2,
-		     pool_name1.c_str(), child_name2.c_str(),
-		     pool_name2.c_str(), child_name4.c_str());
-  test_list_children2(parent, 2,
-                     child_id2, pool_name1.c_str(), child_name2.c_str(), false,
-                     child_id4, pool_name2.c_str(), child_name4.c_str(), false);
-
-  ASSERT_EQ(0, rbd_close(image4));
-  ASSERT_EQ(0, rbd_remove(ioctx2, child_name4.c_str()));
-  test_list_children(parent, 1,
-		     pool_name1.c_str(), child_name2.c_str());
-  test_list_children2(parent, 1,
-                      child_id2, pool_name1.c_str(), child_name2.c_str(), false);
-
-  ASSERT_EQ(0, rbd_close(image2));
-  ASSERT_EQ(0, rbd_remove(ioctx1, child_name2.c_str()));
-  test_list_children(parent, 0);
-  test_list_children2(parent, 0);
-
-  ASSERT_EQ(0, rbd_snap_unprotect(parent, "parent_snap"));
-  ASSERT_EQ(0, rbd_snap_remove(parent, "parent_snap"));
-  ASSERT_EQ(0, rbd_close(parent));
-  ASSERT_EQ(0, rbd_remove(ioctx1, parent_name.c_str()));
-  rados_ioctx_destroy(ioctx1);
-  rados_ioctx_destroy(ioctx2);
-  cmdstr = "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" +
-     pool_name1 + "\"}";
-  cmd[0] = (char *)cmdstr.c_str();
-  ASSERT_EQ(0, rados_mon_command(_cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
-  cmdstr = "{\"prefix\": \"osd tier remove\", \"pool\": \"" +
-     pool_name1 + "\", \"tierpool\":\"" + pool_name3 + "\"}";
-  cmd[0] = (char *)cmdstr.c_str();
-  ASSERT_EQ(0, rados_mon_command(_cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
-}
-
 TEST_F(TestLibRBD, LockingPP)
 {
   librados::IoCtx ioctx;
@@ -11338,6 +11148,13 @@ TEST_F(TestLibRBD, CreateWithMirrorEnabled) {
   librbd::Image parent_image;
   ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
 
+  librbd::mirror_image_info_t mirror_image_info;
+  ASSERT_EQ(0, parent_image.mirror_image_get_info(&mirror_image_info,
+                                                  sizeof(mirror_image_info)));
+  ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, mirror_image_info.state);
+  ASSERT_NE("", mirror_image_info.global_id);
+  ASSERT_EQ(true, mirror_image_info.primary);
+
   librbd::mirror_image_mode_t mirror_image_mode;
   ASSERT_EQ(0, parent_image.mirror_image_get_mode(&mirror_image_mode));
   ASSERT_EQ(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mirror_image_mode);
@@ -11358,6 +11175,14 @@ TEST_F(TestLibRBD, CreateWithMirrorEnabled) {
   ASSERT_EQ(0, child_image.mirror_image_disable(true));
   ASSERT_EQ(0, parent_image.mirror_image_disable(true));
   ASSERT_EQ(0, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED));
+
+  ASSERT_EQ(0, parent_image.mirror_image_get_info(&mirror_image_info,
+                                                  sizeof(mirror_image_info)));
+  ASSERT_EQ(RBD_MIRROR_IMAGE_DISABLED, mirror_image_info.state);
+  ASSERT_EQ("", mirror_image_info.global_id);
+  ASSERT_EQ(false, mirror_image_info.primary);
+
+  ASSERT_EQ(-EINVAL, parent_image.mirror_image_get_mode(&mirror_image_mode));
 }
 
 TEST_F(TestLibRBD, FlushCacheWithCopyupOnExternalSnapshot) {
@@ -11405,6 +11230,83 @@ TEST_F(TestLibRBD, FlushCacheWithCopyupOnExternalSnapshot) {
   read_comp->release();
 }
 
+static void test_write_exclusive_lock(rbd_image_t image1, rbd_image_t image2,
+                                      char* buf, size_t buf_len) {
+  int lock_owner;
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(buf_len, rbd_write(image1, 0, buf_len, buf));
+
+  rbd_completion_t write_comp;
+  rbd_aio_create_completion(NULL, NULL, &write_comp);
+  ASSERT_EQ(0, rbd_aio_write(image2, 0, buf_len, buf, write_comp));
+
+  rbd_completion_t flush_comp;
+  rbd_aio_create_completion(NULL, NULL, &flush_comp);
+  ASSERT_EQ(0, rbd_aio_flush(image2, flush_comp));
+
+  for (int i = 0; i < 10 && !rbd_aio_is_complete(write_comp); i++) {
+    usleep(5 * 1000);
+  }
+  ASSERT_TRUE(rbd_aio_is_complete(write_comp));
+  ASSERT_EQ(-EROFS, rbd_aio_get_return_value(write_comp));
+  rbd_aio_release(write_comp);
+
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(flush_comp));
+  ASSERT_EQ(-EROFS, rbd_aio_get_return_value(flush_comp));
+  rbd_aio_release(flush_comp);
+
+  ASSERT_EQ(0, rbd_lock_release(image1));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(buf_len, rbd_write(image2, 0, buf_len, buf));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+}
+
+static void test_write_exclusive_lock_transient(rbd_image_t image1,
+                                                rbd_image_t image2,
+                                                char* buf, size_t buf_len) {
+  int lock_owner;
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(buf_len, rbd_write(image1, 0, buf_len, buf));
+
+  rbd_completion_t write_comp;
+  rbd_aio_create_completion(NULL, NULL, &write_comp);
+  ASSERT_EQ(0, rbd_aio_write(image2, 0, buf_len, buf, write_comp));
+
+  rbd_completion_t flush_comp;
+  rbd_aio_create_completion(NULL, NULL, &flush_comp);
+  ASSERT_EQ(0, rbd_aio_flush(image2, flush_comp));
+
+  for (int i = 0; i < 10 && !rbd_aio_is_complete(write_comp); i++) {
+    usleep(500 * 1000);
+  }
+  ASSERT_FALSE(rbd_aio_is_complete(write_comp));
+  ASSERT_FALSE(rbd_aio_is_complete(flush_comp));
+
+  ASSERT_EQ(0, rbd_lock_release(image1));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(write_comp));
+  ASSERT_EQ(0, rbd_aio_get_return_value(write_comp));
+  rbd_aio_release(write_comp);
+
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(flush_comp));
+  ASSERT_EQ(0, rbd_aio_get_return_value(flush_comp));
+  rbd_aio_release(flush_comp);
+
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+}
+
 TEST_F(TestLibRBD, ExclusiveLock)
 {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
@@ -11427,6 +11329,8 @@ TEST_F(TestLibRBD, ExclusiveLock)
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
   ASSERT_TRUE(lock_owner);
 
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image1, 0, sizeof(buf), buf));
+
   rbd_lock_mode_t lock_mode;
   char *lock_owners[1];
   size_t max_lock_owners = 0;
@@ -11442,11 +11346,12 @@ TEST_F(TestLibRBD, ExclusiveLock)
 
   rbd_image_t image2;
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image2, NULL));
-
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
   ASSERT_FALSE(lock_owner);
 
   ASSERT_EQ(-EOPNOTSUPP, rbd_lock_break(image1, RBD_LOCK_MODE_SHARED, ""));
+  ASSERT_EQ(-EOPNOTSUPP,
+            rbd_lock_break(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT, ""));
   ASSERT_EQ(-EBUSY, rbd_lock_break(image1, RBD_LOCK_MODE_EXCLUSIVE,
                                    "not the owner"));
 
@@ -11458,16 +11363,41 @@ TEST_F(TestLibRBD, ExclusiveLock)
                                     lock_owners[0]));
   rbd_lock_get_owners_cleanup(lock_owners, max_lock_owners);
 
+  // lock isn't held by anyone, image2 acquires automatically
   ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
   ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  test_write_exclusive_lock(image1, image2, buf, sizeof(buf));
+  test_write_exclusive_lock_transient(image1, image2, buf, sizeof(buf));
+
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  // EXCLUSIVE_TRANSIENT -> EXCLUSIVE without unlocking
+  test_write_exclusive_lock(image1, image2, buf, sizeof(buf));
+
+  // lock is held by image2
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
 
   ASSERT_EQ(0, rbd_lock_acquire(image2, RBD_LOCK_MODE_EXCLUSIVE));
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
   ASSERT_TRUE(lock_owner);
 
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));
+
   ASSERT_EQ(0, rbd_lock_release(image2));
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
   ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ(-EROFS, rbd_write(image2, 0, sizeof(buf), buf));
 
   ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE));
   ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
@@ -11548,9 +11478,173 @@ TEST_F(TestLibRBD, ExclusiveLock)
   rados_ioctx_destroy(ioctx);
 }
 
+TEST_F(TestLibRBD, ExclusiveLockTransient)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  static char buf[10];
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+
+  rbd_image_t image1;
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image1, NULL));
+
+  int lock_owner;
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image1, 0, sizeof(buf), buf));
+
+  rbd_lock_mode_t lock_mode;
+  char *lock_owners[1];
+  size_t max_lock_owners = 0;
+  ASSERT_EQ(-ERANGE, rbd_lock_get_owners(image1, &lock_mode, lock_owners,
+                                         &max_lock_owners));
+  ASSERT_EQ(1U, max_lock_owners);
+
+  ASSERT_EQ(0, rbd_lock_get_owners(image1, &lock_mode, lock_owners,
+                                   &max_lock_owners));
+  ASSERT_EQ(RBD_LOCK_MODE_EXCLUSIVE, lock_mode);
+  ASSERT_STRNE("", lock_owners[0]);
+  ASSERT_EQ(1U, max_lock_owners);
+
+  rbd_image_t image2;
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image2, NULL));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(-EOPNOTSUPP, rbd_lock_break(image1, RBD_LOCK_MODE_SHARED, ""));
+  ASSERT_EQ(-EOPNOTSUPP,
+            rbd_lock_break(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT, ""));
+  ASSERT_EQ(-EBUSY, rbd_lock_break(image1, RBD_LOCK_MODE_EXCLUSIVE,
+                                   "not the owner"));
+
+  ASSERT_EQ(0, rbd_lock_release(image1));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(-ENOENT, rbd_lock_break(image1, RBD_LOCK_MODE_EXCLUSIVE,
+                                    lock_owners[0]));
+  rbd_lock_get_owners_cleanup(lock_owners, max_lock_owners);
+
+  // lock isn't held by anyone, image2 acquires automatically
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  test_write_exclusive_lock_transient(image1, image2, buf, sizeof(buf));
+  test_write_exclusive_lock(image1, image2, buf, sizeof(buf));
+
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  // EXCLUSIVE -> EXCLUSIVE_TRANSIENT without unlocking
+  test_write_exclusive_lock_transient(image1, image2, buf, sizeof(buf));
+
+  // lock is held by image2
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(0, rbd_lock_acquire(image2, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image2, 0, sizeof(buf), buf));
+
+  ASSERT_EQ(0, rbd_lock_release(image2));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(-EROFS, rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ(-EROFS, rbd_write(image2, 0, sizeof(buf), buf));
+
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image1, 0, sizeof(buf), buf));
+  ASSERT_EQ(-EROFS, rbd_write(image2, 0, sizeof(buf), buf));
+
+  ASSERT_EQ(0, rbd_lock_release(image1));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  int owner_id = -1;
+  std::mutex lock;
+  const auto pingpong = [&](int m_id, rbd_image_t &m_image) {
+      for (int i = 0; i < 10; i++) {
+        {
+          std::lock_guard<std::mutex> locker(lock);
+          if (owner_id == m_id) {
+            std::cout << m_id << ": releasing exclusive lock" << std::endl;
+            EXPECT_EQ(0, rbd_lock_release(m_image));
+            int lock_owner;
+            EXPECT_EQ(0, rbd_is_exclusive_lock_owner(m_image, &lock_owner));
+            EXPECT_FALSE(lock_owner);
+            owner_id = -1;
+            std::cout << m_id << ": exclusive lock released" << std::endl;
+            continue;
+          }
+        }
+
+        std::cout << m_id << ": acquiring exclusive lock" << std::endl;
+        EXPECT_EQ(0, rbd_lock_acquire(m_image,
+                                      RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+
+        int lock_owner;
+        EXPECT_EQ(0, rbd_is_exclusive_lock_owner(m_image, &lock_owner));
+        EXPECT_TRUE(lock_owner);
+        std::cout << m_id << ": exclusive lock acquired" << std::endl;
+        {
+          std::lock_guard<std::mutex> locker(lock);
+          owner_id = m_id;
+        }
+        usleep(rand() % 50000);
+      }
+
+      std::lock_guard<std::mutex> locker(lock);
+      if (owner_id == m_id) {
+        EXPECT_EQ(0, rbd_lock_release(m_image));
+        int lock_owner;
+        EXPECT_EQ(0, rbd_is_exclusive_lock_owner(m_image, &lock_owner));
+        EXPECT_FALSE(lock_owner);
+        owner_id = -1;
+      }
+  };
+  thread ping(bind(pingpong, 1, ref(image1)));
+  thread pong(bind(pingpong, 2, ref(image2)));
+
+  ping.join();
+  pong.join();
+
+  ASSERT_EQ(0, rbd_lock_acquire(image2, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image2, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(0, rbd_close(image2));
+
+  ASSERT_EQ(0, rbd_lock_acquire(image1, RBD_LOCK_MODE_EXCLUSIVE_TRANSIENT));
+  ASSERT_EQ(0, rbd_is_exclusive_lock_owner(image1, &lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  ASSERT_EQ(0, rbd_close(image1));
+  rados_ioctx_destroy(ioctx);
+}
+
 TEST_F(TestLibRBD, BreakLock)
 {
-  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
   REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
 
@@ -13112,7 +13206,6 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
 
 TEST_F(TestLibRBD, QuiesceWatchError)
 {
-  SKIP_IF_CRIMSON();
   librbd::RBD rbd;
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
@@ -13471,7 +13564,6 @@ TEST_F(TestLibRBD, WriteZeroesThickProvision) {
 
 TEST_F(TestLibRBD, ConcurrentOperations)
 {
-  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::RBD rbd;

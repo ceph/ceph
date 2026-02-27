@@ -1,6 +1,7 @@
 
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -147,12 +148,12 @@ public:
   }
 
   int start_command(
-    const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
+    std::vector<std::string>&& cmd, ceph::buffer::list&& inbl,
     ceph::buffer::list *outbl, std::string *outs,
     Context *onfinish);
   int start_tell_command(
-    const std::string& name,
-    const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
+    std::string&& name,
+    std::vector<std::string>&& cmd, ceph::buffer::list&& inbl,
     ceph::buffer::list *outbl, std::string *outs,
     Context *onfinish);
 

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_LIBRBD_JOURNAL_REPLAY_H
 #define CEPH_LIBRBD_JOURNAL_REPLAY_H
@@ -10,7 +10,6 @@
 #include "common/ceph_mutex.h"
 #include "librbd/io/Types.h"
 #include "librbd/journal/Types.h"
-#include <boost/variant.hpp>
 #include <list>
 #include <unordered_set>
 #include <unordered_map>
@@ -102,7 +101,7 @@ private:
     }
   };
 
-  struct EventVisitor : public boost::static_visitor<void> {
+  struct EventVisitor {
     Replay *replay;
     Context *on_ready;
     Context *on_safe;

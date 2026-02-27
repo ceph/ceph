@@ -12,12 +12,15 @@ const jestConfig = {
   moduleNameMapper: {
     '\\.scss$': 'identity-obj-proxy',
     '~/(.*)$': '<rootDir>/src/$1',
-    '^@carbon/icons/es/(.*)$': '@carbon/icons/lib/$1.js'
+    '^@carbon/icons/es/(.*)$': '@carbon/icons/lib/$1.js',
+    '^lodash-es$': 'lodash',
   },
   moduleFileExtensions: ['ts', 'html', 'js', 'json', 'mjs', 'cjs'],
   preset: 'jest-preset-angular',
   setupFilesAfterEnv: ['<rootDir>/src/setupJest.ts'],
-  transformIgnorePatterns: ['node_modules/(?!.*\\.mjs$|'.concat(esModules.join('|'), ')')],
+  transformIgnorePatterns: [
+    'node_modules/(?!.*\\.mjs$|lodash-es|carbon-components-angular|@angular/localize|' + esModules.join('|') + ')'
+  ],
   transform: {
     '^.+\\.(ts|html|mjs)$': [
       'jest-preset-angular',
@@ -40,7 +43,7 @@ const jestConfig = {
   testMatch: ['**/*.spec.ts'],
   testRunner: 'jest-jasmine2',
   testEnvironmentOptions: {
-    detectOpenHandles: true
+    detectOpenHandles: false
   }
 };
 module.exports = jestConfig;

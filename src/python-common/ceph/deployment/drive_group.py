@@ -24,6 +24,14 @@ class OSDMethod(str, enum.Enum):
         return self.value
 
 
+class OSDType(str, enum.Enum):
+    crimson = 'crimson'
+    classic = 'classic'
+
+    def to_json(self) -> str:
+        return self.value
+
+
 class DeviceSelection(object):
     """
     Used within :class:`ceph.deployment.drive_group.DriveGroupSpec` to specify the devices
@@ -171,7 +179,9 @@ class DriveGroupSpec(ServiceSpec):
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
         "journal_size", "unmanaged", "filter_logic", "preview_only", "extra_container_args",
-        "extra_entrypoint_args", "data_allocate_fraction", "method", "crush_device_class", "config",
+        "extra_entrypoint_args", "data_allocate_fraction", "method",
+        "termination_grace_period_seconds", "crush_device_class", "config",
+        "osd_type",
     ]
 
     def __init__(self,
@@ -203,6 +213,8 @@ class DriveGroupSpec(ServiceSpec):
                  config=None,  # type: Optional[Dict[str, str]]
                  custom_configs=None,  # type: Optional[List[CustomConfig]]
                  crush_device_class=None,  # type: Optional[str]
+                 osd_type=None,  # type: Optional[OSDType]
+                 termination_grace_period_seconds: Optional[int] = 30,
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
@@ -212,7 +224,9 @@ class DriveGroupSpec(ServiceSpec):
                                              preview_only=preview_only,
                                              extra_container_args=extra_container_args,
                                              extra_entrypoint_args=extra_entrypoint_args,
-                                             custom_configs=custom_configs)
+                                             custom_configs=custom_configs,
+                                             termination_grace_period_seconds=(
+                                                 termination_grace_period_seconds))
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
         self.data_devices = data_devices
@@ -243,7 +257,7 @@ class DriveGroupSpec(ServiceSpec):
         #: A list of strings, containing paths which should back OSDs
         self.data_directories = data_directories
 
-        #: ``filestore`` or ``bluestore``
+        #: ``filestore`` or ``bluestore`` or ``seastore``
         self.objectstore = objectstore
 
         #: ``true`` or ``false``
@@ -276,6 +290,9 @@ class DriveGroupSpec(ServiceSpec):
 
         #: Crush device class to assign to OSDs
         self.crush_device_class = crush_device_class
+
+        #: OSD type to install, defaults to classic OSDs if not specified
+        self.osd_type = osd_type if osd_type is not None else "classic"
 
     @classmethod
     def _from_json_impl(cls, json_drive_group):
@@ -348,10 +365,10 @@ class DriveGroupSpec(ServiceSpec):
                     self.service_id,
                     "`all` is only allowed for data_devices")
 
-        if self.objectstore not in ('bluestore'):
+        if self.objectstore not in ['bluestore', 'seastore']:
             raise DriveGroupValidationError(self.service_id,
                                             f"{self.objectstore} is not supported. Must be "
-                                            f"one of ('bluestore')")
+                                            f"one of bluestore, seastore")
 
         if self.block_wal_size is not None and type(self.block_wal_size) not in [int, str]:
             raise DriveGroupValidationError(
@@ -379,11 +396,22 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError(
                 self.service_id,
                 'method raw only supports bluestore')
-
+        if self.method == 'raw' and self.objectstore == 'seastore':
+            raise DriveGroupValidationError(
+                self.service_id,
+                'method raw only supports bluestore')
         if self.data_devices.paths is not None:
             for device in list(self.data_devices.paths):
                 if not device.path:
                     raise DriveGroupValidationError(self.service_id, 'Device path cannot be empty')  # noqa E501
+        if self.osd_type not in ['classic', 'crimson']:
+            raise DriveGroupValidationError(
+                self.service_id,
+                'osd_type must be one of classic, crimson')
+        if self.objectstore == 'seastore' and self.osd_type == 'classic':
+            raise DriveGroupValidationError(
+                self.service_id,
+                'objectstore seastore only supports osd type crimson')
 
 
 yaml.add_representer(DriveGroupSpec, DriveGroupSpec.yaml_representer)

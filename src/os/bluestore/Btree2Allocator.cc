@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "Btree2Allocator.h"
 #include "common/debug.h"
@@ -65,7 +65,7 @@ int64_t Btree2Allocator::allocate(
   uint64_t want,
   uint64_t unit,
   uint64_t max_alloc_size,
-  int64_t  hint, // unused, for now!
+  int64_t  hint, // unused and likely unneeded
   PExtentVector* extents)
 {
   ldout(cct, 10) << __func__ << std::hex
@@ -182,7 +182,7 @@ int64_t Btree2Allocator::_allocate(
   uint64_t want,
   uint64_t unit,
   uint64_t max_alloc_size,
-  int64_t  hint, // unused, for now!
+  int64_t  hint, // unused and likely unneeded
   PExtentVector* extents)
 {
   uint64_t allocated = 0;

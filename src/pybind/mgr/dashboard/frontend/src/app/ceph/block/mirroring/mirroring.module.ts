@@ -23,7 +23,8 @@ import {
   IconService,
   InputModule,
   ModalModule,
-  SelectModule
+  SelectModule,
+  TagModule
 } from 'carbon-components-angular';
 
 // Icons
@@ -49,7 +50,8 @@ import DocumentImportIcon from '@carbon/icons/es/document--import/16';
     SelectModule,
     GridModule,
     ButtonModule,
-    IconModule
+    IconModule,
+    TagModule
   ],
   declarations: [
     BootstrapCreateModalComponent,

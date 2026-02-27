@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -54,9 +55,6 @@ public:
   // Print human readable brief description with relevant parameters
   virtual void print(std::ostream &out) const = 0;
 
-  // Apply config changes to the scheduler (if any)
-  virtual void update_configuration() = 0;
-
   // Get the scheduler type set for the queue
   virtual op_queue_type_t get_type() const = 0;
 
@@ -75,7 +73,7 @@ using OpSchedulerRef = std::unique_ptr<OpScheduler>;
 OpSchedulerRef make_scheduler(
   CephContext *cct, int whoami, uint32_t num_shards, int shard_id,
   bool is_rotational, std::string_view osd_objectstore,
-  op_queue_type_t osd_scheduler, unsigned op_queue_cut_off, MonClient *monc);
+  op_queue_type_t osd_scheduler, unsigned op_queue_cut_off);
 
 /**
  * Implements OpScheduler in terms of OpQueue
@@ -138,10 +136,6 @@ public:
     out << "ClassedOpQueueScheduler(queue=";
     queue.print(out);
     out << ", cutoff=" << cutoff << ")";
-  }
-
-  void update_configuration() final {
-    // no-op
   }
 
   op_queue_type_t get_type() const final {

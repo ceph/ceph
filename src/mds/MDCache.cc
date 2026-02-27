@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,14 +13,21 @@
  * 
  */
 
+#include "MDCache.h"
+#include "Mutation.h"
+#include "RetryMessage.h"
+#include "RetryRequest.h"
+
 #include <errno.h>
+
+#include <deque>
 #include <ostream>
 #include <string>
 #include <string_view>
 #include <map>
 #include <memory>
+#include <queue>
 
-#include "MDCache.h"
 #include "MDSRank.h"
 #include "Server.h"
 #include "Locker.h"
@@ -27,8 +35,10 @@
 #include "MDBalancer.h"
 #include "Migrator.h"
 #include "ScrubStack.h"
+#include "BatchOp.h"
 
 #include "SnapClient.h"
+#include "SnapRealm.h"
 
 #include "MDSMap.h"
 
@@ -41,18 +51,43 @@
 #include "include/filepath.h"
 #include "include/util.h"
 
+#include "messages/MCacheExpire.h"
 #include "messages/MClientCaps.h"
+#include "messages/MClientQuota.h"
+#include "messages/MClientRequest.h"
+#include "messages/MClientSnap.h"
+#include "messages/MDentryLink.h"
+#include "messages/MDentryUnlink.h"
+#include "messages/MDirUpdate.h"
+#include "messages/MDiscover.h"
+#include "messages/MDiscoverReply.h"
+#include "messages/MGatherCaps.h"
+#include "messages/MMDSCacheRejoin.h"
+#include "messages/MMDSFindIno.h"
+#include "messages/MMDSFindInoReply.h"
+#include "messages/MMDSFragmentNotify.h"
+#include "messages/MMDSFragmentNotifyAck.h"
+#include "messages/MMDSOpenIno.h"
+#include "messages/MMDSOpenInoReply.h"
+#include "messages/MMDSPeerRequest.h"
+#include "messages/MMDSResolve.h"
+#include "messages/MMDSResolveAck.h"
+#include "messages/MMDSSnapUpdate.h"
 
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/safe_io.h"
 
 #include "osdc/Journaler.h"
 #include "osdc/Filer.h"
+#include "osdc/Objecter.h"
+#include "osdc/Striper.h"
 
+#include "events/EMetaBlob.h"
 #include "events/ESubtreeMap.h"
 #include "events/ELid.h"
 #include "events/EUpdate.h"
@@ -169,6 +204,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   kill_dirfrag_at = static_cast<enum dirfrag_killpoint>(g_conf().get_val<int64_t>("mds_kill_dirfrag_at"));
 
   kill_shutdown_at = g_conf().get_val<uint64_t>("mds_kill_shutdown_at");
+  use_global_snaprealm_seq = g_conf().get_val<bool>("mds_use_global_snaprealm_seq_for_subvol");
 
   lru.lru_set_midpoint(g_conf().get_val<double>("mds_cache_mid"));
 
@@ -246,6 +282,10 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
   }
   if (changed.count("mds_kill_shutdown_at")) {
     kill_shutdown_at = g_conf().get_val<uint64_t>("mds_kill_shutdown_at");
+  }
+  if (changed.count("mds_use_global_snaprealm_seq_for_subvol")) {
+    use_global_snaprealm_seq = g_conf().get_val<bool>("mds_use_global_snaprealm_seq_for_subvol");
+    dout(20) << __func__ << " mds_use_global_snaprealm_seq_for_subvol now " << use_global_snaprealm_seq << dendl;
   }
 
   migrator->handle_conf_change(changed, mdsmap);
@@ -495,7 +535,7 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
 
   adjust_subtree_auth(mydir, mds->get_nodeid());   
 
-  LogSegment *ls = mds->mdlog->get_current_segment();
+  auto&& ls = mds->mdlog->get_current_segment();
 
   // stray dir
   for (int i = 0; i < NUM_STRAY; ++i) {
@@ -801,7 +841,7 @@ void MDCache::populate_mydir()
     // it before dirtying any of the strays we create within it.
     mds->clog->warn() << "fragment " << mydir->dirfrag() << " was unreadable, "
       "recreating it now";
-    LogSegment *ls = mds->mdlog->get_current_segment();
+    auto&& ls = mds->mdlog->get_current_segment();
     mydir->state_clear(CDir::STATE_BADFRAG);
     mydir->mark_complete();
     mydir->_get_fnode()->version = mydir->pre_dirty();
@@ -3515,7 +3555,7 @@ void MDCache::handle_resolve_ack(const cref_t<MMDSResolveAck> &ack)
   }
 }
 
-void MDCache::add_uncommitted_peer(metareqid_t reqid, LogSegment *ls, mds_rank_t leader, MDPeerUpdate *su)
+void MDCache::add_uncommitted_peer(metareqid_t reqid, LogSegmentRef const& ls, mds_rank_t leader, MDPeerUpdate *su)
 {
   auto const &ret = uncommitted_peers.emplace(std::piecewise_construct,
                                                std::forward_as_tuple(reqid),
@@ -5862,7 +5902,7 @@ void MDCache::clean_open_file_lists()
   for (auto p = mds->mdlog->segments.begin();
        p != mds->mdlog->segments.end();
        ++p) {
-    LogSegment *ls = p->second;
+    auto&& ls = p->second;
 
     auto q = ls->open_files.begin(member_offset(CInode, item_open_file));
     while (!q.end()) {
@@ -5887,7 +5927,7 @@ void MDCache::dump_openfiles(Formatter *f)
   for (auto p = mds->mdlog->segments.begin();
        p != mds->mdlog->segments.end();
        ++p) {
-    LogSegment *ls = p->second;
+    auto&& ls = p->second;
     
     auto q = ls->open_files.begin(member_offset(CInode, item_open_file));
     while (!q.end()) {
@@ -6582,16 +6622,16 @@ void MDCache::do_file_recover()
 
 class C_MDC_RetryTruncate : public MDCacheContext {
   CInode *in;
-  LogSegment *ls;
+  LogSegmentRef ls;
 public:
-  C_MDC_RetryTruncate(MDCache *c, CInode *i, LogSegment *l) :
+  C_MDC_RetryTruncate(MDCache *c, CInode *i, LogSegmentRef const& l) :
     MDCacheContext(c), in(i), ls(l) {}
   void finish(int r) override {
     mdcache->_truncate_inode(in, ls);
   }
 };
 
-void MDCache::truncate_inode(CInode *in, LogSegment *ls)
+void MDCache::truncate_inode(CInode *in, LogSegmentRef const& ls)
 {
   const auto& pi = in->get_projected_inode();
   dout(10) << "truncate_inode "
@@ -6616,10 +6656,10 @@ void MDCache::truncate_inode(CInode *in, LogSegment *ls)
 
 struct C_IO_MDC_TruncateWriteFinish : public MDCacheIOContext {
   CInode *in;
-  LogSegment *ls;
+  LogSegmentRef ls;
   uint32_t block_size;
-  C_IO_MDC_TruncateWriteFinish(MDCache *c, CInode *i, LogSegment *l, uint32_t bs) :
-    MDCacheIOContext(c, false), in(i), ls(l), block_size(bs) {
+  C_IO_MDC_TruncateWriteFinish(MDCache *c, CInode *i, LogSegmentRef const& l, uint32_t bs) :
+    MDCacheIOContext(c), in(i), ls(l), block_size(bs) {
   }
   void finish(int r) override {
     ceph_assert(r == 0 || r == -ENOENT);
@@ -6632,9 +6672,9 @@ struct C_IO_MDC_TruncateWriteFinish : public MDCacheIOContext {
 
 struct C_IO_MDC_TruncateFinish : public MDCacheIOContext {
   CInode *in;
-  LogSegment *ls;
-  C_IO_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegment *l) :
-    MDCacheIOContext(c, false), in(i), ls(l) {
+  LogSegmentRef ls;
+  C_IO_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegmentRef const& l) :
+    MDCacheIOContext(c), in(i), ls(l) {
   }
   void finish(int r) override {
     ceph_assert(r == 0 || r == -ENOENT);
@@ -6645,7 +6685,7 @@ struct C_IO_MDC_TruncateFinish : public MDCacheIOContext {
   }
 };
 
-void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
+void MDCache::_truncate_inode(CInode *in, LogSegmentRef const& ls)
 {
   const auto& pi = in->get_inode();
   dout(10) << "_truncate_inode "
@@ -6742,7 +6782,7 @@ struct C_MDC_TruncateLogged : public MDCacheLogContext {
   }
 };
 
-void MDCache::truncate_inode_write_finish(CInode *in, LogSegment *ls,
+void MDCache::truncate_inode_write_finish(CInode *in, LogSegmentRef const& ls,
                                           uint32_t block_size)
 {
   const auto& pi = in->get_inode();
@@ -6786,7 +6826,7 @@ void MDCache::truncate_inode_write_finish(CInode *in, LogSegment *ls,
                                   mds->finisher));
 }
 
-void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
+void MDCache::truncate_inode_finish(CInode *in, LogSegmentRef const& ls)
 {
   dout(10) << "truncate_inode_finish " << *in << dendl;
   
@@ -6833,7 +6873,7 @@ void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
 }
 
 
-void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
+void MDCache::add_recovered_truncate(CInode *in, LogSegmentRef const& ls)
 {
   dout(20) << "add_recovered_truncate " << *in << " in log segment "
 	   << ls->seq << "/" << ls->offset << dendl;
@@ -6841,7 +6881,7 @@ void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
   in->get(CInode::PIN_TRUNCATING);
 }
 
-void MDCache::remove_recovered_truncate(CInode *in, LogSegment *ls)
+void MDCache::remove_recovered_truncate(CInode *in, LogSegmentRef const& ls)
 {
   dout(20) << "remove_recovered_truncate " << *in << " in log segment "
 	   << ls->seq << "/" << ls->offset << dendl;
@@ -6858,7 +6898,7 @@ void MDCache::start_recovered_truncates()
   for (auto p = mds->mdlog->segments.begin();
        p != mds->mdlog->segments.end();
        ++p) {
-    LogSegment *ls = p->second;
+    auto&& ls = p->second;
     for (auto q = ls->truncating_inodes.begin();
 	 q != ls->truncating_inodes.end();
 	 ++q) {
@@ -6882,11 +6922,11 @@ void MDCache::start_recovered_truncates()
 
 class C_MDS_purge_completed_finish : public MDCacheLogContext {
   interval_set<inodeno_t> inos;
-  LogSegment *ls; 
+  LogSegmentRef ls; 
   version_t inotablev;
 public:
   C_MDS_purge_completed_finish(MDCache *m, const interval_set<inodeno_t>& _inos,
-			       LogSegment *_ls, version_t iv)
+			       LogSegmentRef const& _ls, version_t iv)
     : MDCacheLogContext(m), inos(_inos), ls(_ls), inotablev(iv) {}
   void finish(int r) override {
     ceph_assert(r == 0);
@@ -6901,14 +6941,14 @@ public:
 void MDCache::start_purge_inodes(){
   dout(10) << "start_purge_inodes" << dendl;
   for (auto& p : mds->mdlog->segments){
-    LogSegment *ls = p.second;
+    auto&& ls = p.second;
     if (ls->purging_inodes.size()){
       purge_inodes(ls->purging_inodes, ls);
     }
   }
 }
 
-void MDCache::purge_inodes(const interval_set<inodeno_t>& inos, LogSegment *ls)
+void MDCache::purge_inodes(const interval_set<inodeno_t>& inos, LogSegmentRef const& ls)
 {
   dout(10) << __func__ << " purging inos " << inos << " logseg " << ls->seq << dendl;
   // FIXME: handle non-default data pool and namespace
@@ -6965,7 +7005,12 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   bool throttled = false;
   while (1) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
-    if (throttled) break;
+    if (throttled) {
+      if (logger) {
+        logger->inc(l_mdss_cache_trim_throttle);
+      }
+      break;
+    }
     CDentry *dn = static_cast<CDentry*>(bottom_lru.lru_expire());
     if (!dn)
       break;
@@ -6991,7 +7036,12 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   // trim dentries from the LRU until count is reached
   while (!throttled && (cache_toofull() || count > 0)) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
-    if (throttled) break;
+    if (throttled) {
+      if (logger) {
+        logger->inc(l_mdss_cache_trim_throttle);
+      }
+      break;
+    }
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) {
       break;
@@ -7664,7 +7714,7 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
   show_subtrees();
 }
 
-void MDCache::standby_trim_segment(LogSegment *ls)
+void MDCache::standby_trim_segment(LogSegmentRef const& ls)
 {
   ls->new_dirfrags.clear_list();
   ls->open_files.clear_list();
@@ -8715,17 +8765,17 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	return -ENOENT;
       }
 
-      // do we have inode?
+      // do we have the inode?
       CInode *in = dnl->get_inode();
       if (!in) {
         ceph_assert(dnl->is_remote() || dnl->is_referent_remote());
-        // do i have it?
+        // do we have it?
         in = get_inode(dnl->get_remote_ino());
         if (in) {
 	  dout(7) << "linking in remote in " << *in << dendl;
 	  dn->link_remote(dnl, in);
 	} else {
-          dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
+          dout(7) << "remote link to " << dnl->get_remote_ino() << ", which we don't have" << dendl;
 	  ceph_assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
           if (mds->damage_table.is_remote_damaged(dnl->get_remote_ino())) {
             dout(4) << "traverse: remote dentry points to damaged ino "
@@ -10021,6 +10071,10 @@ void MDCache::request_forward(const MDRequestRef& mdr, mds_rank_t who, int port)
 
 void MDCache::dispatch_request(const MDRequestRef& mdr)
 {
+  if (!mdr) {
+    dout(0) << __func__ << ": received a null request!"  << dendl;
+    return;
+  }
   if (mdr->dead) {
     dout(20) << __func__ << ": dead " << *mdr << dendl;
     return;
@@ -10090,8 +10144,9 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
     auto new_batch_head = it->second->find_new_head();
     if (!new_batch_head) {
       mdr->batch_op_map->erase(it);
+    } else {
+      mds->finisher->queue(new C_MDS_RetryRequest(this, new_batch_head));
     }
-    mds->finisher->queue(new C_MDS_RetryRequest(this, new_batch_head));
   }
 
   if (mdr->has_more()) {
@@ -11964,6 +12019,10 @@ bool MDCache::can_fragment(CInode *diri, const std::vector<CDir*>& dirs)
     dout(7) << "can_fragment: directory inode is quiesced" << dendl;
     return false;
   }
+  if (diri->ino() == CEPH_INO_ROOT) {
+    dout(7) << "can_fragment: i won't fragment root direcory" << dendl;
+    return false;
+  }
 
   for (const auto& dir : dirs) {
     if (dir->scrub_is_in_progress()) {
@@ -12774,7 +12833,7 @@ void MDCache::handle_fragment_notify(const cref_t<MMDSFragmentNotify> &notify)
 }
 
 void MDCache::add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, const frag_vec_t& old_frags,
-				       LogSegment *ls, bufferlist *rollback)
+				       LogSegmentRef const& ls, bufferlist *rollback)
 {
   dout(10) << "add_uncommitted_fragment: base dirfrag " << basedirfrag << " bits " << bits << dendl;
   ceph_assert(!uncommitted_fragments.count(basedirfrag));
@@ -13333,7 +13392,9 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f, double timeout)
 void C_MDS_RetryRequest::finish(int r)
 {
   mdr->retry++;
-  cache->dispatch_request(mdr);
+  if (mdr) {
+    cache->dispatch_request(mdr);
+  }
 }
 
 MDSContext *CF_MDS_RetryRequestFactory::build()
@@ -13454,7 +13515,7 @@ class C_MDC_DataUninlinedSubmitted : public MDCacheLogContext {
 
   void finish(int r) {
     auto mds = get_mds(); // to keep dout happy
-    auto in = mds->server->rdlock_path_pin_ref(mdr, true);
+    auto in = mdr->in[0];
 
     ceph_assert(in != nullptr);
 
@@ -13471,6 +13532,7 @@ class C_MDC_DataUninlinedSubmitted : public MDCacheLogContext {
     h->record_uninline_passed();
     in->uninline_finished();
     mdr->apply();
+    in->auth_unpin(this); // for uninline data
     mds->server->respond_to_request(mdr, r);
   }
 };
@@ -13487,7 +13549,9 @@ struct C_IO_DataUninlined : public MDSIOContext {
 
   void finish(int r) override {
     auto mds = get_mds(); // to keep dout/derr happy
-    auto in = mds->server->rdlock_path_pin_ref(mdr, true);
+    auto in = mdr->in[0];
+
+    ceph_assert(in != nullptr);
 
     // return faster if operation has failed (non-zero) status
     if (r) {
@@ -13501,6 +13565,7 @@ struct C_IO_DataUninlined : public MDSIOContext {
       in->make_path_string(path);
       h->record_uninline_status(in->ino(), r, path);
       in->uninline_finished();
+      in->auth_unpin(this); // for uninline data
       mds->server->respond_to_request(mdr, r);
       return;
     }
@@ -13542,11 +13607,9 @@ struct C_IO_DataUninlined : public MDSIOContext {
 
 void MDCache::uninline_data_work(MDRequestRef mdr)
 {
-  CInode *in = mds->server->rdlock_path_pin_ref(mdr, true);
+  CInode *in = mdr->in[0];
 
-  if (!in) {
-    return;
-  }
+  ceph_assert(in != nullptr);
 
   MutationImpl::LockOpVec lov;
   lov.add_xlock(&in->authlock);
@@ -13561,6 +13624,7 @@ void MDCache::uninline_data_work(MDRequestRef mdr)
   if (!in->has_inline_data()) {
     dout(20) << "(uninline_data) inode doesn't have inline data anymore " << *in << dendl;
     in->uninline_finished();
+    in->auth_unpin(this); // for uninline_data
     mds->server->respond_to_request(mdr, 0);
     return;
   }

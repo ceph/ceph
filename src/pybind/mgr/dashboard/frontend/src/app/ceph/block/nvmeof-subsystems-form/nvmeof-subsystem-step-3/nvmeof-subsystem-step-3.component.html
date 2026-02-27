@@ -1,0 +1,112 @@
+
+<form [formGroup]="formGroup"
+      novalidate>
+  <div cdsGrid
+       [useCssGrid]="true"
+       [narrow]="true"
+       [fullWidth]="true">
+    <div cdsCol
+         [columnNumbers]="{sm: 10, md: 10, lg: 12}">
+      <div cdsRow
+           class="form-heading">
+        <h3 class="cds--type-heading-03"
+            i18n>Authentication</h3>
+        <p
+          class="cds--type-label-02"
+          i18n>Configure authentication to verify the identity of connecting hosts and protect the subsystem from unauthorized access.</p>
+      </div>
+      <div cdsRow
+           class="form-item">
+        <cds-radio-group
+          formControlName="authType"
+          legend="Authentication type"
+          i18n-legend>
+          <cds-radio
+            [value]="AUTHENTICATION.Unidirectional">
+            <div class="auth-radio">
+              <span>Unidirectional</span>
+              <span class="cds--form__helper-text"
+                    i18n>Each host can provide an optional DH-HMAC-CHAP key. The subsystem does not require its own key.</span>
+            </div>
+          </cds-radio>
+          <cds-radio
+            [value]="AUTHENTICATION.Bidirectional">
+            <div class="auth-radio">
+              <div cdsStack="horizontal">
+                <span i18n>Bidirectional</span>
+                <cds-tag
+                  type="blue"
+                  size="sm"
+                  i18n>
+                  Requires keys on both sides
+                </cds-tag>
+              </div>
+              <span class="cds--form__helper-text"
+                    i18n>Both subsystem and hosts must provide DH-HMAC-CHAP keys. All connections will be verified in both directions.</span>
+            </div>
+          </cds-radio>
+        </cds-radio-group>
+      </div>
+      @if(formGroup.get('authType').value === AUTHENTICATION.Bidirectional) {
+      <div cdsRow
+           class="form-item step-3-form-item">
+        <div class="step-3-heading">
+          <h1
+            class="cds--type-heading-compact-01"
+            i18n>Subsystem authentication detail</h1>
+          <p class="cds--type-label-01 text-helper"
+             i18n>Mandatory field.</p>
+        </div>
+        <cds-text-label
+          i18n
+          helperText="A secret key for the subsystem to authenticate itself to hosts."
+          i18n-helperText
+          [invalid]="subDK.isInvalid"
+          [invalidText]="subsystemDchapKeyInvalidTemplate">
+          Subsystem DH-HMAC-CHAP key
+          <input cdsPassword
+                 cdValidate
+                 #subDK="cdValidate"
+                 [invalid]="subDK.isInvalid"
+                 formControlName="subsystemDchapKey"
+                 type="password"
+                 class="step-3-form-item"
+                 placeholder="Enter subsystem DH-HMAC-CHAP key"
+                 i18n-placeholder
+                 autocomplete>
+        </cds-text-label>
+      </div>
+      }
+      <div cdsRow
+           class="form-item step-3-form-item">
+        <div class="step-3-heading">
+          <h1
+            class="cds--type-heading-compact-01"
+            i18n>Host authentication details</h1>
+          <p class="cds--type-label-01 text-helper"
+             i18n>{{formGroup.get('authType').value === AUTHENTICATION.Bidirectional ? 'All fields are required.' : 'Optional fields.'}}</p>
+        </div>
+        @for(hostDchapKeyItem of hostDchapKeyList.controls; track hostDchapKeyItem; let i = $index) {
+        <cds-text-label
+          [formGroupName]="i"
+          i18n>
+          DHCHAP Key | {{hostNQN}}
+          <input cdsPassword
+                 formControlName="key"
+                 type="password"
+                 placeholder="Enter DHCHAP key"
+                 class="step-3-form-item"
+                 i18n-placeholder
+                 autocomplete>
+        </cds-text-label>
+        }
+      </div>
+    </div>
+  </div>
+</form>
+
+<ng-template #subsystemDchapKeyInvalidTemplate>
+@for (err of formGroup.get('subsystemDchapKey').errors | keyvalue; track err.key) {
+<span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
+}
+</ng-template>

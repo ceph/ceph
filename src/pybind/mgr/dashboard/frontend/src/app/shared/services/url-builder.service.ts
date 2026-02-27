@@ -47,4 +47,16 @@ export class URLBuilderService {
   getRecreate(item: string, absolute = true): string {
     return this.getURL(URLVerbs.RECREATE, absolute, item);
   }
+
+  getConnect(absolute = true): string {
+    return this.getURL(URLVerbs.CONNECT, absolute);
+  }
+
+  getReconnect(item: string, absolute = true): string {
+    return this.getURL(URLVerbs.RECONNECT, absolute, item);
+  }
+
+  getView(absolute = true): string {
+    return this.getURL(URLVerbs.VIEW, absolute);
+  }
 }

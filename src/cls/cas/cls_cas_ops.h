@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_CLS_CAS_OPS_H
 #define CEPH_CLS_CAS_OPS_H
@@ -39,8 +39,10 @@ struct cls_cas_chunk_create_or_get_ref_op {
     f->dump_unsigned("flags", flags);
     f->dump_unsigned("data_len", data.length());
   }
-  static void generate_test_instances(std::list<cls_cas_chunk_create_or_get_ref_op*>& ls) {
-    ls.push_back(new cls_cas_chunk_create_or_get_ref_op());
+  static std::list<cls_cas_chunk_create_or_get_ref_op> generate_test_instances() {
+    std::list<cls_cas_chunk_create_or_get_ref_op> ls;
+    ls.emplace_back();
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(cls_cas_chunk_create_or_get_ref_op)
@@ -65,8 +67,10 @@ struct cls_cas_chunk_get_ref_op {
   void dump(ceph::Formatter *f) const {
     f->dump_object("source", source);
   }
-  static void generate_test_instances(std::list<cls_cas_chunk_get_ref_op*>& ls) {
-    ls.push_back(new cls_cas_chunk_get_ref_op());
+  static std::list<cls_cas_chunk_get_ref_op> generate_test_instances() {
+    std::list<cls_cas_chunk_get_ref_op> ls;
+    ls.emplace_back();
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(cls_cas_chunk_get_ref_op)
@@ -92,8 +96,10 @@ struct cls_cas_chunk_put_ref_op {
   void dump(ceph::Formatter *f) const {
     f->dump_object("source", source);
   }
-  static void generate_test_instances(std::list<cls_cas_chunk_put_ref_op*>& ls) {
-    ls.push_back(new cls_cas_chunk_put_ref_op());
+  static std::list<cls_cas_chunk_put_ref_op> generate_test_instances() {
+    std::list<cls_cas_chunk_put_ref_op> ls;
+    ls.emplace_back();
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(cls_cas_chunk_put_ref_op)

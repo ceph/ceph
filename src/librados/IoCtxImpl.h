@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -39,6 +40,7 @@ struct librados::IoCtxImpl {
   uint64_t assert_ver = 0;
   version_t last_objver = 0;
   uint32_t notify_timeout = 30;
+  bool no_version_on_read = false;
   object_locator_t oloc;
   int extra_op_flags = 0;
   int objclass_flags_mask = -1;
@@ -296,6 +298,9 @@ struct librados::IoCtxImpl {
   int application_metadata_list(const std::string& app_name,
                                 std::map<std::string, std::string> *values);
 
+  void set_no_version_on_read(bool _val);
+ private:
+  version_t *get_objver_for_read(version_t *objver_p) const;
 };
 
 #endif

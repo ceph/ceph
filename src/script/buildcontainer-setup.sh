@@ -31,16 +31,17 @@ fi
 # packages etc.
 case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
     *~*centos*8)
-        dnf install -y java-1.8.0-openjdk-headless /usr/bin/rpmbuild wget curl
+        dnf install -y java-1.8.0-openjdk-headless /usr/bin/{rpmbuild,wget,curl}
         install_container_deps
         dnf_clean
     ;;
-    *~*centos*9|*~*centos*10*|*~fedora*)
-        dnf install -y /usr/bin/rpmbuild wget curl
+    # EL-ish, 9+
+    *~*centos*|*~fedora*|*~rocky*|*~alma*)
+        dnf install -y /usr/bin/{rpmbuild,wget,curl}
         install_container_deps
         dnf_clean
     ;;
-    *~*ubuntu*)
+    *~*ubuntu*|*~*debian*)
         apt-get update
         apt-get install -y wget reprepro curl software-properties-common lksctp-tools libsctp-dev protobuf-compiler ragel libc-ares-dev
         install_container_deps

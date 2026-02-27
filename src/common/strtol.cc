@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -22,13 +23,16 @@
 #include <strings.h>
 #include <string_view>
 
-using std::ostringstream;
+#include <boost/algorithm/string/predicate.hpp>
 
-bool strict_strtob(const char* str, std::string *err)
+using std::ostringstream;
+using namespace std::literals::string_view_literals;
+
+bool strict_strtob(std::string_view str, std::string *err)
 {
-  if (strcasecmp(str, "false") == 0) {
+  if (boost::iequals(str, "false"sv)) {
     return false;
-  } else if (strcasecmp(str, "true") == 0) {
+  } else if (boost::iequals(str, "true"sv)) {
     return true;
   } else {
     int b = strict_strtol(str, 10, err);
@@ -49,6 +53,25 @@ long long strict_strtoll(std::string_view str, int base, std::string *err)
   if (errno) {
     *err = (std::string{"The option value '"} + std::string{str} +
 	    "' seems to be invalid");
+    return 0;
+  }
+  *err = "";
+  return ret;
+}
+
+unsigned long long strict_strtoull(std::string_view str, int base, std::string *err)
+{
+  char *endptr;
+  errno = 0; /* To distinguish success/failure after call (see man page) */
+  auto ret = strtoull(str.data(), &endptr, base);
+  if (endptr == str.data() || endptr != str.data() + str.size()) {
+    *err = (std::string{"Expected option value to be integer, got '"} +
+        std::string{str} + "'");
+    return 0;
+  }
+  if (errno) {
+    *err = (std::string{"The option value '"} + std::string{str} +
+        "' seems to be invalid");
     return 0;
   }
   *err = "";

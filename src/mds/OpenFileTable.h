@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,14 +16,33 @@
 #ifndef OPEN_FILE_TABLE_H
 #define OPEN_FILE_TABLE_H
 
+#include <cstdint>
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+
 #include "mdstypes.h"
-#include "Anchor.h"
 
-#include "MDSContext.h"
+#include "common/config_proxy.h" // for class ConfigProxy
+#include "global/global_context.h" // for g_conf()
+#include "include/buffer_fwd.h"
+#include "include/cephfs/types.h" // for mds_rank_t"
+#include "include/frag.h"
+#include "include/fs_types.h" // for inodeno_t
+#include "include/object.h"
+#include "include/types.h" // for version_t
 
+namespace TOPNSPC::common { class PerfCounters; }
+struct inode_backpointer_t;
+class Context;
 class CDir;
 class CInode;
+class MDSContext;
 class MDSRank;
+class Anchor;
+class OpenedAnchor;
+class RecoveredAnchor;
 
 struct ObjectOperation;
 
@@ -90,13 +110,7 @@ protected:
 
   object_t get_object_name(unsigned idx) const;
 
-  void _reset_states() {
-    omap_num_objs = 0;
-    omap_num_items.resize(0);
-    journal_state = JOURNAL_NONE;
-    loaded_journals.clear();
-    loaded_anchor_map.clear();
-  }
+  void _reset_states();
   void _read_omap_values(const std::string& key, unsigned idx, bool first);
   void _load_finish(int op_r, int header_r, int values_r,
 		    unsigned idx, bool first, bool more,
@@ -135,7 +149,7 @@ protected:
 
   std::vector<std::map<std::string, bufferlist> > loaded_journals;
   std::map<inodeno_t, RecoveredAnchor> loaded_anchor_map;
-  MDSContext::vec waiting_for_load;
+  std::vector<MDSContext*> waiting_for_load;
   bool load_done = false;
 
   enum {
@@ -146,12 +160,12 @@ protected:
   };
   unsigned prefetch_state = 0;
   unsigned num_opening_inodes = 0;
-  MDSContext::vec waiting_for_prefetch;
+  std::vector<MDSContext*> waiting_for_prefetch;
 
   std::map<uint64_t, std::vector<inodeno_t> > logseg_destroyed_inos;
   std::set<inodeno_t> destroyed_inos_set;
 
-  std::unique_ptr<PerfCounters> logger;
+  std::unique_ptr<TOPNSPC::common::PerfCounters> logger;
 
   std::map<uint64_t, std::vector<Context*>> waiting_for_commit;
 };

@@ -26,8 +26,10 @@ When('I view the grafana panel {string}', (panels: string) => {
       cy.get('.grafana-app')
         .wait(WAIT_TO_LOAD)
         .within(() => {
-          cy.get(`[data-testid="data-testid Panel header ${panel}"]`).click();
-          cy.get(`[aria-label="Menu for panel with title ${panel}"]`).click();
+          cy.contains('[data-testid="data-testid header-container"] h2', panel)
+            .closest('[data-testid="data-testid header-container"]')
+            .click();
+          cy.get(`[data-testid="data-testid Panel menu ${panel}"]`).click();
         });
 
       cy.get('[data-testid="data-testid Panel menu item View"]').click();

@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #pragma once
 
@@ -66,20 +66,19 @@ public:
     const omap_keys_t& keys,
     uint32_t op_flags = 0) final;
 
-  /// Retrieves paged set of values > start (if present)
-  read_errorator::future<std::tuple<bool, omap_values_t>> omap_get_values(
-    CollectionRef c,           ///< [in] collection
-    const ghobject_t &oid,     ///< [in] oid
-    const std::optional<std::string> &start, ///< [in] start, empty for begin
-    uint32_t op_flags = 0
-    ) final; ///< @return <done, values> values.empty() iff done
-
   seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
     CollectionRef c,
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit,
     uint32_t op_flags = 0) const final;
+
+  read_errorator::future<ObjectStore::omap_iter_ret_t> omap_iterate(
+    CollectionRef c,
+    const ghobject_t &oid,
+    ObjectStore::omap_iter_seek_t start_from,
+    omap_iterate_cb_t callback,
+    uint32_t op_flags = 0) final;
 
   seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
   seastar::future<CollectionRef> open_collection(const coll_t& cid) final;

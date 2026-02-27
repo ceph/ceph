@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,6 +16,7 @@
 #include "include/stringify.h"
 #include "NVMeofGwMon.h"
 #include "NVMeofGwMap.h"
+#include "Monitor.h"
 #include "OSDMonitor.h"
 #include "mon/health_check.h"
 
@@ -40,14 +42,15 @@ void NVMeofGwMap::to_gmap(
       const auto& gw_id = gw_created_pair.first;
       const auto& gw_created  = gw_created_pair.second;
       gw_availability_t availability = gw_created.availability;
-      // Gateways expect to see UNAVAILABLE, not DELETING
-      // for entries in DELETING state
       if (gw_created.availability == gw_availability_t::GW_DELETING) {
-         availability = gw_availability_t::GW_UNAVAILABLE;
+         dout (4) << gw_id << "Send empty unicast map in Deleting state"
+                  << dendl;
+         continue;
       }
 
       auto gw_state = NvmeGwClientState(
-	gw_created.ana_grp_id, epoch, availability);
+	gw_created.ana_grp_id, epoch, availability, gw_created.beacon_sequence,
+	gw_created.beacon_sequence_ooo);
       for (const auto& sub: gw_created.subsystems) {
 	gw_state.subsystems.insert({
 	    sub.nqn,
@@ -80,10 +83,10 @@ void NVMeofGwMap::remove_grp_id(
 }
 
 int NVMeofGwMap::cfg_add_gw(
-  const NvmeGwId &gw_id, const NvmeGroupKey& group_key)
+  const NvmeGwId &gw_id, const NvmeGroupKey& group_key, uint64_t features)
 {
   std::set<NvmeAnaGrpId> allocated;
-  if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOFHAMAP)) {
+  if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
     auto gw_epoch_it = gw_epoch.find(group_key);
     if (gw_epoch_it == gw_epoch.end()) {
       gw_epoch[group_key] = epoch;
@@ -174,11 +177,16 @@ int NVMeofGwMap::cfg_delete_gw(
     for (auto& gws_states: created_gws[group_key]) {
       if (gws_states.first == gw_id) {
         auto& state = gws_states.second;
+        if (state.availability == gw_availability_t::GW_AVAILABLE) {
+		   /*prevent failover because blocklisting right now cause IO errors */
+		   dout(4) << "Delete GW: set skip-failovers for group " << gw_id
+				   << " group " << group_key << dendl;
+		   skip_failovers_for_group(group_key, 5);
+		}
         state.availability = gw_availability_t::GW_DELETING;
         dout(4) << " Deleting  GW :"<< gw_id  << " in state  "
             << state.availability <<  " Resulting GW availability: "
             << state.availability  << dendl;
-        state.subsystems.clear();//ignore subsystems of this GW
         utime_t now = ceph_clock_now();
         mon->nvmegwmon()->gws_deleting_time[group_key][gw_id] = now;
         return 0;
@@ -188,6 +196,26 @@ int NVMeofGwMap::cfg_delete_gw(
     return do_delete_gw(gw_id, group_key);
   }
   return -EINVAL;
+}
+
+void NVMeofGwMap::check_all_gws_in_deleting_state(const NvmeGwId &gw_id,
+    const NvmeGroupKey& group_key) {
+  for (auto& gws_states: created_gws[group_key]) {
+    auto& state = gws_states.second;
+    if (state.availability != gw_availability_t::GW_DELETING) {
+      return;
+    }
+  }
+  dout(5) << "all gws in DELETING state, remove them from the map: pool/group "
+		  << group_key << dendl;
+  /* Monitor have to force remove GWs because otherwise all GW will stay forever
+   * in  DELETING state - no beacons from the group and monitor cannot update
+   * number namespaces in each group so delete condition newer turns true.
+  */
+  for (auto& gws_states: created_gws[group_key]) {
+    do_delete_gw(gws_states.first, group_key);
+  }
+  return;
 }
 
 int  NVMeofGwMap::do_erase_gw_id(const NvmeGwId &gw_id,
@@ -234,14 +262,63 @@ int NVMeofGwMap::do_delete_gw(
 void  NVMeofGwMap::gw_performed_startup(const NvmeGwId &gw_id,
       const NvmeGroupKey& group_key, bool &propose_pending)
 {
+  std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
   dout(4) << "GW  performed the full startup " << gw_id << dendl;
   propose_pending = true;
   increment_gw_epoch( group_key);
+  auto &st = created_gws[group_key][gw_id];
+  const auto skip_failovers_sec = g_conf().get_val<std::chrono::seconds>
+    ("mon_nvmeofgw_skip_failovers_interval");
+  const auto beacon_grace_sec =
+    g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_beacon_grace");
+ /*
+    This is a heuristic that meant to identify "cephadm redeploy" of the nvmeof gws.
+    We would like to identify that redeploy is going on, because it helps us to prevent
+    redundant failover and failback actions.
+    It is very important to minimize fo/fb during redeploy, because during redeploy
+    all GWs go down and up again, and the amount of fo/fb that could be driven by that
+    is big, which also triggers a lot of changes on the hosts the are nvmeof connected
+    to the gws, even up to the point that the host will get stuck.
+    This heuristic assumes that if a gw disappears and shows back in less than
+    REDEPLOY_TIMEOUT seconds, then it might be that a redeploy started, so we will
+    do a failover for this GW, but will not do failover for the next REDEPLOY_TIMEOUT.
+    Then again for the next GW that disappears and so on.
+    If it works as designed, than regardless of the number of GWs, redeploy will only
+    cause one fo/fb. */
+  if ((now - (st.last_gw_down_ts - beacon_grace_sec)) < skip_failovers_sec) {
+    skip_failovers_for_group(group_key);
+    dout(4) << "startup: set skip-failovers for group " << gw_id << " group "
+	         << group_key << dendl;
+  }
+}
+
+void NVMeofGwMap::set_addr_vect(const NvmeGwId &gw_id,
+    const NvmeGroupKey& group_key, const entity_addr_t &addr) {
+  entity_addrvec_t addrvec(addr);
+  for (auto& gws_states: created_gws[group_key]) {
+     auto &state = gws_states.second;
+     auto &gw_found = gws_states.first;
+     if (state.addr_vect == addrvec && gw_found != gw_id) {
+      /* This can happen when several GWs restart simultaneously and
+       * they got entity_addr that differ from the previous one
+       */
+       entity_addr_t a;
+       state.addr_vect = entity_addrvec_t(a);// cleanup duplicated address
+       dout(4) << "found duplicated addr vect in gw " << gw_found << dendl;
+     }
+  }
+  created_gws[group_key][gw_id].addr_vect = addrvec;
+  dout(10) << "Set addr vect " << addrvec << " for gw " << gw_id << dendl;
 }
 
 void NVMeofGwMap::increment_gw_epoch(const NvmeGroupKey& group_key)
 {
   if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOFHAMAP)) {
+    if (gw_epoch.find(group_key) == gw_epoch.end()) {
+      gw_epoch[group_key] = epoch;
+      dout(4) << "recreated GW epoch of " << group_key
+           << " " << gw_epoch[group_key] << dendl;
+    }
     gw_epoch[group_key] ++;
     dout(4) << "incremented epoch of " << group_key
          << " " << gw_epoch[group_key] << dendl;
@@ -272,23 +349,33 @@ void NVMeofGwMap::track_deleting_gws(const NvmeGroupKey& group_key,
   propose_pending = false;
   for (auto& itr: created_gws[group_key]) {
     auto &gw_id = itr.first;
-    if (itr.second.availability == gw_availability_t::GW_DELETING) {
+    if (subs.size() &&
+	 itr.second.availability == gw_availability_t::GW_DELETING) {
       int num_ns = 0;
+      dout(4) << " to delete ? " << gw_id
+          << " subsystems size "<< subs.size() << dendl;
       if ( (num_ns = get_num_namespaces(gw_id, group_key, subs)) == 0) {
         do_delete_gw(gw_id, group_key);
         propose_pending =  true;
       }
-      dout(4) << " to delete ? " << gw_id  << " num_ns " << num_ns
-          << " subsystems size "<< subs.size() << dendl;
-      break; // handle just one GW in "Deleting" state in time.
+      dout(4)  << " num_ns " << num_ns << dendl;
+      if (propose_pending) {
+        break; // handle just one GW in "Deleting" state in time.
+      }
     }
   }
 }
 
-void NVMeofGwMap::skip_failovers_for_group(const NvmeGroupKey& group_key)
+void NVMeofGwMap::skip_failovers_for_group(const NvmeGroupKey& group_key,
+   int interval_sec)
 {
-  const auto skip_failovers = g_conf().get_val<std::chrono::seconds>
-    ("mon_nvmeofgw_skip_failovers_interval");
+  std::chrono::seconds skip_failovers;
+  if (interval_sec == 0) {
+    skip_failovers = g_conf().get_val<std::chrono::seconds>
+	      ("mon_nvmeofgw_skip_failovers_interval");
+	} else {
+	skip_failovers = std::chrono::seconds(interval_sec);
+  }
   for (auto& gw_created: created_gws[group_key]) {
     gw_created.second.allow_failovers_ts = std::chrono::system_clock::now()
         + skip_failovers;
@@ -332,6 +419,8 @@ int NVMeofGwMap::process_gw_map_gw_down(
     dout(10) << "GW down " << gw_id << dendl;
     auto& st = gw_state->second;
     st.set_unavailable_state();
+    st.set_last_gw_down_ts();
+    st.reset_beacon_sequence();
     for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
       fsm_handle_gw_down(
 	gw_id, group_key, state_itr.second,
@@ -987,14 +1076,23 @@ int NVMeofGwMap::blocklist_gw(
   // find_already_created_gw(gw_id, group_key);
   NvmeGwMonState& gw_map = created_gws[group_key][gw_id];
   NvmeNonceVector nonces;
+
+  NvmeAnaNonceMap nonce_map;
+  for (const auto& sub: gw_map.subsystems) { // recreate nonce map from subsystems
+    for (const auto& ns: sub.namespaces) {
+	  auto& nonce_vec = nonce_map[ns.anagrpid-1]; //Converting  ana groups to offsets
+	  if (std::find(nonce_vec.begin(), nonce_vec.end(), ns.nonce) == nonce_vec.end())
+	    nonce_vec.push_back(ns.nonce);
+    }
+  }
   for (auto& state_itr: gw_map.sm_state) {
     // to make blocklist on all clusters of the failing GW
-    nonces.insert(nonces.end(), gw_map.nonce_map[state_itr.first].begin(),
-        gw_map.nonce_map[state_itr.first].end());
+    nonces.insert(nonces.end(), nonce_map[state_itr.first].begin(),
+        nonce_map[state_itr.first].end());
   }
-
+  gw_map.subsystems.clear();
   if (nonces.size() > 0) {
-    NvmeNonceVector &nonce_vector = gw_map.nonce_map[grpid];;
+    NvmeNonceVector &nonce_vector = nonces;
     std::string str = "[";
     entity_addrvec_t addr_vect;
 
@@ -1067,6 +1165,45 @@ void  NVMeofGwMap::validate_gw_map(const NvmeGroupKey& group_key)
     break;
   }
 }
+
+bool NVMeofGwMap::put_gw_beacon_sequence_number(const NvmeGwId &gw_id,
+	  int gw_version, const NvmeGroupKey& group_key,
+	  uint64_t beacon_sequence, uint64_t& old_sequence)
+{
+  bool rc = true;
+  NvmeGwMonState& gw_map = created_gws[group_key][gw_id];
+
+  if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF) ||
+		  (gw_version > 0) ) {
+    uint64_t seq_number = gw_map.beacon_sequence;
+    if ((beacon_sequence != seq_number+1) &&
+        !(beacon_sequence == 0 && seq_number == 0 )) {// new GW startup
+        rc = false;
+        old_sequence = seq_number;
+        dout(4) << "Warning: GW " << gw_id
+                << " sent beacon sequence out of order, expected "
+                << seq_number +1 << " received " << beacon_sequence << dendl;
+        gw_map.beacon_sequence_ooo = true;
+    } else {
+      gw_map.beacon_sequence = beacon_sequence;
+    }
+  }
+  return rc;
+}
+
+bool NVMeofGwMap::set_gw_beacon_sequence_number(const NvmeGwId &gw_id,
+	 int gw_version, const NvmeGroupKey& group_key, uint64_t beacon_sequence)
+{
+  NvmeGwMonState& gw_map = created_gws[group_key][gw_id];
+  if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF) ||
+		  (gw_version > 0)) {
+      gw_map.beacon_sequence = beacon_sequence;
+      gw_map.beacon_sequence_ooo = false;
+      dout(10) << gw_id << " set beacon_sequence " << beacon_sequence << dendl;
+  }
+  return true;
+}
+
 
 void NVMeofGwMap::update_active_timers(bool &propose_pending)
 {

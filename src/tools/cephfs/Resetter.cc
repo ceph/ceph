@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -119,7 +120,6 @@ int Resetter::reset()
   journaler.set_read_pos(new_start);
   journaler.set_write_pos(new_start);
   journaler.set_expire_pos(new_start);
-  journaler.set_trimmed_pos(new_start);
   journaler.set_writeable();
 
   cout << "writing journal head" << std::endl;

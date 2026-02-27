@@ -79,7 +79,7 @@
          i18n>Daemon Logs</a>
       <ng-template ngbNavContent>
         <ng-container *ngIf="showDaemonLogs && lokiServiceStatus$ | async as lokiServiceStatus ; else daemonLogsTpl ">
-          <div *ngIf="promtailServiceStatus$ | async as promtailServiceStatus; else daemonLogsTpl">
+          <div *ngIf="alloyServiceStatus$ | async as alloyServiceStatus; else daemonLogsTpl">
             <cd-grafana i18n-title
                         title="Daemon logs"
                         [grafanaPath]="'explore?'"
@@ -119,7 +119,9 @@
              i18n>Keyword:</label>
       <div class="input-group">
         <span class="input-group-text">
-          <i [ngClass]="[icons.search]"></i>
+          <svg [cdsIcon]="icons.search"
+               [size]="icons.size16"
+               ></svg>
         </span>
 
         <input class="form-control"
@@ -132,7 +134,9 @@
                 class="btn btn-light"
                 (click)="clearSearchKey()"
                 title="Clear">
-          <i class="icon-prepend {{ icons.destroy }}"></i>
+          <svg [cdsIcon]="icons.destroy"
+               [size]="icons.size16"
+               ></svg>
         </button>
       </div>
     </div>
@@ -155,7 +159,9 @@
                 class="btn btn-light"
                 (click)="clearDate()"
                 title="Clear">
-          <i class="icon-prepend {{ icons.destroy }}"></i>
+          <svg [cdsIcon]="icons.destroy"
+               [size]="icons.size16"
+               ></svg>
         </button>
       </div>
     </div>
@@ -187,8 +193,8 @@
 
 <ng-template #daemonLogsTpl>
   <cd-alert-panel type="info"
-                  title="Loki/Promtail service not running"
+                  title="Loki/Alloy service not running"
                   i18n-title>
-  <ng-container i18n>Please start the loki and promtail service to see these logs.</ng-container>
+  <ng-container i18n>Please start the loki and alloy services to see these logs.</ng-container>
   </cd-alert-panel>
 </ng-template>

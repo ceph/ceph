@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -26,6 +27,7 @@
 #include "mon/MonCommand.h"
 #include "mon/mon_types.h"
 #include "mon/ConfigMap.h"
+#include "mgr/MDSPerfMetricTypes.h"
 #include "mgr/TTLCache.h"
 
 #include "DaemonState.h"
@@ -33,6 +35,7 @@
 #include "OSDPerfMetricTypes.h"
 
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 
@@ -91,29 +94,50 @@ public:
     const std::string &svc_type, const std::string &svc_id);
   PyObject *get_daemon_status_python(
     const std::string &svc_type, const std::string &svc_id);
-  PyObject *get_counter_python(
+  PyObject *get_unlabeled_counter_python(
     const std::string &svc_type,
     const std::string &svc_id,
     const std::string &path);
+  PyObject *get_latest_unlabeled_counter_python(
+      const std::string &svc_type,
+      const std::string &svc_id,
+      const std::string &path);
   PyObject *get_latest_counter_python(
-    const std::string &svc_type,
-    const std::string &svc_id,
-    const std::string &path);
+      const std::string &svc_type,
+      const std::string &svc_id,
+      std::string_view counter_name,
+      std::string_view sub_counter_name,
+      const std::vector<std::pair<std::string_view, std::string_view>> &labels);
+  PyObject *get_unlabeled_perf_schema_python(
+      const std::string &svc_type,
+      const std::string &svc_id);
   PyObject *get_perf_schema_python(
-     const std::string &svc_type,
-     const std::string &svc_id);
+      const std::string &svc_type,
+      const std::string &svc_id);
   PyObject *get_rocksdb_version();
   PyObject *get_context();
   PyObject *get_osdmap();
   /// @note @c fct is not allowed to acquire locks when holding GIL
-  PyObject *with_perf_counters(
+  PyObject *with_unlabled_perf_counters(
       std::function<void(
-        PerfCounterInstance& counter_instance,
-        PerfCounterType& counter_type,
-        PyFormatter& f)> fct,
+	  PerfCounterInstance &counter_instance,
+	  PerfCounterType &counter_type,
+	  PyFormatter &f)> fct,
       const std::string &svc_name,
       const std::string &svc_id,
       const std::string &path) const;
+  /// @note @c fct is not allowed to acquire locks when holding GIL
+  PyObject *with_perf_counters(
+      std::function<void(
+	  PerfCounterInstance &counter_instance,
+	  PerfCounterType &counter_type,
+	  PyFormatter &f)> fct,
+      const std::string &svc_name,
+      const std::string &svc_id,
+      std::string_view counter_name,
+      std::string_view sub_counter_name,
+      const std::vector<std::pair<std::string_view, std::string_view>> &labels)
+      const;
 
   MetricQueryID add_osd_perf_query(
       const OSDPerfMetricQuery &query,

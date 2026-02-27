@@ -1,5 +1,7 @@
 :orphan:
 
+.. _man-radosgw-admin:
+
 =================================================================
  radosgw-admin -- rados REST gateway user administration utility
 =================================================================
@@ -122,6 +124,16 @@ as follows:
 :command:`bucket sync enable`
   Enable bucket sync.
 
+:command:`bucket logging list`
+  List pending log objects for a source bucket.
+
+:command:`bucket logging info`
+  Show logging configuration for a source bucket, or list source buckets
+  logging to a specific log bucket.
+
+:command:`bucket logging flush`
+  Flush pending log objects to the log bucket immediately.
+
 :command:`bi get`
   Retrieve bucket index object entries.
 
@@ -240,7 +252,7 @@ as follows:
 :command:`zonegroup default`
   Set the default zone group.
 
-:command:`zonegroup rm`
+:command:`zonegroup delete`
   Remove a zone group info.
 
 :command:`zonegroup get`
@@ -490,6 +502,12 @@ as follows:
 
 :command:`topic dump`
   Dump (in JSON format) all pending bucket notifications of a persistent topic
+
+:command:`restore list`
+  List restore status of each object in a bucket
+
+:command:`restore status`
+  Show restoration status of an object in the bucket
 
 Options
 =======
@@ -879,6 +897,14 @@ Options
    scan the bucket index, e.g., listing, deletion, and all scan/search
    operations such as finding orphans or checking the bucket index.
    The default is 32.
+
+.. option:: --restore-status
+
+   Filter objects return by the 'restore list' command by status.
+
+.. option:: --show-restore-stats
+
+   Shows restore stats in a bucket stat command. Here the bucket name need be provided.
 
 Quota Options
 =============

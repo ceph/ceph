@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -17,29 +18,26 @@
 
 #include <string_view>
 
-#include "messages/MCommand.h"
-#include "messages/MCommandReply.h"
-#include "messages/MGenericMessage.h"
-#include "messages/MMDSMap.h"
-#include "messages/MMonCommand.h"
-
+#include "common/admin_finisher.h" // for asok_finisher
 #include "common/LogClient.h"
-#include "common/ceph_mutex.h"
 #include "common/fair_mutex.h"
 #include "common/Timer.h"
-#include "include/Context.h"
-#include "include/types.h"
 #include "mgr/MgrClient.h"
 #include "msg/Dispatcher.h"
 
 #include "Beacon.h"
-#include "MDSMap.h"
-#include "MDSRank.h"
 
 #define CEPH_MDS_PROTOCOL    37 /* cluster internal */
 
+namespace boost::asio { class io_context; }
+class Context;
+class MDSAuthCaps;
+class MDSMap;
+class MDSRankDispatcher;
 class Messenger;
 class MonClient;
+class MCommand;
+class MMDSMap;
 
 class MDSDaemon : public Dispatcher {
  public:

@@ -1,10 +1,15 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, NgZone, OnInit, ViewChild } from '@angular/core';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { StorageClass, ZoneGroupDetails } from '../models/rgw-storage-class.model';
+import {
+  StorageClass,
+  TIER_TYPE,
+  TIER_TYPE_DISPLAY,
+  ZoneGroupDetails
+} from '../models/rgw-storage-class.model';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -17,17 +22,21 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Permission } from '~/app/shared/models/permissions';
 import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
-
 import { Router } from '@angular/router';
+import { Observable, Subscriber } from 'rxjs';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 
-const BASE_URL = 'rgw/tiering';
+const BASE_URL = 'rgw/storage-class';
 @Component({
   selector: 'cd-rgw-storage-class-list',
   templateUrl: './rgw-storage-class-list.component.html',
   styleUrls: ['./rgw-storage-class-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class RgwStorageClassListComponent extends ListWithDetails implements OnInit {
+  @ViewChild('table', { static: true })
+  table: TableComponent;
   columns: CdTableColumn[];
   selection = new CdTableSelection();
   permission: Permission;
@@ -42,7 +51,8 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     private authStorageService: AuthStorageService,
     private rgwStorageClassService: RgwStorageClassService,
     private router: Router,
-    private urlBuilder: URLBuilderService
+    private urlBuilder: URLBuilderService,
+    protected ngZone: NgZone
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().rgw;
@@ -51,18 +61,23 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
   ngOnInit() {
     this.columns = [
       {
-        name: $localize`Storage Class`,
+        prop: 'uniqueId',
+        isInvisible: true,
+        isHidden: true
+      },
+      {
+        name: $localize`Name`,
         prop: 'storage_class',
         flexGrow: 2
       },
       {
-        name: $localize`Zone Group`,
-        prop: 'zonegroup_name',
+        name: $localize`Type`,
+        prop: 'tier_type',
         flexGrow: 2
       },
       {
-        name: $localize`Placement Target`,
-        prop: 'placement_target',
+        name: $localize`Zonegroup`,
+        prop: 'zonegroup_name',
         flexGrow: 2
       },
       {
@@ -76,11 +91,16 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       }
     ];
-    const getStorageUri = () =>
-      this.selection.first() &&
-      `${encodeURI(this.selection.first().zonegroup_name)}/${encodeURI(
-        this.selection.first().placement_target
-      )}/${encodeURI(this.selection.first().storage_class)}`;
+    const getStorageUri = () => {
+      const selection = this.selection.first();
+      if (!selection) return '';
+
+      let url = `${encodeURIComponent(selection.zonegroup_name)}/${encodeURIComponent(
+        selection.placement_target
+      )}/${encodeURIComponent(selection.storage_class)}`;
+
+      return url;
+    };
     this.tableActions = [
       {
         name: this.actionLabels.CREATE,
@@ -93,7 +113,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         name: this.actionLabels.EDIT,
         permission: 'update',
         icon: Icons.edit,
-        routerLink: () => [`/rgw/tiering/edit/${getStorageUri()}`]
+        routerLink: () => [`/${BASE_URL}/edit/${getStorageUri()}`]
       },
       {
         name: this.actionLabels.REMOVE,
@@ -102,15 +122,23 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         click: () => this.removeStorageClassModal()
       }
     ];
+    this.setTableRefreshTimeout();
   }
 
   loadStorageClass(): Promise<void> {
+    this.setTableRefreshTimeout();
     return new Promise((resolve, reject) => {
       this.rgwZonegroupService.getAllZonegroupsInfo().subscribe(
         (data: ZoneGroupDetails) => {
           this.storageClassList = [];
           const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
-          this.storageClassList.push(...tierObj);
+          const tierConfig = tierObj.map((tier) => ({
+            ...tier,
+            tier_type: this.mapTierTypeDisplay(tier.tier_type)
+          }));
+
+          this.transformTierData(tierConfig);
+          this.storageClassList.push(...tierConfig);
           resolve();
         },
         (error) => {
@@ -120,29 +148,61 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     });
   }
 
+  private mapTierTypeDisplay(tierType: string): string {
+    switch (tierType?.toLowerCase()) {
+      case TIER_TYPE.CLOUD_TIER:
+        return TIER_TYPE_DISPLAY.CLOUD_TIER;
+      case TIER_TYPE.LOCAL:
+        return TIER_TYPE_DISPLAY.LOCAL;
+      case TIER_TYPE.GLACIER:
+        return TIER_TYPE_DISPLAY.GLACIER;
+      default:
+        return tierType;
+    }
+  }
+
+  transformTierData(tierConfig: any[]) {
+    tierConfig.forEach((item, index) => {
+      const zone_group = item?.zone_group;
+      const storageClass = item?.storage_class;
+      const uniqueId = `${zone_group}-${storageClass}-${index}`;
+      item.uniqueId = uniqueId;
+    });
+    return tierConfig;
+  }
+
   removeStorageClassModal() {
     const storage_class = this.selection.first().storage_class;
     const placement_target = this.selection.first().placement_target;
     this.cdsModalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: $localize`Tiering Storage Class`,
+      itemDescription: $localize`Storage class`,
       itemNames: [storage_class],
       actionDescription: 'remove',
-      submitActionObservable: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('rgw/zonegroup/storage-class', {
-            placement_target: placement_target,
-            storage_class: storage_class
-          }),
-          call: this.rgwStorageClassService.removeStorageClass(placement_target, storage_class)
-        })
+      submitActionObservable: () => {
+        return new Observable((observer: Subscriber<any>) => {
+          this.taskWrapper
+            .wrapTaskAroundCall({
+              task: new FinishedTask('rgw/zonegroup/storage-class', {
+                placement_target: placement_target,
+                storage_class: storage_class
+              }),
+              call: this.rgwStorageClassService.removeStorageClass(placement_target, storage_class)
+            })
+            .subscribe({
+              error: (error: any) => {
+                observer.error(error);
+              },
+              complete: () => {
+                observer.complete();
+                this.table.refreshBtn();
+              }
+            });
+        });
+      }
     });
   }
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
-  }
-
-  setExpandedRow(expandedRow: any) {
-    super.setExpandedRow(expandedRow);
   }
 }

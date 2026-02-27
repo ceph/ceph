@@ -1,7 +1,7 @@
 import { PageHelper } from '../page-helper.po';
 
 export class DashboardV3PageHelper extends PageHelper {
-  pages = { index: { url: '#/dashboard', id: 'cd-dashboard-v3' } };
+  pages = { index: { url: '#/overview', id: 'cd-dashboard-v3' } };
 
   cardTitle(index: number) {
     return cy.get('.card-title').its(index).text();
@@ -16,5 +16,9 @@ export class DashboardV3PageHelper extends PageHelper {
     cy.get('cd-card').as('cards');
 
     return cy.get('@cards').its(indexOrTitle);
+  }
+
+  cardRow(rowName: string) {
+    return cy.get(`[data-testid=${rowName}]`);
   }
 }

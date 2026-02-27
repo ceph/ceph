@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -14,9 +14,10 @@
  */
 
 #pragma once
-#include <include/types.h>
+#include "include/encoding.h"
 
 class XMLObj;
+namespace ceph { class Formatter; }
 
 class PublicAccessBlockConfiguration {
   bool BlockPublicAcls;

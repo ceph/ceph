@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "include/compat.h"
 #include "common/errno.h"
@@ -17,7 +17,6 @@
 #include "common/RefCountedObj.h"
 
 #include "rgw_coroutine.h"
-#include "rgw_tools.h"
 
 #include <atomic>
 #include <string_view>
@@ -316,6 +315,17 @@ std::ostream& RGWHTTPClient::gen_prefix(std::ostream& out) const
 
 void RGWHTTPClient::init()
 {
+  char* ca_bundle = std::getenv("CURL_CA_BUNDLE");
+  if (ca_bundle) {
+    size_t ca_bundle_len = strlen(ca_bundle);
+    size_t max_len = PATH_MAX + NAME_MAX;
+    if (ca_bundle_len > max_len) {
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): CURL_CA_BUNDLE length exceeds the allowed maximum (" << max_len << " chars)" << dendl;
+    } else {
+      set_ca_path(ca_bundle);
+    }
+  }
+
   auto pos = url.find("://");
   if (pos == string::npos) {
     host = url;
@@ -820,9 +830,11 @@ void RGWHTTPManager::_complete_request(rgw_http_req_data *req_data)
     std::lock_guard l{req_data->lock};
     req_data->mgr = nullptr;
   }
+#ifdef WITH_RADOSGW_RADOS
   if (completion_mgr) {
     completion_mgr->complete(NULL, req_data->control_io_id, req_data->user_info);
   }
+#endif
 
   req_data->put();
 }
@@ -1169,6 +1181,7 @@ void *RGWHTTPManager::reqs_thread_entry()
   std::unique_lock rl{reqs_lock};
   for (auto r : unregistered_reqs) {
     _unlink_request(r);
+    r->put();
   }
 
   unregistered_reqs.clear();
@@ -1180,9 +1193,11 @@ void *RGWHTTPManager::reqs_thread_entry()
 
   reqs.clear();
 
+#ifdef WITH_RADOSGW_RADOS
   if (completion_mgr) {
     completion_mgr->go_down();
   }
+#endif
   
   return 0;
 }

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -131,12 +131,20 @@ class not_before_queue_t {
 
     template <typename U>
     bool operator()(const U &lhs, const container_t &rhs) const {
-      return lhs < project_removal_class(rhs.v);
+      if constexpr (std::is_integral_v<U>) {
+	return std::cmp_less(lhs, project_removal_class(rhs.v));
+      } else {
+	return lhs < project_removal_class(rhs.v);
+      }
     }
 
     template <typename U>
     bool operator()(const container_t &lhs, const U &rhs) const {
-      return project_removal_class(lhs.v) < rhs;
+      if constexpr (std::is_integral_v<U>) {
+	return std::cmp_less(project_removal_class(lhs.v), rhs);
+      } else {
+	return project_removal_class(lhs.v) < rhs;
+      }
     }
   };
   struct removal_registry_disposer_t {

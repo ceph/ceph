@@ -84,6 +84,14 @@ common_args: Dict[str, Any] = {
         'action': arg_validators.DmcryptAction,
         'help': 'Enable device encryption via dm-crypt',
     },
+    '--dmcrypt-format-opts': {
+        'default': None,
+        'type': Optional[str],
+    },
+    '--dmcrypt-open-opts': {
+        'default': None,
+        'type': Optional[str],
+    },
     '--with-tpm': {
         'dest': 'with_tpm',
         'help': 'Whether encrypted OSDs should be enrolled with TPM.',
@@ -93,6 +101,13 @@ common_args: Dict[str, Any] = {
         'dest': 'no_systemd',
         'action': 'store_true',
         'help': 'Skip creating and enabling systemd units and starting OSD services when activating',
+    },
+    '--osd-type': {
+        'dest': 'osd_type',
+        'help': 'The Ceph OSD type to use.',
+        'default': 'classic',
+        'choices': ['classic', 'crimson'],
+        'type': str,
     },
 }
 

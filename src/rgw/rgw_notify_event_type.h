@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 #include <string>
@@ -39,7 +39,11 @@ namespace rgw::notify {
     ReplicationCreate                      = 0x10000000,
     ReplicationDelete                      = 0x20000000,
     ReplicationDeletionMarkerCreated       = 0x40000000,
-    UnknownEvent                           = 0x100000000
+    ObjectRestore                          = 0xF00000000,
+    ObjectRestoreInitiated                 = 0x100000000,
+    ObjectRestoreCompleted                 = 0x200000000,
+    ObjectRestoreExpired                   = 0x400000000,
+    UnknownEvent                           = 0x1000000000
 };
 
   using EventTypeList = std::vector<EventType>;

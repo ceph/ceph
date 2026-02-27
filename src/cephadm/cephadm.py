@@ -138,6 +138,7 @@ from cephadmlib.logging import (
 )
 from cephadmlib.systemd import check_unit, check_units, terminate_service, enable_service
 from cephadmlib import systemd_unit
+from cephadmlib.signals import send_signal_to_container_entrypoint
 from cephadmlib import runscripts
 from cephadmlib.container_types import (
     CephContainer,
@@ -188,9 +189,9 @@ from cephadmlib.daemons import (
 )
 from cephadmlib.agent import http_query
 from cephadmlib.listing import (
+    CombinedStatusUpdater,
     DaemonStatusUpdater,
     NoOpDaemonStatusUpdater,
-    CombinedStatusUpdater,
     daemons_matching,
     daemons_summary,
 )
@@ -201,7 +202,7 @@ from cephadmlib.listing_updaters import (
     MemUsageStatusUpdater,
     VersionStatusUpdater,
 )
-from cephadmlib.container_lookup import infer_local_ceph_image
+from cephadmlib.container_lookup import infer_local_ceph_image, identify
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -655,6 +656,9 @@ def create_daemon_dirs(
         elif daemon_type == 'promtail':
             data_dir_root = ident.data_dir(ctx.data_dir)
             config_dir = 'etc/promtail'
+        elif daemon_type == 'alloy':
+            data_dir_root = ident.data_dir(ctx.data_dir)
+            config_dir = 'etc/alloy'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
         elif daemon_type == 'loki':
@@ -962,6 +966,7 @@ def deploy_daemon(
                     endpoints=endpoints,
                     init_containers=init_containers,
                     sidecars=sidecars,
+                    stop_timeout=getattr(ctx, 'termination_grace_period_seconds', None),
                 )
             else:
                 raise RuntimeError('attempting to deploy a daemon without a container image')
@@ -1028,6 +1033,7 @@ def deploy_daemon_units(
     endpoints: Optional[List[EndPoint]] = None,
     init_containers: Optional[List[InitContainer]] = None,
     sidecars: Optional[List[SidecarContainer]] = None,
+    stop_timeout: Optional[int] = None,
 ) -> None:
     data_dir = ident.data_dir(ctx.data_dir)
     pre_start_commands: List[runscripts.Command] = []
@@ -1061,7 +1067,7 @@ def deploy_daemon_units(
         endpoints=endpoints,
         pre_start_commands=pre_start_commands,
         post_stop_commands=post_stop_commands,
-        timeout=30 if ident.daemon_type == 'osd' else None,
+        timeout=stop_timeout,
     )
 
     # sysctl
@@ -1688,6 +1694,7 @@ def command_version(ctx):
     # type: (CephadmContext) -> int
     import importlib
     import zipimport
+    import zipfile
     import types
 
     vmod: Optional[types.ModuleType]
@@ -1744,10 +1751,17 @@ def command_version(ctx):
             out['bundled_packages'] = deps_info
         except OSError:
             pass
-        files = getattr(loader, '_files', {})
-        out['zip_root_entries'] = sorted(
-            {p.split('/')[0] for p in files.keys()}
-        )
+        # Use zipfile module to properly read the archive contents
+        # loader.archive contains the path to the zip file
+        try:
+            with zipfile.ZipFile(loader.archive, 'r') as zf:
+                files = zf.namelist()
+                out['zip_root_entries'] = sorted(
+                    {p.split('/')[0] for p in files if p}
+                )
+        except (OSError, zipfile.BadZipFile):
+            # Fallback to empty list if we can't read the zip
+            out['zip_root_entries'] = []
 
     json.dump(out, sys.stdout, indent=2)
     print()
@@ -2250,7 +2264,7 @@ def prepare_ssh(
                              'Perhaps the ceph version being bootstrapped does not support it')
 
     if ctx.with_centralized_logging:
-        for t in ['loki', 'promtail']:
+        for t in ['loki', 'alloy']:
             logger.info('Deploying %s service with default placement...' % t)
             try:
                 cli(['orch', 'apply', t])
@@ -2848,7 +2862,7 @@ def command_bootstrap(ctx):
     if not installed:
         logger.warning('Log rotation will not occur because the logrotate service is not installed. Please install it to enable log rotation.')
     else:
-        logger.info('enable logrotate.timer service')
+        logger.info('Enabling the logrotate.timer service to perform daily log rotation.')
         enable_service(ctx, 'logrotate.timer')
     return ctx.error_code
 
@@ -2860,19 +2874,45 @@ def command_registry_login(ctx: CephadmContext) -> int:
     if ctx.registry_json:
         logger.info('Pulling custom registry login info from %s.' % ctx.registry_json)
         d = get_parm(ctx.registry_json)
-        if d.get('url') and d.get('username') and d.get('password'):
-            ctx.registry_url = d.get('url')
-            ctx.registry_username = d.get('username')
-            ctx.registry_password = d.get('password')
-            registry_login(ctx, ctx.registry_url, ctx.registry_username, ctx.registry_password)
-        else:
-            raise Error('json provided for custom registry login did not include all necessary fields. '
-                        'Please setup json file as\n'
-                        '{\n'
-                        ' "url": "REGISTRY_URL",\n'
-                        ' "username": "REGISTRY_USERNAME",\n'
-                        ' "password": "REGISTRY_PASSWORD"\n'
-                        '}\n')
+        # to support multiple container registries, the command will now accept a list
+        # of dictionaries. For backward compatibility, it will first check for the presence
+        # of the registry_credentials key. If the key is not found, it will fall back to
+        # parsing the old JSON format.
+        example_multi_registry = {
+            'registry_credentials': [
+                {
+                    'url': 'REGISTRY_URL1',
+                    'username': 'REGISTRY_USERNAME1',
+                    'password': 'REGISTRY_PASSWORD1'
+                },
+                {
+                    'url': 'REGISTRY_URL2',
+                    'username': 'REGISTRY_USERNAME2',
+                    'password': 'REGISTRY_PASSWORD2'
+                }
+            ]
+        }
+        registry_creds = d.get('registry_credentials')
+        if not registry_creds:
+            registry_creds = [d]
+        for d in registry_creds:
+            if d.get('url') and d.get('username') and d.get('password'):
+                ctx.registry_url = d.get('url')
+                ctx.registry_username = d.get('username')
+                ctx.registry_password = d.get('password')
+                registry_login(ctx, ctx.registry_url, ctx.registry_username, ctx.registry_password)
+            else:
+                raise Error(
+                    'json provided for custom registry login did not include all necessary fields. '
+                    'Please setup json file as\n'
+                    '{\n'
+                    ' "url": "REGISTRY_URL",\n'
+                    ' "username": "REGISTRY_USERNAME",\n'
+                    ' "password": "REGISTRY_PASSWORD"\n'
+                    '}\n'
+                    'or as below for multiple registry login\n'
+                    f'{json.dumps(example_multi_registry, indent=4)}'
+                )
     elif ctx.registry_url and ctx.registry_username and ctx.registry_password:
         registry_login(ctx, ctx.registry_url, ctx.registry_username, ctx.registry_password)
     else:
@@ -2943,6 +2983,7 @@ def apply_deploy_config_to_ctx(
         if key not in facade.defaults:
             logger.warning('unexpected parameter: %r=%r', key, value)
         setattr(ctx, key, value)
+
     update_default_image(ctx)
     logger.debug('Determined image: %r', ctx.image)
 
@@ -3151,12 +3192,9 @@ def command_shell(ctx):
 
 
 @infer_fsid
-def command_enter(ctx):
-    # type: (CephadmContext) -> int
-    if not ctx.fsid:
-        raise Error('must pass --fsid to specify cluster')
-    (daemon_type, daemon_id) = ctx.name.split('.', 1)
-    container_args = ['-i']  # type: List[str]
+def command_enter(ctx: CephadmContext) -> int:
+    ident = identify(ctx)
+    container_args = ['-i']
     if ctx.command:
         command = ctx.command
     else:
@@ -3168,12 +3206,15 @@ def command_enter(ctx):
         ]
     c = CephContainer(
         ctx,
+        identity=ident,
         image=ctx.image,
         entrypoint='doesnotmatter',
         container_args=container_args,
-        cname='ceph-%s-%s.%s' % (ctx.fsid, daemon_type, daemon_id),
     )
     command = c.exec_cmd(command)
+    if ctx.dry_run:
+        print(' '.join(shlex.quote(arg) for arg in command))
+        return 0
     return call_timeout(ctx, command, ctx.timeout)
 
 ##################################
@@ -3228,50 +3269,59 @@ def command_ceph_volume(ctx):
 
 
 @infer_fsid
-def command_unit_install(ctx):
-    # type: (CephadmContext) -> int
-    if not getattr(ctx, 'fsid', None):
-        raise Error('must pass --fsid to specify cluster')
-    if not getattr(ctx, 'name', None):
-        raise Error('daemon name required')
-    ident = DaemonIdentity.from_context(ctx)
+def command_unit_install(ctx: CephadmContext) -> int:
+    ident = identify(ctx)
     systemd_unit.update_files(ctx, ident)
     call_throws(ctx, ['systemctl', 'daemon-reload'])
     return 0
 
 
 @infer_fsid
-def command_unit(ctx):
-    # type: (CephadmContext) -> int
+def command_unit(ctx: CephadmContext) -> int:
+    ident = identify(ctx)
+    unit_name = lookup_unit_name_by_daemon_name(
+        ctx, ident.fsid, ident.daemon_name
+    )
+    command = ['systemctl', ctx.command, unit_name]
+    if ctx.dry_run:
+        print(' '.join(shlex.quote(arg) for arg in command))
+        return 0
+    _, _, code = call(
+        ctx,
+        command,
+        verbosity=CallVerbosity.VERBOSE,
+        desc='',
+    )
+    return code
+
+
+@infer_fsid
+def command_signal(ctx: CephadmContext) -> int:
     if not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
 
-    unit_name = lookup_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
+    container_name = DaemonIdentity.from_name(ctx.fsid, ctx.name).container_name
 
-    _, _, code = call(
-        ctx,
-        ['systemctl', ctx.command, unit_name],
-        verbosity=CallVerbosity.VERBOSE,
-        desc=''
-    )
-    return code
+    return send_signal_to_container_entrypoint(ctx, container_name, ctx.signal_name or ctx.signal_number)
+
 
 ##################################
 
 
 @infer_fsid
-def command_logs(ctx):
-    # type: (CephadmContext) -> None
-    if not ctx.fsid:
-        raise Error('must pass --fsid to specify cluster')
-
-    unit_name = lookup_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
-
+def command_logs(ctx: CephadmContext) -> None:
+    ident = identify(ctx)
+    unit_name = lookup_unit_name_by_daemon_name(
+        ctx, ident.fsid, ident.daemon_name
+    )
     cmd = [find_program('journalctl')]
     cmd.extend(['-u', unit_name])
     if ctx.command:
         cmd.extend(ctx.command)
 
+    if ctx.dry_run:
+        print(' '.join(shlex.quote(arg) for arg in cmd))
+        return
     # call this directly, without our wrapper, so that we get an unmolested
     # stdout with logger prefixing.
     logger.debug('Running command: %s' % ' '.join(cmd))
@@ -3936,7 +3986,7 @@ def _zap_osds(ctx: CephadmContext) -> None:
         raise Error(f'Invalid JSON in ceph-volume inventory: {e}')
 
     for i in ls:
-        matches = [lv.get('cluster_fsid') == ctx.fsid and i.get('ceph_device') for lv in i.get('lvs', [])]
+        matches = [lv.get('cluster_fsid') == ctx.fsid and i.get('ceph_device_lvm') for lv in i.get('lvs', [])]
         if any(matches) and all(matches):
             _zap(ctx, i.get('path'))
         elif any(matches):
@@ -3960,7 +4010,9 @@ def command_zap_osds(ctx: CephadmContext) -> None:
 
 
 def get_ceph_cluster_count(ctx: CephadmContext) -> int:
-    return len([c for c in os.listdir(ctx.data_dir) if is_fsid(c)])
+    if os.path.isdir(ctx.data_dir):
+        return len([c for c in os.listdir(ctx.data_dir) if is_fsid(c)])
+    return 0
 
 
 def command_rm_cluster(ctx: CephadmContext) -> None:
@@ -4497,6 +4549,26 @@ def _add_deploy_parser_args(
         default=[],
         help='Additional entrypoint arguments to apply to deamon'
     )
+    parser_deploy.add_argument(
+        '--termination-grace-period-seconds',
+        type=int,
+        default=None,
+        help='Time in seconds to wait for graceful service shutdown before forcefully killing it'
+    )
+
+
+def _name_opts(parser: argparse.ArgumentParser) -> None:
+    ng = parser.add_mutually_exclusive_group(required=True)
+    ng.add_argument(
+        '--name',
+        '-n',
+        help='daemon name (type.id)',
+    )
+    ng.add_argument(
+        '--infer-name',
+        '-i',
+        help='daemon name search (type[.partial_id])',
+    )
 
 
 def _get_parser():
@@ -4767,10 +4839,11 @@ def _get_parser():
     parser_enter.add_argument(
         '--fsid',
         help='cluster FSID')
+    _name_opts(parser_enter)
     parser_enter.add_argument(
-        '--name', '-n',
-        required=True,
-        help='daemon name (type.id)')
+        '--dry-run',
+        action='store_true',
+        help='print, but do not execute, the command to enter the container')
     parser_enter.add_argument(
         'command', nargs=argparse.REMAINDER,
         help='command')
@@ -4820,9 +4893,10 @@ def _get_parser():
         '--fsid',
         help='cluster FSID')
     parser_unit.add_argument(
-        '--name', '-n',
-        required=True,
-        help='daemon name (type.id)')
+        '--dry-run',
+        action='store_true',
+        help='print, but do not execute, the unit command')
+    _name_opts(parser_unit)
 
     parser_unit_install = subparsers.add_parser(
         'unit-install', help="Install the daemon's systemd unit")
@@ -4830,7 +4904,22 @@ def _get_parser():
     parser_unit_install.add_argument(
         '--fsid',
         help='cluster FSID')
-    parser_unit_install.add_argument(
+    _name_opts(parser_unit_install)
+
+    parser_signal = subparsers.add_parser(
+        'signal', help='Send signal to entrypoint of containerized daemon')
+    parser_signal.set_defaults(func=command_signal)
+    signal_group = parser_signal.add_mutually_exclusive_group(required=True)
+    signal_group.add_argument(
+        '--signal-number',
+        help='Signal number to send',)
+    signal_group.add_argument(
+        '--signal-name',
+        help='Signal to send')
+    parser_signal.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_signal.add_argument(
         '--name', '-n',
         required=True,
         help='daemon name (type.id)')
@@ -4841,10 +4930,11 @@ def _get_parser():
     parser_logs.add_argument(
         '--fsid',
         help='cluster FSID')
+    _name_opts(parser_logs)
     parser_logs.add_argument(
-        '--name', '-n',
-        required=True,
-        help='daemon name (type.id)')
+        '--dry-run',
+        action='store_true',
+        help='print, but do not execute, the command to show the logs')
     parser_logs.add_argument(
         'command', nargs='*',
         help='additional journalctl args')
@@ -4995,7 +5085,7 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--with-centralized-logging',
         action='store_true',
-        help='Automatically provision centralized logging (promtail, loki)')
+        help='Automatically provision centralized logging (alloy, loki)')
     parser_bootstrap.add_argument(
         '--apply-spec',
         help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')

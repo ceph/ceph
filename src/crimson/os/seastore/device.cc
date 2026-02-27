@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "device.h"
 
@@ -83,7 +83,7 @@ check_create_device_ret check_create_device(
 	return seastar::now();
       } catch (const std::system_error &e) {
 	if (e.code().value() == EEXIST) {
-          ERROR("path={} exists", path);
+          DEBUG("path={} exists", path);
 	  return seastar::now();
 	} else {
           ERROR("path={} creation error -- {}", path, e);

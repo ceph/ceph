@@ -263,13 +263,12 @@ class FuseMountBase(CephFSMountBase):
                 return False
 
         fstype = proc.stdout.getvalue().rstrip('\n')
-        if fstype == 'fuseblk':
+        if fstype in ('fuseblk', 'fuse'):
             log.info('ceph-fuse is mounted on %s', self.hostfs_mntpt)
             return True
         else:
-            log.debug('ceph-fuse not mounted, got fs type {fstype!r}'.format(
-                fstype=fstype))
-            return False
+            raise RuntimeError('fstype expected fuseblk or fuse but found '
+                               f'{fstype}')
 
     def wait_until_mounted(self):
         """

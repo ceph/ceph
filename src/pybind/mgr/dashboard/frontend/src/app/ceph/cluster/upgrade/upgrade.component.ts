@@ -16,11 +16,13 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { Router } from '@angular/router';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
+import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 
 @Component({
   selector: 'cd-upgrade',
   templateUrl: './upgrade.component.html',
-  styleUrls: ['./upgrade.component.scss']
+  styleUrls: ['./upgrade.component.scss'],
+  standalone: false
 })
 export class UpgradeComponent implements OnInit, OnDestroy {
   version: string;
@@ -76,7 +78,7 @@ export class UpgradeComponent implements OnInit, OnDestroy {
 
     this.subs.add(
       this.summaryService.subscribe((summary) => {
-        const version = summary.version.replace('ceph version ', '').split('-');
+        const version = summary.version.replace(VERSION_PREFIX, '').split('-');
         this.version = version[0];
         this.executingTasks = summary.executing_tasks.filter((tasks) =>
           tasks.name.includes('progress/Upgrade')

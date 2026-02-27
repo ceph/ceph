@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -11,6 +11,7 @@
 #include "common/async/yield_context.h"
 #include "rgw_xml.h"
 #include "rgw_acl.h"
+#include "rgw_object_ownership.h"
 #include "rgw_sal_fwd.h"
 
 class RGWEnv;
@@ -34,8 +35,10 @@ void write_policy_xml(const RGWAccessControlPolicy& policy,
 /// Construct a policy from a s3 canned acl string.
 int create_canned_acl(const ACLOwner& owner,
                       const ACLOwner& bucket_owner,
+                      ObjectOwnership object_ownership,
                       const std::string& canned_acl,
-                      RGWAccessControlPolicy& policy);
+                      RGWAccessControlPolicy& policy,
+                      std::string& error_message);
 
 /// Construct a policy from x-amz-grant-* request headers.
 int create_policy_from_headers(const DoutPrefixProvider* dpp,

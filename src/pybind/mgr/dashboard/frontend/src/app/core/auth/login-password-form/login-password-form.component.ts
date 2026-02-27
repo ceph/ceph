@@ -13,7 +13,8 @@ import { UserPasswordFormComponent } from '../user-password-form/user-password-f
 @Component({
   selector: 'cd-login-password-form',
   templateUrl: './login-password-form.component.html',
-  styleUrls: ['./login-password-form.component.scss']
+  styleUrls: ['./login-password-form.component.scss'],
+  standalone: false
 })
 export class LoginPasswordFormComponent extends UserPasswordFormComponent {
   constructor(

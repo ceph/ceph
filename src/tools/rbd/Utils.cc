@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "tools/rbd/Utils.h"
 #include "include/ceph_assert.h"
@@ -1023,6 +1023,8 @@ std::string mirror_image_state(librbd::mirror_image_state_t state) {
       return "enabled";
     case RBD_MIRROR_IMAGE_DISABLED:
       return "disabled";
+    case RBD_MIRROR_IMAGE_CREATING:
+      return "creating";
     default:
       return "unknown";
   }
@@ -1192,10 +1194,9 @@ int mgr_command(librados::Rados& rados, const std::string& cmd,
       "prefix": ")" + cmd + R"(", )" + mgr_command_args_to_str(args) + R"(
     })";
 
-  bufferlist in_bl;
   bufferlist out_bl;
   std::string outs;
-  int r = rados.mgr_command(command, in_bl, &out_bl, &outs);
+  int r = rados.mgr_command(std::move(command), {}, &out_bl, &outs);
   if (r < 0) {
     (*err_os) << "rbd: " << cmd << " failed: " << cpp_strerror(r);
     if (!outs.empty()) {

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Bitmap based in-memory allocator implementation.
  * Author: Igor Fedotov, ifedotov@suse.com
@@ -593,7 +594,7 @@ void AllocatorLevel01Loose::foreach_internal(
                 if (p < bits_per_slot) {
                   //now @p are 1s
                   ssize_t free_count = count_1s(allocation_pattern, p);
-                  assert(free_count > 0);
+                  ceph_assert(free_count > 0);
                   len = free_count;
                   off = (pos + t) * bits_per_slot + p;
                   p += free_count;

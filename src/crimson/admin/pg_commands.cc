@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/admin/pg_commands.h"
 
@@ -68,7 +68,7 @@ public:
       ](auto &&pg) mutable {
 	if (!pg) {
 	  return seastar::make_ready_future<tell_result_t>(tell_result_t{
-	      -ENOENT, fmt::format("i don't have pgid '{}'", spg_id)});
+	      -ENOENT, fmt::format("don't have pgid '{}'", spg_id)});
 	}
 	if (!pg->is_primary()) {
 	  return seastar::make_ready_future<tell_result_t>(tell_result_t{

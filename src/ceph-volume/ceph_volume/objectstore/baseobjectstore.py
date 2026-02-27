@@ -32,18 +32,28 @@ class BaseObjectStore:
         self.osd_id: str = ''
         self.osd_fsid: str = ''
         self.cephx_lockbox_secret: str = ''
-        self.objectstore: str = ''
+        self.objectstore: str = getattr(args, "objectstore", '')
         self.osd_mkfs_cmd: List[str] = []
+        self.osd_type: str = getattr(args, "osd_type", '')
         self.block_device_path: str = ''
         self.dmcrypt_key: str = encryption_utils.create_dmcrypt_key()
         self.with_tpm: int = int(getattr(self.args, 'with_tpm', False))
         self.method: str = ''
+        self.osd_path: str = ''
+        self.key: Optional[str] = None
+        self.block_device_path: str = ''
+        self.wal_device_path: str = ''
+        self.db_device_path: str = ''
+        self.block_lv: Optional[Volume] = None
         if getattr(self.args, 'dmcrypt', False):
             self.encrypted = 1
             if not self.with_tpm:
                 self.cephx_lockbox_secret = prepare_utils.create_key()
                 self.secrets['cephx_lockbox_secret'] = \
                     self.cephx_lockbox_secret
+        # If set, we skip mkfs-time discards by overriding bdev_enable_discard flag
+        # for the `ceph-osd --mkfs` command.
+        self.skip_mkfs_discard: bool = False
 
     def get_ptuuid(self, argument: str) -> str:
         uuid = disk.get_partuuid(argument)
@@ -68,7 +78,41 @@ class BaseObjectStore:
         raise NotImplementedError()
 
     def add_objectstore_opts(self) -> None:
-        raise NotImplementedError()
+        """
+        Create the files for the OSD to function. A normal call will look like:
+
+            ceph-osd --cluster ceph --mkfs --mkkey -i 0 \
+                    --monmap /var/lib/ceph/osd/ceph-0/activate.monmap \
+                    --osd-data /var/lib/ceph/osd/ceph-0 \
+                    --osd-uuid 8d208665-89ae-4733-8888-5d3bfbeeec6c \
+                    --keyring /var/lib/ceph/osd/ceph-0/keyring \
+                    --setuser ceph --setgroup ceph
+
+        In some cases it is required to use the keyring, when it is passed
+        in as a keyword argument it is used as part of the ceph-osd command
+        """
+
+        if self.wal_device_path:
+            self.osd_mkfs_cmd.extend(
+                ['--bluestore-block-wal-path', self.wal_device_path]
+            )
+            system.chown(self.wal_device_path)
+
+        if self.db_device_path:
+            self.osd_mkfs_cmd.extend(
+                ['--bluestore-block-db-path', self.db_device_path]
+            )
+            system.chown(self.db_device_path)
+
+        if self.get_osdspec_affinity():
+            self.osd_mkfs_cmd.extend(['--osdspec-affinity',
+                                      self.get_osdspec_affinity()])
+
+    def unlink_bs_symlinks(self) -> None:
+        for link_name in ['block', 'block.db', 'block.wal']:
+            link_path = os.path.join(self.osd_path, link_name)
+            if os.path.exists(link_path):
+                os.unlink(os.path.join(self.osd_path, link_name))
 
     def prepare_osd_req(self, tmpfs: bool = True) -> None:
         # create the directory
@@ -99,7 +143,13 @@ class BaseObjectStore:
     def get_osd_path(self) -> str:
         return '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, self.osd_id)
 
+    def get_default_entrypoint_cmd(self) -> str:
+        if self.osd_type == "crimson":
+            return "ceph-osd-crimson"
+        return "ceph-osd"
+    
     def build_osd_mkfs_cmd(self) -> List[str]:
+        base_mkfs_cmd = self.get_default_entrypoint_cmd()
         self.supplementary_command = [
             '--osd-data', self.osd_path,
             '--osd-uuid', self.osd_fsid,
@@ -107,19 +157,21 @@ class BaseObjectStore:
             '--setgroup', 'ceph'
         ]
         self.osd_mkfs_cmd = [
-            'ceph-osd',
+            base_mkfs_cmd,
             '--cluster', conf.cluster,
             '--osd-objectstore', self.objectstore,
             '--mkfs',
             '-i', self.osd_id,
             '--monmap', self.monmap,
         ]
+        # Skip mkfs discard if we have already formatted the device
+        # set bdev_enable_discard = false
+        if self.skip_mkfs_discard and self.objectstore == 'bluestore':
+            self.osd_mkfs_cmd.extend(['--bdev-enable-discard', 'false'])
         if self.cephx_secret is not None:
             self.osd_mkfs_cmd.extend(['--keyfile', '-'])
-        try:
-            self.add_objectstore_opts()
-        except NotImplementedError:
-            logger.info("No specific objectstore options to add.")
+
+        self.add_objectstore_opts()
 
         self.osd_mkfs_cmd.extend(self.supplementary_command)
         return self.osd_mkfs_cmd
@@ -154,6 +206,20 @@ class BaseObjectStore:
                     raise RuntimeError('Command failed with exit code %s: %s' %
                                        (returncode, ' '.join(cmd)))
 
+        mapping: Dict[str, Any] = {'raw': ['data', 'block_db', 'block_wal'],
+                                   'lvm': ['ceph.block_device', 'ceph.db_device', 'ceph.wal_device']}
+        if self.args.dmcrypt:
+            for dev_type in mapping[self.method]:
+                if self.method == 'raw':
+                    path = self.args.__dict__.get(dev_type, None)
+                else:
+                    if self.block_lv is not None:
+                        path = self.block_lv.tags.get(dev_type, None)
+                    else:
+                        raise RuntimeError('Unexpected error while running bluestore mkfs.')
+                if path is not None:
+                    encryption_utils.CephLuks2(path).config_luks2({'subsystem': f'ceph_fsid={self.osd_fsid}'})
+
     def activate(self) -> None:
         raise NotImplementedError()
 
@@ -179,3 +245,30 @@ class BaseObjectStore:
                                   device, '--unlock-key-file', temp_file_name,
                                   '--tpm2-pcrs', '9+12', '--wipe-slot', 'tpm2']
                 process.call(cmd, run_on_host=True, show_command=True)
+
+    def add_label(self, key: str,
+                  value: str,
+                  device: str) -> None:
+        """Add a label to a BlueStore device.
+        Args:
+            key (str): The name of the label being added.
+            value (str): Value of the label being added.
+            device (str): The path of the BlueStore device.
+        Raises:
+            RuntimeError: If `ceph-bluestore-tool` command doesn't success.
+        """
+
+        command: List[str] = ['ceph-bluestore-tool',
+                              'set-label-key',
+                              '-k',
+                              key,
+                              '-v',
+                              value,
+                              '--dev',
+                              device]
+
+        _, err, rc = process.call(command,
+                                  terminal_verbose=True,
+                                  show_command=True)
+        if rc:
+            raise RuntimeError(f"Can't add BlueStore label '{key}' to device {device}: {err}")

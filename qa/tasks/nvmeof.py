@@ -22,7 +22,7 @@ gw_yaml_file = '/etc/ceph/nvmeof-gw.yaml'
 class Nvmeof(Task):
     """
     Setup nvmeof gateway on client and then share gateway config to target host.
-
+    tasks:
         - nvmeof:
             installer: host.a     // or 'nvmeof.nvmeof.a' 
             version: default
@@ -33,6 +33,16 @@ class Nvmeof(Task):
                 namespaces_count: 10
                 cli_version: latest
                 create_mtls_secrets: False 
+
+    You can pass extra conf file to override above setup values:
+
+    overrides: 
+        nvmeof:
+            gw_image: quay.io/ceph/nvmeof:devel
+            gateway_config:
+                subsystems_count: 3
+                namespaces_count: 20
+                cli_image: quay.io/ceph/nvmeof-cli:devel
                     
     """
 
@@ -44,6 +54,8 @@ class Nvmeof(Task):
             raise ConfigError('nvmeof requires a installer host to deploy service') 
         self.cluster_name, _, _ = misc.split_role(host)
         self.remote = get_remote_for_role(self.ctx, host)  
+        overrides = self.ctx.config.get('overrides', {})
+        misc.deep_merge(self.config, overrides.get('nvmeof', {}))
 
     def begin(self):
         super(Nvmeof, self).begin()
@@ -61,6 +73,7 @@ class Nvmeof(Task):
 
         gateway_config = self.config.get('gateway_config', {})
         self.cli_image = gateway_config.get('cli_image', 'quay.io/ceph/nvmeof-cli:latest')
+        self.enable_groups = bool(gateway_config.get('enable_groups', True))
         self.groups_count = gateway_config.get('groups_count', 1)
         self.groups_prefix = gateway_config.get('groups_prefix', 'mygroup') 
         self.nqn_prefix = gateway_config.get('subsystem_nqn_prefix', 'nqn.2016-06.io.spdk:cnode')
@@ -114,16 +127,22 @@ class Nvmeof(Task):
                 'rbd', 'pool', 'init', poolname
             ])
 
-            group_to_nodes = defaultdict(list)
-            for index, node in enumerate(nodes):
-                group_name = self.groups_prefix + str(index % int(self.groups_count))
-                group_to_nodes[group_name] += [node]
-            for group_name in group_to_nodes:
-                gp_nodes = group_to_nodes[group_name]
-                log.info(f'[nvmeof]: ceph orch apply nvmeof {poolname} {group_name}')
+            if self.enable_groups:
+                group_to_nodes = defaultdict(list)
+                for index, node in enumerate(nodes):
+                    group_name = self.groups_prefix + str(index % int(self.groups_count))
+                    group_to_nodes[group_name] += [node]
+                for group_name in group_to_nodes:
+                    gp_nodes = group_to_nodes[group_name]
+                    log.info(f'[nvmeof]: ceph orch apply nvmeof {poolname} {group_name}')
+                    _shell(self.ctx, self.cluster_name, self.remote, [
+                        'ceph', 'orch', 'apply', 'nvmeof', poolname, group_name,
+                        '--placement', ';'.join(gp_nodes)
+                    ])
+            else:
                 _shell(self.ctx, self.cluster_name, self.remote, [
-                    'ceph', 'orch', 'apply', 'nvmeof', poolname, group_name,
-                    '--placement', ';'.join(gp_nodes)
+                        'ceph', 'orch', 'apply', 'nvmeof', poolname,
+                        '--placement', ';'.join(nodes)
                 ])
 
             total_images = int(self.namespaces_count) * int(self.subsystems_count)
@@ -287,7 +306,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
     - workunit:
         clients:
             client.3:
-            - rbd/nvmeof_fio_test.sh --rbd_iostat
+            - nvmeof/fio_test.sh --rbd_iostat
         env:
             RBD_POOL: mypool
             IOSTAT_INTERVAL: '10'
@@ -321,7 +340,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
         self.max_thrash_daemons = int(self.config.get('max_thrash', len(self.daemons) - 1))
 
         # Limits on thrashing each daemon
-        self.daemon_max_thrash_times = int(self.config.get('daemon_max_thrash_times', 5))
+        self.daemon_max_thrash_times = int(self.config.get('daemon_max_thrash_times', 4))
         self.daemon_max_thrash_period = int(self.config.get('daemon_max_thrash_period', 30 * 60)) # seconds
 
         self.min_thrash_delay = int(self.config.get('min_thrash_delay', 60))
@@ -331,7 +350,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
 
     def _get_devices(self, remote):
         GET_DEVICE_CMD = "sudo nvme list --output-format=json | " \
-            "jq -r '.Devices[].Subsystems[] | select(.Controllers | all(.ModelNumber == \"Ceph bdev Controller\")) | .Namespaces | sort_by(.NSID) | .[] | .NameSpace'"
+            "jq -r '.Devices | sort_by(.NameSpace) | .[] | select(.ModelNumber == \"Ceph bdev Controller\") | .DevicePath'"
         devices = remote.sh(GET_DEVICE_CMD).split()
         return devices
     
@@ -369,8 +388,8 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 for d in self.daemons:
                     random_gateway_host = d.remote
                     d.remote.sh(d.status_cmd, check_status=False)
-                random_gateway_host.run(args=['ceph', 'orch', 'ls', '--refresh'])
-                random_gateway_host.run(args=['ceph', 'orch', 'ps', '--daemon-type', 'nvmeof', '--refresh'])
+                random_gateway_host.run(args=['ceph', 'orch', 'ls'])
+                random_gateway_host.run(args=['ceph', 'orch', 'ps', '--daemon-type', 'nvmeof'])
                 random_gateway_host.run(args=['ceph', 'health', 'detail'])
                 random_gateway_host.run(args=['ceph', '-s'])
                 random_gateway_host.run(args=['ceph', 'nvme-gw', 'show', 'mypool', 'mygroup0'])
@@ -436,7 +455,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
         if killed_method == "ceph_daemon_stop":
             daemon.remote.run(args=[
                 "ceph", "orch", "daemon", "restart",
-                name
+                name, "--force"
             ])
         # note: temporarily use 'daemon start' to restart
         # daemons instead of 'systemctl start'

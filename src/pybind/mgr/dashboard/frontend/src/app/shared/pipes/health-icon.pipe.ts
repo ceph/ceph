@@ -3,7 +3,8 @@ import { Pipe, PipeTransform } from '@angular/core';
 import { HealthIcon } from '../enum/health-icon.enum';
 
 @Pipe({
-  name: 'healthIcon'
+  name: 'healthIcon',
+  standalone: false
 })
 export class HealthIconPipe implements PipeTransform {
   transform(value: string): string {

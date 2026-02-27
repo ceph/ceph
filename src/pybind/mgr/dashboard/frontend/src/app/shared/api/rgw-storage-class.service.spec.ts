@@ -41,12 +41,14 @@ describe('RgwStorageClassService', () => {
           placement_id: 'default-placement',
           storage_class: 'test1',
           tier_type: 'cloud-s3',
+          tier_config_rm: { 'acls.source_id': 'test1' },
           tier_config: {
             endpoint: 'http://198.162.100.100:80',
             access_key: 'test56',
             secret: 'test56',
             target_path: 'tsest-dnyanee',
             retain_head_object: false,
+            allow_read_through: true,
             region: 'ams3d',
             multipart_sync_threshold: 33554432,
             multipart_min_part_size: 33554432

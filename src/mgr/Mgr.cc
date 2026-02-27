@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -17,6 +18,7 @@
 #include "common/errno.h"
 #include "mon/MonClient.h"
 #include "include/stringify.h"
+#include "include/str_map.h"
 #include "global/global_context.h"
 #include "global/signal_handler.h"
 
@@ -515,9 +517,15 @@ void Mgr::handle_osd_map()
         
       DaemonStatePtr daemon = daemon_state.get(k);
         
-      if (daemon && osd_map.is_out(osd_id) && osd_map.is_down(osd_id)) {
-        std::lock_guard l(daemon->lock);
-        daemon->daemon_health_metrics.clear();
+      if (daemon) {
+        bool clear_metrics = false;
+        clear_metrics |= (osd_map.is_out(osd_id) && osd_map.is_down(osd_id));
+        clear_metrics |= osd_map.is_destroyed(osd_id);
+        if (clear_metrics) {
+          // clear any health metrics for an OSD that is (out and down) or destroyed
+          std::lock_guard l(daemon->lock);
+          daemon->daemon_health_metrics.clear();
+        }
       }
 
       bool update_meta = false;

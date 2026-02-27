@@ -1,11 +1,17 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_SCRUB_TYPES_H
 #define CEPH_SCRUB_TYPES_H
 
+#include <cstdint>
+#include <map>
+#include <vector>
+
 #include <fmt/ranges.h>
 
+#include "include/buffer.h"
+#include "include/types.h" // for epoch_t
 #include "osd/osd_types.h"
 
 // wrappers around scrub types to offer the necessary bits other than

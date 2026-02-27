@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #include "pg.h"
 
@@ -480,7 +480,8 @@ void PG::prepare_write(pg_info_t &info,
 std::pair<ghobject_t, bool>
 PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
 {
-  logger().info("removing pg {}", pgid);
+  LOG_PREFIX(PG::do_delete_work);
+  DEBUGDPP("removing pg {}", *this, pgid);
   auto fut = interruptor::make_interruptible(
     shard_services.get_store().list_objects(
       coll_ref,
@@ -490,7 +491,7 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
 
   auto [objs_to_rm, next] = fut.get();
   if (objs_to_rm.empty()) {
-    logger().info("all objs removed, removing coll for {}", pgid);
+    DEBUGDPP("all objs removed, removing coll for {}", *this, pgid);
     t.remove(coll_ref->get_cid(), pgid.make_snapmapper_oid());
     t.remove(coll_ref->get_cid(), pgmeta_oid);
     t.remove_collection(coll_ref->get_cid());
@@ -500,17 +501,19 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
     });
     return {next, false};
   } else {
+    DEBUGDPP("pg {}, removing {} objects in this batch",
+        *this, pgid, objs_to_rm.size());
     for (auto &obj : objs_to_rm) {
       if (obj == pgmeta_oid || obj.is_internal_pg_local()) {
         continue;
       }
-      logger().trace("pg {}, removing obj {}", pgid, obj);
+      TRACEDPP("pg {}, removing obj {}", *this, pgid, obj);
       t.remove(coll_ref->get_cid(), obj);
     }
     t.register_on_commit(
-      new LambdaContext([this](int r) {
+      new LambdaContext([this, FNAME](int r) {
       ceph_assert(r == 0);
-      logger().trace("triggering more pg delete {}", pgid);
+      DEBUGDPP("triggering more pg delete {}", *this, pgid);
       (void) shard_services.start_operation<LocalPeeringEvent>(
         this,
         pg_whoami,
@@ -630,7 +633,7 @@ void PG::on_active_actmap()
       publish_stats_to_osd();
     });
   } else {
-    logger().debug("{}: pg not clean, skipping snap trim");
+    logger().debug("pg not clean, skipping snap trim");
     ceph_assert(!peering_state.state_test(PG_STATE_SNAPTRIM));
   }
 }
@@ -657,6 +660,69 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
     logger().info("{}: {} new removed snaps {}, snap_trimq now{}",
                   *this, __func__, it->second, snap_trimq);
     assert(!bad || !local_conf().get_val<bool>("osd_debug_verify_cached_snaps"));
+  }
+}
+
+PG::interruptible_future<bool> PG::do_recover_missing(
+  const hobject_t& soid,
+  const osd_reqid_t& reqid)
+{
+  LOG_PREFIX(PG::do_recover_missing);
+  DEBUGDPP(
+    "reqid {} check for recovery, {}",
+    *this, reqid, soid);
+  assert(is_primary());
+  eversion_t ver;
+  auto &missing_loc = peering_state.get_missing_loc();
+  bool needs_recovery_or_backfill = false;
+
+  if (is_unreadable_object(soid)) {
+    DEBUGDPP(
+      "reqid {}, {} is unreadable",
+      *this, reqid, soid);
+    ceph_assert(missing_loc.needs_recovery(soid, &ver));
+    needs_recovery_or_backfill = true;
+  }
+
+  if (is_degraded_or_backfilling_object(soid)) {
+    DEBUGDPP(
+      "reqid {}, {} is degraded or backfilling",
+      *this, reqid, soid);
+    if (missing_loc.needs_recovery(soid, &ver)) {
+      needs_recovery_or_backfill = true;
+    }
+  }
+
+  if (!needs_recovery_or_backfill) {
+    DEBUGDPP(
+      "reqid {} nothing to recover {}",
+      *this, reqid, soid);
+    co_return false;
+  }
+
+  if (peering_state.get_missing_loc().is_unfound(soid)) {
+    co_return true;
+  }
+  DEBUGDPP(
+    "reqid {} need to wait for recovery, {} version {}",
+    *this, reqid, soid);
+  if (recovery_backend->is_recovering(soid)) {
+    DEBUGDPP(
+      "reqid {} object {} version {}, already recovering",
+      *this, reqid, soid, ver);
+    co_await PG::interruptor::make_interruptible(
+      recovery_backend->get_recovering(
+	soid).wait_for_recovered());
+    co_return false;
+  } else {
+    DEBUGDPP(
+      "reqid {} object {} version {}, starting recovery",
+      *this, reqid, soid, ver);
+    auto [op, fut] =
+      shard_services.start_operation<UrgentRecovery>(
+        soid, ver, this, shard_services, get_osdmap_epoch());
+    co_await PG::interruptor::make_interruptible(std::move(fut));
+    co_return false;
   }
 }
 
@@ -730,7 +796,8 @@ seastar::future<> PG::init(
         t.touch(coll_ref->get_cid(), pgid.make_snapmapper_oid());
       }
     },
-    ::crimson::ct_error::assert_all{"unexpected eio"}
+    ::crimson::ct_error::assert_all{fmt::format(
+      "{} {} unexpected eio", *this, __func__).c_str()}
   );
 }
 
@@ -1000,12 +1067,12 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
   const std::error_code e,
   ceph_tid_t rep_tid)
 {
-  // as with submit_executer, need to ensure that log numbering and submission
-  // are atomic
-  co_await interruptor::make_interruptible(submit_lock.lock());
   auto unlocker = seastar::defer([this] {
     submit_lock.unlock();
   });
+  // as with submit_executer, need to ensure that log numbering and submission
+  // are atomic
+  co_await interruptor::make_interruptible(submit_lock.lock());
   LOG_PREFIX(PG::submit_error_log);
   DEBUGDPP("{} rep_tid: {} error: {}",
 	   *this, *m, rep_tid, e);
@@ -1029,8 +1096,26 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
     log_entries, t, peering_state.get_pg_trim_to(),
     peering_state.get_pg_committed_to());
 
-
   set<pg_shard_t> waiting_on;
+
+  waiting_on.insert(pg_whoami);
+
+  // preapre log_entry_update_waiting_on prior to sending requests
+  for (const auto &peer: get_acting_recovery_backfill()) {
+    if (peer == pg_whoami) {
+      continue;
+    }
+    ceph_assert(peering_state.get_peer_missing().count(peer));
+    ceph_assert(peering_state.has_peer_info(peer));
+    waiting_on.insert(peer);
+  }
+
+  DEBUGDPP("inserting rep_tid {} waiting on {}", *this, rep_tid, waiting_on);
+  log_entry_update_waiting_on.insert(
+    std::make_pair(rep_tid,
+                   log_update_t{std::move(waiting_on)}));
+
+  // Send missing_requests to peers
   for (const auto &peer: get_acting_recovery_backfill()) {
     if (peer == pg_whoami) {
       continue;
@@ -1046,7 +1131,6 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
       rep_tid,
       peering_state.get_pg_trim_to(),
       peering_state.get_pg_committed_to());
-    waiting_on.insert(peer);
 
     DEBUGDPP("sending log missing_request (rep_tid: {} entries: {}) to osd {}",
 	     *this, rep_tid, log_entries, peer.osd);
@@ -1056,11 +1140,7 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
 	std::move(log_m),
 	get_osdmap_epoch()));
   }
-  waiting_on.insert(pg_whoami);
-  DEBUGDPP("inserting rep_tid {}", *this, rep_tid);
-  log_entry_update_waiting_on.insert(
-    std::make_pair(rep_tid,
-		   log_update_t{std::move(waiting_on)}));
+
   co_await interruptor::make_interruptible(
     shard_services.get_store().do_transaction(
       get_collection_ref(), std::move(t)
@@ -1078,8 +1158,19 @@ PG::run_executer_fut PG::run_executer(
 {
   LOG_PREFIX(PG::run_executer);
   auto rollbacker = ox.create_rollbacker(
-    [obc_data = duplicate_obc_data(obc)](auto &obc) mutable {
+    [FNAME, obc_data = duplicate_obc_data(obc), &ox, this](auto &obc) mutable {
+      // First, revert the OBC state
       obc->update_from(obc_data);
+      // Then clean up any prepared clone OBCs
+      if (ox.has_cloning_ctx()) {
+        const auto coid = ox.get_cloning_coid();
+        DEBUGDPP("cleaning up clone OBC for {} reqid={}",
+        FNAME, coid, ox.get_message().get_reqid());
+        // Use single-key clear by passing [coid, coid] to avoid impacting other clones
+        this->obc_registry.clear_range(coid, coid);
+        // Reset the cloning context directly
+        ox.reset_cloning_ctx();
+      }
     });
   auto rollback_on_error = seastar::defer([&rollbacker] {
     rollbacker.rollback_obc_if_modified();
@@ -1125,12 +1216,12 @@ PG::submit_executer_fut PG::submit_executer(
   LOG_PREFIX(PG::submit_executer);
   DEBUGDPP("", *this);
 
-  // we need to build the pg log entries and submit the transaction
-  // atomically to ensure log ordering
-  co_await interruptor::make_interruptible(submit_lock.lock());
   auto unlocker = seastar::defer([this] {
     submit_lock.unlock();
   });
+  // we need to build the pg log entries and submit the transaction
+  // atomically to ensure log ordering
+  co_await interruptor::make_interruptible(submit_lock.lock());
 
   auto [submitted, completed] = co_await std::move(
     ox
@@ -1221,8 +1312,10 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
   DEBUGDPP("{}", *this, *req);
 
   ceph::os::Transaction txn;
-  auto encoded_txn = req->get_data().cbegin();
-  decode(txn, encoded_txn);
+  auto encoded_txn_p = req->get_middle().cbegin();
+  auto encoded_txn_d = req->get_data().cbegin();
+  txn.decode(req->get_middle().length() != 0 ? encoded_txn_p : encoded_txn_d,
+             encoded_txn_d);
   auto p = req->logbl.cbegin();
   std::vector<pg_log_entry_t> log_entries;
   decode(log_entries, p);
@@ -1298,7 +1391,7 @@ void PG::log_operation(
 
   if (!is_primary()) { // && !is_ec_pg()
     DEBUGDPP("on replica, clearing obc", *this);
-    replica_clear_repop_obc(logv);
+    clear_repop_obc(logv);
   }
   if (!logv.empty()) {
     scrubber.on_log_update(logv.rbegin()->version);
@@ -1312,9 +1405,9 @@ void PG::log_operation(
                            false);
 }
 
-void PG::replica_clear_repop_obc(
+void PG::clear_repop_obc(
   const std::vector<pg_log_entry_t> &logv) {
-  LOG_PREFIX(PG::replica_clear_repop_obc);
+  LOG_PREFIX(PG::clear_repop_obc);
   DEBUGDPP("clearing obc for {} log entries", *this, logv.size());
   for (auto &&e: logv) {
     DEBUGDPP("clearing entry for {} from: {} to: {}",
@@ -1405,8 +1498,9 @@ PG::interruptible_future<> PG::do_update_log_missing_reply(
       log_entry_update_waiting_on.erase(it);
     }
   } else {
-    logger().error("{} : {} got reply {} on unknown tid {}",
-      __func__, peering_state.get_info().pgid, *m, m->get_tid());
+   ceph_abort_msg(fmt::format(
+     "{} : {} got reply {} on unknown tid {}",
+     __func__, peering_state.get_info().pgid, *m, m->get_tid()));
   }
   return seastar::now();
 }
@@ -1458,6 +1552,7 @@ seastar::future<> PG::stop()
   cancel_remote_recovery_reservation();
   check_readable_timer.cancel();
   renew_lease_timer.cancel();
+  backend->on_actingset_changed(false);
   return osdmap_gate.stop().then([this] {
     return wait_for_active_blocker.stop();
   }).then([this] {
@@ -1523,8 +1618,7 @@ bool PG::can_discard_op(const MOSDOp& m) const {
     return true;
   }
 
-  if ((m.get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-                        CEPH_OSD_FLAG_LOCALIZE_READS))
+  if ((m.get_flags() & CEPH_OSD_FLAGS_DIRECT_READ)
     && !is_primary()
     && (m.get_map_epoch() <
         peering_state.get_info().history.same_interval_since))
@@ -1536,6 +1630,15 @@ bool PG::can_discard_op(const MOSDOp& m) const {
       // (us).
       return true;
     }
+
+  // Note: the Objecter will resend on pg split
+  // hence we can discard ops here.
+  // Refer: https://github.com/ceph/ceph/pull/13235
+  if (m.get_map_epoch() < peering_state.get_info().history.last_epoch_split) {
+    logger().debug("{} pg split in {} dropping!", __func__,
+        peering_state.get_info().history.last_epoch_split);
+    return true;
+  }
   return __builtin_expect(m.get_map_epoch()
       < peering_state.get_info().history.same_primary_since, false);
 }
@@ -1654,9 +1757,10 @@ void PG::reset_pglog_based_recovery_op() {
 }
 
 void PG::cancel_pglog_based_recovery_op() {
-  ceph_assert(pglog_based_recovery_op);
-  pglog_based_recovery_op->cancel();
-  reset_pglog_based_recovery_op();
+  if (pglog_based_recovery_op) {
+    pglog_based_recovery_op->cancel();
+    reset_pglog_based_recovery_op();
+  }
 }
 
 void PG::C_PG_FinishRecovery::finish(int r) {

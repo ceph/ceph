@@ -1,3 +1,5 @@
+.. _radosgw-compression:
+
 ===========
 Compression
 ===========
@@ -5,10 +7,9 @@ Compression
 .. versionadded:: Kraken
 
 The Ceph Object Gateway supports server-side compression of uploaded objects.
-using any of the existing compression plugins.
 
 .. note:: The Reef release added a :ref:`feature_compress_encrypted` zonegroup
-   feature to enable compression with `Server-Side Encryption`_.
+   feature to enable compression with :ref:`Server-Side Encryption <radosgw-encryption>`.
 
 Supported compression plugins include the following:
 
@@ -16,6 +17,16 @@ Supported compression plugins include the following:
 * snappy
 * zlib
 * zstd
+
+.. note:: Ceph Object Gateway compression is performed by RGW daemons only
+   for RGW objects, and is distinct from BlueStore compression that is performed 
+   by OSDs at pool granularity. It is typical to only enable one or the other. 
+   Enabling at both levels does not cause a problem, but one should make the decision 
+   based on the use case. If your cluster only serves object storage and the nodes 
+   where RGW runs have more available CPU than OSD nodes, RGW level compression may be appealing. 
+   Compressing at the OSD level does mean compressing the same user data more 
+   than once since it is post-replication, but in a cluster with far more OSDs 
+   than RGWs this strategy may result in better performance.
 
 Configuration
 =============
@@ -34,13 +45,17 @@ Compression settings apply to all new objects uploaded to buckets using this
 placement target. Compression can be disabled by setting the ``type`` to an
 empty string or ``none``.
 
-For example::
+For example:
 
-  $ radosgw-admin zone placement modify \
-        --rgw-zone default \
-        --placement-id default-placement \
-        --storage-class STANDARD \
-        --compression zlib
+.. prompt:: bash #
+
+   radosgw-admin zone placement modify --rgw-zone default \
+                                         --placement-id default-placement \
+                                         --storage-class STANDARD \
+                                         --compression zlib
+
+::
+
   {
   ...
       "placement_pools": [
@@ -63,7 +78,7 @@ For example::
   }
 
 .. note:: A ``default`` zone is created for you if you have not done any
-   previous `Multisite Configuration`_.
+   previous :ref:`Multisite Configuration <multisite>`.
 
 
 Statistics
@@ -72,7 +87,7 @@ Statistics
 Run the ``radosgw-admin bucket stats`` command to see compression statistics
 for a given bucket:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin bucket stats --bucket=<name>
 
@@ -100,6 +115,3 @@ uncompressed data.
 The ``size_utilized`` and ``size_kb_utilized`` fields represent the total
 size of compressed data, in bytes and kilobytes respectively.
 
-
-.. _`Server-Side Encryption`: ../encryption
-.. _`Multisite Configuration`: ../multisite

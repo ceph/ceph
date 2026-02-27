@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -449,6 +449,19 @@ public:
   }
 
   version_t get_last_user_version() const;
+
+  bool has_cloning_ctx() const {
+    return cloning_ctx != nullptr;
+  }
+
+  const hobject_t& get_cloning_coid() const {
+    ceph_assert(has_cloning_ctx());
+    return cloning_ctx->coid;
+  }
+
+  void reset_cloning_ctx() {
+    cloning_ctx.reset();
+  }
 
   ObjectContextRef prepare_clone(
     const hobject_t& coid,

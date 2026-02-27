@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -329,7 +329,7 @@ public:
         crimson::get_logger(ceph_subsys_ms).error(
           "{} try_enter_out_dispatching() got wrong io_state {}",
           conn, io_state);
-        ceph_abort("impossible");
+        ceph_abort_msg("impossible");
       }
     }
 

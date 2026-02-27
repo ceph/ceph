@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -1485,6 +1485,17 @@ public:
     return ::seastar::internal::when_all_succeed_impl(
 	futurize_invoke_if_func(std::forward<FutOrFuncs>(fut_or_funcs))...);
   }
+
+  // This is a simpler implemation than seastar::when_all_succeed.
+  // We are not using ::seastar::internal::complete_when_all
+  template <typename T>
+  static inline auto when_all_succeed(std::vector<interruptible_future<InterruptCond, T>>&& futures) noexcept {
+    return interruptor::parallel_for_each(futures,
+    [] (auto&& ifut) -> interruptible_future<InterruptCond, T> {
+      return std::move(ifut);
+    });
+  }
+
 
   template <typename Func,
 	    typename Result = futurize_t<std::invoke_result_t<Func>>>

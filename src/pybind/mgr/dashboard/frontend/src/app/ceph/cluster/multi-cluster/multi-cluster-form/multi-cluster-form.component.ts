@@ -1,10 +1,11 @@
 import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
 import { AbstractControl, FormControl, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, USER } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -14,14 +15,12 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-multi-cluster-form',
   templateUrl: './multi-cluster-form.component.html',
-  styleUrls: ['./multi-cluster-form.component.scss']
+  styleUrls: ['./multi-cluster-form.component.scss'],
+  standalone: false
 })
 export class MultiClusterFormComponent implements OnInit, OnDestroy {
   @Output()
   submitAction = new EventEmitter();
-  readonly endpoints = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{2,5}\/?$/;
-  readonly ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
-  readonly ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
   clusterApiUrlCmd = 'ceph mgr services';
   remoteClusterForm: CdFormGroup;
   connectionVerified: boolean;
@@ -35,47 +34,101 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
   clusterUsers: string[];
   clusterUrlUserMap: Map<string, string>;
   hubUrl: string;
+  loading = false;
+  formPatched = false;
+  clusterTokenStatus: { [key: string]: any } = {};
 
   constructor(
     public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService,
-    private multiClusterService: MultiClusterService
+    private multiClusterService: MultiClusterService,
+    private router: Router
   ) {
     this.subs.add(
       this.multiClusterService.subscribe((resp: any) => {
         this.hubUrl = resp['hub_url'];
       })
     );
-    this.createForm();
+    this.prepareFormForAction();
   }
+
   ngOnInit(): void {
-    if (this.action === 'edit') {
-      this.remoteClusterForm.get('remoteClusterUrl').setValue(this.cluster.url);
-      this.remoteClusterForm.get('clusterAlias').setValue(this.cluster.cluster_alias);
-      this.remoteClusterForm.get('ssl').setValue(this.cluster.ssl_verify);
-      this.remoteClusterForm.get('ssl_cert').setValue(this.cluster.ssl_certificate);
+    this.createForm();
+    const clusterName = this.router.url.split('/').pop();
+    this.subs.add(
+      this.multiClusterService.subscribe((resp: any) => {
+        if (resp && resp['config']) {
+          this.clustersData = Object.values(resp['config']).flat() as MultiCluster[];
+          this.cluster = this.clustersData.find((c) => c.name === clusterName);
+          [this.clusterAliasNames, this.clusterUrls, this.clusterUsers] = [
+            'cluster_alias',
+            'url',
+            USER
+          ].map((prop) => this.clustersData.map((c) => (c as any)[prop]));
+          if (!this.formPatched && this.cluster) {
+            this.formPatched = true;
+            this.prepareEditForm(this.cluster);
+            this.prepareReconnectForm(this.cluster);
+          }
+        }
+      })
+    );
+
+    this.subs.add(
+      this.multiClusterService.subscribeClusterTokenStatus((resp: object) => {
+        this.clusterTokenStatus = resp;
+        this.checkClusterConnectionStatus();
+      })
+    );
+  }
+
+  checkClusterConnectionStatus() {
+    if (this.clusterTokenStatus && this.clustersData) {
+      this.clustersData.forEach((cluster: MultiCluster) => {
+        const clusterStatus = this.clusterTokenStatus[cluster.name];
+        if (clusterStatus !== undefined) {
+          cluster.cluster_connection_status = clusterStatus.status;
+          cluster.ttl = clusterStatus.time_left;
+        } else {
+          cluster.cluster_connection_status = 2;
+        }
+        if (cluster.cluster_alias === 'local-cluster') {
+          cluster.cluster_connection_status = 0;
+        }
+      });
     }
-    if (this.action === 'reconnect') {
-      this.remoteClusterForm.get('remoteClusterUrl').setValue(this.cluster.url);
+  }
+
+  prepareEditForm(cluster: MultiCluster) {
+    if (this.action === 'Edit') {
+      this.remoteClusterForm.get('remoteClusterUrl').setValue(cluster.url);
       this.remoteClusterForm.get('remoteClusterUrl').disable();
-      this.remoteClusterForm.get('clusterAlias').setValue(this.cluster.cluster_alias);
-      this.remoteClusterForm.get('clusterAlias').disable();
-      this.remoteClusterForm.get('username').setValue(this.cluster.user);
+      this.remoteClusterForm.get('clusterAlias').setValue(cluster.cluster_alias);
+      this.remoteClusterForm.get('username').setValue(cluster.user);
       this.remoteClusterForm.get('username').disable();
-      this.remoteClusterForm.get('ssl').setValue(this.cluster.ssl_verify);
-      this.remoteClusterForm.get('ssl_cert').setValue(this.cluster.ssl_certificate);
+      this.remoteClusterForm.get('ssl').setValue(cluster.ssl_verify);
+      this.remoteClusterForm.get('ssl_cert').setValue(cluster.ssl_certificate);
     }
-    [this.clusterAliasNames, this.clusterUrls, this.clusterUsers] = [
-      'cluster_alias',
-      'url',
-      'user'
-    ].map((prop) => this.clustersData?.map((cluster) => cluster[prop]));
+  }
+
+  prepareReconnectForm(cluster: MultiCluster) {
+    if (this.action === 'Reconnect') {
+      this.remoteClusterForm.get('remoteClusterUrl').setValue(cluster.url);
+      this.remoteClusterForm.get('remoteClusterUrl').disable();
+      this.remoteClusterForm.get('clusterAlias').setValue(cluster.cluster_alias);
+      this.remoteClusterForm.get('clusterAlias').disable();
+      this.remoteClusterForm.get('username').setValue(cluster.user);
+      this.remoteClusterForm.get('username').disable();
+      this.remoteClusterForm.get('ssl').setValue(cluster.ssl_verify);
+      this.remoteClusterForm.get('ssl_cert').setValue(cluster.ssl_certificate);
+    }
   }
 
   createForm() {
     this.remoteClusterForm = new CdFormGroup({
       username: new FormControl('', [
+        Validators.required,
         CdValidators.custom('uniqueUrlandUser', (username: string) => {
           let remoteClusterUrl = '';
           if (
@@ -88,33 +141,29 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
             remoteClusterUrl = this.remoteClusterForm.getValue('remoteClusterUrl');
           }
           return (
+            this.action !== 'Edit' &&
             this.remoteClusterForm &&
             this.clusterUrls?.includes(remoteClusterUrl) &&
             this.clusterUsers?.includes(username)
           );
         })
       ]),
-      password: new FormControl(
-        null,
-        CdValidators.custom('requiredNotEdit', (value: string) => {
-          return this.action !== 'edit' && !value;
-        })
-      ),
+      password: new FormControl(null, {
+        validators: [
+          Validators.required,
+          CdValidators.custom('requiredNotEdit', (value: string) => {
+            return this.action !== 'Edit' && !value;
+          })
+        ]
+      }),
       remoteClusterUrl: new FormControl(null, {
         validators: [
-          CdValidators.custom('endpoint', (value: string) => {
-            if (_.isEmpty(value)) {
-              return false;
-            } else {
-              return (
-                !this.endpoints.test(value) &&
-                !this.ipv4Rgx.test(value) &&
-                !this.ipv6Rgx.test(value)
-              );
-            }
-          }),
+          CdValidators.url,
           CdValidators.custom('hubUrlCheck', (remoteClusterUrl: string) => {
-            return this.action === 'connect' && remoteClusterUrl?.includes(this.hubUrl);
+            if (this.action === 'Connect' && remoteClusterUrl?.includes(this.hubUrl)) {
+              return true;
+            }
+            return false;
           }),
           Validators.required
         ]
@@ -124,7 +173,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
           Validators.required,
           CdValidators.custom('uniqueName', (clusterAlias: string) => {
             return (
-              (this.action === 'connect' || this.action === 'edit') &&
+              (this.action === 'Connect' || this.action === 'Edit') &&
               this.clusterAliasNames &&
               this.clusterAliasNames.indexOf(clusterAlias) !== -1 &&
               this.cluster?.cluster_alias &&
@@ -133,8 +182,8 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
           })
         ]
       }),
-      ssl: new FormControl(false),
       ttl: new FormControl(15),
+      ssl: new FormControl(false),
       ssl_cert: new FormControl('', {
         validators: [
           CdValidators.requiredIf({
@@ -147,6 +196,17 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.subs.unsubscribe();
+  }
+
+  prepareFormForAction() {
+    const url = this.router.url;
+    if (url.startsWith('/multi-cluster/manage-clusters/connect')) {
+      this.action = this.actionLabels.CONNECT;
+    } else if (url.startsWith('/multi-cluster/manage-clusters/reconnect')) {
+      this.action = this.actionLabels.RECONNECT;
+    } else if (url.startsWith('/multi-cluster/manage-clusters/edit')) {
+      this.action = this.actionLabels.EDIT;
+    }
   }
 
   handleError(error: any): void {
@@ -167,7 +227,10 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
   handleSuccess(message?: string): void {
     this.notificationService.show(NotificationType.success, message);
     this.submitAction.emit();
-    this.activeModal.close();
+    const currentRoute = '/multi-cluster/manage-clusters';
+    this.multiClusterService.refreshMultiCluster(currentRoute);
+    this.checkClusterConnectionStatus();
+    this.multiClusterService.isClusterAdded(true);
   }
 
   convertToHours(value: number): number {
@@ -194,7 +257,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     };
 
     switch (this.action) {
-      case 'edit':
+      case 'Edit':
         this.subs.add(
           this.multiClusterService
             .editCluster(
@@ -211,14 +274,14 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
             })
         );
         break;
-      case 'reconnect':
+      case 'Reconnect':
         this.subs.add(
           this.multiClusterService
             .reConnectCluster(updatedUrl, username, password, ssl, ssl_certificate, ttl)
             .subscribe(commonSubscribtion)
         );
         break;
-      case 'connect':
+      case 'Connect':
         this.subs.add(
           this.multiClusterService
             .addCluster(

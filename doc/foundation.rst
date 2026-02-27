@@ -30,22 +30,22 @@ Diamond
 * `45Drives <https://45drives.com/>`_
 * `Bloomberg <https://bloomberg.com>`_
 * `IBM <https://ibm.com>`_
+* `Clyso <https://www.clyso.com/en/>`_
+
 
 Platinum
 --------
 
-* `Clyso <https://www.clyso.com/en/>`_
-* `Samsung Electronics <https://samsung.com/>`_
+* `Western Digital <https://westerndigital.com/>`_
 
-Premier
--------
-
-* `OVH <https://www.ovh.com/>`_
 
 Gold
 ----
 
 * `42on <https://www.42on.com/>`_
+* `OVH <https://www.ovh.com/>`_
+* `Samsung Electronics <https://samsung.com/>`_
+
 
 Silver
 ------
@@ -53,9 +53,11 @@ Silver
 * `Canonical <https://www.canonical.com/>`_
 * `CloudFerro <https://cloudferro.com/>`_
 * `croit <http://www.croit.io/>`_
+* `Digital Ocean <http://digitalocean.com/>`_
 * `ISS <http://iss-integration.com/>`_
 * `Intel <http://www.intel.com/>`_
 * `OSNexus <https://osnexus.com/>`_
+* `Sony Interactive <https://sonyinteractive.com/>`_
 
 Associate
 ---------
@@ -99,12 +101,12 @@ Members
 -------
 
 * Brett Kelly (45Drives)
-* Carlos Maltzahn (UCSC) - Associate member representative
+* Enrico Bocchi (CERN) - Associate member representative
 * Dan van der Ster (Clyso) - Ceph Council representative
 * Joachim Kraftmayer (Clyso)
 * Josh Durgin (IBM) - Ceph Council representative
 * Matthew Leonard (Bloomberg)
-* Mike Perez (IBM) - Ceph community manager
+* Anthony Middleton (Linux Foundation) - Ceph Community Manager
 * Neha Ojha (IBM) - Ceph Council Representative
 * Steven Umbehocker (OSNexus) - General member representative
 * Pawel Sadowski (OVH)

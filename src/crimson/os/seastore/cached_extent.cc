@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/transaction.h"
@@ -47,8 +47,6 @@ std::ostream &operator<<(std::ostream &out, CachedExtent::extent_state_t state)
     return out << "INITIAL_WRITE_PENDING";
   case CachedExtent::extent_state_t::MUTATION_PENDING:
     return out << "MUTATION_PENDING";
-  case CachedExtent::extent_state_t::CLEAN_PENDING:
-    return out << "CLEAN_PENDING";
   case CachedExtent::extent_state_t::CLEAN:
     return out << "CLEAN";
   case CachedExtent::extent_state_t::DIRTY:
@@ -72,26 +70,42 @@ std::ostream &operator<<(std::ostream &out, const CachedExtent &ext)
 CachedExtent::~CachedExtent()
 {
   if (parent_index) {
-    assert(is_linked());
+    assert(is_linked_to_index());
     parent_index->erase(*this);
   }
 }
-CachedExtent* CachedExtent::get_transactional_view(Transaction &t) {
-  return get_transactional_view(t.get_trans_id());
-}
-
-CachedExtent* CachedExtent::get_transactional_view(transaction_id_t tid) {
-  auto it = mutation_pending_extents.find(tid, trans_spec_view_t::cmp_t());
-  if (it != mutation_pending_extents.end()) {
-    return (CachedExtent*)&(*it);
-  } else {
+CachedExtent* CachedExtent::maybe_get_transactional_view(Transaction &t) {
+  if (t.is_weak()) {
     return this;
   }
+
+  auto tid = t.get_trans_id();
+  if (is_pending()) {
+    ceph_assert(is_pending_in_trans(tid));
+    return this;
+  }
+
+  if (!mutation_pending_extents.empty()) {
+    auto it = mutation_pending_extents.find(tid, trans_spec_view_t::cmp_t());
+    if (it != mutation_pending_extents.end()) {
+      return (CachedExtent*)&(*it);
+    }
+  }
+
+  if (!retired_transactions.empty()) {
+    auto it = retired_transactions.find(tid, trans_spec_view_t::cmp_t());
+    if (it != retired_transactions.end()) {
+      return nullptr;
+    }
+  }
+
+  return this;
 }
 
 std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
 {
-  out << ", laddr=" << laddr;
+  out << ", laddr=" << laddr
+      << ", seen=" << seen_by_users;
   return print_detail_l(out);
 }
 
@@ -103,10 +117,51 @@ void CachedExtent::set_invalid(Transaction &t) {
   on_invalidated(t);
 }
 
-void LogicalCachedExtent::maybe_set_intermediate_laddr(LBAMapping &mapping) {
-  laddr = mapping.is_indirect()
-    ? mapping.get_intermediate_base()
-    : mapping.get_key();
+std::pair<bool, CachedExtent::viewable_state_t>
+CachedExtent::is_viewable_by_trans(Transaction &t) {
+  ceph_assert(is_valid());
+
+  auto trans_id = t.get_trans_id();
+  if (is_pending()) {
+    ceph_assert(is_pending_in_trans(trans_id));
+    return std::make_pair(true, viewable_state_t::pending);
+  }
+
+  // shared by multiple transactions
+  assert(t.is_in_read_set(this));
+  assert(is_stable_ready());
+
+  auto cmp = trans_spec_view_t::cmp_t();
+  if (mutation_pending_extents.find(trans_id, cmp) !=
+      mutation_pending_extents.end()) {
+    return std::make_pair(false, viewable_state_t::stable_become_pending);
+  }
+
+  if (retired_transactions.find(trans_id, cmp) !=
+      retired_transactions.end()) {
+    assert(t.is_stable_extent_retired(get_paddr(), get_length()));
+    return std::make_pair(false, viewable_state_t::stable_become_retired);
+  }
+
+  return std::make_pair(true, viewable_state_t::stable);
+}
+
+std::ostream &operator<<(
+  std::ostream &out,
+  CachedExtent::viewable_state_t state)
+{
+  switch(state) {
+  case CachedExtent::viewable_state_t::stable:
+    return out << "stable";
+  case CachedExtent::viewable_state_t::pending:
+    return out << "pending";
+  case CachedExtent::viewable_state_t::stable_become_retired:
+    return out << "stable_become_retired";
+  case CachedExtent::viewable_state_t::stable_become_pending:
+    return out << "stable_become_pending";
+  default:
+    __builtin_unreachable();
+  }
 }
 
 bool BufferSpace::is_range_loaded(extent_len_t offset, extent_len_t length) const

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "io_handler.h"
 
@@ -912,7 +912,7 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
       ctx.exit_out_dispatching("switched", conn);
       return seastar::make_ready_future<stop_t>(stop_t::yes);
      default:
-      ceph_abort("impossible");
+      ceph_abort_msg("impossible");
     }
   }).handle_exception_type([this, &ctx](const std::system_error& e) {
     auto io_state = ctx.get_io_state();
@@ -1130,7 +1130,7 @@ void IOHandler::do_in_dispatch()
                 return seastar::now();
               }
               // TODO: message throttler
-              ceph_abort("TODO");
+              ceph_abort_msg("TODO");
               return seastar::now();
             }).then([this, msg_size] {
               // throttle_bytes() logic

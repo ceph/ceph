@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph distributed storage system
  *
@@ -247,7 +248,7 @@ namespace ceph {
 	}
       }
       if (rc == 0) {
-	dout(1) << __func__ << " using plugin " << plg_name << ", " <<  "volume " << ebd_impl->get_devname()
+	dout(1) << __func__ << " using plugin " << plg_name << ", volume " << ebd_impl->get_devname()
 		      << " maps to " << logdevname << dendl;
       } else {
 	dout(10) << __func__ << " no plugin volume maps to " << logdevname << dendl;

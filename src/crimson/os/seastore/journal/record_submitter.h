@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #pragma once
 
@@ -23,8 +23,6 @@ namespace crimson::os::seastore::journal {
 
 class JournalAllocator {
 public:
-  using base_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
   virtual const std::string& get_name() const = 0;
   
   virtual void update_modify_time(record_t& record) = 0;
@@ -237,9 +235,6 @@ class RecordSubmitter {
     FULL      // outstanding_io == io_depth_limit
     // OVERFLOW: outstanding_io >  io_depth_limit is impossible
   };
-
-  using base_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
 
 public:
   RecordSubmitter(std::size_t io_depth,

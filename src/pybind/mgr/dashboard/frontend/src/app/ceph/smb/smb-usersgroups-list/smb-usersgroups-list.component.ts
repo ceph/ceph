@@ -4,7 +4,7 @@ import { BehaviorSubject, Observable, of } from 'rxjs';
 
 import _ from 'lodash';
 
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -23,13 +23,14 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
-export const USERSGROUPS_URL = '/cephfs/smb/standalone';
+export const USERSGROUPS_PATH = 'cephfs/smb/standalone';
 
 @Component({
   selector: 'cd-smb-users-list',
   templateUrl: './smb-usersgroups-list.component.html',
   styleUrls: ['./smb-usersgroups-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(USERSGROUPS_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(USERSGROUPS_PATH) }],
+  standalone: false
 })
 export class SmbUsersgroupsListComponent extends ListWithDetails implements OnInit {
   @ViewChild('groupsNamesTpl', { static: true })
@@ -76,7 +77,7 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
       },
       {
         name: $localize`Linked to cluster`,
-        prop: 'values.linked_to_cluster',
+        prop: 'linked_to_cluster',
         flexGrow: 2
       }
     ];
@@ -130,7 +131,7 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
       itemNames: [usersGroupsId],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('smb/standalone/remove', {
+          task: new FinishedTask(`${USERSGROUPS_PATH}/${URLVerbs.DELETE}`, {
             usersGroupsId: usersGroupsId
           }),
           call: this.smbService.deleteUsersgroups(usersGroupsId)

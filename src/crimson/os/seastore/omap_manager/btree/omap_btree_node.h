@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #pragma once
 
 #include <string>
@@ -14,6 +15,9 @@
 #include "crimson/os/seastore/omap_manager/btree/omap_types.h"
 
 namespace crimson::os::seastore::omap_manager{
+
+const std::string BEGIN_KEY = "";
+const std::string END_KEY(64, (char)(-1));
 
 struct omap_context_t {
   TransactionManager &tm;
@@ -30,8 +34,6 @@ enum class mutation_status_t : uint8_t {
 };
 
 struct OMapNode : LogicalChildNode {
-  using base_iertr = OMapManager::base_iertr;
-
   using OMapNodeRef = TCachedExtentRef<OMapNode>;
 
   struct mutation_result_t {
@@ -52,7 +54,10 @@ struct OMapNode : LogicalChildNode {
   explicit OMapNode(ceph::bufferptr &&ptr) : LogicalChildNode(std::move(ptr)) {}
   explicit OMapNode(extent_len_t length) : LogicalChildNode(length) {}
   OMapNode(const OMapNode &other)
-  : LogicalChildNode(other) {}
+  : LogicalChildNode(other),
+    root(other.root),
+    begin(other.begin),
+    end(other.end) {}
 
   using get_value_iertr = base_iertr;
   using get_value_ret = OMapManager::omap_get_value_ret;
@@ -60,7 +65,8 @@ struct OMapNode : LogicalChildNode {
     omap_context_t oc,
     const std::string &key) = 0;
 
-  using insert_iertr = base_iertr;
+  using insert_iertr = base_iertr::extend<
+    crimson::ct_error::value_too_large>;
   using insert_ret = insert_iertr::future<mutation_result_t>;
   virtual insert_ret insert(
     omap_context_t oc,
@@ -72,6 +78,21 @@ struct OMapNode : LogicalChildNode {
   virtual rm_key_ret rm_key(
     omap_context_t oc,
     const std::string &key) = 0;
+
+  using rm_key_range_iertr = base_iertr;
+  using rm_key_range_ret = rm_key_range_iertr::future<mutation_result_t>;
+  using key_range_t = OMapManager::key_range_t;
+  virtual rm_key_range_ret rm_key_range(
+    omap_context_t oc,
+    key_range_t &key_range) = 0;
+
+  using iterate_iertr = base_iertr;
+  using iterate_ret = OMapManager::omap_iterate_ret;
+  using omap_iterate_cb_t = OMapManager::omap_iterate_cb_t;
+  virtual iterate_ret iterate(
+    omap_context_t oc,
+    ObjectStore::omap_iter_seek_t &start_from,
+    omap_iterate_cb_t callback) = 0;
 
   using omap_list_config_t = OMapManager::omap_list_config_t;
   using list_iertr = base_iertr;
@@ -98,7 +119,8 @@ struct OMapNode : LogicalChildNode {
           <std::tuple<OMapNodeRef, OMapNodeRef, std::string>>;
   virtual make_balanced_ret make_balanced(
     omap_context_t oc,
-    OMapNodeRef _right) = 0;
+    OMapNodeRef _right,
+    uint32_t pivot_idx) = 0;
 
   virtual omap_node_meta_t get_node_meta() const = 0;
   virtual bool extent_will_overflow(
@@ -109,13 +131,38 @@ struct OMapNode : LogicalChildNode {
   virtual uint32_t get_node_size() = 0;
 
   virtual ~OMapNode() = default;
+
+  virtual bool exceeds_max_kv_limit(
+    const std::string &key,
+    const ceph::bufferlist &value) const = 0;
+
+  void init_range(std::string _begin, std::string _end) {
+    assert(begin.empty());
+    assert(end.empty());
+    if (_begin == BEGIN_KEY && _end == END_KEY) {
+      root = true;
+    }
+    begin = std::move(_begin);
+    end = std::move(_end);
+  }
+  const std::string &get_begin() const {
+    return begin;
+  }
+  const std::string &get_end() const {
+    return end;
+  }
+  bool is_btree_root() const { return root; }
+protected:
+  void set_root(bool is_root) {
+    root = is_root;
+  }
+private:
+  bool root = false;
+  std::string begin;
+  std::string end;
 };
 
 using OMapNodeRef = OMapNode::OMapNodeRef;
-
-using omap_load_extent_iertr = OMapNode::base_iertr;
-omap_load_extent_iertr::future<OMapNodeRef>
-omap_load_extent(omap_context_t oc, laddr_t laddr, depth_t depth);
 
 }
 

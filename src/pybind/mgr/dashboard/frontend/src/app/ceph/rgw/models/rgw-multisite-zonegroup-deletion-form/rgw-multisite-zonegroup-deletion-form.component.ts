@@ -1,37 +1,44 @@
-import { AfterViewInit, Component, OnInit } from '@angular/core';
+import { AfterViewInit, Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { PoolService } from '~/app/shared/api/pool.service';
+
+import { RgwZonegroupMeta } from '~/app/ceph/rgw/models/rgw-multisite';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdForm } from '~/app/shared/forms/cd-form';
 import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-rgw-multisite-zonegroup-deletion-form',
   templateUrl: './rgw-multisite-zonegroup-deletion-form.component.html',
-  styleUrls: ['./rgw-multisite-zonegroup-deletion-form.component.scss']
+  styleUrls: ['./rgw-multisite-zonegroup-deletion-form.component.scss'],
+  standalone: false
 })
-export class RgwMultisiteZonegroupDeletionFormComponent implements OnInit, AfterViewInit {
+export class RgwMultisiteZonegroupDeletionFormComponent
+  extends CdForm
+  implements OnInit, AfterViewInit {
   zonegroupData$: any;
   poolList$: any;
   zonesPools: Array<any> = [];
-  zonegroup: any;
+  zonegroup: RgwZonegroupMeta;
   zonesList: Array<any> = [];
   zonegroupForm: CdFormGroup;
   displayText: boolean = false;
   includedPools: Set<string> = new Set<string>();
 
   constructor(
-    public activeModal: NgbActiveModal,
+    @Optional() @Inject('zonegroup') public zonegroupInput: RgwZonegroupMeta,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService,
     private rgwZonegroupService: RgwZonegroupService,
     private poolService: PoolService,
     private rgwZoneService: RgwZoneService
   ) {
+    super();
+    this.zonegroup = zonegroupInput;
     this.createForm();
   }
 
@@ -52,13 +59,18 @@ export class RgwMultisiteZonegroupDeletionFormComponent implements OnInit, After
 
   submit() {
     this.rgwZonegroupService
-      .delete(this.zonegroup.name, this.zonegroupForm.value.deletePools, this.includedPools)
+      .delete(
+        this.zonegroup.name,
+        this.zonegroupForm.value.deletePools,
+        this.includedPools,
+        this.zonegroup.parent
+      )
       .subscribe(() => {
         this.notificationService.show(
           NotificationType.success,
           $localize`Zonegroup: '${this.zonegroup.name}' deleted successfully`
         );
-        this.activeModal.close();
+        this.closeModal();
       });
   }
 

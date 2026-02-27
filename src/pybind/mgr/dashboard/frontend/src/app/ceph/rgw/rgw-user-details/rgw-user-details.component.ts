@@ -14,11 +14,13 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { Permissions } from '~/app/shared/models/permissions';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { USER } from '~/app/shared/constants/app.constants';
 
 @Component({
   selector: 'cd-rgw-user-details',
   templateUrl: './rgw-user-details.component.html',
-  styleUrls: ['./rgw-user-details.component.scss']
+  styleUrls: ['./rgw-user-details.component.scss'],
+  standalone: false
 })
 export class RgwUserDetailsComponent implements OnChanges, OnInit {
   @ViewChild('accessKeyTpl')
@@ -113,7 +115,7 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
         });
       }
 
-      this.keys = _.sortBy(this.keys, 'user');
+      this.keys = _.sortBy(this.keys, USER);
     }
   }
 
@@ -135,5 +137,15 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
         modalRef.setValues(key.ref.user, key.ref.secret_key);
         break;
     }
+  }
+
+  extractPolicyNamesFromArns(arnList: string[]) {
+    if (!arnList || arnList.length === 0) {
+      return '-';
+    }
+    return arnList
+      .map((arn) => arn.trim().split('/').pop())
+      .filter(Boolean)
+      .join(', ');
   }
 }

@@ -11,7 +11,6 @@ from nose.tools import eq_ as eq
 from itertools import zip_longest  # type: ignore
 
 from .multisite import *
-from .tools import *
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +48,13 @@ def make_request(conn, method, bucket, key, query_args, headers):
         raise boto.exception.S3ResponseError(result.status, result.reason, result.read())
     return result
 
+def append_query_arg(s, n, v):
+    if not v:
+        return s
+    nv = '{n}={v}'.format(n=n, v=v)
+    if not s:
+        return nv
+    return '{s}&{nv}'.format(s=s, nv=nv)
 
 class MDSearch:
     def __init__(self, conn, bucket_name, query, query_args = None, marker = None):
@@ -252,6 +258,9 @@ class ESZone(Zone):
         def has_role(self, role_name):
             assert False
 
+        def put_role_policy(self, rolename, policyname, policy_document):
+            assert False
+
         def create_topic(self, topicname, attributes):
             assert False
 
@@ -271,6 +280,9 @@ class ESZone(Zone):
             assert False
 
         def list_notifications(self, bucket_name):
+            assert False
+
+        def assume_role(self, role_arn, session_name, policy, duration_seconds):
             assert False
 
     def get_conn(self, credentials):

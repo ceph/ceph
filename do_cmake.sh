@@ -2,7 +2,7 @@
 set -ex
 
 if [ -d .git ]; then
-    git submodule update --init --recursive --progress --recommend-shallow
+    git submodule update --init --recursive --recommend-shallow
 fi
 
 : ${BUILD_DIR:=build}
@@ -19,7 +19,9 @@ if [ -r /etc/os-release ]; then
   source /etc/os-release
   case "$ID" in
       fedora)
-          if [ "$VERSION_ID" -ge "41" ] ; then
+          if [ "$VERSION_ID" -ge "43" ] ; then
+            PYBUILD="3.14"
+          elif [ "$VERSION_ID" -ge "41" ] ; then
             PYBUILD="3.13"
           elif [ "$VERSION_ID" -ge "39" ] ; then
             PYBUILD="3.12"
@@ -87,10 +89,18 @@ ARGS+=" -DCMAKE_C_COMPILER=$c_compiler"
 
 mkdir $BUILD_DIR
 cd $BUILD_DIR
-if type cmake3 > /dev/null 2>&1 ; then
-    CMAKE=cmake3
-else
-    CMAKE=cmake
+
+# Only set CMAKE variable if not already set by user/environment.
+# This allows users to override with a custom cmake binary via environment variable.
+# Priority order: cmake 4.x+ (if available) -> cmake3 -> cmake (fallback)
+if [ -z "${CMAKE}" ]; then
+  if type cmake > /dev/null 2>&1 && cmake --version | grep -qE 'cmake version [4-9]\.'; then
+      CMAKE=cmake
+  elif type cmake3 > /dev/null 2>&1; then
+      CMAKE=cmake3
+  else
+      CMAKE=cmake
+  fi
 fi
 ${CMAKE} $ARGS "$@" $CEPH_GIT_DIR || exit 1
 set +x
@@ -105,13 +115,20 @@ EOF
 echo done.
 
 if [[ ! "$ARGS $@" =~ "-DCMAKE_BUILD_TYPE" ]]; then
-  cat <<EOF
-
+    if [ -d ../.git ]; then
+        printf "
 ****
-WARNING: do_cmake.sh now creates debug builds by default. Performance
-may be severely affected. Please use -DCMAKE_BUILD_TYPE=RelWithDebInfo
+WARNING: do_cmake.sh now creates debug builds by default if .git exists.
+Performance may be severely affected. Please use -DCMAKE_BUILD_TYPE=RelWithDebInfo
 if a performance sensitive build is required.
 ****
-EOF
+"
+    else
+        printf "
+****
+WARNING: do_cmake.sh now creates RelWithDebInfo builds by default when .git is absent.
+****
+"
+    fi
 fi
 

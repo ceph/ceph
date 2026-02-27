@@ -458,7 +458,7 @@ Clock Skew Questions and Answers
 **Can I increase the maximum tolerated clock skew?**
 
   Yes, but we strongly recommend against doing so. The maximum tolerated clock
-  skew is configurable via the ``mon-clock-drift-allowed`` option, but it is
+  skew is configurable via the ``mon_clock_drift_allowed`` option, but it is
   almost certainly a bad idea to make changes to this option. The clock skew
   maximum is in place because clock-skewed monitors cannot be relied upon. The
   current default value has proven its worth at alerting the user before the

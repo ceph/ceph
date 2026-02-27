@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef CEPH_MDS_FLOCK_H
 #define CEPH_MDS_FLOCK_H
 
@@ -7,17 +8,11 @@
 #include "include/types.h" // for client_t
 
 #include <cstdint>
+#include <iosfwd>
 #include <list>
 #include <map>
-#include <ostream>
 
-inline std::ostream& operator<<(std::ostream& out, const ceph_filelock& l) {
-  out << "start: " << l.start << ", length: " << l.length
-      << ", client: " << l.client << ", owner: " << l.owner
-      << ", pid: " << l.pid << ", type: " << (int)l.type
-      << std::endl;
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const ceph_filelock& l);
 
 inline bool ceph_filelock_owner_equal(const ceph_filelock& l, const ceph_filelock& r)
 {
@@ -126,18 +121,10 @@ public:
 
   bool remove_all_from(client_t client);
 
-  void encode(ceph::bufferlist& bl) const {
-    using ceph::encode;
-    encode(held_locks, bl);
-    encode(client_held_lock_counts, bl);
-  }
-  void decode(ceph::bufferlist::const_iterator& bl) {
-    using ceph::decode;
-    decode(held_locks, bl);
-    decode(client_held_lock_counts, bl);
-  }
+  void encode(ceph::bufferlist& bl) const;
+  void decode(ceph::bufferlist::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<ceph_lock_state_t*>& ls);
+  static std::list<ceph_lock_state_t> generate_test_instances();
   bool empty() const {
     return held_locks.empty() && waiting_locks.empty() &&
 	   client_held_lock_counts.empty() &&
@@ -274,22 +261,6 @@ private:
 };
 WRITE_CLASS_ENCODER(ceph_lock_state_t)
 
-inline std::ostream& operator<<(std::ostream &out, const ceph_lock_state_t &l) {
-  out << "ceph_lock_state_t. held_locks.size()=" << l.held_locks.size()
-      << ", waiting_locks.size()=" << l.waiting_locks.size()
-      << ", client_held_lock_counts -- " << l.client_held_lock_counts
-      << "\n client_waiting_lock_counts -- " << l.client_waiting_lock_counts
-      << "\n held_locks -- ";
-    for (auto iter = l.held_locks.begin();
-         iter != l.held_locks.end();
-         ++iter)
-      out << iter->second;
-    out << "\n waiting_locks -- ";
-    for (auto iter =l.waiting_locks.begin();
-         iter != l.waiting_locks.end();
-         ++iter)
-      out << iter->second << "\n";
-  return out;
-}
+std::ostream& operator<<(std::ostream &out, const ceph_lock_state_t &l);
 
 #endif

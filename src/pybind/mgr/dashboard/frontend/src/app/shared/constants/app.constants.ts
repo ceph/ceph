@@ -5,6 +5,7 @@ import { environment } from '~/environments/environment';
 export class AppConstants {
   public static readonly organization = 'ceph';
   public static readonly projectName = 'Ceph Dashboard';
+  public static readonly defaultUser = 'dashboard';
   public static readonly license = 'Free software (LGPL 2.1).';
   public static readonly copyright = 'Copyright(c) ' + environment.year + ' Ceph contributors.';
   public static readonly cephLogo = 'assets/Ceph_Logo.svg';
@@ -32,13 +33,19 @@ export enum URLVerbs {
   /* Non-standard verbs */
   COPY = 'copy',
   CLONE = 'clone',
+  VIEW = 'view',
 
   /* Prometheus wording */
   RECREATE = 'recreate',
   EXPIRE = 'expire',
 
   /* Daemons */
-  RESTART = 'Restart'
+  RESTART = 'Restart',
+
+  /* Multi-cluster */
+  CONNECT = 'connect',
+  RECONNECT = 'reconnect',
+  GATEWAY_GROUP = 'Gateway group'
 }
 
 export enum ActionLabels {
@@ -77,7 +84,12 @@ export enum ActionLabels {
   START = 'Start',
   STOP = 'Stop',
   REDEPLOY = 'Redeploy',
-  RESTART = 'Restart'
+  RESTART = 'Restart',
+
+  /* Multi-cluster */
+  CONNECT = 'connect',
+  RECONNECT = 'reconnect',
+  VIEW = 'View'
 }
 
 @Injectable({
@@ -152,7 +164,7 @@ export class ActionLabelsI18n {
   EXPAND_CLUSTER: string;
   SETUP_MULTISITE_REPLICATION: string;
   NFS_EXPORT: string;
-
+  VIEW: string;
   constructor() {
     /* Create a new item */
     this.CREATE = $localize`Create`;
@@ -244,6 +256,7 @@ export class ActionLabelsI18n {
     this.EXPAND_CLUSTER = $localize`Expand Cluster`;
 
     this.NFS_EXPORT = $localize`Create NFS Export`;
+    this.VIEW = $localize`View`;
   }
 }
 
@@ -370,3 +383,11 @@ export const SSL_CIPHERS = [
   'POLY1305',
   'DHE'
 ];
+
+export const USER = 'user';
+export const VERSION_PREFIX = 'ceph version';
+
+export const CEPHFS_MIRRORING_PAGE_HEADER = {
+  title: $localize`CephFS Mirroring`,
+  description: $localize`Centralised view of all CephFS Mirroring relationships.`
+};

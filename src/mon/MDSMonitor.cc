@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -87,7 +88,7 @@ namespace TOPNSPC::common {
 template<> bool cmd_getval(const cmdmap_t& cmdmap,
 			   string_view k, mds_gid_t &val)
 {
-  return cmd_getval(cmdmap, k, (int64_t&)val);
+  return cmd_getval(cmdmap, k, reinterpret_cast<int64_t&>(val));
 }
 
 template<> bool cmd_getval(const cmdmap_t& cmdmap,

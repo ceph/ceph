@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -657,7 +658,7 @@ CEPH_RADOS_API int rados_cluster_stat(rados_t cluster,
  * @param cluster where to get the fsid
  * @param buf where to write the fsid
  * @param len the size of buf in bytes (should be 37)
- * @returns 0 on success, negative error code on failure
+ * @returns length of the string on success, negative error code on failure
  * @returns -ERANGE if the buffer is too short to contain the
  * fsid
  */

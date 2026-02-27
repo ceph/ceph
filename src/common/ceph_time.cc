@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,6 +19,7 @@
 #include <fmt/chrono.h>
 #include <fmt/ostream.h>
 
+#include "include/rados.h" // for struct ceph_timespec
 #include "log/LogClock.h"
 #include "config.h"
 #include "strtol.h"
@@ -319,6 +321,33 @@ std::chrono::seconds parse_timespan(const std::string& s)
   return r;
 }
 
+std::string
+to_pretty_timedelta(timespan duration)
+{
+  using namespace std::chrono;
+
+  auto duration_seconds = duration_cast<seconds>(duration).count();
+
+  if (duration < seconds{120}) {
+    return fmt::format("{}s", duration_seconds);
+  }
+  if (duration < minutes{120}) {
+    return fmt::format("{}m", duration_seconds / 60);
+  }
+  if (duration < hours{48}) {
+    return fmt::format("{}h", duration_seconds / 3600);
+  }
+  if (duration < hours{24 * 14}) {
+    return fmt::format("{}d", duration_seconds / (3600 * 24));
+  }
+  if (duration < hours{24 * 7 * 12}) {
+    return fmt::format("{}w", duration_seconds / (3600 * 24 * 7));
+  }
+  if (duration < hours{24 * 365 * 2}) {
+    return fmt::format("{}M", duration_seconds / (3600 * 24 * 30));
+  }
+  return fmt::format("{}y", duration_seconds / (3600 * 24 * 365));
+}
 }
 
 namespace std {

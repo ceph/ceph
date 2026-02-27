@@ -6,6 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { AuthStorageService } from '../services/auth-storage.service';
 import { AuthService } from './auth.service';
+import { LocalStorage } from '~/app/shared/enum/local-storage-enum';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -40,7 +41,7 @@ describe('AuthService', () => {
     expect(req.request.body).toEqual(fakeCredentials);
     req.flush(fakeResponse);
     tick();
-    expect(localStorage.getItem('dashboard_username')).toBe('foo');
+    expect(localStorage.getItem(LocalStorage.DASHBOARD_USRENAME)).toBe('foo');
   }));
 
   it('should logout and remove the user', () => {
@@ -51,7 +52,7 @@ describe('AuthService', () => {
     const req = httpTesting.expectOne('api/auth/logout');
     expect(req.request.method).toBe('POST');
     req.flush({ redirect_url: '#/login' });
-    expect(localStorage.getItem('dashboard_username')).toBe(null);
+    expect(localStorage.getItem(LocalStorage.DASHBOARD_USRENAME)).toBe(null);
     expect(router.navigate).toBeCalledTimes(1);
   });
 });

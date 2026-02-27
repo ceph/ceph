@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,6 +19,7 @@
 
 #include "include/compat.h"
 #include "include/str_list.h"
+#include "include/types.h" // for operator<<(std::list)
 #include "common/BackTrace.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
@@ -154,7 +156,7 @@ namespace ceph {
     ceph_pthread_getname(g_assert_thread_name, sizeof(g_assert_thread_name));
 
     BufAppender ba(g_assert_msg, sizeof(g_assert_msg));
-    BackTrace *bt = new ClibBackTrace(1);
+    auto bt = std::make_unique<ClibBackTrace>(1);
     ba.printf("%s: In function '%s' thread %llx time %s\n"
 	     "%s: %d: FAILED ceph_assert(%s)\n",
 	     file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
@@ -212,7 +214,7 @@ namespace ceph {
     g_assert_thread = (unsigned long long)pthread_self();
     ceph_pthread_getname(g_assert_thread_name, sizeof(g_assert_thread_name));
 
-    BackTrace *bt = new ClibBackTrace(1);
+    auto bt = std::make_unique<ClibBackTrace>(1);
     snprintf(g_assert_msg, sizeof(g_assert_msg),
              "%s: In function '%s' thread %llx time %s\n"
 	     "%s: %d: ceph_abort_msg(\"%s\")\n", file, func,
@@ -254,7 +256,7 @@ namespace ceph {
     ceph_pthread_getname(g_assert_thread_name, sizeof(g_assert_thread_name));
 
     BufAppender ba(g_assert_msg, sizeof(g_assert_msg));
-    BackTrace *bt = new ClibBackTrace(1);
+    auto bt = std::make_unique<ClibBackTrace>(1);
     ba.printf("%s: In function '%s' thread %llx time %s\n"
 	      "%s: %d: abort()\n",
 	      file, func, (unsigned long long)pthread_self(), tss.str().c_str(),

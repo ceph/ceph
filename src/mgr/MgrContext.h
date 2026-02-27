@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -35,9 +36,9 @@ public:
         &outbl, &outs, &cond);
   }
 
-  void run(MonClient *monc, const std::string &command, const ceph::buffer::list &inbl)
+  void run(MonClient *monc, const std::string &command, ceph::buffer::list &&inbl)
   {
-    monc->start_mon_command({command}, inbl,
+    monc->start_mon_command({command}, std::move(inbl),
         &outbl, &outs, &cond);
   }
 

@@ -332,7 +332,8 @@ options:
 - name: osd_scrub_min_interval
   type: float
   level: advanced
-  desc: The desired interval between scrubs of a specific PG.
+  desc: The desired interval between scrubs of a specific PG. Note that this option
+    must be set at ``global`` scope, or for both ``mgr`` and``osd``.
   fmt_desc: The desired interval in seconds between scrubs of a specific PG.
   default: 1_day
   see_also:
@@ -341,7 +342,8 @@ options:
 - name: osd_scrub_max_interval
   type: float
   level: advanced
-  desc: Scrub each PG no less often than this interval
+  desc: Scrub each PG no less often than this interval. Note that this option
+    must be set at ``global`` scope, or for both ``mgr`` and``osd``.
   fmt_desc: The maximum interval in seconds for scrubbing each PG.
   default: 7_day
   see_also:
@@ -377,8 +379,9 @@ options:
   type: int
   level: advanced
   desc: Minimum number of objects to deep-scrub in a single chunk
-  fmt_desc: The minimal number of object store chunks to scrub during single operation.
-    Ceph blocks writes to single chunk during scrub.
+  fmt_desc: The minimum number of objects to scrub during single operation. Also
+    serves as a minimal chunk size even after scrubbing is preempted by client
+    operations and the effective chunk size is halved.
   default: 5
   see_also:
   - osd_scrub_chunk_max
@@ -455,15 +458,17 @@ options:
   desc: Automatically repair damaged objects detected during scrub
   fmt_desc: Setting this to ``true`` will enable automatic PG repair when errors
     are found by scrubs or deep-scrubs.  However, if more than
-    ``osd_scrub_auto_repair_num_errors`` errors are found a repair is NOT performed.
+    ``osd_scrub_auto_repair_num_errors`` damaged objects are found
+    a repair is NOT performed.
   default: false
   with_legacy: true
 # only auto-repair when number of errors is below this threshold
 - name: osd_scrub_auto_repair_num_errors
   type: uint
   level: advanced
-  desc: Maximum number of detected errors to automatically repair
-  fmt_desc: Auto repair will not occur if more than this many errors are found.
+  desc: Maximum number of damaged objects to automatically repair
+  fmt_desc: Scrub will not perform automatic repair if more than this many
+    damaged objects are found.
   default: 5
   see_also:
   - osd_scrub_auto_repair
@@ -479,24 +484,25 @@ options:
 - name: osd_deep_scrub_interval
   type: float
   level: advanced
-  desc: Deep scrub each PG (i.e., verify data checksums) at least this often
+  desc: Deep scrub each PG (i.e., verify data checksums) at least this often. Note that this option
+    must be set at ``global`` scope, or for both ``mgr`` and``osd``.
   fmt_desc: The interval for "deep" scrubbing (fully reading all data).
   default: 7_day
   with_legacy: true
 - name: osd_deep_scrub_interval_cv
   type: float
   level: advanced
-  desc: determining the amount of variation in the deep scrub interval
-  long_desc: deep scrub intervals are varied by a random amount to prevent
+  desc: Determines the amount of variation in the deep scrub interval
+  long_desc: Deep scrub intervals are varied by a random amount to prevent
     stampedes. This parameter determines the amount of variation.
-    Technically - osd_deep_scrub_interval_cv is the coefficient of variation for
+    Technically ``osd_deep_scrub_interval_cv`` is the coefficient of variation for
     the deep scrub interval.
   fmt_desc: The coefficient of variation for the deep scrub interval, specified as a
     ratio. On average, the next deep scrub for a PG is scheduled osd_deep_scrub_interval
     after the last deep scrub . The actual time is randomized to a normal distribution
     with a standard deviation of osd_deep_scrub_interval * osd_deep_scrub_interval_cv
     (clamped to within 2 standard deviations).
-    The default value guarantees that 95% of the deep scrubs will be scheduled in the range
+    The default value guarantees that 95% of deep scrubs will be scheduled in the range
     [0.8 * osd_deep_scrub_interval, 1.2 * osd_deep_scrub_interval].
   min: 0
   max: 0.4
@@ -513,7 +519,7 @@ options:
   level: advanced
   desc: Number of bytes to read from an object at a time during deep scrub
   fmt_desc: Read size when doing a deep scrub.
-  default: 512_K
+  default: 4_M
   with_legacy: true
 - name: osd_deep_scrub_keys
   type: int
@@ -1080,6 +1086,7 @@ options:
     of 0 specifies the lowest possible reservation. Any value greater than
     0 and up to 1.0 specifies the minimum IO proportion to reserve for each
     client in terms of a fraction of the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO proportion reserved for each client (default).
   default: 0
@@ -1087,15 +1094,18 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_client_wgt
   type: uint
   level: advanced
   desc: IO share for each client (default) over reservation
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO share for each client (default) over reservation.
   default: 1
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_client_lim
   type: float
   level: advanced
@@ -1105,6 +1115,7 @@ options:
     than 0 and up to 1.0 specifies the upper IO limit over reservation
     that each client receives in terms of a fraction of the OSD's
     maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO limit for each client (default) over reservation.
   default: 0
@@ -1112,6 +1123,7 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_recovery_res
   type: float
   level: advanced
@@ -1120,6 +1132,7 @@ options:
     greater than 0 and up to 1.0 specifies the minimum IO proportion to
     reserve for background recovery operations in terms of a fraction of
     the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO proportion reserved for background recovery (default).
   default: 0
@@ -1127,15 +1140,18 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_recovery_wgt
   type: uint
   level: advanced
   desc: IO share for each background recovery over reservation
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO share for each background recovery over reservation.
   default: 1
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_recovery_lim
   type: float
   level: advanced
@@ -1145,6 +1161,7 @@ options:
     OSD. Any value greater than 0 and up to 1.0 specifies the upper IO
     limit over reservation that background recovery operation receives in
     terms of a fraction of the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO limit for background recovery over reservation.
   default: 0
@@ -1152,6 +1169,7 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_best_effort_res
   type: float
   level: advanced
@@ -1160,6 +1178,7 @@ options:
     greater than 0 and up to 1.0 specifies the minimum IO proportion to
     reserve for background best_effort operations in terms of a fraction
     of the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO proportion reserved for background best_effort (default).
   default: 0
@@ -1167,15 +1186,18 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_best_effort_wgt
   type: uint
   level: advanced
   desc: IO share for each background best_effort over reservation
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO share for each background best_effort over reservation.
   default: 1
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_best_effort_lim
   type: float
   level: advanced
@@ -1185,6 +1207,7 @@ options:
     OSD. Any value greater than 0 and up to 1.0 specifies the upper IO
     limit over reservation that background best_effort operation receives
     in terms of a fraction of the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO limit for background best_effort over reservation.
   default: 0
@@ -1192,6 +1215,7 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_anticipation_timeout
   type: float
   level: advanced
@@ -1536,7 +1560,7 @@ options:
   type: int
   level: advanced
   default: 512
-  fmt_desc: The maximum number of objects per backfill scan.p
+  fmt_desc: The maximum number of objects per backfill scan.
   with_legacy: true
 - name: osd_extblkdev_plugins
   type: str

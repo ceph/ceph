@@ -8,6 +8,7 @@ struct lua_State;
 class req_state;
 class RGWREST;
 class OpsLogSink;
+class RGWOp;
 
 namespace rgw::lua::request {
 
@@ -16,11 +17,18 @@ void create_top_metatable(lua_State* L, req_state* s, const char* op_name);
 
 // execute a lua script in the Request context
 int execute(
-    rgw::sal::Driver* driver,
     RGWREST* rest,
     OpsLogSink* olog,
     req_state *s, 
     RGWOp* op,
     const std::string& script);
+
+int execute(
+    RGWREST* rest,
+    OpsLogSink* olog,
+    req_state *s, 
+    RGWOp* op,
+    const std::string& script,
+    int& script_return_code );
 } // namespace rgw::lua::request
 

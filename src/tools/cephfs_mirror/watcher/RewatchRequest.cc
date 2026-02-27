@@ -1,10 +1,11 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "common/ceph_mutex.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "include/Context.h"
+#include "include/rados.h" // for EBLOCKLISTED
 #include "tools/cephfs_mirror/aio_utils.h"
 #include "RewatchRequest.h"
 

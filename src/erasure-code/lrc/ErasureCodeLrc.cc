@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1104,8 +1105,11 @@ int ErasureCodeLrc::decode_chunks(const shard_id_set &want_to_read,
   }
 
   for (const auto& [shard, ptr] : out) {
-    if (chunk_size == 0) chunk_size = ptr.length();
-    else ceph_assert(chunk_size == ptr.length());
+    if (chunk_size == 0) {
+      chunk_size = ptr.length();
+    } else {
+      ceph_assert(chunk_size == ptr.length());
+    }
     erasures.insert(shard);
   }
 
@@ -1132,10 +1136,12 @@ int ErasureCodeLrc::decode_chunks(const shard_id_set &want_to_read,
       {
         shard_id_t cs(*c);
         if (!erasures.contains(cs)) {
-          if (in.contains(cs)) layer_in[j] = in[cs];
-          else layer_in[j] = out[cs];
-        }
-        else {
+          if (in.contains(cs)) {
+            layer_in[j] = in[cs];
+          } else {
+            layer_in[j] = out[cs];
+          }
+        } else {
           layer_out[j] = out[cs];
         }
         ++j;

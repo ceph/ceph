@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_RBD_MIRROR_IMAGE_MAP_TYPES_H
 #define CEPH_RBD_MIRROR_IMAGE_MAP_TYPES_H
@@ -8,7 +8,7 @@
 #include <map>
 #include <set>
 #include <string>
-#include <boost/variant.hpp>
+#include <variant>
 
 #include "include/buffer.h"
 #include "include/encoding.h"
@@ -60,7 +60,7 @@ typedef std::vector<std::string> InstanceIds;
 typedef std::set<std::string> GlobalImageIds;
 typedef std::map<std::string, ActionType> ImageActionTypes;
 
-enum PolicyMetaType {
+enum PolicyMetaType : uint32_t {
   POLICY_META_TYPE_NONE = 0,
 };
 
@@ -97,8 +97,8 @@ struct PolicyMetaUnknown {
   }
 };
 
-typedef boost::variant<PolicyMetaNone,
-                       PolicyMetaUnknown> PolicyMeta;
+typedef std::variant<PolicyMetaNone,
+		     PolicyMetaUnknown> PolicyMeta;
 
 struct PolicyData {
   PolicyData()
@@ -116,7 +116,7 @@ struct PolicyData {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<PolicyData *> &o);
+  static std::list<PolicyData> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(PolicyData);

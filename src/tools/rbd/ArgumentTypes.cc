@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
@@ -7,7 +7,8 @@
 #include "include/rbd/features.h"
 #include "common/config_proxy.h"
 #include "common/strtol.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+#include "common/XMLFormatter.h"
 #include "global/global_context.h"
 #include <iostream>
 #include <boost/tokenizer.hpp>
@@ -277,6 +278,12 @@ void add_size_option(boost::program_options::options_description *opt) {
   opt->add_options()
     ((IMAGE_SIZE + ",s").c_str(), po::value<ImageSize>()->required(),
      "image size (in M/G/T) [default: M]");
+}
+
+void add_estimated_size_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (IMAGE_ESTIMATED_SIZE.c_str(), po::value<ImageSize>(),
+     "estimated image size (valid only for raw import from stdin, in M/G/T) [default: M]");
 }
 
 void add_sparse_size_option(boost::program_options::options_description *opt) {

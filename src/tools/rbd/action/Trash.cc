@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -97,14 +98,22 @@ int execute_move(const po::variables_map &vm,
   librbd::RBD rbd;
   r = rbd.trash_move(io_ctx, image_name.c_str(), dt);
   if (r < 0) {
-    std::cerr << "rbd: deferred delete error: " << cpp_strerror(r)
-              << std::endl;
+    if (r == -EMLINK) {
+      std::cerr << "rbd: error: image belongs to a group"
+                << std::endl
+                << "Remove the image from the group and try again."
+                << std::endl;
+    } else {
+      std::cerr << "rbd: deferred delete error: " << cpp_strerror(r)
+                << std::endl;
+    }
+    return r;
   }
 
   if (expires_at != "now") {
     std::cout << "rbd: image " << image_name << " will expire at " << exp_time << std::endl;
   }
-  return r;
+  return 0;
 }
 
 void get_remove_arguments(po::options_description *positional,
@@ -161,7 +170,10 @@ int execute_remove(const po::variables_map &vm,
                 << "waiting 30s for the crashed client to timeout."
                 << std::endl;
     } else if (r == -EMLINK) {
-      std::cerr << std::endl
+      // moving to trash an image that belongs to a group is no longer
+      // allowed, this is to handle any image that was trashed earlier
+      std::cerr << "rbd: error: image belongs to a group"
+                << std::endl
                 << "Remove the image from the group and try again."
                 << std::endl;
     } else if (r == -EPERM) {

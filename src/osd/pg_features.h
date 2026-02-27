@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -21,6 +21,7 @@ static constexpr pg_feature_vec_t PG_FEATURE_INCARNATION_1 = 0ull;
 DEFINE_PG_FEATURE(0, 1, PCT)
 
 static constexpr pg_feature_vec_t PG_FEATURE_NONE = 0ull;
-static constexpr pg_feature_vec_t PG_FEATURE_CRIMSON_ALL = 0ull;
+static constexpr pg_feature_vec_t PG_FEATURE_CRIMSON_ALL =
+  PG_FEATURE_PCT;
 static constexpr pg_feature_vec_t PG_FEATURE_CLASSIC_ALL =
   PG_FEATURE_PCT;

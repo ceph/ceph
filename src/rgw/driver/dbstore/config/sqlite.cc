@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -25,8 +25,9 @@
 #include "include/encoding.h"
 #include "common/dout.h"
 #include "common/random_string.h"
+#include "rgw_realm_watcher.h"
 
-#include "driver/rados/rgw_zone.h" // FIXME: subclass dependency
+#include "rgw/rgw_zone.h"
 
 #include "common/connection_pool.h"
 #include "sqlite/connection.h"
@@ -676,6 +677,14 @@ int SQLiteConfigStore::realm_notify_new_period(const DoutPrefixProvider* dpp,
   return -ENOTSUP;
 }
 
+auto SQLiteConfigStore::create_realm_watcher(const DoutPrefixProvider* dpp,
+                                             optional_yield y,
+                                             const RGWRealm& realm)
+  -> std::unique_ptr<RGWRealmWatcher>
+{
+  return nullptr;
+}
+
 int SQLiteConfigStore::list_realm_names(const DoutPrefixProvider* dpp,
                                         optional_yield y, const std::string& marker,
                                         std::span<std::string> entries,
@@ -869,6 +878,14 @@ int SQLiteConfigStore::delete_period(const DoutPrefixProvider* dpp,
     }
     return -EIO;
   }
+  return 0;
+}
+
+int SQLiteConfigStore::update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
+                                           std::string_view period_id, uint32_t epoch)
+{
+  Prefix prefix{*dpp, "dbconfig:sqlite:read_latest_epoch "}; dpp = &prefix;
+  // TODO: implement it later
   return 0;
 }
 

@@ -1,0 +1,16 @@
+<cds-tile class="productive-card"
+          [ngClass]="{'productive-card--shadow': applyShadow}"
+          [cdsLayer]="0">
+  <header class="productive-card-header">
+    <ng-container *ngTemplateOutlet="headerTemplate"></ng-container>
+  </header>
+  <section class="productive-card-section cds--type-body-compact-01"
+           [ngClass]="{'productive-card-section--footer': footerTemplate}">
+    <ng-content></ng-content>
+  </section>
+  @if(!!footerTemplate) {
+  <footer class="productive-card-footer">
+    <ng-container *ngTemplateOutlet="footerTemplate"></ng-container>
+  </footer>
+  }
+</cds-tile>

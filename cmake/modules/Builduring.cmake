@@ -42,4 +42,6 @@ function(build_uring)
     INTERFACE_INCLUDE_DIRECTORIES ${URING_INCLUDE_DIR}
     IMPORTED_LINK_INTERFACE_LANGUAGES "C"
     IMPORTED_LOCATION "${URING_LIBRARY_DIR}/liburing.a")
+
+  add_library(URING::uring ALIAS uring::uring)
 endfunction()

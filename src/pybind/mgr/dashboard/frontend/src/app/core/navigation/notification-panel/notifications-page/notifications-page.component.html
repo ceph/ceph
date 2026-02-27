@@ -1,0 +1,215 @@
+<div
+  cdsGrid
+  [useCssGrid]="true"
+  [fullWidth]="true"
+  class="notifications-page__container">
+  <!-- Left Panel - Notifications List -->
+  <div cdsCol
+       [columnNumbers]="{sm: 4, md: 4, lg: 6}">
+    <cds-search
+      cdsRow
+      [size]="'md'"
+      placeholder="Search notifications..."
+      i18n-placeholder
+      [(ngModel)]="searchText"
+      (valueChange)="onSearch($event)">
+    </cds-search>
+    <cds-structured-list
+      cdsRow
+      class="notifications-list"
+      *ngIf="filteredNotifications.length > 0">
+      <cds-list-row
+        *ngFor="let notification of filteredNotifications; trackBy trackByNotificationId"
+        [class.active]="selectedNotificationID === notification.id"
+        (click)="onNotificationSelect(notification)"
+        class="notification-row">
+        <cds-list-column>
+          <div class="notification-item-content">
+            <h6 class="notification-title">
+              <ng-container *ngIf="notification.prometheusAlert; else regularTitle">
+                {{ notification.prometheusAlert.alertName }}
+                <cds-tag
+                  [type]="notification.prometheusAlert.status === 'active' || notification.prometheusAlert.status === 'firing'?'red':
+                          notification.prometheusAlert.status === 'resolved' ? 'green' : 'blue'"
+                  [size]="'sm'"
+                  class="ml-2">
+                  {{ notification.prometheusAlert.status }}
+                </cds-tag>
+              </ng-container>
+              <ng-template #regularTitle>
+                {{ notification.title }}
+              </ng-template>
+            </h6>
+            <small class="notification-meta">
+              {{ notification.application }}
+              <ng-container *ngIf="notification.prometheusAlert">
+                • {{ notification.prometheusAlert.severity }}
+                <ng-container *ngIf="notification.prometheusAlert.instance">
+                  • {{ notification.prometheusAlert.instance }}
+                </ng-container>
+              </ng-container>
+            </small>
+          </div>
+        </cds-list-column>
+        <cds-list-column nowrap="true">
+          <small class="notification-date">{{ formatDate(notification.timestamp) }}</small>
+        </cds-list-column>
+      </cds-list-row>
+    </cds-structured-list>
+    <div
+      *ngIf="filteredNotifications.length === 0"
+      class="empty-state"
+      cdsRow>
+      <svg
+        cdsIcon="notification"
+        size="20"
+        class="empty-icon"></svg>
+      <p *ngIf="searchText">No notifications match your search</p>
+      <p *ngIf="!searchText">No notifications available</p>
+    </div>
+  </div>
+  <!-- Right Panel - Notifications Details -->
+  <div cdsCol
+       [columnNumbers]="{sm: 12, md: 12, lg: 10}">
+    <div
+      cdsGrid
+      [fullWidth]="true"
+      *ngIf="selectedNotification"
+      class="notification-details">
+      <div cdsCol
+           [columnNumbers]="{sm: 16, md: 16, lg: 16}">
+        <h3 cdsRow>{{ selectedNotification.title }}</h3>
+        <cds-structured-list
+          cdsRow
+          class="details-list mt-4">
+          <cds-list-row>
+            <cds-list-column
+              nowrap="true"
+              class="detail-label">Application:</cds-list-column>
+            <cds-list-column>{{ selectedNotification.application }}</cds-list-column>
+          </cds-list-row>
+          <cds-list-row>
+            <cds-list-column
+              nowrap="true"
+              class="detail-label">Type:</cds-list-column>
+            <cds-list-column>
+              <cds-tag
+                [type]="selectedNotification.type === 0 ? 'red' :
+                        selectedNotification.type === 1 ? 'blue' :
+                        selectedNotification.type === 2 ? 'green' : 'yellow'"
+                [size]="'sm'">
+                {{ selectedNotification.type === 0 ? 'Error' :
+                  selectedNotification.type === 1 ? 'Info' :
+                  selectedNotification.type === 2 ? 'Success' : 'Warning' }}
+              </cds-tag>
+            </cds-list-column>
+          </cds-list-row>
+          <cds-list-row>
+            <cds-list-column
+              nowrap="true"
+              class="detail-label">Date:</cds-list-column>
+            <cds-list-column>{{ formatDate(selectedNotification.timestamp) }}</cds-list-column>
+          </cds-list-row>
+          <cds-list-row>
+            <cds-list-column
+              nowrap="true"
+              class="detail-label">Time:</cds-list-column>
+            <cds-list-column>{{ formatTime(selectedNotification.timestamp) }}</cds-list-column>
+          </cds-list-row>
+          <!-- Prometheus-specific metadata fields -->
+          <ng-container *ngIf="selectedNotification.prometheusAlert">
+            <cds-list-row>
+              <cds-list-column
+                nowrap="true"
+                class="detail-label">Alert Name:</cds-list-column>
+              <cds-list-column>{{ selectedNotification.prometheusAlert.alertName }}</cds-list-column>
+            </cds-list-row>
+            <cds-list-row>
+              <cds-list-column
+                nowrap="true"
+                class="detail-label">Status:</cds-list-column>
+              <cds-list-column>
+                <cds-tag
+                  [type]="selectedNotification.prometheusAlert.status === 'active' || selectedNotification.prometheusAlert.status === 'firing' ? 'red' :
+                          selectedNotification.prometheusAlert.status === 'resolved' ? 'green' :
+                          selectedNotification.prometheusAlert.status === 'suppressed' ? 'gray' : 'blue'"
+                  [size]="'sm'">
+                  {{ selectedNotification.prometheusAlert.status }}
+                </cds-tag>
+              </cds-list-column>
+            </cds-list-row>
+            <cds-list-row>
+              <cds-list-column
+                nowrap="true"
+                class="detail-label">Severity:</cds-list-column>
+              <cds-list-column>
+                <cds-tag
+                  [type]="selectedNotification.prometheusAlert.severity === 'critical' ? 'red' :
+                          selectedNotification.prometheusAlert.severity === 'warning' ? 'yellow' :
+                          selectedNotification.prometheusAlert.severity === 'resolved' ? 'green' : 'blue'"
+                  [size]="'sm'">
+                  {{ selectedNotification.prometheusAlert.severity }}
+                </cds-tag>
+              </cds-list-column>
+            </cds-list-row>
+            <cds-list-row *ngIf="selectedNotification.prometheusAlert.instance">
+              <cds-list-column
+                nowrap="true"
+                class="detail-label">Instance:</cds-list-column>
+              <cds-list-column>{{ selectedNotification.prometheusAlert.instance }}</cds-list-column>
+            </cds-list-row>
+            <cds-list-row *ngIf="selectedNotification.prometheusAlert.job">
+              <cds-list-column
+                nowrap="true"
+                class="detail-label">Job:</cds-list-column>
+              <cds-list-column>{{ selectedNotification.prometheusAlert.job }}</cds-list-column>
+            </cds-list-row>
+            <cds-list-row>
+              <cds-list-column
+                nowrap="true"
+                class="detail-label">Description:</cds-list-column>
+              <cds-list-column>
+                <p class="message-content">{{ selectedNotification.prometheusAlert.description }}</p>
+              </cds-list-column>
+            </cds-list-row>
+            <cds-list-row *ngIf="selectedNotification.prometheusAlert.sourceUrl">
+              <cds-list-column
+                nowrap="true"
+                class="detail-label">Source:</cds-list-column>
+              <cds-list-column>
+                <a
+                  [href]="selectedNotification.prometheusAlert.sourceUrl"
+                  target="_blank"
+                  class="source-link">
+                  <svg
+                    cdsIcon="launch"
+                    size="16"></svg>
+                  View in Prometheus
+                </a>
+              </cds-list-column>
+            </cds-list-row>
+            <cds-list-row *ngIf="selectedNotification.prometheusAlert.fingerprint">
+              <cds-list-column
+                nowrap="true"
+                class="detail-label">Fingerprint:</cds-list-column>
+              <cds-list-column>
+                <code class="fingerprint">{{ selectedNotification.prometheusAlert.fingerprint }}</code>
+              </cds-list-column>
+            </cds-list-row>
+          </ng-container>
+          <!-- Regular message for non-Prometheus notifications -->
+          <cds-list-row
+            cdsRow
+            *ngIf="selectedNotification.message && !selectedNotification.prometheusAlert">
+            <cds-list-column
+              nowrap="true"
+              class="detail-label">Message:</cds-list-column>
+            <cds-list-column>
+              <p class="message-content">{{ selectedNotification.message }}</p>
+            </cds-list-column>
+          </cds-list-row>
+        </cds-structured-list>
+      </div>
+    </div>
+  </div>
+</div>

@@ -47,7 +47,7 @@ def _validate_access_type(access_type: str) -> None:
 
 
 def _validate_sec_type(sec_type: str) -> None:
-    valid_sec_types = ["none", "sys", "krb5", "krb5i", "krb5p"]
+    valid_sec_types = ["none", "sys", "krb5", "krb5i", "krb5p", "tls", "mtls"]
     if not isinstance(sec_type, str) or sec_type not in valid_sec_types:
         raise NFSInvalidOperation(
             f"SecType {sec_type} invalid, valid types are {valid_sec_types}")
@@ -413,6 +413,11 @@ class Export:
         # accept "sectype" too.
         sectype = (export_block.values.get("SecType")
                    or export_block.values.get("sectype") or None)
+        # If sectype was only a single value (e.g. "sys") we end
+        # up with a string instead of a list of strings here
+        # https://github.com/ceph/go-ceph/issues/1097
+        if sectype is not None and not isinstance(sectype, list):
+            sectype = [sectype]
         return cls(export_block.values['export_id'],
                    export_block.values['path'],
                    cluster_id,

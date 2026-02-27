@@ -70,8 +70,9 @@ Not a block device - device that's just been unmapped:
 
 A block device, but not rbd:
 
-  $ sudo rbd device unmap /dev/[sv]da
-  rbd: '/dev/?da' is not an rbd device (glob)
+  $ THIS_FS_DEV=$(findmnt -n -o SOURCE -T .)
+  $ sudo rbd device unmap $THIS_FS_DEV
+  rbd: '/dev/.+' is not an rbd device (re)
   rbd: unmap failed: (22) Invalid argument
   [22]
 

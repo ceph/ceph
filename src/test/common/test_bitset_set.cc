@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <gtest/gtest.h>
 #include "common/bitset_set.h"
@@ -210,4 +210,55 @@ TEST(bitset_set, fmt_formatting) {
   std::ostringstream oss;
   oss << bitset;
   EXPECT_EQ(using_fmt, oss.str());
+}
+
+TEST(bitset_set, find_nth) {
+  constexpr size_t range = 128;
+  bitset_set<range, Key> bitset;
+
+  ASSERT_EQ(bitset.end(), bitset.find_nth(0) );
+  ASSERT_EQ(bitset.end(), bitset.find_nth(1) );
+  ASSERT_EQ(bitset.end(), bitset.find_nth(range) );
+
+  bitset.insert(0);
+  ASSERT_EQ(Key(0), *bitset.find_nth(0) );
+  ASSERT_EQ(bitset.end(), bitset.find_nth(1) );
+  ASSERT_EQ(bitset.end(), bitset.find_nth(range) );
+
+  // Single bit set
+  for (unsigned int i = 0; i < range; i++) {
+    bitset.clear();
+    bitset.insert(i);
+    ASSERT_EQ(Key(i), *bitset.find_nth(0) );
+    ASSERT_EQ(bitset.end(), bitset.find_nth(1) );
+    ASSERT_EQ(bitset.end(), bitset.find_nth(range) );
+  }
+
+  /* Alt bits set */
+  bitset.clear();
+  for (unsigned int i = 0; i < range; i += 2) {
+    bitset.insert(i);
+  }
+  for (unsigned int i = 0; i < range / 2; i++) {
+    ASSERT_EQ(Key(i * 2), *bitset.find_nth(i) );
+  }
+  ASSERT_EQ(bitset.end(), bitset.find_nth(range / 2) );
+
+  /* Other alt bits set */
+  bitset.clear();
+  for (unsigned int i = 1; i < range; i += 2) {
+    bitset.insert(i);
+  }
+  for (unsigned int i = 0; i < range / 2; i++) {
+    ASSERT_EQ(Key(i * 2 + 1), *bitset.find_nth(i) );
+  }
+  ASSERT_EQ(bitset.end(), bitset.find_nth(range / 2) );
+
+  /* All bits set */
+  bitset.clear();
+  bitset.insert_range(Key(0), range);
+  for (unsigned int i = 0; i < range; i++) {
+    ASSERT_EQ(Key(i), *bitset.find_nth(i) );
+  }
+  ASSERT_EQ(bitset.end(), bitset.find_nth(range) );
 }

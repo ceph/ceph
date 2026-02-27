@@ -1,14 +1,17 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #include "gtest/gtest.h"
 
 #include "mds/mdstypes.h"
 #include "include/buffer.h"
+#include "include/intarith.h" // for cbits()
 #include "include/rbd_types.h"
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
 #include "include/types.h"
 #include "global/global_context.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/Cond.h"
 #include "common/ceph_crypto.h"
 #include "test/librados/test_cxx.h"
@@ -37,7 +40,6 @@ typedef RadosTestECPP LibRadosTierECPP;
 
 void flush_evict_all(librados::Rados& cluster, librados::IoCtx& cache_ioctx)
 {
-  bufferlist inbl;
   cache_ioctx.set_namespace(all_nspaces);
   for (NObjectIterator it = cache_ioctx.nobjects_begin();
        it != cache_ioctx.nobjects_end(); ++it) {
@@ -70,10 +72,9 @@ void flush_evict_all(librados::Rados& cluster, librados::IoCtx& cache_ioctx)
 
 static string _get_required_osd_release(Rados& cluster)
 {
-  bufferlist inbl;
   string cmd = string("{\"prefix\": \"osd dump\",\"format\":\"json\"}");
   bufferlist outbl;
-  int r = cluster.mon_command(cmd, inbl, &outbl, NULL);
+  int r = cluster.mon_command(std::move(cmd), {}, &outbl, NULL);
   ceph_assert(r >= 0);
   string outstr(outbl.c_str(), outbl.length());
   json_spirit::Value v;
@@ -234,16 +235,15 @@ protected:
     // flush + evict cache
     flush_evict_all(cluster, cache_ioctx);
 
-    bufferlist inbl;
     // tear down tiers
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
       "\"}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
       "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+      {}, NULL, NULL));
 
     // wait for maps to settle before next test
     cluster.wait_for_latest_osdmap();
@@ -358,16 +358,15 @@ TEST_F(LibRadosTwoPoolsPP, Overlay) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -412,20 +411,19 @@ TEST_F(LibRadosTwoPoolsPP, Promote) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -520,20 +518,19 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnap) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -632,20 +629,19 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapScrub) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -685,7 +681,7 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapScrub) {
 	ss << "{\"prefix\": \"pg scrub\", \"pgid\": \""
 	   << cache_ioctx.get_id() << "." << i
 	   << "\"}";
-	int r = cluster.mon_command(ss.str(), inbl, NULL, NULL);
+	int r = cluster.mon_command(ss.str(), {}, NULL, NULL);
 	if (r == -ENOENT ||  // in case mgr osdmap is stale
 	    r == -EAGAIN) {
 	  sleep(5);
@@ -733,20 +729,19 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapTrimRace) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -780,20 +775,19 @@ TEST_F(LibRadosTwoPoolsPP, Whiteout) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -867,20 +861,19 @@ TEST_F(LibRadosTwoPoolsPP, Whiteout) {
 TEST_F(LibRadosTwoPoolsPP, WhiteoutDeleteCreate) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -922,20 +915,19 @@ TEST_F(LibRadosTwoPoolsPP, Evict) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -1125,20 +1117,19 @@ TEST_F(LibRadosTwoPoolsPP, EvictSnap) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -1323,20 +1314,19 @@ TEST_F(LibRadosTwoPoolsPP, EvictSnap2) {
     ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -1442,20 +1432,19 @@ TEST_F(LibRadosTwoPoolsPP, ListSnap){
   }
 
   // Configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // Wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -1559,20 +1548,19 @@ TEST_F(LibRadosTwoPoolsPP, EvictSnapRollbackReadRace) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -1643,20 +1631,19 @@ TEST_F(LibRadosTwoPoolsPP, EvictSnapRollbackReadRace) {
 TEST_F(LibRadosTwoPoolsPP, TryFlush) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -1788,20 +1775,19 @@ TEST_F(LibRadosTwoPoolsPP, TryFlush) {
 TEST_F(LibRadosTwoPoolsPP, Flush) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -1985,20 +1971,19 @@ TEST_F(LibRadosTwoPoolsPP, Flush) {
 TEST_F(LibRadosTwoPoolsPP, FlushSnap) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -2144,7 +2129,7 @@ TEST_F(LibRadosTwoPoolsPP, FlushSnap) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -2172,7 +2157,7 @@ TEST_F(LibRadosTwoPoolsPP, FlushSnap) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // cleanup
   ioctx.selfmanaged_snap_remove(my_snaps[0]);
@@ -2192,19 +2177,18 @@ TEST_F(LibRadosTierPP, FlushWriteRaces) {
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -2285,11 +2269,11 @@ TEST_F(LibRadosTierPP, FlushWriteRaces) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -2301,20 +2285,19 @@ TEST_F(LibRadosTierPP, FlushWriteRaces) {
 TEST_F(LibRadosTwoPoolsPP, FlushTryFlushRaces) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -2499,20 +2482,19 @@ void flush_read_race_cb(completion_t cb, void *arg)
 TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -2595,21 +2577,20 @@ string set_pool_str(string pool, string var, int val)
 TEST_F(LibRadosTwoPoolsPP, HitSetRead) {
   SKIP_IF_CRIMSON();
   // make it a tier
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // enable hitset tracking for this pool
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_count", 2),
-						inbl, NULL, NULL));
+						{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_period", 600),
-						inbl, NULL, NULL));
+						{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_type",
 						"explicit_object"),
-				   inbl, NULL, NULL));
+				   {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -2658,12 +2639,11 @@ TEST_F(LibRadosTwoPoolsPP, HitSetRead) {
 
 static int _get_pg_num(Rados& cluster, string pool_name)
 {
-  bufferlist inbl;
   string cmd = string("{\"prefix\": \"osd pool get\",\"pool\":\"")
     + pool_name
     + string("\",\"var\": \"pg_num\",\"format\": \"json\"}");
   bufferlist outbl;
-  int r = cluster.mon_command(cmd, inbl, &outbl, NULL);
+  int r = cluster.mon_command(std::move(cmd), {}, &outbl, NULL);
   ceph_assert(r >= 0);
   string outstr(outbl.c_str(), outbl.length());
   json_spirit::Value v;
@@ -2736,21 +2716,20 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
   ceph_assert(num_pg > 0);
 
   // make it a tier
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // enable hitset tracking for this pool
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_count", 8),
-						inbl, NULL, NULL));
+						{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_period", 600),
-						inbl, NULL, NULL));
+						{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_type",
 						"explicit_hash"),
-				   inbl, NULL, NULL));
+				   {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -2795,22 +2774,21 @@ TEST_F(LibRadosTwoPoolsPP, HitSetTrim) {
   unsigned period = 3;
 
   // make it a tier
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // enable hitset tracking for this pool
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_count", count),
-						inbl, NULL, NULL));
+						{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_period", period),
-						inbl, NULL, NULL));
+						{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_type", "bloom"),
-				   inbl, NULL, NULL));
+				   {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_fpp", ".01"),
-				   inbl, NULL, NULL));
+				   {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -2870,40 +2848,39 @@ TEST_F(LibRadosTwoPoolsPP, PromoteOn2ndRead) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // enable hitset tracking for this pool
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_count", 2),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_period", 600),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_type", "bloom"),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "min_read_recency_for_promote", 1),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_grade_decay_rate", 20),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_search_last_n", 1),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -2973,11 +2950,11 @@ TEST_F(LibRadosTwoPoolsPP, PromoteOn2ndRead) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -2995,20 +2972,19 @@ TEST_F(LibRadosTwoPoolsPP, ProxyRead) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"readproxy\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -3032,11 +3008,11 @@ TEST_F(LibRadosTwoPoolsPP, ProxyRead) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -3075,20 +3051,19 @@ TEST_F(LibRadosTwoPoolsPP, CachePin) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -3139,19 +3114,19 @@ TEST_F(LibRadosTwoPoolsPP, CachePin) {
   // enable agent
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_count", 2),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_period", 600),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_type", "bloom"),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "min_read_recency_for_promote", 1),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "target_max_objects", 1),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   sleep(10);
 
@@ -3184,11 +3159,11 @@ TEST_F(LibRadosTwoPoolsPP, CachePin) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -3563,10 +3538,9 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
     GTEST_SKIP() << "cluster is not yet nautilus, skipping test";
   }
 
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
 	    set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
-	    inbl, NULL, NULL));
+	    {}, NULL, NULL));
   cluster.wait_for_latest_osdmap();
   string tgt_oid;
 
@@ -3628,10 +3602,9 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount) {
     return;
   }
 
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   cluster.wait_for_latest_osdmap();
 
   // create object
@@ -3936,10 +3909,9 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapRefcount2) {
     return;
   }
 
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   cluster.wait_for_latest_osdmap();
 
   // create object
@@ -4323,10 +4295,9 @@ TEST_F(LibRadosTwoPoolsPP, ManifestCheckRefcountWhenModification) {
     GTEST_SKIP() << "cluster is not yet octopus, skipping test";
   }
 
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   cluster.wait_for_latest_osdmap();
 
   // create object
@@ -4981,13 +4952,12 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapSizeMismatch) {
   // scrub
   {
     for (int tries = 0; tries < 5; ++tries) {
-      bufferlist inbl;
       ostringstream ss;
       ss << "{\"prefix\": \"pg deep-scrub\", \"pgid\": \""
         << cache_ioctx.get_id() << "."
         << std::hex << hash
         << "\"}";
-      int r = cluster.mon_command(ss.str(), inbl, NULL, NULL);
+      int r = cluster.mon_command(ss.str(), {}, NULL, NULL);
       if (r == -ENOENT ||  
          r == -EAGAIN) {
        sleep(5);
@@ -5016,19 +4986,18 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
     GTEST_SKIP() << "cluster is not yet octopus, skipping test";
   }
 
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_tier", pool_name),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -5100,7 +5069,7 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
 
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 512),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   cluster.wait_for_latest_osdmap();
 
   // make a dirty chunks
@@ -5148,7 +5117,7 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
 
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 16384),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   cluster.wait_for_latest_osdmap();
 
   // make a dirty chunks
@@ -5196,7 +5165,7 @@ TEST_F(LibRadosTwoPoolsPP, DedupFlushRead) {
   // less than object size
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   cluster.wait_for_latest_osdmap();
 
   // make a dirty chunks
@@ -5272,19 +5241,18 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushSnap) {
     return;
   }
 
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_tier", pool_name),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -5456,19 +5424,18 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushDupCount) {
     return;
   }
 
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_tier", pool_name),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
 
   // create object
   bufferlist gbl;
@@ -5674,24 +5641,22 @@ TEST_F(LibRadosTwoPoolsPP, TierFlushDuringFlush) {
     return;
   }
 
-  bufferlist inbl;
-
   // create a new pool 
   std::string temp_pool_name = get_temp_pool_name() + "-test-flush";
   ASSERT_EQ(0, cluster.pool_create(temp_pool_name.c_str()));
 
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_tier", temp_pool_name),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
 
   // create object
   bufferlist gbl;
@@ -5755,10 +5720,9 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapHasChunk) {
     return;
   }
 
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
 	set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
   cluster.wait_for_latest_osdmap();
 
   // create object
@@ -6289,16 +6253,15 @@ protected:
     // flush + evict cache
     flush_evict_all(cluster, cache_ioctx);
 
-    bufferlist inbl;
     // tear down tiers
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
       "\"}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
       "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
     // wait for maps to settle before next test
     cluster.wait_for_latest_osdmap();
@@ -6392,16 +6355,15 @@ TEST_F(LibRadosTwoPoolsECPP, Overlay) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -6446,20 +6408,19 @@ TEST_F(LibRadosTwoPoolsECPP, Promote) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -6554,20 +6515,19 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteSnap) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -6600,7 +6560,7 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteSnap) {
 	 << cache_ioctx.get_id() << "."
 	 << hash
 	 << "\"}";
-      int r = cluster.mon_command(ss.str(), inbl, NULL, NULL);
+      int r = cluster.mon_command(ss.str(), {}, NULL, NULL);
       if (r == -EAGAIN ||
 	  r == -ENOENT) {  // in case mgr osdmap is a bit stale
 	sleep(5);
@@ -6687,20 +6647,19 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteSnapTrimRace) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -6734,20 +6693,19 @@ TEST_F(LibRadosTwoPoolsECPP, Whiteout) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -6830,20 +6788,19 @@ TEST_F(LibRadosTwoPoolsECPP, Evict) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -7033,20 +6990,19 @@ TEST_F(LibRadosTwoPoolsECPP, EvictSnap) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -7210,20 +7166,19 @@ TEST_F(LibRadosTwoPoolsECPP, EvictSnap) {
 TEST_F(LibRadosTwoPoolsECPP, TryFlush) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -7355,20 +7310,19 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlush) {
 TEST_F(LibRadosTwoPoolsECPP, FailedFlush) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -7493,20 +7447,19 @@ TEST_F(LibRadosTwoPoolsECPP, FailedFlush) {
 TEST_F(LibRadosTwoPoolsECPP, Flush) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -7690,20 +7643,19 @@ TEST_F(LibRadosTwoPoolsECPP, Flush) {
 TEST_F(LibRadosTwoPoolsECPP, FlushSnap) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -7849,7 +7801,7 @@ TEST_F(LibRadosTwoPoolsECPP, FlushSnap) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -7877,7 +7829,7 @@ TEST_F(LibRadosTwoPoolsECPP, FlushSnap) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   cluster.wait_for_latest_osdmap();
 
   // cleanup
@@ -7898,19 +7850,18 @@ TEST_F(LibRadosTierECPP, FlushWriteRaces) {
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -7991,11 +7942,11 @@ TEST_F(LibRadosTierECPP, FlushWriteRaces) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -8007,20 +7958,19 @@ TEST_F(LibRadosTierECPP, FlushWriteRaces) {
 TEST_F(LibRadosTwoPoolsECPP, FlushTryFlushRaces) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -8174,20 +8124,19 @@ TEST_F(LibRadosTwoPoolsECPP, FlushTryFlushRaces) {
 TEST_F(LibRadosTwoPoolsECPP, TryFlushReadRace) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -8246,35 +8195,34 @@ TEST_F(LibRadosTierECPP, CallForcesPromote) {
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // set things up such that the op would normally be proxied
   ASSERT_EQ(0, cluster.mon_command(
 	      set_pool_str(cache_pool_name, "hit_set_count", 2),
-	      inbl, NULL, NULL));
+	      {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	      set_pool_str(cache_pool_name, "hit_set_period", 600),
-	      inbl, NULL, NULL));
+	      {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	      set_pool_str(cache_pool_name, "hit_set_type",
 			   "explicit_object"),
-	      inbl, NULL, NULL));
+	      {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	      set_pool_str(cache_pool_name, "min_read_recency_for_promote",
 			   "4"),
-	      inbl, NULL, NULL));
+	      {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -8337,11 +8285,11 @@ TEST_F(LibRadosTierECPP, CallForcesPromote) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -8374,21 +8322,20 @@ TEST_F(LibRadosTierECPP, HitSetNone) {
 TEST_F(LibRadosTwoPoolsECPP, HitSetRead) {
   SKIP_IF_CRIMSON();
   // make it a tier
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // enable hitset tracking for this pool
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_count", 2),
-						inbl, NULL, NULL));
+						{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_period", 600),
-						inbl, NULL, NULL));
+						{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_type",
 						"explicit_object"),
-				   inbl, NULL, NULL));
+				   {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -8442,14 +8389,13 @@ TEST_F(LibRadosTierECPP, HitSetWrite) {
   ceph_assert(num_pg > 0);
 
   // enable hitset tracking for this pool
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_count", 8),
-						inbl, NULL, NULL));
+						{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_period", 600),
-						inbl, NULL, NULL));
+						{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_type",
 						"explicit_hash"),
-				   inbl, NULL, NULL));
+				   {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -8517,22 +8463,21 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetTrim) {
   unsigned period = 3;
 
   // make it a tier
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // enable hitset tracking for this pool
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_count", count),
-						inbl, NULL, NULL));
+						{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_period", period),
-						inbl, NULL, NULL));
+						{}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_type", "bloom"),
-				   inbl, NULL, NULL));
+				   {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(cache_pool_name, "hit_set_fpp", ".01"),
-				   inbl, NULL, NULL));
+				   {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -8597,40 +8542,39 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteOn2ndRead) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // enable hitset tracking for this pool
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_count", 2),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_period", 600),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_type", "bloom"),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "min_read_recency_for_promote", 1),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_grade_decay_rate", 20),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_search_last_n", 1),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -8700,11 +8644,11 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteOn2ndRead) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -8722,20 +8666,19 @@ TEST_F(LibRadosTwoPoolsECPP, ProxyRead) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"readproxy\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -8759,11 +8702,11 @@ TEST_F(LibRadosTwoPoolsECPP, ProxyRead) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -8802,20 +8745,19 @@ TEST_F(LibRadosTwoPoolsECPP, CachePin) {
   }
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -8866,19 +8808,19 @@ TEST_F(LibRadosTwoPoolsECPP, CachePin) {
   // enable agent
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_count", 2),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_period", 600),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_type", "bloom"),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "min_read_recency_for_promote", 1),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "target_max_objects", 1),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   sleep(10);
 
@@ -8911,11 +8853,11 @@ TEST_F(LibRadosTwoPoolsECPP, CachePin) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -8939,12 +8881,11 @@ TEST_F(LibRadosTwoPoolsECPP, SetRedirectRead) {
   }
 
   // configure tier
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -8968,7 +8909,7 @@ TEST_F(LibRadosTwoPoolsECPP, SetRedirectRead) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
@@ -9109,10 +9050,9 @@ TEST_F(LibRadosTwoPoolsECPP, TrySetDedupTier) {
   SKIP_IF_CRIMSON();
   // note: require >= mimic
   
-  bufferlist inbl;
   ASSERT_EQ(-EOPNOTSUPP, cluster.mon_command(
 	set_pool_str(pool_name, "dedup_tier", cache_pool_name),
-	inbl, NULL, NULL));
+	{}, NULL, NULL));
 }
 
 TEST_F(LibRadosTwoPoolsPP, PropagateBaseTierError) {
@@ -9126,33 +9066,32 @@ TEST_F(LibRadosTwoPoolsPP, PropagateBaseTierError) {
   ASSERT_EQ(0, ioctx.operate("propagate-base-tier-error", &op1));
 
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_type", "bloom"),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_count", 1),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "hit_set_period", 600),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "target_max_objects", 250),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -9171,36 +9110,35 @@ TEST_F(LibRadosTwoPoolsPP, PropagateBaseTierError) {
 TEST_F(LibRadosTwoPoolsPP, HelloWriteReturn) {
   SKIP_IF_CRIMSON();
   // configure cache
-  bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name +
     "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
     "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // set things up such that the op would normally be proxied
   ASSERT_EQ(0, cluster.mon_command(
 	      set_pool_str(cache_pool_name, "hit_set_count", 2),
-	      inbl, NULL, NULL));
+	      {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	      set_pool_str(cache_pool_name, "hit_set_period", 600),
-	      inbl, NULL, NULL));
+	      {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	      set_pool_str(cache_pool_name, "hit_set_type",
 			   "explicit_object"),
-	      inbl, NULL, NULL));
+	      {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
 	      set_pool_str(cache_pool_name, "min_read_recency_for_promote",
 			   "10000"),
-	      inbl, NULL, NULL));
+	      {}, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -9245,18 +9183,16 @@ TEST_F(LibRadosTwoPoolsPP, TierFlushDuringUnsetDedupTier) {
     return;
   }
 
-  bufferlist inbl;
-
   // set dedup parameters without dedup_tier
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "fingerprint_algorithm", "sha1"),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "dedup_chunk_algorithm", "fastcdc"),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "dedup_cdc_chunk_size", 1024),
-    inbl, NULL, NULL));
+    {}, NULL, NULL));
 
   // create object
   bufferlist gbl;

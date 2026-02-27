@@ -20,19 +20,23 @@
               data-toggle="tooltip"
               [title]="addButtonTooltip"
               [disabled]="availDevices.length === 0 || !canSelect || expansionCanSelect">
-        <i [ngClass]="[icons.add]"></i>
+        <svg [cdsIcon]="icons.add"
+             [size]="icons.size16"
+             ></svg>
         <ng-container i18n>Add</ng-container>
       </button>
     </ng-container>
     <ng-template #blockClearDevices>
       <div class="pb-2 my-2 border-bottom">
         <span *ngFor="let filter of appliedFilters">
-          <span class="badge badge-dark me-2">{{ filter.name }}: {{ filter.value.formatted }}</span>
+          <cds-tag class="tag-dark me-2">{{ filter.name }}: {{ filter.value.formatted }}</cds-tag>
         </span>
         <a class="tc_clearSelections"
            href=""
            (click)="clearDevices(); false">
-          <i [ngClass]="[icons.clearFilters]"></i>
+          <svg [cdsIcon]="icons.clearFilters"
+               [size]="icons.size16"
+               ></svg>
           <ng-container i18n>Clear</ng-container>
         </a>
       </div>

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -52,7 +53,8 @@ public:
       // the corner case of m = 1
       return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
 	FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
-        FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS;
+        FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS |
+        FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT;
     }
     return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
       FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS;

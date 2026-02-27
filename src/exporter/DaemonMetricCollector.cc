@@ -102,62 +102,137 @@ std::string quote(std::string value) { return "\"" + value + "\""; }
 void DaemonMetricCollector::parse_asok_metrics(
     std::string &counter_dump_response, std::string &counter_schema_response,
     int64_t prio_limit, const std::string &daemon_name) {
-  json_object counter_dump =
-      boost::json::parse(counter_dump_response).as_object();
-  json_object counter_schema =
-      boost::json::parse(counter_schema_response).as_object();
+  try {
+    json_object counter_dump =
+        boost::json::parse(counter_dump_response).as_object();
+    json_object counter_schema =
+        boost::json::parse(counter_schema_response).as_object();
 
-  for (auto &perf_group_item : counter_schema) {
-    std::string perf_group = {perf_group_item.key().begin(),
-                              perf_group_item.key().end()};
-    json_array perf_group_schema_array = perf_group_item.value().as_array();
-    json_array perf_group_dump_array = counter_dump[perf_group].as_array();
-    for (auto schema_itr = perf_group_schema_array.begin(),
-              dump_itr = perf_group_dump_array.begin();
-         schema_itr != perf_group_schema_array.end() &&
-         dump_itr != perf_group_dump_array.end();
-         ++schema_itr, ++dump_itr) {
-      auto counters = schema_itr->at("counters").as_object();
-      auto counters_labels = schema_itr->at("labels").as_object();
-      auto counters_values = dump_itr->at("counters").as_object();
-      labels_t labels;
+    for (auto &perf_group_item : counter_schema) {
+      std::string perf_group = {perf_group_item.key().begin(),
+                                perf_group_item.key().end()};
+      json_array perf_group_schema_array = perf_group_item.value().as_array();
+      json_array perf_group_dump_array = counter_dump[perf_group].as_array();
+      for (auto schema_itr = perf_group_schema_array.begin(),
+                dump_itr = perf_group_dump_array.begin();
+           schema_itr != perf_group_schema_array.end() &&
+           dump_itr != perf_group_dump_array.end();
+           ++schema_itr, ++dump_itr) {
+        try {
+          auto counters = schema_itr->at("counters").as_object();
+          auto counters_labels = schema_itr->at("labels").as_object();
+          auto counters_values = dump_itr->at("counters").as_object();
+          labels_t labels;
 
-      for (auto &label : counters_labels) {
-        std::string label_key = {label.key().begin(), label.key().end()};
-        labels[label_key] = quote(label.value().as_string().c_str());
-      }
-      for (auto &counter : counters) {
-        json_object counter_group = counter.value().as_object();
-        if (counter_group["priority"].as_int64() < prio_limit) {
+          for (auto &label : counters_labels) {
+            std::string label_key = {label.key().begin(), label.key().end()};
+            labels[label_key] = quote(label.value().as_string().c_str());
+          }
+          for (auto &counter : counters) {
+            try {
+              json_object counter_group = counter.value().as_object();
+              if (counter_group["priority"].as_int64() < prio_limit) {
+                continue;
+              }
+              std::string counter_name_init = {counter.key().begin(),
+                                               counter.key().end()};
+              std::string counter_name = perf_group + "_" + counter_name_init;
+              promethize(counter_name);
+
+              auto extra_labels = get_extra_labels(daemon_name);
+              if (extra_labels.empty()) {
+                dout(1) << "Unable to parse instance_id from daemon_name: "
+                        << daemon_name << dendl;
+                continue;
+              }
+              labels.insert(extra_labels.begin(), extra_labels.end());
+
+              // For now this is only required for rgw multi-site metrics
+              auto multisite_labels_and_name = add_fixed_name_metrics(counter_name);
+              if (!multisite_labels_and_name.first.empty()) {
+                labels.insert(multisite_labels_and_name.first.begin(),
+                              multisite_labels_and_name.first.end());
+                counter_name = multisite_labels_and_name.second;
+              }
+              auto perf_values = counters_values.at(counter_name_init);
+              dump_asok_metric(counter_group, perf_values, counter_name, labels);
+            } catch (const std::exception &e) {
+              dout(1) << "Exception in counter processing for " << daemon_name << ": " << e.what() << dendl;
+              continue;
+            }
+          }
+        } catch (const std::exception &e) {
+          dout(1) << "Exception in schema/dump iteration for " << daemon_name << ": " << e.what() << dendl;
           continue;
         }
-        std::string counter_name_init = {counter.key().begin(),
-                                         counter.key().end()};
-        std::string counter_name = perf_group + "_" + counter_name_init;
-        promethize(counter_name);
-
-        auto extra_labels = get_extra_labels(daemon_name);
-        if (extra_labels.empty()) {
-          dout(1) << "Unable to parse instance_id from daemon_name: "
-                  << daemon_name << dendl;
-          continue;
-        }
-        labels.insert(extra_labels.begin(), extra_labels.end());
-
-        // For now this is only required for rgw multi-site metrics
-        auto multisite_labels_and_name = add_fixed_name_metrics(counter_name);
-        if (!multisite_labels_and_name.first.empty()) {
-          labels.insert(multisite_labels_and_name.first.begin(),
-                        multisite_labels_and_name.first.end());
-          counter_name = multisite_labels_and_name.second;
-        }
-        auto perf_values = counters_values.at(counter_name_init);
-        dump_asok_metric(counter_group, perf_values, counter_name, labels);
       }
     }
+  } catch (const std::exception &e) {
+    dout(1) << "Exception in parse_asok_metrics for " << daemon_name << ": " << e.what() << dendl;
+    return;
   }
 }
 
+/*
+perf_values can be either a int/double or a json_object. Since
+   json_value is a wrapper of both we use that class.
+ */
+void DaemonMetricCollector::dump_asok_metric(json_object perf_info,
+                                             json_value perf_values,
+                                             std::string name,
+                                             labels_t labels) {
+  try {
+    if (!perf_info.if_contains("type") ||
+        !perf_info.if_contains("metric_type") ||
+        !perf_info.if_contains("description")) {
+      dout(1) << "Missing required key in perf_info for metric: " << name << dendl;
+      return;
+    }
+    int64_t type = perf_info["type"].as_int64();
+
+    if (!perf_info["metric_type"].is_string()) {
+      dout(1) << "Missing or invalid 'metric_type' in perf_info for metric: " << name << dendl;
+      return;
+    }
+    std::string metric_type =
+        boost_string_to_std(perf_info["metric_type"].as_string());
+
+    if (!perf_info["description"].is_string()) {
+      dout(1) << "Missing or invalid 'description' in perf_info for metric: " << name << dendl;
+      return;
+    }
+    std::string description =
+        boost_string_to_std(perf_info["description"].as_string());
+
+    if (type & PERFCOUNTER_LONGRUNAVG) {
+      if (!perf_values.is_object()) {
+        dout(1) << "perf_values is not an object for metric: " << name << dendl;
+        return;
+      }
+      auto perf_obj = perf_values.as_object();
+      if (!perf_obj.if_contains("avgcount")) {
+        dout(1) << "Missing 'avgcount' in perf_values for metric: " << name << dendl;
+        return;
+      }
+      if (!perf_obj.if_contains("sum")) {
+        dout(1) << "Missing 'sum' in perf_values for metric: " << name << dendl;
+        return;
+      }
+      int64_t count = perf_obj["avgcount"].as_int64();
+      add_metric(builder, count, name + "_count", description + " Count", "counter",
+                 labels);
+      json_value sum_value = perf_obj["sum"];
+      add_double_or_int_metric(builder, sum_value, name + "_sum", description + " Total",
+                               metric_type, labels);
+    } else {
+      add_double_or_int_metric(builder, perf_values, name, description,
+                               metric_type, labels);
+    }
+  } catch (const std::exception& e) {
+    dout(1) << "Exception in dump_asok_metric for metric: " << name << ": " << e.what() << dendl;
+    return;
+  }
+}
 
 void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter_prio,
                                               bool sockClientsPing, std::string &dump_response,
@@ -398,33 +473,6 @@ DaemonMetricCollector::add_fixed_name_metrics(std::string metric_name) {
   }
 
   return {};
-}
-
-/*
-perf_values can be either a int/double or a json_object. Since
-   json_value is a wrapper of both we use that class.
- */
-void DaemonMetricCollector::dump_asok_metric(json_object perf_info,
-                                             json_value perf_values,
-                                             std::string name,
-                                             labels_t labels) {
-  int64_t type = perf_info["type"].as_int64();
-  std::string metric_type =
-      boost_string_to_std(perf_info["metric_type"].as_string());
-  std::string description =
-      boost_string_to_std(perf_info["description"].as_string());
-
-  if (type & PERFCOUNTER_LONGRUNAVG) {
-    int64_t count = perf_values.as_object()["avgcount"].as_int64();
-    add_metric(builder, count, name + "_count", description + " Count", "counter",
-               labels);
-    json_value sum_value = perf_values.as_object()["sum"];
-    add_double_or_int_metric(builder, sum_value, name + "_sum", description + " Total",
-                             metric_type, labels);
-  } else {
-    add_double_or_int_metric(builder, perf_values, name, description,
-                             metric_type, labels);
-  }
 }
 
 void DaemonMetricCollector::update_sockets() {

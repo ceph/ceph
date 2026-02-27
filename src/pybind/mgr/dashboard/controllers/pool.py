@@ -10,7 +10,7 @@ from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
-from ..services.rbd import RbdConfiguration
+from ..services.rbd import RbdConfiguration, RbdMirroringService
 from ..tools import TaskManager, str_to_bool
 from . import APIDoc, APIRouter, Endpoint, EndpointDoc, ReadPermission, \
     RESTController, Task, UIRouter
@@ -156,6 +156,28 @@ class Pool(RESTController):
         pool = [p for p in pools if p['pool_name'] == pool_name]
         if not pool:
             raise cherrypy.NotFound('No such pool')
+
+        pool_schedule_spec = f"{pool_name}/"
+        pool_interval = RbdMirroringService.get_schedule_interval(pool_schedule_spec)
+
+        if pool_interval:
+            pool[0]['schedule_info'] = {
+                'name': pool_schedule_spec,
+                'schedule_interval': pool_interval,
+                'schedule_time': None,
+                'inherited': None
+            }
+        else:
+            cluster_interval = RbdMirroringService.get_schedule_interval('')
+            if cluster_interval:
+                pool[0]['schedule_info'] = {
+                    'name': '',
+                    'schedule_interval': cluster_interval,
+                    'schedule_time': None,
+                    'inherited': 'cluster'
+                }
+            else:
+                pool[0]['schedule_info'] = {}
         return pool[0]
 
     def get(self, pool_name: str, attrs: Optional[str] = None, stats: bool = False) -> dict:

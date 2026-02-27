@@ -30,7 +30,8 @@ export interface Tags {
 @Component({
   selector: 'cd-rgw-bucket-tiering',
   templateUrl: './rgw-bucket-tiering-form.component.html',
-  styleUrls: ['./rgw-bucket-tiering-form.component.scss']
+  styleUrls: ['./rgw-bucket-tiering-form.component.scss'],
+  standalone: false
 })
 export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
   tieringForm: CdFormGroup;
@@ -285,7 +286,7 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
   }
 
   goToCreateStorageClass() {
-    this.router.navigate(['rgw/tiering/create']);
+    this.router.navigate(['rgw/storage-class/create']);
     this.closeModal();
   }
 }

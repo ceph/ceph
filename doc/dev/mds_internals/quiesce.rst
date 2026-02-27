@@ -1,3 +1,5 @@
+.. _dev_mds_internals_quiesce:
+
 MDS Quiesce Protocol
 ====================
 

@@ -1,7 +1,8 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({
-  name: 'mbpersecond'
+  name: 'mbpersecond',
+  standalone: false
 })
 export class MbpersecondPipe implements PipeTransform {
   transform(value: any): any {

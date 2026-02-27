@@ -51,6 +51,16 @@ RGW_USER_SCHEMA = {
 }
 
 
+def _get_owner(owner):
+    accounts = RgwAccounts().get_accounts()
+
+    # if the owner is present in the accounts list,
+    # then the bucket is owned by an account.
+    # hence we will use dashboard user to fetch the
+    # bucket info
+    return owner if owner not in accounts else RgwServiceManager.user
+
+
 @UIRouter('/rgw', Scope.RGW)
 @APIDoc("RGW Management API", "Rgw")
 class Rgw(BaseController):
@@ -109,27 +119,29 @@ class RgwMultisiteStatus(RESTController):
     @allow_empty_body
     # pylint: disable=W0102,W0613
     def migrate(self, daemon_name=None, realm_name=None, zonegroup_name=None, zone_name=None,
-                zonegroup_endpoints=None, zone_endpoints=None, username=None):
+                zonegroup_endpoints=None, zone_endpoints=None, username=None, tier_type=None):
         multisite_instance = RgwMultisite()
         result = multisite_instance.migrate_to_multisite(realm_name, zonegroup_name,
                                                          zone_name, zonegroup_endpoints,
-                                                         zone_endpoints, username)
+                                                         zone_endpoints, username, tier_type)
         return result
 
     @RESTController.Collection(method='POST', path='/multisite-replications')
     @allow_empty_body
     # pylint: disable=W0102,W0613
     def setup_multisite_replication(self, daemon_name=None, realm_name=None, zonegroup_name=None,
-                                    zonegroup_endpoints=None, zone_name=None, zone_endpoints=None,
-                                    username=None, cluster_fsid=None, replication_zone_name=None,
-                                    cluster_details=None):
+                                    zonegroup_endpoints=None, zone_name=None, tier_type=None,
+                                    zone_endpoints=None, username=None, cluster_fsid=None,
+                                    replication_zone_name=None, cluster_details=None,
+                                    selectedRealmName=None):
         multisite_instance = RgwMultisiteAutomation()
         result = multisite_instance.setup_multisite_replication(realm_name, zonegroup_name,
                                                                 zonegroup_endpoints, zone_name,
-                                                                zone_endpoints, username,
-                                                                cluster_fsid,
+                                                                tier_type, zone_endpoints,
+                                                                username, cluster_fsid,
                                                                 replication_zone_name,
-                                                                cluster_details)
+                                                                cluster_details,
+                                                                selectedRealmName)
         return result
 
     @RESTController.Collection(method='PUT', path='/setup-rgw-credentials')
@@ -401,15 +413,6 @@ class RgwBucket(RgwRESTController):
                 if bucket['tenant'] else bucket['bucket']
         return bucket
 
-    def _get_owner(self, owner):
-        accounts = RgwAccounts().get_accounts()
-
-        # if the owner is present in the accounts list,
-        # then the bucket is owned by an account.
-        # hence we will use dashboard user to fetch the
-        # bucket info
-        return owner if owner not in accounts else RgwServiceManager.user
-
     def _get_versioning(self, owner, daemon_name, bucket_name):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.get_bucket_versioning(bucket_name)
@@ -474,6 +477,22 @@ class RgwBucket(RgwRESTController):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.delete_lifecycle(bucket_name)
 
+    def _get_notification(self, bucket_name: str = '',
+                          daemon_name=None, owner=None):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.get_notification(bucket_name)
+
+    def _set_notification(self, bucket_name: str,
+                          notification: Optional[str] = None,
+                          daemon_name=None, owner=None):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.set_notification(bucket_name, notification)
+
+    def _delete_notification(self, bucket_name: str, notification_id: str,
+                             daemon_name=None, owner=None):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.delete_notification(bucket_name, notification_id)
+
     def _get_acl(self, bucket_name, daemon_name, owner):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return str(rgw_client.get_acl(bucket_name))
@@ -528,6 +547,41 @@ class RgwBucket(RgwRESTController):
             bucket_name = '{}:{}'.format(tenant, bucket_name)
         return bucket_name
 
+    def map_bucket_owners(self, result, daemon_name):
+        """
+        Replace bucket owner IDs with account names for a list of buckets.
+
+        :param result: List of bucket dicts with 'owner' keys.
+        :param daemon_name: RGW daemon identifier.
+        :return: Modified result with owner names instead of IDs.
+        """
+        # Get unique owner IDs from buckets
+        owner_ids = {bucket['owner'] for bucket in result}
+
+        # Get available account IDs
+        valid_accounts = set(RgwAccounts().get_accounts())
+
+        # Determine which owner IDs are valid and need querying
+        query_ids = owner_ids & valid_accounts
+
+        # Fetch account names for valid owner IDs
+        id_to_name = {}
+        for owner_id in query_ids:
+            try:
+                account = self.proxy(daemon_name, 'GET', 'account', {'id': owner_id})
+                if 'name' in account:
+                    id_to_name[owner_id] = account['name']
+            except RequestException:
+                continue
+
+        # Replace owner IDs with names in the bucket list
+        for bucket in result:
+            owner_id = bucket.get('owner')
+            if owner_id in id_to_name:
+                bucket['owner'] = id_to_name[owner_id]
+
+        return result
+
     @RESTController.MethodMap(version=APIVersion(1, 1))  # type: ignore
     def list(self, stats: bool = False, daemon_name: Optional[str] = None,
              uid: Optional[str] = None) -> List[Union[str, Dict[str, Any]]]:
@@ -535,9 +589,9 @@ class RgwBucket(RgwRESTController):
         if uid and uid.strip():
             query_params = f'{query_params}&uid={uid.strip()}'
         result = self.proxy(daemon_name, 'GET', 'bucket{}'.format(query_params))
-
-        if stats:
+        if str_to_bool(stats):
             result = [self._append_bid(bucket) for bucket in result]
+            result = self.map_bucket_owners(result, daemon_name)
 
         return result
 
@@ -547,7 +601,7 @@ class RgwBucket(RgwRESTController):
         bucket_name = RgwBucket.get_s3_bucket_name(result['bucket'],
                                                    result['tenant'])
 
-        owner = self._get_owner(result['owner'])
+        owner = _get_owner(result['owner'])
         # Append the versioning configuration.
         versioning = self._get_versioning(owner, daemon_name, bucket_name)
         encryption = self._get_encryption(bucket_name, daemon_name, owner)
@@ -624,18 +678,26 @@ class RgwBucket(RgwRESTController):
                 bucket = '/{}'.format(bucket)
 
             # Link bucket to new user:
+            params = {
+                'bucket': bucket,
+                'bucket-id': bucket_id,
+            }
+
+            accounts = RgwAccounts().get_accounts()
+            if uid in accounts:
+                # If the bucket is owned by an account, we need to use the account-id
+                # instead of uid.
+                params['account-id'] = uid
+            else:
+                params['uid'] = uid
             result = self.proxy(daemon_name,
                                 'PUT',
-                                'bucket', {
-                                    'bucket': bucket,
-                                    'bucket-id': bucket_id,
-                                    'uid': uid
-                                },
+                                'bucket', params,
                                 json_response=False)
 
         uid_tenant = uid[:uid.find('$')] if uid.find('$') >= 0 else None
         bucket_name = RgwBucket.get_s3_bucket_name(bucket, uid_tenant)
-        uid = self._get_owner(uid)
+        uid = _get_owner(uid)
 
         locking = self._get_locking(uid, daemon_name, bucket_name)
         if versioning_state:
@@ -663,7 +725,7 @@ class RgwBucket(RgwRESTController):
             self._set_policy(bucket_name, bucket_policy, daemon_name, uid)
         if canned_acl:
             self._set_acl(bucket_name, canned_acl, uid, daemon_name)
-        if replication:
+        if replication is not None:
             self._set_replication(bucket_name, replication, uid, daemon_name)
         if lifecycle and not lifecycle == '{}':
             self._set_lifecycle(bucket_name, lifecycle, daemon_name, uid)
@@ -727,7 +789,7 @@ class RgwBucket(RgwRESTController):
     @allow_empty_body
     def set_lifecycle_policy(self, bucket_name: str = '', lifecycle: str = '', daemon_name=None,
                              owner=None, tenant=None):
-        owner = self._get_owner(owner)
+        owner = _get_owner(owner)
         bucket_name = RgwBucket.get_s3_bucket_name(bucket_name, tenant)
         if lifecycle == '{}':
             return self._delete_lifecycle(bucket_name, daemon_name, owner)
@@ -736,9 +798,36 @@ class RgwBucket(RgwRESTController):
     @RESTController.Collection(method='GET', path='/lifecycle')
     def get_lifecycle_policy(self, bucket_name: str = '', daemon_name=None, owner=None,
                              tenant=None):
-        owner = self._get_owner(owner)
+        owner = _get_owner(owner)
         bucket_name = RgwBucket.get_s3_bucket_name(bucket_name, tenant)
         return self._get_lifecycle(bucket_name, daemon_name, owner)
+
+    @RESTController.Collection(method='GET', path='/notification')
+    @EndpointDoc("Get the bucket notification")
+    def get_notification(self, bucket_name: str,
+                         daemon_name=None, owner=None):
+        owner = _get_owner(owner)
+        bucket_name = RgwBucket.get_s3_bucket_name(bucket_name)
+        return self._get_notification(bucket_name, daemon_name, owner)
+
+    @RESTController.Collection(method='PUT', path='/notification')
+    @allow_empty_body
+    @EndpointDoc("Create or update the bucket notification")
+    def set_notification(self, bucket_name: str, notification: str = '', daemon_name=None,
+                         owner=None):
+        owner = _get_owner(owner)
+        bucket_name = RgwBucket.get_s3_bucket_name(bucket_name)
+        if notification == '{}':
+            return self._delete_notification(bucket_name, daemon_name, owner)
+        return self._set_notification(bucket_name, notification, daemon_name, owner)
+
+    @RESTController.Collection(method='DELETE', path='/notification')
+    @EndpointDoc("Delete the bucket notification")
+    def delete_notification(self, bucket_name: str, notification_id: str,
+                            daemon_name=None, owner=None):
+        owner = _get_owner(owner)
+        s3_bucket_name = RgwBucket.get_s3_bucket_name(bucket_name)
+        return self._delete_notification(s3_bucket_name, notification_id, daemon_name, owner)
 
     @Endpoint(method='GET', path='/ratelimit')
     @EndpointDoc("Get the bucket global rate limit")
@@ -809,16 +898,24 @@ class RgwUser(RgwRESTController):
             and len(set(edit_permissions).intersection(set(permissions[Scope.RGW]))) > 0
 
     @EndpointDoc("Display RGW Users",
+                 parameters={
+                     'detailed': (bool, "If true, returns complete user details for each user. "
+                                  "If false, returns only the list of usernames.")
+                 },
                  responses={200: RGW_USER_SCHEMA})
-    def list(self, daemon_name=None):
-        # type: (Optional[str]) -> List[str]
-        users = []  # type: List[str]
+    def list(self, daemon_name=None, detailed: bool = False):
+        detailed = str_to_bool(detailed)
+        users = []  # type: List[Union[str, Dict[str, Any]]]
         marker = None
         while True:
             params = {}  # type: dict
             if marker:
                 params['marker'] = marker
             result = self.proxy(daemon_name, 'GET', 'user?list', params)
+            if detailed:
+                for user in result['keys']:
+                    users.append(self._get(user, daemon_name=daemon_name, stats=False))
+                return users
             users.extend(result['keys'])
             if not result['truncated']:
                 break
@@ -839,6 +936,9 @@ class RgwUser(RgwRESTController):
         if not self._keys_allowed():
             del result['keys']
             del result['swift_keys']
+        if result.get('account_id') not in (None, '') and result.get('type') != 'root':
+            rgwAccounts = RgwAccounts()
+            result['managed_user_policies'] = rgwAccounts.list_managed_policy(uid)
         result['uid'] = result['full_user_id']
         return result
 
@@ -857,53 +957,94 @@ class RgwUser(RgwRESTController):
     def create(self, uid, display_name, email=None, max_buckets=None,
                system=None, suspended=None, generate_key=None, access_key=None,
                secret_key=None, daemon_name=None, account_id: Optional[str] = None,
-               account_root_user: Optional[bool] = False):
-        params = {'uid': uid}
-        if display_name is not None:
-            params['display-name'] = display_name
-        if email is not None:
-            params['email'] = email
-        if max_buckets is not None:
-            params['max-buckets'] = max_buckets
-        if system is not None:
-            params['system'] = system
-        if suspended is not None:
-            params['suspended'] = suspended
-        if generate_key is not None:
-            params['generate-key'] = generate_key
-        if access_key is not None:
-            params['access-key'] = access_key
-        if secret_key is not None:
-            params['secret-key'] = secret_key
-        if account_id is not None:
-            params['account-id'] = account_id
+               account_root_user: Optional[bool] = False,
+               account_policies: Optional[str] = None):
+        """Create a new RGW user."""
+
+        params = {'uid': uid, 'display-name': display_name}
+
+        # Add optional parameters
+        optional_params = {
+            'email': email,
+            'max-buckets': max_buckets,
+            'system': system,
+            'suspended': suspended,
+            'generate-key': generate_key,
+            'access-key': access_key,
+            'secret-key': secret_key,
+            'account-id': account_id
+        }
+
+        # Add only non-None parameters
+        for key, value in optional_params.items():
+            if value is not None:
+                params[key] = value
+
+        # Handle boolean parameter separately
         if account_root_user:
             params['account-root'] = account_root_user
+
+        # Make the API request
         result = self.proxy(daemon_name, 'PUT', 'user', params)
         result['uid'] = result['full_user_id']
+
+        # Process account policies
+        if account_policies is not None:
+            self._process_account_policies(uid, account_policies)
+
         return result
+
+    def _process_account_policies(self, uid, account_policies):
+        """Process account policies for a user."""
+        rgw_accounts = RgwAccounts()
+        # Parse the policies JSON if it's a string
+        if isinstance(account_policies, str):
+            account_policies = json.loads(account_policies)
+
+        # Attach policies
+        for policy_arn in account_policies.get('attach', []):
+            rgw_accounts.attach_managed_policy(uid, policy_arn)
+
+        # Detach policies
+        for policy_arn in account_policies.get('detach', []):
+            rgw_accounts.detach_managed_policy(uid, policy_arn)
 
     @allow_empty_body
     def set(self, uid, display_name=None, email=None, max_buckets=None,
             system=None, suspended=None, daemon_name=None, account_id: Optional[str] = None,
-            account_root_user: Optional[bool] = False):
+            account_root_user: Optional[bool] = False,
+            account_policies: Optional[str] = None):
+        """Update an existing RGW user."""
+
         params = {'uid': uid}
-        if display_name is not None:
-            params['display-name'] = display_name
-        if email is not None:
-            params['email'] = email
-        if max_buckets is not None:
-            params['max-buckets'] = max_buckets
-        if system is not None:
-            params['system'] = system
-        if suspended is not None:
-            params['suspended'] = suspended
-        if account_id is not None:
-            params['account-id'] = account_id
+
+        # Add optional parameters
+        optional_params = {
+            'display-name': display_name,
+            'email': email,
+            'max-buckets': max_buckets,
+            'system': system,
+            'suspended': suspended,
+            'account-id': account_id
+        }
+
+        # Add only non-None parameters
+        for key, value in optional_params.items():
+            if value is not None:
+                params[key] = value
+
+        # Handle boolean parameter separately
         if account_root_user:
             params['account-root'] = account_root_user
+
+        # Make the API request
         result = self.proxy(daemon_name, 'POST', 'user', params)
         result['uid'] = result['full_user_id']
+
+        # Process account policies
+        if account_policies is not None:
+            self._process_account_policies(uid, account_policies)
+
         return result
 
     def delete(self, uid, daemon_name=None):
@@ -1199,10 +1340,16 @@ class RgwRealm(RESTController):
 
     @allow_empty_body
     # pylint: disable=W0613
-    def list(self):
-        multisite_instance = RgwMultisite()
-        result = multisite_instance.list_realms()
-        return result
+    def list(self, replicable: Optional[bool] = None):
+        if replicable:
+            try:
+                multisite_automation_instance = RgwMultisiteAutomation()
+                return multisite_automation_instance.get_replicable_realms_list()
+            except NoRgwDaemonsException as e:
+                raise DashboardException(e, http_status_code=404, component='rgw')
+        else:
+            multisite_instance = RgwMultisite()
+            return multisite_instance.list_realms()
 
     @allow_empty_body
     # pylint: disable=W0613
@@ -1313,12 +1460,14 @@ class RgwZonegroup(RESTController):
         result = multisite_instance.get_all_zonegroups_info()
         return result
 
-    def delete(self, zonegroup_name, delete_pools, pools: Optional[List[str]] = None):
+    def delete(self, zonegroup_name, delete_pools, pools: Optional[List[str]] = None,
+               realm_name: Optional[str] = None):
         if pools is None:
             pools = []
         try:
             multisite_instance = RgwMultisite()
-            result = multisite_instance.delete_zonegroup(zonegroup_name, delete_pools, pools)
+            result = multisite_instance.delete_zonegroup(zonegroup_name, delete_pools,
+                                                         pools, realm_name)
             return result
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
@@ -1341,11 +1490,11 @@ class RgwZone(RESTController):
     @allow_empty_body
     # pylint: disable=W0613
     def create(self, zone_name, zonegroup_name=None, default=False, master=False,
-               zone_endpoints=None, access_key=None, secret_key=None):
+               zone_endpoints=None, access_key=None, secret_key=None, tier_type=''):
         multisite_instance = RgwMultisite()
         result = multisite_instance.create_zone(zone_name, zonegroup_name, default,
                                                 master, zone_endpoints, access_key,
-                                                secret_key)
+                                                secret_key, tier_type)
         return result
 
     @allow_empty_body
@@ -1370,14 +1519,16 @@ class RgwZone(RESTController):
         return result
 
     def delete(self, zone_name, delete_pools, pools: Optional[List[str]] = None,
-               zonegroup_name=None):
+               zonegroup_name=None, realm_name: Optional[str] = None):
         if pools is None:
             pools = []
         if zonegroup_name is None:
             zonegroup_name = ''
         try:
             multisite_instance = RgwMultisite()
-            result = multisite_instance.delete_zone(zone_name, delete_pools, pools, zonegroup_name)
+            result = multisite_instance.delete_zone(zone_name, delete_pools,
+                                                    pools, zonegroup_name,
+                                                    realm_name)
             return result
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
@@ -1388,13 +1539,13 @@ class RgwZone(RESTController):
             master: str = '', zone_endpoints: str = '', access_key: str = '', secret_key: str = '',
             placement_target: str = '', data_pool: str = '', index_pool: str = '',
             data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
-            compression: str = ''):
+            compression: str = '', tier_type: str = ''):
         multisite_instance = RgwMultisite()
         result = multisite_instance.edit_zone(zone_name, new_zone_name, zonegroup_name, default,
                                               master, zone_endpoints, access_key, secret_key,
                                               placement_target, data_pool, index_pool,
                                               data_extra_pool, storage_class, data_pool_class,
-                                              compression)
+                                              compression, tier_type)
         return result
 
     @Endpoint()
@@ -1423,6 +1574,57 @@ class RgwZone(RESTController):
         result = multisite_instance.get_user_list(zoneName, realmName)
         return result
 
+    @Endpoint('POST', path='storage-class')
+    @CreatePermission
+    def create_storage_class(self, zone_name: str, placement_target: str, storage_class: str,
+                             data_pool: str, compression=''):
+        return self.handle_storage_class(zone_name, placement_target, storage_class, data_pool,
+                                         operation='create', compression=compression)
+
+    @Endpoint('PUT', path='storage-class')
+    @CreatePermission
+    def edit_storage_class(self, zone_name: str, placement_target: str, storage_class: str,
+                           data_pool: str, compression=''):
+        return self.handle_storage_class(zone_name, placement_target, storage_class, data_pool,
+                                         operation='edit', compression=compression)
+
+    def handle_storage_class(self, zone_name: str, placement_target: str, storage_class: str,
+                             data_pool: str, operation: str, compression=''):
+        if not (placement_target and storage_class and data_pool):
+            raise DashboardException(
+                msg='Failed to get placement target',
+                http_status_code=404,
+                component='rgw'
+            )
+        multisite_instance = RgwMultisite()
+
+        try:
+            if operation == 'create':
+                multisite_instance.add_storage_class_zone(
+                    zone_name=zone_name,
+                    placement_target=placement_target,
+                    storage_class=storage_class,
+                    data_pool=data_pool,
+                    compression=compression
+                )
+            elif operation == 'edit':
+                multisite_instance.edit_storage_class_zone(
+                    zone_name=zone_name,
+                    placement_target=placement_target,
+                    storage_class=storage_class,
+                    data_pool=data_pool,
+                    compression=compression
+                )
+        except DashboardException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+        return {
+            'placement_target': placement_target,
+            'storage_class': storage_class,
+            'data_pool': data_pool,
+            'status': 'success'
+        }
+
 
 @APIRouter('/rgw/topic', Scope.RGW)
 @APIDoc("RGW Topic Management API", "RGW Topic Management")
@@ -1432,25 +1634,23 @@ class RgwTopic(RESTController):
         "Create a new RGW Topic",
         parameters={
             "name": (str, "Name of the topic"),
+            "owner": (str, "Name of the owner"),
+            "daemon_name": (str, "Name of the daemon"),
             "push_endpoint": (str, "Push Endpoint"),
-            "opaque_data": (str, " opaque data"),
-            "persistent": (bool, "persistent"),
+            "opaque_data": (str, "OpaqueData"),
+            "persistent": (bool, "Persistent"),
             "time_to_live": (str, "Time to live"),
-            "max_retries": (str, "max retries"),
-            "retry_sleep_duration": (str, "retry sleep duration"),
-            "policy": (str, "policy"),
-            "verify_ssl": (bool, 'verify ssl'),
-            "cloud_events": (str, 'cloud events'),
-            "user": (str, 'user'),
-            "password": (str, 'password'),
-            "vhost": (str, 'vhost'),
-            "ca_location": (str, 'ca location'),
-            "amqp_exchange": (str, 'amqp exchange'),
-            "amqp_ack_level": (str, 'amqp ack level'),
-            "use_ssl": (bool, 'use ssl'),
-            "kafka_ack_level": (str, 'kafka ack level'),
-            "kafka_brokers": (str, 'kafka brokers'),
-            "mechanism": (str, 'mechanism'),
+            "max_retries": (str, "Max retries"),
+            "retry_sleep_duration": (str, "Retry sleep duration"),
+            "policy": (str, "Policy"),
+            "verify_ssl": (bool, 'Verify ssl'),
+            "cloud_events": (str, 'Cloud events'),
+            "ca_location": (str, 'Ca location'),
+            "amqp_exchange": (str, 'Amqp exchange'),
+            "ack_level": (str, 'Amqp ack level'),
+            "use_ssl": (bool, 'Use ssl'),
+            "kafka_brokers": (str, 'Kafka brokers'),
+            "mechanism": (str, 'Mechanism'),
         },
     )
     def create(
@@ -1469,15 +1669,16 @@ class RgwTopic(RESTController):
         cloud_events: Optional[bool] = False,
         ca_location: Optional[str] = None,
         amqp_exchange: Optional[str] = None,
-        amqp_ack_level: Optional[str] = None,
+        ack_level: Optional[str] = None,
         use_ssl: Optional[bool] = False,
-        kafka_ack_level: Optional[str] = None,
         kafka_brokers: Optional[str] = None,
         mechanism: Optional[str] = None
     ):
+        owner = _get_owner(owner)
         rgw_topic_instance = RgwClient.instance(owner, daemon_name=daemon_name)
         return rgw_topic_instance.create_topic(
             name=name,
+            daemon_name=daemon_name,
             push_endpoint=push_endpoint,
             opaque_data=opaque_data,
             persistent=persistent,
@@ -1489,45 +1690,38 @@ class RgwTopic(RESTController):
             cloud_events=cloud_events,
             ca_location=ca_location,
             amqp_exchange=amqp_exchange,
-            amqp_ack_level=amqp_ack_level,
+            ack_level=ack_level,
             use_ssl=use_ssl,
-            kafka_ack_level=kafka_ack_level,
             kafka_brokers=kafka_brokers,
             mechanism=mechanism
         )
 
     @EndpointDoc(
         "Get RGW Topic List",
-        parameters={
-            "uid": (str, "Name of the user"),
-            "tenant": (str, "Name of the tenant"),
-        },
     )
-    def list(self, uid: Optional[str] = None, tenant: Optional[str] = None):
+    def list(self):
         rgw_topic_instance = RgwTopicmanagement()
-        result = rgw_topic_instance.list_topics(uid, tenant)
+        result = rgw_topic_instance.list_topics()
         return result
 
     @EndpointDoc(
         "Get RGW Topic",
         parameters={
-            "name": (str, "Name of the user"),
-            "tenant": (str, "Name of the tenant"),
+            "key": (str, "The metadata object key to retrieve the topic e.g owner:topic_name"),
         },
     )
-    def get(self, name: str, tenant: Optional[str] = None):
+    def get(self, key: str):
         rgw_topic_instance = RgwTopicmanagement()
-        result = rgw_topic_instance.get_topic(name, tenant)
+        result = rgw_topic_instance.get_topic(key)
         return result
 
     @EndpointDoc(
         "Delete RGW Topic",
         parameters={
-            "name": (str, "Name of the user"),
-            "tenant": (str, "Name of the tenant"),
+            "key": (str, "The metadata object key to retrieve the topic e.g topic:topic_name"),
         },
     )
-    def delete(self, name: str, tenant: Optional[str] = None):
+    def delete(self, key: str):
         rgw_topic_instance = RgwTopicmanagement()
-        result = rgw_topic_instance.delete_topic(name=name, tenant=tenant)
+        result = rgw_topic_instance.delete_topic(key=key)
         return result

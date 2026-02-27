@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #pragma once
 /**
  * \file fmtlib formatter for utime_t
@@ -34,7 +35,11 @@ struct fmt::formatter<utime_t> {
     // this looks like an absolute time.
     // conform to http://en.wikipedia.org/wiki/ISO_8601
     // (unless short_format is set)
-    auto aslocal = fmt::localtime(utime.sec());
+    std::time_t time = utime.sec();
+    std::tm aslocal;
+    if (!localtime_r(&time, &aslocal)) {
+      throw fmt::format_error("time_t value out of range");
+    }
     if (short_format) {
       return fmt::format_to(ctx.out(), "{:%FT%T}.{:03}", aslocal,
 			    utime.usec() / 1000);

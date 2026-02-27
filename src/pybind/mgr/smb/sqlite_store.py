@@ -506,6 +506,35 @@ class MirrorUsersAndGroups(Mirror):
         return filtered
 
 
+class MirrorTLSCredentials(Mirror):
+    """Mirroring configuration for objects in the tls_credentials namespace."""
+
+    def __init__(self, store: ConfigStore) -> None:
+        super().__init__('tls_credentials', store)
+
+    def filter_object(self, obj: Simplified) -> Simplified:
+        """Filter tls_credential for sqlite3 store."""
+        filtered = copy.deepcopy(obj)
+        if filtered.get('credential_type') and filtered.get('value'):
+            filtered.pop('value', None)
+        return filtered
+
+
+class MirrorExternalCephCluster(Mirror):
+    """Mirroring configuration for objects in the ext_ceph_clusters namespace."""
+
+    def __init__(self, store: ConfigStore) -> None:
+        super().__init__('ext_ceph_clusters', store)
+
+    def filter_object(self, obj: Simplified) -> Simplified:
+        """Filter ext_ceph_clusters for sqlite3 store."""
+        filtered = copy.deepcopy(obj)
+        cu = filtered.get('cluster', {}).get('cephfs_user')
+        if cu:
+            cu.pop('key', None)
+        return filtered
+
+
 def _tables(
     *,
     specialize: bool = True,
@@ -526,6 +555,8 @@ def _tables(
         srt,
         SimpleTable('join_auths', 'join_auths'),
         SimpleTable('users_and_groups', 'users_and_groups'),
+        SimpleTable('tls_creds', 'tls_creds'),
+        SimpleTable('ext_ceph_clusters', 'ext_ceph_clusters'),
     ]
 
 
@@ -539,6 +570,16 @@ def _mirror_join_auths(opts: Optional[Dict[str, str]] = None) -> bool:
 
 def _mirror_users_and_groups(opts: Optional[Dict[str, str]] = None) -> bool:
     return (opts or {}).get('mirror_users_and_groups') != 'no'
+
+
+def _mirror_tls_credentials(opts: Optional[Dict[str, str]] = None) -> bool:
+    return (opts or {}).get('mirror_tls_credentials') != 'no'
+
+
+def _mirror_external_ceph_clusters(
+    opts: Optional[Dict[str, str]] = None
+) -> bool:
+    return (opts or {}).get('mirror_external_ceph_clusters') != 'no'
 
 
 def mgr_sqlite3_db(
@@ -566,6 +607,10 @@ def mgr_sqlite3_db_with_mirroring(
         mirrors.append(MirrorJoinAuths(mirror_store))
     if _mirror_users_and_groups(opts):
         mirrors.append(MirrorUsersAndGroups(mirror_store))
+    if _mirror_tls_credentials(opts):
+        mirrors.append(MirrorTLSCredentials(mirror_store))
+    if _mirror_external_ceph_clusters(opts):
+        mirrors.append(MirrorExternalCephCluster(mirror_store))
     return SqliteMirroringStore(mgr, tables, mirrors)
 
 

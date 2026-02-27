@@ -225,8 +225,38 @@ if(${WITH_RADOSGW})
     ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
 
+  # ceph_test_cls_rgw_admin_account_quota_set
+  set(test_cls_rgw_admin_account_quota_set_srcs 
+    test_rgw_admin_account_quota_set.cc
+    test_rgw_admin_helper.cc
+  )
+  add_executable(ceph_test_cls_rgw_admin_account_quota_set
+    ${test_cls_rgw_admin_account_quota_set_srcs}
+    )
+  target_link_libraries(ceph_test_cls_rgw_admin_account_quota_set
+    librados
+    ${rgw_libs}
+    global
+    cls_version_client
+    cls_log_client
+    cls_refcount_client
+    cls_rgw_client
+    cls_user_client
+    cls_lock_client
+    ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
+    ${CMAKE_DL_LIBS} ${UNITTEST_LIBS} ${CRYPTO_LIBS})
+
+  install(TARGETS
+    ceph_test_cls_rgw_admin_account_quota_set
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
   # ceph_test_cls_rgw_meta
-  set(test_cls_rgw_meta_srcs test_rgw_admin_meta.cc)
+  set(test_cls_rgw_meta_srcs
+    test_rgw_admin_meta.cc
+    test_rgw_admin_helper.cc
+  )
   add_executable(ceph_test_cls_rgw_meta
     ${test_cls_rgw_meta_srcs}
     )
@@ -593,12 +623,14 @@ if(NOT WIN32)
   ceph_snappy
   cls_lock
   ceph_test_objectstore
-  ceph_test_bluefs
   ceph_erasure_code_non_regression
   cython_modules
   crushtool
   monmaptool)
 
+if (WITH_BLUESTORE)
+  add_dependencies(tests ceph_test_bluefs)
+endif()
 if (WITH_CEPHFS)
   add_dependencies(tests ceph-mds)
 endif()
@@ -614,7 +646,7 @@ if(WITH_RBD)
     add_dependencies(tests unittest_librbd rbd-mirror)
   endif(WITH_RBD_MIRROR)
 endif(WITH_RBD)
-if(WITH_RADOSGW)
+if(WITH_RADOSGW AND WITH_RADOSGW_RADOS)
   add_dependencies(tests radosgw radosgw-admin)
 endif()
 #add dependency from fio just to ensure the plugin build isn't failing
@@ -983,6 +1015,12 @@ add_executable(unittest_not_before_queue
 add_ceph_unittest(unittest_not_before_queue)
 target_link_libraries(unittest_not_before_queue ceph-common)
 
+# unittest_mode_collector
+add_executable(unittest_mode_collector
+  test_mode_collector.cc)
+add_ceph_unittest(unittest_mode_collector)
+target_link_libraries(unittest_mode_collector ceph-common)
+
 if(NOT WIN32)
 # unittest_on_exit
 add_executable(unittest_on_exit
@@ -1026,6 +1064,15 @@ target_link_libraries(test_nvmeof_mon_encoding
   mon ceph-common global-static
   )
 
+
+if(WITH_BREAKPAD)
+# unittest_ceph_breakpad
+add_executable(unittest_ceph_breakpad
+  ceph_breakpad.cc)
+add_ceph_unittest(unittest_ceph_breakpad)
+target_link_libraries(unittest_ceph_breakpad ceph-common global Breakpad::breakpad)
+endif()
+
 if(NOT WIN32)
 # unittest_ceph_assert
 add_executable(unittest_ceph_assert
@@ -1033,3 +1080,12 @@ add_executable(unittest_ceph_assert
 add_ceph_unittest(unittest_ceph_assert)
 target_link_libraries(unittest_ceph_assert ceph-common global)
 endif()
+
+add_executable(test_nvmeof_gw_utils
+  test_nvmeof_gw_utils.cc
+  ../nvmeof/NVMeofGwUtils.cc
+  )
+target_link_libraries(test_nvmeof_gw_utils
+  mon ceph-common global-static
+  )
+

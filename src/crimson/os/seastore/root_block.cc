@@ -1,8 +1,8 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/os/seastore/root_block.h"
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/lba/lba_btree_node.h"
 #include "crimson/os/seastore/backref/backref_tree_node.h"
 #include "crimson/os/seastore/linked_tree_node.h"
 
@@ -14,17 +14,17 @@ void RootBlock::on_replace_prior() {
     if (prior.lba_root_node) {
       RootBlockRef this_ref = this;
       auto lba_root = static_cast<
-	lba_manager::btree::LBANode*>(prior.lba_root_node);
+	lba::LBANode*>(prior.lba_root_node);
       if (likely(lba_root->range.depth > 1)) {
-	TreeRootLinker<RootBlock, lba_manager::btree::LBAInternalNode>::link_root(
+	TreeRootLinker<RootBlock, lba::LBAInternalNode>::link_root(
 	  this_ref,
-	  static_cast<lba_manager::btree::LBAInternalNode*>(prior.lba_root_node)
+	  static_cast<lba::LBAInternalNode*>(prior.lba_root_node)
 	);
       } else {
 	assert(lba_root->range.depth == 1);
-	TreeRootLinker<RootBlock, lba_manager::btree::LBALeafNode>::link_root(
+	TreeRootLinker<RootBlock, lba::LBALeafNode>::link_root(
 	  this_ref,
-	  static_cast<lba_manager::btree::LBALeafNode*>(prior.lba_root_node)
+	  static_cast<lba::LBALeafNode*>(prior.lba_root_node)
 	);
       }
     }

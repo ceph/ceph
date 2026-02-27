@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,18 +13,31 @@
  * 
  */
 
+#include "SessionMap.h"
+#include "Capability.h"
+#include "CDentry.h" // for struct ClientLease
+#include "CInode.h"
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "Mutation.h"
-#include "SessionMap.h"
 #include "osdc/Filer.h"
+#include "osdc/Objecter.h"
 #include "common/Finisher.h"
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/DecayCounter.h"
+#include "common/perf_counters.h"
+#include "common/strescape.h" // for get_trimmed_path()
 #include "include/ceph_assert.h"
 #include "include/stringify.h"
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -31,6 +45,21 @@
 #define dout_prefix *_dout << "mds." << rank << ".sessionmap "
 
 using namespace std;
+
+void Session::touch_cap(Capability *cap) {
+  session_cache_liveness.hit(1.0);
+  caps.push_front(&cap->item_session_caps);
+}
+
+void Session::touch_cap_bottom(Capability *cap) {
+  session_cache_liveness.hit(1.0);
+  caps.push_back(&cap->item_session_caps);
+}
+
+void Session::touch_lease(ClientLease *r) {
+  session_cache_liveness.hit(1.0);
+  leases.push_back(&r->item_session_lease);
+}
 
 namespace {
 class SessionMapIOContext : public MDSIOContextBase
@@ -48,6 +77,18 @@ class SessionMapIOContext : public MDSIOContextBase
 SessionMap::SessionMap(MDSRank *m)
   : mds(m),
     mds_session_metadata_threshold(g_conf().get_val<Option::size_t>("mds_session_metadata_threshold")) {
+}
+
+SessionMap::~SessionMap()
+{
+  for (auto p : by_state)
+      delete p.second;
+
+  if (logger) {
+    g_ceph_context->get_perfcounters_collection()->remove(logger);
+  }
+
+  delete logger;
 }
 
 void SessionMap::register_perfcounters()
@@ -591,6 +632,7 @@ void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
 void Session::dump(Formatter *f, bool cap_dump) const
 {
   f->dump_int("id", info.inst.name.num());
+  f->dump_object("auth_name", info.auth_name);
   f->dump_object("entity", info.inst);
   f->dump_string("state", get_state_name());
   f->dump_int("num_leases", leases.size());
@@ -642,10 +684,30 @@ void SessionMapStore::dump(Formatter *f) const
   f->close_section(); // Sessions
 }
 
-void SessionMapStore::generate_test_instances(std::list<SessionMapStore*>& ls)
+Session* SessionMapStore::get_or_add_session(const entity_inst_t& i) {
+  Session *s;
+  auto session_map_entry = session_map.find(i.name);
+  if (session_map_entry != session_map.end()) {
+    s = session_map_entry->second;
+  } else {
+    s = session_map[i.name] = new Session(ConnectionRef());
+    s->info.inst = i;
+    s->last_cap_renew = Session::clock::now();
+    if (logger) {
+      logger->set(l_mdssm_session_count, session_map.size());
+      logger->inc(l_mdssm_session_add);
+    }
+  }
+
+  return s;
+}
+
+std::list<SessionMapStore> SessionMapStore::generate_test_instances()
 {
+  std::list<SessionMapStore> ls;
   // pretty boring for now
-  ls.push_back(new SessionMapStore());
+  ls.push_back(SessionMapStore());
+  return ls;
 }
 
 void SessionMap::wipe()
@@ -1029,7 +1091,7 @@ void Session::decode(bufferlist::const_iterator &p)
   _update_human_name();
 }
 
-int Session::check_access(CInode *in, unsigned mask,
+int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
 			  int caller_uid, int caller_gid,
 			  const vector<uint64_t> *caller_gid_list,
 			  int new_uid, int new_gid)
@@ -1062,11 +1124,14 @@ int Session::check_access(CInode *in, unsigned mask,
     }
   }
 
+  string trimmed_path = "";
   if (!path.empty()) {
     dout(20) << __func__ << " stray_prior_path " << path << dendl;
   } else {
     in->make_path_string(path, true);
-    dout(20) << __func__ << " path " << path << dendl;
+    /* Log only 10 final components fo the path to since logging entire
+     * path is not useful and also reduces readability. */
+    dout(20) << __func__ << " path " << get_trimmed_path_str(path) << dendl;
   }
   if (path.length())
     path = path.substr(1);    // drop leading /
@@ -1080,10 +1145,9 @@ int Session::check_access(CInode *in, unsigned mask,
     return -EIO;
   }
 
-  if (!auth_caps.is_capable(path, inode->uid, inode->gid, inode->mode,
+  if (!auth_caps.is_capable(fs_name, path, inode->uid, inode->gid, inode->mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
-			    new_uid, new_gid,
-			    info.inst.addr)) {
+			    new_uid, new_gid, info.inst.addr, trimmed_path)) {
     return -EACCES;
   }
   return 0;
@@ -1091,9 +1155,11 @@ int Session::check_access(CInode *in, unsigned mask,
 
 // track total and per session load
 void SessionMap::hit_session(Session *session) {
-  uint64_t sessions = get_session_count_in_state(Session::STATE_OPEN) +
+  uint64_t sessions = get_session_count_in_state(Session::STATE_OPENING) +
+                      get_session_count_in_state(Session::STATE_OPEN) +
                       get_session_count_in_state(Session::STATE_STALE) +
-                      get_session_count_in_state(Session::STATE_CLOSING);
+                      get_session_count_in_state(Session::STATE_CLOSING) +
+                      get_session_count_in_state(Session::STATE_KILLING);
   ceph_assert(sessions != 0);
 
   double total_load = total_load_avg.hit();

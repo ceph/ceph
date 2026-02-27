@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,8 +13,11 @@
  * 
  */
 
+#include "Beacon.h"
+#include "BatchOp.h"
+#include "Server.h"
 
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/likely.h"
 #include "common/HeartbeatMap.h"
 
@@ -22,13 +26,14 @@
 #include "include/util.h"
 
 #include "mon/MonClient.h"
+#include "mds/MDCache.h"
 #include "mds/MDLog.h"
 #include "mds/MDSRank.h"
-#include "mds/MDSMap.h"
 #include "mds/Locker.h"
 #include "mds/mdstypes.h"
+#include "osdc/Objecter.h"
 
-#include "Beacon.h"
+#include "messages/MMDSBeacon.h"
 
 #include <chrono>
 

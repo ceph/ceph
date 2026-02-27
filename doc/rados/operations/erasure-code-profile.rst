@@ -80,7 +80,9 @@ Where:
               ``osd_pool_erasure_code_stripe_unit`` when a pool is
               created.  The stripe_width of a pool using this profile
               will be the number of data chunks multiplied by this
-              stripe_unit.
+              stripe_unit. See :ref:`rados_ops_erasure_coding_optimizations`
+              for more information.
+
 
 :Type: String
 :Required: No.

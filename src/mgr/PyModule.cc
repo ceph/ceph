@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -21,6 +22,7 @@
 
 #include "include/stringify.h"
 #include "common/BackTrace.h"
+#include "common/JSONFormatter.h"
 #include "global/signal_handler.h"
 
 #include "common/debug.h"
@@ -449,8 +451,16 @@ int PyModule::load_notify_types()
 {
   PyObject *ls = PyObject_GetAttrString(pClass, "NOTIFY_TYPES");
   if (ls == nullptr) {
-    dout(10) << "Module " << get_name() << " has no NOTIFY_TYPES member" << dendl;
-    return 0;
+    // NOTIFY_TYPES is optional - clear expected AttributeError
+    if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
+      PyErr_Clear();
+      dout(10) << "Module " << get_name() << " has no NOTIFY_TYPES member" << dendl;
+      return 0;
+    }
+    // Unexpected error - report it
+    derr << "Error getting NOTIFY_TYPES from " << get_name() << ": "
+         << handle_pyerror(true, module_name, "load_notify_types") << dendl;
+    return -EINVAL;
   }
   if (!PyObject_TypeCheck(ls, &PyList_Type)) {
     // Relatively easy mistake for human to make, e.g. defining COMMANDS
@@ -667,6 +677,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
     error_string = peek_pyerror();
     derr << "Module not found: '" << module_name << "'" << dendl;
     derr << handle_pyerror(true, module_name, "PyModule::load_subclass_of") << dendl;
+    Py_DECREF(mgr_module_type);
     return -ENOENT;
   }
   auto locals = PyModule_GetDict(plugin_module);
@@ -707,6 +718,8 @@ PyModule::~PyModule()
     Gil gil(pMyThreadState, true);
     Py_XDECREF(pClass);
     Py_XDECREF(pStandbyClass);
+    Py_EndInterpreter(pMyThreadState.ts);
+    pMyThreadState.ts = nullptr;
   }
 }
 

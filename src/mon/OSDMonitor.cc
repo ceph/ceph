@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -57,6 +58,7 @@
 #include "messages/MMonGetPurgedSnaps.h"
 #include "messages/MMonGetPurgedSnapsReply.h"
 
+#include "common/JSONFormatter.h"
 #include "common/TextTable.h"
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
@@ -64,6 +66,7 @@
 #include "common/PriorityCache.h"
 #include "common/strtol.h"
 #include "common/numa.h"
+#include "common/prime.h"
 
 #include "common/config.h"
 #include "common/errno.h"
@@ -111,6 +114,8 @@ using ceph::ErasureCodeProfile;
 using ceph::Formatter;
 using ceph::JSONFormatter;
 using ceph::make_message;
+using ceph::make_timespan;
+using ceph::timespan_str;
 using namespace std::literals;
 
 #define dout_subsys ceph_subsys_mon
@@ -501,6 +506,7 @@ void OSDMonitor::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("mon_memory_target") ||
       changed.count("rocksdb_cache_size")) {
+    _set_cache_autotuning();
     int r = _update_mon_cache_settings();
     if (r < 0) {
       derr << __func__ << " mon_memory_target:"
@@ -1521,9 +1527,11 @@ void OSDMonitor::prime_pg_temp(
   {
     std::lock_guard l(prime_pg_temp_lock);
     // do not touch a mapping if a change is pending
+    std::vector<int> pg_temp = pool ? next.pgtemp_primaryfirst(*pool, acting) :
+                                      acting;
     pending_inc.new_pg_temp.emplace(
       pgid,
-      mempool::osdmap::vector<int>(acting.begin(), acting.end()));
+      mempool::osdmap::vector<int>(pg_temp.begin(), pg_temp.end()));
   }
 }
 
@@ -3891,6 +3899,7 @@ bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
   return false;
 
  ignore:
+  mon.no_reply(op);
   return true;
 }
 
@@ -4136,9 +4145,11 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     // change?
     //  NOTE: we assume that this will clear pg_primary, so consider
     //        an existing pg_primary field to imply a change
+    std::vector<int> acting_set;
+    osdmap.pg_to_acting_osds(p->first, acting_set);
     if (p->second.size() &&
 	(osdmap.pg_temp->count(p->first) == 0 ||
-	 osdmap.pg_temp->get(p->first) != p->second ||
+	 acting_set != p->second ||
 	 osdmap.primary_temp->count(p->first)))
       return false;
   }
@@ -4187,8 +4198,18 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
                << ": pool has been removed" << dendl;
       continue;
     }
+    // Pools with allow_ec_optimizations set store pg_temp in a different
+    // order to change the primary selection algorithm without breaking
+    // old clients. If necessary re-order the new pg_temp now
+    pg_pool_t pg_pool;
+    if (pending_inc.new_pools.count(pool))
+      pg_pool = pending_inc.new_pools[pool];
+    else
+      pg_pool = *osdmap.get_pg_pool(pool);
+
+    std::vector<int> pg_temp = osdmap.pgtemp_primaryfirst(pg_pool, p->second);
     pending_inc.new_pg_temp[p->first] =
-      mempool::osdmap::vector<int>(p->second.begin(), p->second.end());
+      mempool::osdmap::vector<int>(pg_temp.begin(), pg_temp.end());
 
     // unconditionally clear pg_primary (until this message can encode
     // a change for that, too.. at which point we need to also fix
@@ -7783,8 +7804,8 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 	*min_size =
 	  erasure_code->get_data_chunk_count() +
 	  std::min<int>(1, erasure_code->get_coding_chunk_count() - 1);
-	assert(*min_size <= *size);
-	assert(*min_size >= erasure_code->get_data_chunk_count());
+	ceph_assert(*min_size <= *size);
+	ceph_assert(*min_size >= erasure_code->get_data_chunk_count());
       }
     }
     break;
@@ -7816,6 +7837,17 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
 	break;
       uint32_t data_chunks = erasure_code->get_data_chunk_count();
       uint32_t stripe_unit = g_conf().get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
+
+      if (stripe_unit == 0) {
+        if (((erasure_code->get_supported_optimizations() & 
+              ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) != 0) &&
+            (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations"))) {
+            stripe_unit = 16 * 1024;
+        } else {
+          stripe_unit = 4 * 1024;
+        }
+      } 
+    
       auto it = profile.find("stripe_unit");
       if (it != profile.end()) {
 	string err_str;
@@ -8216,12 +8248,12 @@ int OSDMonitor::prepare_new_pool(string& name,
   pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
   pi->create_time = ceph_clock_now();
   pi->type = pool_type;
-  pi->fast_read = fread; 
+  pi->fast_read = fread;
   pi->flags = g_conf()->osd_pool_default_flags;
   if (bulk) {
     pi->set_flag(pg_pool_t::FLAG_BULK);
   } else if (g_conf()->osd_pool_default_flag_bulk) {
-      pi->set_flag(pg_pool_t::FLAG_BULK);
+    pi->set_flag(pg_pool_t::FLAG_BULK);
   }
   if (g_conf()->osd_pool_default_flag_hashpspool)
     pi->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
@@ -8238,7 +8270,6 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->use_gmt_hitset = false;
   if (crimson) {
     pi->set_flag(pg_pool_t::FLAG_CRIMSON);
-    pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   }
 
   pi->size = size;
@@ -8321,6 +8352,13 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->cache_min_flush_age = g_conf()->osd_pool_default_cache_min_flush_age;
   pi->cache_min_evict_age = g_conf()->osd_pool_default_cache_min_evict_age;
 
+  if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
+    // This will fail if the pool cannot support ec optimizations.
+    enable_pool_ec_optimizations(*pi, nullptr, true);
+  }
+
+  enable_pool_ec_direct_reads(*pi);
+
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -8349,6 +8387,93 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
   wait_for_commit(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 						    get_last_committed() + 1));
   return true;
+}
+
+int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
+    stringstream *ss, bool enable) {
+  if (!p.is_erasure()) {
+    if (ss) {
+      *ss << "allow_ec_optimizations can only be enabled for an erasure coded pool";
+    }
+    return -EINVAL;
+  }
+  if (osdmap.require_osd_release < ceph_release_t::tentacle) {
+    if (ss) {
+      *ss << "All OSDs must be upgraded to tentacle or "
+           << "later before setting allow_ec_optimizations";
+    }
+    return -EINVAL;
+  }
+  if (enable) {
+    ErasureCodeInterfaceRef erasure_code;
+    unsigned int k, m;
+    stringstream tmp;
+    int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+    if (err == 0) {
+      k = erasure_code->get_data_chunk_count();
+      m = erasure_code->get_coding_chunk_count();
+    } else {
+      if (ss) {
+        *ss << "get_erasure_code failed: " << tmp.str();
+      }
+      return -EINVAL;
+    }
+    if ((erasure_code->get_supported_optimizations() &
+        ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0) {
+      if (ss) {
+        *ss << "ec optimizations not currently supported for pool profile.";
+      }
+      return -EINVAL;
+    }
+    // Restrict the set of shards that can be a primary to the 1st data
+    // raw_shard (raw_shard 0) and the coding parity raw_shards because§
+    // the other shards (including local parity for LRC) may not have
+    // up to date copies of xattrs including OI
+    p.nonprimary_shards.clear();
+    for (raw_shard_id_t raw_shard; raw_shard < k + m; ++raw_shard) {
+      if (raw_shard > 0 && raw_shard < k) {
+	shard_id_t shard;
+	if (erasure_code->get_chunk_mapping().size() > raw_shard ) {
+	  shard = shard_id_t(erasure_code->get_chunk_mapping().at(int(raw_shard)));
+	} else {
+	  shard = shard_id_t(int(raw_shard));
+	}
+        p.nonprimary_shards.insert(shard);
+      }
+    }
+    p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
+  } else {
+    if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
+      if (ss) {
+        *ss << "allow_ec_optimizations cannot be disabled once enabled";
+      }
+      return -EINVAL;
+    }
+  }
+  return 0;
+}
+
+void OSDMonitor::enable_pool_ec_direct_reads(pg_pool_t &p) {
+  if (p.is_erasure()) {
+    ErasureCodeInterfaceRef erasure_code;
+    stringstream tmp;
+    int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+
+    // Once this feature is finished, we will replace this with upgrade code.
+    // The upgrade code will enable the split read flag once all OSDs are at
+    // Umbrella. For now, if the plugin does not support direct reads, we just
+    // disable it.  All plugins and techniques should be capable of supporting
+    // direct reads, but we put in place this capability to reduce the test
+    // matrix for less important plugins/techniques.
+    //
+    // To enable direct reads in development, set the osd_pool_default_flags to
+    // 1<<20 = 0x100000 = 1048576
+    if (err != 0 || !p.allows_ecoptimizations() ||
+          (erasure_code->get_supported_optimizations() &
+            ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) == 0) {
+      p.flags &= ~pg_pool_t::FLAG_CLIENT_SPLIT_READS;
+    }
+  }
 }
 
 int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
@@ -8500,6 +8625,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
     }
+    // check for Crimson pools
+    // pg merging is not yet supported in Crimson
+    if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      if (n < (int)p.get_pg_num()) {
+        ss << "crimson-osd does not support decreasing pg_num_actual (shrinking)";
+        return -ENOTSUP;
+      }
+      if (n > (int)p.get_pg_num() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
+        ss << "crimson_allow_pg_split is false; pg_num_actual increase denied";
+        return -EPERM;
+      }
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -8551,6 +8688,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
     }
+    // check for Crimson pools
+    // pg merging is not yet supported in Crimson
+    if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      if (n < (int)p.get_pg_num_target()) {
+        ss << "crimson-osd does not support decreasing pg_num";
+        return -ENOTSUP;
+      }
+      if (n > (int)p.get_pg_num_target() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
+        ss << "crimson_allow_pg_split is false; pg_num increase denied for crimson pool";
+        return -EPERM;
+      }
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -8597,7 +8746,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     }
     if (osdmap.require_osd_release < ceph_release_t::nautilus) {
       // pre-nautilus osdmap format; increase pg_num directly
-      assert(n > (int)p.get_pg_num());
+      ceph_assert(n > (int)p.get_pg_num());
       // force pre-nautilus clients to resend their ops, since they
       // don't understand pg_num_target changes form a new interval
       p.last_force_op_resend_prenautilus = pending_inc.epoch;
@@ -8619,6 +8768,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
+    }
+    // check for Crimson pools
+    // pg merging is not yet supported in Crimson
+    if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      if (n < (int)p.get_pgp_num()) {
+        ss << "crimson-osd does not support decreasing pgp_num_actual";
+        return -ENOTSUP;
+      }
+      if (n > (int)p.get_pgp_num() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
+        ss << "crimson_allow_pg_split is false; pgp_num_actual increase denied";
+        return -EPERM;
+      }
     }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -8642,6 +8803,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
+    }
+    // check for Crimson pools
+    // pg merging is not yet supported in Crimson
+    if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      if (n < (int)p.get_pgp_num_target()) {
+        ss << "crimson-osd does not support decreasing pgp_num";
+        return -ENOTSUP;
+      }
+      if (n > (int)p.get_pgp_num_target() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
+        ss << "crimson_allow_pg_split is false; pgp_num increase denied";
+        return -EPERM;
+      }
     }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -8695,10 +8868,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (val == "true" || (interr.empty() && n == 1)) {
       p.set_flag(flag);
     } else if (val == "false" || (interr.empty() && n == 0)) {
-      if (flag == pg_pool_t::FLAG_NOPGCHANGE && p.is_crimson()) {
-	ss << "cannot clear FLAG_NOPGCHANGE on a crimson pool";
-	return -EINVAL;
-      }
       p.unset_flag(flag);
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
@@ -8818,25 +8987,33 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
   } else if (var == "allow_ec_optimizations") {
-    if (!p.is_erasure()) {
-      ss << "allow_ec_optimizations can only be enabled for an erasure coded pool";
-      return -EINVAL;
-    }
-    if (osdmap.require_osd_release < ceph_release_t::tentacle) {
-      ss << "All OSDs must be upgraded to tentacle or "
-           << "later before setting allow_ec_optimizations";
-        return -EINVAL;
-      }
+    bool enable = false;
     if (val == "true" || (interr.empty() && n == 1)) {
-      p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
+      enable = true;
     } else if (val == "false" || (interr.empty() && n == 0)) {
-      if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
-	ss << "allow_ec_optimizations cannot be disabled once enabled";
-	return -EINVAL;
-      }
+      enable = false;
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
+    }
+    bool was_enabled = p.allows_ecoptimizations();
+    int r = enable_pool_ec_optimizations(p, nullptr, enable);
+    if (r != 0) {
+      return r;
+    }
+    if (!was_enabled && p.allows_ecoptimizations()) {
+      // Pools with allow_ec_optimizations set store pg_temp in a different
+      // order to change the primary selection algorithm without breaking
+      // old clients. Modify any existing pg_temp for the pool now.
+      // This is only needed when switching on optimisations after creation.
+      for (auto pg_temp = osdmap.pg_temp->begin();
+           pg_temp != osdmap.pg_temp->end();
+           ++pg_temp) {
+        if (pg_temp->first.pool() == pool) {
+          std::vector<int> new_pg_temp = osdmap.pgtemp_primaryfirst(p, pg_temp->second);
+          pending_inc.new_pg_temp[pg_temp->first] = mempool::osdmap::vector<int>(new_pg_temp.begin(), new_pg_temp.end());
+        }
+      }
     }
   } else if (var == "target_max_objects") {
     if (interr.length()) {
@@ -11560,10 +11737,49 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (profile_map.find("plugin") == profile_map.end()) {
       ss << "erasure-code-profile " << profile_map
-	 << " must contain a plugin entry" << std::endl;
+      << " must contain a plugin entry" << std::endl;
       err = -EINVAL;
       goto reply_no_propose;
     }
+
+    bool force_no_fake = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", force_no_fake);
+
+    //This is the start of the validation for the w value in a blaum_roth profile
+    //this will search the Profile map, which contains the values for the parameters given in the command, for the technique parameter
+    if (auto found = profile_map.find("technique"); found != profile_map.end()) {
+      //if the technique parameter is found then save the value of it
+      string technique = found->second;
+      //then search the profile map again for the w value, which doesnt have to be specified, and if it is found and the technique used is blaum-roth then check that the w value is correct.
+      if (found = profile_map.find("w"); technique == "blaum_roth" 
+      && found != profile_map.end()) {
+        int w = std::stoi(found->second);
+        if ((w <= 2) || (w >= 256)) {
+          ss << "erasure-code-profile: " << profile_map
+          << " The value of w must be greater than 2 and less than 256." << std::endl;
+          err = -EINVAL;
+          goto reply_no_propose;
+        }
+
+        //checks if w+1 is not prime
+        if (!is_prime(w + 1)) {
+          if (force ^ force_no_fake) {
+            err = -EPERM;
+            ss << "Creating a blaum-roth erasure code profile with a w+1 value"
+            << " that is not prime is dangerous, as it can cause data corruption."
+            << " You need to use both --yes-i-really-mean-it and --force flags."
+            << std::endl;
+            goto reply_no_propose;
+          } else if (!force && !force_no_fake) {
+            ss << "erasure-code-profile: " << profile_map 
+            << " must use a w value such that w+1 is prime." << std::endl;
+            err = -EINVAL;
+            goto reply_no_propose;
+          }
+        }
+      }
+    }
+
     string plugin = profile_map["plugin"];
 
     if (pending_inc.has_erasure_code_profile(name)) {
@@ -11585,8 +11801,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  err = 0;
 	  goto reply_no_propose;
 	}
-	bool force_no_fake = false;
-	cmd_getval(cmdmap, "yes_i_really_mean_it", force_no_fake);
+
 	if (!force) {
 	  err = -EPERM;
 	  ss << "will not override erasure code profile " << name
@@ -12480,6 +12695,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply_no_propose;
       }
     }
+    // Optimized EC does not cope with pg temp with a mismatched size.
+    pending_inc.new_pg_temp[pgid].resize(osdmap.get_pg_size(pgid), CRUSH_ITEM_NONE);
     goto update;
   } else if (prefix == "osd pg-upmap" ||
              prefix == "osd rm-pg-upmap" ||
@@ -14320,6 +14537,91 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						   get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd pool clear-availability-status") {
+    if (!g_conf().get_val<bool>("enable_availability_tracking")) {
+      ss << "Availability tracking is disabled. Availability status can not be cleared "
+      << "while the feature is disabled. Enable it by setting the config "
+      << "option enable_availability_tracking to ``true`` then try again.";
+      err = -EOPNOTSUPP;
+      goto reply_no_propose;
+    }
+
+    string pool_name;
+    cmd_getval(cmdmap, "pool", pool_name);
+    int64_t pool_id = osdmap.lookup_pg_pool_name(pool_name);
+    // check if pool exists
+    if (pool_id < 0) {
+      ss << "unrecognized pool '" << pool_name << "'";
+      err = -ENOENT;
+      goto reply_no_propose;
+    }
+    std::map<uint64_t, PoolAvailability> pool_availability = mon.mgrstatmon()->get_pool_availability();
+    // check if pool exists in pool_availability
+    if (pool_availability.find(pool_id) == pool_availability.end()){
+      ss << "unrecognized pool '" << pool_name << "'";
+      err = -ENOENT;
+      goto reply_no_propose;
+    }
+    // clear existing calculations
+    mon.mgrstatmon()->clear_pool_availability(pool_id);
+  } else if (prefix == "osd pool availability-status") {
+    if (!g_conf().get_val<bool>("enable_availability_tracking")) {
+      ss << "availability tracking is disabled; you can enable it by setting the config option enable_availability_tracking";
+      err = -EOPNOTSUPP;
+      goto reply_no_propose;
+    }  
+    
+    std::map<uint64_t, PoolAvailability> pool_availability = mon.mgrstatmon()->get_pool_availability();
+
+    if (f) {
+      f->open_array_section("pools");
+      for (const auto& i : pool_availability) {
+        const auto& p = i.second;
+        double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;
+        double mttr = p.num_failures > 0 ? (p.downtime / p.num_failures) : 0;
+        double score = mtbf > 0 ? mtbf / (mtbf +  mttr): 1.0;
+
+        f->open_object_section("pool");
+        f->dump_string("pool", p.pool_name);
+        f->dump_unsigned("uptime",    p.uptime);
+        f->dump_unsigned("downtime",  p.downtime);
+        f->dump_float("mtbf",      mtbf);
+        f->dump_float("mttr",      mttr);
+        f->dump_unsigned("num_failures", p.num_failures);
+        f->dump_float("score", score);
+        f->dump_bool("available", p.is_avail);
+        f->close_section(); 
+      }
+      f->close_section(); 
+      f->flush(rdata);
+    } else {
+      TextTable tbl;
+      tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("UPTIME", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("DOWNTIME", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("NUMFAILURES", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("MTBF", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("MTTR", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("SCORE", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("AVAILABLE", TextTable::LEFT, TextTable::RIGHT);
+
+      for (const auto& i : pool_availability) {
+        const auto& p = i.second;
+        double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;
+        double mttr = p.num_failures > 0 ? (p.downtime / p.num_failures) : 0;
+        double score = mtbf > 0 ? mtbf / (mtbf +  mttr): 1.0;
+        tbl << p.pool_name;
+        tbl << timespan_str(make_timespan(p.uptime));
+        tbl << timespan_str(make_timespan(p.downtime));
+        tbl << p.num_failures;
+        tbl << timespan_str(make_timespan(mtbf));
+        tbl << timespan_str(make_timespan(mttr));
+        tbl << score;
+        tbl << p.is_avail;
+        tbl << TextTable::endrow;
+      }
+      rdata.append(stringify(tbl));
+    }
   } else if (prefix == "osd force-create-pg") {
     pg_t pgid;
     string pgidstr;
@@ -15080,6 +15382,26 @@ int OSDMonitor::_prepare_remove_pool(
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
   }
+
+  // remove any crush rules for this pool
+  const pg_pool_t *pi = osdmap.get_pg_pool(pool);
+  if (pi->is_erasure() && newcrush.rule_exists(pi->get_crush_rule())) {
+    int ruleno = pi->get_crush_rule();
+    ceph_assert(ruleno >= 0);
+
+    auto rule_in_use = false;
+    for (const auto &_pool : osdmap.pools) {
+      if (_pool.second.get_crush_rule() == ruleno && pool != _pool.first)
+        rule_in_use = true;
+    }
+    if (!rule_in_use) {
+      dout(10) << __func__ << " removing crush rule for pool " << pool << dendl;
+      newcrush.remove_rule(ruleno);
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    }
+  }
+
   return 0;
 }
 

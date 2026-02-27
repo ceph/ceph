@@ -1,4 +1,4 @@
-#ifndef _NDEBUG
+#ifndef NDEBUG
 // The callbacks we define here will be called from the sanitizer runtime, but
 // aren't referenced from the Chrome executable. We must ensure that those
 // callbacks are not sanitizer-instrumented, and that they aren't stripped by
@@ -17,4 +17,4 @@ static char kLSanDefaultSuppressions[] =
 SANITIZER_HOOK_ATTRIBUTE const char *__lsan_default_suppressions() {
   return kLSanDefaultSuppressions;
 }
-#endif // ! _NDEBUG
+#endif // !NDEBUG

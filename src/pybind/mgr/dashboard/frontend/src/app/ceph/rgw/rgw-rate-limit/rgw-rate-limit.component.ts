@@ -10,11 +10,13 @@ import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import _ from 'lodash';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { USER } from '~/app/shared/constants/app.constants';
 
 @Component({
   selector: 'cd-rgw-rate-limit',
   templateUrl: './rgw-rate-limit.component.html',
-  styleUrls: ['./rgw-rate-limit.component.scss']
+  styleUrls: ['./rgw-rate-limit.component.scss'],
+  standalone: false
 })
 export class RgwRateLimitComponent implements OnInit, AfterViewInit {
   globalRateLimit: GlobalRateLimitConfig['user_ratelimit' | 'bucket_ratelimit'];
@@ -45,7 +47,7 @@ export class RgwRateLimitComponent implements OnInit, AfterViewInit {
 
   ngOnInit(): void {
     // get the global rate Limit
-    if (this.type === 'user') {
+    if (this.type === USER) {
       this.rgwUserService.getGlobalUserRateLimit().subscribe(
         (data: GlobalRateLimitConfig) => {
           if (data && data.user_ratelimit !== undefined) {
@@ -158,7 +160,7 @@ export class RgwRateLimitComponent implements OnInit, AfterViewInit {
    * on load for user and bucket
    */
   private getRateLimitFormValues() {
-    if (this.type === 'user') {
+    if (this.type === USER) {
       this.rgwUserService.getUserRateLimit(this.id).subscribe(
         (resp: GlobalRateLimitConfig) => {
           this.populateFormValues(resp.user_ratelimit);

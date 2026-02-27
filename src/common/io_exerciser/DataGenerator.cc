@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #include "DataGenerator.h"
 
 #include <chrono>
@@ -73,7 +74,7 @@ ceph::bufferptr SeededRandomGenerator::generate_block(uint64_t block_offset) {
     size_t remainingBytes = block_size % (generation_length * 2);
     if (remainingBytes > generation_length) {
       size_t remainingBytes2 = remainingBytes - generation_length;
-      std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
+      std::memcpy(buffer + block_size - remainingBytes, &rand1, generation_length);
       std::memcpy(buffer + block_size - remainingBytes2, &rand2,
                   remainingBytes2);
     } else if (remainingBytes > 0) {
@@ -105,7 +106,7 @@ ceph::bufferptr SeededRandomGenerator::generate_wrong_block(
   size_t remainingBytes = block_size % (generation_length * 2);
   if (remainingBytes > generation_length) {
     size_t remainingBytes2 = remainingBytes - generation_length;
-    std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
+    std::memcpy(buffer + block_size - remainingBytes, &rand1, generation_length);
     std::memcpy(buffer + block_size - remainingBytes2, &rand2, remainingBytes2);
   } else if (remainingBytes > 0) {
     std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
@@ -226,7 +227,7 @@ bool HeaderedSeededRandomGenerator::validate(bufferlist& bufferlist,
   }
 
   if (!invalid_block_offsets.empty()) {
-    dout(0) << "Miscompare for read of " << m_model.get_oid() <<
+    dout(0) << "Miscompare for read of " << m_model.get_primary_oid() <<
       " offset=" << offset << " length=" << length << dendl;
     printDebugInformationForOffsets(offset, invalid_block_offsets, bufferlist);
   }

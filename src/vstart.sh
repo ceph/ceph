@@ -194,7 +194,6 @@ if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
     with_mgr_dashboard=false
 fi
 
-kstore_path=
 declare -a block_devs
 declare -a bluestore_db_devs
 declare -a bluestore_wal_devs
@@ -244,7 +243,6 @@ options:
 	--rgw_store storage backend: rados|dbstore|posix
 	--seastore use seastore as crimson osd backend
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
-	-K, --kstore use kstore as the osd objectstore backend
 	--cyanstore use cyanstore as the osd objectstore backend
 	--memstore use memstore as the osd objectstore backend
 	--cache <pool>: enable cache tiering on pool
@@ -275,11 +273,15 @@ options:
 	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
 	--crimson-smp: number of cores to use for crimson
 	--crimson-alien-num-threads: number of alien-tp threads
-	--crimson-alien-num-cores: number of cores to use for alien-tp
+	--crimson-reactor-physical-only: use only one cpu per physical core for seastar reactors
+	--crimson-alien-num-cores: number of cpus to use for alien threads
+	--crimson-alienstore-physical-only: use only one cpu per physical core for alienstore
 	--crimson-balance-cpu: distribute the Seastar reactors uniformly across OSDs (osd) or NUMA (socket)
+	--crimson-poll-mode: enable poll-mode (100% cpu usage)
 	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
 	--require-osd-and-client-version: if supplied, do set-require-min-compat-client and require-osd-release to specified value
 	--use-crush-tunables: if supplied, set tunables to specified value
+	--reactor-backend: configre seastar reactor backend options like io_uring or linux-aio
 \n
 EOF
 
@@ -350,41 +352,43 @@ parse_secondary_devs() {
 
 # Auxiliar function to prepare the CPU cores to pin Seastar reactors
 prep_balance_cpu() {
-    local crimson_smp=$1
-    local balance_strategy=$2
-    local in_file_name="/tmp/numa_args_${balance_strategy}.out"
-    local out_file_name="/tmp/numa_nodes.json"
-    local log_file_name="/tmp/numa_bal_${balance_strategy}.log"
-    local cmd
+    if [ -z $crimson_balance_cpu ] || [ "${crimson_balance_cpu}" == "none" ] ; then
+        echo "Not assigning cpus for crimson"
+        return
+    fi
 
-    # Check the table is empty
-    if [ "${#cpu_table[@]}" -eq 0 ]; then
-        # Ensure the file with the CPU mappings exist
-        if [ ! -f ${in_file_name} ]; then
-            debug echo "lscpu --json > ${out_file_name}"
-            lscpu --json > ${out_file_name}
-            MY_CPUS=$(taskset -acp $$ | awk -F : '{print $2}')
-            cmd="python3 ${CEPH_DIR}/../src/tools/contrib/balance_cpu.py -o ${CEPH_NUM_OSD}\
-                -r ${crimson_smp}  -b ${balance_strategy} -u ${out_file_name} -t ${MY_CPUS} > ${in_file_name}"
-            debug echo "$cmd"
-            eval "$cmd" >> ${log_file_name}
-        fi
+    cmd="python3 ${CEPH_DIR}/../src/tools/contrib/assign_crimson_cores.py"
+    cmd+=" -o ${CEPH_NUM_OSD} -r ${crimson_smp} -a ${crimson_alien_num_cores}"
+    cmd+=" -b ${crimson_balance_cpu}"
+    if [ ${crimson_reactor_physical_only} != 0 ]; then
+        cmd+=" --physical-only-seastar"
+    fi
+    if [ ${crimson_alienstore_physical_only} != 0 ]; then
+        cmd+=" --physical-only-alienstore"
+    fi
 
-        readarray -t cpu_table < ${in_file_name}
-        # Check the table is not empty, bail out otherwise
-        if [ "${#cpu_table[@]}" -ne 0 ]; then
-            debug echo "CPU table not empty with ${#cpu_table[@]} entries"
-        else
-            debug echo "CPU table empty, bailing out. Check  ${log_file_name}"
-        fi
+    echo $cmd
+    readarray -t cpu_table < <($cmd)
+    # Check the table is not empty, bail out otherwise
+    if [ "${#cpu_table[@]}" -ne 0 ]; then
+        debug echo "CPU table not empty with ${#cpu_table[@]} entries"
+    else
+        debug echo "CPU table empty, bailing out."
+        exit 1
     fi
 }
 
 # Default values for the crimson options
 crimson_smp=1
 crimson_alien_num_threads=0
+crimson_reactor_physical_only=0
 crimson_alien_num_cores=0
+crimson_alienstore_physical_only=0
 crimson_balance_cpu="" # "osd", "socket"
+crimson_poll_mode=false
+
+# default value for the benchmark option
+run_benchmark=0
 
 while [ $# -ge 1 ]; do
 case $1 in
@@ -442,6 +446,10 @@ case $1 in
         ;;
     --osd-args)
         extra_osd_args="$2"
+        if [ "$extra_osd_args" == "--run-benchmark" ]; then
+            run_benchmark=1
+            extra_osd_args=""
+        fi
         shift
         ;;
     --msgr1)
@@ -524,10 +532,6 @@ case $1 in
         rgw_store=$2
         shift
         ;;
-    --kstore_path)
-        kstore_path=$2
-        shift
-        ;;
     -m)
         [ -z "$2" ] && usage_exit
         MON_ADDR=$2
@@ -565,9 +569,6 @@ case $1 in
         ;;
     -b | --bluestore)
         objectstore="bluestore"
-        ;;
-    -K | --kstore)
-        objectstore="kstore"
         ;;
     --hitset)
         hitset="$hitset $2 $3"
@@ -616,16 +617,30 @@ case $1 in
         crimson_smp=$2
         shift
         ;;
+    --reactor-backend)
+        crimson_reactor_backend=$2
+        shift
+        ;;
     --crimson-alien-num-threads)
         crimson_alien_num_threads=$2
         shift
+        ;;
+    --crimson-reactor-physical-only)
+        crimson_reactor_physical_only=1
         ;;
     --crimson-alien-num-cores)
         crimson_alien_num_cores=$2
         shift
         ;;
+    --crimson-alienstore-physical-only)
+        crimson_alienstore_physical_only=1
+        ;;
     --crimson-balance-cpu)
         crimson_balance_cpu=$2
+        shift
+        ;;
+    --crimson-poll-mode)
+        crimson_poll_mode=true
         shift
         ;;
     --bluestore-spdk)
@@ -768,29 +783,11 @@ do_rgw_conf() {
 [client.rgw.${current_port}]
         rgw frontends = $rgw_frontend port=${current_port}${flight_conf:+,arrow_flight}
         admin socket = ${CEPH_OUT_DIR}/radosgw.${current_port}.asok
-        debug rgw_flight = 20
-        debug rgw_notification = 20
 EOF
         current_port=$((current_port + 1))
         unset flight_conf
 done
 
-}
-
-do_rgw_dbstore_conf() {
-    if [ $CEPH_NUM_RGW -gt 1 ]; then
-        echo "dbstore is not distributed so only works with CEPH_NUM_RGW=1"
-        exit 1
-    fi
-
-    prun mkdir -p "$CEPH_DEV_DIR/rgw/dbstore"
-    wconf <<EOF
-        rgw backend store = dbstore
-        rgw config store = dbstore
-        dbstore db dir = $CEPH_DEV_DIR/rgw/dbstore
-        dbstore_config_uri = file://$CEPH_DEV_DIR/rgw/dbstore/config.db
-
-EOF
 }
 
 format_conf() {
@@ -960,21 +957,47 @@ $CCLIENTDEBUG
         $(format_conf "${extra_conf}")
 EOF
     if [ "$rgw_store" == "dbstore" ] ; then
-        do_rgw_dbstore_conf
-    elif [ "$rgw_store" == "posix" ] ; then
-        # use dbstore as the backend and posix as the filter
-        do_rgw_dbstore_conf
-        posix_dir="$CEPH_DEV_DIR/rgw/posix"
-        prun mkdir -p $posix_dir/root $posix_dir/lmdb
+        if [ $CEPH_NUM_RGW -gt 1 ]; then
+            echo "dbstore is not distributed so only works with CEPH_NUM_RGW=1"
+            exit 1
+        fi
+
+        if [ "$new" -eq 1 ]; then
+            prun rm -rf "$CEPH_DEV_DIR/rgw/dbstore"
+        fi
+
+        prun mkdir -p "$CEPH_DEV_DIR/rgw/dbstore"
         wconf <<EOF
-        rgw filter = posix
+        rgw backend store = dbstore
+        rgw config store = dbstore
+        dbstore db dir = $CEPH_DEV_DIR/rgw/dbstore
+        dbstore_config_uri = file://$CEPH_DEV_DIR/rgw/dbstore/config.db
+
+EOF
+    fi
+    if [ "$rgw_store" == "posix" ] ; then
+        # use dbstore as the backend and posix as the filter
+        posix_dir="$CEPH_DEV_DIR/rgw/posix"
+        if [ "$new" -eq 1 ]; then
+            prun rm -rf "$posix_dir/root"
+            prun rm -rf "$posix_dir/lmdb"
+            prun rm -rf "$posix_dir/userdb"
+            prun rm -rf "$CEPH_DEV_DIR/rgw/dbstore/config.db"
+        fi
+
+        prun mkdir -p $posix_dir/root $posix_dir/lmdb $posix_dir/userdb "$CEPH_DEV_DIR/rgw/dbstore"
+        wconf <<EOF
+        rgw backend store = posix
+        rgw config store = dbstore
+        dbstore_config_uri = file://$CEPH_DEV_DIR/rgw/dbstore/config.db
         rgw posix base path = $posix_dir/root
+        rgw posix userdb dir = $posix_dir/userdb
         rgw posix database root = $posix_dir/lmdb
 
 EOF
     fi
-	do_rgw_conf
-	wconf << EOF
+    do_rgw_conf
+    wconf << EOF
 [mds]
 $CMDSDEBUG
 $DAEMONOPTS
@@ -1003,21 +1026,10 @@ $DAEMONOPTS
 
         bluestore fsck on mount = true
         bluestore block create = true
+        
 $BLUESTORE_OPTS
 
-        ; kstore
-        kstore fsck on mount = true
-EOF
-    if [ "$crimson" -eq 1 ]; then
-        wconf <<EOF
-        crimson osd objectstore = $objectstore
-EOF
-    else
-        wconf <<EOF
         osd objectstore = $objectstore
-EOF
-    fi
-    wconf <<EOF
 $SEASTORE_OPTS
 $COSDSHORT
         $(format_conf "${extra_conf}")
@@ -1197,10 +1209,32 @@ start_cephexporter() {
 
 do_balance_cpu() {
     local osd=$1
+    local alienstore_idx=$(( osd + CEPH_NUM_OSD ))
 
-    interval=${cpu_table[${osd}]}
-    echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_seastar_cpu_cores $interval"
-    $CEPH_BIN/ceph -c $conf_fn config set "osd.$osd" crimson_seastar_cpu_cores "$interval"
+    local reactor_interval=${cpu_table[${osd}]}
+    if ! [ "${reactor_interval}" == "" ]; then
+        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_cpu_set ${reactor_interval}"
+        echo $cmd
+        $cmd
+    else
+        echo "No cpu_table entry for osd $osd, setting crimson_seastar_num_reactors"
+        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_cpu_num $crimson_smp"
+        echo $cmd
+        $cmd
+        return
+    fi
+
+
+    local alienstore_interval=${cpu_table[${alienstore_idx}]}
+    if [ ! "${alienstore_interval}" == "" ]; then
+        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_bluestore_cpu_set ${alienstore_interval}"
+        echo $cmd
+        $cmd
+    else
+        echo "No alienstore cpu_table entry for osd $osd"
+        return
+    fi
+
 }
 
 start_osd() {
@@ -1215,21 +1249,21 @@ start_osd() {
     fi
     local osds_wait
     # If the type of OSD is Crimson and the option to balance the Seastar reactors is true
-	if [ "$ceph_osd" == "crimson-osd" ] && [ ! -z "$crimson_balance_cpu" ]; then
+	if [ "$ceph_osd" == "crimson-osd" ]; then
         debug echo "Preparing balance CPU for Crimson"
-        prep_balance_cpu $crimson_smp $crimson_balance_cpu
+        prep_balance_cpu
     fi
     for osd in `seq $start $end`
     do
 	if [ "$ceph_osd" == "crimson-osd" ]; then
-        if [ ! -z "$crimson_balance_cpu" ]; then
-            do_balance_cpu $osd
-        else
-            bottom_cpu=$(( osd * crimson_smp ))
-            top_cpu=$(( bottom_cpu + crimson_smp - 1 ))
-            # set exclusive CPU nodes for each osd
-            echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_seastar_cpu_cores $bottom_cpu-$top_cpu"
-            $CEPH_BIN/ceph -c $conf_fn config set "osd.$osd" crimson_seastar_cpu_cores "$bottom_cpu-$top_cpu"
+        do_balance_cpu $osd
+        if $crimson_poll_mode; then
+            echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_poll_mode true"
+            $CEPH_BIN/ceph -c $conf_fn config set "osd.$osd" crimson_poll_mode true
+        fi
+        if [ -n "$crimson_reactor_backend" ]; then
+            echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_reactor_backend $crimson_reactor_backend"
+            $CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_reactor_backend $crimson_reactor_backend
         fi
     fi
 	if [ "$new" -eq 1 -o $inc_osd_num -gt 0 ]; then
@@ -1257,27 +1291,23 @@ EOF
             if command -v btrfs > /dev/null; then
                 for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
             fi
-            if [ -n "$kstore_path" ]; then
-                ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
-            else
-                mkdir -p $CEPH_DEV_DIR/osd$osd
-                if [ -n "${block_devs[$osd]}" ]; then
-                    dd if=/dev/zero of=${block_devs[$osd]} bs=1M count=1
-                    ln -s ${block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block
-                fi
-                if [ -n "${bluestore_db_devs[$osd]}" ]; then
-                    dd if=/dev/zero of=${bluestore_db_devs[$osd]} bs=1M count=1
-                    ln -s ${bluestore_db_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.db
-                fi
-                if [ -n "${bluestore_wal_devs[$osd]}" ]; then
-                    dd if=/dev/zero of=${bluestore_wal_devs[$osd]} bs=1M count=1
-                    ln -s ${bluestore_wal_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.wal
-                fi
-                if [ -n "${secondary_block_devs[$osd]}" ]; then
-                    dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
-                    mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
-                    ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
-                fi
+            mkdir -p $CEPH_DEV_DIR/osd$osd
+            if [ -n "${block_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${block_devs[$osd]} bs=1M count=1
+                ln -s ${block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block
+            fi
+            if [ -n "${bluestore_db_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${bluestore_db_devs[$osd]} bs=1M count=1
+                ln -s ${bluestore_db_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.db
+            fi
+            if [ -n "${bluestore_wal_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${bluestore_wal_devs[$osd]} bs=1M count=1
+                ln -s ${bluestore_wal_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.wal
+            fi
+            if [ -n "${secondary_block_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
+                mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
+                ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
             fi
             if [ "$objectstore" == "bluestore" ]; then
                 wconf <<EOF
@@ -1299,6 +1329,26 @@ EOF
 [osd.$osd]
         key = $OSD_SECRET
 EOF
+        fi
+        # Run the osd benchmark if requested
+        if [ "$run_benchmark" -eq 1 ]; then
+            echo "running $SUDO $CEPH_BIN/$ceph_osd --run-benchmark -i $osd $ARGS"
+            osd_bench_result=$($SUDO $CEPH_BIN/$ceph_osd --run-benchmark -i $osd $ARGS)
+            echo "osd_bench_result: $osd_bench_result"
+            local run_status=$(echo "$osd_bench_result" | jq -r '.status')
+            if [ "$run_status" == "0" ]; then
+                local iops=$(echo "$osd_bench_result" | jq -r '.iops')
+                local is_rotational=$(echo "$osd_bench_result" | jq -r '.is_rotational')
+                if [ "$is_rotational" -eq 1 ]; then
+                    wconf <<EOF
+        osd mclock max capacity iops hdd = $iops
+EOF
+                else
+                    wconf <<EOF
+        osd mclock max capacity iops ssd = $iops
+EOF
+                fi
+            fi
         fi
         echo start osd.$osd
         local osd_pid
@@ -1596,7 +1646,9 @@ else
         debug mgrc = 20
         debug ms = 1'
     CCLIENTDEBUG='
-        debug client = 20'
+        debug client = 20
+        debug rgw_flight = 20
+        debug rgw_notification = 20'
     CMDSDEBUG='
         debug mds = 20'
 fi
@@ -1617,7 +1669,7 @@ if [ -z "$CEPH_PORT" ]; then
     while [ true ]
     do
         CEPH_PORT="$(echo $(( RANDOM % 1000 + 40000 )))"
-        ss -a -n | egrep "\<LISTEN\>.+:${CEPH_PORT}\s+" 1>/dev/null 2>&1 || break
+        ss -a -n | grep -E "\<LISTEN\>.+:${CEPH_PORT}\s+" 1>/dev/null 2>&1 || break
     done
 fi
 
@@ -1759,38 +1811,9 @@ if [ "$ceph_osd" == "crimson-osd" ]; then
         extra_seastar_args=" --trace"
     fi
     if [ "$objectstore" == "bluestore" ]; then
-        # This condition verifies the number of logical CPU cores
-        if [ "$(expr $(nproc) - 1)" -gt "$(($CEPH_NUM_OSD * crimson_smp))" ]; then
-            if [ ! -z "$crimson_balance_cpu" ]; then
-                debug echo "Preparing balance CPU for Crimson"
-                prep_balance_cpu $crimson_smp $crimson_balance_cpu
-                available_cpus="${cpu_table[-1]}"
-                echo "crimson_alien_thread_cpu_cores: '$available_cpus'"
-                $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_thread_cpu_cores "$available_cpus"
-            else
-                if [ $crimson_alien_num_cores -gt 0 ]; then
-                    alien_bottom_cpu=$(($CEPH_NUM_OSD * crimson_smp))
-                    alien_top_cpu=$(( alien_bottom_cpu + crimson_alien_num_cores - 1 ))
-                    # Ensure top value within range:
-                    if [ "$(($alien_top_cpu))" -gt "$(expr $(nproc) - 1)" ]; then
-                        alien_top_cpu=$(expr $(nproc) - 1)
-                    fi
-                    echo "crimson_alien_thread_cpu_cores: $alien_bottom_cpu-$alien_top_cpu"
-                    # This is a (logical) processor id range, it could be refined to encompass only physical processor ids
-                    # (equivalently, ignore hyperthreading sibling processor ids)
-                    $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_thread_cpu_cores "$alien_bottom_cpu-$alien_top_cpu"
-                else
-                    # This is the legacy default case
-                    echo "crimson_alien_thread_cpu_cores:" $(($CEPH_NUM_OSD * crimson_smp))-"$(expr $(nproc) - 1)"
-                    $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_thread_cpu_cores $(($CEPH_NUM_OSD * crimson_smp))-"$(expr $(nproc) - 1)"
-                fi
-            fi
-            if [ $crimson_alien_num_threads -gt 0 ]; then
-                echo "$CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_op_num_threads $crimson_alien_num_threads"
-                $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_op_num_threads "$crimson_alien_num_threads"
-            fi
-        else
-          echo "No alien thread cpu core isolation"
+        if [ $crimson_alien_num_threads -gt 0 ]; then
+            echo "$CEPH_BIN/ceph -c $conf_fn config set osd crimson_bluestore_num_threads $crimson_alien_num_threads"
+            $CEPH_BIN/ceph -c $conf_fn config set osd crimson_bluestore_num_threads "$crimson_alien_num_threads"
         fi
     fi
 fi
@@ -1992,7 +2015,7 @@ do_rgw()
 
     RGWDEBUG=""
     if [ "$debug" -ne 0 ]; then
-        RGWDEBUG="--debug-rgw=20 --debug-ms=1"
+        RGWDEBUG="--debug-rgw=20 --debug-rgw-lifecycle=20 --debug-ms=1"
     fi
 
     local CEPH_RGW_PORT_NUM="${CEPH_RGW_PORT}"

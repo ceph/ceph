@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "test/crimson/gtest_seastar.h"
 
@@ -8,7 +8,7 @@
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
-#include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
+#include "crimson/os/seastore/lba/btree_lba_manager.h"
 
 #include "test/crimson/seastore/test_block.h"
 
@@ -21,8 +21,7 @@ namespace {
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
-using namespace crimson::os::seastore::lba_manager;
-using namespace crimson::os::seastore::lba_manager::btree;
+using namespace crimson::os::seastore::lba;
 
 struct btree_test_base :
   public seastar_test_suite_t, SegmentProvider, JournalTrimmer {
@@ -46,7 +45,7 @@ struct btree_test_base :
 
   mutable segment_info_t tmp_info;
 
-  btree_test_base() = default;
+  btree_test_base() : JournalTrimmer(true) {}
 
   /*
    * JournalTrimmer interfaces
@@ -140,7 +139,12 @@ struct btree_test_base :
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
       journal = journal::make_segmented(*this, *this);
-      epm.reset(new ExtentPlacementManager());
+      rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
+	"seastore_hot_tier_generations");
+      rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
+	"seastore_cold_tier_generations");
+      epm.reset(new ExtentPlacementManager(
+	hot_tier_generations, cold_tier_generations));
       cache.reset(new Cache(*epm));
 
       block_size = segment_manager->get_block_size();
@@ -221,7 +225,7 @@ struct lba_btree_test : btree_test_base {
   std::map<laddr_t, lba_map_val_t> check;
 
   auto get_op_context(Transaction &t) {
-    return op_context_t<laddr_t>{*cache, t};
+    return op_context_t{*cache, t};
   }
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
@@ -308,8 +312,8 @@ struct lba_btree_test : btree_test_base {
       }).unsafe_get();
   }
 
-  static auto get_map_val(extent_len_t len) {
-    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, len, 0};
+  static auto get_map_val(extent_len_t len, extent_types_t type) {
+    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, len, 0, type};
   }
 
   device_off_t next_off = 0;
@@ -320,7 +324,7 @@ struct lba_btree_test : btree_test_base {
 
   void insert(laddr_t addr, extent_len_t len) {
     ceph_assert(check.count(addr) == 0);
-    check.emplace(addr, get_map_val(len));
+    check.emplace(addr, get_map_val(len, TestBlock::TYPE));
     lba_btree_update([=, this](auto &btree, auto &t) {
       auto extents = cache->alloc_new_data_extents<TestBlock>(
 	  t,
@@ -335,7 +339,7 @@ struct lba_btree_test : btree_test_base {
 	  extents,
 	  [this, addr, len, &t, &btree](auto &extent) {
 	  return btree.insert(
-	    get_op_context(t), addr, get_map_val(len)
+	    get_op_context(t), addr, get_map_val(len, extent->get_type())
 	  ).si_then([addr, extent](auto p){
 	    auto& [iter, inserted] = p;
 	    iter.get_leaf_node()->insert_child_ptr(
@@ -364,7 +368,7 @@ struct lba_btree_test : btree_test_base {
 	EXPECT_TRUE(iter.get_val().len == len);
 	return btree.remove(
 	  get_op_context(t), iter 
-	);
+        ).discard_result();
       });
     });
   }
@@ -561,16 +565,16 @@ struct btree_lba_manager_test : btree_test_base {
 	});
       }).unsafe_get();
     for (auto &ret : rets) {
-      logger().debug("alloc'd: {}", *ret);
-      EXPECT_EQ(len, ret->get_length());
-      auto [b, e] = get_overlap(t, ret->get_key(), len);
+      logger().debug("alloc'd: {}", ret);
+      EXPECT_EQ(len, ret.get_length());
+      auto [b, e] = get_overlap(t, ret.get_key(), len);
       EXPECT_EQ(b, e);
       t.mappings.emplace(
 	std::make_pair(
-	  ret->get_key(),
+	  ret.get_key(),
 	  test_extent_t{
-	    ret->get_val(),
-	    ret->get_length(),
+	    ret.get_val(),
+	    ret.get_length(),
 	    1
 	  }
 	));
@@ -598,10 +602,10 @@ struct btree_lba_manager_test : btree_test_base {
 	  t,
 	  target->first
 	).si_then([this, &t, target](auto result) {
-	  EXPECT_EQ(result.refcount, target->second.refcount);
-	  if (result.refcount == 0) {
+	  EXPECT_EQ(result.result.refcount, target->second.refcount);
+	  if (result.result.refcount == 0) {
 	    return cache->retire_extent_addr(
-	      t, result.addr.get_paddr(), result.length);
+	      t, result.result.addr.get_paddr(), result.result.length);
 	  }
 	  return Cache::retire_extent_iertr::now();
 	});
@@ -652,9 +656,9 @@ struct btree_lba_manager_test : btree_test_base {
 	}).unsafe_get();
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
-      EXPECT_EQ(i.second.addr, ret->get_val());
-      EXPECT_EQ(laddr, ret->get_key());
-      EXPECT_EQ(len, ret->get_length());
+      EXPECT_EQ(i.second.addr, ret.get_val());
+      EXPECT_EQ(laddr, ret.get_key());
+      EXPECT_EQ(len, ret.get_length());
 
       auto ret_pin = with_trans_intr(
 	*t.t,
@@ -662,9 +666,9 @@ struct btree_lba_manager_test : btree_test_base {
 	  return lba_manager->get_mapping(
 	    t, laddr);
 	}).unsafe_get();
-      EXPECT_EQ(i.second.addr, ret_pin->get_val());
-      EXPECT_EQ(laddr, ret_pin->get_key());
-      EXPECT_EQ(len, ret_pin->get_length());
+      EXPECT_EQ(i.second.addr, ret_pin.get_val());
+      EXPECT_EQ(laddr, ret_pin.get_key());
+      EXPECT_EQ(len, ret_pin.get_length());
     }
     with_trans_intr(
       *t.t,

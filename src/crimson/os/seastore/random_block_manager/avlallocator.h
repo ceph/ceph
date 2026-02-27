@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #pragma once
 
@@ -125,6 +125,10 @@ public:
       return rbm_extent_state_t::FREE;
     }
     return rbm_extent_state_t::ALLOCATED;
+  }
+
+  rbm_abs_addr get_end() const {
+    return base_addr + total_size;
   }
 
 private:

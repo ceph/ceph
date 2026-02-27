@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph distributed storage system
  *
@@ -18,7 +19,11 @@
 #ifndef CEPH_ERASURE_CODE_JERASURE_H
 #define CEPH_ERASURE_CODE_JERASURE_H
 
+#include <string_view>
+
 #include "erasure-code/ErasureCode.h"
+
+using namespace std::literals;
 
 class ErasureCodeJerasure : public ceph::ErasureCode {
 public:
@@ -32,28 +37,36 @@ public:
   std::string rule_root;
   std::string rule_failure_domain;
   bool per_chunk_alignment;
+  uint64_t flags;
 
-  explicit ErasureCodeJerasure(const char *_technique) :
-    k(0),
-    DEFAULT_K("2"),
-    m(0),
-    DEFAULT_M("1"),
-    w(0),
-    DEFAULT_W("8"),
-    technique(_technique),
-    per_chunk_alignment(false)
-  {}
+  explicit ErasureCodeJerasure(const char *_technique)
+      : k(0),
+        DEFAULT_K("2"),
+        m(0),
+        DEFAULT_M("1"),
+        w(0),
+        DEFAULT_W("8"),
+        technique(_technique),
+        per_chunk_alignment(false) {
+    flags = FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION |
+      FLAG_EC_PLUGIN_DIRECT_READS;
+
+    if (technique == "reed_sol_van"sv) {
+      flags |= FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED;
+    } else if (technique != "cauchy_orig"sv) {
+      flags |= FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT;
+    }
+  }
 
   ~ErasureCodeJerasure() override {}
 
   uint64_t get_supported_optimizations() const override {
-    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
-      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
-      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
-      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+    return flags;
   }
 
-  
   unsigned int get_chunk_count() const override {
     return k + m;
   }
@@ -83,7 +96,7 @@ public:
                     ceph::bufferptr *delta_maybe_in_place);
 
   void apply_delta(const shard_id_map<ceph::bufferptr> &in,
-                           shard_id_map<ceph::bufferptr> &out) = 0;
+                   shard_id_map<ceph::bufferptr> &out) = 0;
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
@@ -293,6 +306,7 @@ public:
   ErasureCodeJerasureBlaumRoth() :
     ErasureCodeJerasureLiberation("blaum_roth")
   {
+    DEFAULT_W = "6"; //The recommended default value of w when using blaum-roth is 6, see Jerasure documentation for more details.
   }
 
   bool check_w(std::ostream *ss) const override;

@@ -35,7 +35,7 @@
 %bcond_with rbd_rwl_cache
 %endif
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
-%if 0%{?rhel} < 9 || 0%{?openEuler}
+%if (0%{?rhel} && 0%{?rhel} < 9) || 0%{?openEuler}
 %bcond_with system_pmdk
 %else
 %ifarch s390x aarch64
@@ -91,7 +91,7 @@
 %bcond_with lua_packages
 %endif
 %endif
-%bcond_with crimson
+%bcond_without crimson
 %if 0%{?suse_version} || 0%{?openEuler}
 %bcond_with jaeger
 %else
@@ -150,25 +150,8 @@
 %{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
-%if 0%{with crimson}
+%if 0%{?rhel} && 0%{?rhel} < 10
 %{!?gts_version: %global gts_version 13}
-%else
-%if 0%{?rhel} == 8
-%{!?gts_version: %global gts_version 11}
-%endif
-%endif
-
-# gcc-toolset-13 seems to trigger a linker bug resulting in a segfault in SafeTimer
-# and perhaps elsewhere.  For now, let's just disable it.  See
-# ceph bug https://tracker.ceph.com/issues/63867
-# and
-# gcc bug https://bugzilla.redhat.com/show_bug.cgi?id=2241339
-# for details.
-#
-# Also disable lto on systems that do not support symver attribute
-# See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200 for details
-%if 0%{?gts_version} == 13 || (0%{?rhel} && 0%{?rhel} < 9)  || ( 0%{?suse_version} && 0%{?suse_version} <= 1500 )
-%define _lto_cflags %{nil}
 %endif
 
 %if ! 0%{?suse_version}
@@ -205,10 +188,6 @@
 %if 0%{gts_version} == 13
 %if 0%{?enable_devtoolset13:1}
 %enable_devtoolset13
-%endif
-%else
-%if 0%{?enable_devtoolset11:1}
-%enable_devtoolset11
 %endif
 %endif
 %endif
@@ -257,22 +236,20 @@ BuildRequires:	selinux-policy-devel
 %endif
 BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
-BuildRequires:	fuse-devel
+BuildRequires:	pkgconfig(fuse3)
 BuildRequires:	git
 BuildRequires:	grpc-devel
-%if 0%{?fedora} || 0%{?suse_version} > 1500 || 0%{?rhel} == 9 || 0%{?openEuler}
-BuildRequires:	gcc-c++ >= 11
-%endif
-%if 0%{?suse_version} == 1500
-BuildRequires: gcc11-c++
-%endif
-%if 0%{?gts_version} > 0
-BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++
-%if 0%{?gts_version} >= 12
-BuildRequires:	gcc-toolset-%{gts_version}-runtime
+# Before 13.3, an lto bug resulted in a segfault in SafeTimer and perhaps
+# elsewhere. Require the fixed version so we can reenable lto. See
+# ceph bug https://tracker.ceph.com/issues/63867
+# and
+# gcc bug https://bugzilla.redhat.com/show_bug.cgi?id=2241339
+# for details.
+%if 0%{?gts_version} == 0
+BuildRequires:	gcc-c++ >= 13.3
 %else
-BuildRequires:	gcc-toolset-%{gts_version}-build
-%endif
+BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++ >= 13.3
+BuildRequires:	gcc-toolset-%{gts_version}-runtime
 BuildRequires:	gcc-toolset-%{gts_version}-libatomic-devel
 %endif
 %if 0%{?fedora} || 0%{?rhel} == 9 || 0%{?openEuler}
@@ -314,6 +291,8 @@ BuildRequires:	python%{python3_pkgversion}
 BuildRequires:	python%{python3_pkgversion}-devel
 BuildRequires:	python%{python3_pkgversion}-setuptools
 BuildRequires:	python%{python3_pkgversion}-Cython
+BuildRequires:	python%{python3_pkgversion}-pip
+BuildRequires:	python%{python3_pkgversion}-wheel
 BuildRequires:	snappy-devel
 BuildRequires:	sqlite-devel
 BuildRequires:	sudo
@@ -400,12 +379,7 @@ BuildRequires:  libasan
 BuildRequires:  protobuf-devel
 BuildRequires:  protobuf-compiler
 %if 0%{?gts_version} > 0
-%if 0%{?gts_version} >= 12
 BuildRequires:  gcc-toolset-%{gts_version}-gcc-plugin-annobin
-%else
-BuildRequires:  gcc-toolset-%{gts_version}-annobin
-BuildRequires:  gcc-toolset-%{gts_version}-annobin-plugin-gcc
-%endif
 BuildRequires:  gcc-toolset-%{gts_version}-libubsan-devel
 BuildRequires:  gcc-toolset-%{gts_version}-libasan-devel
 %endif
@@ -523,8 +497,8 @@ BuildRequires:  libcryptopp-devel
 BuildRequires:  libnuma-devel
 %endif
 %endif
-%if 0%{?rhel} >= 8
-BuildRequires:  /usr/bin/pathfix.py
+%if 0%{?rhel} >= 9
+BuildRequires: python-rpm-macros
 %endif
 
 %description
@@ -702,7 +676,7 @@ Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-routes
 %if 0%{?weak_deps}
 Recommends:     python%{python3_pkgversion}-saml
-%if 0%{?fedora} || 0%{?rhel} <= 8
+%if 0%{?fedora} || (0%{?rhel} && 0%{?rhel} <= 8)
 Recommends:     python%{python3_pkgversion}-grpcio
 Recommends:     python%{python3_pkgversion}-grpcio-tools
 %endif
@@ -757,7 +731,7 @@ Requires:       python%{python3_pkgversion}-PyYAML
 %endif
 # RHEL8 has python 3.6 and that lacks dataclasses in the stdlib, so pull in the
 # backport dataclasses module instead.
-%if 0%{?rhel} <= 8
+%if 0%{?rhel} && 0%{?rhel} <= 8
 Requires:       python%{python3_pkgversion}-dataclasses
 %endif
 %if 0%{?weak_deps}
@@ -821,7 +795,7 @@ Summary:	Ceph fuse-based client
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-Requires:       fuse
+Requires:       fuse3
 Requires:	python%{python3_pkgversion}
 %description fuse
 FUSE based client for Ceph distributed network file system
@@ -940,28 +914,44 @@ Summary:	Ceph Object Storage Daemon
 Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
+Requires:	ceph-osd-classic = %{_epoch_prefix}%{version}-%{release}
+%if 0%{with crimson}
+Requires: 	ceph-osd-crimson = %{_epoch_prefix}%{version}-%{release}
+%endif
 Requires:	sudo
 Requires:	libstoragemgmt
-%if 0%{with crimson}
-Requires:	protobuf
-%endif
 %if 0%{?weak_deps}
 Recommends:	ceph-volume = %{_epoch_prefix}%{version}-%{release}
 %endif
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
+system.  It provides components shared between classic and crimson OSD
+implementations. It requires either the classic or crimson OSD
+to provide the core OSD daemon.
+
+%package osd-classic
+Summary:	Ceph Object Storage Daemon (classic)
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Requires:   ceph-osd = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:  ceph-osd < %{_epoch_prefix}%{version}-%{release}
+%description osd-classic
+classic-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
 and providing access to them over the network.
 
 %if 0%{with crimson}
-%package crimson-osd
+%package osd-crimson
 Summary:	Ceph Object Storage Daemon (crimson)
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
 Requires:	ceph-osd = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	ceph-osd < %{_epoch_prefix}%{version}-%{release}
 Requires:	binutils
-%description crimson-osd
+Requires:	protobuf
+%description osd-crimson
 crimson-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
 and providing access to them over the network.
@@ -1591,9 +1581,9 @@ rm -f %{buildroot}/%{_sysconfdir}/init.d/ceph
 popd
 
 %if 0%{with crimson}
-# package crimson-osd with the name of ceph-osd
-install -m 0755 %{buildroot}%{_bindir}/crimson-osd %{buildroot}%{_bindir}/ceph-osd
+mv %{buildroot}%{_bindir}/crimson-osd %{buildroot}%{_bindir}/ceph-osd-crimson
 %endif
+mv %{buildroot}%{_bindir}/ceph-osd %{buildroot}%{_bindir}/ceph-osd-classic
 
 install -m 0644 -D src/etc-rbdmap %{buildroot}%{_sysconfdir}/ceph/rbdmap
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
@@ -1631,8 +1621,7 @@ install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 install -m 0440 -D sudoers.d/ceph-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-smartctl
 
 %if 0%{?rhel} >= 8 || 0%{?openEuler}
-pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*
-pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_sbindir}/*
+%{py3_shebang_fix} %{buildroot}%{_bindir}/* %{buildroot}%{_sbindir}/*
 %endif
 
 #set up placeholder directories
@@ -1836,6 +1825,7 @@ exit 0
 %{_mandir}/man8/rbd-replay-many.8*
 %{_mandir}/man8/rbd-replay-prep.8*
 %{_mandir}/man8/rgw-orphan-list.8*
+%{_mandir}/man8/rgw-gap-list.8*
 %{_mandir}/man8/rgw-restore-bucket-index.8*
 %dir %{_datadir}/ceph/
 %{_datadir}/ceph/known_hosts_drop.ceph.com
@@ -1881,13 +1871,6 @@ exit 0
 
 %post common
 %tmpfiles_create %{_tmpfilesdir}/ceph-common.conf
-
-%postun common
-# Package removal cleanup
-if [ "$1" -eq "0" ] ; then
-    rm -rf %{_localstatedir}/log/ceph
-    rm -rf %{_sysconfdir}/ceph
-fi
 
 %files mds
 %{_bindir}/ceph-mds
@@ -2032,6 +2015,7 @@ fi
 %{_datadir}/ceph/mgr/telemetry
 %{_datadir}/ceph/mgr/test_orchestrator
 %{_datadir}/ceph/mgr/volumes
+%{_datadir}/ceph/mgr/nvmeof
 
 %files mgr-rook
 %{_datadir}/ceph/mgr/rook
@@ -2313,17 +2297,12 @@ fi
 
 %files osd
 %{_bindir}/ceph-clsinfo
-%{_bindir}/ceph-bluestore-tool
 %{_bindir}/ceph-erasure-code-tool
-%{_bindir}/ceph-objectstore-tool
-%{_bindir}/ceph-osd
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/ceph-osd.8*
-%{_mandir}/man8/ceph-bluestore-tool.8*
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-osd.target
-%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
 %config(noreplace) %{_sysctldir}/90-ceph-osd.conf
 
 %post osd
@@ -2362,10 +2341,36 @@ if [ $1 -ge 1 ] ; then
   fi
 fi
 
+%files osd-classic
+%{_bindir}/ceph-bluestore-tool
+%{_bindir}/ceph-objectstore-tool
+%{_bindir}/ceph-osd-classic
+%{_mandir}/man8/ceph-bluestore-tool.8*
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
+
 %if 0%{with crimson}
-%files crimson-osd
-%{_bindir}/crimson-osd
+%files osd-crimson
+%{_bindir}/ceph-osd-crimson
+%{_bindir}/crimson-objectstore-tool
+
+%posttrans osd-crimson
+%{_sbindir}/update-alternatives --install %{_bindir}/ceph-osd ceph-osd \
+    %{_bindir}/ceph-osd-crimson 50
+
+%preun osd-crimson
+if [ $1 -eq 0 ]; then
+    ${_sbindir}/update-alternatives --remove ceph-osd %{_bindir}/ceph-osd-crimson
+fi
 %endif
+
+%posttrans osd-classic
+%{_sbindir}/update-alternatives --install %{_bindir}/ceph-osd ceph-osd \
+    %{_bindir}/ceph-osd-classic 100
+
+%preun osd-classic
+if [ $1 -eq 0 ]; then
+    ${_sbindir}/update-alternatives --remove ceph-osd %{_bindir}/ceph-osd-classic
+fi
 
 %files volume
 %{_sbindir}/ceph-volume
@@ -2456,7 +2461,7 @@ fi
 
 %files -n python%{python3_pkgversion}-rados
 %{python3_sitearch}/rados.cpython*.so
-%{python3_sitearch}/rados-*.egg-info
+%{python3_sitearch}/rados-*.dist-info
 
 %files -n libcephsqlite
 %{_libdir}/libcephsqlite.so
@@ -2528,11 +2533,11 @@ fi
 
 %files -n python%{python3_pkgversion}-rgw
 %{python3_sitearch}/rgw.cpython*.so
-%{python3_sitearch}/rgw-*.egg-info
+%{python3_sitearch}/rgw-*.dist-info
 
 %files -n python%{python3_pkgversion}-rbd
 %{python3_sitearch}/rbd.cpython*.so
-%{python3_sitearch}/rbd-*.egg-info
+%{python3_sitearch}/rbd-*.dist-info
 
 %files -n libcephfs2
 %{_libdir}/libcephfs.so.*
@@ -2559,13 +2564,16 @@ fi
 %{_includedir}/cephfs/types.h
 %dir %{_includedir}/cephfs/metrics
 %{_includedir}/cephfs/metrics/Types.h
+%{_includedir}/cephfs/dump.h
+%{_includedir}/cephfs/json.h
+%{_includedir}/cephfs/keys_and_values.h
 %{_libdir}/libcephfs.so
 %{_libdir}/libcephfs_proxy.so
 %{_libdir}/pkgconfig/cephfs.pc
 
 %files -n python%{python3_pkgversion}-cephfs
 %{python3_sitearch}/cephfs.cpython*.so
-%{python3_sitearch}/cephfs-*.egg-info
+%{python3_sitearch}/cephfs-*.dist-info
 
 %files -n python%{python3_pkgversion}-ceph-argparse
 %{python3_sitelib}/ceph_argparse.py
@@ -2597,6 +2605,7 @@ fi
 %{_bindir}/ceph_erasure_code_benchmark
 %{_bindir}/ceph_omapbench
 %{_bindir}/ceph_objectstore_bench
+%{_bindir}/ceph_ec_consistency_checker
 %{_bindir}/ceph_perf_objectstore
 %{_bindir}/ceph_perf_local
 %{_bindir}/ceph_perf_msgr_client
@@ -2614,6 +2623,7 @@ fi
 %{_bindir}/ceph-dedup-daemon
 %if 0%{with crimson}
 %{_bindir}/crimson-store-nbd
+%{_bindir}/crimson-store-bench
 %endif
 %{_mandir}/man8/ceph-debugpack.8*
 %dir %{_libdir}/ceph

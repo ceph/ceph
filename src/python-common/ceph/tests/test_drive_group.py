@@ -7,7 +7,7 @@ import yaml
 from ceph.deployment import drive_selection, translate
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import PlacementSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.tests.utils import _mk_inventory, _mk_device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
     DriveGroupValidationError
@@ -163,7 +163,7 @@ def test_ceph_volume_command_0():
     inventory = _mk_inventory(_mk_device()*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmds = translate.to_ceph_volume(sel, []).run()
-    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --osd-type classic --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_1():
@@ -177,7 +177,7 @@ def test_ceph_volume_command_1():
     sel = drive_selection.DriveSelection(spec, inventory)
     cmds = translate.to_ceph_volume(sel, []).run()
     assert all(cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
-                   '--db-devices /dev/sdc /dev/sdd --yes --no-systemd') for cmd in cmds), f'Expected {cmd} in {cmds}'
+                   '--db-devices /dev/sdc /dev/sdd --objectstore bluestore --osd-type classic --yes --no-systemd') for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_2():
@@ -195,8 +195,8 @@ def test_ceph_volume_command_2():
     sel = drive_selection.DriveSelection(spec, inventory)
     cmds = translate.to_ceph_volume(sel, []).run()
     assert all(cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
-                   '--db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf '
-                   '--yes --no-systemd') for cmd in cmds), f'Expected {cmd} in {cmds}'
+                   '--db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf --objectstore bluestore '
+                   '--osd-type classic --yes --no-systemd') for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_3():
@@ -216,7 +216,7 @@ def test_ceph_volume_command_3():
     cmds = translate.to_ceph_volume(sel, []).run()
     assert all(cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
                    '--db-devices /dev/sdc /dev/sdd '
-                   '--wal-devices /dev/sde /dev/sdf --dmcrypt '
+                   '--wal-devices /dev/sde /dev/sdf --objectstore bluestore --osd-type classic --dmcrypt '
                    '--yes --no-systemd') for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
@@ -240,7 +240,7 @@ def test_ceph_volume_command_4():
     cmds = translate.to_ceph_volume(sel, []).run()
     assert all(cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
                    '--db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf '
-                   '--block-wal-size 500M --block-db-size 500M --dmcrypt '
+                   '--block-wal-size 500M --block-db-size 500M --objectstore bluestore --osd-type classic --dmcrypt '
                    '--osds-per-device 3 --yes --no-systemd') for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
@@ -286,7 +286,7 @@ def test_ceph_volume_command_7():
     inventory = _mk_inventory(_mk_device(rotational=True)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmds = translate.to_ceph_volume(sel, ['0', '1']).run()
-    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --osd-ids 0 1 --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --osd-type classic --osd-ids 0 1 --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_8():
@@ -304,7 +304,7 @@ def test_ceph_volume_command_8():
                               )
     sel = drive_selection.DriveSelection(spec, inventory)
     cmds = translate.to_ceph_volume(sel, []).run()
-    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --db-devices /dev/sdc --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --db-devices /dev/sdc --objectstore bluestore --osd-type classic --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 def test_ceph_volume_command_9():
@@ -317,7 +317,7 @@ def test_ceph_volume_command_9():
     inventory = _mk_inventory(_mk_device()*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmds = translate.to_ceph_volume(sel, []).run()
-    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --data-allocate-fraction 0.8 --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --osd-type classic --data-allocate-fraction 0.8 --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 @pytest.mark.parametrize("test_input_base",
@@ -340,7 +340,7 @@ def test_ceph_volume_command_10(test_input_base):
     drive = drive_selection.DriveSelection(spec, spec.data_devices.paths)
     cmds = translate.to_ceph_volume(drive, []).run()
 
-    assert all(cmd == 'lvm batch --no-auto /dev/sda --crush-device-class ssd --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
+    assert all(cmd == 'lvm batch --no-auto /dev/sda --crush-device-class ssd --objectstore bluestore --osd-type classic --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 @pytest.mark.parametrize("test_input1",
@@ -365,8 +365,7 @@ def test_ceph_volume_command_11(test_input1):
     spec.validate()
     drive = drive_selection.DriveSelection(spec, spec.data_devices.paths)
     cmds = translate.to_ceph_volume(drive, []).run()
-
-    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --crush-device-class hdd --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --crush-device-class hdd --objectstore bluestore --osd-type classic --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
 
 
 @pytest.mark.parametrize("test_input2",
@@ -393,8 +392,8 @@ def test_ceph_volume_command_12(test_input2):
     cmds = translate.to_ceph_volume(drive, []).run()
 
     expected_cmds = [
-        'lvm batch --no-auto /dev/sdb --crush-device-class ssd --yes --no-systemd',
-        'lvm batch --no-auto /dev/sda --crush-device-class hdd --yes --no-systemd',
+        'lvm batch --no-auto /dev/sdb --crush-device-class ssd --objectstore bluestore --osd-type classic --yes --no-systemd',
+        'lvm batch --no-auto /dev/sda --crush-device-class hdd --objectstore bluestore --osd-type classic --yes --no-systemd',
     ]
     assert len(cmds) == len(expected_cmds), f"Expected {expected_cmds} got {cmds}"
     assert all(cmd in cmds for cmd in expected_cmds), f'Expected {expected_cmds} got {cmds}'
@@ -423,8 +422,8 @@ def test_ceph_volume_command_13(test_input3):
     cmds = translate.to_ceph_volume(drive, []).run()
 
     expected_cmds = [
-        'lvm batch --no-auto /dev/sdb --yes --no-systemd',
-        'lvm batch --no-auto /dev/sda --crush-device-class hdd --yes --no-systemd',
+        'lvm batch --no-auto /dev/sdb --objectstore bluestore --osd-type classic --yes --no-systemd',
+        'lvm batch --no-auto /dev/sda --crush-device-class hdd --objectstore bluestore --osd-type classic --yes --no-systemd',
     ]
     assert len(cmds) == len(expected_cmds), f"Expected {expected_cmds} got {cmds}"
     assert all(cmd in cmds for cmd in expected_cmds), f'Expected {expected_cmds} got {cmds}'
@@ -450,6 +449,19 @@ def test_ceph_volume_command_14(test_input4):
         spec.validate()
 
 
+def test_ceph_volume_command_15():
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
+                          data_devices=DeviceSelection(all=True),
+                          osd_type='crimson',
+                          )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device()*2)
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --osd-type crimson --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
+
+
 def test_raw_ceph_volume_command_0():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
                           service_id='foobar',
@@ -463,7 +475,7 @@ def test_raw_ceph_volume_command_0():
                               _mk_device(rotational=False) +  # db
                               _mk_device(rotational=False)  # db
                               )
-    exp_cmds = ['raw prepare --bluestore --data /dev/sda --block.db /dev/sdc', 'raw prepare --bluestore --data /dev/sdb --block.db /dev/sdd']
+    exp_cmds = ['raw prepare --bluestore --data /dev/sda --block.db /dev/sdc --osd-type classic', 'raw prepare --bluestore --data /dev/sdb --block.db /dev/sdd --osd-type classic']
     sel = drive_selection.DriveSelection(spec, inventory)
     cmds = translate.to_ceph_volume(sel, []).run()
     assert all(cmd in exp_cmds for cmd in cmds), f'Expected {exp_cmds} to match {cmds}'
@@ -516,9 +528,9 @@ def test_raw_ceph_volume_command_2(test_input5):
     drive = drive_selection.DriveSelection(spec, spec.data_devices.paths)
     cmds = translate.to_ceph_volume(drive, []).run()
 
-    assert cmds[0] == 'raw prepare --bluestore --data /dev/sda --block.db /dev/sdd --crush-device-class hdd'
-    assert cmds[1] == 'raw prepare --bluestore --data /dev/sdb --block.db /dev/sde --crush-device-class hdd'
-    assert cmds[2] == 'raw prepare --bluestore --data /dev/sdc --block.db /dev/sdf --crush-device-class hdd'
+    assert cmds[0] == 'raw prepare --bluestore --data /dev/sda --block.db /dev/sdd --crush-device-class hdd --osd-type classic'
+    assert cmds[1] == 'raw prepare --bluestore --data /dev/sdb --block.db /dev/sde --crush-device-class hdd --osd-type classic'
+    assert cmds[2] == 'raw prepare --bluestore --data /dev/sdc --block.db /dev/sdf --crush-device-class hdd --osd-type classic'
 
 
 @pytest.mark.parametrize("test_input6",
@@ -553,9 +565,9 @@ def test_raw_ceph_volume_command_3(test_input6):
     drive = drive_selection.DriveSelection(spec, spec.data_devices.paths)
     cmds = translate.to_ceph_volume(drive, []).run()
 
-    assert cmds[0] == 'raw prepare --bluestore --data /dev/sda --block.db /dev/sdd --crush-device-class hdd'
-    assert cmds[1] == 'raw prepare --bluestore --data /dev/sdb --block.db /dev/sde --crush-device-class hdd'
-    assert cmds[2] == 'raw prepare --bluestore --data /dev/sdc --block.db /dev/sdf --crush-device-class ssd'
+    assert cmds[0] == 'raw prepare --bluestore --data /dev/sda --block.db /dev/sdd --crush-device-class hdd --osd-type classic'
+    assert cmds[1] == 'raw prepare --bluestore --data /dev/sdb --block.db /dev/sde --crush-device-class hdd --osd-type classic'
+    assert cmds[2] == 'raw prepare --bluestore --data /dev/sdc --block.db /dev/sdf --crush-device-class ssd --osd-type classic'
 
 
 @pytest.mark.parametrize("test_input7",
@@ -595,6 +607,83 @@ def test_raw_ceph_volume_command_4(test_input7):
     drive = drive_selection.DriveSelection(spec, spec.data_devices.paths)
     cmds = translate.to_ceph_volume(drive, []).run()
 
-    assert cmds[0] == 'raw prepare --bluestore --data /dev/sda --block.db /dev/sdd --block.wal /dev/sdg --crush-device-class hdd'
-    assert cmds[1] == 'raw prepare --bluestore --data /dev/sdb --block.db /dev/sdf --block.wal /dev/sdi --crush-device-class nvme'
-    assert cmds[2] == 'raw prepare --bluestore --data /dev/sdc --block.db /dev/sde --block.wal /dev/sdh --crush-device-class ssd'
+    assert cmds[0] == 'raw prepare --bluestore --data /dev/sda --block.db /dev/sdd --block.wal /dev/sdg --crush-device-class hdd --osd-type classic'
+    assert cmds[1] == 'raw prepare --bluestore --data /dev/sdb --block.db /dev/sdf --block.wal /dev/sdi --crush-device-class nvme --osd-type classic'
+    assert cmds[2] == 'raw prepare --bluestore --data /dev/sdc --block.db /dev/sde --block.wal /dev/sdh --crush-device-class ssd --osd-type classic'
+
+
+def test_ceph_volume_command_seastore():
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='foobar',
+                          data_devices=DeviceSelection(all=True),
+                          objectstore='seastore',
+                          osd_type='crimson',
+                          )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device()*2)
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all(cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --objectstore seastore --osd-type crimson --yes --no-systemd' for cmd in cmds), f'Expected {cmd} in {cmds}'
+
+
+def test_drive_group_objectstore_invalid():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        objectstore='invalid',
+    )
+    with pytest.raises(DriveGroupValidationError, match='is not supported'):
+        spec.validate()
+
+
+def test_drive_group_seastore_requires_crimson():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        objectstore='seastore',
+        osd_type='classic',
+    )
+    with pytest.raises(DriveGroupValidationError, match='seastore only supports osd type crimson'):
+        spec.validate()
+
+
+def test_drive_group_seastore_with_crimson_valid():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        objectstore='seastore',
+        osd_type='crimson',
+    )
+    spec.validate()
+
+
+def test_drive_group_osd_type_invalid():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        osd_type='invalid',
+    )
+    with pytest.raises(DriveGroupValidationError, match='osd_type must be one of'):
+        spec.validate()
+
+
+def test_drive_group_osd_type_crimson_roundtrip():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(all=True),
+        osd_type='crimson',
+    )
+    spec.validate()
+
+    j = spec.to_json()
+    assert j['spec']['osd_type'] == 'crimson'
+
+    spec2 = ServiceSpec.from_json(j)
+    assert spec2.osd_type == 'crimson'
+    j2 = spec2.to_json()
+    assert j2['spec']['osd_type'] == 'crimson'

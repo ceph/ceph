@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -97,11 +97,10 @@ public:
     ShardServices &shard_services, Ref<PG> pg);
 };
 
-class RemotePeeringEvent : public PeeringEvent<RemotePeeringEvent> {
+class RemotePeeringEvent :
+    public PeeringEvent<RemotePeeringEvent>,
+    public RemoteOperation {
 protected:
-  crimson::net::ConnectionRef l_conn;
-  crimson::net::ConnectionXcoreRef r_conn;
-
   // must be after conn due to ConnectionPipeline's life-time
   PipelineHandle handle;
 
@@ -117,7 +116,7 @@ public:
   template <typename... Args>
   RemotePeeringEvent(crimson::net::ConnectionRef conn, Args&&... args) :
     PeeringEvent(std::forward<Args>(args)...),
-    l_conn(conn)
+    RemoteOperation(std::move(conn))
   {}
 
   std::tuple<
@@ -145,33 +144,6 @@ public:
   ConnectionPipeline &get_connection_pipeline();
 
   PerShardPipeline &get_pershard_pipeline(ShardServices &);
-
-  crimson::net::Connection &get_local_connection() {
-    assert(l_conn);
-    assert(!r_conn);
-    return *l_conn;
-  };
-
-  crimson::net::Connection &get_foreign_connection() {
-    assert(r_conn);
-    assert(!l_conn);
-    return *r_conn;
-  };
-
-  crimson::net::ConnectionFFRef prepare_remote_submission() {
-    assert(l_conn);
-    assert(!r_conn);
-    auto ret = seastar::make_foreign(std::move(l_conn));
-    l_conn.reset();
-    return ret;
-  }
-
-  void finish_remote_submission(crimson::net::ConnectionFFRef conn) {
-    assert(conn);
-    assert(!l_conn);
-    assert(!r_conn);
-    r_conn = make_local_shared_foreign(std::move(conn));
-  }
 };
 
 class LocalPeeringEvent final : public PeeringEvent<LocalPeeringEvent> {

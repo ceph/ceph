@@ -535,38 +535,6 @@ class TestRgwTopicController(ControllerTestCase):
     def test_list_topic_with_details(self, mock_list_topics):
         mock_return_value = [
             {
-                "topic": {
-                    "owner": "dashboard",
-                    "name": "HttpTest",
-                    "dest": {
-                        "push_endpoint": "https://10.0.66.13:443",
-                        "push_endpoint_args": "verify_ssl=true",
-                        "push_endpoint_topic": "HttpTest",
-                        "stored_secret": False,
-                        "persistent": True,
-                        "persistent_queue": ":HttpTest",
-                        "time_to_live": "5",
-                        "max_retries": "2",
-                        "retry_sleep_duration": "2"
-                    },
-                    "arn": "arn:aws:sns:zg1-realm1::HttpTest",
-                    "opaqueData": "test123",
-                    "policy": "{}",
-                    "subscribed_buckets": []
-                }
-            }
-        ]
-
-        mock_list_topics.return_value = mock_return_value
-        controller = RgwTopic()
-        result = controller.list(True, None)
-        mock_list_topics.assert_called_with(True, None)
-        self.assertEqual(result, mock_return_value)
-
-    @patch('dashboard.controllers.rgw.RgwTopic.get')
-    def test_get_topic(self, mock_get_topic):
-        mock_return_value = {
-            "topic": {
                 "owner": "dashboard",
                 "name": "HttpTest",
                 "dest": {
@@ -583,9 +551,40 @@ class TestRgwTopicController(ControllerTestCase):
                 "arn": "arn:aws:sns:zg1-realm1::HttpTest",
                 "opaqueData": "test123",
                 "policy": "{}",
+                "key": "RGW22222222222222222:HttpTest",
                 "subscribed_buckets": []
             }
-        }
+        ]
+        mock_list_topics.return_value = mock_return_value
+        controller = RgwTopic()
+        result = controller.list(True, None)
+        mock_list_topics.assert_called_with(True, None)
+        self.assertEqual(result, mock_return_value)
+
+    @patch('dashboard.controllers.rgw.RgwTopic.get')
+    def test_get_topic(self, mock_get_topic):
+        mock_return_value = [
+            {
+                "owner": "dashboard",
+                "name": "HttpTest",
+                "dest": {
+                    "push_endpoint": "https://10.0.66.13:443",
+                    "push_endpoint_args": "verify_ssl=true",
+                    "push_endpoint_topic": "HttpTest",
+                    "stored_secret": False,
+                    "persistent": True,
+                    "persistent_queue": ":HttpTest",
+                    "time_to_live": "5",
+                    "max_retries": "2",
+                    "retry_sleep_duration": "2"
+                },
+                "arn": "arn:aws:sns:zg1-realm1::HttpTest",
+                "opaqueData": "test123",
+                "policy": "{}",
+                "key": "RGW22222222222222222:HttpTest",
+                "subscribed_buckets": []
+            }
+        ]
         mock_get_topic.return_value = mock_return_value
 
         controller = RgwTopic()
@@ -598,6 +597,6 @@ class TestRgwTopicController(ControllerTestCase):
         mock_delete_topic.return_value = None
 
         controller = RgwTopic()
-        result = controller.delete(name='HttpTest', tenant=None)
-        mock_delete_topic.assert_called_with(name='HttpTest', tenant=None)
+        result = controller.delete(key='RGW22222222222222222:HttpTest')
+        mock_delete_topic.assert_called_with(key='RGW22222222222222222:HttpTest')
         self.assertEqual(result, None)

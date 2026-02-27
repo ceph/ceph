@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "include/neorados/RADOS.hpp"
 #include "include/rados/librados.hpp"
@@ -558,7 +558,7 @@ RADOS::RADOS() = default;
 
 RADOS::RADOS(RADOS&&) = default;
 
-RADOS::RADOS(std::unique_ptr<detail::Client> impl)
+RADOS::RADOS(std::shared_ptr<detail::Client> impl)
   : impl(std::move(impl)) {
 }
 
@@ -584,7 +584,8 @@ boost::asio::io_context::executor_type neorados::RADOS::get_executor() const {
 
 void RADOS::execute_(Object o, IOContext ioc, ReadOp op,
 		     ceph::buffer::list* bl, Op::Completion c,
-		     uint64_t* objver, const blkin_trace_info* trace_info) {
+		     uint64_t* objver, const blkin_trace_info* trace_info,
+		     uint64_t subsystem) {
   auto io_ctx = impl->get_io_ctx(ioc);
   if (io_ctx == nullptr) {
     asio::dispatch(asio::append(std::move(c), osdc_errc::pool_dne));
@@ -603,7 +604,8 @@ void RADOS::execute_(Object o, IOContext ioc, ReadOp op,
 
 void RADOS::execute_(Object o, IOContext ioc, WriteOp op,
 		     Op::Completion c, uint64_t* objver,
-		     const blkin_trace_info* trace_info) {
+		     const blkin_trace_info* trace_info,
+		     uint64_t subsystem) {
   auto io_ctx = impl->get_io_ctx(ioc);
   if (io_ctx == nullptr) {
     asio::dispatch(asio::append(std::move(c), osdc_errc::pool_dne));
@@ -624,11 +626,11 @@ void RADOS::execute_(Object o, IOContext ioc, WriteOp op,
   ceph_assert(r == 0);
 }
 
-void RADOS::mon_command_(std::vector<std::string> command,
-			 bufferlist bl,
+void RADOS::mon_command_(std::vector<std::string>&& command,
+			 bufferlist&& bl,
 			 std::string* outs, bufferlist* outbl,
 			 Op::Completion c) {
-  auto r = impl->test_rados_client->mon_command(command, bl, outbl, outs);
+  auto r = impl->test_rados_client->mon_command(std::move(command), std::move(bl), outbl, outs);
   asio::post(get_executor(),
 	     asio::append(std::move(c),
 			  (r < 0 ? bs::error_code(-r, osd_category()) :

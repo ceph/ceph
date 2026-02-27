@@ -32,7 +32,8 @@ import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impa
 @Component({
   selector: 'cd-cephfs-subvolume-snapshots-list',
   templateUrl: './cephfs-subvolume-snapshots-list.component.html',
-  styleUrls: ['./cephfs-subvolume-snapshots-list.component.scss']
+  styleUrls: ['./cephfs-subvolume-snapshots-list.component.scss'],
+  standalone: false
 })
 export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges {
   @Input() fsName: string;
@@ -91,11 +92,11 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
         name: $localize`Pending Clones`,
         prop: 'info.has_pending_clones',
         flexGrow: 0.5,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            no: { class: 'badge-success' },
-            yes: { class: 'badge-info' }
+            no: { class: 'tag-success' },
+            yes: { class: 'tag-info' }
           }
         }
       }

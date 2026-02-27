@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_LIBRBD_CACHE_PWL_REQUEST_H
 #define CEPH_LIBRBD_CACHE_PWL_REQUEST_H
@@ -246,7 +246,7 @@ public:
                    PerfCounters *perfcounter, Context *user_req);
 
   ~C_DiscardRequest() override;
-  void finish_req(int r) override {}
+  void finish_req(int r) override;
 
   bool alloc_resources() override;
 

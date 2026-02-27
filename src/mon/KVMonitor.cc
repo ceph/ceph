@@ -1,10 +1,11 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "mon/Monitor.h"
 #include "mon/KVMonitor.h"
 #include "include/stringify.h"
 #include "messages/MKVData.h"
+#include "messages/MMonCommand.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

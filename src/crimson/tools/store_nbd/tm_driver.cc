@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "tm_driver.h"
 
@@ -64,7 +64,7 @@ TMDriver::read_extents_ret TMDriver::read_extents(
   extent_len_t length)
 {
   return seastar::do_with(
-    lba_pin_list_t(),
+    lba_mapping_list_t(),
     lextent_list_t<TestBlock>(),
     [this, &t, offset, length](auto &pins, auto &ret) {
       return tm->get_pins(
@@ -78,8 +78,8 @@ TMDriver::read_extents_ret TMDriver::read_extents(
 	  [this, &t, &ret](auto &&pin) {
 	    logger().debug(
 	      "read_extents: get_extent {}~{}",
-	      pin->get_val(),
-	      pin->get_length());
+	      pin.get_val(),
+	      pin.get_length());
 	    return tm->read_pin<TestBlock>(
 	      t,
 	      std::move(pin)

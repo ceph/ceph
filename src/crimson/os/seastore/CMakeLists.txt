@@ -7,16 +7,16 @@ set(crimson_seastore_srcs
   segment_manager/block.cc
   transaction_interruptor.cc
   transaction_manager.cc
-  transaction.cc
   cache.cc
+  extent_pinboard.cc
   root_block.cc
   lba_manager.cc
   async_cleaner.cc
+  btree/btree_types.cc
   backref_manager.cc
-  backref/backref_tree_node.cc
   backref/btree_backref_manager.cc
-  lba_manager/btree/btree_lba_manager.cc
-  lba_manager/btree/lba_btree_node.cc
+  lba/btree_lba_manager.cc
+  lba/lba_btree_node.cc
   omap_manager.cc
   omap_manager/btree/btree_omap_manager.cc
   omap_manager/btree/omap_btree_node_impl.cc

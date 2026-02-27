@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/ImageCtx.h"
@@ -20,6 +20,8 @@ int StandardPolicy<I>::lock_requested(bool force) {
   ldout(m_image_ctx->cct, 20) << this << " " << __func__ << ": force=" << force
 			      << dendl;
 
+  // refuse to release the lock (ignore forced requests) -- the peer
+  // will error out immediately
   return -EROFS;
 }
 

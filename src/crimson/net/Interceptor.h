@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -79,7 +79,7 @@ class socket_blocker {
       return seastar::sleep_abortable(
         std::chrono::seconds(10), *p_unblocked
       ).then([] {
-        ceph_abort("Timeout (10s) in socket_blocker::block()");
+        ceph_abort_msg("Timeout (10s) in socket_blocker::block()");
       }).handle_exception_type([] (const seastar::sleep_aborted& e) {
         // wait done!
       });

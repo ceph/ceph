@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -102,7 +102,7 @@ class SecretCache {
     : cct(g_ceph_context),
       lock(),
       max(cct->_conf->rgw_keystone_token_cache_size),
-      s3_token_expiry_length(300, 0) {
+      s3_token_expiry_length(cct->_conf->rgw_keystone_token_cache_ttl, 0) {
   }
 
   ~SecretCache() {}

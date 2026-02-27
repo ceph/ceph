@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -138,8 +139,9 @@ public:
 
 template<typename Ret>
 class waiter<Ret> final : public detail::base {
-  std::aligned_storage_t<sizeof(Ret)> ret;
-
+  struct alignas(Ret) {
+    std::byte data[sizeof(Ret)];
+  } ret;
 public:
   Ret wait() {
     auto l = wait_base();

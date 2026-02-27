@@ -223,6 +223,11 @@ class Field:
     default: Any = _unset
     quiet: bool = False  # customization value
     keep_none: bool = False  # customization value
+    # wrapper_type can be used to customize the output type of a scalar value.
+    # Typically this is used to assist YAML serialization.
+    # IMPORTANT: make sure the type produces valid YAML and JSON, ideally as
+    # subclass as a native type.
+    wrapper_type: Optional[Callable] = None
 
     def optional(self) -> bool:
         """Return true if the type of the field is Optional."""
@@ -462,11 +467,15 @@ class Resource:
             }
             return
 
+        if fld.wrapper_type:
+            _out = fld.wrapper_type
+        else:
+            _out = lambda v: v  # noqa: E731
         if isinstance(value, str):
-            data[fld.name] = str(value)
+            data[fld.name] = _out(str(value))
             return
         if isinstance(value, (int, float)):
-            data[fld.name] = value
+            data[fld.name] = _out(value)
             return
         raise ResourceTypeError(f'unexpected type for field {fld.name}')
 
@@ -498,6 +507,11 @@ class Resource:
         _customize = getattr(resource_cls, '_customize_resource', None)
         if _customize is not None:
             resource = _customize(resource)
+            if not resource:
+                raise ValueError(
+                    '_customize_resource must return a valid resource object,'
+                    f' not {resource!r}'
+                )
         return resource
 
 

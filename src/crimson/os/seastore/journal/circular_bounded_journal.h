@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -23,6 +23,8 @@
 #include "crimson/os/seastore/journal/circular_journal_space.h"
 #include "crimson/os/seastore/record_scanner.h"
 
+using namespace std::literals;
+
 namespace crimson::os::seastore::journal {
 
 using RBMDevice = random_block_device::RBMDevice;
@@ -39,19 +41,13 @@ using RBMDevice = random_block_device::RBMDevice;
  *
  * - Commit time
  * After submit_record is done, written_to is increased(this in-memory value)
- * ---written_to represents where the new record will be appended. Note that
- * applied_to is not changed here.
+ * ---written_to represents where the new record will be appended.
  *
  * - Replay time
  * At replay time, CBJournal begins to replay records in CBjournal by reading
  * records from dirty_tail. Then, CBJournal examines whether the records is valid
  * one by one, at which point written_to is recovered
- * if the valid record is founded. Note that applied_to is stored
- * permanently when the apply work---applying the records in CBJournal to RBM---
- * is done by CBJournal (TODO).
- *
- * TODO: apply records from CircularBoundedJournal to RandomBlockManager
- *
+ * if the valid record is founded.
  */
 
 constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
@@ -160,11 +156,6 @@ public:
     cbj_delta_handler_t &&delta_handler,
     journal_seq_t tail);
 
-  submit_record_ertr::future<> do_submit_record(
-    record_t &&record,
-    OrderingHandle &handle,
-    on_submission_func_t &&on_submission);
-
   void try_read_rolled_header(scan_valid_records_cursor &cursor) {
     paddr_t addr = convert_abs_addr_to_paddr(
       get_records_start(),
@@ -229,6 +220,20 @@ private:
   // the sequence to written records
   CircularJournalSpace cjs;
   RecordSubmitter record_submitter; 
+
+  struct {
+    uint64_t submit_record_count = 0;
+    uint64_t submit_record_size = 0;
+    std::chrono::duration<double> submit_record_latency_total = 0.0s;
+
+    uint64_t submit_record_roll_count = 0;
+    std::chrono::duration<double> submit_record_roll_latency_total = 0.0s;
+
+    uint64_t submit_record_wait_count = 0;
+    std::chrono::duration<double> submit_record_wait_latency_total = 0.0s;
+  } stats;
+  seastar::metrics::metric_group metrics;
+  void register_metrics();
 };
 
 }

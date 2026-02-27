@@ -35,7 +35,8 @@ const BASE_URL = 'monitoring/silences';
   ],
   selector: 'cd-silences-list',
   templateUrl: './silence-list.component.html',
-  styleUrls: ['./silence-list.component.scss']
+  styleUrls: ['./silence-list.component.scss'],
+  standalone: false
 })
 export class SilenceListComponent extends PrometheusListHelper {
   silences: AlertmanagerSilence[] = [];
@@ -45,9 +46,9 @@ export class SilenceListComponent extends PrometheusListHelper {
   selection = new CdTableSelection();
   modalRef: NgbModalRef;
   customCss = {
-    'badge badge-danger': 'active',
-    'badge badge-warning': 'pending',
-    'badge badge-default': 'expired'
+    'tag-danger': 'active',
+    'tag-warning': 'pending',
+    'tag-default': 'expired'
   };
   sorts: CdSortPropDir[] = [{ prop: 'endsAt', dir: CdSortDirection.desc }];
   rules: PrometheusRule[];
@@ -126,7 +127,7 @@ export class SilenceListComponent extends PrometheusListHelper {
         name: $localize`Alerts Silenced`,
         prop: 'silencedAlerts',
         flexGrow: 3,
-        cellTransformation: CellTemplate.badge
+        cellTransformation: CellTemplate.tag
       },
       {
         name: $localize`Created by`,
@@ -151,7 +152,14 @@ export class SilenceListComponent extends PrometheusListHelper {
       {
         name: $localize`Status`,
         prop: 'status.state',
-        cellTransformation: CellTemplate.classAdding
+        cellTransformation: CellTemplate.tag,
+        customTemplateConfig: {
+          map: {
+            active: { class: 'tag-danger' },
+            pending: { class: 'tag-warning' },
+            expired: { class: 'tag-default' }
+          }
+        }
       }
     ];
   }

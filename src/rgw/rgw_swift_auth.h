@@ -1,10 +1,10 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
 #include "rgw_common.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_auth.h"
@@ -159,7 +159,7 @@ class SwiftAnonymousApplier : public rgw::auth::LocalApplier {
       : LocalApplier(cct, std::move(user), std::nullopt, {}, LocalApplier::NO_SUBUSER,
                      std::nullopt, LocalApplier::NO_ACCESS_KEY) {
     }
-    bool is_admin_of(const rgw_owner& o) const {return false;}
+    bool is_admin() const {return false;}
     bool is_owner_of(const rgw_owner& o) const {
       auto* uid = std::get_if<rgw_user>(&o);
       return uid && uid->id == RGW_USER_ANON_ID;
@@ -243,12 +243,13 @@ class DefaultStrategy : public rgw::auth::Strategy,
                             std::vector<IAM::Policy> policies,
                             const std::string& subuser,
                             const std::optional<uint32_t>& perm_mask,
-                            const std::string& access_key_id) const override {
+                            const std::string& access_key_id,
+                            bool is_impersonating) const override {
     auto apl = \
       rgw::auth::add_3rdparty(driver, rgw_user(s->account_name),
         rgw::auth::add_sysreq(cct, driver, s,
           LocalApplier(cct, std::move(user), std::move(account), std::move(policies),
-                       subuser, perm_mask, access_key_id)));
+                       subuser, perm_mask, access_key_id), is_impersonating));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }

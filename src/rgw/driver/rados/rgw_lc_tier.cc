@@ -1,11 +1,11 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <string.h>
 #include <iostream>
 #include <map>
 
-#include "common/Formatter.h"
+#include "common/XMLFormatter.h"
 #include <common/errno.h>
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
@@ -260,6 +260,7 @@ int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
                          uint64_t& accounted_size, rgw::sal::Attrs& attrs,
                          std::optional<uint64_t> days,
                          RGWZoneGroupTierS3Glacier& glacier_params,
+			 bool& in_progress,
                          void* cb) {
   RGWRESTConn::get_obj_params req_params;
   std::string target_obj_name;
@@ -276,25 +277,23 @@ int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
     target_obj_name += get_key_instance(tier_ctx.obj->get_key());
   }
 
-  if (glacier_params.glacier_restore_tier_type != GlacierRestoreTierType::Expedited) {
-    //XXX: Supporting STANDARD tier type is still in WIP
-    ldpp_dout(tier_ctx.dpp, -1) << __func__ << "ERROR: Only Expedited tier_type is supported " << dendl;
-    return -1;
-  }
+  if (!in_progress) { // first time. Send RESTORE req.
 
-  rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
+    rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
+    ret = cloud_tier_restore(tier_ctx.dpp, tier_ctx.conn, dest_obj, days, glacier_params);
 
-  ret = cloud_tier_restore(tier_ctx.dpp, tier_ctx.conn, dest_obj, days, glacier_params);
-  
-  ldpp_dout(tier_ctx.dpp, 20) << __func__ << "Restoring object=" << dest_obj << "returned ret = " << ret << dendl;
- 
-  if (ret < 0 ) { 
-    ldpp_dout(tier_ctx.dpp, -1) << __func__ << "ERROR: failed to restore object=" << dest_obj << "; ret = " << ret << dendl;
-    return ret;
+    ldpp_dout(tier_ctx.dpp, 20) << __func__ << "Restoring object=" << target_obj_name << "returned ret = " << ret << dendl;
+
+    if (ret < 0 ) {
+      ldpp_dout(tier_ctx.dpp, -1) << __func__ << "ERROR: failed to restore object=" << dest_obj << "; ret = " << ret << dendl;
+      return ret;
+    }
+    in_progress = true;
   }
 
   // now send HEAD request and verify if restore is complete on glacier/tape endpoint
-  bool restore_in_progress = false;
+  static constexpr int MAX_RETRIES = 2;
+  uint32_t retries = 0;
   do {
     ret = rgw_cloud_tier_get_object(tier_ctx, true, headers, nullptr, etag,
                                     accounted_size, attrs, nullptr);
@@ -304,8 +303,14 @@ int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
       return ret;
     }
 
-    restore_in_progress = is_restore_in_progress(tier_ctx.dpp, headers);
-  } while(restore_in_progress);
+    in_progress = is_restore_in_progress(tier_ctx.dpp, headers);
+
+  } while(retries++ < MAX_RETRIES && in_progress);
+
+  if (in_progress) {
+    ldpp_dout(tier_ctx.dpp, 20) << __func__ << "Restoring object=" << target_obj_name << " still in progress; returning " << dendl;
+    return 0;
+  } 
 
   // now do the actual GET
   ret = rgw_cloud_tier_get_object(tier_ctx, false, headers, pset_mtime, etag,
@@ -395,11 +400,12 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
     }
     
     if (header.first == "CONTENT_LENGTH") {
-      accounted_size = atoi(val.c_str());
+      char* end = nullptr;
+      accounted_size = strtoull(val.c_str(), &end, 10);	    
     }
   }
 
-  ldpp_dout(tier_ctx.dpp, 20) << __func__ << "(): Sucessfully fetched object from cloud bucket:" << dest_bucket << ", object: " << target_obj_name << dendl;
+  ldpp_dout(tier_ctx.dpp, 20) << __func__ << "(): Successfully fetched object from cloud bucket:" << dest_bucket << ", object: " << target_obj_name << dendl;
   return ret;
 }
 
@@ -822,10 +828,8 @@ void RGWLCCloudStreamPut::send_ready(const DoutPrefixProvider *dpp, const rgw_re
 }
 
 void RGWLCCloudStreamPut::handle_headers(const map<string, string>& headers) {
-  for (const auto& h : headers) {
-    if (h.first == "ETAG") {
-      etag = h.second;
-    }
+  if (auto h = headers.find("ETAG"); h != headers.end()) {
+    etag = h->second;
   }
 }
 
@@ -924,7 +928,7 @@ static int cloud_tier_plain_transfer(RGWLCCloudTierCtx& tier_ctx) {
 
   rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
-  tier_ctx.obj->set_atomic();
+  tier_ctx.obj->set_atomic(true);
 
   /* Prepare Read from source */
   /* TODO: Define readf, writef as stack variables. For some reason,
@@ -968,7 +972,7 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
 
   rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
-  tier_ctx.obj->set_atomic();
+  tier_ctx.obj->set_atomic(true);
 
   /* TODO: Define readf, writef as stack variables. For some reason,
    * when used as stack variables (esp., readf), the transition seems to
@@ -1015,8 +1019,10 @@ int cloud_tier_restore(const DoutPrefixProvider *dpp, RGWRESTConn& dest_conn,
   bufferlist bl, out_bl;
   string resource = obj_to_aws_path(dest_obj);
 
-  const std::string tier_v = (glacier_params.glacier_restore_tier_type == GlacierRestoreTierType::Expedited) ? "Expedited" : "Standard";
-
+  std::optional<std::string> tier_v;
+  if (glacier_params.glacier_restore_tier_type != GlacierRestoreTierType::NoTier) {
+    tier_v = (glacier_params.glacier_restore_tier_type == GlacierRestoreTierType::Expedited) ? "Expedited" : "Standard";
+  }
   struct RestoreRequest {
 	  std::optional<uint64_t> days;
 	  std::optional<std::string> tier;
@@ -1450,6 +1456,23 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
   bufferlist out_bl;
   int ret = 0;
   pair<string, string> key(tier_ctx.storage_class, tier_ctx.target_bucket_name);
+  stringstream ss;
+  XMLFormatter formatter;
+  bufferlist bl;
+  std::string lconstraint;
+
+  struct CreateBucketReq {
+	  std::optional<std::string>  lconstraint;
+
+    explicit CreateBucketReq(std::optional<std::string> _lconstraint) : lconstraint(_lconstraint) {}
+
+    void dump_xml(Formatter *f) const {
+      if (lconstraint) {
+        encode_xml("LocationConstraint", lconstraint, f);
+      };
+    }
+  } req_enc(lconstraint);
+
   struct CreateBucketResult {
     std::string code;
 
@@ -1459,8 +1482,15 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
   } result;
 
   ldpp_dout(tier_ctx.dpp, 30) << "Cloud_tier_ctx: creating bucket:" << tier_ctx.target_bucket_name << dendl;
-  bufferlist bl;
   string resource = tier_ctx.target_bucket_name;
+
+  if (!tier_ctx.location_constraint.empty()) {
+    req_enc.lconstraint = tier_ctx.location_constraint;
+    encode_xml("CreateBucketConfiguration", req_enc, &formatter);
+
+    formatter.flush(ss);
+    bl.append(ss.str());
+  }
 
   ret = tier_ctx.conn.send_resource(tier_ctx.dpp, "PUT", resource, nullptr, nullptr,
                                     out_bl, &bl, nullptr, null_yield);

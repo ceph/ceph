@@ -20,7 +20,8 @@ import { RoleFormModel } from './role-form.model';
 @Component({
   selector: 'cd-role-form',
   templateUrl: './role-form.component.html',
-  styleUrls: ['./role-form.component.scss']
+  styleUrls: ['./role-form.component.scss'],
+  standalone: false
 })
 export class RoleFormComponent extends CdForm implements OnInit {
   roleForm: CdFormGroup;

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -16,12 +17,10 @@
 #define CEPH_DECAYCOUNTER_H
 
 #include "include/buffer.h"
-#include "common/StackStringStream.h"
 #include "common/ceph_time.h"
 
 #include <cmath>
 #include <list>
-#include <sstream>
 
 namespace ceph { class Formatter; }
 
@@ -65,7 +64,7 @@ public:
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<DecayCounter*>& ls);
+  static std::list<DecayCounter> generate_test_instances();
 
   /**
    * reading
@@ -126,12 +125,6 @@ inline void decode(DecayCounter &c, ceph::buffer::list::const_iterator &p) {
   c.decode(p);
 }
 
-inline std::ostream& operator<<(std::ostream& out, const DecayCounter& d) {
-  CachedStackStringStream css;
-  css->precision(2);
-  double val = d.get();
-  *css << "[C " << std::scientific << val << "]";
-  return out << css->strv();
-}
+std::ostream& operator<<(std::ostream& out, const DecayCounter& d);
 
 #endif

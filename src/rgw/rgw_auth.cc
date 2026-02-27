@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <array>
 #include <string>
@@ -9,7 +9,7 @@
 #include "rgw_common.h"
 #include "rgw_auth.h"
 #include "rgw_quota.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_http_client.h"
 #include "rgw_iam_managed_policy.h"
 #include "rgw_keystone.h"
@@ -203,7 +203,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
     const rgw_user id;
     const std::string display_name;
     const std::string path;
-    const bool is_admin;
+    const bool user_is_admin;
     const uint32_t type;
     const std::optional<RGWAccountInfo> account;
     const std::vector<IAM::Policy> policies;
@@ -216,7 +216,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
         id(user.user_id),
         display_name(user.display_name),
         path(user.path),
-        is_admin(user.admin),
+        user_is_admin(user.admin || user.system),
         type(user.type),
         account(std::move(account)),
         policies(std::move(policies))
@@ -238,8 +238,8 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
       return rgw_perms_from_aclspec_default_strategy(id.to_str(), aclspec, dpp);
     }
 
-    bool is_admin_of(const rgw_owner& o) const override {
-      return is_admin;
+    bool is_admin() const override {
+      return user_is_admin;
     }
 
     bool is_owner_of(const rgw_owner& o) const override {
@@ -280,6 +280,10 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
       return type;
     }
 
+    std::optional<rgw::ARN> get_caller_identity() const override {
+      return std::nullopt;
+    }
+
     string get_acct_name() const override {
       return {};
     }
@@ -302,7 +306,7 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
 
     void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
-          << ", is_admin=" << is_admin << ")";
+          << ", is_admin=" << user_is_admin << ")";
     }
 
     auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override {
@@ -365,13 +369,6 @@ uint32_t rgw_perms_from_aclspec_default_strategy(
 
   ldpp_dout(dpp, 5) << "Permissions for user not found" << dendl;
   return 0;
-}
-
-
-static inline const std::string make_spec_item(const std::string& tenant,
-                                               const std::string& id)
-{
-  return tenant + ":" + id;
 }
 
 
@@ -557,18 +554,18 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
 
       return 0;
     } catch (const int err) {
-      ldpp_dout(dpp, 5) << "applier throwed err=" << err << dendl;
+      ldpp_dout(dpp, 5) << "applier threw err=" << err << dendl;
       return err;
     } catch (const std::exception& e) {
-      ldpp_dout(dpp, 5) << "applier throwed unexpected err: " << e.what()
+      ldpp_dout(dpp, 5) << "applier threw unexpected err: " << e.what()
                         << dendl;
       return -EPERM;
     }
   } catch (const int err) {
-    ldpp_dout(dpp, 5) << "auth engine throwed err=" << err << dendl;
+    ldpp_dout(dpp, 5) << "auth engine threw err=" << err << dendl;
     return err;
   } catch (const std::exception& e) {
-    ldpp_dout(dpp, 5) << "auth engine throwed unexpected err: " << e.what()
+    ldpp_dout(dpp, 5) << "auth engine threw unexpected err: " << e.what()
                       << dendl;
   }
 
@@ -708,7 +705,15 @@ auto rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
 void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
   s->info.args.append("sub", this->sub);
-  s->info.args.append("aud", this->aud);
+  //this is needed for AssumeRoleWithWebIdentityResponse
+  //but if aud is not present in the token, client id can be used
+  //from AWS docs - "The intended audience (also known as client ID) of the web identity token."
+  //https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html
+  if (this->aud.empty() && !this->client_id.empty()) {
+    s->info.args.append("aud", this->client_id);
+  } else {
+    s->info.args.append("aud", this->aud);
+  }
   s->info.args.append("provider_id", this->iss);
   s->info.args.append("client_id", this->client_id);
 
@@ -782,6 +787,7 @@ bool rgw::auth::WebIdentityApplier::is_identity(const Principal& p) const
 
 const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
 const std::string rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY;
+const std::string rgw::auth::RemoteApplier::AuthInfo::NO_KEYSTONE_USER;
 
 /* rgw::auth::RemoteAuthApplier */
 ACLOwner rgw::auth::RemoteApplier::get_aclowner() const
@@ -824,7 +830,7 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvid
   return perm;
 }
 
-bool rgw::auth::RemoteApplier::is_admin_of(const rgw_owner& o) const
+bool rgw::auth::RemoteApplier::is_admin() const
 {
   return info.is_admin;
 }
@@ -954,6 +960,7 @@ void rgw::auth::RemoteApplier::write_ops_log_entry(rgw_log_entry& entry) const
   if (account) {
     entry.account_id = account->id;
   }
+  entry.user = info.keystone_user;
 }
 
 /* TODO(rzarzynski): we need to handle display_name changes. */
@@ -1019,15 +1026,24 @@ auto rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp) con
   ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
   create_account(dpp, acct_user, implicit_tenant, user->get_info());
 
-  /* Succeeded if we are here (create_account() hasn't throwed). */
+  /* Succeeded if we are here (create_account() hasn't thrown). */
   return user;
 }
 
 void rgw::auth::RemoteApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
 {
+  string key = "aws:userid";
+  string value = info.acct_user.id;
+  s->env.emplace(key, value);
+
   // copy our identity policies into req_state
   s->iam_identity_policies.insert(s->iam_identity_policies.end(),
                                   policies.begin(), policies.end());
+}
+
+std::optional<rgw::ARN> rgw::auth::RemoteApplier::get_caller_identity() const 
+{
+  return rgw::ARN(owner_acct_user.id, "user", owner_acct_user.tenant, true);
 }
 
 /* rgw::auth::LocalApplier */
@@ -1064,7 +1080,7 @@ uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvide
   return mask;
 }
 
-bool rgw::auth::LocalApplier::is_admin_of(const rgw_owner& o) const
+bool rgw::auth::LocalApplier::is_admin() const
 {
   return user_info.admin || user_info.system;
 }
@@ -1137,6 +1153,10 @@ auto rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp) cons
 
 void rgw::auth::LocalApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
 {
+  string key = "aws:userid";
+  string value = user_info.type == TYPE_ROOT ? user_info.account_id : user_info.user_id.id;
+  s->env.emplace(key, value);
+
   // copy our identity policies into req_state
   s->iam_identity_policies.insert(s->iam_identity_policies.end(),
                                   policies.begin(), policies.end());
@@ -1319,7 +1339,8 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
     auto apl = \
       apl_factory->create_apl_local(cct, s, std::move(user), std::nullopt, {},
                                     rgw::auth::LocalApplier::NO_SUBUSER,
-                                    std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
+                                    std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY,
+                                    false /* is_impersonating */);
     return result_t::grant(std::move(apl));
   }
 }

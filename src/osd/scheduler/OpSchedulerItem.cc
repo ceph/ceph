@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,11 +19,6 @@
 
 
 namespace ceph::osd::scheduler {
-
-std::ostream& operator<<(std::ostream& out, const op_scheduler_class& class_id) {
-  out << static_cast<size_t>(class_id);
-  return out;
-}
 
 void PGOpItem::run(
   OSD *osd,
@@ -181,7 +177,7 @@ void PGRecovery::run(
 {
   osd->logger->tinc(
     l_osd_recovery_queue_lat,
-    time_queued - ceph_clock_now());
+    ceph_clock_now() - time_queued);
   osd->do_recovery(pg.get(), epoch_queued, reserved_pushes, priority, handle);
   pg->unlock();
 }
@@ -194,7 +190,7 @@ void PGRecoveryContext::run(
 {
   osd->logger->tinc(
     l_osd_recovery_context_queue_lat,
-    time_queued - ceph_clock_now());
+    ceph_clock_now() - time_queued);
   c.release()->complete(handle);
   pg->unlock();
 }
@@ -214,7 +210,7 @@ void PGRecoveryMsg::run(
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
-  auto latency = time_queued - ceph_clock_now();
+  auto latency = ceph_clock_now() - time_queued;
   switch (op->get_req()->get_type()) {
   case MSG_OSD_PG_PUSH:
     osd->logger->tinc(l_osd_recovery_push_queue_lat, latency);

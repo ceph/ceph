@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -22,6 +22,7 @@ public:
 		     bool track_lock=true,
 		     bool enable_lock_dep=true,
 		     bool prioritize_write=false);
+  ~shared_mutex_debug();
   // exclusive locking
   void lock();
   bool try_lock();

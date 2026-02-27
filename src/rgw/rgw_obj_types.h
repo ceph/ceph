@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -88,11 +88,13 @@ struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
     f->dump_string("instance", instance);
   }
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<rgw_obj_index_key*>& ls) {
-    ls.push_back(new rgw_obj_index_key);
-    ls.push_back(new rgw_obj_index_key);
-    ls.back()->name = "name";
-    ls.back()->instance = "instance";
+  static std::list<rgw_obj_index_key> generate_test_instances() {
+    std::list<rgw_obj_index_key> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().name = "name";
+    ls.back().instance = "instance";
+    return ls;
   }
 
   size_t estimate_encoded_size() const {
@@ -475,7 +477,7 @@ struct rgw_raw_obj {
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<rgw_raw_obj*>& o);
+  static std::list<rgw_raw_obj> generate_test_instances();
   void decode_json(JSONObj *obj);
 
   inline std::string to_str() const {
@@ -596,7 +598,7 @@ struct rgw_obj {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<rgw_obj*>& o);
+  static std::list<rgw_obj> generate_test_instances();
 
   bool operator==(const rgw_obj& o) const {
     return (key == o.key) &&

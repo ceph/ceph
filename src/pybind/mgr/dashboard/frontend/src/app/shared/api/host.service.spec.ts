@@ -31,7 +31,9 @@ describe('HostService', () => {
     let result: any[] = [{}, {}];
     const hostContext = new CdTableFetchDataContext(() => undefined);
     service.list(hostContext.toParams(), 'true').subscribe((resp) => (result = resp));
-    const req = httpTesting.expectOne('api/host?offset=0&limit=10&search=&sort=%2Bname&facts=true');
+    const req = httpTesting.expectOne(
+      'api/host?offset=0&limit=10&search=&sort=%2Bname&facts=true&include_service_instances=false'
+    );
     expect(req.request.method).toBe('GET');
     req.flush([{ foo: 1 }, { bar: 2 }]);
     tick();

@@ -165,7 +165,7 @@ class TestAdminCommands(CephFSTestCase):
         if overwrites:
             self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
-    def gen_health_warn_mds_cache_oversized(self, mds_id=None, fs=None):
+    def gen_health_warn_mds_cache_oversized(self, mds_id=None, fs=None, path='.'):
         health_warn = 'MDS_CACHE_OVERSIZED'
 
         # cs_name = config section name
@@ -181,9 +181,9 @@ class TestAdminCommands(CephFSTestCase):
             raise RuntimeError('Makes no sense to pass both, mds_id as well as '
                                'FS object')
 
-        self.config_set(cs_name, 'mds_cache_memory_limit', '1K')
+        self.config_set(cs_name, 'mds_cache_memory_limit', '50K')
         self.config_set(cs_name, 'mds_health_cache_threshold', '1.00000')
-        self.mount_a.open_n_background('.', 400)
+        self.mount_a.open_n_background(path, 400)
 
         self.wait_for_health(health_warn, 30)
 
@@ -1724,6 +1724,120 @@ class TestFsAuthorize(CephFSTestCase):
         self.captester2.conduct_neg_test_for_chown_caps()
         self.captester2.conduct_neg_test_for_truncate_caps()
 
+    def test_multifs_single_client_cross_access_rw_caps_end(self):
+        """
+        test_multifs_single_client_cross_access_rw_caps_end -
+        A client having 'r' access on a fs (fs1) and 'rw' access on another fs (fs2) :
+          1. It shouldn't have 'rw' access on fs1
+          2. It should have 'rw' access on fs2
+
+        The fs name wasn't considered while validating mds auth caps. As a result,
+        incorrect permissions were granted to a user having access to multiple
+        filesystems. The order too matters as the last mds auth cap in the sequence
+        is considered while validating. This tests the auth caps having 'rw' caps
+        at the end.
+        """
+
+        self.fs1 = self.fs
+        self.fs2 = self.mds_cluster.newfs('testcephfs2')
+        self.mount_b.remount(cephfs_name=self.fs2.name)
+
+        FS1_AUTH_CAPS = (('/', 'r'),)
+        captester_fs1_r = CapTester(self.mount_a, '/')
+        FS2_AUTH_CAPS = (('/', 'rw'),)
+        captester_fs2_rw = CapTester(self.mount_b, '/')
+
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+        # Authorize client to fs1 with 'rw'
+        self.fs1.authorize(self.client_id, FS1_AUTH_CAPS)
+        # Authorize client to fs2 with only 'r'
+        keyring = self.fs2.authorize(self.client_id, FS2_AUTH_CAPS)
+
+        # Mount fs1
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=self.client_id, client_keyring_path=keyring_path, cephfs_name=self.fs1.name)
+
+        # Mount fs2
+        keyring_path = self.mount_b.client_remote.mktemp(data=keyring)
+        self.mount_b.remount(client_id=self.client_id, client_keyring_path=keyring_path, cephfs_name=self.fs2.name)
+
+        # Client on fs1 should not have 'rw' access
+        captester_fs1_r.conduct_pos_test_for_read_caps()
+        captester_fs1_r.conduct_neg_test_for_write_caps()
+        captester_fs1_r.conduct_neg_test_for_new_file_creation()
+
+        # Client on fs2 - validate 'rw' access
+        captester_fs2_rw.conduct_pos_test_for_read_caps()
+        captester_fs2_rw.conduct_pos_test_for_write_caps()
+        captester_fs2_rw.conduct_pos_test_for_new_file_creation()
+
+    def test_multifs_single_client_cross_access_r_caps_end(self):
+        """
+        test_multifs_single_client_cross_access_r_caps_end -
+        A client having 'rw' access on a fs (fs1) and 'r' access on another fs (fs2) :
+          1. It should have 'rw' access on fs1
+          1. It shouldn't have 'rw' access on fs2
+
+        The fs name wasn't considered while validating mds auth caps. As a result,
+        incorrect permissions were granted to a user having access to multiple
+        filesystems. The order too matters as the last mds auth cap in the sequence
+        is considered while validating. This tests the auth caps having 'r' caps
+        at the end.
+        """
+
+        self.fs1 = self.fs
+        self.fs2 = self.mds_cluster.newfs('testcephfs2')
+        self.mount_b.remount(cephfs_name=self.fs2.name)
+
+        FS1_AUTH_CAPS = (('/', 'rw'),)
+        captester_fs1_rw = CapTester(self.mount_a, '/')
+        FS2_AUTH_CAPS = (('/', 'r'),)
+        captester_fs2_r = CapTester(self.mount_b, '/')
+
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+        # Authorize client to fs1 with 'rw'
+        self.fs1.authorize(self.client_id, FS1_AUTH_CAPS)
+        # Authorize client to fs2 with only 'r'
+        keyring = self.fs2.authorize(self.client_id, FS2_AUTH_CAPS)
+
+        # Mount fs1
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=self.client_id, client_keyring_path=keyring_path, cephfs_name=self.fs1.name)
+
+        # Mount fs2
+        keyring_path = self.mount_b.client_remote.mktemp(data=keyring)
+        self.mount_b.remount(client_id=self.client_id, client_keyring_path=keyring_path, cephfs_name=self.fs2.name)
+
+        # Client on fs2 should not have 'rw' access
+        captester_fs2_r.conduct_pos_test_for_read_caps()
+        captester_fs2_r.conduct_neg_test_for_write_caps()
+        captester_fs2_r.conduct_neg_test_for_new_file_creation()
+
+        # Client on fs1 - validate 'rw' access
+        ceph_client_version = None
+        tasks = self.ctx.config.get('tasks', [])
+        for task in tasks:
+            if task.get("install", None):
+                ceph_client_version = task.get("install").get("tag", None)
+                break
+
+        log.info(f"dumping ceph_client_version - {ceph_client_version}")
+        captester_fs1_rw.conduct_pos_test_for_read_caps()
+        # The multifs auth caps bug has a fix both in client and mds
+        # If it's old client (19.2.2) and not patched, we expect that the fs
+        # with 'rw' would end up having 'r' caps with the multifs for
+        # auth caps used as in this test above.
+        if ceph_client_version != "v19.2.2":
+            # The following condition should be removed once the fix lands in kernel
+            if isinstance(self.mount_a, FuseMount):
+                captester_fs1_rw.conduct_pos_test_for_write_caps()
+                captester_fs1_rw.conduct_pos_test_for_new_file_creation()
+
+
     def test_multifs_rootsquash_nofeature(self):
         """
         That having root_squash on one fs doesn't prevent access to others.
@@ -2695,49 +2809,49 @@ class TestMDSFail(TestAdminCommands):
 
     def _get_unhealthy_mds_id(self, health_warn):
         '''
-        Return MDS ID for which health warning in "health_warn" has been
-        generated.
+        Returns number of MDSs for which health warning in "health_warn" has been
+        generated and the first MDS ID for which warning is generated
         '''
         health_report = json.loads(self.get_ceph_cmd_stdout('health detail '
-                                                            '--format json'))
+                                                            '--format json-pretty'))
         # variable "msg" should hold string something like this -
         # 'mds.b(mds.0): Behind on trimming (865/10) max_segments: 10,
         # num_segments: 86
+        count = health_report['checks'][health_warn]['summary']['count']
         msg = health_report['checks'][health_warn]['detail'][0]['message']
         mds_id = msg.split('(')[0]
         mds_id = mds_id.replace('mds.', '')
-        return mds_id
+        return count, mds_id
 
-    def test_with_health_warn_with_2_active_MDSs(self):
+    def test_with_health_warn_on_1_mds_with_2_active_MDSs(self):
         '''
         Test when a CephFS has 2 active MDSs and one of them have either
         health warning MDS_TRIM or MDS_CACHE_OVERSIZE, running "ceph mds fail"
-        fails for both MDSs without confirmation flag and passes for both when
+        fails on the MDS with warning without confirmation flag and passes for
+        the other mds without warning. It passes for the mds with warning when
         confirmation flag is passed.
         '''
         health_warn = 'MDS_CACHE_OVERSIZED'
         self.fs.set_max_mds(2)
-        self.gen_health_warn_mds_cache_oversized()
-        mds1_id, mds2_id = self.fs.get_active_names()
+
+        self.mount_a.run_shell_payload("mkdir dir1")
+        self.mount_a.setfattr("dir1", "ceph.dir.pin", "0")
+        self._wait_subtrees([('/dir1', 0)], rank=0)
+
+        mds0_id, mds1_id = self.fs.get_active_names()
+        self.gen_health_warn_mds_cache_oversized(mds_id=mds0_id, path="dir1")
 
         # MDS ID for which health warning has been generated.
-        hw_mds_id = self._get_unhealthy_mds_id(health_warn)
-        if mds1_id == hw_mds_id:
-            non_hw_mds_id = mds2_id
-        elif mds2_id == hw_mds_id:
-            non_hw_mds_id = mds1_id
-        else:
-            raise RuntimeError('There are only 2 MDSs right now but apparently'
-                               'health warning was raised for an MDS other '
-                               'than these two. This is definitely an error.')
+        count, hw_mds_id = self._get_unhealthy_mds_id(health_warn)
+        # Validate the warning is raised on only one mds
+        self.assertEqual(count, 1)
+        self.assertEqual(hw_mds_id, mds0_id)
 
         # actual testing begins now...
-        self.negtest_ceph_cmd(args=f'mds fail {non_hw_mds_id}', retval=1,
+        self.negtest_ceph_cmd(args=f'mds fail {mds0_id}', retval=1,
                               errmsgs=health_warn)
-        self.negtest_ceph_cmd(args=f'mds fail {hw_mds_id}', retval=1,
-                              errmsgs=health_warn)
-        self.run_ceph_cmd(f'mds fail {mds1_id} --yes-i-really-mean-it')
-        self.run_ceph_cmd(f'mds fail {mds2_id} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'mds fail {mds1_id}')
+        self.run_ceph_cmd(f'mds fail {mds0_id} --yes-i-really-mean-it')
 
     def test_when_other_MDS_has_warn_TRIM(self):
         '''

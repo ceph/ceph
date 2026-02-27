@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -24,7 +24,8 @@ using RGWZonesNeedPeriod = RGWPeriod;
 class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
                               public RGWRealmReloader::Pauser {
  public:
-  explicit RGWPeriodPusher(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y);
+  explicit RGWPeriodPusher(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::ConfigStore* cfgsore,
+                           optional_yield y);
   ~RGWPeriodPusher() override;
 
   /// respond to realm notifications by pushing new periods to other zones

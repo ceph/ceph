@@ -168,7 +168,7 @@ class RHDiskFailurePredictor(Predictor):
         roll_window_size = 6
 
         # rolling means generator
-        dataset_size = disk_days_attrs.shape[0] - roll_window_size + 1
+        dataset_size = disk_days_attrs.shape[0] - roll_window_size + 1  # type: ignore
         gen = (disk_days_attrs[i: i + roll_window_size, ...].mean(axis=0)
                for i in range(dataset_size))
         means = np.vstack(gen)  # type: ignore

@@ -34,13 +34,16 @@ import { SmbService } from '~/app/shared/api/smb.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SmbDomainSettingModalComponent } from '../smb-domain-setting-modal/smb-domain-setting-modal.component';
 import { CephServicePlacement } from '~/app/shared/models/service.interface';
-import { USERSGROUPS_URL } from '../smb-usersgroups-list/smb-usersgroups-list.component';
 import { UpperFirstPipe } from '~/app/shared/pipes/upper-first.pipe';
+import { CLUSTER_PATH } from '../smb-cluster-list/smb-cluster-list.component';
+import { USERSGROUPS_PATH } from '../smb-usersgroups-list/smb-usersgroups-list.component';
+import { Host } from '~/app/shared/models/host.interface';
 
 @Component({
   selector: 'cd-smb-cluster-form',
   templateUrl: './smb-cluster-form.component.html',
-  styleUrls: ['./smb-cluster-form.component.scss']
+  styleUrls: ['./smb-cluster-form.component.scss'],
+  standalone: false
 })
 export class SmbClusterFormComponent extends CdForm implements OnInit {
   smbForm: CdFormGroup;
@@ -49,6 +52,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   orchStatus$: Observable<any>;
   allClustering: string[] = [];
   CLUSTERING = CLUSTERING;
+  AUTHMODE = AUTHMODE;
   selectedLabels: string[] = [];
   selectedHosts: string[] = [];
   action: string;
@@ -82,7 +86,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   ngOnInit() {
     this.action = this.actionLabels.CREATE;
     this.usersGroups$ = this.smbService.listUsersGroups();
-    if (this.router.url.startsWith(`/cephfs/smb/${URLVerbs.EDIT}`)) {
+    if (this.router.url.startsWith(`/${CLUSTER_PATH}/${URLVerbs.EDIT}`)) {
       this.isEdit = true;
     }
     this.smbService.modalData$.subscribe((data: DomainSettings) => {
@@ -94,7 +98,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       labels: this.hostService.getLabels()
     }).pipe(
       map(({ hosts, labels }) => ({
-        hosts: hosts.map((host: any) => ({ content: host['hostname'] })),
+        hosts: hosts.map((host: Host) => ({ content: host['hostname'] })),
         labels: labels.map((label: string) => ({ content: label }))
       }))
     );
@@ -128,7 +132,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
             customDnsFormArray.push(new FormControl(dns));
           });
         }
-        if (this.clusterResponse.auth_mode == AUTHMODE.activeDirectory) {
+        if (this.clusterResponse.auth_mode == AUTHMODE.ActiveDirectory) {
           this.domainSettingsObject = this.clusterResponse?.domain_settings;
           this.smbForm.get('domain_settings').setValue(this.domainSettingsObject.realm);
         } else {
@@ -168,7 +172,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         labels: this.hostService.getLabels()
       }).pipe(
         map(({ hosts, labels }) => ({
-          hosts: hosts.map((host: any) => ({ content: host['hostname'] })),
+          hosts: hosts.map((host: Host) => ({ content: host['hostname'] })),
           labels: labels.map((label: string) => ({ content: label }))
         }))
       );
@@ -185,13 +189,13 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         validators: [Validators.required]
       }),
       auth_mode: [
-        AUTHMODE.activeDirectory,
+        AUTHMODE.ActiveDirectory,
         {
           validators: [Validators.required]
         }
       ],
       domain_settings: [null],
-      placement: [{}],
+      placement: [],
       hosts: [[]],
       label: [
         null,
@@ -227,7 +231,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     const userGroupSettingsControl = this.smbForm.get('joinSources') as FormArray;
 
     // User Group Setting should be optional if authMode is "Active Directory"
-    if (authMode === AUTHMODE.activeDirectory) {
+    if (authMode === AUTHMODE.ActiveDirectory) {
       if (userGroupSettingsControl) {
         userGroupSettingsControl.clear();
       }
@@ -283,7 +287,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     }
 
     // Domain Setting should be mandatory if authMode is "Active Directory"
-    if (authMode === AUTHMODE.activeDirectory && !domainSettingsControl.value) {
+    if (authMode === AUTHMODE.ActiveDirectory && !domainSettingsControl.value) {
       domainSettingsControl.setErrors({ required: true });
       this.smbForm.markAllAsTouched();
       return;
@@ -297,18 +301,17 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
 
   handleTaskRequest(urlVerb: string) {
     const requestModel = this.buildRequest();
-    const BASE_URL = 'smb/cluster';
     const component = this;
     const cluster_id = this.smbForm.get('cluster_id').value;
 
     this.taskWrapperService
       .wrapTaskAroundCall({
-        task: new FinishedTask(`${BASE_URL}/${urlVerb}`, { cluster_id }),
+        task: new FinishedTask(`${CLUSTER_PATH}/${urlVerb}`, { cluster_id }),
         call: this.smbService.createCluster(requestModel)
       })
       .subscribe({
         complete: () => {
-          this.router.navigate([`cephfs/smb`]);
+          this.router.navigate([CLUSTER_PATH]);
         },
         error: () => {
           component.smbForm.setErrors({ cdSubmitButton: true });
@@ -380,7 +383,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       requestModel.cluster_resource.clustering = rawFormValue.clustering.toLowerCase();
     }
 
-    if (rawFormValue.placement.count) {
+    if (rawFormValue.placement?.count) {
       requestModel.cluster_resource.count = rawFormValue.placement.count;
     }
 
@@ -439,7 +442,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   }
 
   navigateCreateUsersGroups() {
-    this.router.navigate([`${USERSGROUPS_URL}/${URLVerbs.CREATE}`]);
+    this.router.navigate([`${USERSGROUPS_PATH}/${URLVerbs.CREATE}`]);
   }
 
   addCustomDns() {
@@ -449,8 +452,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
 
   addPublicAddrs() {
     const control = this.formBuilder.group({
-      address: ['', Validators.required],
-      destination: ['']
+      address: new FormControl('', { validators: [Validators.required] }),
+      destination: new FormControl('')
     });
     this.public_addrs.push(control);
   }

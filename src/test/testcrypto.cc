@@ -5,6 +5,7 @@
 #include "common/Clock.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "include/ceph_fs.h" // for CEPH_CRYPTO_AES
 
 #define dout_subsys ceph_subsys_auth
 

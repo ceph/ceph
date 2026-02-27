@@ -1,10 +1,11 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <iostream>
 #include <string_view>
 
 #include "common/not_before_queue.h"
+#include "include/types.h" // for operator<<
 #include "gtest/gtest.h"
 
 // Just to have a default constructor that sets it to 0
@@ -62,6 +63,16 @@ class NotBeforeTest : public testing::Test {
  public:
   using queue_t = not_before_queue_t<tv_t, test_time_t>;
 
+  ~NotBeforeTest() {
+    // Advance time until all queued items become eligible for processing.
+    // This ensures complete dequeuing during test teardown, preventing memory leaks.
+    // We assume test cutoff timepoints remain within reasonable bounds. If a specified
+    // timepoint precedes current time, the process continues advancing normally.
+    for (unsigned when = 1; queue.eligible_count() < queue.total_count(); when += 1) {
+      queue.advance_time(when);
+    }
+    while (queue.dequeue()) {}
+  }
   void load_test_data(const std::vector<tv_t> &dt) {
     for (const auto &d : dt) {
       queue.enqueue(d);

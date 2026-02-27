@@ -1,0 +1,87 @@
+<div class="performance-card-wrapper">
+  <cd-productive-card
+    headerTitle="Performance"
+    i18n-headerTitle
+    [applyShadow]="false"
+  >
+    @if(chartDataLengthSignal() > 0) {
+    <ng-template #header>
+      <h2 class="cds--type-heading-compact-02"
+          i18n>Performance</h2>
+      <div cdsStack="horizontal"
+           gap="2">
+        <cds-dropdown
+          [placeholder]="selectedStorageType"
+          (selected)="onStorageTypeSelection($event)"
+          [label]="'Storage Type'"
+          class="overview-storage-card-dropdown"
+          [inline]="true"
+          size="sm"
+          i18n>
+          <cds-dropdown-list
+            [items]="storageTypes"
+            size="sm"></cds-dropdown-list>
+        </cds-dropdown>
+
+        <cd-time-picker
+          [dropdwonSize]="'sm'"
+          [label]="'Time Span'"
+          (selectedTime)="loadCharts($event)"
+        ></cd-time-picker>
+      </div>
+    </ng-template>
+    <div cdsGrid
+         [narrow]="true"
+         [condensed]="false"
+         [fullWidth]="true"
+         class="cds-mt-5 cds-mb-5">
+      <div cdsRow
+           [narrow]="true">
+        <div cdsCol
+             class="cds-mb-5"
+             [columnNumbers]="{lg: 5, md: 8, sm: 12}">
+          <cd-area-chart
+            chartTitle="IOPS"
+            [chartKey]="performanceTypes?.IOPS"
+            [dataUnit]="metricUnitMap?.iops"
+            [rawData]="chartDataSignal()?.iops">
+          </cd-area-chart>
+        </div>
+        <div cdsCol
+             [columnNumbers]="{lg: 5, md: 8, sm: 12}"
+             class="cds-mb-5 performance-card-latency-chart">
+          <cd-area-chart
+            chartTitle="Latency"
+            [chartKey]="performanceTypes?.Latency"
+            [dataUnit]="metricUnitMap?.latency"
+            [rawData]="chartDataSignal()?.latency">
+          </cd-area-chart>
+        </div>
+        <div cdsCol
+             class="cds-mb-5"
+             [columnNumbers]="{lg: 5, md: 8, sm: 12}">
+          <cd-area-chart
+            chartTitle="Throughput"
+            [chartKey]="performanceTypes?.Throughput"
+            [dataUnit]="metricUnitMap?.throughput"
+            [rawData]="chartDataSignal()?.throughput">
+          </cd-area-chart>
+        </div>
+      </div>
+    </div>
+    }
+
+    @if(chartDataLengthSignal() === 0) {
+    <div class="performance-card-empty-msg">
+      <div class="performance-card-empty-msg-icon">
+        <img src="assets/locked.png"
+             alt="no-services-links"/>
+      </div>
+      <span class="cds--type-label-01"
+            i18n>
+        You must have storage configured to access this capability.
+      </span>
+    </div>
+    }
+  </cd-productive-card>
+</div>

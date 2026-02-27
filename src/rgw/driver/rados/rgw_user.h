@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -60,10 +60,12 @@ struct RGWUID
   void dump(Formatter *f) const {
     f->dump_string("user_id", id);
   }
-  static void generate_test_instances(std::list<RGWUID*>& o) {
-    o.push_back(new RGWUID);
-    o.push_back(new RGWUID);
-    o.back()->id = "test:tester";
+  static std::list<RGWUID> generate_test_instances() {
+    std::list<RGWUID> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().id = "test:tester";
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(RGWUID)

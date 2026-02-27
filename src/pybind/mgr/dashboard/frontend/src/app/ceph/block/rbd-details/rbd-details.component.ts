@@ -7,7 +7,8 @@ import { RbdFormModel } from '../rbd-form/rbd-form.model';
 @Component({
   selector: 'cd-rbd-details',
   templateUrl: './rbd-details.component.html',
-  styleUrls: ['./rbd-details.component.scss']
+  styleUrls: ['./rbd-details.component.scss'],
+  standalone: false
 })
 export class RbdDetailsComponent implements OnChanges {
   @Input()
@@ -25,7 +26,7 @@ export class RbdDetailsComponent implements OnChanges {
 
   ngOnChanges() {
     if (this.selection) {
-      this.rbdDashboardUrl = `rbd-details?var-pool=${this.selection['pool_name']}&var-image=${this.selection['name']}`;
+      this.rbdDashboardUrl = `ceph-block-details?var-pool=${this.selection['pool_name']}&var-image=${this.selection['name']}`;
     }
   }
 }

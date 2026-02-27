@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -38,7 +39,7 @@
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
-#include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
@@ -453,7 +454,8 @@ int get_log(CephContext *cct, ObjectStore *fs, __u8 struct_ver,
       pgid.make_pgmeta_oid(),
       info, log, missing,
       oss,
-      g_ceph_context->_conf->osd_ignore_stale_divergent_priors);
+      g_ceph_context->_conf->osd_ignore_stale_divergent_priors,
+      true); // Always use relaxed asserts for this tool.
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }
@@ -1173,6 +1175,7 @@ int expand_log(
       info,
       oss,
       cct->_conf->osd_ignore_stale_divergent_priors,
+      true, // Always use relaxed asserts for this tool.
       cct->_conf->osd_debug_verify_missing_on_start);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
@@ -1183,7 +1186,7 @@ int expand_log(
     for (; e <= target_version; e.version++) {
       entry.version = e;
       std::cout << "adding " << e << std::endl;
-      log.add(entry, true);
+      log.add(entry);
     }
     info.last_complete = target_version;
     info.last_update = target_version;
@@ -2897,9 +2900,9 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
     }
   }
   bufferlist hattr;
-  gr = store->getattr(ch, ghobj, ECUtil::get_hinfo_key(), hattr);
+  gr = store->getattr(ch, ghobj, ECLegacy::ECUtilL::get_hinfo_key(), hattr);
   if (gr == 0) {
-    ECUtil::HashInfo hinfo;
+    ECLegacy::ECUtilL::HashInfo hinfo;
     auto hp = hattr.cbegin();
     try {
       decode(hinfo, hp);
@@ -3596,6 +3599,9 @@ void usage(po::options_description &desc)
     cerr << "ceph-objectstore-tool ... <object> set-size" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> clear-data-digest" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> remove-clone-metadata <cloneid>" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> clear-snapset "
+            "[(corrupt|seq|snaps|clones|clone_size|clone_overlap|size)]"
+         << std::endl;
     cerr << std::endl;
     cerr << "<object> can be a JSON object description as displayed" << std::endl;
     cerr << "by --op list." << std::endl;
@@ -3606,6 +3612,19 @@ void usage(po::options_description &desc)
     cerr << std::endl;
     cerr << "The optional [file] argument will read stdin or write stdout" << std::endl;
     cerr << "if not specified or if '-' specified." << std::endl;
+    cerr << std::endl;
+    cerr << "clear-snapset options:" << std::endl;
+    cerr << "  clear-snapset               : by default, clear clones, "
+            "clone_size and clone_overlap"
+         << std::endl;
+    cerr << "  clear-snapset corrupt       : clear entire snapset" << std::endl;
+    cerr << "  clear-snapset seq           : clear snapset.seq" << std::endl;
+    cerr << "  clear-snapset clone_size    : clear clone_size" << std::endl;
+    cerr << "  clear-snapset clone_overlap : clear clone_overlap" << std::endl;
+    cerr << "  clear-snapset clones        : clear clones" << std::endl;
+    cerr << "  clear-snapset snaps         : clear clone_snaps" << std::endl;
+    cerr << "  clear-snapset size          : break all clone sizes by adding 1"
+         << std::endl;
 }
 
 bool ends_with(const string& check, const string& ending)
@@ -3997,6 +4016,7 @@ int main(int argc, char **argv)
     op == "get-inc-osdmap" ||
     objcmd == "get-bytes" ||
     objcmd == "get-attrs" ||
+    objcmd == "get-attr" ||
     objcmd == "get-omap" ||
     objcmd == "get-omaphdr" ||
     objcmd == "list-attrs" ||
@@ -4170,6 +4190,11 @@ int main(int argc, char **argv)
         }
 	if (pgidstr != "meta") {
 	  auto ch = fs->open_collection(coll_t(pgid));
+	  if (!ch) {
+	    stringstream ss;
+	    cerr << "PG '" << pgid << "' not found" << std::endl;
+	    throw std::runtime_error(ss.str());
+	  }
 	  if (!ghobj.match(fs->collection_bits(ch), pgid.ps())) {
 	    stringstream ss;
 	    ss << "object " << ghobj << " not contained by pg " << pgid;
@@ -4683,9 +4708,22 @@ int main(int argc, char **argv)
         ret = clear_data_digest(fs.get(), coll, ghobj);
         goto out;
       } else if (objcmd == "clear-snapset") {
-        // UNDOCUMENTED: For testing zap SnapSet
-        // IGNORE extra args since not in usage anyway
-	if (!ghobj.hobj.has_snapset()) {
+        if (vm.count("arg1") == 0) {
+          usage(desc);
+          ret = 1;
+          goto out;
+        }
+
+        if (vm.count("arg2") != 0) {
+          if (arg2 != "corrupt" && arg2 != "seq" && arg2 != "snaps" &&
+              arg2 != "clones" && arg2 != "clone_size" &&
+              arg2 != "clone_overlap" && arg2 != "size") {
+            usage(desc);
+            ret = 1;
+            goto out;
+          }
+        }
+        if (!ghobj.hobj.has_snapset()) {
 	  cerr << "'" << objcmd << "' requires a head or snapdir object" << std::endl;
 	  ret = 1;
 	  goto out;

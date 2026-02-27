@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -43,6 +43,7 @@
 #include "common/async/yield_context.h"
 #include "rgw_website.h"
 #include "rgw_object_lock.h"
+#include "rgw_object_ownership.h"
 #include "rgw_tag.h"
 #include "rgw_op_type.h"
 #include "rgw_sync_policy.h"
@@ -87,7 +88,9 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_LC		RGW_ATTR_PREFIX "lc"
 #define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG RGW_ATTR_PREFIX "etag"
-#define RGW_ATTR_CKSUM    	RGW_ATTR_PREFIX "cksum"
+#define RGW_ATTR_CKSUM          RGW_ATTR_PREFIX "cksum"
+#define RGW_ATTR_SHA256         RGW_ATTR_PREFIX "x-amz-content-sha256"
+#define RGW_ATTR_BLAKE3         RGW_ATTR_PREFIX "blake3"
 #define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
@@ -102,6 +105,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_SHADOW_OBJ    	RGW_ATTR_PREFIX "shadow_name"
 #define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
 #define RGW_ATTR_USER_MANIFEST  RGW_ATTR_PREFIX "user_manifest"
+#define RGW_ATTR_SHARE_MANIFEST RGW_ATTR_PREFIX "shared_manifest"
 #define RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION	RGW_ATTR_PREFIX RGW_AMZ_WEBSITE_REDIRECT_LOCATION
 #define RGW_ATTR_SLO_MANIFEST   RGW_ATTR_PREFIX "slo_manifest"
 /* Information whether an object is SLO or not must be exposed to
@@ -110,6 +114,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_X_ROBOTS_TAG	RGW_ATTR_PREFIX "x-robots-tag"
 #define RGW_ATTR_STORAGE_CLASS  RGW_ATTR_PREFIX "storage_class"
 #define RGW_ATTR_BUCKET_LOGGING RGW_ATTR_PREFIX "logging"
+#define RGW_ATTR_BUCKET_LOGGING_MTIME RGW_ATTR_PREFIX "logging-mtime"
 #define RGW_ATTR_BUCKET_LOGGING_SOURCES RGW_ATTR_PREFIX "logging-sources"
 
 /* S3 Object Lock*/
@@ -117,6 +122,8 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OBJECT_RETENTION   RGW_ATTR_PREFIX "object-retention"
 #define RGW_ATTR_OBJECT_LEGAL_HOLD  RGW_ATTR_PREFIX "object-legal-hold"
 
+// S3 Object Ownership
+#define RGW_ATTR_OWNERSHIP_CONTROLS RGW_ATTR_PREFIX "ownership-controls"
 
 #define RGW_ATTR_PG_VER 	RGW_ATTR_PREFIX "pg_ver"
 #define RGW_ATTR_SOURCE_ZONE    RGW_ATTR_PREFIX "source_zone"
@@ -346,6 +353,9 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_PRESIGNED_URL_DISABLED     2224
 #define ERR_AUTHORIZATION        2225 // SNS 403 AuthorizationError
 #define ERR_ILLEGAL_LOCATION_CONSTRAINT_EXCEPTION 2226
+#define ERR_ACLS_NOT_SUPPORTED   2227 // 400 AccessControlListNotSupported
+#define ERR_INVALID_BUCKET_ACL   2228 // 400 InvalidBucketAclWithObjectOwnership
+#define ERR_NO_SUCH_OWNERSHIP_CONTROLS 2229 // 404 OwnershipControlsNotFoundError
 
 #define ERR_BUSY_RESHARDING      2300 // also in cls_rgw_types.h, don't change!
 #define ERR_NO_SUCH_ENTITY       2301
@@ -565,26 +575,40 @@ class RateLimiter;
 struct RGWRateLimitInfo {
   int64_t max_write_ops;
   int64_t max_read_ops;
+  int64_t max_list_ops;
+  int64_t max_delete_ops;
   int64_t max_write_bytes;
   int64_t max_read_bytes;
   bool enabled = false;
   RGWRateLimitInfo()
-    : max_write_ops(0), max_read_ops(0), max_write_bytes(0), max_read_bytes(0)  {}
+    : max_write_ops(0), max_read_ops(0), max_list_ops(0), max_delete_ops(0), max_write_bytes(0), max_read_bytes(0)  {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(max_write_ops, bl);
     encode(max_read_ops, bl);
+    encode(max_list_ops, bl);
+    encode(max_delete_ops, bl);
     encode(max_write_bytes, bl);
     encode(max_read_bytes, bl);
     encode(enabled, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(max_write_ops,bl);
+    DECODE_START(2, bl);
+    decode(max_write_ops, bl);
     decode(max_read_ops, bl);
-    decode(max_write_bytes,bl);
+    if (struct_v >= 2) {
+      decode(max_list_ops, bl);
+    } else {
+      max_list_ops = 0;
+    }
+    if (struct_v >= 2) {
+      decode(max_delete_ops, bl);
+    } else {
+      max_delete_ops = 0;
+    }
+    decode(max_write_bytes, bl);
     decode(max_read_bytes, bl);
     decode(enabled, bl);
     DECODE_FINISH(bl);
@@ -796,7 +820,7 @@ struct RGWUserInfo
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWUserInfo*>& o);
+  static std::list<RGWUserInfo> generate_test_instances();
 
   void decode_json(JSONObj *obj);
 };
@@ -862,7 +886,7 @@ struct RGWAccountInfo {
 
   void dump(Formatter* f) const;
   void decode_json(JSONObj* obj);
-  static void generate_test_instances(std::list<RGWAccountInfo*>& o);
+  static std::list<RGWAccountInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWAccountInfo)
 
@@ -896,7 +920,7 @@ struct RGWGroupInfo {
 
   void dump(Formatter* f) const;
   void decode_json(JSONObj* obj);
-  static void generate_test_instances(std::list<RGWGroupInfo*>& o);
+  static std::list<RGWGroupInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWGroupInfo)
 
@@ -1106,7 +1130,7 @@ struct RGWBucketInfo {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWBucketInfo*>& o);
+  static std::list<RGWBucketInfo> generate_test_instances();
 
   void decode_json(JSONObj *obj);
 
@@ -1203,7 +1227,7 @@ struct RGWBucketEntryPoint
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<RGWBucketEntryPoint*>& o);
+  static std::list<RGWBucketEntryPoint> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWBucketEntryPoint)
 
@@ -1252,7 +1276,7 @@ struct req_info {
   meta_map_t crypt_attribute_map;
 
   std::string host;
-  const char *method;
+  const char *method = nullptr;
   std::string script_uri;
   std::string request_uri;
   std::string request_uri_aws4;
@@ -1378,6 +1402,7 @@ struct req_state : DoutPrefixProvider {
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
   boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
+  rgw::s3::ObjectOwnership bucket_object_ownership = rgw::s3::ObjectOwnership::ObjectWriter;
   std::vector<rgw::IAM::Policy> iam_identity_policies;
 
   /* Is the request made by an user marked as a system one?
@@ -1386,6 +1411,7 @@ struct req_state : DoutPrefixProvider {
 
   std::string canned_acl;
   bool has_acl_header{false};
+  bool granted_by_acl{false};
   bool local_source{false}; /* source is local */
 
   int prot_flags{0};
@@ -1530,7 +1556,7 @@ struct RGWBucketEnt {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWBucketEnt*>& o);
+  static std::list<RGWBucketEnt> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWBucketEnt)
 
@@ -1596,11 +1622,13 @@ struct multipart_upload_info
     dest_placement.dump(f);
   }
 
-  static void generate_test_instances(std::list<multipart_upload_info*>& o) {
-    o.push_back(new multipart_upload_info);
-    o.push_back(new multipart_upload_info);
-    o.back()->dest_placement.name = "dest_placement";
-    o.back()->dest_placement.storage_class = "dest_storage_class";
+  static std::list<multipart_upload_info> generate_test_instances() {
+    std::list<multipart_upload_info> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().dest_placement.name = "dest_placement";
+    o.back().dest_placement.storage_class = "dest_storage_class";
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(multipart_upload_info)
@@ -1689,6 +1717,7 @@ struct perm_state_base {
   const rgw::IAM::Environment& env;
   rgw::auth::Identity *identity;
   const RGWBucketInfo bucket_info;
+  rgw::s3::ObjectOwnership bucket_object_ownership;
   int perm_mask;
   bool defer_to_bucket_acls;
   boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
@@ -1697,6 +1726,7 @@ struct perm_state_base {
                   const rgw::IAM::Environment& _env,
                   rgw::auth::Identity *_identity,
                   const RGWBucketInfo& _bucket_info,
+                  rgw::s3::ObjectOwnership bucket_object_ownership,
                   int _perm_mask,
                   bool _defer_to_bucket_acls,
                   boost::optional<PublicAccessBlockConfiguration> _bucket_access_conf = boost::none) :
@@ -1704,6 +1734,7 @@ struct perm_state_base {
                                                 env(_env),
                                                 identity(_identity),
                                                 bucket_info(_bucket_info),
+                                                bucket_object_ownership(bucket_object_ownership),
                                                 perm_mask(_perm_mask),
                                                 defer_to_bucket_acls(_defer_to_bucket_acls),
                                                 bucket_access_conf(_bucket_access_conf)
@@ -1726,6 +1757,7 @@ struct perm_state : public perm_state_base {
              const rgw::IAM::Environment& _env,
              rgw::auth::Identity *_identity,
              const RGWBucketInfo& _bucket_info,
+             rgw::s3::ObjectOwnership bucket_object_ownership,
              int _perm_mask,
              bool _defer_to_bucket_acls,
              const char *_referer,
@@ -1733,6 +1765,7 @@ struct perm_state : public perm_state_base {
                                                     _env,
                                                     _identity,
                                                     _bucket_info,
+                                                    bucket_object_ownership,
                                                     _perm_mask,
                                                     _defer_to_bucket_acls),
                                     referer(_referer),
@@ -1751,10 +1784,10 @@ struct perm_state : public perm_state_base {
  * to do the requested action  */
 bool verify_bucket_permission_no_policy(
   const DoutPrefixProvider* dpp,
-  struct perm_state_base * const s,
+  const perm_state_base * const s,
   const RGWAccessControlPolicy& user_acl,
   const RGWAccessControlPolicy& bucket_acl,
-  const int perm);
+  const int perm, bool* granted_by_acl = nullptr);
 
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       struct perm_state_base * const s,
@@ -1766,7 +1799,8 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
 					const RGWAccessControlPolicy& user_acl,
 					const RGWAccessControlPolicy& bucket_acl,
 					const RGWAccessControlPolicy& object_acl,
-					const int perm);
+					const int perm,
+                                        bool *granted_by_acl = nullptr);
 
 // determine whether a request is allowed or denied within an account
 rgw::IAM::Effect evaluate_iam_policies(
@@ -1787,7 +1821,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       req_state * const s,
                                       int perm);
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
-                              struct perm_state_base * const s,
+                              const perm_state_base * const s,
                               const rgw::ARN& arn,
                               bool account_root,
                               const RGWAccessControlPolicy& user_acl,
@@ -1795,7 +1829,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 			      const boost::optional<rgw::IAM::Policy>& bucket_policy,
                               const std::vector<rgw::IAM::Policy>& identity_policies,
                               const std::vector<rgw::IAM::Policy>& session_policies,
-                              const uint64_t op);
+                              const uint64_t op, bool *granted_by_acl = nullptr);
 bool verify_bucket_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,
@@ -1831,13 +1865,6 @@ extern bool verify_object_permission(
   const std::vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
 extern bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op);
-extern bool verify_object_permission_no_policy(
-  const DoutPrefixProvider* dpp,
-  req_state * const s,
-  const RGWAccessControlPolicy& user_acl,
-  const RGWAccessControlPolicy& bucket_acl,
-  const RGWAccessControlPolicy& object_acl,
-  int perm);
 extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state *s,
 					       int perm);
 extern int verify_object_lock(
@@ -2046,3 +2073,26 @@ extern boost::optional<rgw::IAM::Policy>
 get_iam_policy_from_attr(CephContext* cct,
                          const std::map<std::string, bufferlist>& attrs,
                          const std::string& tenant);
+
+static inline void prepend_bucket_marker(const rgw_bucket& bucket, const std::string& orig_oid, std::string& oid)
+{
+  if (bucket.marker.empty() || orig_oid.empty()) {
+    oid = orig_oid;
+  } else {
+    oid = bucket.marker;
+    oid.append("_");
+    oid.append(orig_oid);
+  }
+}
+
+static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, std::string& oid, std::string& locator)
+{
+  const rgw_bucket& bucket = obj.bucket;
+  prepend_bucket_marker(bucket, obj.get_oid(), oid);
+  const std::string& loc = obj.key.get_loc();
+  if (!loc.empty()) {
+    prepend_bucket_marker(bucket, loc, locator);
+  } else {
+    locator.clear();
+  }
+}

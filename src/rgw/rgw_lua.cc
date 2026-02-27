@@ -1,14 +1,20 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <lua.hpp>
 #include "services/svc_zone.h"
 #include "rgw_lua_utils.h"
-#include "rgw_sal_rados.h"
+#include "driver/rados/rgw_sal_rados.h"
 #include "rgw_lua.h"
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 #include <filesystem>
-#include <boost/process.hpp>
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/env.hpp>
+#include <boost/process/v1/environment.hpp>
+#include <boost/process/v1/io.hpp>
+#include <boost/process/v1/pipe.hpp>
+#include <boost/process/v1/search_path.hpp>
+#include <boost/process/v1/start_dir.hpp>
 #endif
 
 #define dout_subsys ceph_subsys_rgw
@@ -96,7 +102,7 @@ int delete_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const
 
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 
-namespace bp = boost::process;
+namespace bp = boost::process::v1;
 
 int add_package(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, optional_yield y, const std::string& package_name, bool allow_compilation)
 {
@@ -141,8 +147,6 @@ int remove_package(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, opti
 {
   return driver->get_lua_manager("")->remove_package(dpp, y, package_name);
 }
-
-namespace bp = boost::process;
 
 int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, packages_t& packages)
 {

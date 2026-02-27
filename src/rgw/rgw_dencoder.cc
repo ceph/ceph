@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -19,23 +19,29 @@ using namespace std;
 
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
-void obj_version::generate_test_instances(list<obj_version*>& o)
+list<obj_version> obj_version::generate_test_instances()
 {
-  obj_version *v = new obj_version;
-  v->ver = 5;
-  v->tag = "tag";
+  list<obj_version> o;
 
-  o.push_back(v);
-  o.push_back(new obj_version);
+  obj_version v;
+  v.ver = 5;
+  v.tag = "tag";
+
+  o.push_back(std::move(v));
+  o.emplace_back();
+  return o;
 }
 
-void RGWBucketEncryptionConfig::generate_test_instances(std::list<RGWBucketEncryptionConfig*>& o)
+std::list<RGWBucketEncryptionConfig> RGWBucketEncryptionConfig::generate_test_instances()
 {
-  auto *bc = new RGWBucketEncryptionConfig("aws:kms", "some:key", true);
-  o.push_back(bc);
+  std::list<RGWBucketEncryptionConfig> o;
 
-  bc = new RGWBucketEncryptionConfig("AES256");
-  o.push_back(bc);
+  auto bc = RGWBucketEncryptionConfig("aws:kms", "some:key", true);
+  o.push_back(std::move(bc));
 
-  o.push_back(new RGWBucketEncryptionConfig);
+  bc = RGWBucketEncryptionConfig("AES256");
+  o.push_back(std::move(bc));
+
+  o.emplace_back();
+  return o;
 }

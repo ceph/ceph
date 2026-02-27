@@ -10,7 +10,8 @@ import { ChartTooltip } from '~/app/shared/models/chart-tooltip';
 @Component({
   selector: 'cd-cephfs-chart',
   templateUrl: './cephfs-chart.component.html',
-  styleUrls: ['./cephfs-chart.component.scss']
+  styleUrls: ['./cephfs-chart.component.scss'],
+  standalone: false
 })
 export class CephfsChartComponent implements OnChanges, OnInit {
   @ViewChild('chartCanvas', { static: true })

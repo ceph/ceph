@@ -2,7 +2,6 @@ import { CommonModule, TitleCasePipe } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
-
 import {
   NgbNavModule,
   NgbPopoverModule,
@@ -83,8 +82,24 @@ import {
   TagModule,
   TooltipModule,
   ComboBoxModule,
-  ToggletipModule
+  ToggletipModule,
+  IconService,
+  LayoutModule,
+  SkeletonModule
 } from 'carbon-components-angular';
+import EditIcon from '@carbon/icons/es/edit/16';
+import ScalesIcon from '@carbon/icons/es/scales/20';
+import UserIcon from '@carbon/icons/es/user/16';
+import CubeIcon from '@carbon/icons/es/cube/20';
+import ShareIcon from '@carbon/icons/es/share/16';
+import ViewIcon from '@carbon/icons/es/view/16';
+import PasswordIcon from '@carbon/icons/es/password/16';
+import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
+import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
+import ToolsIcon from '@carbon/icons/es/tools/32';
+import ParentChild from '@carbon/icons/es/parent-child/20';
+import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
+
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
 import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-accounts-form.component';
@@ -96,6 +111,11 @@ import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw
 import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
 import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
+import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
+import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
+import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
+import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notification-form.component';
 
 @NgModule({
   imports: [
@@ -125,14 +145,16 @@ import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
     InputModule,
     AccordionModule,
     CheckboxModule,
-    SelectModule,
     NumberModule,
     TabsModule,
-    RadioModule,
     TagModule,
     TooltipModule,
     ComboBoxModule,
-    ToggletipModule
+    ToggletipModule,
+    RadioModule,
+    SelectModule,
+    LayoutModule,
+    SkeletonModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -193,11 +215,33 @@ import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
     RgwStorageClassFormComponent,
     RgwBucketTieringFormComponent,
     RgwBucketLifecycleListComponent,
-    RgwRateLimitDetailsComponent
+    RgwRateLimitDetailsComponent,
+    RgwTopicListComponent,
+    RgwTopicDetailsComponent,
+    RgwTopicFormComponent,
+    RgwBucketNotificationListComponent,
+    RgwNotificationFormComponent
   ],
   providers: [TitleCasePipe]
 })
-export class RgwModule {}
+export class RgwModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([
+      EditIcon,
+      ScalesIcon,
+      CubeIcon,
+      UserIcon,
+      ShareIcon,
+      ViewIcon,
+      PasswordIcon,
+      ArrowDownIcon,
+      ProgressBarRoundIcon,
+      ToolsIcon,
+      ParentChild,
+      UserAccessLocked
+    ]);
+  }
+}
 
 const routes: Routes = [
   {
@@ -292,7 +336,7 @@ const routes: Routes = [
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
-        path: `${URLVerbs.EDIT}/:bid`,
+        path: `${URLVerbs.EDIT}/:bid/:owner`,
         component: RgwBucketFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
       }
@@ -345,8 +389,8 @@ const routes: Routes = [
     ]
   },
   {
-    path: 'tiering',
-    data: { breadcrumbs: 'Tiering' },
+    path: 'storage-class',
+    data: { breadcrumbs: 'Storage class' },
     children: [
       { path: '', component: RgwStorageClassListComponent },
       {
@@ -392,6 +436,23 @@ const routes: Routes = [
     path: 'configuration',
     data: { breadcrumbs: 'Configuration' },
     children: [{ path: '', component: RgwConfigurationPageComponent }]
+  },
+  {
+    path: 'destination',
+    data: { breadcrumbs: 'Notification destination' },
+    children: [
+      { path: '', component: RgwTopicListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:name`,
+        component: RgwTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
   }
 ];
 

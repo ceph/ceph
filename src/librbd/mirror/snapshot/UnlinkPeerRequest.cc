@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
 #include "common/dout.h"
@@ -79,10 +79,13 @@ void UnlinkPeerRequest<I>::unlink_peer() {
     }
   }
 
-  if (r == -ENOENT) {
-    ldout(cct, 15) << "missing snapshot: snap_id=" << m_snap_id << dendl;
+  if (r == -ENOENT ||
+      std::holds_alternative<cls::rbd::TrashSnapshotNamespace>(
+        snap_namespace)) {
+    ldout(cct, 15) << "missing or trashed snapshot: snap_id=" << m_snap_id
+                   << dendl;
     m_image_ctx->image_lock.unlock_shared();
-    finish(r);
+    finish(-ENOENT);
     return;
   }
 

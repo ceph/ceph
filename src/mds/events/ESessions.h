@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -47,7 +48,7 @@ public:
     else decode_new(bl);
   }
   void dump(Formatter *f) const override;
-  static void generate_test_instances(std::list<ESessions*>& ls);
+  static std::list<ESessions> generate_test_instances();
 
   void print(std::ostream& out) const override {
     out << "ESessions " << client_map.size() << " opens cmapv " << cmapv;

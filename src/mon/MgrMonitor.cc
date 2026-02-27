@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -16,6 +17,7 @@
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrMap.h"
 #include "messages/MMgrDigest.h"
+#include "messages/MMonCommand.h"
 
 #include "include/stringify.h"
 #include "mgr/MgrContext.h"
@@ -23,6 +25,7 @@
 #include "OSDMonitor.h"
 #include "ConfigMonitor.h"
 #include "HealthMonitor.h"
+#include "Monitor.h"
 
 #include "common/TextTable.h"
 #include "include/stringify.h"
@@ -725,7 +728,7 @@ void MgrMonitor::on_active()
     return;
   }
   mon.clog->debug() << "mgrmap e" << map.epoch << ": " << map;
-  assert(HAVE_FEATURE(mon.get_quorum_con_features(), SERVER_NAUTILUS));
+  ceph_assert(HAVE_FEATURE(mon.get_quorum_con_features(), SERVER_NAUTILUS));
   if (pending_map.always_on_modules == always_on_modules()) {
     return;
   }
@@ -1368,7 +1371,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     }
 
     if (pending_map.force_disabled_modules.contains(mod)) {
-      ss << "Module \"" << mod << "\"is already disabled";
+      ss << "Module \"" << mod << "\" is already disabled";
       r = 0;
       goto out;
     }

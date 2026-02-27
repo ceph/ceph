@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -131,10 +131,7 @@ public:
   RGWListBuckets_ObjStore_S3() {}
   ~RGWListBuckets_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override {
-    limit = -1; /* no limit */
-    return 0;
-  }
+  int get_params(optional_yield y) override;
   void send_response_begin(bool has_buckets) override;
   void send_response_data(std::span<const RGWBucketEnt> buckets) override;
   void send_response_end() override;
@@ -214,7 +211,6 @@ public:
   ~RGWGetBucketWebsite_ObjStore_S3() override {}
 
   void send_response() override;
-  virtual std::string canonical_name() const override { return fmt::format("WEBSITE.{}.BUCKET_WEBSITE", s->info.method); }
 };
 
 class RGWSetBucketWebsite_ObjStore_S3 : public RGWSetBucketWebsite {
@@ -224,7 +220,6 @@ public:
 
   int get_params(optional_yield y) override;
   void send_response() override;
-  virtual std::string canonical_name() const override { return fmt::format("WEBSITE.{}.BUCKET_WEBSITE", s->info.method); }
 };
 
 class RGWDeleteBucketWebsite_ObjStore_S3 : public RGWDeleteBucketWebsite {
@@ -233,7 +228,6 @@ public:
   ~RGWDeleteBucketWebsite_ObjStore_S3() override {}
 
   void send_response() override;
-  virtual std::string canonical_name() const override { return fmt::format("WEBSITE.{}.BUCKET_WEBSITE", s->info.method); }
 };
 
 class RGWStatBucket_ObjStore_S3 : public RGWStatBucket_ObjStore {
@@ -470,6 +464,22 @@ public:
   void send_response() override;
 };
 
+class RGWGetBucketOwnershipControls_ObjStore_S3 : public RGWGetBucketOwnershipControls_ObjStore {
+ public:
+  void send_response() override;
+};
+
+class RGWPutBucketOwnershipControls_ObjStore_S3 : public RGWPutBucketOwnershipControls_ObjStore {
+  int get_params(optional_yield y) override;
+ public:
+  void send_response() override;
+};
+
+class RGWDeleteBucketOwnershipControls_ObjStore_S3 : public RGWDeleteBucketOwnershipControls_ObjStore {
+ public:
+  void send_response() override;
+};
+
 class RGWGetRequestPayment_ObjStore_S3 : public RGWGetRequestPayment {
 public:
   RGWGetRequestPayment_ObjStore_S3() {}
@@ -500,6 +510,8 @@ public:
 };
 
 class RGWCompleteMultipart_ObjStore_S3 : public RGWCompleteMultipart_ObjStore {
+private:
+  std::map<std::string, std::string> crypt_http_responses;
 public:
   RGWCompleteMultipart_ObjStore_S3() {}
   ~RGWCompleteMultipart_ObjStore_S3() override {}
@@ -603,7 +615,6 @@ class RGWConfigBucketMetaSearch_ObjStore_S3 : public RGWConfigBucketMetaSearch {
 public:
   RGWConfigBucketMetaSearch_ObjStore_S3() {}
   ~RGWConfigBucketMetaSearch_ObjStore_S3() {}
-  virtual std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET_MDSEARCH", s->info.method); }
 
   int get_params(optional_yield y) override;
   void send_response() override;
@@ -621,7 +632,6 @@ class RGWDelBucketMetaSearch_ObjStore_S3 : public RGWDelBucketMetaSearch {
 public:
   RGWDelBucketMetaSearch_ObjStore_S3() {}
   ~RGWDelBucketMetaSearch_ObjStore_S3() {}
-  virtual std::string canonical_name() const override { return fmt::format("REST.{}.BUCKET_MDSEARCH", s->info.method); }
 
   void send_response() override;
 };
@@ -754,6 +764,9 @@ protected:
   }
   bool is_bucket_encryption_op() {
     return s->info.args.exists("encryption");
+  }
+  bool is_bucket_ownership_op() const {
+    return s->info.args.exists("ownershipControls");
   }
 
   RGWOp *get_obj_op(bool get_data) const;
@@ -947,13 +960,14 @@ public:
     static constexpr size_t DIGEST_SIZE_V2 = CEPH_CRYPTO_HMACSHA1_DIGESTSIZE;
     static constexpr size_t DIGEST_SIZE_V4 = CEPH_CRYPTO_HMACSHA256_DIGESTSIZE;
 
+  public:
+
     /* Knowing the signature max size allows us to employ the sstring, and thus
      * avoid dynamic allocations. The multiplier comes from representing digest
      * in the base64-encoded form. */
     static constexpr size_t SIGNATURE_MAX_SIZE = \
       std::max(DIGEST_SIZE_V2, DIGEST_SIZE_V4) * 2 + sizeof('\0');
 
-  public:
     virtual ~VersionAbstractor() {};
 
     using access_key_id_t = std::string_view;
@@ -1159,6 +1173,7 @@ public:
 };
 
 class LocalEngine : public AWSEngine {
+  typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
   rgw::sal::Driver* driver;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 

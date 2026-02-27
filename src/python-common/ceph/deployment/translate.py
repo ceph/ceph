@@ -107,7 +107,7 @@ class to_ceph_volume(object):
                     cmds.append(cmd)
                     dev_counter += 1
 
-            elif self.spec.objectstore == 'bluestore':
+            elif self.spec.objectstore in ['bluestore', 'seastore']:
                 # for lvm batch we can just do all devices in one command
 
                 cmd = "lvm batch --no-auto {}".format(" ".join(data_devices))
@@ -121,14 +121,27 @@ class to_ceph_volume(object):
                 if self.spec.block_wal_size:
                     cmd += " --block-wal-size {}".format(self.spec.block_wal_size)
 
+                if isinstance(self.spec.wal_slots, int) and self.spec.wal_slots > 1:
+                    cmd += " --block-wal-slots {}".format(self.spec.wal_slots)
+
                 if self.spec.block_db_size:
                     cmd += " --block-db-size {}".format(self.spec.block_db_size)
 
+                if isinstance(self.spec.db_slots, int) and self.spec.db_slots > 1:
+                    cmd += " --block-db-slots {}".format(self.spec.db_slots)
+
                 if d != self.NO_CRUSH:
                     cmd += " --crush-device-class {}".format(d)
+
+                cmd += " --objectstore {}".format(self.spec.objectstore)
+
                 cmds.append(cmd)
 
         for i in range(len(cmds)):
+            if self.spec.osd_type:
+                osd_type_str = getattr(self.spec.osd_type, 'value', self.spec.osd_type)
+                cmds[i] += " --osd-type {}".format(osd_type_str)
+
             if self.spec.encrypted:
                 cmds[i] += " --dmcrypt"
 

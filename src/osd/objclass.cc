@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <cstdarg>
 #include <boost/container/small_vector.hpp>
@@ -731,7 +731,7 @@ int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_o
   int subop_num = (*pctx)->current_osd_subop_num;
   OSDOp *osd_op = &(*(*pctx)->ops)[subop_num];
   auto [iter, inserted] = (*pctx)->op_finishers.emplace(std::make_pair(subop_num, std::make_unique<GatherFinisher>(osd_op)));
-  assert(inserted);
+  ceph_assert(inserted);
   auto &gather = *static_cast<GatherFinisher*>(iter->second.get());
   for (const auto &obj : src_objs) {
     gather.src_obj_buffs[obj] = bufferlist();
@@ -741,7 +741,7 @@ int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_o
 
 int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, bufferlist> *results)
 {
-  assert(results);
+  ceph_assert(results);
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
   PrimaryLogPG::OpFinisher* op_finisher = nullptr;
   int r = 0;

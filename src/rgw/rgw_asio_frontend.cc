@@ -1,7 +1,8 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <atomic>
+#include <chrono>
 #include <ctime>
 #include <iomanip>
 #include <list>
@@ -114,17 +115,17 @@ class StreamIO : public rgw::asio::ClientIO {
   CephContext* const cct;
   Stream& stream;
   timeout_timer& timeout;
-  boost::asio::yield_context yield;
+  optional_yield y;
   parse_buffer& buffer;
   boost::system::error_code fatal_ec;
  public:
   StreamIO(CephContext *cct, Stream& stream, timeout_timer& timeout,
-           rgw::asio::parser_type& parser, boost::asio::yield_context yield,
+           rgw::asio::parser_type& parser, optional_yield y,
            parse_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint)
       : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
-        cct(cct), stream(stream), timeout(timeout), yield(yield),
+        cct(cct), stream(stream), timeout(timeout), y(y),
         buffer(buffer)
   {}
 
@@ -133,8 +134,14 @@ class StreamIO : public rgw::asio::ClientIO {
   size_t write_data(const char* buf, size_t len) override {
     boost::system::error_code ec;
     timeout.start();
-    auto bytes = boost::asio::async_write(stream, boost::asio::buffer(buf, len),
-                                          yield[ec]);
+    size_t bytes = 0;
+    if (y) {
+      boost::asio::yield_context& yield = y.get_yield_context();
+      bytes = boost::asio::async_write(stream, boost::asio::buffer(buf, len),
+                                       yield[ec]);
+    } else {
+      bytes = boost::asio::write(stream, boost::asio::buffer(buf, len), ec);
+    }
     timeout.cancel();
     if (ec) {
       ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
@@ -159,7 +166,12 @@ class StreamIO : public rgw::asio::ClientIO {
     while (body_remaining.size && !parser.is_done()) {
       boost::system::error_code ec;
       timeout.start();
-      http::async_read_some(stream, buffer, parser, yield[ec]);
+      if (y) {
+        boost::asio::yield_context& yield = y.get_yield_context();
+        http::async_read_some(stream, buffer, parser, yield[ec]);
+      } else {
+        http::read_some(stream, buffer, parser, ec);
+      }
       timeout.cancel();
       if (ec == http::error::need_buffer) {
         break;
@@ -289,8 +301,6 @@ void handle_connection(boost::asio::io_context& context,
       return;
     }
 
-    bool expect_continue = (message[http::field::expect] == "100-continue");
-
     {
       auto lock = pause_mutex.async_lock_shared(yield[ec]);
       if (ec == boost::asio::error::operation_aborted) {
@@ -315,7 +325,11 @@ void handle_connection(boost::asio::io_context& context,
         return;
       }
 
-      StreamIO real_client{cct, stream, timeout, parser, yield, buffer,
+      optional_yield y = null_yield;
+      if (cct->_conf->rgw_beast_enable_async) {
+        y = optional_yield{yield};
+      }
+      StreamIO real_client{cct, stream, timeout, parser, y, buffer,
                            is_ssl, local_endpoint, remote_endpoint};
 
       auto real_client_io = rgw::io::add_reordering(
@@ -333,10 +347,6 @@ void handle_connection(boost::asio::io_context& context,
         auto& client_env = client.get_env();
         client_env.set("SSL_CIPHER", ssl_cipher);
         client_env.set("TLS_VERSION", tls_version);
-      }
-      optional_yield y = null_yield;
-      if (cct->_conf->rgw_beast_enable_async) {
-        y = optional_yield{yield};
       }
       int http_ret = 0;
       string user = "-";
@@ -365,18 +375,14 @@ void handle_connection(boost::asio::io_context& context,
         return;
       }
 
-      if (real_client.sent_100_continue()) {
-        expect_continue = false;
+      if (!real_client.keep_alive()) {
+        return;
       }
-    }
-
-    if (!parser.keep_alive()) {
-      return;
     }
 
     // if we failed before reading the entire message, discard any remaining
     // bytes before reading the next
-    while (!expect_continue && !parser.is_done()) {
+    while (!parser.is_done()) {
       static std::array<char, 1024*1024> discard_buffer;
 
       auto& body = parser.get().body();
@@ -462,13 +468,20 @@ class AsioFrontend {
   ceph::timespan request_timeout = std::chrono::milliseconds(REQUEST_TIMEOUT);
   size_t header_limit = 16384;
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
-  boost::optional<ssl::context> ssl_context;
+#ifdef __cpp_lib_atomic_shared_ptr
+  std::atomic<std::shared_ptr<ssl::context>> ssl_context;
+#else
+  std::shared_ptr<ssl::context> ssl_context;
+#endif
+  boost::asio::steady_timer ssl_reload_timer;
   int get_config_key_val(string name,
                          const string& type,
                          bufferlist *pbl);
-  int ssl_set_private_key(const string& name, bool is_ssl_cert);
-  int ssl_set_certificate_chain(const string& name);
-  int init_ssl();
+  int ssl_set_private_key(ssl::context& ctx, const string& name, bool is_ssl_cert);
+  int ssl_set_certificate_chain(ssl::context& ctx, const string& name);
+  int ssl_init();
+  int ssl_reload();
+  int ssl_reload_timer_start();
 #endif
   SharedMutex pause_mutex;
   std::unique_ptr<rgw::dmclock::Scheduler> scheduler;
@@ -503,6 +516,9 @@ class AsioFrontend {
 	       dmc::SchedulerCtx& sched_ctx,
 	       boost::asio::io_context& context)
     : env(env), conf(conf), context(context),
+#ifdef WITH_RADOSGW_BEAST_OPENSSL
+      ssl_reload_timer(context),
+#endif
       pause_mutex(context.get_executor()),
       backoff(context)
   {
@@ -658,9 +674,20 @@ int AsioFrontend::init()
   }
 
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
-  int r = init_ssl();
+  int r = ssl_init();
   if (r < 0) {
     return r;
+  }
+#ifdef __cpp_lib_atomic_shared_ptr
+  const auto ssl_ctx = ssl_context.load(std::memory_order_acquire);
+#else
+  const auto ssl_ctx = std::atomic_load_explicit(&ssl_context, std::memory_order_acquire);
+#endif
+  if (ssl_ctx != nullptr) {
+    r = ssl_reload_timer_start();
+    if (r < 0) {
+      return r;
+    }
   }
 #endif
 
@@ -696,8 +723,12 @@ int AsioFrontend::init()
       l.use_nodelay = (nodelay->second == "1");
     }
   }
-  
 
+  bool reuse_port = false;
+  auto reuse_port_it = config.find("so_reuseport");
+  if (reuse_port_it != config.end()) {
+    reuse_port = (reuse_port_it->second == "1");
+  }
   bool socket_bound = false;
   // start listeners
   for (auto& l : listeners) {
@@ -722,7 +753,21 @@ int AsioFrontend::init()
       }
     }
 
-    l.acceptor.set_option(tcp::acceptor::reuse_address(true));
+    if (reuse_port) {
+      // setting option |SO_REUSEPORT| allows running of multiple rgw processes on
+      // the same port. Can read more about the implementation here.
+      // https://web.git.kernel.org/pub/scm/linux/kernel/git/netdev/net-next.git/commit/?id=c617f398edd4db2b8567a28e899a88f8f574798d
+      int one = 1;
+      if (setsockopt(l.acceptor.native_handle(), SOL_SOCKET,
+                     SO_REUSEADDR | SO_REUSEPORT, &one, sizeof(one)) == -1) {
+        lderr(ctx()) << "setsockopt SO_REUSEADDR | SO_REUSEPORT failed:" <<
+ dendl;
+        return -1;
+      }
+    } else {
+      l.acceptor.set_option(tcp::acceptor::reuse_address(true));
+    }
+
     l.acceptor.bind(l.endpoint, ec);
     if (ec) {
       lderr(ctx()) << "failed to bind address " << l.endpoint
@@ -858,12 +903,12 @@ int AsioFrontend::get_config_key_val(string name,
   return 0;
 }
 
-int AsioFrontend::ssl_set_private_key(const string& name, bool is_ssl_certificate)
+int AsioFrontend::ssl_set_private_key(ssl::context& ssl_ctx, const string& name, bool is_ssl_certificate)
 {
   boost::system::error_code ec;
 
   if (!boost::algorithm::starts_with(name, config_val_prefix)) {
-    ssl_context->use_private_key_file(name, ssl::context::pem, ec);
+    ssl_ctx.use_private_key_file(name, ssl::context::pem, ec);
   } else {
     bufferlist bl;
     int r = get_config_key_val(name.substr(config_val_prefix.size()),
@@ -872,7 +917,7 @@ int AsioFrontend::ssl_set_private_key(const string& name, bool is_ssl_certificat
     if (r < 0) {
       return r;
     }
-    ssl_context->use_private_key(boost::asio::buffer(bl.c_str(), bl.length()),
+    ssl_ctx.use_private_key(boost::asio::buffer(bl.c_str(), bl.length()),
                                  ssl::context::pem, ec);
   }
 
@@ -890,12 +935,12 @@ int AsioFrontend::ssl_set_private_key(const string& name, bool is_ssl_certificat
   return 0;
 }
 
-int AsioFrontend::ssl_set_certificate_chain(const string& name)
+int AsioFrontend::ssl_set_certificate_chain(ssl::context& ssl_ctx, const string& name)
 {
   boost::system::error_code ec;
 
   if (!boost::algorithm::starts_with(name, config_val_prefix)) {
-    ssl_context->use_certificate_chain_file(name, ec);
+    ssl_ctx.use_certificate_chain_file(name, ec);
   } else {
     bufferlist bl;
     int r = get_config_key_val(name.substr(config_val_prefix.size()),
@@ -904,7 +949,7 @@ int AsioFrontend::ssl_set_certificate_chain(const string& name)
     if (r < 0) {
       return r;
     }
-    ssl_context->use_certificate_chain(boost::asio::buffer(bl.c_str(), bl.length()),
+    ssl_ctx.use_certificate_chain(boost::asio::buffer(bl.c_str(), bl.length()),
                                  ec);
   }
 
@@ -917,21 +962,62 @@ int AsioFrontend::ssl_set_certificate_chain(const string& name)
   return 0;
 }
 
-int AsioFrontend::init_ssl()
+int AsioFrontend::ssl_init()
 {
   boost::system::error_code ec;
   auto& config = conf->get_config_map();
 
-  // ssl configuration
-  std::optional<string> cert = conf->get_val("ssl_certificate");
-  if (cert) {
-    // only initialize the ssl context if it's going to be used
-    ssl_context = boost::in_place(ssl::context::tls);
+  auto ports = config.equal_range("ssl_port");
+  auto endpoints = config.equal_range("ssl_endpoint");
+
+  /*
+   * don't try to config certificate if frontend isn't configured for ssl
+   */
+  if (ports.first == ports.second &&
+      endpoints.first == endpoints.second) {
+    return 0;
   }
 
-  std::optional<string> key = conf->get_val("ssl_private_key");
-  bool have_cert = false;
+  int r = ssl_reload();
+  if (r < 0) {
+    return r;
+  }
 
+  // parse ssl endpoints
+  for (auto i = ports.first; i != ports.second; ++i) {
+    auto port = parse_port(i->second.c_str(), ec);
+    if (ec) {
+      lderr(ctx()) << "failed to parse ssl_port=" << i->second << dendl;
+      return -ec.value();
+    }
+    listeners.emplace_back(context);
+    listeners.back().endpoint.port(port);
+    listeners.back().use_ssl = true;
+
+    listeners.emplace_back(context);
+    listeners.back().endpoint = tcp::endpoint(tcp::v6(), port);
+    listeners.back().use_ssl = true;
+  }
+
+  for (auto i = endpoints.first; i != endpoints.second; ++i) {
+    auto endpoint = parse_endpoint(i->second, 443, ec);
+    if (ec) {
+      lderr(ctx()) << "failed to parse ssl_endpoint=" << i->second << dendl;
+      return -ec.value();
+    }
+    listeners.emplace_back(context);
+    listeners.back().endpoint = endpoint;
+    listeners.back().use_ssl = true;
+  }
+
+  return 0;
+}
+
+int AsioFrontend::ssl_reload() {
+  const auto ssl_ctx = std::make_shared<ssl::context>(ssl::context(ssl::context::tls));
+
+  std::optional<string> cert = conf->get_val("ssl_certificate");
+  std::optional<string> key = conf->get_val("ssl_private_key");
   if (key && !cert) {
     lderr(ctx()) << "no ssl_certificate configured for ssl_private_key" << dendl;
     return -EINVAL;
@@ -950,21 +1036,21 @@ int AsioFrontend::init_ssl()
   if (options) {
     for (auto &option : ceph::split(*options, ":")) {
       if (option == "default_workarounds") {
-        ssl_context->set_options(ssl::context::default_workarounds);
+        ssl_ctx->set_options(ssl::context::default_workarounds);
       } else if (option == "no_compression") {
-        ssl_context->set_options(ssl::context::no_compression);
+        ssl_ctx->set_options(ssl::context::no_compression);
       } else if (option == "no_sslv2") {
-        ssl_context->set_options(ssl::context::no_sslv2);
+        ssl_ctx->set_options(ssl::context::no_sslv2);
       } else if (option == "no_sslv3") {
-        ssl_context->set_options(ssl::context::no_sslv3);
+        ssl_ctx->set_options(ssl::context::no_sslv3);
       } else if (option == "no_tlsv1") {
-        ssl_context->set_options(ssl::context::no_tlsv1);
+        ssl_ctx->set_options(ssl::context::no_tlsv1);
       } else if (option == "no_tlsv1_1") {
-        ssl_context->set_options(ssl::context::no_tlsv1_1);
+        ssl_ctx->set_options(ssl::context::no_tlsv1_1);
       } else if (option == "no_tlsv1_2") {
-        ssl_context->set_options(ssl::context::no_tlsv1_2);
+        ssl_ctx->set_options(ssl::context::no_tlsv1_2);
       } else if (option == "single_dh_use") {
-        ssl_context->set_options(ssl::context::single_dh_use);
+        ssl_ctx->set_options(ssl::context::single_dh_use);
       } else {
         lderr(ctx()) << "ignoring unknown ssl option '" << option << "'" << dendl;
       }
@@ -978,8 +1064,7 @@ int AsioFrontend::init_ssl()
       return -EINVAL;
     }
 
-    int r = SSL_CTX_set_cipher_list(ssl_context->native_handle(),
-                                    ciphers->c_str());
+    int r = SSL_CTX_set_cipher_list(ssl_ctx->native_handle(), ciphers->c_str());
     if (r == 0) {
       lderr(ctx()) << "no cipher could be selected from ssl_ciphers: "
                    << *ciphers << dendl;
@@ -987,19 +1072,8 @@ int AsioFrontend::init_ssl()
     }
   }
 
-  auto ports = config.equal_range("ssl_port");
-  auto endpoints = config.equal_range("ssl_endpoint");
-
-  /*
-   * don't try to config certificate if frontend isn't configured for ssl
-   */
-  if (ports.first == ports.second &&
-      endpoints.first == endpoints.second) {
-    return 0;
-  }
-
   bool key_is_cert = false;
-
+  bool have_cert = false;
   if (cert) {
     if (!key) {
       key = cert;
@@ -1007,59 +1081,71 @@ int AsioFrontend::init_ssl()
     }
 
     ExpandMetaVar emv(env.driver->get_zone());
-
     cert = emv.process_str(*cert);
     key = emv.process_str(*key);
 
-    int r = ssl_set_private_key(*key, key_is_cert);
+    int r = ssl_set_private_key(*ssl_ctx, *key, key_is_cert);
     bool have_private_key = (r >= 0);
     if (r < 0) {
       if (!key_is_cert) {
-        r = ssl_set_private_key(*cert, true);
+        r = ssl_set_private_key(*ssl_ctx, *cert, true);
         have_private_key = (r >= 0);
       }
     }
 
     if (have_private_key) {
-      int r = ssl_set_certificate_chain(*cert);
+      int r = ssl_set_certificate_chain(*ssl_ctx, *cert);
       have_cert = (r >= 0);
     }
   }
 
-  // parse ssl endpoints
-  for (auto i = ports.first; i != ports.second; ++i) {
-    if (!have_cert) {
-      lderr(ctx()) << "no ssl_certificate configured for ssl_port" << dendl;
-      return -EINVAL;
-    }
-    auto port = parse_port(i->second.c_str(), ec);
-    if (ec) {
-      lderr(ctx()) << "failed to parse ssl_port=" << i->second << dendl;
-      return -ec.value();
-    }
-    listeners.emplace_back(context);
-    listeners.back().endpoint.port(port);
-    listeners.back().use_ssl = true;
-
-    listeners.emplace_back(context);
-    listeners.back().endpoint = tcp::endpoint(tcp::v6(), port);
-    listeners.back().use_ssl = true;
+  if (!have_cert) {
+    lderr(ctx()) << "no ssl_certificate configured" << dendl;
+    return -EINVAL;
   }
 
-  for (auto i = endpoints.first; i != endpoints.second; ++i) {
-    if (!have_cert) {
-      lderr(ctx()) << "no ssl_certificate configured for ssl_endpoint" << dendl;
-      return -EINVAL;
-    }
-    auto endpoint = parse_endpoint(i->second, 443, ec);
-    if (ec) {
-      lderr(ctx()) << "failed to parse ssl_endpoint=" << i->second << dendl;
-      return -ec.value();
-    }
-    listeners.emplace_back(context);
-    listeners.back().endpoint = endpoint;
-    listeners.back().use_ssl = true;
+#ifdef __cpp_lib_atomic_shared_ptr
+  ssl_context.store(ssl_ctx, std::memory_order_release);
+#else
+  std::atomic_store_explicit(&ssl_context, ssl_ctx, std::memory_order_release);
+#endif
+
+  return 0;
+}
+
+int AsioFrontend::ssl_reload_timer_start() {
+  const auto interval_str = conf->get_val("ssl_reload");
+  if (!interval_str) {
+    return 0;
   }
+
+  const auto interval = ceph::parse<uint64_t>(*interval_str);
+  if (!interval) {
+    lderr(ctx()) << "failed to parse ssl_reload=" << *interval_str << dendl;
+    return -EINVAL;
+  };
+
+  if (*interval == 0) {
+    return 0;
+  }
+
+  ssl_reload_timer.expires_after(std::chrono::seconds(*interval));
+  ssl_reload_timer.async_wait([this](const boost::system::error_code &ec) {
+    if (ec) {
+      return;
+    }
+
+    ldout(ctx(), 4) << "ssl reload triggered" << dendl;
+    if (ssl_reload() < 0) {
+      lderr(ctx()) << "ssl reload failed, continuing with existing context"
+                   << dendl;
+    } else {
+      ldout(ctx(), 4) << "ssl reload successful" << dendl;
+    }
+
+    ssl_reload_timer_start();
+  });
+
   return 0;
 }
 #endif // WITH_RADOSGW_BEAST_OPENSSL
@@ -1097,16 +1183,21 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
 {
   boost::system::error_code ec;
   stream.set_option(tcp::no_delay(l.use_nodelay), ec);
-  
+
   // spawn a coroutine to handle the connection
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   if (l.use_ssl) {
+#ifdef __cpp_lib_atomic_shared_ptr
+    const auto ssl_ctx = ssl_context.load(std::memory_order_acquire);
+#else
+    const auto ssl_ctx = std::atomic_load_explicit(&ssl_context, std::memory_order_acquire);
+#endif
     boost::asio::spawn(make_strand(context), std::allocator_arg, make_stack_allocator(),
-      [this, s=std::move(stream)] (boost::asio::yield_context yield) mutable {
+      [this, s=std::move(stream), ssl_ctx] (boost::asio::yield_context yield) mutable {
         auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
         auto c = connections.add(*conn);
         // wrap the tcp stream in an ssl stream
-        boost::asio::ssl::stream<tcp::socket&> stream{conn->socket, *ssl_context};
+        boost::asio::ssl::stream<tcp::socket&> stream{conn->socket, *ssl_ctx};
         auto timeout = timeout_timer{context.get_executor(), request_timeout, conn};
         // do ssl handshake
         boost::system::error_code ec;
@@ -1167,6 +1258,7 @@ void AsioFrontend::stop()
     // signal cancellation of accept()
     listener.signal.emit(boost::asio::cancellation_type::terminal);
   }
+  ssl_reload_timer.cancel();
 
   const bool graceful_stop{ g_ceph_context->_conf->rgw_graceful_stop };
   if (graceful_stop) {

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <iostream>
 
@@ -111,7 +111,7 @@ SegmentedJournal::prep_replay_segments(
     auto journal_tail = trimmer.get_journal_tail();
     auto journal_tail_paddr = journal_tail.offset;
     ceph_assert(journal_tail != JOURNAL_SEQ_NULL);
-    ceph_assert(journal_tail_paddr != P_ADDR_NULL);
+    ceph_assert(journal_tail_paddr.is_absolute_segmented());
     auto from = std::find_if(
       segments.begin(),
       segments.end(),

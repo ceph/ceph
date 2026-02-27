@@ -42,7 +42,8 @@ const BASE_URL = 'block/rbd';
   providers: [
     TaskListService,
     { provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }
-  ]
+  ],
+  standalone: false
 })
 export class RbdListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })
@@ -401,7 +402,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         const scheduleStatus = 'scheduled';
         let nextSnapshotDate = +new Date(image.schedule_info.schedule_time);
         const offset = new Date().getTimezoneOffset();
-        nextSnapshotDate = nextSnapshotDate + Math.abs(offset) * 60000;
+        nextSnapshotDate = (nextSnapshotDate + Math.abs(offset) * 60000) / 1000;
         scheduling.push(image.mirror_mode, scheduleStatus, nextSnapshotDate);
         image.mirror_mode = scheduling;
         scheduling = [];

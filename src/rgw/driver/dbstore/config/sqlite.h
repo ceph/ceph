@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -61,6 +61,10 @@ class SQLiteConfigStore : public sal::ConfigStore {
   int realm_notify_new_period(const DoutPrefixProvider* dpp,
                               optional_yield y,
                               const RGWPeriod& period) override;
+  auto create_realm_watcher(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            const RGWRealm& realm)
+      -> std::unique_ptr<RGWRealmWatcher> override;
   int list_realm_names(const DoutPrefixProvider* dpp,
                        optional_yield y, const std::string& marker,
                        std::span<std::string> entries,
@@ -79,6 +83,8 @@ class SQLiteConfigStore : public sal::ConfigStore {
                       optional_yield y, const std::string& marker,
                       std::span<std::string> entries,
                       sal::ListResult<std::string>& result) override;
+  int update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
+                          std::string_view period_id, uint32_t epoch) override;
 
   int write_default_zonegroup_id(const DoutPrefixProvider* dpp,
                                  optional_yield y, bool exclusive,

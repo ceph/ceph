@@ -2,8 +2,10 @@ import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification, CdNotificationConfig } from './cd-notification';
 
 describe('cd-notification classes', () => {
-  const expectObject = (something: object, expected: object) => {
-    Object.keys(expected).forEach((key) => expect(something[key]).toBe(expected[key]));
+  const expectObject = (something: any, expected: any) => {
+    (Object.keys(expected) as (keyof typeof expected)[]).forEach((key) =>
+      expect(something[key]).toEqual(expected[key])
+    );
   };
 
   // As these Models have a view methods they need to be tested
@@ -13,7 +15,13 @@ describe('cd-notification classes', () => {
         application: 'Ceph',
         applicationClass: 'ceph-icon',
         message: undefined,
-        options: undefined,
+        options: {
+          lowContrast: true,
+          type: undefined,
+          title: '',
+          subtitle: '',
+          caption: ''
+        },
         title: undefined,
         type: 1
       });
@@ -32,7 +40,13 @@ describe('cd-notification classes', () => {
           application: 'Prometheus',
           applicationClass: 'prometheus-icon',
           message: 'Something failed',
-          options: undefined,
+          options: {
+            lowContrast: true,
+            type: undefined,
+            title: '',
+            subtitle: '',
+            caption: ''
+          },
           title: 'Some Alert',
           type: 0
         }
@@ -42,17 +56,35 @@ describe('cd-notification classes', () => {
 
   describe('CdNotification', () => {
     beforeEach(() => {
-      const baseTime = new Date('2022-02-22');
-      spyOn(global, 'Date').and.returnValue(baseTime);
+      const baseTime = new Date('2022-02-22T00:00:00.000Z');
+      const OriginalDate = Date;
+
+      spyOn(global as any, 'Date').and.callFake(function (...args: any[]): any {
+        if (args.length === 0) {
+          return baseTime;
+        }
+        return new (OriginalDate as any)(...args);
+      });
+
+      Object.defineProperty(Date, 'now', {
+        configurable: true,
+        value: () => baseTime.getTime()
+      });
     });
 
     it('should create a new config without any parameters', () => {
       expectObject(new CdNotification(), {
         application: 'Ceph',
         applicationClass: 'ceph-icon',
-        iconClass: 'fa fa-info',
+        iconClass: 'information',
         message: undefined,
-        options: undefined,
+        options: {
+          lowContrast: true,
+          type: undefined,
+          title: '',
+          subtitle: '',
+          caption: ''
+        },
         textClass: 'text-info',
         timestamp: '2022-02-22T00:00:00.000Z',
         title: undefined,
@@ -74,9 +106,15 @@ describe('cd-notification classes', () => {
         {
           application: 'Prometheus',
           applicationClass: 'prometheus-icon',
-          iconClass: 'fa fa-exclamation-triangle',
+          iconClass: 'warning--alt--filled',
           message: 'Something failed',
-          options: undefined,
+          options: {
+            lowContrast: true,
+            type: undefined,
+            title: '',
+            subtitle: '',
+            caption: ''
+          },
           textClass: 'text-danger',
           timestamp: '2022-02-22T00:00:00.000Z',
           title: 'Some Alert',
@@ -87,7 +125,7 @@ describe('cd-notification classes', () => {
 
     it('should expect the right success classes', () => {
       expectObject(new CdNotification(new CdNotificationConfig(NotificationType.success)), {
-        iconClass: 'fa fa-check',
+        iconClass: 'checkmark',
         textClass: 'text-success'
       });
     });

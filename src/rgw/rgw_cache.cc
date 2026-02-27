@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_cache.h"
 #include "rgw_perf_counters.h"
@@ -357,12 +357,14 @@ ObjectCache::~ObjectCache()
   }
 }
 
-void ObjectMetaInfo::generate_test_instances(list<ObjectMetaInfo*>& o)
+list<ObjectMetaInfo> ObjectMetaInfo::generate_test_instances()
 {
-  ObjectMetaInfo *m = new ObjectMetaInfo;
-  m->size = 1024 * 1024;
-  o.push_back(m);
-  o.push_back(new ObjectMetaInfo);
+  list<ObjectMetaInfo> o;
+  ObjectMetaInfo m;
+  m.size = 1024 * 1024;
+  o.push_back(std::move(m));
+  o.emplace_back();
+  return o;
 }
 
 void ObjectMetaInfo::dump(Formatter *f) const
@@ -371,25 +373,27 @@ void ObjectMetaInfo::dump(Formatter *f) const
   encode_json("mtime", utime_t(mtime), f);
 }
 
-void ObjectCacheInfo::generate_test_instances(list<ObjectCacheInfo*>& o)
+list<ObjectCacheInfo> ObjectCacheInfo::generate_test_instances()
 {
   using ceph::encode;
-  ObjectCacheInfo *i = new ObjectCacheInfo;
-  i->status = 0;
-  i->flags = CACHE_FLAG_MODIFY_XATTRS;
+  list<ObjectCacheInfo> o;
+  ObjectCacheInfo i;
+  i.status = 0;
+  i.flags = CACHE_FLAG_MODIFY_XATTRS;
   string s = "this is a string";
   string s2 = "this is a another string";
   bufferlist data, data2;
   encode(s, data);
   encode(s2, data2);
-  i->data = data;
-  i->xattrs["x1"] = data;
-  i->xattrs["x2"] = data2;
-  i->rm_xattrs["r2"] = data2;
-  i->rm_xattrs["r3"] = data;
-  i->meta.size = 512 * 1024;
-  o.push_back(i);
-  o.push_back(new ObjectCacheInfo);
+  i.data = data;
+  i.xattrs["x1"] = data;
+  i.xattrs["x2"] = data2;
+  i.rm_xattrs["r2"] = data2;
+  i.rm_xattrs["r3"] = data;
+  i.meta.size = 512 * 1024;
+  o.push_back(std::move(i));
+  o.emplace_back();
+  return o;
 }
 
 void ObjectCacheInfo::dump(Formatter *f) const
@@ -403,9 +407,11 @@ void ObjectCacheInfo::dump(Formatter *f) const
 
 }
 
-void RGWCacheNotifyInfo::generate_test_instances(list<RGWCacheNotifyInfo*>& o)
+list<RGWCacheNotifyInfo> RGWCacheNotifyInfo::generate_test_instances()
 {
-  o.push_back(new RGWCacheNotifyInfo);
+  list<RGWCacheNotifyInfo> o;
+  o.emplace_back();
+  return o;
 }
 
 void RGWCacheNotifyInfo::dump(Formatter *f) const

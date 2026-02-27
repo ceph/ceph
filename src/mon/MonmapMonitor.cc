@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -691,10 +692,10 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
      * we can simply go ahead and add the monitor.
      */
 
-    pending_map.add(name, addrs);
-    pending_map.mon_info[name].crush_loc = loc;
+    auto& info = pending_map.add(name, addrs);
+    info.crush_loc = loc;
     pending_map.last_changed = ceph_clock_now();
-    ss << "adding mon." << name << " at " << addrs;
+    ss << "adding " << info;
     dout(0) << __func__ << " proposing new mon." << name << dendl;
 
   } else if (prefix == "mon remove" ||
@@ -920,11 +921,32 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       err = -EINVAL;
       goto reply_no_propose;
     }
+    if (pending_map.stretch_mode_enabled) {
+        err = -EINVAL;
+        ss << "Stretch mode is enabled, so you cannot change the election strategy; please disable stretch mode first!";
+        ceph_assert(pending_map.strategy == MonMap::CONNECTIVITY);
+        goto reply_no_propose;
+    }
     if (strat == "classic") {
+      if (pending_map.strategy == MonMap::CLASSIC) {
+        err = 0;
+        ss << "You are already in classic election strategy";
+        goto reply_no_propose;
+      }
       strategy = MonMap::CLASSIC;
     } else if (strat == "disallow") {
+      if (pending_map.strategy == MonMap::DISALLOW) {
+          err = 0;
+          ss << "You are already in disallow election strategy";
+          goto reply_no_propose;
+      }
       strategy = MonMap::DISALLOW;
     } else if (strat == "connectivity") {
+      if (pending_map.strategy == MonMap::CONNECTIVITY) {
+        err = 0;
+        ss << "You are already in connectivity election strategy";
+        goto reply_no_propose;
+      }
       strategy = MonMap::CONNECTIVITY;
     } else {
       err = -EINVAL;
@@ -1401,8 +1423,8 @@ bool MonmapMonitor::prepare_join(MonOpRequestRef op)
   }
   if (pending_map.contains(join->name))
     pending_map.remove(join->name);
-  pending_map.add(join->name, join->addrs);
-  pending_map.mon_info[join->name].crush_loc =
+  auto& mon_info = pending_map.add(join->name, join->addrs);
+  mon_info.crush_loc =
     ((join->force_loc || existing_loc.empty()) ?
      join->crush_loc : existing_loc);
   pending_map.last_changed = ceph_clock_now();

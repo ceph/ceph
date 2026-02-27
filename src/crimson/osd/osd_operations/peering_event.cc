@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sleep.hh>
@@ -138,8 +138,8 @@ PeeringEvent<T>::complete_rctx(ShardServices &shard_services, Ref<PG> pg)
 
 ConnectionPipeline &RemotePeeringEvent::get_connection_pipeline()
 {
-  return get_osd_priv(&get_local_connection()
-         ).peering_request_conn_pipeline;
+  return get_osd_priv(&get_connection()
+  ).peering_request_conn_pipeline;
 }
 
 PerShardPipeline &RemotePeeringEvent::get_pershard_pipeline(

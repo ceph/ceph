@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <string>
+
 #include <boost/asio/io_context.hpp>
 
 #include "IoOp.h"
@@ -21,20 +24,28 @@
 namespace ceph {
 namespace io_exerciser {
 
+class IoOp;
+
 class Model {
  protected:
   int num_io{0};
-  std::string oid;
+  std::string primary_oid;
+  std::string secondary_oid;
   uint64_t block_size;
 
+  void set_primary_oid(const std::string& new_oid);
+  void set_secondary_oid(const std::string& new_oid);
+
  public:
-  Model(const std::string& oid, uint64_t block_size);
+  Model(const std::string& primary_oid, const std::string& secondary_oid, uint64_t block_size);
   virtual ~Model() = default;
 
   virtual bool readyForIoOp(IoOp& op) = 0;
   virtual void applyIoOp(IoOp& op) = 0;
 
-  const std::string get_oid() const;
+  const std::string get_primary_oid() const;
+  const std::string get_secondary_oid() const;
+  void swap_primary_secondary_oid();
   const uint64_t get_block_size() const;
   int get_num_io() const;
 };

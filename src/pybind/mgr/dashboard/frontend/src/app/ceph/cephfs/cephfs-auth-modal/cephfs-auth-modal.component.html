@@ -108,7 +108,8 @@
               <cds-checkbox i18n-label
                             [id]="permission.name"
                             [name]="permission.name"
-                            [formControlName]="permission.name">
+                            [formControlName]="permission.name"
+                            (checkedChange)="toggleFormControl($event, permission.name)">
               {{ permission.name | titlecase }}
               <cd-help-text *ngIf="permission.description">
                 {{ permission.description }}

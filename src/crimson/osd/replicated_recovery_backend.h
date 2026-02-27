@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -14,6 +14,8 @@
 #include "messages/MOSDPGRecoveryDelete.h"
 #include "messages/MOSDPGRecoveryDeleteReply.h"
 #include "os/ObjectStore.h"
+
+namespace crimson::osd {
 
 class ReplicatedRecoveryBackend : public RecoveryBackend {
 public:
@@ -179,3 +181,5 @@ private:
   std::pair<object_info_t, crimson::osd::SnapSetContextRef>
   get_md_from_push_op(PushOp &push_op);
 };
+
+}

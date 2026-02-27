@@ -1,16 +1,30 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable, Subscription, forkJoin, timer } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, Subject, Subscription, forkJoin, of, timer } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { AlertmanagerSilence } from '../models/alertmanager-silence';
 import {
   AlertmanagerAlert,
   AlertmanagerNotification,
+  GroupAlertmanagerAlert,
   PrometheusRuleGroup
 } from '../models/prometheus-alerts';
 import moment from 'moment';
+
+export type PromethuesGaugeMetricResult = {
+  metric: Record<string, string>; // metric metadata
+  value: [number, string]; // timestamp, value
+};
+
+export type PromqlGuageMetric = {
+  resultType: 'vector';
+  result: PromethuesGaugeMetricResult[];
+};
+
+export const STORAGE_TYPE_WARNING =
+  'Storage type details are unavailable. Upgrade this cluster to version 9.0 or later to access them.';
 
 @Injectable({
   providedIn: 'root'
@@ -29,6 +43,7 @@ export class PrometheusService {
     prometheus: 'ui-api/prometheus/prometheus-api-host'
   };
   private settings: { [url: string]: string } = {};
+  updatedChrtData = new Subject<any>();
 
   constructor(private http: HttpClient) {}
 
@@ -38,8 +53,14 @@ export class PrometheusService {
     }
   }
 
+  // Range Queries
   getPrometheusData(params: any): any {
     return this.http.get<any>(`${this.baseURL}/data`, { params });
+  }
+
+  // Guage Queries
+  getPrometheusQueryData(params: { params: string }): Observable<PromqlGuageMetric> {
+    return this.http.get<any>(`${this.baseURL}/prometheus_query_data`, { params });
   }
 
   ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
@@ -61,6 +82,11 @@ export class PrometheusService {
   getAlerts(clusterFilteredAlerts = false, params = {}): Observable<AlertmanagerAlert[]> {
     params['cluster_filter'] = clusterFilteredAlerts;
     return this.http.get<AlertmanagerAlert[]>(this.baseURL, { params });
+  }
+
+  getGroupedAlerts(clusterFilteredAlerts = false, params: Record<string, any> = {}) {
+    params['cluster_filter'] = clusterFilteredAlerts;
+    return this.http.get<GroupAlertmanagerAlert[]>(`${this.baseURL}/alertgroup`, { params });
   }
 
   getSilences(params = {}): Observable<AlertmanagerSilence[]> {
@@ -131,49 +157,23 @@ export class PrometheusService {
     return data.value || data.instance || '';
   }
 
-  getPrometheusQueriesData(
-    selectedTime: any,
-    queries: any,
-    queriesResults: any,
-    checkNan?: boolean
-  ) {
+  getGaugeQueryData(query: string): Observable<PromqlGuageMetric> {
+    let result$: Observable<PromqlGuageMetric> = of({ result: [] } as PromqlGuageMetric);
+
     this.ifPrometheusConfigured(() => {
-      if (this.timerGetPrometheusDataSub) {
-        this.timerGetPrometheusDataSub.unsubscribe();
-      }
-      this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
-        selectedTime = this.updateTimeStamp(selectedTime);
-        for (const queryName in queries) {
-          if (queries.hasOwnProperty(queryName)) {
-            const query = queries[queryName];
-            this.getPrometheusData({
-              params: encodeURIComponent(query),
-              start: selectedTime['start'],
-              end: selectedTime['end'],
-              step: selectedTime['step']
-            }).subscribe((data: any) => {
-              if (data.result.length) {
-                queriesResults[queryName] = data.result[0].values;
-              } else {
-                queriesResults[queryName] = [];
-              }
-              if (
-                queriesResults[queryName] !== undefined &&
-                queriesResults[queryName] !== '' &&
-                checkNan
-              ) {
-                queriesResults[queryName].forEach((valueArray: any[]) => {
-                  if (isNaN(parseFloat(valueArray[1]))) {
-                    valueArray[1] = '0';
-                  }
-                });
-              }
-            });
-          }
-        }
-      });
+      result$ = this.getPrometheusQueryData({ params: query }).pipe(
+        map((result: PromqlGuageMetric) => result),
+        catchError(() => of({ result: [] } as PromqlGuageMetric))
+      );
     });
-    return queriesResults;
+
+    return result$;
+  }
+
+  formatGuageMetric(data: string): number {
+    const value: number = parseFloat(data ?? '');
+    // Guage value can be "Nan", "+inf", "-inf" in case of errors
+    return isFinite(value) ? value : null;
   }
 
   private updateTimeStamp(selectedTime: any): any {
@@ -276,5 +276,53 @@ export class PrometheusService {
         });
       });
     });
+  }
+
+  getRangeQueriesData(
+    selectedTime: any,
+    queries: Record<string, string>,
+    checkNan?: boolean
+  ): Observable<Record<string, [number, string][]>> {
+    return timer(0, this.timerTime).pipe(
+      switchMap(() => {
+        this.ifPrometheusConfigured(() => {});
+
+        const updatedTime = this.updateTimeStamp(selectedTime);
+
+        const observables = Object.entries(queries).map(([queryName, query]) =>
+          this.getPrometheusData({
+            params: encodeURIComponent(query),
+            start: updatedTime.start,
+            end: updatedTime.end,
+            step: updatedTime.step
+          }).pipe(
+            map((data: any) => ({
+              queryName,
+              values: data.result?.length ? data.result[0].values : []
+            }))
+          )
+        );
+
+        return forkJoin(observables) as Observable<Array<{ queryName: string; values: any[] }>>;
+      }),
+      map((results) => {
+        const formattedResults: Record<string, [number, string][]> = {};
+
+        results.forEach(({ queryName, values }) => {
+          if (checkNan) {
+            values = values.map((v) => {
+              if (isNaN(parseFloat(v[1]))) {
+                v[1] = '0';
+              }
+              return v;
+            });
+          }
+
+          formattedResults[queryName] = values;
+        });
+
+        return formattedResults;
+      })
+    );
   }
 }

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/ImageWatcher.h"
 #include "librbd/ExclusiveLock.h"
@@ -14,7 +14,9 @@
 #include "librbd/image_watcher/NotifyLockOwner.h"
 #include "librbd/io/AioCompletion.h"
 #include "include/encoding.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include "common/perf_counters.h"
 #include <boost/bind/bind.hpp>
 
 #include <shared_mutex> // for std::shared_lock
@@ -1065,11 +1067,11 @@ bool ImageWatcher<I>::handle_payload(const RequestLockPayload &payload,
         return true;
       }
 
-      ldout(m_image_ctx.cct, 10) << this << " queuing release of exclusive lock"
-                                 << dendl;
+      // potentially queue release of exclusive lock
       r = m_image_ctx.get_exclusive_lock_policy()->lock_requested(
         payload.force);
     }
+    ldout(m_image_ctx.cct, 10) << this << " responding with r=" << r << dendl;
     encode(ResponseMessage(r), ack_ctx->out);
   }
   return true;

@@ -125,7 +125,12 @@ def deny_access(mgr, client_entity, want_mds_caps, want_osd_caps):
     mds_cap_str, osd_cap_str = cap_remove(orig_mds_caps, orig_osd_caps,
                                           want_mds_caps, want_osd_caps)
 
-    caps_list = prepare_updated_caps_list(cap, mds_cap_str, osd_cap_str, authorize=False)
+    # The same auth key may be used for multiple subvolumes
+    # If upon cap_remove the key still has mds or osd caps, it must also keep
+    # mon caps so that the client is allowed to check in with the mons.
+    auth = True if mds_cap_str or osd_cap_str else False
+
+    caps_list = prepare_updated_caps_list(cap, mds_cap_str, osd_cap_str, authorize=auth)
     if not caps_list:
         mgr.mon_command(
             {

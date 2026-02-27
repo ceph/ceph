@@ -1,16 +1,22 @@
-import { Component } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { Observable } from 'rxjs';
-import { FeatureTogglesService } from '~/app/shared/services/feature-toggles.service';
+import {
+  FeatureTogglesMap,
+  FeatureTogglesService
+} from '~/app/shared/services/feature-toggles.service';
 
 @Component({
   selector: 'cd-dashboard',
   templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.scss']
+  styleUrls: ['./dashboard.component.scss'],
+  standalone: false
 })
-export class DashboardComponent {
-  enabledFeature$: Observable<Object>;
+export class DashboardComponent implements OnInit {
+  enabledFeature$: Observable<FeatureTogglesMap>;
 
-  constructor(private featureToggles: FeatureTogglesService) {
+  private featureToggles = inject(FeatureTogglesService);
+
+  ngOnInit() {
     this.enabledFeature$ = this.featureToggles.get();
   }
 }

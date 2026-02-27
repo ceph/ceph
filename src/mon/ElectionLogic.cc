@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -47,7 +48,6 @@ using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
 using ceph::Formatter;
-using ceph::JSONFormatter;
 using ceph::mono_clock;
 using ceph::mono_time;
 using ceph::timespan_str;
@@ -86,7 +86,7 @@ void ElectionLogic::bump_epoch(epoch_t e)
 
 void ElectionLogic::declare_standalone_victory()
 {
-  assert(elector->paxos_size() == 1 && elector->get_my_rank() == 0);
+  ceph_assert(elector->paxos_size() == 1 && elector->get_my_rank() == 0);
   init();
   bump_epoch(epoch+1);
 }

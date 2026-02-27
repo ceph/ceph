@@ -1,9 +1,9 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "svc_config_key_rados.h"
 
-#include "rgw_tools.h"
+#include "driver/rados/rgw_tools.h"
 
 using std::string;
 
@@ -41,8 +41,7 @@ int RGWSI_ConfigKey_RADOS::get(const string& key, bool secure,
       "\"key\": \"" + key + "\""
     "}";
 
-  bufferlist inbl;
-  int ret = rados->mon_command(cmd, inbl, result, nullptr);
+  int ret = rados->mon_command(std::move(cmd), {}, result, nullptr);
   if (ret < 0) {
     return ret;
   }

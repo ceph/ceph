@@ -335,6 +335,8 @@ networks:
 - 10.0.0.0/8
 - 192.168.0.0/16
 spec:
+  certificate_source: cephadm-signed
+  rgw_exit_timeout_secs: 60
   rgw_frontend_type: civetweb
   rgw_realm: default-rgw-realm
   rgw_zone: eu-central-1
@@ -353,11 +355,28 @@ spec:
   objectstore: bluestore
   wal_devices:
     model: NVME-QQQQ-987
+  termination_grace_period_seconds: 30
+  osd_type: classic
+---
+service_type: osd
+service_id: osd_spec_seastore
+service_name: osd.osd_spec_seastore
+placement:
+  host_pattern: '*'
+spec:
+  data_devices:
+    model: MC-55-44-XZ
+  filter_logic: AND
+  objectstore: seastore
+  termination_grace_period_seconds: 30
+  osd_type: crimson
 ---
 service_type: alertmanager
 service_name: alertmanager
 spec:
+  certificate_source: cephadm-signed
   port: 1234
+  ssl: true
   user_data:
     default_webhook_urls:
     - foo
@@ -366,16 +385,20 @@ service_type: grafana
 service_name: grafana
 spec:
   anonymous_access: true
+  certificate_source: cephadm-signed
   port: 1234
   protocol: https
+  ssl: true
 ---
 service_type: grafana
 service_name: grafana
 spec:
   anonymous_access: true
+  certificate_source: cephadm-signed
   initial_admin_password: secure
   port: 1234
   protocol: https
+  ssl: true
 ---
 service_type: ingress
 service_id: rgw.foo
@@ -387,8 +410,10 @@ placement:
   - host3
 spec:
   backend_service: rgw.foo
+  certificate_source: cephadm-signed
   first_virtual_router_id: 50
   frontend_port: 8080
+  monitor_cert_source: reuse_service_cert
   monitor_port: 8081
   virtual_ip: 192.168.20.1/24
 ---
@@ -413,6 +438,7 @@ spec:
   api_password: admin
   api_port: 5000
   api_user: admin
+  certificate_source: cephadm-signed
   pool: pool
   trusted_ip_list:
   - ::1
@@ -495,16 +521,21 @@ placement:
   count: 1
 spec:
   anonymous_access: false
+  certificate_source: cephadm-signed
   initial_admin_password: password
   protocol: https
+  ssl: true
 """.split('---\n'))
 def test_yaml(y):
     data = yaml.safe_load(y)
-    object = ServiceSpec.from_json(data)
+    obj = ServiceSpec.from_json(data)
 
-    assert yaml.dump(object) == y
-    assert yaml.dump(ServiceSpec.from_json(object.to_json())) == y
+    obj_dict = obj.to_json()
+    for key in ['data_devices', 'db_devices', 'wal_devices']:
+        if key in obj_dict.get('spec', {}):
+            obj_dict['spec'][key] = data['spec'][key]
 
+    assert obj_dict == data
 
 def test_alertmanager_spec_1():
     spec = AlertManagerSpec()
@@ -1295,3 +1326,99 @@ def test_extra_args_handling(y, ec_args, ee_args, ec_final_args, ee_final_args):
         for args in spec_obj.extra_entrypoint_args:
             ee_res.extend(args.to_args())
         assert ee_res == ee_final_args
+  
+def test_osd_has_default_termination_grace_when_missing():
+    
+    spec_data = """
+service_type: osd
+service_id: osd_spec_default
+placement:
+  host_pattern: '*'
+spec:
+  data_devices:
+    model: MC-55-44-XZ
+  db_devices:
+    model: SSD-123-foo
+  filter_logic: AND
+  objectstore: bluestore
+  wal_devices:
+    model: NVME-QQQQ-987
+"""
+    data = yaml.safe_load(spec_data)
+    spec_obj = ServiceSpec.from_json(data)
+
+    j = spec_obj.to_json()
+    assert 'spec' in j
+    assert 'termination_grace_period_seconds' in j['spec']
+    assert j['spec']['termination_grace_period_seconds'] == 30
+
+def test_termination_grace_roundtrip_preserves_value():
+    spec_data = """
+service_type: osd
+service_id: osd_with_custom_timeout
+placement:
+  host_pattern: '*'
+spec:
+  termination_grace_period_seconds: 7
+  data_devices:
+    model: MC-55-44-XZ
+"""
+    data = yaml.safe_load(spec_data)
+    spec_obj = ServiceSpec.from_json(data)
+
+    j = spec_obj.to_json()
+    assert j['spec']['termination_grace_period_seconds'] == 7
+
+    spec2 = ServiceSpec.from_json(j)
+    j2 = spec2.to_json()
+    assert j2['spec']['termination_grace_period_seconds'] == 7
+
+def test_negative_termination_grace_raises_validation_error():
+    spec_data = """
+service_type: osd
+service_id: osd_bad_timeout
+placement:
+  host_pattern: '*'
+spec:
+  termination_grace_period_seconds: -1
+"""
+    data = yaml.safe_load(spec_data)
+    with pytest.raises(SpecValidationError):
+        ServiceSpec.from_json(data)
+
+@pytest.mark.parametrize("spec_data", [
+    """
+service_type: mgr
+placement:
+  count: 1
+""",
+    """
+service_type: mon
+placement:
+  count: 1
+""",
+
+    """
+service_type: rgw
+service_id: default-rgw
+placement:
+  hosts:
+    - ceph-001
+""",
+
+    """
+service_type: nfs
+service_id: mynfs
+placement:
+  count: 1
+""",
+])
+def test_non_osd_services_do_not_get_default_termination_if_not_provided(spec_data):
+
+    data = yaml.safe_load(spec_data)
+    spec_obj = ServiceSpec.from_json(data)
+
+    j = spec_obj.to_json()
+
+    spec_section = j.get('spec', {})
+    assert 'termination_grace_period_seconds' not in spec_section

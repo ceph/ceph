@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -649,6 +650,9 @@ TEST(LibRGW, BAD_DELETES_DIRS1) {
 TEST(LibRGW, GETATTR_DIRS1)
 {
   if (do_dirs1) {
+    if (verbose) {
+      std::cout << "\ttesting Unix attributes " << std::endl;
+    }
     int rc;
     struct stat st;
     for (auto& dirs_rec : dirs_vec) {

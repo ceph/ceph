@@ -110,12 +110,12 @@ class StateMachineRenderer(object):
             previous_line = line
 
     def get_context(self, line, previous_line):
-        match = re.search(r"(\w+::)*::(?P<tag>\w+)::\w+\(const (?P<event>\w+)", line)
+        match = re.search(r"(\w+::)*::(?P<tag>\w+)::\w+\((const )?(?P<event>\w+)", line)
         if match is None and previous_line is not None:
             # it is possible that we need to match on the previous line as well, so join
             # them to make them one line and try and get this matching
             joined_line = ' '.join([previous_line, line])
-            match = re.search(r"(\w+::)*::(?P<tag>\w+)::\w+\(\s*const (?P<event>\w+)", joined_line)
+            match = re.search(r"(\w+::)*::(?P<tag>\w+)::\w+\(\s*(const )?(?P<event>\w+)", joined_line)
         if match is not None:
             self.context.append((match.group('tag'), self.context_depth, match.group('event')))
         if '{' in line:
@@ -126,33 +126,33 @@ class StateMachineRenderer(object):
                 self.context.pop()
 
     def get_state(self, line):
-        if "boost::statechart::state_machine" in line:
+        if "::state_machine" in line:
             tokens = re.search(
-                r"boost::statechart::state_machine<\s*(\w*),\s*(\w*)\s*>",
+                r"(sc|boost::statechart)::state_machine<\s*(\w*),\s*(\w*)\s*>",
                 line)
             if tokens is None:
                 raise Exception("Error: malformed state_machine line: " + line)
-            self.machines[tokens.group(1)] = tokens.group(2)
+            self.machines[tokens.group(2)] = tokens.group(3)
             self.context.append((tokens.group(1), self.context_depth, ""))
             return
-        if "boost::statechart::state" in line:
+        if "boost::statechart::state" in line or "sc::state" in line:
             tokens = re.search(
-                r"boost::statechart::state<\s*(\w*),\s*(\w*)\s*,?\s*(\w*)\s*>",
+                r"(sc|boost::statechart)::state<\s*(\w*),\s*(\w*)\s*,?\s*(\w*)\s*>",
                 line)
             if tokens is None:
                 raise Exception("Error: malformed state line: " + line)
-            self.states[tokens.group(1)] = tokens.group(2)
-            if tokens.group(2) not in self.state_contents.keys():
-                self.state_contents[tokens.group(2)] = []
-            self.state_contents[tokens.group(2)].append(tokens.group(1))
-            if tokens.group(3):
-                self.machines[tokens.group(1)] = tokens.group(3)
-            self.context.append((tokens.group(1), self.context_depth, ""))
+            self.states[tokens.group(2)] = tokens.group(3)
+            if tokens.group(3) not in self.state_contents.keys():
+                self.state_contents[tokens.group(3)] = []
+            self.state_contents[tokens.group(3)].append(tokens.group(2))
+            if tokens.group(4):
+                self.machines[tokens.group(2)] = tokens.group(4)
+            self.context.append((tokens.group(2), self.context_depth, ""))
             return
 
     def get_event(self, line):
-        if "boost::statechart::transition" in line:
-            for i in re.finditer(r'boost::statechart::transition<\s*([\w:]*)\s*,\s*(\w*)\s*>',
+        if "::transition" in line:
+            for i in re.finditer(r'::transition<\s*([\w:]*)\s*,\s*(\w*)\s*>',
                                  line):
                 if i.group(1) not in self.edges.keys():
                     self.edges[i.group(1)] = []

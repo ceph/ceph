@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -24,10 +24,12 @@
 
 #include "rgw_common.h"
 #include "rgw_sal.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
+#endif
 #include "rgw_quota.h"
 #include "rgw_bucket.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 
 #include "services/svc_sys_obj.h"
 
@@ -1039,14 +1041,16 @@ void RGWQuotaInfo::dump(Formatter *f) const
   f->dump_int("max_objects", max_objects);
 }
 
-void RGWQuotaInfo::generate_test_instances(std::list<RGWQuotaInfo*>& o)
+std::list<RGWQuotaInfo> RGWQuotaInfo::generate_test_instances()
 {
-  o.push_back(new RGWQuotaInfo);
-  o.push_back(new RGWQuotaInfo);
-  o.back()->enabled = true;
-  o.back()->check_on_raw = true;
-  o.back()->max_size = 1024;
-  o.back()->max_objects = 1;
+  std::list<RGWQuotaInfo> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().enabled = true;
+  o.back().check_on_raw = true;
+  o.back().max_size = 1024;
+  o.back().max_objects = 1;
+  return o;
 }
 
 void RGWQuotaInfo::decode_json(JSONObj *obj)

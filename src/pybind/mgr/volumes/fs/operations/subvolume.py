@@ -5,7 +5,7 @@ from .group import open_group
 from .template import SubvolumeOpType
 from .versions import loaded_subvolumes
 
-def create_subvol(mgr, fs, vol_spec, group, subvolname, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, case_insensitive):
+def create_subvol(mgr, fs, vol_spec, group, subvolname, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive, enctag):
     """
     create a subvolume (create a subvolume with the max known version).
 
@@ -20,11 +20,12 @@ def create_subvol(mgr, fs, vol_spec, group, subvolname, size, isolate_nspace, po
     :param gid: the group identifier
     :param earmark: metadata string to identify if subvolume is associated with nfs/smb
     :param normalization: the unicode normalization form to use (nfd, nfc, nfkd or nfkc)
-    :param case_insensitive: whether to make the subvolume case insensitive or not
+    :param casesensitive: whether to make the subvolume case insensitive or not
+    :param enctag: metadata string to associate subvolume with an encryption tag
     :return: None
     """
     subvolume = loaded_subvolumes.get_subvolume_object_max(mgr, fs, vol_spec, group, subvolname)
-    subvolume.create(size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, case_insensitive)
+    subvolume.create(size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive, enctag)
 
 
 def create_clone(mgr, fs, vol_spec, group, subvolname, pool, source_volume, source_subvolume, snapname):
@@ -101,7 +102,8 @@ def open_subvol_in_group(mgr, vol_handle, vol_spec, group_name, subvol_name,
 
 @contextmanager
 def open_clone_subvol_pair_in_vol(vc, vol_spec, vol_name, group_name,
-                                  subvol_name, lockless=False):
+                                  subvol_name, lockless=False, failed=False):
+
     with open_subvol_in_vol(vc, vol_spec, vol_name, group_name, subvol_name,
                             SubvolumeOpType.CLONE_INTERNAL, lockless) \
                             as (vol_handle, _, dst_subvol):
@@ -112,9 +114,14 @@ def open_clone_subvol_pair_in_vol(vc, vol_spec, vol_name, group_name,
             # use the same subvolume to avoid metadata overwrites
             yield (dst_subvol, dst_subvol, src_snap_name)
         else:
+            if failed:
+                op_type = SubvolumeOpType.CLONE_FAILED
+            else:
+                op_type = SubvolumeOpType.CLONE_SOURCE
+
             with open_subvol_in_group(vc.mgr, vol_handle, vol_spec,
                                       src_group_name, src_subvol_name,
-                                      SubvolumeOpType.CLONE_SOURCE) \
+                                      op_type) \
                                       as src_subvol:
                 yield (dst_subvol, src_subvol, src_snap_name)
 

@@ -6,7 +6,8 @@ import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 @Component({
   selector: 'cd-back-button',
   templateUrl: './back-button.component.html',
-  styleUrls: ['./back-button.component.scss']
+  styleUrls: ['./back-button.component.scss'],
+  standalone: false
 })
 export class BackButtonComponent implements OnInit {
   @Output() backAction = new EventEmitter();

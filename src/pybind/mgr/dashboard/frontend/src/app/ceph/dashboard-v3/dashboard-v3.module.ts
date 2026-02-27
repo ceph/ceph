@@ -14,7 +14,8 @@ import { DashboardPieComponent } from './dashboard-pie/dashboard-pie.component';
 import { DashboardTimeSelectorComponent } from './dashboard-time-selector/dashboard-time-selector.component';
 import { DashboardV3Component } from './dashboard/dashboard-v3.component';
 import { PgSummaryPipe } from './pg-summary.pipe';
-import { ToggletipModule } from 'carbon-components-angular';
+import { InlineLoadingModule, ToggletipModule, TagModule } from 'carbon-components-angular';
+import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 
 @NgModule({
   imports: [
@@ -28,7 +29,10 @@ import { ToggletipModule } from 'carbon-components-angular';
     ReactiveFormsModule,
     SimplebarAngularModule,
     BaseChartDirective,
-    ToggletipModule
+    ToggletipModule,
+    InlineLoadingModule,
+    TagModule,
+    ProductiveCardComponent
   ],
   declarations: [
     DashboardV3Component,

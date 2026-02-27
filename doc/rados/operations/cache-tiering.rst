@@ -2,10 +2,14 @@
  Cache Tiering
 ===============
 
-.. warning:: Cache tiering has been deprecated in the Reef release as it
-             has lacked a maintainer for a very long time. This does not mean
-             it will be certainly removed, but we may choose to remove it
-             without much further notice.
+.. warning:: Cache tiering has been deprecated in the Reef release. Cache
+   tiering has lacked a maintainer for a long time. This does not mean that
+   it will certainly be removed, but it might be removed without much
+   notice.
+
+   The upstream Ceph community strongly advises against deploying new cache
+   tiers. The upstream Ceph community also recommends migrating from legacy
+   deployments.
 
 A cache tier provides Ceph Clients with better I/O performance for a subset of
 the data stored in a backing storage tier. Cache tiering involves creating a
@@ -177,12 +181,12 @@ Setting up a backing storage pool typically involves one of two scenarios:
 In the standard storage scenario, you can setup a CRUSH rule to establish 
 the failure domain (e.g., osd, host, chassis, rack, row, etc.). Ceph OSD 
 Daemons perform optimally when all storage drives in the rule are of the 
-same size, speed (both RPMs and throughput) and type. See `CRUSH Maps`_ 
+same size, speed (both RPMs and throughput) and type. See :ref:`rados-crush-map`
 for details on creating a rule. Once you have created a rule, create 
 a backing storage pool. 
 
 In the erasure coding scenario, the pool creation arguments will generate the
-appropriate rule automatically. See `Create a Pool`_ for details.
+appropriate rule automatically. See :ref:`createpool` for details.
 
 In subsequent examples, we will refer to the backing storage pool 
 as ``cold-storage``.
@@ -201,9 +205,6 @@ that have the high performance drives while omitting the hosts that don't. See
 
 In subsequent examples, we will refer to the cache pool as ``hot-storage`` and
 the backing pool as ``cold-storage``.
-
-For cache tier configuration and default values, see 
-`Pools - Set Pool Values`_.
 
 
 Creating a Cache Tier
@@ -260,7 +261,7 @@ cache tier configuration options with the following usage:
 
    ceph osd pool set {cachepool} {key} {value}
    
-See `Pools - Set Pool Values`_ for details.
+See :ref:`setpoolvalues` for details.
 
 
 Target Size and Type
@@ -312,11 +313,10 @@ A similar parameter can be set for the write operation, which is
    ceph osd pool set {cachepool} min_write_recency_for_promote 2
 
 .. note:: The longer the period and the higher the
-   ``min_read_recency_for_promote`` and
-   ``min_write_recency_for_promote``values, the more RAM the ``ceph-osd``
-   daemon consumes. In particular, when the agent is active to flush
-   or evict cache objects, all ``hit_set_count`` HitSets are loaded
-   into RAM.
+   ``min_read_recency_for_promote`` and ``min_write_recency_for_promote``
+   values, the more RAM the ``ceph-osd`` daemon consumes. In particular, when
+   the agent is active to flush or evict cache objects, all ``hit_set_count``
+   HitSets are loaded into RAM.
 
 
 Cache Sizing
@@ -607,8 +607,5 @@ See `Tracker Issue #44286 <https://tracker.ceph.com/issues/44286>`_ for the
 history of this issue.
 
 
-.. _Create a Pool: ../pools#create-a-pool
-.. _Pools - Set Pool Values: ../pools#set-pool-values
 .. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter
-.. _CRUSH Maps: ../crush-map
 .. _Absolute Sizing: #absolute-sizing

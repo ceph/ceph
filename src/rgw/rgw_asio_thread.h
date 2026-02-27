@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <assert.h>
+
 class DoutPrefixProvider;
 
 /// indicates whether the current thread is in boost::asio::io_context::run(),
@@ -24,3 +26,14 @@ extern thread_local bool is_asio_thread;
 /// call when an operation will block the calling thread due to an empty
 /// optional_yield. a warning is logged when is_asio_thread is true
 void maybe_warn_about_blocking(const DoutPrefixProvider* dpp);
+
+/// enables warnings while in scope. these scopes must not be nested
+struct warn_about_blocking_in_scope {
+  warn_about_blocking_in_scope() {
+    assert(!is_asio_thread);
+    is_asio_thread = true;
+  }
+  ~warn_about_blocking_in_scope() {
+    is_asio_thread = false;
+  }
+};

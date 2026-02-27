@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -44,17 +44,17 @@ class TestReplayExtent final: public NodeExtent {
 
  protected:
   NodeExtentRef mutate(context_t, DeltaRecorderURef&&) override {
-    ceph_abort("impossible path"); }
+    ceph_abort_msg("impossible path"); }
   DeltaRecorder* get_recorder() const override {
-    ceph_abort("impossible path"); }
+    ceph_abort_msg("impossible path"); }
   CachedExtentRef duplicate_for_write(Transaction&) override {
-    ceph_abort("impossible path"); }
+    ceph_abort_msg("impossible path"); }
   extent_types_t get_type() const override {
     return extent_types_t::TEST_BLOCK; }
   ceph::bufferlist get_delta() override {
-    ceph_abort("impossible path"); }
+    ceph_abort_msg("impossible path"); }
   void apply_delta(const ceph::bufferlist&) override {
-    ceph_abort("impossible path"); }
+    ceph_abort_msg("impossible path"); }
 
  private:
   TestReplayExtent(ceph::bufferptr&& ptr, DeltaRecorderURef&& recorder)

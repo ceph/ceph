@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -17,11 +17,10 @@
 #include "common/strtol.h"
 #include "rgw_rest.h"
 #include "rgw_op.h"
-#include "rgw_rados.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_config.h"
 #include "rgw_client_io.h"
-#include "rgw_sal_rados.h"
+#include "driver/rados/rgw_sal_rados.h"
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 

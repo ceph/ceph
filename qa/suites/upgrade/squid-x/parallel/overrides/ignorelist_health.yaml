@@ -18,3 +18,4 @@ overrides:
       - \(MON_DOWN\)
       - noscrub
       - nodeep-scrub
+      - osds down

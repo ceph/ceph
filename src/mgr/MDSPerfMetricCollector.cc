@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "common/debug.h"
 #include "common/errno.h"
@@ -21,7 +21,7 @@ MDSPerfMetricCollector::MDSPerfMetricCollector(MetricListener &listener)
 }
 
 void MDSPerfMetricCollector::process_reports(const MetricPayload &payload) {
-  const MDSPerfMetricReport &metric_report = boost::get<MDSMetricPayload>(payload).metric_report;
+  const MDSPerfMetricReport &metric_report = std::get<MDSMetricPayload>(payload).metric_report;
 
   std::lock_guard locker(lock);
   process_reports_generic(

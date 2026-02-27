@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -123,7 +123,7 @@ int RGWCreateUser_IAM::forward_to_master(optional_yield y,
   }
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -412,7 +412,7 @@ int RGWUpdateUser_IAM::forward_to_master(optional_yield y, const rgw::SiteConfig
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -551,7 +551,7 @@ int RGWDeleteUser_IAM::forward_to_master(optional_yield y, const rgw::SiteConfig
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -882,7 +882,7 @@ int RGWCreateAccessKey_IAM::forward_to_master(optional_yield y,
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -1106,7 +1106,7 @@ int RGWUpdateAccessKey_IAM::forward_to_master(optional_yield y,
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;
@@ -1253,7 +1253,7 @@ int RGWDeleteAccessKey_IAM::forward_to_master(optional_yield y,
   s->info.args.remove("Version");
 
   int r = forward_iam_request_to_master(this, site, s->user->get_info(),
-                                        post_body, parser, s->info, y);
+                                        post_body, parser, s->info, s->err, y);
   if (r < 0) {
     ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
     return r;

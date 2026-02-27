@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_CLS_LOG_OPS_H
 #define CEPH_CLS_LOG_OPS_H
@@ -40,17 +40,19 @@ struct add_op {
     encode_json("monotonic_inc", monotonic_inc, f);
   }
 
-  static void generate_test_instances(std::list<add_op *>& l) {
+  static std::list<add_op> generate_test_instances() {
     using namespace std::literals;
-    l.push_back(new add_op);
-    l.push_back(new add_op);
-    l.back()->entries.push_back(entry{});
-    l.back()->entries.push_back(entry{});
-    l.back()->entries.back().section = "section";
-    l.back()->entries.back().name = "name";
-    l.back()->entries.back().timestamp = ceph::real_time{1s + 2ns};
-    l.back()->entries.back().data.append("data");
-    l.back()->entries.back().id = "id";
+    std::list<add_op> l;
+    l.emplace_back();
+    l.emplace_back();
+    l.back().entries.emplace_back();
+    l.back().entries.emplace_back();
+    l.back().entries.back().section = "section";
+    l.back().entries.back().name = "name";
+    l.back().entries.back().timestamp = ceph::real_time{1s + 2ns};
+    l.back().entries.back().data.append("data");
+    l.back().entries.back().id = "id";
+    return l;
   }
 };
 WRITE_CLASS_ENCODER(add_op)
@@ -88,14 +90,16 @@ struct list_op {
     f->dump_stream("to_time") << to_time;
     f->dump_int("max_entries", max_entries);
   }
-  static void generate_test_instances(std::list<list_op*>& ls) {
+  static std::list<list_op> generate_test_instances() {
     using namespace std::literals;
-    ls.push_back(new list_op);
-    ls.push_back(new list_op);
-    ls.back()->from_time = ceph::real_time{1s + 2ns};
-    ls.back()->marker = "marker";
-    ls.back()->to_time = ceph::real_time{3s + 4ns};
-    ls.back()->max_entries = 5;
+    std::list<list_op> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().from_time = ceph::real_time{1s + 2ns};
+    ls.back().marker = "marker";
+    ls.back().to_time = ceph::real_time{3s + 4ns};
+    ls.back().max_entries = 5;
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(list_op)
@@ -128,19 +132,21 @@ struct list_ret {
     f->dump_string("marker", marker);
     f->dump_bool("truncated", truncated);
   }
-  static void generate_test_instances(std::list<list_ret*>& ls) {
+  static std::list<list_ret> generate_test_instances() {
     using namespace std::literals;
-    ls.push_back(new list_ret);
-    ls.push_back(new list_ret);
-    ls.back()->entries.push_back(entry{});
-    ls.back()->entries.push_back(entry{});
-    ls.back()->entries.back().section = "section";
-    ls.back()->entries.back().name = "name";
-    ls.back()->entries.back().timestamp = ceph::real_time{1s + 2ns};
-    ls.back()->entries.back().data.append("data");
-    ls.back()->entries.back().id = "id";
-    ls.back()->marker = "marker";
-    ls.back()->truncated = true;
+    std::list<list_ret> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().entries.emplace_back();
+    ls.back().entries.emplace_back();
+    ls.back().entries.back().section = "section";
+    ls.back().entries.back().name = "name";
+    ls.back().entries.back().timestamp = ceph::real_time{1s + 2ns};
+    ls.back().entries.back().data.append("data");
+    ls.back().entries.back().id = "id";
+    ls.back().marker = "marker";
+    ls.back().truncated = true;
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(list_ret)
@@ -182,14 +188,16 @@ struct trim_op {
     f->dump_string("from_marker", from_marker);
     f->dump_string("to_marker", to_marker);
   }
-  static void generate_test_instances(std::list<trim_op*>& ls) {
+  static std::list<trim_op> generate_test_instances() {
     using namespace std::literals;
-    ls.push_back(new trim_op);
-    ls.push_back(new trim_op);
-    ls.back()->from_time = ceph::real_time{1s + 2ns};
-    ls.back()->to_time = ceph::real_time(3s + 4ns);
-    ls.back()->from_marker = "from_marker";
-    ls.back()->to_marker = "to_marker";
+    std::list<trim_op> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().from_time = ceph::real_time{1s + 2ns};
+    ls.back().to_time = ceph::real_time(3s + 4ns);
+    ls.back().from_marker = "from_marker";
+    ls.back().to_marker = "to_marker";
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(trim_op)
@@ -212,8 +220,10 @@ struct info_op {
   void dump(ceph::Formatter* f) const {
   }
 
-  static void generate_test_instances(std::list<info_op*>& ls) {
-    ls.push_back(new info_op);
+  static std::list<info_op> generate_test_instances() {
+    std::list<info_op> ls;
+    ls.emplace_back();
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(info_op)

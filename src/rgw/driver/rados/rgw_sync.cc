@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_sync.h"
 #include "rgw_rest_conn.h"
@@ -239,6 +239,17 @@ public:
   bool spawn_next() override;
 };
 
+RGWRemoteMetaLog::~RGWRemoteMetaLog()
+{
+  delete error_logger;
+}
+
+void RGWRemoteMetaLog::finish()
+{
+  going_down = true;
+  stop();
+}
+
 int RGWRemoteMetaLog::read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info)
 {
   rgw_http_param_pair pairs[] = { { "type", "metadata" },
@@ -296,6 +307,18 @@ int RGWRemoteMetaLog::init()
   tn = sync_env.sync_tracer->add_node(sync_env.sync_tracer->root_node, "meta");
 
   return 0;
+}
+
+RGWMetaSyncStatusManager::~RGWMetaSyncStatusManager(){}
+
+std::ostream&  RGWMetaSyncStatusManager::gen_prefix(std::ostream& out) const
+{
+  return out << "meta sync: ";
+}
+
+unsigned RGWMetaSyncStatusManager::get_subsys() const
+{
+  return dout_subsys;
 }
 
 #define CLONE_MAX_ENTRIES 100
@@ -510,7 +533,7 @@ public:
         }
 
         if (op_ret < 0) {
-          if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+          if (op_ret == -ERR_INTERNAL_ERROR && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
             ldpp_dout(dpp, 20) << "failed to read remote metadata log shard info. retry. shard_id=" << shard_id << dendl;
             continue;
           } else {
@@ -1094,7 +1117,7 @@ public:
         }
 
         if (op_ret < 0) {
-          if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+          if (op_ret == -ERR_INTERNAL_ERROR && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
             ldpp_dout(dpp, 20) << "failed to read remote metadata. retry. section=" << section << " key=" << key << dendl;
             continue;
           } else {
@@ -1996,8 +2019,7 @@ public:
         set_status("sync lock notification");
         yield call(sync_env->bid_manager->notify_cr());
         if (retcode < 0) {
-          tn->log(5, SSTR("ERROR: failed to notify bidding information" << retcode));
-          return set_cr_error(retcode);
+          tn->log(5, SSTR("ERROR: failed to notify bidding information retcode=" << retcode));
         }
 
         set_status("sleeping");
@@ -2211,7 +2233,7 @@ int RGWRemoteMetaLog::store_sync_info(const DoutPrefixProvider *dpp, const rgw_m
 static RGWPeriodHistory::Cursor get_period_at(const DoutPrefixProvider *dpp,
                                               rgw::sal::RadosStore* store,
                                               const rgw_meta_sync_info& info,
-					      optional_yield y)
+					      optional_yield y, rgw::sal::ConfigStore* cfgstore)
 {
   if (info.period.empty()) {
     // return an empty cursor with error=0
@@ -2234,14 +2256,14 @@ static RGWPeriodHistory::Cursor get_period_at(const DoutPrefixProvider *dpp,
 
   // read the period from rados or pull it from the master
   RGWPeriod period;
-  int r = store->svc()->mdlog->pull_period(dpp, info.period, period, y);
+  int r = store->svc()->mdlog->pull_period(dpp, info.period, period, y, cfgstore);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed to read period id "
         << info.period << ": " << cpp_strerror(r) << dendl;
     return RGWPeriodHistory::Cursor{r};
   }
   // attach the period to our history
-  cursor = store->svc()->mdlog->get_period_history()->attach(dpp, std::move(period), y);
+  cursor = store->svc()->mdlog->get_period_history()->attach(dpp, std::move(period), y, cfgstore);
   if (!cursor) {
     r = cursor.get_error();
     ldpp_dout(dpp, -1) << "ERROR: failed to read period history back to "
@@ -2250,7 +2272,7 @@ static RGWPeriodHistory::Cursor get_period_at(const DoutPrefixProvider *dpp,
   return cursor;
 }
 
-int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
+int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y, rgw::sal::ConfigStore* cfgstore)
 {
   if (store->svc()->zone->is_meta_master()) {
     return 0;
@@ -2384,7 +2406,7 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
       case rgw_meta_sync_info::StateSync:
         tn->log(20, "sync");
         // find our position in the period history (if any)
-        cursor = get_period_at(dpp, store, sync_status.sync_info, y);
+        cursor = get_period_at(dpp, store, sync_status.sync_info, y, cfgstore);
         r = cursor.get_error();
         if (r < 0) {
           return r;
@@ -2441,7 +2463,7 @@ int RGWCloneMetaLogCoroutine::operate(const DoutPrefixProvider *dpp)
           return state_receive_rest_response();
         }
 
-        if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+        if (op_ret == -ERR_INTERNAL_ERROR && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
           ldout(cct, 20) << __func__ << ": request IO error. retries=" << tries << dendl;
           continue;
         } else if (op_ret < 0) {
@@ -2548,7 +2570,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request(const DoutPrefixProvider *
 int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 {
   op_ret = http_op->wait(sync_env->dpp, &data, null_yield);
-  if (op_ret < 0 && op_ret != -EIO) {
+  if (op_ret < 0 && op_ret != -ERR_INTERNAL_ERROR) {
     error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
     ldpp_dout(sync_env->dpp, 5) << "failed to wait for op, ret=" << op_ret << dendl;
     http_op->put();
@@ -2558,7 +2580,7 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
   http_op->put();
   http_op = NULL;
 
-  if (op_ret == -EIO) {
+  if (op_ret == -ERR_INTERNAL_ERROR) {
     return 0;
   }
 

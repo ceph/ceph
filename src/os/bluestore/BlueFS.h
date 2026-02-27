@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef CEPH_OS_BLUESTORE_BLUEFS_H
 #define CEPH_OS_BLUESTORE_BLUEFS_H
 
@@ -32,6 +33,7 @@ enum {
   l_bluefs_wal_used_bytes,
   l_bluefs_slow_total_bytes,
   l_bluefs_slow_used_bytes,
+  l_bluefs_meta_ratio,
   l_bluefs_num_files,
   l_bluefs_log_bytes,
   l_bluefs_log_compactions,
@@ -86,9 +88,6 @@ enum {
   l_bluefs_wal_alloc_lat,
   l_bluefs_db_alloc_lat,
   l_bluefs_slow_alloc_lat,
-  l_bluefs_wal_alloc_max_lat,
-  l_bluefs_db_alloc_max_lat,
-  l_bluefs_slow_alloc_max_lat,
   l_bluefs_last,
 };
 
@@ -98,6 +97,13 @@ public:
 
   virtual ~BlueFSVolumeSelector() {
   }
+
+  /**
+  *  Update config parameters from the config database.
+  *
+  */
+  virtual void update_from_config(CephContext* cct) = 0;
+
   /**
   *  Method to learn a hint (aka logic level discriminator)  specific for
   *  BlueFS log
@@ -434,6 +440,9 @@ public:
     // NOTE: caller must call BlueFS::close_writer()
     ~FileWriter() {
       --file->num_writers;
+      for (unsigned i = 0; i < MAX_BDEV; ++i) {
+        delete iocv[i];
+      }
     }
 
     // note: BlueRocksEnv uses this append exclusively, so it's safe
@@ -547,8 +556,6 @@ private:
     l_bluefs_max_bytes_db,
   };
 
-  ceph::timespan max_alloc_lat[MAX_BDEV] = {ceph::make_timespan(0)};
-
   // cache
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::nodes.lock");
@@ -563,7 +570,7 @@ private:
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::log.lock");
     uint64_t seq_live = 1;   //seq that log is currently writing to; mirrors dirty.seq_live
-    FileWriter *writer = 0;
+    FileWriter *writer = nullptr;
     bluefs_transaction_t t;
     bool uses_envelope_mode = false; // true if any file is in envelope mode
   } log;
@@ -805,6 +812,7 @@ public:
   int revert_wal_to_plain();
 
   uint64_t get_used();
+  int64_t get_used_non_bluefs();
   uint64_t get_block_device_size(unsigned id);
   uint64_t get_free(unsigned id);
   uint64_t get_used(unsigned id);
@@ -860,10 +868,16 @@ public:
     vselector.reset(s);
   }
   void dump_volume_selector(std::ostream& sout) {
+    ceph_assert(vselector);
     vselector->dump(sout);
+  }
+  void update_volume_selector_from_config() {
+    ceph_assert(vselector);
+    vselector->update_from_config(cct);
   }
   void get_vselector_paths(const std::string& base,
                            BlueFSVolumeSelector::paths& res) const {
+    ceph_assert(vselector);
     return vselector->get_paths(base, res);
   }
 
@@ -950,6 +964,7 @@ public:
     uint64_t _slow_total)
     : wal_total(_wal_total), db_total(_db_total), slow_total(_slow_total) {}
 
+  void update_from_config(CephContext* cct) override {}
   void* get_hint_for_log() const override;
   void* get_hint_by_dir(std::string_view dirname) const override;
 
@@ -985,6 +1000,218 @@ public:
 
   void get_paths(const std::string& base, paths& res) const override;
 };
+
+class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
+{
+  template <class T, size_t MaxX, size_t MaxY>
+  class matrix_2d {
+    T values[MaxX][MaxY];
+  public:
+    matrix_2d() {
+      clear();
+    }
+    T& at(size_t x, size_t y) {
+      ceph_assert(x < MaxX);
+      ceph_assert(y < MaxY);
+
+      return values[x][y];
+    }
+    size_t get_max_x() const {
+      return MaxX;
+    }
+    size_t get_max_y() const {
+      return MaxY;
+    }
+    void clear() {
+      memset(values, 0, sizeof(values));
+    }
+  };
+
+  enum {
+    // use 0/nullptr as unset indication
+    LEVEL_FIRST = 1,
+    LEVEL_LOG = LEVEL_FIRST, // BlueFS log
+    LEVEL_WAL,
+    LEVEL_DB,
+    LEVEL_SLOW,
+    LEVEL_MAX
+  };
+  // add +1 row for per-level actual (taken from file size) total
+  // add +1 column for corresponding per-device totals
+  typedef matrix_2d<std::atomic<uint64_t>, BlueFS::MAX_BDEV + 1, LEVEL_MAX - LEVEL_FIRST + 1> per_level_per_dev_usage_t;
+
+  per_level_per_dev_usage_t per_level_per_dev_usage;
+  // file count per level, add +1 to keep total file count
+  std::atomic<uint64_t> per_level_files[LEVEL_MAX - LEVEL_FIRST + 1] = { 0 };
+
+  // Note: maximum per-device totals below might be smaller than corresponding
+  // perf counters by up to a single alloc unit (1M) due to superblock extent.
+  // The later is not accounted here.
+  per_level_per_dev_usage_t per_level_per_dev_max;
+
+  uint64_t l_totals[LEVEL_MAX - LEVEL_FIRST];
+  uint64_t db_avail4slow = 0;
+  uint64_t level0_size = 0;
+  uint64_t level_base = 0;
+  uint64_t level_multiplier = 0;
+  bool new_pol = false;
+  size_t extra_level = 0;
+  enum {
+    OLD_POLICY,
+    USE_SOME_EXTRA
+  };
+
+public:
+  RocksDBBlueFSVolumeSelector(
+    uint64_t _wal_total,
+    uint64_t _db_total,
+    uint64_t _slow_total,
+    uint64_t _level0_size,
+    uint64_t _level_base,
+    uint64_t _level_multiplier,
+    bool _new_pol) {
+
+    l_totals[LEVEL_LOG - LEVEL_FIRST] = 0; // not used at the moment
+    l_totals[LEVEL_WAL - LEVEL_FIRST] = _wal_total;
+    l_totals[LEVEL_DB - LEVEL_FIRST] = _db_total;
+    l_totals[LEVEL_SLOW - LEVEL_FIRST] = _slow_total;
+
+    level0_size = _level0_size;
+    level_base = _level_base;
+    level_multiplier = _level_multiplier;
+
+    new_pol = _new_pol;
+  }
+
+  void update_from_config(CephContext* cct) override
+  {
+    if (!new_pol) {
+      return;
+    }
+
+    db_avail4slow = 0;
+    extra_level = 0;
+    double reserved_factor =
+      cct->_conf->bluestore_volume_selection_reserved_factor;
+    uint64_t reserved = cct->_conf->bluestore_volume_selection_reserved;
+
+    auto db_total = l_totals[LEVEL_DB - LEVEL_FIRST];
+    // Calculating how much extra space is available at DB volume.
+    // Depending on the presence of explicit reserved size specification it might be either
+    // * DB volume size - reserved
+    // or
+    // * DB volume size - sum_max_level_size(0, L-1) - max_level_size(L) * reserved_factor
+    if (!reserved) {
+      uint64_t prev_levels = level0_size;
+      uint64_t cur_level = level_base;
+      extra_level = 1;
+      do {
+        uint64_t next_level = cur_level * level_multiplier;
+        uint64_t next_threshold = prev_levels + cur_level + next_level;
+        ++extra_level;
+        if (db_total <= next_threshold) {
+          uint64_t cur_threshold = prev_levels + cur_level * reserved_factor;
+          db_avail4slow = cur_threshold < db_total ? db_total - cur_threshold : 0;
+          break;
+        }
+        else {
+          prev_levels += cur_level;
+          cur_level = next_level;
+        }
+      } while (true);
+    }
+    else {
+      db_avail4slow = reserved < db_total ? db_total - reserved : 0;
+      extra_level = 0;
+    }
+  }
+
+  uint64_t get_available_extra() const {
+    return db_avail4slow;
+  }
+  uint64_t get_extra_level() const {
+    return extra_level;
+  }
+  void* get_hint_for_log() const override {
+    return  reinterpret_cast<void*>(LEVEL_LOG);
+  }
+  void* get_hint_by_dir(std::string_view dirname) const override;
+
+  void add_usage(void* hint, const bluefs_extent_t& extent) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    auto& cur = per_level_per_dev_usage.at(extent.bdev, pos);
+    auto& max = per_level_per_dev_max.at(extent.bdev, pos);
+    uint64_t v = cur.fetch_add(extent.length) + extent.length;
+    while (v > max) {
+      max.exchange(v);
+    }
+    {
+      //update per-device totals
+      auto& cur = per_level_per_dev_usage.at(extent.bdev, LEVEL_MAX - LEVEL_FIRST);
+      auto& max = per_level_per_dev_max.at(extent.bdev, LEVEL_MAX - LEVEL_FIRST);
+      uint64_t v = cur.fetch_add(extent.length) + extent.length;
+      while (v > max) {
+        max.exchange(v);
+      }
+    }
+  }
+  void sub_usage(void* hint, const bluefs_extent_t& extent) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    auto& cur = per_level_per_dev_usage.at(extent.bdev, pos);
+    ceph_assert(cur >= extent.length);
+    cur -= extent.length;
+
+    //update per-device totals
+    auto& cur2 = per_level_per_dev_usage.at(extent.bdev, LEVEL_MAX - LEVEL_FIRST);
+    ceph_assert(cur2 >= extent.length);
+    cur2 -= extent.length;
+  }
+  void add_usage(void* hint, uint64_t size_more, bool upd_files) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
+    uint64_t v = cur.fetch_add(size_more) + size_more;
+    while (v > max) {
+      max.exchange(v);
+    }
+    if (upd_files) {
+      ++per_level_files[pos];
+      ++per_level_files[LEVEL_MAX - LEVEL_FIRST];
+    }
+  }
+  void sub_usage(void* hint, uint64_t size_less, bool upd_files) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    ceph_assert(cur >= size_less);
+    cur -= size_less;
+    if (upd_files) {
+      ceph_assert(per_level_files[pos] > 0);
+      --per_level_files[pos];
+      ceph_assert(per_level_files[LEVEL_MAX - LEVEL_FIRST] > 0);
+      --per_level_files[LEVEL_MAX - LEVEL_FIRST];
+    }
+  }
+
+  uint8_t select_prefer_bdev(void* h) override;
+  void get_paths(
+    const std::string& base,
+    BlueFSVolumeSelector::paths& res) const override;
+
+  void dump(std::ostream& sout) override;
+  BlueFSVolumeSelector* clone_empty() const override;
+  bool compare(BlueFSVolumeSelector* other) override;
+};
+
 /**
  * Directional graph of locks.
  * Vertices - Locks. Edges (directed) - locking progression.

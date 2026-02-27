@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "key_layout.h"
 
@@ -27,7 +27,7 @@ void string_key_view_t::append_dedup(
   } else if (dedup_type == Type::MAX) {
     mut.copy_in_absolute(p_append, MARKER_MAX);
   } else {
-    ceph_abort("impossible path");
+    ceph_abort_msg("impossible path");
   }
 }
 

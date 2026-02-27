@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -68,7 +68,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  //  static void generate_test_instances(list<ACLOwner*>& o);
+  //  static list<ACLOwner> generate_test_instances();
   void set_days(const std::string& _days) { days = _days; }
   std::string get_days_str() const {
     return days;
@@ -542,7 +542,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWLifecycleConfiguration*>& o);
+  static std::list<RGWLifecycleConfiguration> generate_test_instances();
 
   void add_rule(const LCRule& rule);
 
@@ -562,18 +562,19 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
+namespace ceph::async { class spawn_throttle; }
+
 class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
   rgw::sal::Driver* driver;
   std::unique_ptr<rgw::sal::Lifecycle> sal_lc;
+  std::unique_ptr<rgw::sal::Restore> sal_restore;
   int max_objs{0};
   std::string *obj_names{nullptr};
   std::atomic<bool> down_flag = { false };
   std::string cookie;
 
 public:
-
-  class WorkPool;
 
   class LCWorker : public Thread
   {
@@ -583,14 +584,13 @@ public:
     int ix;
     std::mutex lock;
     std::condition_variable cond;
-    WorkPool* workpool{nullptr};
     /* save the target bucket names created as part of object transition
      * to cloud. This list is maintained for the duration of each RGWLC::process()
      * post which it is discarded. */
     std::set<std::string> cloud_targets;
+    time_t lc_start_time;
 
-  public:
-
+   public:
     using lock_guard = std::lock_guard<std::mutex>;
     using unique_lock = std::unique_lock<std::mutex>;
 
@@ -611,7 +611,6 @@ public:
 
     friend class RGWRados;
     friend class RGWLC;
-    friend class WorkQ;
   }; /* LCWorker */
 
   friend class RGWRados;
@@ -641,11 +640,13 @@ public:
   int process(int index, int max_lock_secs, LCWorker* worker, bool once);
   int process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     const std::string& bucket_entry_marker, bool once);
-  bool expired_session(time_t started);
+  bool expired_session(time_t started, time_t lc_start_time);
   time_t thread_stop_at();
   int list_lc_progress(std::string& marker, uint32_t max_entries,
 		       std::vector<rgw::sal::LCEntry>&,
 		       int& index);
+  int bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
+			bool once, boost::asio::yield_context yield);
   int bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
 			bool once);
   int bucket_lc_post(int index, int max_lock_sec,
@@ -657,13 +658,14 @@ public:
                         rgw::sal::Bucket* bucket,
                         const rgw::sal::Attrs& bucket_attrs,
                         RGWLifecycleConfiguration *config);
+  // remove a bucket from the lc list, and optionally update the bucket
+  // instance metadata to remove RGW_ATTR_LC
   int remove_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
-                           rgw::sal::Bucket* bucket,
-                           const rgw::sal::Attrs& bucket_attrs,
-			   bool merge_attrs = true);
+                           rgw::sal::Bucket* bucket, bool update_attrs);
 
   CephContext *get_cct() const override { return cct; }
   rgw::sal::Lifecycle* get_lc() const { return sal_lc.get(); }
+  rgw::sal::Restore* get_restore() const { return sal_restore.get(); }
   unsigned get_subsys() const;
   std::ostream& gen_prefix(std::ostream& out) const;
 
@@ -671,6 +673,8 @@ public:
 
   int handle_multipart_expiration(rgw::sal::Bucket* target,
 				  const std::multimap<std::string, lc_op>& prefix_map,
+				  ceph::async::spawn_throttle& workpool,
+				  boost::asio::yield_context yield,
 				  LCWorker* worker, time_t stop_at, bool once);
 };
 

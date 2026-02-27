@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=2 sw=2 expandtab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -311,7 +311,9 @@ class DaosBucket : public StoreBucket {
   virtual int sync_owner_stats(const DoutPrefixProvider* dpp,
                                optional_yield y) override;
   virtual int check_bucket_shards(const DoutPrefixProvider* dpp) override;
-  virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_user,
+  virtual int chown(const DoutPrefixProvider* dpp,
+                    const rgw_owner& new_user,
+                    const std::string& new_owner_name,
                     optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
                        ceph::real_time mtime) override;
@@ -612,8 +614,8 @@ class DaosObject : public StoreObject {
       RGWObjCategory category, uint64_t olh_epoch,
       boost::optional<ceph::real_time> delete_at, std::string* version_id,
       std::string* tag, std::string* etag, void (*progress_cb)(off_t, void*),
-      void* progress_data, const DoutPrefixProvider* dpp,
-      optional_yield y) override;
+      void* progress_data, rgw::sal::DataProcessorFactory* dp_factory,
+      const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
   virtual int set_acl(const RGWAccessControlPolicy& acl) override {
     acls = acl;
@@ -654,15 +656,14 @@ class DaosObject : public StoreObject {
                                   optional_yield y) override;
   virtual int restore_obj_from_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
-			   rgw_placement_rule& placement_rule,
-			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
 			   RGWObjTier& tier_config,
 			   uint64_t olh_epoch,
 			   std::optional<uint64_t> days,
+		           bool& in_progress,
+		           uint64_t& size,
 			   const DoutPrefixProvider* dpp,
-			   optional_yield y,
-			   uint32_t flags) override;
+			   optional_yield y) override;
   virtual bool placement_rules_match(rgw_placement_rule& r1,
                                      rgw_placement_rule& r2) override;
   virtual int dump_obj_layout(const DoutPrefixProvider* dpp, optional_yield y,
@@ -937,6 +938,8 @@ class DaosStore : public StoreDriver {
   virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
   virtual int cluster_stat(RGWClusterStat& stats) override;
   virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
+  virtual std::unique_ptr<Restore> get_restore(const int n_objs,
+		 const std::vector<std::string_view>& obj_names) override;
   virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
   virtual std::unique_ptr<Notification> get_notification(
       rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
@@ -953,6 +956,7 @@ class DaosStore : public StoreDriver {
       std::string& _req_id,
       optional_yield y) override;
   virtual RGWLC* get_rgwlc(void) override { return NULL; }
+  virtual RGWRestore* get_rgwrestore(void) override { return NULL; }
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override {
     return NULL;
   }

@@ -1,0 +1,33 @@
+<cds-inline-notification
+  [notificationObj]="{
+                      type: 'warning',
+                      title: 'CephFS Mirroring module is not enabled',
+                      message: 'To create mirror links and configure replication, the CephFS Mirroring module must be enabled on this cluster.',
+                      lowContrast: true,
+                      showClose: false
+                    }"
+  class="mt-2 mb-2 full-width padding-inline-0"
+  i18n></cds-inline-notification>
+<cds-tile>
+  <p class="cds--type-heading-compact-01"
+     i18n>Enable CephFS Mirroring</p>
+  <p class="cds--type-body-compact-01"
+     i18n>Turn on CephFS Mirroring to start creating mirror links and synchronizing data across clusters. After enabling, you can add mirror links.</p>
+  <button cdsButton="primary"
+          (click)="enableModule()"
+          i18n>Enable CephFS Mirroring</button>
+</cds-tile>
+<div cdsGrid
+     class="mt-5">
+  <div cdsRow>
+    <div cdsCol>
+      <img src="assets/empty-state.png"
+           alt="no-mirror-links" />
+    </div>
+  </div>
+  <div cdsRow>
+    <div cdsCol>
+      <p class="cds--body-compact-02">No CephFS mirror links available</p>
+    </div>
+  </div>
+</div>

@@ -724,7 +724,7 @@ login_control:
   - name: itstaff
     category: group
     access: rw
-  - name: caldor
+  - name: "caldor hart"
     category: user
     access: admin
   - name: delbard
@@ -742,12 +742,65 @@ login_control:
     assert share.login_control[1].name == 'itstaff'
     assert share.login_control[1].category == enums.LoginCategory.GROUP
     assert share.login_control[1].access == enums.LoginAccess.READ_WRITE
-    assert share.login_control[2].name == 'caldor'
+    assert share.login_control[2].name == 'caldor hart'
     assert share.login_control[2].category == enums.LoginCategory.USER
     assert share.login_control[2].access == enums.LoginAccess.ADMIN
     assert share.login_control[3].name == 'delbard'
     assert share.login_control[3].category == enums.LoginCategory.USER
     assert share.login_control[3].access == enums.LoginAccess.NONE
+
+
+def test_tls_credential():
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.tls.credential
+tls_credential_id: tc1
+credential_type: cert
+value: |
+  -----BEGIN CERTIFICATE-----
+  MIIGFjCCA/6gAwIBAgIUZLL4QTx5ESBYQYS761DcZ7S1c24wDQYJKoZIhvcNAQEN
+  BQAwgYgxCzAJBgNVBAYTAlVTMQswCQYDVQQIDAJNQTEPMA0GA1UEBwwGTG93ZWxs
+  MR8wHQYDVQQKDBZCaXJjaCBTdHJlZXQgQ29tcHV0aW5nMRYwFAYDVQQDDA1Kb2hu
+  IE11bGxpZ2FuMSIwIAYJKoZIhvcNAQkBFhNqb2hubUBhc3luY2hyb25vLnVzMB4X
+  DTI1MDYzMDE5MzAwM1oXDTI2MDcyNDE5MzAwM1owbjELMAkGA1UEBhMCVVMxCzAJ
+  BgNVBAgMAk1BMQ8wDQYDVQQHDAZMb3dlbGwxHzAdBgNVBAoMFkJpcmNoIFN0cmVl
+  dCBDb21wdXRpbmcxIDAeBgNVBAMMF0ROUzpjZXBoMC5jeC5mZG9wZW4ubmV0MIIC
+  IjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEApZYqA73a8ojX7QsCJHiXh0J2
+  KKEqDU6k0Yjoie9raYCP/aaiJpffSjhKl1rYuIqjBUG5D0tdT3sRw3m96Nw6gkhM
+  5J8r02muQpJqmzPmfAn75IVjRkJ9OsHyS1Mf9GADTfv3pMBkwqqrGb8NxWQXeS4s
+  PLPBv8SI4ozFNwwlEvZ0kesI4Qf0VRZ1ieSzAArjDWWFX8kURMt6UzN8opnxGvzT
+  cfY4J0iKCYBK6Vqmf/OrMg3IjDojKaQqBlMPAQURyiYeF1hfDrcqGQC6S4Iz5mDt
+  ZsMywFQFlEhkWkhJdMMkY4bqvn01BKXl3WY0HY5pPslRWWfj4aQeBb8DFH+rFeTf
+  I/S02ECE/SKc+O7JJa23HtzJspiaK/MV6XQUDDWYdFQEfLhQb3y3RuYJ7C0WZDMc
+  EmJHuB1D0/RS5xWiukTyRbOFf0Dbzn07PPUycE5BaCJ/ekwpMBvYQ6uCZq19CRAE
+  v5j7oyC1+rjOCKpTBPGCFWbODJmf5LrfcZLX/VtR+vu3a28OKmbxvdQ3uzLPwjFx
+  szzsJRn4URyI5hxl3K0w5Yptd/mvdnSeQTnX9TmMFE/G+EdlGxZtc695mOvWX6gK
+  ezwSqwtxVAZ18x/we6NZUkeuaC4+Xec8HoowHYmfRUH1P69ZXAuKKSIZizuvDYIF
+  tfcDeDY6s0wp3SKQ1bUCAwEAAaOBkDCBjTAJBgNVHRMEAjAAMEAGA1UdEQQ5MDeC
+  E2NlcGgwLmN4LmZkb3Blbi5uZXSCGnJjLnNtYi5jZXBoMC5jeC5mZG9wZW4ubmV0
+  hwTAqEzIMB0GA1UdDgQWBBR9bOCw+6pMkeS1HnAuCFhmoM7NPzAfBgNVHSMEGDAW
+  gBRsCQk9OUjWypZgtyH+5LxzZ4eBJDANBgkqhkiG9w0BAQ0FAAOCAgEAF6u76+6C
+  JkQEqBSYU09JQT8JDWX3AUZDXoCIpv2F1UD26ueAIaYD1dkpKDFg0UOOBwC7TiR9
+  uf210HtY5ic++Bm5xavhRk65FGwypv65SqjfehqTiRU+b0my0LG2OaAVrUcKWdbn
+  ZvwiBr1I7Wyn0MV1Ko7sqZh0j7Y4kPXCa2D8QG1inr9YBQQpid7CUwNeS5eYAVbP
+  gI4zTYKKvJMYPr4lTqsweCDOpctC7fwVb43XGTRVhVXQdOux9n5emROx/Ok0d2xX
+  mi5rlUfMxlrWjs7KK336x8z31i3w+1xc1ESaF0eP1byikvpbYBN1dEYahilMaSVl
+  3IpDYCwCFMU+ZZUZdqVyQQL+lTxqsc2orzzFgfv594hkEdYNlJ/z/f1b8idYk3g1
+  WTrixgd+KYcHoCCS8pHFVs8lankBqQGMckZmIyzfP7RxY43j6XTV+4791O4o0waZ
+  I5AwhUmgJj7G2Mp1jacMlHtZPqC0iDlci5fh6KpzVjPzrqA2sIN+9yJAlX8teJnC
+  adKnxoY+AbqwLLTHfGx/W0W8jUxmea0eYufgUqxoQv5qdREafcuchGM36bKukVYb
+  L3pqleYyvguwxxcc2MJvXjgAiZ5EsNJ2TCr4Mt0mZP406BhEQxfvpBSdRXTiHGJ/
+  KNDwOknnnEhdXshW5M8G8ZhkahG8YABHTBw=
+  -----END CERTIFICATE-----
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+    tcred = loaded[0]
+    assert isinstance(tcred, smb.resources.TLSCredential)
+    assert tcred.tls_credential_id == 'tc1'
+    assert tcred.credential_type == enums.TLSCredentialType.CERT
 
 
 @pytest.mark.parametrize(
@@ -838,3 +891,249 @@ def test_load_text(params):
     else:
         with pytest.raises(params['exc_type'], match=params['error']):
             smb.resources.load_text(params['txt'])
+
+
+@pytest.mark.parametrize("max_conn", [0, 25])
+def test_share_with_comment_and_max_connections(max_conn):
+    import yaml
+
+    yaml_str = f"""
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: goodshare
+name: Good Share
+cephfs:
+    volume: myvol
+    path: /good
+comment: This is a test share
+max_connections: {max_conn}
+"""
+
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    share = loaded[0]
+    assert share.comment == "This is a test share"
+    assert share.max_connections == max_conn
+
+
+def test_share_with_invalid_max_connections():
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: badshare
+name: Bad Share
+cephfs:
+    volume: myvol
+    path: /bad
+max_connections: -10
+"""
+    data = yaml.safe_load_all(yaml_str)
+    with pytest.raises(
+        ValueError,
+        match="max_connections must be 0 or a non-negative integer",
+    ):
+        smb.resources.load(data)
+
+
+def test_share_with_invalid_comment():
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: weirdshare
+name: Weird Share
+cephfs:
+    volume: myvol
+    path: /weird
+comment: "Invalid\\nComment"
+"""
+    data = yaml.safe_load_all(yaml_str)
+    with pytest.raises(ValueError, match="Comment cannot contain newlines"):
+        smb.resources.load(data)
+
+
+def test_share_with_qos():
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: qoscluster
+share_id: qostest
+name: QoS Test Share
+cephfs:
+    volume: myvol
+    path: /qos
+    qos:
+        read_iops_limit: 100
+        write_iops_limit: 200
+        read_bw_limit: 1048576
+        write_bw_limit: 2097152
+        read_delay_max: 20
+        write_delay_max: 30
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    share = loaded[0]
+    assert share.cephfs.qos is not None
+    assert share.cephfs.qos.read_iops_limit == 100
+    assert share.cephfs.qos.write_iops_limit == 200
+    assert share.cephfs.qos.read_bw_limit == 1048576
+    assert share.cephfs.qos.write_bw_limit == 2097152
+    assert share.cephfs.qos.read_delay_max == 20
+    assert share.cephfs.qos.write_delay_max == 30
+
+
+def test_share_update_qos():
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/qos',
+            qos=smb.resources.QoSConfig(
+                read_iops_limit=100,
+                write_iops_limit=200,
+                read_delay_max=5,
+                write_delay_max=30,
+            ),
+        ),
+    )
+
+    # Update with new QoS values
+    updated_cephfs = share.cephfs.update_qos(
+        read_bw_limit=1048576,
+        write_bw_limit=2097152,
+        read_iops_limit=300,
+        read_delay_max=15,
+    )
+
+    assert updated_cephfs.qos is not None
+    assert updated_cephfs.qos.read_iops_limit == 300  # new value
+    assert updated_cephfs.qos.write_iops_limit == 200  # preserved original
+    assert updated_cephfs.qos.read_bw_limit == 1048576  # new value
+    assert updated_cephfs.qos.write_bw_limit == 2097152  # new value
+    assert updated_cephfs.qos.read_delay_max == 15  # new value
+    assert updated_cephfs.qos.write_delay_max == 30  # preserved original
+
+    # Verify share with updated QoS works
+    data = share.to_simplified()
+    data.pop("resource_type", None)
+    updated_share = smb.resources.Share(**{**data, 'cephfs': updated_cephfs})
+    assert updated_share.cephfs.qos.read_bw_limit == 1048576
+    assert updated_share.cephfs.qos.read_delay_max == 15
+
+
+def test_share_qos_remove():
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/qos',
+            qos=smb.resources.QoSConfig(
+                read_iops_limit=100,
+                write_iops_limit=200,
+                read_delay_max=5,
+                write_delay_max=30,
+            ),
+        ),
+    )
+
+    # Disable QoS by setting all limits to 0
+    updated_cephfs = share.cephfs.update_qos(
+        read_iops_limit=0,
+        write_iops_limit=0,
+        read_bw_limit=0,
+        write_bw_limit=0,
+        read_delay_max=0,
+        write_delay_max=0,
+    )
+
+    # Verify QoS is completely removed
+    assert updated_cephfs.qos is None
+
+
+def test_share_qos_default_delay():
+    """Test that delay_max defaults to 30 when not specified"""
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/qos',
+            qos=smb.resources.QoSConfig(
+                read_iops_limit=100,
+                write_iops_limit=200
+                # delay_max not specified - should use defaults
+            ),
+        ),
+    )
+
+    assert share.cephfs.qos is not None
+    assert share.cephfs.qos.read_delay_max == 30  # Default value
+    assert share.cephfs.qos.write_delay_max == 30  # Default value
+
+
+def test_share_qos_max_allowed_delay():
+    """Test that delay_max values exceeding 300 will be capped to 300"""
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/qos',
+            qos=smb.resources.QoSConfig(
+                read_iops_limit=100,
+                write_iops_limit=200,
+                read_delay_max=30,
+                write_delay_max=30,
+            ),
+        ),
+    )
+
+    updated_cephfs = share.cephfs.update_qos(read_delay_max=350)
+
+    assert updated_cephfs.qos is not None
+    assert updated_cephfs.qos.read_delay_max == 300  # Capped value
+
+
+def test_share_qos_max_allowed_iops_and_bandwidth():
+    """Test that iops and bandwidth values exceeding limits will be capped to IOPS_LIMIT_MAX and BYTES_LIMIT_MAX"""
+    IOPS_LIMIT_MAX = 1_000_000
+    BYTES_LIMIT_MAX = 1 << 40  # 1 TB
+
+    share = smb.resources.Share(
+        cluster_id="qoscluster",
+        share_id="qostest",
+        name="QoS Test Share",
+        cephfs=smb.resources.CephFSStorage(
+            volume="myvol",
+            path="/qos",
+            qos=smb.resources.QoSConfig(
+                read_iops_limit=100,
+                write_iops_limit=200,
+                read_delay_max=30,
+                write_delay_max=30,
+            ),
+        ),
+    )
+
+    updated_cephfs = share.cephfs.update_qos(
+        read_iops_limit=1_500_000_000,  # way above limit
+        write_bw_limit=2_000_000_000_000,  # ~2 TB, way above limit
+    )
+
+    assert updated_cephfs.qos is not None
+    assert updated_cephfs.qos.read_iops_limit == IOPS_LIMIT_MAX  # capped
+    assert updated_cephfs.qos.write_bw_limit == BYTES_LIMIT_MAX  # capped

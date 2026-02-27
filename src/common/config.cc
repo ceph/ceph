@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -714,6 +715,9 @@ int md_config_t::parse_argv(ConfigValues& values,
     }
     else if (ceph_argparse_witharg(args, i, &val, "--client_mountpoint", "-r", (char*)NULL)) {
       set_val_or_die(values, tracker, "client_mountpoint", val.c_str());
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--service_unique_id", (char*)NULL)) {
+      set_val_or_die(values, tracker, "service_unique_id", val.c_str());
     }
     else {
       int r = parse_option(values, tracker, args, i, NULL, level);

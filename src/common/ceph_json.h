@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <typeindex>
+#include "include/encoding.h"
 #include <include/types.h>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
@@ -16,7 +17,7 @@
 
 #include "json_spirit/json_spirit.h"
 
-#include "Formatter.h"
+#include "JSONFormatter.h"
 
 
 
@@ -826,31 +827,8 @@ public:
     }
   }
 
-  void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(2, 1, bl);
-    encode((uint8_t)type, bl);
-    encode(value.str, bl);
-    encode(arr, bl);
-    encode(obj, bl);
-    encode(value.quoted, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(2, bl);
-    uint8_t t;
-    decode(t, bl);
-    type = (Type)t;
-    decode(value.str, bl);
-    decode(arr, bl);
-    decode(obj, bl);
-    if (struct_v >= 2) {
-      decode(value.quoted, bl);
-    } else {
-      value.quoted = true;
-    }
-    DECODE_FINISH(bl);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
 
   void dump(ceph::Formatter *f) const {
     switch (type) {
@@ -879,32 +857,34 @@ public:
         break;
     }
   }
-  static void generate_test_instances(std::list<JSONFormattable*>& o) {
-    o.push_back(new JSONFormattable);
-    o.push_back(new JSONFormattable);
-    o.back()->set_type(FMT_VALUE);
-    o.back()->value.str = "foo";
-    o.back()->value.quoted = true;
-    o.push_back(new JSONFormattable);
-    o.back()->set_type(FMT_VALUE);
-    o.back()->value.str = "foo";
-    o.back()->value.quoted = false;
-    o.push_back(new JSONFormattable);
-    o.back()->set_type(FMT_ARRAY);
-    o.back()->arr.push_back(JSONFormattable());
-    o.back()->arr.back().set_type(FMT_VALUE);
-    o.back()->arr.back().value.str = "foo";
-    o.back()->arr.back().value.quoted = true;
-    o.back()->arr.push_back(JSONFormattable());
-    o.back()->arr.back().set_type(FMT_VALUE);
-    o.back()->arr.back().value.str = "bar";
-    o.back()->arr.back().value.quoted = true;
-    o.push_back(new JSONFormattable);
-    o.back()->set_type(FMT_OBJ);
-    o.back()->obj["foo"] = JSONFormattable();
-    o.back()->obj["foo"].set_type(FMT_VALUE);
-    o.back()->obj["foo"].value.str = "bar";
-    o.back()->obj["foo"].value.quoted = true;
+  static std::list<JSONFormattable> generate_test_instances() {
+    std::list<JSONFormattable> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().set_type(FMT_VALUE);
+    o.back().value.str = "foo";
+    o.back().value.quoted = true;
+    o.emplace_back();
+    o.back().set_type(FMT_VALUE);
+    o.back().value.str = "foo";
+    o.back().value.quoted = false;
+    o.emplace_back();
+    o.back().set_type(FMT_ARRAY);
+    o.back().arr.push_back(JSONFormattable());
+    o.back().arr.back().set_type(FMT_VALUE);
+    o.back().arr.back().value.str = "foo";
+    o.back().arr.back().value.quoted = true;
+    o.back().arr.push_back(JSONFormattable());
+    o.back().arr.back().set_type(FMT_VALUE);
+    o.back().arr.back().value.str = "bar";
+    o.back().arr.back().value.quoted = true;
+    o.emplace_back();
+    o.back().set_type(FMT_OBJ);
+    o.back().obj["foo"] = JSONFormattable();
+    o.back().obj["foo"].set_type(FMT_VALUE);
+    o.back().obj["foo"].value.str = "bar";
+    o.back().obj["foo"].value.quoted = true;
+    return o;
   }
 
   const std::string& val() const {

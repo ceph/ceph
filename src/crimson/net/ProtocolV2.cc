@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "ProtocolV2.h"
 
@@ -908,7 +908,7 @@ void ProtocolV2::execute_connecting()
           logger().info("[Test] got BLOCK");
           return conn.interceptor->blocker.block();
         default:
-          ceph_abort("unexpected action from trap");
+          ceph_abort_msg("unexpected action from trap");
           return seastar::now();
         }
       });;
@@ -1041,7 +1041,7 @@ void ProtocolV2::execute_connecting()
         return seastar::now();
        }
        default: {
-        ceph_abort("impossible next step");
+        ceph_abort_msg("impossible next step");
        }
       }
     }).handle_exception([this](std::exception_ptr eptr) {
@@ -1056,8 +1056,11 @@ seastar::future<> ProtocolV2::_auth_bad_method(int r)
 {
   // _auth_bad_method() logic
   ceph_assert(r < 0);
-  auto [allowed_methods, allowed_modes] =
+  auto allowed_methods =
       messenger.get_auth_server()->get_supported_auth_methods(conn.get_peer_type());
+  auto allowed_modes =
+      messenger.get_auth_server()->get_supported_con_modes(conn.get_peer_type(),
+							  auth_meta->auth_method);
   auto bad_method = AuthBadMethodFrame::Encode(
       auth_meta->auth_method, r, allowed_methods, allowed_modes);
   logger().warn("{} WRITE AuthBadMethodFrame: method={}, result={}, "
@@ -1693,7 +1696,7 @@ void ProtocolV2::execute_accepting()
         execute_server_wait();
         break;
        default:
-        ceph_abort("impossible next step");
+        ceph_abort_msg("impossible next step");
       }
     }).handle_exception([this](std::exception_ptr eptr) {
       const char *e_what;

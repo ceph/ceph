@@ -9,6 +9,7 @@ from typing import (
     List,
     Mapping,
     NamedTuple,
+    no_type_check,
     Optional,
     Sequence,
     Set,
@@ -407,9 +408,7 @@ def _extract_target_func(
     return f, extra_args
 
 
-class CLICommand(object):
-    COMMANDS = {}  # type: Dict[str, CLICommand]
-
+class CLICommandBase(object):
     def __init__(self,
                  prefix: str,
                  perm: str = 'rw',
@@ -473,11 +472,14 @@ class CLICommand(object):
         self.desc, self.arg_spec, self.first_default, self.args = \
             self._load_func_metadata(f)
 
-    def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
+    def _register_handler(self, func: HandlerFuncType) -> HandlerFuncType:
         self.store_func_metadata(func)
+        self.COMMANDS[self.prefix] = self  # type: ignore[attr-defined]
         self.func = func
-        self.COMMANDS[self.prefix] = self
         return self.func
+
+    def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
+        return self._register_handler(func)
 
     def _get_arg_value(self, kwargs_switch: bool, key: str, val: Any) -> Tuple[bool, str, Any]:
         def start_kwargs() -> bool:
@@ -501,7 +503,7 @@ class CLICommand(object):
         special_args = set()
         kwargs_switch = False
         for index, (name, tp) in enumerate(self.arg_spec.items()):
-            if name in CLICommand.KNOWN_ARGS:
+            if name in self.KNOWN_ARGS:
                 special_args.add(name)
                 continue
             assert self.first_default >= 0
@@ -539,16 +541,23 @@ class CLICommand(object):
         }
 
     @classmethod
+    def Read(cls, prefix: str, poll: bool = False) -> 'CLICommandBase':
+        return cls(prefix, "r", poll)
+
+    @classmethod
+    def Write(cls, prefix: str, poll: bool = False) -> 'CLICommandBase':
+        return cls(prefix, "w", poll)
+
+    @classmethod
     def dump_cmd_list(cls) -> List[Dict[str, Union[str, bool]]]:
-        return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]
+        return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]  # type: ignore[attr-defined]
 
-
-def CLIReadCommand(prefix: str, poll: bool = False) -> CLICommand:
-    return CLICommand(prefix, "r", poll)
-
-
-def CLIWriteCommand(prefix: str, poll: bool = False) -> CLICommand:
-    return CLICommand(prefix, "w", poll)
+    @classmethod
+    @no_type_check
+    def make_registry_subtype(cls, name) -> 'CLICommandBase':
+        return type(name, (cls,), {
+            'COMMANDS': {},
+        })
 
 
 def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerFuncType]:
@@ -656,55 +665,6 @@ class Option(Dict):
         super(Option, self).__init__(
             (k, v) for k, v in vars().items()
             if k != 'self' and v is not None)
-
-
-class Command(dict):
-    """
-    Helper class to declare options for COMMANDS list.
-
-    It also allows to specify prefix and args separately, as well as storing a
-    handler callable.
-
-    Usage:
-    >>> def handler(): return 0, "", ""
-    >>> Command(prefix="example",
-    ...         handler=handler,
-    ...         perm='w')
-    {'perm': 'w', 'poll': False}
-    """
-
-    def __init__(
-            self,
-            prefix: str,
-            handler: HandlerFuncType,
-            perm: str = "rw",
-            poll: bool = False,
-    ):
-        super().__init__(perm=perm,
-                         poll=poll)
-        self.prefix = prefix
-        self.handler = handler
-
-    @staticmethod
-    def returns_command_result(instance: Any,
-                               f: HandlerFuncType) -> Callable[..., HandleCommandResult]:
-        @functools.wraps(f)
-        def wrapper(mgr: Any, *args: Any, **kwargs: Any) -> HandleCommandResult:
-            retval, stdout, stderr = f(instance or mgr, *args, **kwargs)
-            return HandleCommandResult(retval, stdout, stderr)
-        wrapper.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
-        return wrapper
-
-    def register(self, instance: bool = False) -> HandlerFuncType:
-        """
-        Register a CLICommand handler. It allows an instance to register bound
-        methods. In that case, the mgr instance is not passed, and it's expected
-        to be available in the class instance.
-        It also uses HandleCommandResult helper to return a wrapped a tuple of 3
-        items.
-        """
-        cmd = CLICommand(prefix=self.prefix, perm=self['perm'])
-        return cmd(self.returns_command_result(instance, self.handler))
 
 
 class CPlusPlusHandler(logging.Handler):
@@ -885,20 +845,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     from their active peer), and to configuration settings (read only).
     """
 
-    MODULE_OPTIONS: List[Option] = []
-    MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
-
     def __init__(self, module_name: str, capsule: Any):
         super(MgrStandbyModule, self).__init__(capsule)
         self.module_name = module_name
-
-        # see also MgrModule.__init__()
-        for o in self.MODULE_OPTIONS:
-            if 'default' in o:
-                if 'type' in o:
-                    self.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
-                else:
-                    self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
         # mock does not return a str
         mgr_level = cast(str, self.get_ceph_option("debug_mgr"))
@@ -911,7 +860,14 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         self._logger = self.getLogger()
 
     @classmethod
+    @no_type_check
     def _register_options(cls, module_name: str) -> None:
+        if not hasattr(cls, 'MODULE_OPTIONS'):
+            cls.MODULE_OPTIONS = []
+
+        if not hasattr(cls, 'MODULE_OPTION_DEFAULTS'):
+            cls.MODULE_OPTION_DEFAULTS = {}
+
         cls.MODULE_OPTIONS.append(
             Option(name='log_level', type='str', default="", runtime=True,
                    enum_allowed=['info', 'debug', 'critical', 'error',
@@ -929,6 +885,13 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
                    runtime=True,
                    enum_allowed=['info', 'debug', 'critical', 'error',
                                  'warning', '']))
+
+        for o in cls.MODULE_OPTIONS:
+            if 'default' in o:
+                if 'type' in o:
+                    cls.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
+                else:
+                    cls.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     @property
     def log(self) -> logging.Logger:
@@ -952,7 +915,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         """
         r = self._ceph_get_module_option(key)
         if r is None:
-            return self.MODULE_OPTION_DEFAULTS.get(key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)  # type: ignore[attr-defined]
         else:
             return r
 
@@ -994,7 +957,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     def get_localized_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
-            return self.MODULE_OPTION_DEFAULTS.get(key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)  # type: ignore[attr-defined]
         else:
             return r
 
@@ -1034,14 +997,6 @@ class API:
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     MGR_POOL_NAME = ".mgr"
 
-    COMMANDS = []  # type: List[Any]
-    MODULE_OPTIONS: List[Option] = []
-    MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
-
-    # Database Schema
-    SCHEMA = None  # type: Optional[List[str]]
-    SCHEMA_VERSIONED = None  # type: Optional[List[List[str]]]
-
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
     PRIO_INTERESTING = 8
@@ -1075,18 +1030,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self.module_name = module_name
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
 
-        for o in self.MODULE_OPTIONS:
-            if 'default' in o:
-                if 'type' in o:
-                    # we'll assume the declared type matches the
-                    # supplied default value's type.
-                    self.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
-                else:
-                    # module not declaring it's type, so normalize the
-                    # default value to be a string for consistent behavior
-                    # with default and user-supplied option values.
-                    self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
-
         mgr_level = cast(str, self.get_ceph_option("debug_mgr"))
         log_level = cast(str, self.get_module_option("log_level"))
         cluster_level = cast(str, self.get_module_option('log_to_cluster_level'))
@@ -1117,7 +1060,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._db_lock = threading.Lock()
 
     @classmethod
+    @no_type_check
     def _register_options(cls, module_name: str) -> None:
+        if not hasattr(cls, 'MODULE_OPTIONS'):
+            cls.MODULE_OPTIONS = []
+
+        if not hasattr(cls, 'MODULE_OPTION_DEFAULTS'):
+            cls.MODULE_OPTION_DEFAULTS = {}
+
         cls.MODULE_OPTIONS.append(
             Option(name='log_level', type='str', default="", runtime=True,
                    enum_allowed=['info', 'debug', 'critical', 'error',
@@ -1136,9 +1086,25 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                    enum_allowed=['info', 'debug', 'critical', 'error',
                                  'warning', '']))
 
+        for o in cls.MODULE_OPTIONS:
+            if 'default' in o:
+                if 'type' in o:
+                    # we'll assume the declared type matches the
+                    # supplied default value's type.
+                    cls.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
+                else:
+                    # module not declaring it's type, so normalize the
+                    # default value to be a string for consistent behavior
+                    # with default and user-supplied option values.
+                    cls.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
+
     @classmethod
+    @no_type_check
     def _register_commands(cls, module_name: str) -> None:
-        cls.COMMANDS.extend(CLICommand.dump_cmd_list())
+        if not hasattr(cls, 'COMMANDS'):
+            cls.COMMANDS = []
+
+        cls.COMMANDS.extend(cls.CLICommand.dump_cmd_list())
 
     @property
     def log(self) -> logging.Logger:
@@ -1277,12 +1243,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     def maybe_upgrade(self, db: sqlite3.Connection, version: int) -> None:
         if version <= 0:
+            assert hasattr(self, 'SCHEMA')
             self.log.info(f"creating main.db for {self.module_name}")
             assert self.SCHEMA is not None
             for sql in self.SCHEMA:
                 db.execute(sql)
             self.update_schema_version(db, 1)
         else:
+            assert hasattr(self, 'SCHEMA_VERSIONED')
             assert self.SCHEMA_VERSIONED is not None
             latest = len(self.SCHEMA_VERSIONED)
             if latest < version:
@@ -1628,6 +1596,21 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return cast(ServerInfoT, self._ceph_get_server(hostname))
 
     @API.expose
+    def get_unlabeled_perf_schema(
+        self, svc_type: str, svc_name: str
+    ) -> Dict[str, Dict[str, Dict[str, Union[str, int]]]]:
+        """
+        Called by the plugin to fetch unlabeled perf counter schema info.
+        svc_name can be nullptr, as can svc_type, in which case
+        they are wildcards
+
+        :param str svc_type:
+        :param str svc_name:
+        :return: list of dicts describing the counters requested
+        """
+        return self._ceph_get_unlabeled_perf_schema(svc_type, svc_name)
+
+    @API.expose
     def get_perf_schema(self,
                         svc_type: str,
                         svc_name: str) -> Dict[str,
@@ -1652,10 +1635,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_get_rocksdb_version()
 
     @API.expose
-    def get_counter(self,
-                    svc_type: str,
-                    svc_name: str,
-                    path: str) -> Dict[str, List[Tuple[float, int]]]:
+    def get_unlabeled_counter(
+        self, svc_type: str, svc_name: str, path: str
+    ) -> Dict[str, List[Tuple[float, int]]]:
         """
         Called by the plugin to fetch the latest performance counter data for a
         particular counter on a particular service.
@@ -1668,17 +1650,15 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             of two-tuples of (timestamp, value).  This may be empty if no data is
             available.
         """
-        return self._ceph_get_counter(svc_type, svc_name, path)
+        return self._ceph_get_unlabeled_counter(svc_type, svc_name, path)
 
     @API.expose
-    def get_latest_counter(self,
-                           svc_type: str,
-                           svc_name: str,
-                           path: str) -> Dict[str, Union[Tuple[float, int],
-                                                         Tuple[float, int, int]]]:
+    def get_latest_unlabeled_counter(
+        self, svc_type: str, svc_name: str, path: str
+    ) -> Dict[str, Union[Tuple[float, int], Tuple[float, int, int]]]:
         """
-        Called by the plugin to fetch only the newest performance counter data
-        point for a particular counter on a particular service.
+        Called by the plugin to fetch only the newest performance unlabeled counter
+        data point for a particular counter on a particular service.
 
         :param str svc_type:
         :param str svc_name:
@@ -1688,7 +1668,33 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             (timestamp, value, count) is returned.  This may be empty if no
             data is available.
         """
-        return self._ceph_get_latest_counter(svc_type, svc_name, path)
+        return self._ceph_get_latest_unlabeled_counter(svc_type, svc_name, path)
+
+    @API.expose
+    def get_latest_counter(self,
+                           svc_type: str,
+                           svc_name: str,
+                           counter_name: str,
+                           sub_counter_name: str,
+                           labels: List[Tuple[str, str]]) -> Dict[str, Union[Tuple[float, int],
+                                                                             Tuple[float, int, int]]]:
+        """
+        Called by the plugin to fetch only the newest performance counter data
+        point for a particular counter on a particular service.
+
+        :param str svc_type:
+        :param str svc_name:
+        :param str counter_name: the key_name of the counter, for example
+            "osd_scrub_sh_repl"
+        :param str sub_counter_name: the counters present under the key_name,
+            for example "successful_scrubs_elapsed"
+        :param list[(str, str)] labels: the labels associated with the counter,
+            for example "[("level", "deep"), ("pooltype", "ec")]"
+        :return: A list of two-tuples of (timestamp, value) or three-tuple of
+            (timestamp, value, count) is returned.  This may be empty if no
+            data is available.
+        """
+        return self._ceph_get_latest_counter(svc_type, svc_name, counter_name, sub_counter_name, labels)
 
     @API.expose
     def list_servers(self) -> List[ServerInfoT]:
@@ -1963,10 +1969,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         inbuf: str,
                         cmd: Dict[str, Any]) -> Union[HandleCommandResult,
                                                       Tuple[int, str, str]]:
-        if cmd['prefix'] not in CLICommand.COMMANDS:
+        if cmd['prefix'] not in self.CLICommand.COMMANDS:  # type: ignore[attr-defined]
             return self.handle_command(inbuf, cmd)
 
-        return CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
+        return self.CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)  # type: ignore[attr-defined]
 
     def handle_command(self,
                        inbuf: str,
@@ -2033,7 +2039,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         access config options that they didn't declare
         in their schema.
         """
-        if key not in [o['name'] for o in self.MODULE_OPTIONS]:
+        if key not in [o['name'] for o in self.MODULE_OPTIONS]:  # type: ignore[attr-defined]
             raise RuntimeError("Config option '{0}' is not in {1}.MODULE_OPTIONS".
                                format(key, self.__class__.__name__))
 
@@ -2044,7 +2050,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         r = self._ceph_get_module_option(self.module_name, key,
                                          localized_prefix)
         if r is None:
-            return self.MODULE_OPTION_DEFAULTS.get(key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)  # type: ignore[attr-defined]
         else:
             return r
 
@@ -2129,7 +2135,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     @API.expose
     def set_localized_module_option(self, key: str, val: Optional[str]) -> None:
         """
-        Set localized configuration for this ceph-mgr instance
+        Set localized configuration for this ceph-mgr instance.
+
         :param str key:
         :param str val:
         :return: str
@@ -2194,8 +2201,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return cast(OSDMap, self._ceph_get_osdmap())
 
     @API.expose
-    def get_latest(self, daemon_type: str, daemon_name: str, counter: str) -> int:
-        data = self.get_latest_counter(
+    def get_unlabeled_counter_latest(self, daemon_type: str, daemon_name: str, counter: str) -> int:
+        data = self.get_latest_unlabeled_counter(
             daemon_type, daemon_name, counter)[counter]
         if data:
             return data[1]
@@ -2203,9 +2210,31 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return 0
 
     @API.expose
-    def get_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int]:
+    def get_counter_latest(self, daemon_type: str, daemon_name: str, counter_name: str,
+                           sub_counter_name: str, labels: List[Tuple[str, str]]) -> int:
         data = self.get_latest_counter(
+            daemon_type, daemon_name, counter_name, sub_counter_name, labels)[counter_name]
+        if data:
+            return data[1]
+        else:
+            return 0
+
+    @API.expose
+    def get_unlabeled_counter_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int]:
+        data = self.get_latest_unlabeled_counter(
             daemon_type, daemon_name, counter)[counter]
+        if data:
+            # https://github.com/python/mypy/issues/1178
+            _, value, count = cast(Tuple[float, int, int], data)
+            return value, count
+        else:
+            return 0, 0
+
+    @API.expose
+    def get_counter_latest_avg(self, daemon_type: str, daemon_name: str, counter_name: str,
+                               sub_counter_name: str, labels: List[Tuple[str, str]]) -> Tuple[int, int]:
+        data = self.get_latest_counter(
+            daemon_type, daemon_name, counter_name, sub_counter_name, labels)[counter_name]
         if data:
             # https://github.com/python/mypy/issues/1178
             _, value, count = cast(Tuple[float, int, int], data)
@@ -2247,7 +2276,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 if service['type'] not in services:
                     continue
 
-                schemas = self.get_perf_schema(service['type'], service['id'])
+                schemas = self.get_unlabeled_perf_schema(service['type'], service['id'])
                 if not schemas:
                     self.log.warning("No perf counter schema for {0}.{1}".format(
                         service['type'], service['id']
@@ -2275,7 +2304,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     counter_info = dict(counter_schema)
                     # Also populate count for the long running avgs
                     if tp & self.PERFCOUNTER_LONGRUNAVG:
-                        v, c = self.get_latest_avg(
+                        v, c = self.get_unlabeled_counter_latest_avg(
                             service['type'],
                             service['id'],
                             counter_path
@@ -2283,7 +2312,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         counter_info['value'], counter_info['count'] = v, c
                         result[svc_full_name][counter_path] = counter_info
                     else:
-                        counter_info['value'] = self.get_latest(
+                        counter_info['value'] = self.get_unlabeled_counter_latest(
                             service['type'],
                             service['id'],
                             counter_path
@@ -2291,6 +2320,127 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
                     result[svc_full_name][counter_path] = counter_info
 
+        self.log.debug("returning {0} counter".format(len(result)))
+
+        return result
+
+    @API.expose
+    @profile_method()
+    def get_perf_counters(
+        self,
+        prio_limit: int = PRIO_USEFUL,
+        services: Sequence[str] = (
+            "mds",
+            "mon",
+            "osd",
+            "rbd-mirror",
+            "cephfs-mirror",
+            "rgw",
+            "tcmu-runner",
+        ),
+    ) -> Dict[str, dict]:
+        """
+        Return the perf counters currently known to this ceph-mgr
+        instance, filtered by priority equal to or greater than `prio_limit`.
+        The result is a map of string to dict, associating services
+        (like "osd.123") with their counters.  The counter
+        dict for each service maps counter paths to a counter
+        info structure, which is the information from
+        the schema, plus an additional "value" member with the latest
+        value.
+
+        The returned dictionary looks like:
+        ```
+        {
+            "mon.a": {
+                "AsyncMessenger::Worker": [
+                    {
+                        "labels": {
+                            "id": "1"
+                        },
+                        "counters": {
+                            "msgr_connection_ready_timeouts": {
+                                "type": 10,
+                                "priority": 5,
+                                "units": 1,
+                                "value": 0
+                            },
+                            "msgr_connection_idle_timeouts": {
+                                "type": 10,
+                                "priority": 5,
+                                "units": 1,
+                                "value": 0
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+        ```
+
+        """
+
+        result = defaultdict(dict)   # type: Dict[str, dict]
+
+        for server in self.list_servers():
+            for service in cast(List[ServiceInfoT], server['services']):
+                if service['type'] not in services:
+                    continue
+
+                schemas = self.get_perf_schema(service['type'], service['id'])
+
+                if not schemas:
+                    self.log.warning("No perf counter schema for {0}.{1}".format(
+                        service['type'], service['id']
+                    ))
+                    continue
+
+                # Value is returned in a potentially-multi-service format,
+                # get just the service we're asking about
+                svc_full_name = "{0}.{1}".format(
+                    service['type'], service['id'])
+                labeled_schema = schemas[svc_full_name]
+
+                for counter_name, sub_counters_list in labeled_schema.items():
+                    result[svc_full_name][counter_name] = []
+                    for sub_counter in sub_counters_list:
+                        sub_counter_labels = []
+                        sub_counter_info = dict(sub_counter)
+
+                        for label_key, label_value in sub_counter["labels"].items():
+                            sub_counter_labels.append((label_key, label_value))
+
+                        for sub_counter_name, sub_counter_schema in sub_counter["counters"].items():
+                            priority = sub_counter_schema['priority']
+                            assert isinstance(priority, int)
+                            if priority < prio_limit:
+                                continue
+
+                            tp = sub_counter_schema['type']
+                            assert isinstance(tp, int)
+
+                            # Also populate count for the long running avgs
+                            if tp & self.PERFCOUNTER_LONGRUNAVG:
+                                v, c = self.get_counter_latest_avg(
+                                    service['type'],
+                                    service['id'],
+                                    counter_name,
+                                    sub_counter_name,
+                                    sub_counter_labels,
+                                )
+                                sub_counter_info['counters'][sub_counter_name]['value'] = v
+                                sub_counter_info['counters'][sub_counter_name]['count'] = c
+
+                            else:
+                                sub_counter_info['counters'][sub_counter_name]['value'] = self.get_counter_latest(
+                                    service['type'],
+                                    service['id'],
+                                    counter_name,
+                                    sub_counter_name,
+                                    sub_counter_labels
+                                )
+
+                        result[svc_full_name][counter_name].append(sub_counter_info)
         self.log.debug("returning {0} counter".format(len(result)))
 
         return result
@@ -2321,11 +2471,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return self._ceph_have_mon_connection()
 
+    @API.perm('w')
+    @API.expose
     def update_progress_event(self,
                               evid: str,
                               desc: str,
                               progress: float,
-                              add_to_ceph_s: bool) -> None:
+                              add_to_ceph_s: bool = False) -> None:
         return self._ceph_update_progress_event(evid, desc, progress, add_to_ceph_s)
 
     @API.perm('w')

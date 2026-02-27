@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "mon/ConfigMonitor.h"
 #include "mon/Monitor.h"
@@ -9,7 +9,7 @@
 #include "messages/MConfig.h"
 #include "messages/MGetConfig.h"
 #include "messages/MMonCommand.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/TextTable.h"
 #include "common/cmdparse.h"
 #include "include/stringify.h"

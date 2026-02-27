@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -63,6 +64,11 @@ struct ECCommonL {
   };
   friend std::ostream &operator<<(std::ostream &lhs, const ec_extent_t &rhs);
   using ec_extents_t = std::map<hobject_t, ec_extent_t>;
+
+  static inline const uint32_t scrub_fadvise_flags{
+      CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+      CEPH_OSD_OP_FLAG_SCRUB};
 
   virtual ~ECCommonL() = default;
 
@@ -322,6 +328,13 @@ struct ECCommonL {
     friend struct FinishReadOp;
 
     void get_want_to_read_shards(std::set<int> *want_to_read) const;
+    void get_want_to_read_all_shards(std::set<int> *want_to_read) const;
+    void create_parity_read_buffer(
+      std::map<int, bufferlist> to_decode,
+      std::set<int> wanted_to_read,
+      uint64_t read_size,
+      bufferlist *outbl
+      );
 
     /// Returns to_read replicas sufficient to reconstruct want
     int get_min_avail_to_read_shards(

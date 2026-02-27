@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "LeaderWatcher.h"
 #include "common/Cond.h"
@@ -1015,7 +1015,7 @@ void LeaderWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
     return;
   }
 
-  apply_visitor(HandlePayloadVisitor(this, ctx), notify_message.payload);
+  std::visit(HandlePayloadVisitor(this, ctx), notify_message.payload);
 }
 
 template <typename I>

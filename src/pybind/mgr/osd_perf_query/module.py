@@ -8,6 +8,8 @@ from time import time
 import errno
 import prettytable
 
+from .cli import OSDPerfQueryCLICommand
+
 from mgr_module import MgrModule
 
 def get_human_readable(bytes, precision=2):
@@ -21,6 +23,7 @@ def get_human_readable(bytes, precision=2):
     return '%.*f%s' % (precision, bytes, suffixes[suffix_index])
 
 class OSDPerfQuery(MgrModule):
+    CLICommand = OSDPerfQueryCLICommand
     COMMANDS = [
         {
             "cmd": "osd perf query add "

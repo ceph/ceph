@@ -677,6 +677,7 @@ class MotrObject : public StoreObject {
         boost::optional<ceph::real_time> delete_at,
         std::string* version_id, std::string* tag, std::string* etag,
         void (*progress_cb)(off_t, void *), void* progress_data,
+        rgw::sal::DataProcessorFactory* dp_factory,
         const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
     virtual int set_acl(const RGWAccessControlPolicy& acl) override { acls = acl; return 0; }
@@ -939,7 +940,9 @@ public:
 		       std::string& tag, ACLOwner& owner,
 		       uint64_t olh_epoch,
 		       rgw::sal::Object* target_obj,
-		       prefix_map_t& processed_prefixes) override;
+		       prefix_map_t& processed_prefixes,
+           const char *if_match = nullptr,
+           const char *if_nomatch = nullptr) override;
   virtual int cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
            CephContext *cct, optional_yield y,
            const rgw_obj& obj,
@@ -1006,6 +1009,8 @@ class MotrStore : public StoreDriver {
     virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
+    virtual std::unique_ptr<Restore> get_restore(const int n_objs,
+		   const std::vector<std::string_view>& obj_names) override;
     virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj,
         req_state* s, rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) override;
@@ -1020,6 +1025,7 @@ class MotrStore : public StoreDriver {
         std::string& _req_id,
         optional_yield y) override;
     virtual RGWLC* get_rgwlc(void) override { return NULL; }
+    virtual RGWRestore* get_rgwrestore(void) override { return NULL; }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
 
     virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;

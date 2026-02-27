@@ -1,3 +1,5 @@
+.. _radosgw-admin-guide:
+
 =============
  Admin Guide
 =============
@@ -14,11 +16,11 @@ Ceph Object Storage user management refers only to users of the Ceph Object
 Storage service and not to the Ceph Object Gateway as a user of the Ceph
 Storage Cluster. Create a user, access key, and secret key to enable end users
 to interact with Ceph Object Gateway services. Optionally, the users can belong
-to `Accounts`_ for ease of management.
+to :ref:`Accounts <radosgw-account>` for ease of management.
 
 There are two types of user: 
 
-- **User:** The term "user" refers to  user of the S3 interface.
+- **User:** The term "user" refers to user of the S3 interface.
 
 - **Subuser:** The term "subuser" refers to a user of the Swift interface. A
   subuser is associated with a user. 
@@ -51,13 +53,13 @@ Create a User
 
 To create a user (S3 interface), run a command of the following form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin user create --uid={username} --display-name="{display-name}" [--email={email}]
 
 For example:
 
-.. prompt:: bash
+.. prompt:: bash #
 	
    radosgw-admin user create --uid=johndoe --display-name="John Doe" --email=john@example.com
   
@@ -103,13 +105,13 @@ Create a Subuser
 To create a subuser (a user of the Swift interface) for the user, specify the
 user ID (``--uid={username}``), a subuser ID, and the subuser's access level:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin subuser create --uid={uid} --subuser={uid} --access=[ read | write | readwrite | full ]
 
 For example:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin subuser create --uid=johndoe --subuser=johndoe:swift --access=full
 
@@ -152,7 +154,7 @@ Get User Info
 To get information about a user, specify ``user info`` and the user ID
 (``--uid={username}``). Use a command of the following form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin user info --uid=johndoe
 
@@ -165,14 +167,14 @@ and the attributes that you want to modify. Typical modifications are made to
 keys and secrets, email addresses, display names, and access levels. Use a
 command of the following form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin user modify --uid=johndoe --display-name="John E. Doe"
 
 To modify subuser values, specify ``subuser modify``, user ID and the subuser
 ID. Use a command of the following form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin subuser modify --uid=johndoe --subuser=johndoe:swift --access=full
 
@@ -185,7 +187,7 @@ to suspend user privileges and to re-enable them at a later time. To suspend a
 user, specify ``user suspend`` and the user ID in a command of the following
 form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin user suspend --uid=johndoe
 
@@ -194,7 +196,7 @@ User Enable
 To re-enable a suspended user, provide ``user enable`` and specify the user ID
 in a command of the following form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin user enable --uid=johndoe
 	
@@ -213,7 +215,7 @@ To remove a user and any subusers associated with it, use the ``user rm``
 command and provide the user ID of the user to be removed. Use a command of the
 following form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin user rm --uid=johndoe
 
@@ -237,7 +239,7 @@ removal.
 To remove the subuser, use the command ``subuser rm`` and provide the subuser
 ID of the subuser to be removed. Use a command of the following form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin subuser rm --subuser=johndoe:swift
 
@@ -247,8 +249,8 @@ Options include:
   with the UID.
 
 
-Add or  Remove a Key
---------------------
+Add or Remove a Key
+-------------------
 
 Both users and subusers require a key to access the S3 or Swift interface. To
 use S3, the user needs a key pair which is composed of an access key and a
@@ -269,7 +271,7 @@ Adding S3 keys
 
 To add a specific S3 key pair for a user, run a command of the following form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin key create --uid=foo --key-type=s3 --access-key fooAccessKey --secret-key fooSecretKey
 
@@ -294,7 +296,7 @@ Adding Swift secret keys
 To attach a specific Swift secret key for a subuser, run a command of the
 following form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin key create --subuser=foo:bar --key-type=swift --secret-key barSecret
 
@@ -314,14 +316,14 @@ following form:
 
 .. note:: A subuser can have only one Swift secret key.
 
-Associating subusers with S3 key pairs
+Associating Subusers With S3 Key Pairs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Subusers can also be used with S3 APIs if the subuser is associated with a S3
 key pair. To associate a subuser with an S3 key pair, run a command of the
 following form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin key create --subuser=foo:bar --key-type=s3 --access-key barAccessKey --secret-key barSecretKey
 	
@@ -342,21 +344,21 @@ following form:
   }
 
 
-Removing S3 key pairs
+Removing S3 Key Pairs
 ~~~~~~~~~~~~~~~~~~~~~
 
 To remove a S3 key pair, specify the access key to be removed. Run a command of the following form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin key rm --uid=foo --key-type=s3 --access-key=fooAccessKey 
 
-Removing Swift secret keys
+Removing Swift Secret Keys
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To remove a Swift secret key, run a command of the following form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin key rm --subuser=foo:bar --key-type=swift
 
@@ -364,7 +366,7 @@ To remove a Swift secret key, run a command of the following form:
 Add or Remove Admin Capabilities
 --------------------------------
 
-The Ceph Storage Cluster provides an administrative API that enables users to
+The Ceph Storage Cluster provides an :ref:`Admin Ops API <radosgw admin ops>` that enables users to
 execute administrative functions via the REST API. By default, users do NOT
 have access to this API. To enable a user to exercise administrative
 functionality, provide the user with administrative capabilities.
@@ -372,33 +374,67 @@ functionality, provide the user with administrative capabilities.
 To add administrative capabilities to a user, run a command of the following
 form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin caps add --uid={uid} --caps={caps}
-
 
 You can add read, write or all capabilities to users, buckets, metadata and
 usage (utilization). To do this, use a command-line option of the following
 form:
 
-.. prompt:: bash
+::
 
-   --caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles|ratelimit|user-info-without-keys|accounts]=[\*|read|write|read, write]"
+    --caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles|ratelimit|user-info-without-keys|accounts]=[\*|read|write|read, write]"
 
 For example:
 
-.. prompt:: bash
+.. prompt:: bash #
 
 	radosgw-admin caps add --uid=johndoe --caps="users=*;buckets=*"
 
 To remove administrative capabilities from a user, run a command of the
 following form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin caps rm --uid=johndoe --caps={caps}
-  
 
+Admin and System Users
+----------------------
+
+Users with the ``--admin`` or ``--system`` flag have global read and write
+permissions. These permissions apply to all APIs including S3 and Swift,
+unlike Admin Capabilities, and cannot be denied by IAM policy.
+
+The ``--system`` flag should only be used as documented in :ref:`Multisite Configuration <multisite>`.
+
+The ``--admin`` flag can be useful for troubleshooting and recovery. For
+example, if a user accidentally removes their permissions to a bucket or
+object, the admin user's credentials can be used to issue the S3/Swift API
+requests necessary to restore them.
+
+.. warning:: When not in use, consider deleting the admin user or disabling
+   its access keys. Do not give admin permissions to untrusted users.
+
+To create an admin user:
+
+.. prompt:: bash #
+
+   radosgw-admin user create --uid={username} --display-name="{display-name}" --admin
+
+To add the admin flag to an existing user:
+
+.. prompt:: bash #
+
+   radosgw-admin user modify --uid={username} --admin
+
+To remove the admin flag from an existing user:
+
+.. prompt:: bash #
+
+   radosgw-admin user modify --uid={username} --admin=0
+
+.. _radosgw-quota-management:
 
 Quota Management
 ================
@@ -406,9 +442,6 @@ Quota Management
 The Ceph Object Gateway makes it possible for you to set quotas on users and
 buckets owned by users. Quotas include the maximum number of objects in a
 bucket and the maximum storage size a bucket can hold.
-
-- **Bucket:** The ``--bucket`` option allows you to specify a quota for
-  buckets the user owns.
 
 - **Maximum Objects:** The ``--max-objects`` setting allows you to specify
   the maximum number of objects. A negative value disables this setting.
@@ -418,24 +451,23 @@ bucket and the maximum storage size a bucket can hold.
   setting.
   
 - **Quota Scope:** The ``--quota-scope`` option sets the scope for the quota.
-  The options are ``bucket`` and ``user``. Bucket quotas apply to each bucket
-  owned by the user. User Quotas are summed across all buckets owned by the
-  user. 
-
+  The options are ``bucket`` and ``user``.
 
 Set User Quota
 --------------
 
+User Quotas are summed across all buckets owned by the user.
+
 Before you enable a quota, you must first set the quota parameters.
 To set quota parameters, run a command of the following form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin quota set --quota-scope=user --uid=<uid> [--max-objects=<num objects>] [--max-size=<max size>]
 
 For example:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin quota set --quota-scope=user --uid=johndoe --max-objects=1024 --max-size=1024B
 
@@ -448,13 +480,13 @@ Enabling and Disabling User Quota
 
 After a user quota is set, it must be enabled in order to take effect. To enable a user quota, run a command of the following form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin quota enable --quota-scope=user --uid=<uid>
 
 To disable an enabled user quota, run a command of the following form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin quota disable --quota-scope=user --uid=<uid>
 
@@ -462,13 +494,14 @@ To disable an enabled user quota, run a command of the following form:
 Set Bucket Quota
 ----------------
 
-Bucket quotas apply to the buckets owned by the specified ``uid``. They are
-independent of the user. To set a bucket quota, run a command of the following
-form:
+If the ``--bucket`` option is specified, the bucket quota applies to a single bucket with the specified name.
+Else, if the ``--uid`` option is specified, the bucket quota applies to all buckets owned by the user with the specified UID.
 
-.. prompt:: bash
+To set a bucket quota, run a command of the following form:
 
-   radosgw-admin quota set --uid=<uid> --quota-scope=bucket [--max-objects=<num objects>] [--max-size=<max size]
+.. prompt:: bash #
+
+   radosgw-admin quota set --quota-scope=bucket {--bucket=<bucket name> | --uid=<uid>} [--max-objects=<num objects>] [--max-size=<max size>]
 
 A negative value for ``--max-objects`` or ``--max-size`` means that the
 specific quota attribute is disabled.
@@ -480,13 +513,13 @@ Enable and Disabling Bucket Quota
 After a bucket quota has been set, it must be enabled in order to take effect.
 To enable a bucket quota, run a command of the following form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin quota enable --quota-scope=bucket --uid=<uid>
 
 To disable an enabled bucket quota, run a command of the following form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin quota disable --quota-scope=bucket --uid=<uid>
 
@@ -498,7 +531,7 @@ You can access each user's quota settings via the user information
 API. To read user quota setting information with the CLI interface, 
 run a command of the following form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin user info --uid=<uid>
 
@@ -511,7 +544,7 @@ users and all buckets manually to force an update of the latest quota stats. To
 update quota statistics for all users and all buckets in order to retrieve the
 latest quota statistics, run a command of the following form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin user stats --uid=<uid> --sync-stats
 
@@ -523,7 +556,7 @@ Get User Usage Stats
 To see how much of a quota a user has consumed, run a command of the following
 form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin user stats --uid=<uid>
 
@@ -540,8 +573,7 @@ quota is set for all subsequently-created users, and that quota is enabled. See
 ``rgw_bucket_default_quota_max_objects``,
 ``rgw_bucket_default_quota_max_size``, ``rgw_user_default_quota_max_objects``,
 ``rgw_user_default_quota_max_size``, ``rgw_account_default_quota_max_objects``,
-and ``rgw_account_default_quota_max_size`` in `Ceph Object Gateway Config
-Reference`_.
+and ``rgw_account_default_quota_max_size`` in :ref:`radosgw-config-ref`.
 
 Quota Cache
 -----------
@@ -563,7 +595,7 @@ the multiple RGW instances closer to perfect quota synchronization.
 
 If all three values are set to ``0`` , then quota caching is effectively
 disabled, and multiple instances will have perfect quota enforcement.  See
-`Ceph Object Gateway Config Reference`_.
+:ref:`radosgw-config-ref`.
 
 Reading / Writing Global Quotas
 -------------------------------
@@ -571,7 +603,7 @@ Reading / Writing Global Quotas
 You can read and write global quota settings in the period configuration. To
 view the global quota settings, run the following command:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin global quota get
 
@@ -579,7 +611,7 @@ Global quota settings can be manipulated with the ``global quota``
 counterparts of the ``quota set``, ``quota enable``, and ``quota disable``
 commands, as in the following examples:  
 
-.. prompt:: bash
+.. prompt:: bash #
 
 	radosgw-admin global quota set --quota-scope bucket --max-objects 1024
 	radosgw-admin global quota enable --quota-scope bucket
@@ -590,13 +622,27 @@ commands, as in the following examples:
    be restarted for the changes to take effect.
 
 
+.. _radosgw-rate-limit-management:
+
 Rate Limit Management
 =====================
 
 Quotas can be set for The Ceph Object Gateway on users and buckets. The "rate
-limit" includes the maximum number of read operations (read ops) and write
-operations (write ops) per minute as well as the number of bytes per minute
-that can be written or read per user or per bucket.
+limit" includes the maximum number of read operations and write operations
+per accumulation interval as well as the number of bytes per accumulation interval
+that can be written or read per user or per bucket. It also includes the maximum
+number of list requests and delete operations per accumulation interval.
+The accumulation interval is configured by the :confval:`rgw_ratelimit_interval` option.
+The default value is 60 seconds.
+(Note: S3 Multi-Object Delete operation are currently not supported by rate limiting)
+
+The configured limits should be divided by the number of active object gateways. For example,
+if "user A" is to be be limited to 10 ops per minute and there are two object gateways in the cluster,
+then the limit on "user A" should be 5 (10 ops per minute / 2 RGWs).
+If the requests are not balanced between RGWs, the rate limit might be underutilized.
+For example: if the ops limit is 5 and there are two RGWs,
+but the Load Balancer sends load to only one of those RGWs,
+the effective limit is 5 ops, because this limit is enforced per RGW.
 
 Read Requests and Write Requests
 --------------------------------
@@ -608,8 +654,8 @@ How Metrics Work
 Each object gateway tracks per-user metrics separately from bucket metrics.
 These metrics are not shared with other gateways. The configured limits should
 be divided by the number of active object gateways. For example, if "user A" is
-to be be limited to 10 ops per minute and there are two object gateways in the
-cluster, then the limit on "user A" should be ``5`` (10 ops per minute / 2
+to be be limited to 10 ops per accumulation interval and there are two object gateways in the
+cluster, then the limit on "user A" should be ``5`` (10 ops per accumulation interval / 2
 RGWs). If the requests are **not** balanced between RGWs, the rate limit might
 be underutilized. For example: if the ops limit is ``5`` and there are two
 RGWs, **but** the Load Balancer sends load to only one of those RGWs, the
@@ -624,12 +670,12 @@ The accounting of bandwidth happens only after a request has been accepted.
 This means that requests will proceed even if the bucket rate limit or user
 rate limit is reached during the execution of the request. The RGW keeps track
 of a "debt" consisting of bytes used in excess of the configured value; users
-or buckets that incur this kind of debt are prevented  from sending more
+or buckets that incur this kind of debt are prevented from sending more
 requests until the "debt" has been repaid. The maximum size of the "debt" is
-twice the max-read/write-bytes per minute. If "user A" is subject to a 1-byte
-read limit per minute and they attempt to GET an object that is 1 GB in size,
+twice the max-read/write-bytes per accumulation interval. If "user A" is subject to a 1-byte
+read limit per accumulation interval and they attempt to ``GET`` an object that is 1 GB in size,
 then the ``GET`` action will fail. After "user A" has completed this 1 GB
-operation, RGW blocks the user's requests for up to two minutes. After this
+operation, RGW blocks the user's requests for up to two accumulation intervals. After this
 time has elapsed, "user A" will be able to send ``GET`` requests again.
 
 
@@ -639,20 +685,29 @@ time has elapsed, "user A" will be able to send ``GET`` requests again.
 - **User:** The ``--uid`` option allows you to specify a rate limit for a
   user.
 
-- **Maximum Read Ops:** The ``--max-read-ops`` setting allows you to limit read
-  bytes per minute per RGW instance. A ``0`` value disables throttling. 
+- **Maximum Read Ops:** The ``--max-read-ops`` setting allows you to specify
+  the maximum number of read ops per accumulation interval per RGW instance. A ``0`` value
+  disables throttling.
   
 - **Maximum Read Bytes:** The ``--max-read-bytes`` setting allows you to limit
-  read bytes per minute per RGW instance. A ``0`` value disables throttling. 
+  read bytes per accumulation interval per RGW instance. A ``0`` value disables throttling.
 
 - **Maximum Write Ops:** The ``--max-write-ops`` setting allows you to specify
-  the maximum number of write ops per minute per RGW instance. A ``0`` value
+  the maximum number of write ops per accumulation interval per RGW instance. A ``0`` value
   disables throttling.
   
 - **Maximum Write Bytes:** The ``--max-write-bytes`` setting allows you to
-  specify the maximum number of write bytes per minute per RGW instance. A
+  specify the maximum number of write bytes per accumulation interval per RGW instance. A
   ``0`` value disables throttling.
- 
+
+- **Maximum List Ops:** The ``--max-list-ops`` setting allows you to
+  specify the maximum number of bucket listing requests per accumulation interval per RGW instance.
+  A ``0`` value disables throttling.
+
+- **Maximum Delete Ops:** The ``--max-delete-ops`` setting allows you to
+  specify the maximum number of delete operations per accumulation interval per RGW instance.
+  A ``0`` value disables throttling.
+
 - **Rate Limit Scope:** The ``--ratelimit-scope`` option sets the scope for the
   rate limit.  The options are ``bucket`` , ``user`` and ``anonymous``. Bucket
   rate limit apply to buckets.  The user rate limit applies to a user.  The
@@ -667,19 +722,19 @@ Before you can enable a rate limit, you must first set the rate limit
 parameters. The following is the general form of commands that set rate limit
 parameters: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
-   radosgw-admin ratelimit set --ratelimit-scope=user --uid=<uid>
-   <[--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>]
-   [--max-write-ops=<num ops>] [--max-write-bytes=<num bytes>]>
+   radosgw-admin ratelimit set --ratelimit-scope=user --uid=<uid> \
+                                 <[--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>] \
+                                 [--max-write-ops=<num ops>] [--max-write-bytes=<num bytes>] \
+                                 [--max-list-ops=<num ops>] [--max-delete-ops=<num ops>]>
 
 An example of using ``radosgw-admin ratelimit set`` to set a rate limit might
 look like this: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin ratelimit set --ratelimit-scope=user --uid=johndoe --max-read-ops=1024 --max-write-bytes=10240
-
 
 A value of ``0`` assigned to ``--max-read-ops``, ``--max-read-bytes``,
 ``--max-write-ops``, or ``--max-write-bytes`` disables the specified rate
@@ -694,14 +749,14 @@ rate limit parameters.
 The following is the general form of the command that returns the current
 configured limit parameters:  
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin ratelimit get --ratelimit-scope=user --uid=<uid>
 
 An example of using ``radosgw-admin ratelimit get`` to return the rate limit
 parameters might look like this: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin ratelimit get --ratelimit-scope=user --uid=johndoe
 
@@ -716,13 +771,13 @@ Enable and Disable User Rate Limit
 After you have set a user rate limit, you must enable it in order for it to
 take effect. Run a command of the following form to enable a user rate limit: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin ratelimit enable --ratelimit-scope=user --uid=<uid>
 
 To disable an enabled user rate limit, run a command of the following form: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin ratelimit disable --ratelimit-scope=user --uid=johndoe
 
@@ -733,15 +788,17 @@ Set Bucket Rate Limit
 Before you enable a rate limit, you must first set the rate limit parameters.
 The following is the general form of commands that set rate limit parameters:
 
-.. prompt:: bash
+.. prompt:: bash #
 
-   radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=<bucket> <[--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>]
-  [--max-write-ops=<num ops>] [--max-write-bytes=<num bytes>]>
+   radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=<bucket> \
+                                 <[--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>] \
+                                 [--max-write-ops=<num ops>] [--max-write-bytes=<num bytes>] \
+                                 [--max-list-ops=<num ops>] [--max-delete-ops=<num ops>]>
 
 An example of using ``radosgw-admin ratelimit set`` to set a rate limit for a
 bucket might look like this: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=mybucket --max-read-ops=1024 --max-write-bytes=10240
 
@@ -759,14 +816,14 @@ limit parameters.
 The following is the general form of the command that returns the current
 configured limit parameters:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin ratelimit get --ratelimit-scope=bucket --bucket=<bucket>
 
 An example of using ``radosgw-admin ratelimit get`` to return the rate limit
 parameters for a bucket might look like this:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin ratelimit get --ratelimit-scope=bucket --bucket=mybucket
 
@@ -782,15 +839,15 @@ After you set a bucket rate limit, you can enable it. The following is the
 general form of the ``radosgw-admin ratelimit enable`` command that enables
 bucket rate limits: 
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin ratelimit enable --ratelimit-scope=bucket --bucket=<bucket>
 
 An enabled bucket rate limit can be disabled by running a command of the following form:
 
-.. prompt:: bash
+.. prompt:: bash #
 
-   radosgw-admin ratelimit disable --ratelimit-scope=bucket --uid=mybucket
+   radosgw-admin ratelimit disable --ratelimit-scope=bucket --bucket=mybucket
 
 Reading and Writing Global Rate Limit Configuration
 ---------------------------------------------------
@@ -798,7 +855,7 @@ Reading and Writing Global Rate Limit Configuration
 You can read and write global rate limit settings in the period's configuration.
 To view the global rate limit settings, run the following command:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin global ratelimit get
 
@@ -807,7 +864,7 @@ counterparts of the ``ratelimit set``, ``ratelimit enable``, and ``ratelimit
 disable`` commands. Per-user and per-bucket ratelimit configurations override
 the global configuration:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin global ratelimit set --ratelimit-scope bucket --max-read-ops=1024
    radosgw-admin global ratelimit enable --ratelimit-scope bucket
@@ -815,7 +872,7 @@ the global configuration:
 The global rate limit can be used to configure the scope of the rate limit for
 all authenticated users:
 
-.. prompt:: bash
+.. prompt:: bash #
 
    radosgw-admin global ratelimit set --ratelimit-scope user --max-read-ops=1024
    radosgw-admin global ratelimit enable --ratelimit-scope user
@@ -823,14 +880,14 @@ all authenticated users:
 The global rate limit can be used to configure the scope of the rate limit for
 all unauthenticated users:
 
-.. prompt:: bash
+.. prompt:: bash #
   
    radosgw-admin global ratelimit set --ratelimit-scope=anonymous --max-read-ops=1024
    radosgw-admin global ratelimit enable --ratelimit-scope=anonymous
 
 .. note:: In a multisite configuration where a realm and a period are present,
    any changes to the global rate limit must be committed using ``period update
-   --commit``. If no period is present, the rados gateway(s) must be restarted
+   --commit``. If no period is present, the RGW instances must be restarted
    for the changes to take effect.
 
 Usage
@@ -862,7 +919,6 @@ Options include:
 .. note:: You can specify time to a precision of minutes and seconds, but the
    specified time is stored only with a one-hour resolution.
 
-
 Show Usage
 ----------
 
@@ -871,14 +927,14 @@ usage for a particular user, you must specify a user ID. You can also specify a
 start date, end date, and whether to show log entries. The following is an example
 of such a command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    radosgw-admin usage show --uid=johndoe --start-date=2012-03-01 --end-date=2012-04-01
 
 You can show a summary of usage information for all users by omitting the user
 ID, as in the following example command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    radosgw-admin usage show --show-log-entries=false
 
@@ -891,14 +947,38 @@ heavy use. You can trim the usage logs for all users and for specific users.
 You can also specify date ranges for trim operations, as in the following
 example commands:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    radosgw-admin usage trim --start-date=2010-01-01 --end-date=2010-12-31
    radosgw-admin usage trim --uid=johndoe	
    radosgw-admin usage trim --uid=johndoe --end-date=2013-12-31
 
+Usage Log Key Transition
+-------------------------
 
-.. _radosgw-admin: ../../man/8/radosgw-admin/
-.. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
-.. _Ceph Object Gateway Config Reference: ../config-ref/
-.. _Accounts: ../account/
+.. versionadded:: Umbrella
+
+The ``rgw_usage_log_key_transition`` configuration option controls how RGW handles
+usage log keys in the Umbrella release. This option is enabled by default to ensure
+compatibility with existing usage logs.
+
+In previous versions, usage log keys for user/payer IDs starting with '0' could interfere
+with time-based log keys, causing issues with log trimming and iteration. The new key format
+adds a '~' prefix to prevent this conflict.
+
+When ``rgw_usage_log_key_transition`` is enabled (default: ``true``), RGW will:
+
+- Handle both old and new usage log key formats
+- Automatically migrate old keys to the new format during normal operations
+- Ensure proper trimming and reading of usage logs during the transition period
+
+You can disable this option once all old usage logs have been migrated to improve performance:
+
+.. prompt:: bash #
+
+   ceph config set client.rgw rgw_usage_log_key_transition false
+
+.. note:: Only disable ``rgw_usage_log_key_transition`` after confirming that no old
+   usage log entries remain in your system, as this will prevent RGW from handling
+   the old key format and may result in incomplete usage statistics or failed trim operations.
+

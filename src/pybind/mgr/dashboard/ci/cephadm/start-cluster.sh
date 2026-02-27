@@ -59,8 +59,8 @@ fi
 npm run build ${FRONTEND_BUILD_OPTS} &
 
 cd ${CEPH_DEV_FOLDER}
-: ${VM_IMAGE:='fedora40'}
-: ${VM_IMAGE_URL:='https://download.fedoraproject.org/pub/fedora/linux/releases/40/Cloud/x86_64/images/Fedora-Cloud-Base-Generic.x86_64-40-1.14.qcow2'}
+: ${VM_IMAGE:='fedora42'}
+: ${VM_IMAGE_URL:='https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2'}
 kcli download image -p ceph-dashboard -u ${VM_IMAGE_URL} ${VM_IMAGE}
 kcli delete plan -y ceph || true
 # Compile cephadm locally for the shared_ceph_folder to pick it up

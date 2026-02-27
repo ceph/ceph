@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "ops_executer.h"
 
@@ -1102,17 +1102,18 @@ void OpsExecuter::apply_stats()
   pg->apply_stats(get_target(), delta_stats);
 }
 
-OpsExecuter::OpsExecuter(Ref<PG> pg,
+OpsExecuter::OpsExecuter(Ref<PG> _pg,
                          ObjectContextRef _obc,
                          const OpInfo& op_info,
                          abstracted_msg_t&& msg,
                          crimson::net::ConnectionXcoreRef conn,
                          const SnapContext& _snapc)
-  : pg(std::move(pg)),
+  : pg(std::move(_pg)),
     obc(std::move(_obc)),
     op_info(op_info),
     msg(std::move(msg)),
     conn(conn),
+    txn(pg->min_peer_features()),
     snapc(_snapc)
 {
   if (op_info.may_write() && should_clone(*obc, snapc)) {

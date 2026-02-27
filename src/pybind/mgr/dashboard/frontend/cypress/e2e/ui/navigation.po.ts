@@ -2,11 +2,11 @@ import { PageHelper } from '../page-helper.po';
 
 export class NavigationPageHelper extends PageHelper {
   pages = {
-    index: { url: '#/dashboard', id: 'cd-dashboard' }
+    index: { url: '#/overview', id: 'cd-dashboard' }
   };
 
   navigations = [
-    { menu: 'Dashboard', component: 'cd-dashboard' },
+    { menu: 'Overview', component: 'cd-dashboard' },
     {
       menu: 'Multi-Cluster',
       submenus: [

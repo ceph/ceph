@@ -62,4 +62,7 @@
 - `jenkins test ceph-volume all` [Jenkins Jobs](https://jenkins.ceph.com/view/ceph-volume%20PR/) | [Jenkins Jobs Definition](https://github.com/ceph/ceph-build/blob/main/ceph-volume-cephadm-prs/config/definitions/ceph-volume-pr.yml)
 - `jenkins test windows` [Jenkins Job](https://jenkins.ceph.com/job/ceph-windows-pull-requests/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-windows-pull-requests/config/definitions/ceph-windows-pull-requests.yml)
 - `jenkins test rook e2e` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-orchestrator-rook-e2e/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-rook-e2e/config/definitions/ceph-orchestrator-rook-e2e.yml)
+
+You must only issue one Jenkins command per-comment. Jenkins does not understand
+comments with more than one command.
 </details>

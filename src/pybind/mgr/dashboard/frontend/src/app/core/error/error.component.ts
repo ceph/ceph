@@ -9,11 +9,13 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { DocService } from '~/app/shared/services/doc.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-error',
   templateUrl: './error.component.html',
-  styleUrls: ['./error.component.scss']
+  styleUrls: ['./error.component.scss'],
+  standalone: false
 })
 export class ErrorComponent implements OnDestroy, OnInit {
   header: string;
@@ -32,9 +34,10 @@ export class ErrorComponent implements OnDestroy, OnInit {
   secondaryButtonRoute: string;
   secondaryButtonName: string;
   secondaryButtonTitle: string;
-  buttonToEnableModule: string;
+  module_name: string;
   navigateTo: string;
   component: string;
+  icons = Icons;
 
   constructor(
     private router: Router,
@@ -91,7 +94,7 @@ export class ErrorComponent implements OnDestroy, OnInit {
       this.secondaryButtonRoute = history.state.secondary_button_route;
       this.secondaryButtonName = history.state.secondary_button_name;
       this.secondaryButtonTitle = history.state.secondary_button_title;
-      this.buttonToEnableModule = history.state.button_to_enable_module;
+      this.module_name = history.state.module_name;
       this.navigateTo = history.state.navigate_to;
       this.component = history.state.component;
       this.docUrl = this.docService.urlGenerator(this.section);
@@ -107,11 +110,6 @@ export class ErrorComponent implements OnDestroy, OnInit {
   }
 
   enableModule(): void {
-    this.mgrModuleService.updateModuleState(
-      this.buttonToEnableModule,
-      false,
-      null,
-      this.navigateTo
-    );
+    this.mgrModuleService.updateModuleState(this.module_name, false, null, this.navigateTo);
   }
 }

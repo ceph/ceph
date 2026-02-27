@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "common/ceph_context.h"
 #include "common/ceph_json.h"
@@ -91,8 +91,10 @@ void MirrorWatcher::handle_rewatch_complete(int r) {
 
   if (r == -EBLOCKLISTED) {
     dout(0) << ": client blocklisted" <<dendl;
-    std::scoped_lock locker(m_lock);
-    m_blocklisted = true;
+    {
+      std::scoped_lock locker(m_lock);
+      m_blocklisted = true;
+    }
     m_elistener.set_blocklisted_ts();
   } else if (r == -ENOENT) {
     derr << ": mirroring object deleted" << dendl;

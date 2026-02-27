@@ -22,11 +22,10 @@ import { KmipConfig, VaultConfig } from '~/app/shared/models/rgw-encryption-conf
 @Component({
   selector: 'cd-rgw-config-modal',
   templateUrl: './rgw-config-modal.component.html',
-  styleUrls: ['./rgw-config-modal.component.scss']
+  styleUrls: ['./rgw-config-modal.component.scss'],
+  standalone: false
 })
 export class RgwConfigModalComponent implements OnInit {
-  readonly vaultAddress = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{4}$/;
-
   kmsProviders: string[];
 
   configForm: CdFormGroup;
@@ -133,18 +132,7 @@ export class RgwConfigModalComponent implements OnInit {
 
   createForm() {
     this.configForm = this.formBuilder.group({
-      addr: [
-        null,
-        [
-          Validators.required,
-          CdValidators.custom('vaultPattern', (value: string) => {
-            if (_.isEmpty(value)) {
-              return false;
-            }
-            return !this.vaultAddress.test(value);
-          })
-        ]
-      ],
+      addr: [null, [CdValidators.urlWithProtocolOption(false), Validators.required]],
       kms_provider: ['vault', Validators.required],
       encryptionType: ['kms', Validators.required],
       auth: [

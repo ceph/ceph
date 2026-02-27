@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -16,6 +17,7 @@
 #define INCLUDE_STATIC_ANY
 
 #include <any>
+#include <bit>
 #include <cstddef>
 #include <initializer_list>
 #include <memory>
@@ -491,6 +493,11 @@ any_cast(_any::base<U, V>&& a) {
   throw std::bad_any_cast();
 }
 
+ template<std::size_t S, std::size_t Alignment = std::bit_ceil(S)>
+ struct alignas(Alignment) aligned_storage {
+   std::byte data[S];
+ };
+
 // `immobile_any`
 // ==============
 //
@@ -508,12 +515,11 @@ any_cast(_any::base<U, V>&& a) {
 // invoked when they throw.
 //
 template<std::size_t S>
-class immobile_any : public _any::base<immobile_any<S>,
-				       std::aligned_storage_t<S>> {
-  using base = _any::base<immobile_any<S>, std::aligned_storage_t<S>>;
+class immobile_any : public _any::base<immobile_any<S>, aligned_storage<S>> {
+  using base = _any::base<immobile_any<S>, aligned_storage<S>>;
   friend base;
 
-  using _any::base<immobile_any<S>, std::aligned_storage_t<S>>::storage;
+  using _any::base<immobile_any<S>, aligned_storage<S>>::storage;
 
   // Superclass requirements!
   // ------------------------

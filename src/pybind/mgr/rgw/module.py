@@ -6,9 +6,10 @@ import base64
 import functools
 import sys
 
+from .cli import RGWCLICommand
+
 from mgr_module import (
     MgrModule,
-    CLICommand,
     HandleCommandResult,
     Option,
     MonCommandFailed,
@@ -111,6 +112,7 @@ def check_orchestrator(func: FuncT) -> FuncT:
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
+    CLICommand = RGWCLICommand
     MODULE_OPTIONS: List[Option] = [
         Option(
             'secondary_zone_period_retry_limit',
@@ -163,7 +165,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))  # type: ignore
 
-    @CLICommand('rgw admin', perm='rw')
+    @RGWCLICommand('rgw admin', perm='rw')
     def _cmd_rgw_admin(self, params: Sequence[str]) -> HandleCommandResult:
         """rgw admin"""
         cmd, returncode, out, err = self.env.mgr.tool_exec('radosgw-admin', params or [])
@@ -174,7 +176,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=returncode, stdout=out, stderr=err)
 
-    @CLICommand('rgw realm bootstrap', perm='rw')
+    @RGWCLICommand('rgw realm bootstrap', perm='rw')
     @check_orchestrator
     def _cmd_rgw_realm_bootstrap(self,
                                  realm_name: Optional[str] = None,
@@ -184,6 +186,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  placement: Optional[str] = None,
                                  zone_endpoints: Optional[str] = None,
                                  start_radosgw: Optional[bool] = True,
+                                 skip_realm_components: Optional[bool] = False,
                                  inbuf: Optional[str] = None) -> HandleCommandResult:
         """Bootstrap new rgw realm, zonegroup, and zone"""
 
@@ -207,10 +210,42 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         try:
             for spec in rgw_specs:
                 self.create_pools(spec)
-                RGWAM(self.env).realm_bootstrap(spec, start_radosgw)
+                RGWAM(self.env).realm_bootstrap(spec, start_radosgw, skip_realm_components)
+
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
-            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
+            # The RGWAM code isn't always consistent about what goes into stdout
+            # and message fields. What is known is there are definitely some cases
+            # where the message field contains useful info and the stdout field
+            # does not, which means just giving the stdout can result in not so useful
+            # return messages, e.g.
+            #
+            # [ceph: root@vm-00 /]# ceph rgw realm bootstrap -i specs/rgw.yaml
+            # Error EEXIST:
+            #
+            # For that reason, we want to include the msg in what we return. Doing so
+            # transformed the same error case that just gave us "Error EEXIST:" into
+            #
+            # [ceph: root@vm-00 /]# ceph rgw realm bootstrap -i specs/rgw.yaml
+            # failed to create system user: Command error (-17): user create --uid sysuser-my_realm_ck
+            # --display-name sysuser-my_realm_ck --system --rgw-zonegroup my_zonegroup_ck --zonegroup-id
+            # 428a28d1-c8a9-4c12-a408-29507ef23842 --rgw-zone my_zone_ck --zone-id 161ee2ab-bc96-4729-a2b5-0d170e347129
+            # stdout:
+            # stderr:could not create user: unable to parse parameters, user: sysuser-my_realm_ck exists
+            # Error EEXIST:
+            #
+            # which is much more useful
+            msg = e.message
+            if msg and e.stdout and (e.stdout not in msg):
+                msg = f'{msg}; {e.stdout}'
+            elif e.stdout:
+                msg = e.stdout
+
+            e.stderr = (e.stderr or '') + (
+                "\nNote: Partial bootstrap detected - The following entries were already created during a previous bootstrap attempt. \n"
+                "To resume, run:\n ceph rgw realm bootstrap with --skip-realm-components\n"
+            )
+            return HandleCommandResult(retval=e.retcode, stdout=msg, stderr=e.stderr)
         except PoolCreationError as e:
             self.log.error(f'Pool creation failure: {str(e)}')
             return HandleCommandResult(retval=-errno.EINVAL, stderr=str(e))
@@ -322,7 +357,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                     f'with attrs {profile_attrs}: {str(e)}')
         return profile_name
 
-    @CLICommand('rgw realm zone-creds create', perm='rw')
+    @RGWCLICommand('rgw realm zone-creds create', perm='rw')
     def _cmd_rgw_realm_new_zone_creds(self,
                                       realm_name: Optional[str] = None,
                                       endpoints: Optional[str] = None,
@@ -337,7 +372,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
-    @CLICommand('rgw realm zone-creds remove', perm='rw')
+    @RGWCLICommand('rgw realm zone-creds remove', perm='rw')
     def _cmd_rgw_realm_rm_zone_creds(self, realm_token: Optional[str] = None) -> HandleCommandResult:
         """Create credentials for new zone creation"""
 
@@ -349,7 +384,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return HandleCommandResult(retval=retval, stdout=out, stderr=err)
 
-    @CLICommand('rgw realm tokens', perm='r')
+    @RGWCLICommand('rgw realm tokens', perm='r')
     def list_realm_tokens(self) -> HandleCommandResult:
         try:
             realms_info = self.get_realm_tokens()
@@ -376,7 +411,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 realms_info.append({'realm': realm_info['realm_name'], 'token': realm_token_s})
         return realms_info
 
-    @CLICommand('rgw zone modify', perm='rw')
+    @RGWCLICommand('rgw zone modify', perm='rw')
     def update_zone_info(self, realm_name: str, zonegroup_name: str, zone_name: str, realm_token: str, zone_endpoints: List[str]) -> HandleCommandResult:
         try:
             retval, out, err = RGWAM(self.env).zone_modify(realm_name,
@@ -389,7 +424,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
             return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
-    @CLICommand('rgw zonegroup modify', perm='rw')
+    @RGWCLICommand('rgw zonegroup modify', perm='rw')
     def update_zonegroup_info(self, realm_name: str, zonegroup_name: str, zone_name: str, hostnames: List[str]) -> HandleCommandResult:
         try:
             retval, out, err = RGWAM(self.env).zonegroup_modify(realm_name,
@@ -401,7 +436,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
             return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
 
-    @CLICommand('rgw zone create', perm='rw')
+    @RGWCLICommand('rgw zone create', perm='rw')
     @check_orchestrator
     def _cmd_rgw_zone_create(self,
                              zone_name: Optional[str] = None,
@@ -464,7 +499,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             raise e
         return created_zones
 
-    @CLICommand('rgw realm reconcile', perm='rw')
+    @RGWCLICommand('rgw realm reconcile', perm='rw')
     def _cmd_rgw_realm_reconcile(self,
                                  realm_name: Optional[str] = None,
                                  zonegroup_name: Optional[str] = None,

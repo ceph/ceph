@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,7 +19,8 @@
 #include "CInode.h"
 #include "CDir.h"
 #include "SnapClient.h"
-
+#include "SnapRealm.h"
+#include "BatchOp.h"
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "Locker.h"
@@ -26,12 +28,49 @@
 
 #include "messages/MLock.h"
 
+#include "common/debug.h"
+#include "common/strescape.h" // for binstrprint()
+#include "include/filepath.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
 
 using namespace std;
+
+CDentry::CDentry(std::string_view n, __u32 h,
+		 mempool::mds_co::string alternate_name,
+		 snapid_t f, snapid_t l) :
+  hash(h),
+  first(f), last(l),
+  item_dirty(this),
+  lock(this, &lock_type),
+  versionlock(this, &versionlock_type),
+  name(n),
+  alternate_name(std::move(alternate_name))
+{}
+
+CDentry::CDentry(std::string_view n, __u32 h,
+		 mempool::mds_co::string alternate_name,
+		 inodeno_t ino, inodeno_t referent_ino,
+		 unsigned char dt, snapid_t f, snapid_t l) :
+  hash(h),
+  first(f), last(l),
+  item_dirty(this),
+  lock(this, &lock_type),
+  versionlock(this, &versionlock_type),
+  name(n),
+  alternate_name(std::move(alternate_name))
+{
+  linkage.remote_ino = ino;
+  linkage.remote_d_type = dt;
+  linkage.referent_ino = referent_ino;
+}
+
+CDentry::~CDentry() {
+  ceph_assert(batch_ops.empty());
+}
 
 ostream& CDentry::print_db_line_prefix(ostream& out) const
 {
@@ -47,7 +86,7 @@ const LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
 ostream& operator<<(ostream& out, const CDentry& dn)
 {
   filepath path;
-  dn.make_path(path);
+  dn.make_trimmed_path(path);
   
   out << "[dentry " << path;
   
@@ -195,7 +234,7 @@ version_t CDentry::pre_dirty(version_t min)
 }
 
 
-void CDentry::_mark_dirty(LogSegment *ls)
+void CDentry::_mark_dirty(LogSegmentRef const& ls)
 {
   // state+pin
   if (!state_test(STATE_DIRTY)) {
@@ -209,7 +248,7 @@ void CDentry::_mark_dirty(LogSegment *ls)
     ls->dirty_dentries.push_back(&item_dirty);
 }
 
-void CDentry::mark_dirty(version_t pv, LogSegment *ls) 
+void CDentry::mark_dirty(version_t pv, LogSegmentRef const& ls) 
 {
   dout(10) << __func__ << " " << *this << dendl;
 
@@ -262,10 +301,11 @@ void CDentry::clear_auth()
   }
 }
 
-void CDentry::make_path_string(string& s, bool projected) const
+void CDentry::make_path_string(string& s, bool projected,
+			       int path_comp_count) const
 {
   if (dir) {
-    dir->inode->make_path_string(s, projected);
+    dir->inode->make_path_string(s, projected, NULL, path_comp_count);
   } else {
     s = "???";
   }
@@ -273,13 +313,62 @@ void CDentry::make_path_string(string& s, bool projected) const
   s.append(name.data(), name.length());
 }
 
-void CDentry::make_path(filepath& fp, bool projected) const
+/* path_comp_count = path component count. default value is 10 which implies
+ * generate entire path.
+ *
+ * XXX Generating more than 10 components of a path for printing in logs will
+ * consume too much time when the path is too long (imagine a path with 2000
+ * components) since the path would've to be generated indidividually for each
+ * log entry.
+ *
+ * Besides consuming too much time, such long paths in logs are not only not
+ * useful but also it makes reading logs harder. Therefore, shorten the path
+ * when used for logging.
+ */
+void CDentry::make_trimmed_path_string(string& s, bool projected,
+				       int path_comp_count) const
 {
-  ceph_assert(dir);
-  dir->inode->make_path(fp, projected);
-  fp.push_dentry(get_name());
+  make_path_string(s, projected, path_comp_count);
 }
 
+/* path_comp_count = path component count. default value is -1 which implies
+ * generate entire path.
+ */
+void CDentry::make_path(filepath& fp, bool projected,
+		        int path_comp_count) const
+{
+  fp.set_trimmed();
+
+  if (path_comp_count == -1) {
+    ceph_assert(dir);
+    dir->inode->make_path(fp, projected, path_comp_count);
+    fp.push_dentry(get_name());
+  } else if (path_comp_count >= 1) {
+    --path_comp_count;
+
+    ceph_assert(dir);
+    dir->inode->make_path(fp, projected, path_comp_count);
+    fp.push_dentry(get_name());
+  }
+}
+
+/* path_comp_count = path component count. default value is 10 which implies
+ * generate entire path.
+ *
+ * XXX Generating more than 10 components of a path for printing in logs will
+ * consume too much time when the path is too long (imagine a path with 2000
+ * components) since the path would've to be generated indidividually for each
+ * log entry.
+ *
+ * Besides consuming too much time, such long paths in logs are not only not
+ * useful but also it makes reading logs harder. Therefore, shorten the path
+ * when used for logging.
+ */
+void CDentry::make_trimmed_path(filepath& fp, bool projected,
+				int path_comp_count) const
+{
+  make_path(fp, projected, path_comp_count);
+}
 /*
  * we only add ourselves to remote_parents when the linkage is
  * active (no longer projected).  if the passed dnl is projected,

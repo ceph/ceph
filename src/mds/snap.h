@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,12 +19,14 @@
 #include <iosfwd>
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 #include <string_view>
 
-#include "mdstypes.h"
 #include "common/snap_types.h"
 #include "include/buffer.h"
+#include "include/object.h" // for snapid_t
+#include "include/utime.h"
 
 namespace ceph { class Formatter; }
 
@@ -34,7 +37,7 @@ struct SnapInfo {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SnapInfo*>& ls);
+  static std::list<SnapInfo> generate_test_instances();
 
   std::string_view get_long_name() const;
 
@@ -66,7 +69,7 @@ struct snaplink_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<snaplink_t*>& ls);
+  static std::list<snaplink_t> generate_test_instances();
 
   inodeno_t ino;
   snapid_t first;
@@ -85,10 +88,15 @@ struct sr_t {
   void clear_subvolume() { flags &= ~SUBVOLUME; }
   bool is_subvolume() const { return flags & SUBVOLUME; }
 
+  void set_snapdir_visibility() { flags |= SNAPDIR_VISIBILITY; }
+  void unset_snapdir_visibility() { flags &= ~SNAPDIR_VISIBILITY; }
+  bool is_snapdir_visible() const { return flags & SNAPDIR_VISIBILITY; }
+
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<sr_t*>& ls);
+  static std::list<sr_t> generate_test_instances();
+  void print(std::ostream&) const;
 
   snapid_t seq = 0;                     // basically, a version/seq # for changes to _this_ realm.
   snapid_t created = 0;                 // when this realm was created.
@@ -103,11 +111,13 @@ struct sr_t {
   uint64_t change_attr = 0;             // tracks changes to snap
                                         // realm attrs.
 
-  __u32 flags = 0;
   enum {
     PARENT_GLOBAL	= 1 << 0,
     SUBVOLUME		= 1 << 1,
+    SNAPDIR_VISIBILITY = 1 << 2,
   };
+
+  __u32 flags = SNAPDIR_VISIBILITY; // snapdir visibility is always on by default
 };
 WRITE_CLASS_ENCODER(sr_t)
 

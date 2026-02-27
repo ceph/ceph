@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -14,8 +15,6 @@
 
 #ifndef CEPHFS_FEATURES_H
 #define CEPHFS_FEATURES_H
-
-#include "include/cephfs/metrics/Types.h"
 
 #include <string>
 
@@ -52,7 +51,8 @@ namespace ceph {
 #define CEPHFS_FEATURE_HAS_OWNER_UIDGID     20
 #define CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK  21
 #define CEPHFS_FEATURE_CHARMAP              22
-#define CEPHFS_FEATURE_MAX                  22
+#define CEPHFS_FEATURE_BLOCKDIFF            23
+#define CEPHFS_FEATURE_MAX                  23
 
 #define CEPHFS_FEATURES_ALL {		\
   0, 1, 2, 3, 4,			\
@@ -75,7 +75,8 @@ namespace ceph {
   CEPHFS_FEATURE_NEW_SNAPREALM_INFO,    \
   CEPHFS_FEATURE_HAS_OWNER_UIDGID,      \
   CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK,   \
-  CEPHFS_FEATURE_CHARMAP,      \
+  CEPHFS_FEATURE_CHARMAP,               \
+  CEPHFS_FEATURE_BLOCKDIFF,             \
 }
 
 #define CEPHFS_METRIC_FEATURES_ALL {		\
@@ -94,7 +95,8 @@ namespace ceph {
     CLIENT_METRIC_TYPE_AVG_WRITE_LATENCY,	\
     CLIENT_METRIC_TYPE_STDEV_WRITE_LATENCY,	\
     CLIENT_METRIC_TYPE_AVG_METADATA_LATENCY,	\
-    CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY,	\
+    CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY, \
+    CLIENT_METRIC_TYPE_SUBVOLUME_METRICS, \
 }
 
 #define CEPHFS_FEATURES_MDS_SUPPORTED CEPHFS_FEATURES_ALL

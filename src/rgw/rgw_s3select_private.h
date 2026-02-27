@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
+
 //
 #pragma once
 
@@ -35,6 +36,10 @@
 #pragma GCC diagnostic push
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated"
+#if defined(__GNUC__) && !defined(__clang__)
+// Clang generates a warning due to this (-Wunknown-warning-option)
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
+#endif
 #pragma clang diagnostic ignored "-Wdeprecated"
 #include <s3select/include/s3select.h>
 #pragma GCC diagnostic pop

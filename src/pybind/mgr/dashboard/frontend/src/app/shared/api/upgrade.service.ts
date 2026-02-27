@@ -8,6 +8,7 @@ import { Observable } from 'rxjs';
 import { UpgradeStartModalComponent } from '~/app/ceph/cluster/upgrade/upgrade-form/upgrade-start-modal.component';
 import { ModalService } from '../services/modal.service';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 
 const CACHE_SIZE = 1;
 
@@ -54,7 +55,7 @@ export class UpgradeService extends ApiClient {
   versionAvailableForUpgrades(upgradeInfo: UpgradeInfoInterface): UpgradeInfoInterface {
     let version = '';
     this.summaryService.subscribe((summary) => {
-      version = summary.version.replace('ceph version ', '').split('-')[0];
+      version = summary.version.replace(`${VERSION_PREFIX}`, '').split('-')[0];
     });
 
     const upgradableVersions = upgradeInfo.versions.filter((targetVersion) => {

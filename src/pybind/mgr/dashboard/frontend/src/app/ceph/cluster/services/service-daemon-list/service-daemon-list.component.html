@@ -5,42 +5,30 @@
 </div>
 
 <ng-template #serviceDetailsTpl>
-  <ng-container>
-    <nav ngbNav
-         #nav="ngbNav"
-         class="nav-tabs"
-         cdStatefulTab="service-details">
-      <ng-container ngbNavItem="details">
-        <a ngbNavLink
-           i18n>Daemons</a>
-        <ng-template ngbNavContent>
-          <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
-        </ng-template>
-      </ng-container>
-      <ng-container ngbNavItem="service_events">
-        <a ngbNavLink
-           i18n>Service Events</a>
-        <ng-template ngbNavContent>
-          <cd-table *ngIf="hasOrchestrator"
-                    #serviceTable
-                    [data]="services"
-                    [columns]="serviceColumns"
-                    columnMode="flex"
-                    (fetchData)="getServices($event)">
-          </cd-table>
-        </ng-template>
-      </ng-container>
-    </nav>
-    <div [ngbNavOutlet]="nav"></div>
-  </ng-container>
+@switch (mode) {
+  @case ('daemons') {
+  <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
+  }
+  @case ('events') {
+  @if (hasOrchestrator) {
+  <cd-table
+    #serviceTable
+    [data]="services"
+    [columns]="serviceColumns"
+    columnMode="flex"
+    (fetchData)="getServices($event)">
+  </cd-table>
+  }
+  }
+}
 </ng-template>
 
 <ng-template #statusTpl
              let-row="data.row">
-  <span class="badge"
-        [ngClass]="row | pipeFunction:getStatusClass">
+  <cds-tag *ngIf="row.status_desc"
+           [class]="row | pipeFunction:getStatusClass">
     {{ row.status_desc }}
-  </span>
+</cds-tag>
 </ng-template>
 
 <ng-template #listTpl
@@ -50,14 +38,16 @@
     <li class="list-group-item"
         *ngFor="let event of events; trackBy:trackByFn">
       <b>{{ event.created | relativeDate }} - </b>
-      <span class="badge badge-info">{{ event.subject }}</span><br>
+      <cds-tag class="tag-info">{{ event.subject }}</cds-tag><br>
       <span *ngIf="event.level === 'INFO'">
-      <i [ngClass]="[icons.infoCircle]"
-         aria-hidden="true"></i>
+        <svg [cdsIcon]="icons.infoCircle"
+             [size]="icons.size16"
+             class="cds-info-color"></svg>
       </span>
       <span *ngIf="event.level === 'ERROR'">
-      <i [ngClass]="[icons.warning]"
-         aria-hidden="true"></i>
+        <svg [cdsIcon]="icons.warning"
+             [size]="icons.size16"
+             class="cds-warning-color"></svg>
       </span>
       {{ event.message }}
     </li>

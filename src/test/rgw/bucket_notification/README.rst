@@ -22,8 +22,8 @@ we would need the following configuration file::
 				version = v1
 
 				[s3 main]
-				access_key = 1234567890
-				secret_key = pencil
+				access_key = 0987654321
+				secret_key = crayon
 
 Add boto3 extension to the standard client: https://github.com/ceph/ceph/tree/main/examples/rgw/boto3#introduction.
 
@@ -57,7 +57,7 @@ and::
 
 After running `vstart.sh`, Zookeeper, and Kafka services you're ready to run the Kafka tests::
 
-        BNTESTS_CONF=bntests.conf python -m nose -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -a 'kafka_test'
+        BNTESTS_CONF=bntests.conf python -m pytest -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -m 'kafka_test'
 
 --------------------
 Kafka Security Tests
@@ -120,7 +120,7 @@ And restart the Kafka server. Once both Zookeeper and Kafka are up, run the foll
 
 To run the Kafka security test, you also need to provide the test with the location of the Kafka directory::
 
-        KAFKA_DIR=/path/to/kafka BNTESTS_CONF=bntests.conf python -m nose -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -a 'kafka_security_test'
+        KAFKA_DIR=/path/to/kafka BNTESTS_CONF=bntests.conf python -m pytest -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -m 'kafka_security_test'
 
 ==============
 RabbitMQ Tests
@@ -148,7 +148,7 @@ To confirm that the RabbitMQ server is running you can run the following command
 
 After running `vstart.sh` and RabbitMQ server you're ready to run the AMQP tests::
 
-        BNTESTS_CONF=bntests.conf python -m nose -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -a 'amqp_test'
+        BNTESTS_CONF=bntests.conf python -m pytest -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -m 'amqp_test'
 
 After running the tests you need to stop the vstart cluster (``/path/to/ceph/src/stop.sh``) and the RabbitMQ server by running the following command::
 
@@ -156,7 +156,7 @@ After running the tests you need to stop the vstart cluster (``/path/to/ceph/src
 
 To run the RabbitMQ SSL security tests use the following::
 
-        BNTESTS_CONF=bntests.conf python -m nose -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -a 'amqp_ssl_test'
+        BNTESTS_CONF=bntests.conf python -m pytest -s /path/to/ceph/src/test/rgw/bucket_notification/test_bn.py -v -m 'amqp_ssl_test'
 
 During these tests, the test script will restart the RabbitMQ server with the correct security configuration (``sudo`` privileges will be needed).
 For that reason it is not recommended to run the `amqp_ssl_test` tests, that assumes a manually configured rabbirmq server, in the same run as `amqp_test` tests, 

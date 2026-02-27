@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,12 +16,18 @@
 #ifndef CEPH_MDSTABLE_H
 #define CEPH_MDSTABLE_H
 
-#include "mdstypes.h"
-#include "mds_table_types.h"
-#include "include/buffer_fwd.h"
+#include "include/buffer.h"
+#include "include/object.h" // for object_t
+#include "include/types.h" // for version_t
+#include "include/cephfs/types.h" // for mds_rank_t
 
-#include "MDSContext.h"
+#include <map>
+#include <string>
+#include <string_view>
+#include <vector>
 
+class Context;
+class MDSContext;
 class MDSRank;
 
 class MDSTable {
@@ -86,6 +93,6 @@ protected:
 
   version_t version = 0, committing_version = 0, committed_version = 0, projected_version = 0;
 
-  std::map<version_t, MDSContext::vec > waitfor_save;
+  std::map<version_t, std::vector<MDSContext*> > waitfor_save;
 };
 #endif

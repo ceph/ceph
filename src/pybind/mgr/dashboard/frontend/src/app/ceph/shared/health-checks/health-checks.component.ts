@@ -6,11 +6,15 @@ import { Permissions } from '~/app/shared/models/permissions';
 @Component({
   selector: 'cd-health-checks',
   templateUrl: './health-checks.component.html',
-  styleUrls: ['./health-checks.component.scss']
+  styleUrls: ['./health-checks.component.scss'],
+  standalone: false
 })
 export class HealthChecksComponent {
   @Input()
   healthData: any;
+
+  @Input()
+  legacyHealthChecks = false;
 
   icons = Icons;
 

@@ -14,7 +14,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Component({
   selector: 'cd-alert-panel',
   templateUrl: './alert-panel.component.html',
-  styleUrls: ['./alert-panel.component.scss']
+  styleUrls: ['./alert-panel.component.scss'],
+  standalone: false
 })
 export class AlertPanelComponent implements OnInit {
   @ViewChild('content', { static: true })
@@ -38,6 +39,8 @@ export class AlertPanelComponent implements OnInit {
   actionName = '';
   @Input()
   lowContrast = true;
+  @Input()
+  variant: 'toast' | 'inline' = 'inline';
 
   /**
    * The event that is triggered when the close button (x) has been
@@ -83,7 +86,8 @@ export class AlertPanelComponent implements OnInit {
       actionsTemplate: this.actionTpl,
       showClose: this.dismissible,
       title: this.showTitle ? this.title : '',
-      lowContrast: this.lowContrast
+      lowContrast: this.lowContrast,
+      variant: this.variant
     };
   }
 

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -62,6 +62,11 @@ struct PeeringFacade final : BackfillState::PeeringFacade {
     const std::vector<pg_shard_t> &peers) override {
     return peering_state.prepare_backfill_for_missing(soid, v, peers);
   }
+
+  const pg_pool_t& get_pool() const override {
+    return peering_state.get_pgpool().info;
+  }
+
   PeeringFacade(PeeringState& peering_state)
     : peering_state(peering_state) {
   }

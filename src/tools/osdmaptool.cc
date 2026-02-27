@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -17,6 +18,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 #include "common/safe_io.h"
 #include "common/strtol.h" // for strict_strtoll()
 #include "crush/CrushWrapper.h"
@@ -108,6 +110,11 @@ void print_inc_upmaps(const OSDMap::Incremental& pending_inc, int fd, bool vstar
       ss << " " << p.first << " " << p.second;
     }
     ss << std::endl;
+  }
+  for (auto& i : pending_inc.old_pg_upmap_primary) {
+    if (vstart)
+      ss << prefix;
+    ss << cmd +  " osd rm-pg-upmap-primary " << i << std::endl;
   }
   for (auto& i : pending_inc.new_pg_upmap_primary) {
     if (vstart)

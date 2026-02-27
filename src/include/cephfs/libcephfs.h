@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -39,9 +40,9 @@ using CephContext = ceph::common::CephContext;
 extern "C" {
 #endif
 
-#define LIBCEPHFS_VER_MAJOR 10
+#define LIBCEPHFS_VER_MAJOR 11
 #define LIBCEPHFS_VER_MINOR 0
-#define LIBCEPHFS_VER_EXTRA 3
+#define LIBCEPHFS_VER_EXTRA 0
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
@@ -130,6 +131,11 @@ struct ceph_ll_io_info {
   bool fsync;
   bool syncdataonly;
 };
+
+struct ceph_fscrypt_key_identifier;
+struct fscrypt_get_key_status_arg;
+struct fscrypt_policy_v2;
+struct fscrypt_remove_key_arg;
 
 /* setattr mask bits (up to an int in size) */
 #ifndef CEPH_SETATTR_MODE
@@ -1148,7 +1154,7 @@ int ceph_chmodat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_chown(struct ceph_mount_info *cmount, const char *path, int uid, int gid);
+int ceph_chown(struct ceph_mount_info *cmount, const char *path, uid_t uid, gid_t gid);
 
 /**
  * Change the ownership of a file from an open file descriptor.
@@ -1159,7 +1165,7 @@ int ceph_chown(struct ceph_mount_info *cmount, const char *path, int uid, int gi
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_fchown(struct ceph_mount_info *cmount, int fd, int uid, int gid);
+int ceph_fchown(struct ceph_mount_info *cmount, int fd, uid_t uid, gid_t gid);
 
 /**
  * Change the ownership of a file/directory, don't follow symlinks.
@@ -1170,7 +1176,7 @@ int ceph_fchown(struct ceph_mount_info *cmount, int fd, int uid, int gid);
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int gid);
+int ceph_lchown(struct ceph_mount_info *cmount, const char *path, uid_t uid, gid_t gid);
 
 /**
  * Change the ownership of a file/directory releative to a file descriptor.
@@ -1275,6 +1281,32 @@ int ceph_utimensat(struct ceph_mount_info *cmount, int dirfd, const char *relpat
  */
 int ceph_flock(struct ceph_mount_info *cmount, int fd, int operation,
 	       uint64_t owner);
+
+/**
+ * Test the existence of a record lock.
+ *
+ * @param cmount the ceph mount handle to use for performing the lock.
+ * @param fd the open file descriptor to test the existence of a record lock.
+ * @param pointer to an flock structure.
+ * @param owner the user-supplied owner identifier (an arbitrary integer)
+ * @returns 0 on success or negative error code on failure.
+ */ 
+ int ceph_getlk(struct ceph_mount_info *cmount, int fd, struct flock *flock,
+		uint64_t owner);
+
+/**
+ * Set a record lock.
+ *
+ * @param cmount the ceph mount handle to use for performing the lock.
+ * @param fd the open file descriptor to set a record lock
+ * @param pointer to an flock structure.
+ * @param owner the user-supplied owner identifier (an arbitrary integer)
+ * @param sleep the user-supplied sleep flag
+ * @returns 0 on success or negative error code on failure.
+ */ 
+ 
+ int ceph_setlk(struct ceph_mount_info *cmount, int fd, struct flock *flock,
+		uint64_t owner, int sleep);
 
 /**
  * Truncate the file to the given size.  If this operation causes the
@@ -1970,6 +2002,75 @@ int ceph_debug_get_fd_caps(struct ceph_mount_info *cmount, int fd);
  */
 int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const char *path);
 
+/**
+ * Add fscrypt encryption key to the in-memory key manager
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param key_data key data
+ * @param key_len key data length
+ * @param out_keyid to hold the hashed key identifier, FSCRYPT_KEY_IDENTIFIER_SIZE bytes in length
+ * @param user user id
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
+                         const char *key_data, int key_len,
+                         char* out_keyid, int user);
+
+/**
+ * Remove fscrypt encryption key from the in-memory key manager
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param kid pointer to the key identifier
+ * @param user user id
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
+                            struct fscrypt_remove_key_arg *kid,
+			    int user);
+
+/**
+ * Get fscrypt encryption key status from the in-memory key manager
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param arg pointer to the key status for specified key
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_get_fscrypt_key_status(struct ceph_mount_info *cmount,
+                                struct fscrypt_get_key_status_arg *arg);
+
+/**
+ * Set encryption policy on a directory.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param fd open directory file descriptor
+ * @param policy pointer to to the fscrypt v2 policy
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                               int fd, const struct fscrypt_policy_v2 *policy);
+
+/**
+ * Checks to see if encryption is set on a directory.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param fd open directory file descriptor
+ * @param enctag, if set on dir, will return non-nullptr
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_is_encrypted(struct ceph_mount_info *cmount,
+                      int fd, char* enctag);
+
+/**
+ * Get encryption policy of a directory.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param fd open directory file descriptor
+ * @param policy pointer to to the fscrypt v2 policy
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_get_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                               int fd, struct fscrypt_policy_v2 *policy);
+
 /* Low Level */
 struct Inode *ceph_ll_get_inode(struct ceph_mount_info *cmount,
 				vinodeno_t vino);
@@ -1994,6 +2095,7 @@ int ceph_ll_lookup_root(struct ceph_mount_info *cmount,
 int ceph_ll_lookup(struct ceph_mount_info *cmount, Inode *parent,
 		   const char *name, Inode **out, struct ceph_statx *stx,
 		   unsigned want, unsigned flags, const UserPerm *perms);
+void ceph_ll_get(struct ceph_mount_info *cmount, struct Inode *in);
 int ceph_ll_put(struct ceph_mount_info *cmount, struct Inode *in);
 int ceph_ll_forget(struct ceph_mount_info *cmount, struct Inode *in,
 		   int count);
@@ -2025,6 +2127,8 @@ int64_t ceph_ll_writev(struct ceph_mount_info *cmount, struct Fh *fh,
 		       const struct iovec *iov, int iovcnt, int64_t off);
 int64_t ceph_ll_nonblocking_readv_writev(struct ceph_mount_info *cmount,
 					 struct ceph_ll_io_info *io_info);
+int64_t ceph_ll_nonblocking_fsync(struct ceph_mount_info *cmount,
+				  Inode *in, struct ceph_ll_io_info *io_info);
 int ceph_ll_close(struct ceph_mount_info *cmount, struct Fh* filehandle);
 int ceph_ll_iclose(struct ceph_mount_info *cmount, struct Inode *in, int mode);
 /**
@@ -2119,6 +2223,14 @@ int ceph_ll_setlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
 
 int ceph_ll_lazyio(struct ceph_mount_info *cmount, Fh *fh, int enable);
+
+int ceph_ll_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                               Inode *in, const struct fscrypt_policy_v2 *policy);
+
+int ceph_ll_get_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                               Inode *in, struct fscrypt_policy_v2 *policy);
+
+int ceph_ll_is_encrypted(struct ceph_mount_info *cmount, Inode *in, char* enctag);
 
 /*
  * Delegation support
@@ -2285,6 +2397,24 @@ int ceph_get_snap_info(struct ceph_mount_info *cmount,
  * @param snap_info snapshot info struct (fetched via call to ceph_get_snap_info()).
  */
 void ceph_free_snap_info_buffer(struct snap_info *snap_info);
+
+/**
+ * perf counters via libcephfs API.
+ */
+
+/**
+ * Get a json string of performance counters
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param perf_dump buffer holding the perf dump
+ *
+ * Returns 0 success with the performance counters populated in the
+ * passed in perf_dump buffer. Caller is responsible for freeing the
+ * @perf_dump buffer using free().
+ */
+int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump);
+
+int ceph_fcopyfile(struct ceph_mount_info *cmount, const char *spath, const char *dpath, mode_t mode);
 #ifdef __cplusplus
 }
 #endif

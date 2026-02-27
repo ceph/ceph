@@ -153,7 +153,7 @@ class TestRgwUserAccountsController(ControllerTestCase):
                 'max-buckets': '1000',
                 'max-users': '1000',
                 'max-roles': '1000',
-                'max-group': '1000',
+                'max-groups': '1000',
                 'max-access-keys': '4'
             })
 
@@ -265,7 +265,7 @@ class TestRgwUserAccountsController(ControllerTestCase):
                 'max-buckets': '1000',
                 'max-users': '1000',
                 'max-roles': '1000',
-                'max-group': '1000',
+                'max-groups': '1000',
                 'max-access-keys': '4'
             })
 

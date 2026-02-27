@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
@@ -286,6 +286,31 @@ TEST_F(TestMockMirrorSnapshotUnlinkPeerRequest, SnapshotDNE) {
 
   C_SaferCond ctx;
   auto req = new MockUnlinkPeerRequest(&mock_image_ctx, 123, "peer_uuid",
+                                       true, &ctx);
+  req->send();
+  ASSERT_EQ(-ENOENT, ctx.wait());
+}
+
+TEST_F(TestMockMirrorSnapshotUnlinkPeerRequest, TrashedSnapshot) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  cls::rbd::TrashSnapshotNamespace ns{
+    cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR, "mirror_snap"};
+  auto snap_id = snap_create(mock_image_ctx, ns, "trash_snap");
+
+  expect_get_snap_info(mock_image_ctx, snap_id);
+
+  InSequence seq;
+
+  expect_is_refresh_required(mock_image_ctx, true);
+  expect_refresh_image(mock_image_ctx, 0);
+
+  C_SaferCond ctx;
+  auto req = new MockUnlinkPeerRequest(&mock_image_ctx, snap_id, "peer_uuid",
                                        true, &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());

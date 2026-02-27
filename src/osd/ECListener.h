@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,6 +19,7 @@
 #include "OSDMap.h"
 #include "common/WorkQueue.h"
 #include "PGLog.h"
+#include "messages/MOSDPGPush.h"
 
 // ECListener -- an interface decoupling the pipelines from
 // particular implementation of ECBackendL (crimson vs cassical).
@@ -27,6 +29,7 @@ struct ECListener {
   virtual const OSDMapRef& pgb_get_osdmap() const = 0;
   virtual epoch_t pgb_get_osdmap_epoch() const = 0;
   virtual const pg_info_t &get_info() const = 0;
+  virtual uint64_t min_peer_features() const = 0;
   /**
    * Called when a pull on soid cannot be completed due to
    * down peers
@@ -85,9 +88,11 @@ struct ECListener {
 
   virtual bool pg_is_repair() const = 0;
 
-     virtual ObjectContextRef get_obc(
-       const hobject_t &hoid,
-       const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) = 0;
+#ifndef WITH_CRIMSON
+  virtual ObjectContextRef get_obc(
+    const hobject_t &hoid,
+    const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) = 0;
+#endif
 
      virtual bool check_failsafe_full() = 0;
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
@@ -141,12 +146,15 @@ struct ECListener {
   // XXX
   virtual void send_message_osd_cluster(
     std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) = 0;
+  virtual void send_message_osd_cluster(
+    int osd, MOSDPGPush* msg, epoch_t from_epoch) = 0;
 
   virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
 
   // RMWPipeline
   virtual const pg_pool_t &get_pool() const = 0;
   virtual const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const = 0;
+  virtual const shard_id_set &get_acting_recovery_backfill_shard_id_set() const = 0;
   // XXX
   virtual bool should_send_op(
     pg_shard_t peer,

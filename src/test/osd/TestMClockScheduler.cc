@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 
 #include <chrono>
 
@@ -7,6 +7,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/common_init.h"
+#include "common/mclock_common.h"
 
 #include "osd/scheduler/mClockScheduler.h"
 #include "osd/scheduler/OpSchedulerItem.h"
@@ -33,7 +34,6 @@ public:
   int shard_id;
   bool is_rotational;
   unsigned cutoff_priority;
-  MonClient *monc;
   bool init_perfcounter;
   mClockScheduler q;
 
@@ -47,26 +47,25 @@ public:
     shard_id(0),
     is_rotational(false),
     cutoff_priority(12),
-    monc(nullptr),
     init_perfcounter(true),
     q(g_ceph_context, whoami, num_shards, shard_id, is_rotational,
       cutoff_priority,
       2ms, 2ms, 1ms,
-      monc, init_perfcounter),
+      init_perfcounter),
     client1(1001),
     client2(9999),
     client3(100000001)
   {}
 
   struct MockDmclockItem : public PGOpQueueable {
-    op_scheduler_class scheduler_class;
+    SchedulerClass scheduler_class;
 
-    MockDmclockItem(op_scheduler_class _scheduler_class) :
+    MockDmclockItem(SchedulerClass _scheduler_class) :
       PGOpQueueable(spg_t()),
       scheduler_class(_scheduler_class) {}
 
     MockDmclockItem()
-      : MockDmclockItem(op_scheduler_class::background_best_effort) {}
+      : MockDmclockItem(SchedulerClass::background_best_effort) {}
 
     ostream &print(ostream &rhs) const final { return rhs; }
 
@@ -78,7 +77,7 @@ public:
       return std::nullopt;
     }
 
-    op_scheduler_class get_scheduler_class() const final {
+    SchedulerClass get_scheduler_class() const final {
       return scheduler_class;
     }
 
@@ -118,7 +117,7 @@ TEST_F(mClockSchedulerTest, TestEmpty) {
   ASSERT_TRUE(q.empty());
 
   for (unsigned i = 100; i < 105; i+=2) {
-    q.enqueue(create_item(i, client1, op_scheduler_class::client));
+    q.enqueue(create_item(i, client1, SchedulerClass::client));
     std::this_thread::sleep_for(std::chrono::microseconds(1));
   }
 
@@ -151,7 +150,7 @@ TEST_F(mClockSchedulerTest, TestSingleClientOrderedEnqueueDequeue) {
   ASSERT_TRUE(q.empty());
 
   for (unsigned i = 100; i < 105; ++i) {
-    q.enqueue(create_item(i, client1, op_scheduler_class::client));
+    q.enqueue(create_item(i, client1, SchedulerClass::client));
     std::this_thread::sleep_for(std::chrono::microseconds(1));
   }
 
@@ -175,7 +174,7 @@ TEST_F(mClockSchedulerTest, TestMultiClientOrderedEnqueueDequeue) {
   const unsigned NUM = 1000;
   for (unsigned i = 0; i < NUM; ++i) {
     for (auto &&c: {client1, client2, client3}) {
-      q.enqueue(create_item(i, c, op_scheduler_class::client));
+      q.enqueue(create_item(i, c, SchedulerClass::client));
       std::this_thread::sleep_for(std::chrono::microseconds(1));
     }
   }
@@ -199,7 +198,7 @@ TEST_F(mClockSchedulerTest, TestMultiClientOrderedEnqueueDequeue) {
 TEST_F(mClockSchedulerTest, TestHighPriorityQueueEnqueueDequeue) {
   ASSERT_TRUE(q.empty());
   for (unsigned i = 200; i < 205; ++i) {
-    q.enqueue(create_high_prio_item(i, i, client1, op_scheduler_class::client));
+    q.enqueue(create_high_prio_item(i, i, client1, SchedulerClass::client));
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
@@ -228,19 +227,19 @@ TEST_F(mClockSchedulerTest, TestAllQueuesEnqueueDequeue) {
 
   // Insert ops into the mClock queue
   for (unsigned i = 100; i < 102; ++i) {
-    q.enqueue(create_item(i, client1, op_scheduler_class::client));
+    q.enqueue(create_item(i, client1, SchedulerClass::client));
     std::this_thread::sleep_for(std::chrono::microseconds(1));
   }
 
   // Insert Immediate ops
   for (unsigned i = 103; i < 105; ++i) {
-    q.enqueue(create_item(i, client1, op_scheduler_class::immediate));
+    q.enqueue(create_item(i, client1, SchedulerClass::immediate));
     std::this_thread::sleep_for(std::chrono::microseconds(1));
   }
 
   // Insert ops into the high queue
   for (unsigned i = 200; i < 202; ++i) {
-    q.enqueue(create_high_prio_item(i, i, client1, op_scheduler_class::client));
+    q.enqueue(create_high_prio_item(i, i, client1, SchedulerClass::client));
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
@@ -278,11 +277,11 @@ TEST_F(mClockSchedulerTest, TestSlowDequeue) {
   // Insert ops into the mClock queue
   unsigned i = 0;
   for (; i < 100; ++i) {
-    q.enqueue(create_item(i, client1, op_scheduler_class::background_best_effort));
+    q.enqueue(create_item(i, client1, SchedulerClass::background_best_effort));
     std::this_thread::sleep_for(5ms);
   }
   for (; i < 200; ++i) {
-    q.enqueue(create_item(i, client2, op_scheduler_class::client));
+    q.enqueue(create_item(i, client2, SchedulerClass::client));
     std::this_thread::sleep_for(5ms);
   }
 

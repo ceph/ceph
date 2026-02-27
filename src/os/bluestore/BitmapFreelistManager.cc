@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "BitmapFreelistManager.h"
 
@@ -116,7 +116,7 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
 
 int BitmapFreelistManager::_expand(uint64_t old_size, KeyValueDB* db)
 {
-  assert(old_size < size);
+  ceph_assert(old_size < size);
   ceph_assert(std::has_single_bit(bytes_per_block));
 
   KeyValueDB::Transaction txn;

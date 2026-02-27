@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/mirror/PromoteRequest.h"
 #include "common/dout.h"
@@ -45,7 +45,7 @@ void PromoteRequest<I>::handle_get_info(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
                << dendl;
     finish(r);

@@ -1,4 +1,4 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Observable } from 'rxjs';
@@ -36,10 +36,12 @@ export class DataGatewayService {
     });
   }
 
-  delete(dataPath: string, key: string): Observable<any> {
+  delete(dataPath: string, key: string | string[]): Observable<HttpResponse<void>> {
     const { url, version } = this.getUrlAndVersion(dataPath);
 
-    return this.http.delete<any>(`${url}/${key}`, {
+    const keyPath = Array.isArray(key) ? key.join(',') : key;
+
+    return this.http.delete<void>(`${url}/${keyPath}`, {
       headers: { Accept: `application/vnd.ceph.api.v${version}+json` },
       observe: 'response'
     });
@@ -81,9 +83,9 @@ export class DataGatewayService {
   }
 
   getUrlAndVersion(dataPath: string) {
-    const match = dataPath.match(/(?<url>[^@]+)(?:@(?<version>.+))?/);
-    const url = match.groups.url.split('.').join('/');
-    const version = match.groups.version || '1.0';
+    const match = dataPath.match(/([^@]+)(?:@(.+))?/);
+    const url = match[1].split('.').join('/');
+    const version = match[2] || '1.0';
 
     return { url: url, version: version };
   }

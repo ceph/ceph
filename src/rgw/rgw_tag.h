@@ -1,11 +1,15 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
-#include <string>
-#include <include/types.h>
+#include <cstdint>
 #include <map>
+#include <string>
+
+#include "include/encoding.h"
+
+namespace ceph { class Formatter; }
 
 class RGWObjTags
 {
@@ -36,7 +40,7 @@ protected:
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWObjTags*>& o);
+  static std::list<RGWObjTags> generate_test_instances();
   void add_tag(const std::string& key, const std::string& val="");
   void emplace_tag(std::string&& key, std::string&& val);
   int check_and_add_tag(const std::string& key, const std::string& val="");
