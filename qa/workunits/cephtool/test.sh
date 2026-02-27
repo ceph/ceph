@@ -888,7 +888,7 @@ function test_tell_output_file()
   # only one line of json
   expect_true sed '2q1' < /tmp/foo > /dev/null
   expect_true jq -e '.version | length > 0' < /tmp/foo
-  rm -f /tmp/foo
+  sudo rm -f /tmp/foo
 
   J=$(ceph tell --format=json-pretty --daemon-output-file=/tmp/foo "$name" version)
   expect_true jq -e '.path == "/tmp/foo"' <<<"$J"
@@ -896,24 +896,24 @@ function test_tell_output_file()
   # more than one line of json
   expect_false sed '2q1' < /tmp/foo > /dev/null
   expect_true jq -e '.version | length > 0' < /tmp/foo
-  rm -f /tmp/foo
+  sudo rm -f /tmp/foo
 
   # Test --daemon-output-file=:tmp:
   J=$(ceph tell --format=json --daemon-output-file=":tmp:" "$name" version)
   path=$(jq -r .path <<<"$J")
   expect_true test -e "$path"
   # only one line of json
-  expect_true sed '2q1' < "$path" > /dev/null
-  expect_true jq -e '.version | length > 0' < "$path"
-  rm -f "$path"
+  expect_true sudo sh -c "sed '2q1' < \"$path\" > /dev/null"
+  expect_true sudo sudo sh -c "jq -e '.version | length > 0' < \"$path\""
+  sudo rm -f "$path"
 
   J=$(ceph tell --format=json-pretty --daemon-output-file=":tmp:" "$name" version)
   path=$(jq -r .path <<<"$J")
   expect_true test -e "$path"
   # only one line of json
-  expect_false sed '2q1' < "$path" > /dev/null
-  expect_true jq -e '.version | length > 0' < "$path"
-  rm -f "$path"
+  expect_false sudo sh -c "sed '2q1' < \"$path\" > /dev/null"
+  expect_true sudo sh -c "jq -e '.version | length > 0' < \"$path\""
+  sudo rm -f "$path"
 }
 
 function test_mds_tell()
