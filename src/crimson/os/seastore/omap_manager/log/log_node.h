@@ -461,9 +461,17 @@ public:
     ceph::bufferlist get_val() const {
       auto node_key = get_node_key();
       ceph::bufferlist bl;
+      bl.append(get_node_val_ptr() + node_key.key_len,
+	node_key.val_len);
+      return bl;
+    }
+
+    ceph::bufferlist get_val_shallow() const {
+      auto node_key = get_node_key();
+      ceph::bufferlist bl;
       ceph::bufferptr bptr(
 	get_node_val_ptr() + node_key.key_len,
-	get_node_key().val_len);
+	node_key.val_len);
       bl.append(bptr);
       return bl;
     }
@@ -822,8 +830,12 @@ struct LogNode
 
   void set_init_vars();
 
+  enum class copy_t : uint8_t {
+    SHALLOW,
+    DEEP,
+  };
   using get_value_ret = OMapManager::omap_get_value_ret;
-  get_value_ret get_value(const std::string &key);
+  get_value_ret get_value(const std::string &key, copy_t c = copy_t::DEEP);
 
   void set_dup_tail_addr(laddr_t laddr);
 

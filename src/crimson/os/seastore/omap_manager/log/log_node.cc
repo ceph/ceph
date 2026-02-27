@@ -203,14 +203,18 @@ void LogNode::list(const std::optional<std::string> &first,
   });
 }
 
-LogNode::get_value_ret LogNode::get_value(const std::string &key)
+LogNode::get_value_ret LogNode::get_value(const std::string &key, copy_t c)
 {
   bufferlist bl;
   bool found = false;
   for_each_live_entry([&](const auto& ent, uint32_t index) -> bool {
     const auto k = ent.get_key();
     if (k == key) {
-      bl = ent.get_val();
+      if (c == copy_t::SHALLOW) {
+	bl = ent.get_val_shallow();
+      } else {
+	bl = ent.get_val();
+      }
       found = true;
       /* If key is time-series log,
        * duplicate does not exist. In this case, return latest one */

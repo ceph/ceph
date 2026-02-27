@@ -310,7 +310,7 @@ LogManager::_log_set_key(omap_root_t &log_root,
   // This means the first entry of the new LogNode is not _fastinfo
   if (!is_ow_key(key) && can_ow) {
     // remove _fastinfo in old LogNode
-    auto e = co_await tail->get_value(key);
+    auto e = co_await tail->get_value(key, LogNode::copy_t::SHALLOW);
     if (e != std::nullopt) {
       auto mut = tm.get_mutable_extent(t, tail)->template cast<LogNode>();
       mut->remove_entry(get_ow_key());
@@ -396,14 +396,11 @@ LogManager::omap_get_value(
   LOG_PREFIX(LogManager::omap_get_value);
   DEBUGT("key={}", t, key);
   assert(log_root.get_type() == omap_type_t::LOG);
-  std::optional<bufferlist> ret;
   if (!is_dup_log_key(key)) {
-    ret = co_await find_kv(t, log_root.addr, key);
-  } else {
-    ret = co_await find_kv(t, 
-      co_await get_dup_addr_from_root(t, log_root.addr), key);
+    co_return co_await find_kv(t, log_root.addr, key);
   }
-  co_return ret;
+  co_return co_await find_kv(t, 
+    co_await get_dup_addr_from_root(t, log_root.addr), key);
 }
 
 LogManager::omap_list_ret
@@ -586,7 +583,7 @@ LogManager::remove_kv(Transaction &t, laddr_t dst, const std::string &key, LogNo
     co_return;
   }
 
-  auto e = co_await extent->get_value(key);
+  auto e = co_await extent->get_value(key, LogNode::copy_t::SHALLOW);
   if (e == std::nullopt) {
     if(extent->get_prev_addr() == L_ADDR_NULL) {
       co_return;
