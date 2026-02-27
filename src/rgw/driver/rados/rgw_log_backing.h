@@ -311,6 +311,13 @@ public:
     co_return co_await fifo->push(dpp, std::move(entries), asio::use_awaitable);
   }
 
+    asio::awaitable<void> push(const DoutPrefixProvider *dpp,
+                             ceph::buffer::list entry) {
+    co_await lazy_init(dpp);
+    co_return co_await fifo->push(dpp, std::move(entry),
+                                  asio::use_awaitable);
+  }
+
   void push(const DoutPrefixProvider *dpp,
 			     ceph::buffer::list entry,
 			     asio::yield_context y) {

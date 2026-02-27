@@ -3,12 +3,13 @@
 
 #pragma once
 
-#include<vector>
+#include <vector>
 #include <string>
 #include <tuple>
 
 #include "cls/rgw/cls_rgw_ops.h"
 #include "include/neorados/RADOS.hpp"
+#include "rgw_log_backing.h"
 #include "neorados/cls/fifo.h"
 #include "rgw_common.h"
 
@@ -20,15 +21,16 @@ class RGWBucketInfo;
 class DoutPrefixProvider;
 
 class RGWBILogFIFO {
+  const DoutPrefixProvider *dpp;
   LazyFIFO fifo;
   static std::string get_bilog_oid(const RGWBucketInfo& bucket_info) {
     return bucket_info.bucket.bucket_id + ".bilog.fifo";
   }
 
 public:
-  RGWBILogFIFO(neorados::RADOS r, neorados::IOContext loc, 
+  RGWBILogFIFO(const DoutPrefixProvider *dpp, neorados::RADOS r, neorados::IOContext loc,
                const RGWBucketInfo& bucket_info)
-    : fifo(std::move(r), get_bilog_oid(bucket_info), std::move(loc)) {}
+    : dpp(dpp), fifo(std::move(r), get_bilog_oid(bucket_info), std::move(loc)) {}
 
   asio::awaitable<void> push(const DoutPrefixProvider *dpp,
                              const rgw_bi_log_entry& entry);
