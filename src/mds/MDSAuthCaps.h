@@ -144,7 +144,8 @@ struct MDSCapMatch {
   }
 
   // check whether this grant matches against a given file and caller uid:gid
-  bool match(std::string_view target_path,
+  bool match(std::string_view fs_name,
+             std::string_view target_path,
 	     const int caller_uid,
 	     const int caller_gid,
 	     const std::vector<uint64_t> *caller_gid_list) const;
@@ -267,7 +268,8 @@ public:
   bool merge(MDSAuthCaps newcaps);
 
   bool allow_all() const;
-  bool is_capable(std::string_view inode_path,
+  bool is_capable(std::string_view fs_name,
+                  std::string_view inode_path,
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
 		  uid_t uid, gid_t gid, const std::vector<uint64_t> *caller_gid_list,
 		  unsigned mask, uid_t new_uid, gid_t new_gid,
