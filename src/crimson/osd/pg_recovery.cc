@@ -808,21 +808,34 @@ hobject_t PGRecovery::get_temp_recovery_object(
   return pg->get_recovery_backend()->get_temp_recovery_object(
     target,
     version);
-void PGRecovery::on_pool_migration_suspended()
+}
 
+void PGRecovery::on_pool_migration_source_suspended()
 {
-  LOG_PREFIX(PGRecovery::on_pool_migration_suspended);
+  LOG_PREFIX(PGRecovery::on_pool_migration_source_suspended);
   DEBUGDPP("", pg->get_dpp());
   // TODO
 }
 
-void PGRecovery::on_pool_migration_reserved()
+void PGRecovery::on_pool_migration_source_reserved()
 {
-  LOG_PREFIX(PGRecovery::on_pool_migration_reserved);
+  LOG_PREFIX(PGRecovery::on_pool_migration_source_reserved);
   DEBUGDPP("", pg->get_dpp());
   // TODO
 }
 
+void PGRecovery::on_pool_migration_target_suspended(bool toofull)
+{
+  LOG_PREFIX(PGRecovery::on_pool_migration_target_suspended);
+  DEBUGDPP("", pg->get_dpp());
+  // TODO
+}
+
+void PGRecovery::on_pool_migration_target_reserved()
+{
+  LOG_PREFIX(PGRecovery::on_pool_migration_target_reserved);
+  DEBUGDPP("", pg->get_dpp());
+  // TODO
 }
 
 } // namespace crimson::osd
