@@ -1196,6 +1196,15 @@ protected:
   hobject_t last_backfill_started;
   bool new_backfill;
 
+  /// last pool migration operation started
+  hobject_t last_pool_migration_started;
+  /// set for 1st object migration after activate
+  bool new_pool_migration_interval;
+  /// set while migrating 1st object after activate
+  bool new_pool_migration_interval_in_flight;
+
+  /// objects waiting for lock retry to delete source after successful copy_from
+  std::set<hobject_t> pool_migration_source_delete_pending_lock;
   /// current source PG reservation TID. Not 0 means source PG is waiting for a response
   ceph_tid_t pool_migration_reservation_tid = 0;
   /// increased whenever an outstanding reservation attempt is abandoned (release /
@@ -1208,8 +1217,24 @@ protected:
   bool pool_migration_reservations_granted_target = false;
   /// current migration target pg
   std::optional<pg_t> pool_migration_target_pg;
+  /// list of all target pgs a particular source pg will migrate to
+  std::vector<pg_t> pool_migration_target_pgs;
+  /// index of current target pg in pool_migration_target_pgs
+  size_t pool_migration_current_target_index = 0;
   /// pending reservation requests for target to reply to
   std::vector<OpRequestRef> pending_pool_migration_reservation_ops;
+
+  void initialize_pool_migration_target_pg_list();
+  hobject_t next_pool_migration(std::optional<hobject_t> start);
+  hobject_t earliest_pool_migration()
+  {
+    return next_pool_migration(std::nullopt);
+  }
+  void update_migration_watermark(const hobject_t &watermark) override
+  {
+    pool_migration_watermark = watermark;
+  }
+  std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) override;
 
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h,
@@ -1372,10 +1397,20 @@ protected:
     const std::set<pg_shard_t> &backfill_targets
     );
 
+  void scan_range_migration(
+    int min, int max, PoolMigrationInterval *pmi,
+    HBHandle *handle
+    );
+
   /// Update a hash range to reflect changes since the last scan
   void update_range(
     PrimaryBackfillInterval *bi, ///< [in,out] interval to update
     ThreadPool::TPHandle &handle ///< [in] tp handle
+    );
+
+  void update_range(
+    PoolMigrationInterval *pmi,
+    HBHandle *handle
     );
 
   int prep_backfill_object_push(
@@ -1394,6 +1429,13 @@ protected:
   void _committed_pushed_object(epoch_t epoch, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
 
+  /**
+   * Schedule pool migration work
+   * @param work_started will be std::set to true if recover_migration got anywhere
+   * @returns the number of operations started
+   */
+  uint64_t recover_pool_migration(uint64_t max, ThreadPool::TPHandle &handle,
+			          bool *work_started);
   pg_t get_source_pg_from_hash(const hobject_t &hobj);
   pg_t get_target_pg_from_hash(const hobject_t &hobj);
   uint16_t count_remaining_target_pgs(const hobject_t &hobj);
@@ -1403,8 +1445,11 @@ protected:
 
   void start_target_pool_migration(int64_t num_bytes, int64_t num_objects);
   void stop_target_pool_migration();
+  void stop_pool_migration_unfound();
   void stop_pool_migration_toofull();
   void stop_pool_migration_revoked();
+  void stop_pool_migration_error(int error_code);
+  void on_pool_migration_source_suspended() override;
   void on_pool_migration_target_reserved() override;
   void on_pool_migration_target_suspended(bool toofull) override;
   void on_pool_migration_source_reserved() override;
@@ -1575,6 +1620,7 @@ protected:
   friend struct C_SetDedupChunks;
   friend struct C_SetManifestRefCountDone;
   friend struct SetManifestFinisher;
+  friend struct C_Migrate;
   friend struct C_PoolMigrationReservationCallback;
 
 public:
@@ -1633,6 +1679,8 @@ public:
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
 
+  void handle_pool_migration_copy_failure(hobject_t oid, int r);
+  bool pool_migration_source_delete(hobject_t oid);
   void pool_migration_target_delete(const pg_t& source_pg, const hobject_t& watermark);
 
 private:
