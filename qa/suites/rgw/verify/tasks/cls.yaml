@@ -17,6 +17,7 @@ tasks:
         - cls/test_cls_2pc_queue.sh
         - cls/test_cls_user.sh
         - cls/test_cls_sem_set.sh
+        - cls/test_cls_timeindex.sh
         - rgw/test_rgw_gc_log.sh
         - rgw/test_rgw_obj.sh
         - rgw/test_rgw_datalog.sh
