@@ -758,7 +758,7 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
   co_await interruptor::make_interruptible(
     crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
       shard_services.get_store(pg.get_store_index()),
-      coll, ghobject_t{oid}, start_from, callback, 0
+      coll, ghobject_t{oid}, start_from, callback, 0, nullptr
     ).safe_then([&new_progress](auto ret) {
       if (ret == ObjectStore::omap_iter_ret_t::NEXT) {
         new_progress.omap_complete = true;

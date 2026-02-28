@@ -1179,23 +1179,34 @@ namespace {
 
       ObjectStore::omap_iter_seek_t start_from{"", ObjectStore::omap_iter_seek_t::UPPER_BOUND};
 
+      std::map<std::string, ceph::bufferlist> kvs;
       std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
-        [this] (std::string_view key, std::string_view value)
+        [&kvs] (std::string_view key, std::string_view value)
       {
-        ceph::bufferlist bl;
-        bl.append(value);
-        process_entry(key, bl);
+	ceph::bufferlist bl;
+	bl.append(value);
+	kvs[std::string(key)] = std::move(bl);
         return ObjectStore::omap_iter_ret_t::NEXT;
+      };
+      std::function<ObjectStore::omap_iter_ret_t()> on_conflict =
+        [&kvs] ()
+      {
+	kvs.clear();
+	return ObjectStore::omap_iter_ret_t::NEXT;
       };
 
       co_await crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
-        store,
-        ch, pgmeta_oid, start_from, callback, 0
+	store,
+        ch, pgmeta_oid, start_from, callback, 0, on_conflict
       ).safe_then([] (auto ret) {
         ceph_assert (ret == ObjectStore::omap_iter_ret_t::NEXT);
       }).handle_error(
         crimson::os::FuturizedStore::Shard::read_errorator::assert_all{}
       );
+
+      for (auto &p : kvs) {
+        process_entry(p.first, p.second);
+      }
 
       if (info.pgid.is_no_shard()) {
         // replicated pool pg does not persist this key

@@ -1347,7 +1347,7 @@ maybe_do_omap_iterate(
 {
   if (oi.is_omap()) {
     return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
-      store, coll, ghobject_t{oi.soid}, start_from, callback, 0);
+      store, coll, ghobject_t{oi.soid}, start_from, callback, 0, nullptr);
   } else {
     return crimson::ct_error::enodata::make();
   }

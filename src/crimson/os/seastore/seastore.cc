@@ -1457,14 +1457,17 @@ SeaStore::Shard::omap_iterate(
   const ghobject_t &oid,
   ObjectStore::omap_iter_seek_t start_from,
   omap_iterate_cb_t callback,
-  uint32_t op_flags)
+  uint32_t op_flags,
+  omap_iterate_conf_t on_conflict)
 {
   assert(store_active);
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
   return seastar::do_with(
     std::move(start_from),
-    [this, ch, &oid, callback, op_flags] (auto &start_from)
+    uint32_t(0),
+    [this, ch, &oid, callback, op_flags, on_conflict] (
+    auto &start_from, auto &conflict_counter)
   {
     return repeat_with_onode<ObjectStore::omap_iter_ret_t>(
       ch,
@@ -1473,8 +1476,17 @@ SeaStore::Shard::omap_iterate(
       "omap_iterate",
       op_type_t::OMAP_ITERATE,
       op_flags,
-      [this, &start_from, callback](auto &t, auto &onode)
+      [this, &start_from, callback, on_conflict, &conflict_counter](auto &t, auto &onode)
     {
+      ceph_assert(conflict_counter < std::numeric_limits<uint32_t>::max());
+      conflict_counter++;
+      if (conflict_counter > 1 && on_conflict) {
+	// This means conflict occurs
+	auto ret = on_conflict();
+	if (ret == ObjectStore::omap_iter_ret_t::STOP) {
+	  return base_iertr::make_ready_future<ObjectStore::omap_iter_ret_t>(ret);
+	}
+      }
       auto root = select_log_omap_root(onode);
       return omaptree_iterate(
         t, std::move(root), start_from, callback);

@@ -333,7 +333,8 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
         obj,
         start_from,
         callback,
-        0
+        0,
+	nullptr
       ).safe_then([FNAME, this, &obj, &progress, &entry, &pg](auto result) {
         assert(result == ObjectStore::omap_iter_ret_t::NEXT);
         DEBUGDPP("op: {}, obj: {}, progress: {} omap done",

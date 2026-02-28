@@ -160,7 +160,7 @@ int OSDriver::get_next(
   };
   return interruptor::green_get(
     crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
-      os, ch, hoid, start_from, callback, 0
+      os, ch, hoid, start_from, callback, 0, nullptr
     ).safe_then([FNAME, key] (auto ret) {
       if (ret == ObjectStore::omap_iter_ret_t::NEXT) {
         DEBUG("key {} no more values", key);
