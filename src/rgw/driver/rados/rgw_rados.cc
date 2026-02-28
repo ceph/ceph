@@ -6417,9 +6417,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
         return r;
       }
 
-      r = store->set_olh<true>(dpp, target->get_ctx(), target->get_bucket_info(), marker, true,
+      r = store->set_olh<true>(dpp, target->get_ctx(), target->get_bucket_info(), marker,
                              &meta, params.olh_epoch, params.unmod_since, params.high_precision_time,
-                             y, params.zones_trace, add_log);
+                             y, params.zones_trace, add_log); // FIXME: should skip_olh_obj_update come from calling functions?
       if (r < 0) {
         return r;
       }
@@ -8787,20 +8787,20 @@ static uint16_t get_olh_op_bilog_flags()
   return 0;
 }
 
-static RGWBILogUpdateBatch get_or_create_fifo_bilog_op(const DoutPrefixProvider *dpp,
-                                                       RGWRados& store,
-                                                       const RGWBucketInfo& bucket_info)
+RGWBILogUpdateBatch RGWRados::get_or_create_fifo_bilog_op(const DoutPrefixProvider *dpp,
+                                                          const RGWBucketInfo& bucket_info)
 {
-  auto r = store.driver->get_neorados();
+  auto r = driver->get_neorados();
   
   librados::IoCtx index_pool;
-  std::string bucket_oid;
-  int ret = store.svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt,
-                                                  bucket_info.layout.current_index,
-                                                  &index_pool, &bucket_oid);
+  std::map<int, string> bucket_oids;
+  int ret = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt,
+                                            bucket_info.layout.current_index,
+                                            &index_pool, &bucket_oids, nullptr);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to open bucket index: " << cpp_strerror(-ret) << dendl;
-    throw std::system_error(-ret, std::system_category(), "Failed to open bucket index");
+    ldpp_dout(dpp, 0) << "ERROR: " << __PRETTY_FUNCTION__
+                      << " failed to open bucket index: "
+                      << cpp_strerror(-ret) << dendl;
   }
 
   maybe_warn_about_blocking(dpp);
@@ -8855,7 +8855,7 @@ int RGWRados::with_bilog(F&& func, const DoutPrefixProvider *dpp, const RGWBucke
   //   2. void-taking one -- the lambda is called with `bilog_handler` only.
   if constexpr (std::is_same_v<CLSRGWBucketModifyOpT, void>) {
      if (svc.zone->get_zone().log_data && !is_inindex) {
-       return std::forward<F>(func)(get_or_create_fifo_bilog_op(dpp, *this, bucket_info));
+       return std::forward<F>(func)(get_or_create_fifo_bilog_op(dpp, bucket_info));
      } else {
        return std::forward<F>(func)(BILogNopHandler{dpp});
      }
@@ -8869,7 +8869,7 @@ int RGWRados::with_bilog(F&& func, const DoutPrefixProvider *dpp, const RGWBucke
       return std::move(func)(CLSRGWBucketModifyOpT{
                                false /* log_data -- never log in-index */,
                                std::forward<Args>(args)...},
-                             get_or_create_fifo_bilog_op(dpp, *this, bucket_info));
+                             get_or_create_fifo_bilog_op(dpp, bucket_info));
     } else {
       // no log at all
       return std::move(func)(CLSRGWBucketModifyOpT{
