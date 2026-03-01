@@ -877,7 +877,8 @@ public:
     op_context_t c,
     iterator iter,
     node_key_t laddr,
-    node_val_t val
+    node_val_t val,
+    BaseChildNode<leaf_node_t, node_key_t> *child
   ) {
     LOG_PREFIX(FixedKVBtree::insert);
     SUBTRACET(
@@ -888,10 +889,10 @@ public:
       iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
     return seastar::do_with(
       iter,
-      [this, c, laddr, val](auto &ret) {
+      [this, c, laddr, val, child](auto &ret) {
         return find_insertion(
           c, laddr, ret
-        ).si_then([this, c, laddr, val, &ret] {
+        ).si_then([this, c, laddr, val, &ret, child] {
           if (!ret.at_boundary() && ret.get_key() == laddr) {
             return insert_ret(
               interruptible::ready_future_marker{},
@@ -900,7 +901,7 @@ public:
             ++(get_tree_stats<self_type>(c.trans).num_inserts);
             return handle_split(
               c, ret
-            ).si_then([c, laddr, val, &ret] {
+            ).si_then([c, laddr, val, &ret, child] {
               if (!ret.leaf.node->is_mutable()) {
                 CachedExtentRef mut = c.cache.duplicate_for_write(
                   c.trans, ret.leaf.node
@@ -914,6 +915,12 @@ public:
               assert(laddr >= ret.leaf.node->get_meta().begin &&
                      laddr < ret.leaf.node->get_meta().end);
               ret.leaf.node->insert(iter, laddr, val);
+              if constexpr (std::is_base_of_v<
+                  ParentNode<leaf_node_t, node_key_t>, leaf_node_t>) {
+                ret.leaf.node->insert_child_ptr(
+                  ret.leaf.pos, child, ret.leaf.node->get_size() - 1);
+              }
+              (void)child;
               return insert_ret(
                 interruptible::ready_future_marker{},
                 std::make_pair(ret, true));
@@ -926,11 +933,12 @@ public:
   insert_ret insert(
     op_context_t c,
     node_key_t laddr,
-    node_val_t val) {
+    node_val_t val,
+    BaseChildNode<leaf_node_t, node_key_t> *child) {
     return lower_bound(
       c, laddr
-    ).si_then([this, c, laddr, val](auto iter) {
-      return this->insert(c, iter, laddr, val);
+    ).si_then([child, this, c, laddr, val](auto iter) {
+      return this->insert(c, iter, laddr, val, child);
     });
   }
 
@@ -949,7 +957,8 @@ public:
   update_ret update(
     op_context_t c,
     iterator iter,
-    node_val_t val)
+    node_val_t val,
+    BaseChildNode<leaf_node_t, node_key_t> *child)
   {
     LOG_PREFIX(FixedKVBtree::update);
     SUBTRACET(
@@ -967,6 +976,12 @@ public:
     iter.leaf.node->update(
       iter.leaf.node->iter_idx(iter.leaf.pos),
       val);
+    if constexpr (std::is_base_of_v<
+        ParentNode<leaf_node_t, node_key_t>, leaf_node_t>) {
+      if (child) {
+        iter.leaf.node->update_child_ptr(iter.leaf.pos, child);
+      }
+    }
     return update_ret(
       interruptible::ready_future_marker{},
       iter);
