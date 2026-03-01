@@ -47,7 +47,6 @@
 
 using namespace std;
 
-
 IsPGRecoverablePredicate *get_is_recoverable_predicate() {
   return new MockECRecPred();
 }
@@ -55,7 +54,6 @@ IsPGRecoverablePredicate *get_is_recoverable_predicate() {
 IsPGReadablePredicate *get_is_readable_predicate() {
   return new MockECReadPred();
 }
-
 
 // Test fixture for PeeringState tests
 class PeeringStateTest : public ::testing::Test {
@@ -446,8 +444,15 @@ protected:
       for (auto it = ls.begin(); it != ls.end();) {
         MessageRef m = *it;
         it = ls.erase(it);
-        // TODO : Should handle messages other than MOSDPeeringOp events, however
-        // for now this seems to be sufficient
+        // NOTE: This dispatcher only handles MOSDPeeringOp-derived messages (MOSDPGLog,
+        // MOSDPGNotify2, MOSDPGInfo2, MOSDPGLease, MOSDPGLeaseAck, MOSDPGQuery2, MOSDPGTrim).
+        // Non-peering messages like MOSDPGRemove and MRecoveryReserve are sent via
+        // send_cluster_message() but are not dispatched through this function - they are
+        // handled by other test mechanisms or are not relevant to peering state transitions.
+        // This is sufficient for testing PeeringState behavior as all peering-related
+        // messages derive from MOSDPeeringOp and provide get_event() for state machine events.
+        // Future enhancement: If testing non-peering cluster messages becomes necessary,
+        // add type checking and appropriate handling for Message-derived (non-MOSDPeeringOp) types.
         dout(0) << __func__ << " message type = " << m->get_type() << dendl;
         MOSDPeeringOp *pm = static_cast<MOSDPeeringOp*>(m.get());
         dout(0) << __func__ << " sending from osd." << fromosd << " to osd." << osd << " " << *pm << dendl;
@@ -552,7 +557,7 @@ protected:
     PGPool pool(osdmap, pool_id, pi, osdmap->get_pool_name(pool_id));
     dpp[osd] = make_unique<DppHelper>(g_ceph_context, dout_subsys, this, osd, shard);
     spg_t spgid = spg_t(pg_t(0, pool_id), pg_whoami.shard);
-    listeners[osd] = make_unique<MockPeeringListener>(osdmap, pi, get_dpp(osd), pg_whoami);
+    listeners[osd] = make_unique<MockPeeringListener>(osdmap, pool_id, get_dpp(osd), pg_whoami);
     get_listener(osd)->current_epoch = osdmap->get_epoch();
     unique_ptr<PeeringState> ps = make_unique<PeeringState>(
       g_ceph_context,

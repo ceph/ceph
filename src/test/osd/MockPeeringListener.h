@@ -14,44 +14,32 @@
 
 #pragma once
 
+#include <memory>
+#include <vector>
 #include <list>
 #include <map>
-#include <memory>
-#include <set>
-#include <string>
-#include <vector>
 #include "osd/PeeringState.h"
 #include "osd/osd_perf_counters.h"
-#include "common/perf_counters_collection.h"
-#include "global/global_context.h"
+#include "common/HeartbeatMap.h"
 #include "os/ObjectStore.h"
-#include "test/osd/MockLog.h"
-#include "test/osd/MockPGBackend.h"
-#include "test/osd/MockPGBackendListener.h"
-#include "test/osd/MockPGLogEntryHandler.h"
+#include "MockPGBackendListener.h"
+#include "MockPGBackend.h"
+#include "MockPGLogEntryHandler.h"
+#include "global/global_context.h"
 
-// dout using global context and OSD subsystem
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 
-using namespace std;
-
-// Mock PeeringListener - stub of PeeringState::PeeringListener
-// to help with testing of PeeringState. Keep track of calls
-// from PeeringState and emulate some of PrimaryLogPG/PG
-// functionality for testing purposes.
-//
-// There are some inject_* variables that can be used to help
-// tests create race hazards or test failure paths
+// Mock implementation of PeeringState::PeeringListener for testing.
+// inject_* variables can be used to create race hazards or test failure paths.
 class MockPeeringListener : public PeeringState::PeeringListener {
  public:
   pg_shard_t pg_whoami;
-  MockLog logger;
   PeeringState *ps;
-  unique_ptr<MockPGBackendListener> backend_listener;
+  std::unique_ptr<MockPGBackendListener> backend_listener;
   coll_t coll;
   ObjectStore::CollectionHandle ch;
-  unique_ptr<MockPGBackend> backend;
+  std::unique_ptr<MockPGBackend> backend;
   PerfCounters* recoverystate_perf;
   PerfCounters* logger_perf;
   std::vector<int> next_acting;
@@ -84,19 +72,33 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   // migration requests with too full
   bool inject_fail_reserve_recovery_space = false;
 
+  std::function<int(ObjectStore::Transaction&&)> queue_transaction_callback;
+
   MockPeeringListener(OSDMapRef osdmap,
-                      const pg_pool_t pi,
+                      int64_t pool_id,
                       DoutPrefixProvider *dpp,
                       pg_shard_t pg_whoami) : pg_whoami(pg_whoami) {
-    backend_listener = make_unique<MockPGBackendListener>(osdmap, pi, dpp, pg_whoami);
-    backend = make_unique<MockPGBackend>(g_ceph_context, backend_listener.get(), nullptr, coll, ch);
+    backend_listener = std::make_unique<MockPGBackendListener>(osdmap, pool_id, dpp, pg_whoami);
+    backend = std::make_unique<MockPGBackend>(g_ceph_context, backend_listener.get(), nullptr, coll, ch);
     recoverystate_perf = build_recoverystate_perf(g_ceph_context);
     g_ceph_context->get_perfcounters_collection()->add(recoverystate_perf);
     logger_perf = build_osd_logger(g_ceph_context);
     g_ceph_context->get_perfcounters_collection()->add(logger_perf);
   }
 
-  // EpochSource interface
+  ~MockPeeringListener() {
+    if (recoverystate_perf) {
+      g_ceph_context->get_perfcounters_collection()->remove(recoverystate_perf);
+      delete recoverystate_perf;
+      recoverystate_perf = nullptr;
+    }
+    if (logger_perf) {
+      g_ceph_context->get_perfcounters_collection()->remove(logger_perf);
+      delete logger_perf;
+      logger_perf = nullptr;
+    }
+  }
+
   epoch_t get_osdmap_epoch() const override {
     return current_epoch;
   }
@@ -112,6 +114,13 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     bool need_write_epoch,
     ObjectStore::Transaction &t) override {
     prepare_write_called = true;
+    
+    // If a callback is set, queue the transaction
+    if (queue_transaction_callback && !t.empty()) {
+      ObjectStore::Transaction copy;
+      copy.append(t);
+      queue_transaction_callback(std::move(copy));
+    }
   }
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override {
@@ -408,14 +417,14 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   }
 
   void log_state_enter(const char *state) override {
-    last_state_entered = string(state);
+    last_state_entered = std::string(state);
     state_entered = true;
   }
 
   void log_state_exit(
     const char *state_name, utime_t enter_time,
     uint64_t events, utime_t event_dur) override {
-    last_state_exited = string(state_name);
+    last_state_exited = std::string(state_name);
     state_exited = true;
   }
 
@@ -424,15 +433,15 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   }
 
   OstreamTemp get_clog_info() override {
-    return logger.info();
+    return OstreamTemp(CLOG_INFO, nullptr);
   }
 
   OstreamTemp get_clog_error() override {
-    return logger.error();
+    return OstreamTemp(CLOG_ERROR, nullptr);
   }
 
   OstreamTemp get_clog_debug() override {
-    return logger.debug();
+    return OstreamTemp(CLOG_DEBUG, nullptr);
   }
 
   void on_activate_complete() override {
@@ -498,7 +507,6 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     removal_called = true;
   }
 
-  // Test state tracking
   unsigned target_pg_log_entries = 100;
   bool renew_lease_scheduled = false;
   bool check_readable_queued = false;
@@ -527,9 +535,9 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   bool recovery_space_reserved = false;
   bool recovery_space_unreserved = false;
   bool missing_set_rebuilt = false;
-  string last_state_entered;
+  std::string last_state_entered;
   bool state_entered = false;
-  string last_state_exited;
+  std::string last_state_exited;
   bool state_exited = false;
   mutable bool recovery_info_dumped = false;
   epoch_t current_epoch = 1;
@@ -566,7 +574,4 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   int events_on_commit_scheduled = 0;
   bool first_write_in_interval = false;
 };
-
-#undef dout_context
-#undef dout_subsys
 
