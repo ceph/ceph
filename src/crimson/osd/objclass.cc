@@ -176,7 +176,7 @@ int cls_cxx_write2(cls_method_context_t hctx,
   OSDOp op{CEPH_OSD_OP_WRITE};
   op.op.extent.offset = ofs;
   op.op.extent.length = len;
-  op.op.flags = op_flags;
+  op.op.flags = op_flags | CEPH_OSD_OP_FLAG_EXPECT_EXISTS;
   op.indata = *inbl;
   return execute_osd_op(hctx, op);
 }

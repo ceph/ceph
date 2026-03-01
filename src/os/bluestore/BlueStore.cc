@@ -15931,6 +15931,11 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       create = true;
     }
 
+    uint32_t fadvise_flags = i.get_fadvise_flags();
+    if (fadvise_flags & CEPH_OSD_OP_FLAG_EXPECT_EXISTS) {
+      // Object must exist, don't allow implicit creation
+      create = false;
+    }
     // object operations
     std::unique_lock l(c->lock);
     OnodeRef &o = ovec[op->oid];
@@ -15955,7 +15960,6 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
         uint64_t off = op->off;
         uint64_t len = op->len;
-	uint32_t fadvise_flags = i.get_fadvise_flags();
         bufferlist bl;
         i.decode_bl(bl);
 	r = _write(txc, c, o, off, len, bl, fadvise_flags);
@@ -16149,6 +16153,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 			     op->op == Transaction::OP_CLONE ||
 			     op->op == Transaction::OP_CLONERANGE2))
 	  msg = "ENOENT on clone suggests osd bug";
+
+  if (r == -ENOENT && op->op == Transaction::OP_WRITE && (fadvise_flags & CEPH_OSD_OP_FLAG_EXPECT_EXISTS))
+      msg = "ENOENT on write with CEPH_OSD_OP_FLAG_EXPECT_EXISTS flag suggests osd bug (likely EC object removal)";  
 
 	if (r == -ENOSPC)
 	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage
