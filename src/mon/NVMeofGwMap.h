@@ -27,7 +27,11 @@
 #include "NVMeofGwTypes.h"
 
 using ceph::coarse_mono_clock;
-
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mon
+#undef dout_prefix
+#define MODULE_PREFFIX "nvmeofgw "
+#define dout_prefix *_dout << MODULE_PREFFIX << __PRETTY_FUNCTION__ << " "
 class health_check_map_t;
 
 class Monitor;
@@ -186,9 +190,50 @@ public:
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     NvmeAnaGrpId ANA_groupid, epoch_t &epoch, bool failover);
 
-  void encode(ceph::buffer::list &bl, uint64_t features) const ;
+  void encode(ceph::buffer::list &bl, uint64_t features) const  {
+    using ceph::encode;
+    uint8_t version = 1;
+    if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
+      version = 2;
+    }
+    if (HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)) {
+      version = 3;
+    }
+    ENCODE_START(version, version, bl);
+    encode(epoch, bl);// global map epoch
 
-  void decode(ceph::buffer::list::const_iterator &bl);
+    encode(created_gws, bl, features); //Encode created GWs
+    encode(fsm_timers, bl, features);
+    if (version >= 2) {
+      encode(gw_epoch, bl);
+    }
+    if (version >=3) {
+      encode(disaster_locations, bl);
+    }
+    ENCODE_FINISH(bl);
+  }
+
+  void  decode(ceph::buffer::list::const_iterator &bl) {
+    using ceph::decode;
+    DECODE_START(3, bl);
+
+    decode(epoch, bl);
+    dout(20)  << "decode epoch "  << dendl;
+    decode(created_gws, bl);
+    dout(20)  << "decode created gws "  << dendl;
+    decode(fsm_timers, bl);
+    dout(20)  << "decode fsm timers "  << dendl;
+    if (struct_v >= 2) {
+      decode(gw_epoch, bl);
+      dout(20)  << "decode gw epoch "  << dendl;
+    }
+    if (struct_v >=3) {
+      decode(disaster_locations, bl);
+      dout(20)  << "decode  disaster location "  << dendl;
+    }
+    DECODE_FINISH(bl);
+  }
+
   void get_health_checks(health_check_map_t *checks);
 };
 

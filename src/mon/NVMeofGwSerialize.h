@@ -909,14 +909,6 @@ inline void encode(const BeaconSubsystem& sub,  ceph::bufferlist &bl, uint64_t f
   if (HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)) {
     version = 2;
   }
-  // For legacy encoding, skip deleted subsystems to maintain compatibility
-  if (version == 1 &&
-      sub.change_descriptor != subsystem_change_t::SUBSYSTEM_ADDED) {
-    dout(4) << "encode BeaconSubsystem: skipping subsystem " << sub.nqn
-            << " with change_descriptor " << (int)sub.change_descriptor
-            << " in legacy mode" << dendl;
-    return; // Skip encoding this subsystem entirely
-  }
 
   ENCODE_START(version, version, bl);
   encode(sub.nqn, bl);
@@ -942,6 +934,7 @@ inline void decode(BeaconSubsystem& sub, ceph::buffer::list::const_iterator &bl)
   uint32_t s;
   sub.listeners.clear();
   decode(s, bl);
+  dout(20) << "decode Nlisteners " << s << dendl;
   for (uint32_t i = 0; i < s; i++) {
     BeaconListener ls;
     decode(ls, bl);
