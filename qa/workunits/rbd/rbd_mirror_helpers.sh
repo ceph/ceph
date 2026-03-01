@@ -523,7 +523,11 @@ status()
     for cluster in ${CLUSTER1} ${CLUSTER2}
     do
         echo "${cluster} status"
-        CEPH_ARGS='' ceph --cluster ${cluster} -s
+        # if "ceph -s" fails, assume that the cluster is broken or
+        # unavailable and skip gathering details for it
+        CEPH_ARGS='' ceph --cluster ${cluster} -s || continue
+
+        echo "${cluster} service status"
         CEPH_ARGS='' ceph --cluster ${cluster} service dump
         CEPH_ARGS='' ceph --cluster ${cluster} service status
         echo
