@@ -1372,6 +1372,42 @@ def test_nfs_colocation_ports_validation():
     assert "missing required fields: monitoring_port" in str(e.value)
 
 
+def test_nfs_colocation_ports_validation_with_rdma():
+    """Test colocation_ports with enable_rdma requires rdma_port in each entry."""
+    from ceph.deployment.service_spec import SpecValidationError
+
+    # Valid: enable_rdma=True, count=3, 2 colocation entries with data_port, monitoring_port, rdma_port
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=3),
+        port=2049,
+        monitoring_port=9587,
+        enable_rdma=True,
+        rdma_port=20049,
+        colocation_ports=[
+            {'data_port': 3049, 'monitoring_port': 9588, 'rdma_port': 20050},
+            {'data_port': 4049, 'monitoring_port': 9589, 'rdma_port': 20051},
+        ]
+    )
+    spec.validate()
+
+    # Invalid: enable_rdma=True but colocation entry missing rdma_port
+    with pytest.raises(SpecValidationError) as e:
+        spec = NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=3),
+            port=2049,
+            monitoring_port=9587,
+            enable_rdma=True,
+            colocation_ports=[
+                {'data_port': 3049, 'monitoring_port': 9588},  # missing rdma_port
+                {'data_port': 4049, 'monitoring_port': 9589, 'rdma_port': 20051},
+            ]
+        )
+        spec.validate()
+    assert "missing required fields: rdma_port" in str(e.value)
+
+
 class ActiveAssignmentTest(NamedTuple):
     service_type: str
     placement: PlacementSpec
