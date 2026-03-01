@@ -14,12 +14,7 @@
 
 #pragma once
 
-#include <functional>
-#include <list>
-#include <optional>
-#include <vector>
 #include "osd/PGBackend.h"
-#include "osd/ECUtil.h"
 #include "os/ObjectStore.h"
 
 // MockPGBackend - simple stub for PGBackend
