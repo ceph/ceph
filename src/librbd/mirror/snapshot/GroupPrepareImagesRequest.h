@@ -32,7 +32,8 @@ public:
     OP_DISABLE         = 1,
     OP_PROMOTE         = 2,
     OP_DEMOTE          = 3,
-    OP_CREATE_PRIMARY  = 4,
+    OP_ADD_IMAGE       = 4,
+    OP_CREATE_PRIMARY  = 5,
   };
   static GroupPrepareImagesRequest *create(
       librados::IoCtx& group_ioctx, const std::string& group_id,
@@ -40,10 +41,11 @@ public:
       std::vector<cls::rbd::GroupImageStatus>& images,
       std::vector<cls::rbd::MirrorImage>* mirror_images,
       std::set<std::string>* mirror_peer_uuids,
+      const std::string& image_id,
       Operation operation, bool force, Context *on_finish) {
     return new GroupPrepareImagesRequest(
       group_ioctx, group_id, image_ctxs, images, mirror_images,
-      mirror_peer_uuids, operation, force, on_finish);
+      mirror_peer_uuids, image_id, operation, force, on_finish);
   }
 
   GroupPrepareImagesRequest(
@@ -52,7 +54,12 @@ public:
     std::vector<cls::rbd::GroupImageStatus>& images,
     std::vector<cls::rbd::MirrorImage>* mirror_images,
     std::set<std::string>* mirror_peer_uuids,
+    const std::string& image_id,
     Operation operation, bool force, Context *on_finish);
+
+  const std::unordered_map<std::string, std::string>& get_image_to_global_id() const {
+    return m_image_to_global_id;
+  }
 
   void send();
 
@@ -101,9 +108,12 @@ private:
   std::vector<cls::rbd::GroupImageStatus>& m_images;
   std::vector<cls::rbd::MirrorImage>* m_mirror_images;
   std::set<std::string>* m_mirror_peer_uuids;
+  const std::string m_image_id;
   Operation m_operation;
   bool m_force;
   Context *m_on_finish;
+
+  std::unordered_map<std::string, std::string> m_image_to_global_id;
 
   CephContext *m_cct;
 

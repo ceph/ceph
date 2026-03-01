@@ -39,12 +39,12 @@ GroupPrepareImagesRequest<I>::GroupPrepareImagesRequest(
     std::vector<librbd::ImageCtx *>& image_ctxs,
     std::vector<cls::rbd::GroupImageStatus>& images,
     std::vector<cls::rbd::MirrorImage>* mirror_images,
-    std::set<std::string>* mirror_peer_uuids,
+    std::set<std::string>* mirror_peer_uuids, const std::string& image_id,
     Operation operation, bool force, Context *on_finish)
      : m_group_ioctx(group_ioctx), m_group_id(group_id),
        m_image_ctxs(image_ctxs), m_images(images),
-       m_mirror_images(mirror_images),
-       m_mirror_peer_uuids(mirror_peer_uuids), m_operation(operation),
+       m_mirror_images(mirror_images), m_mirror_peer_uuids(mirror_peer_uuids),
+       m_image_id(image_id), m_operation(operation),
        m_force(force), m_on_finish(on_finish) {
   m_cct = reinterpret_cast<CephContext*>(m_group_ioctx.cct());
   ldout(m_cct, 10) << "group_id=" << m_group_id
@@ -163,7 +163,7 @@ void GroupPrepareImagesRequest<I>::handle_list_group_images(int r) {
     finish(0);
     return;
   }
-  if (m_operation == OP_ENABLE) {
+  if (m_operation == OP_ENABLE || m_operation == OP_ADD_IMAGE) {
     check_mirror_images_disabled();
   } else {
     open_group_images();
@@ -181,13 +181,18 @@ void GroupPrepareImagesRequest<I>::check_mirror_images_disabled() {
 
   m_out_bls.resize(m_images.size());
   for (size_t i = 0; i < m_images.size(); i++) {
+    if (m_operation == OP_ADD_IMAGE &&
+        m_images[i].spec.image_id != m_image_id) {
+      continue;
+    }
+
     librados::ObjectReadOperation op;
     cls_client::mirror_image_get_start(&op, m_images[i].spec.image_id);
 
     auto on_mirror_image_get = new LambdaContext(
       [this, i, new_sub_ctx=gather_ctx->new_sub()](int r) {
+        cls::rbd::MirrorImage mirror_image;
         if (r == 0) {
-          cls::rbd::MirrorImage mirror_image;
           auto iter = m_out_bls[i].cbegin();
           r = cls_client::mirror_image_get_finish(&iter, &mirror_image);
         }
@@ -201,7 +206,13 @@ void GroupPrepareImagesRequest<I>::check_mirror_images_disabled() {
           r = -EINVAL;
         } else {
           lderr(m_cct) << "failed to get mirror image info for image_id="
-                       << m_images[i].spec.image_id << dendl;
+                       << m_images[i].spec.image_id << ": "
+                       << cpp_strerror(r) << dendl;
+        }
+
+        if (r == 0 && !mirror_image.global_image_id.empty()) {
+          m_image_to_global_id[m_images[i].spec.image_id] =
+              mirror_image.global_image_id;
         }
 
         new_sub_ctx->complete(r);
@@ -220,7 +231,7 @@ void GroupPrepareImagesRequest<I>::check_mirror_images_disabled() {
 
 template <typename I>
 void GroupPrepareImagesRequest<I>::handle_check_mirror_images_disabled(int r) {
-  ldout(m_cct, 10) << "r=" << r <<  dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   m_out_bls.clear();
 
@@ -294,7 +305,7 @@ void GroupPrepareImagesRequest<I>::handle_open_group_images(int r) {
     return;
   }
 
-  if (m_operation == OP_ENABLE) {
+  if (m_operation == OP_ENABLE || m_operation == OP_ADD_IMAGE) {
     finish(0);
   } else if (m_operation == OP_DISABLE) {
     check_images_mirror_mode();
