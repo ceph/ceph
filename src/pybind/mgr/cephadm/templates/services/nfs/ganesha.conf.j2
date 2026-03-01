@@ -2,7 +2,11 @@
 NFS_CORE_PARAM {
         Enable_NLM = {{ enable_nlm }};
         Enable_RQUOTA = false;
+{% if enable_rdma %}
+        Protocols = 3, 4, nfsrdma, rpcrdma;
+{% else %}
         Protocols = 3, 4;
+{% endif %}
         mount_path_pseudo = true;
         Enable_UDP = false;
         NFS_Port = {{ port }};
@@ -17,6 +21,9 @@ NFS_CORE_PARAM {
 	Monitoring_Addr = {{ monitoring_addr }};
 {% endif %}
         Monitoring_Port = {{ monitoring_port }};
+{% if enable_rdma and rdma_port %}
+        NFS_RDMA_Port = {{ rdma_port }};
+{% endif %}
 }
 
 NFSv4 {

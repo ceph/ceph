@@ -1,10 +1,18 @@
 import contextlib
 from unittest.mock import MagicMock, patch, ANY
 
+import pytest
+
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.module import CephadmOrchestrator
-from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, RGWSpec, IngressSpec
+from ceph.deployment.service_spec import (
+    NFSServiceSpec,
+    PlacementSpec,
+    RGWSpec,
+    IngressSpec,
+    SpecValidationError,
+)
 from cephadm.tests.fixtures import with_host, with_service, wait, async_side_effect
 
 
@@ -478,6 +486,163 @@ class TestNFS:
                 )
                 assert expected_tls_block in ganesha_conf
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_config_rdma_enabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """NFS with enable_rdma=True: ganesha.conf has RDMA protocols (nfsrdma, rpcrdma)."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+                enable_rdma=True,
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_id='foo.host1.0.0',
+                        service_name=nfs_spec.service_name(),
+                        ports=[2049, 9587, 20049],
+                    ))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Protocols = 3, 4, nfsrdma, rpcrdma" in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_config_rdma_custom_port(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """NFS with enable_rdma and rdma_port: ganesha.conf has NFS_RDMA_Port."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+                enable_rdma=True,
+                rdma_port=1234,
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_id='foo.host1.0.0',
+                        service_name=nfs_spec.service_name(),
+                        ports=[2049, 9587, 1234],
+                    ))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Protocols = 3, 4, nfsrdma, rpcrdma" in ganesha_conf
+                assert "NFS_RDMA_Port = 1234" in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_config_rdma_disabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """NFS without RDMA: ganesha.conf has Protocols = 3, 4 and no NFS_RDMA_Port."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_id='foo.host1.0.0',
+                        service_name=nfs_spec.service_name(),
+                    ))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Protocols = 3, 4" in ganesha_conf
+                assert "nfsrdma" not in ganesha_conf
+                assert "NFS_RDMA_Port" not in ganesha_conf
+
+
+def test_nfs_colocation_ports_validation():
+    """Test validation of colocation_ports in NFSServiceSpec"""
+    # Valid case: correct number of colocation_ports (count=3, need 2 additional)
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=3),
+        port=2049,
+        monitoring_port=9587,
+        colocation_ports=[
+            {'data_port': 3049, 'monitoring_port': 9588},
+            {'data_port': 4049, 'monitoring_port': 9589}
+        ]
+    )
+    spec.validate()  # Should not raise
+
+    # Invalid case: too few colocation_ports (count=4, need 3 additional, but only 1 provided)
+    with pytest.raises(SpecValidationError) as e:
+        spec = NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=4),
+            port=2049,
+            monitoring_port=9587,
+            colocation_ports=[{'data_port': 3049, 'monitoring_port': 9588}]
+        )
+        spec.validate()
+    assert "colocation_ports requires 3 entries for count=4 (got 1)" in str(e.value)
+
+    # Invalid case: missing required field
+    with pytest.raises(SpecValidationError) as e:
+        spec = NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=3),
+            port=2049,
+            monitoring_port=9587,
+            colocation_ports=[
+                {'data_port': 3049},  # Missing monitoring_port
+                {'data_port': 4049, 'monitoring_port': 9589}
+            ]
+        )
+        spec.validate()
+    assert "missing required fields: monitoring_port" in str(e.value)
+
+
+def test_nfs_colocation_ports_validation_with_rdma():
+    """Test colocation_ports with enable_rdma requires rdma_port in each entry."""
+    # Valid: enable_rdma=True, count=3, 2 colocation entries with data_port, monitoring_port, rdma_port
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=3),
+        port=2049,
+        monitoring_port=9587,
+        enable_rdma=True,
+        rdma_port=20049,
+        colocation_ports=[
+            {'data_port': 3049, 'monitoring_port': 9588, 'rdma_port': 20050},
+            {'data_port': 4049, 'monitoring_port': 9589, 'rdma_port': 20051},
+        ]
+    )
+    spec.validate()
+
+    # Invalid: enable_rdma=True but colocation entry missing rdma_port
+    with pytest.raises(SpecValidationError) as e:
+        spec = NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=3),
+            port=2049,
+            monitoring_port=9587,
+            enable_rdma=True,
+            colocation_ports=[
+                {'data_port': 3049, 'monitoring_port': 9588},  # missing rdma_port
+                {'data_port': 4049, 'monitoring_port': 9589, 'rdma_port': 20051},
+            ]
+        )
+        spec.validate()
+    assert "missing required fields: rdma_port" in str(e.value)
+
 
 @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
 @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
@@ -504,7 +669,6 @@ def test_nfs_choose_next_action(cephadm_module, mock_cephadm):
         # NB: it appears that the code is designed to redeploy unless all
         # dependencies are prefixed with 'kmip' but I can't find any code
         # that would produce any dependencies prefixed with 'kmip'!
-
 
 @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
 @patch("cephadm.services.nfs.NFSService.purge", MagicMock())

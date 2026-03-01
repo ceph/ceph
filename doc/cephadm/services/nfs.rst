@@ -79,6 +79,39 @@ address is not present and ``monitoring_networks`` is specified, an IP address
 that matches one of the specified networks will be used. If neither condition
 is met, the default binding will happen on all available network interfaces.
 
+NFS over RDMA
+-------------
+
+NFS over RDMA is disabled by default. To enable it, set ``enable_rdma: true`` in
+the NFS service spec. You can optionally set ``rdma_port`` to use a custom RDMA
+port, if omitted, NFS Ganesha uses its default.
+
+When RDMA is enabled:
+
+* New exports in the cluster default to **Transports = TCP, RDMA**
+* For colocation, each entry in ``colocation_ports`` must include
+  ``rdma_port`` in addition to ``data_port`` and ``monitoring_port``.
+
+Example with RDMA enabled:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 1
+      hosts: [host1]
+    spec:
+      port: 2049
+      monitoring_port: 9587
+      enable_rdma: true
+      rdma_port: 20049   # optional
+
+.. note:: If you use a bind address (e.g. ``virtual_ip``, ``ip_addrs``, or
+   ``networks``) with ``enable_rdma``, ensure the network interface for that
+   address is RDMA-capable. On the host, run ``rdma link show`` and confirm the
+   netdev for the interface with the bind IP is listed.
+
 NFS Daemon Colocation
 ----------------------
 
@@ -134,8 +167,9 @@ In this configuration, 4 daemons total are deployed (2 per host), distributed ac
      ``monitoring_port`` from the spec.
    * The number of entries in ``colocation_ports`` should be ``count - 1``,
      to cover the node down scenario (or ``count_per_host - 1`` when using ``count_per_host``).
-   * Each entry must specify both ``data_port`` and ``monitoring_port``.
-   * **If ``colocation_ports`` is not specified**, ports will be automatically
+   * Each entry must specify both ``data_port`` and ``monitoring_port``. When
+     ``enable_rdma`` is true, each entry must also include ``rdma_port``.
+   * If ``colocation_ports`` is not specified, ports will be automatically
      incremented for colocated daemons (e.g., 2049 → 2050 → 2051 for data ports,
      and 9587 → 9588 → 9589 for monitoring ports).
 
