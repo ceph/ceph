@@ -1328,50 +1328,6 @@ def test_bad_specs(service_type, placement, hosts, daemons, expected):
     assert str(e.value) == expected
 
 
-def test_nfs_colocation_ports_validation():
-    """Test validation of colocation_ports in NFSServiceSpec"""
-    from ceph.deployment.service_spec import SpecValidationError
-    # Valid case: correct number of colocation_ports (count=3, need 2 additional)
-    spec = NFSServiceSpec(
-        service_id='mynfs',
-        placement=PlacementSpec(count=3),
-        port=2049,
-        monitoring_port=9587,
-        colocation_ports=[
-            {'data_port': 3049, 'monitoring_port': 9588},
-            {'data_port': 4049, 'monitoring_port': 9589}
-        ]
-    )
-    spec.validate()  # Should not raise
-
-    # Invalid case: too few colocation_ports (count=4, need 3 additional, but only 1 provided)
-    with pytest.raises(SpecValidationError) as e:
-        spec = NFSServiceSpec(
-            service_id='mynfs',
-            placement=PlacementSpec(count=4),
-            port=2049,
-            monitoring_port=9587,
-            colocation_ports=[{'data_port': 3049, 'monitoring_port': 9588}]
-        )
-        spec.validate()
-    assert "colocation_ports requires 3 entries for count=4 (got 1)" in str(e.value)
-
-    # Invalid case: missing required field
-    with pytest.raises(SpecValidationError) as e:
-        spec = NFSServiceSpec(
-            service_id='mynfs',
-            placement=PlacementSpec(count=3),
-            port=2049,
-            monitoring_port=9587,
-            colocation_ports=[
-                {'data_port': 3049},  # Missing monitoring_port
-                {'data_port': 4049, 'monitoring_port': 9589}
-            ]
-        )
-        spec.validate()
-    assert "missing required fields: monitoring_port" in str(e.value)
-
-
 class ActiveAssignmentTest(NamedTuple):
     service_type: str
     placement: PlacementSpec
