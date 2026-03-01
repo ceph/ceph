@@ -342,15 +342,11 @@ BtreeLBAManager::reserve_region(
       EXTENT_DEFAULT_REF_COUNT,
       0,
       extent_types_t::NONE};
-    return btree.insert(c, iter, addr, val
+    return btree.insert(
+      c, iter, addr, val, get_reserved_ptr<LBALeafNode, laddr_t>()
     ).si_then([c](auto p) {
       auto &[iter, inserted] = p;
       ceph_assert(inserted);
-      auto &leaf_node = *iter.get_leaf_node();
-      leaf_node.insert_child_ptr(
-	iter.get_leaf_pos(),
-	get_reserved_ptr<LBALeafNode, laddr_t>(),
-	leaf_node.get_size() - 1 /*the size before the insert*/);
       return LBAMapping::create_direct(iter.get_cursor(c));
     });
   });
@@ -397,15 +393,11 @@ BtreeLBAManager::alloc_extents(
 	      ext->get_paddr(),
 	      EXTENT_DEFAULT_REF_COUNT,
 	      ext->get_last_committed_crc(),
-              ext->get_type()}
+              ext->get_type()},
+            ext.get()
 	  ).si_then([ext, c, FNAME, &iter, &ret](auto p) {
 	    auto &[it, inserted] = p;
 	    ceph_assert(inserted);
-	    auto &leaf_node = *it.get_leaf_node();
-	    leaf_node.insert_child_ptr(
-	      it.get_leaf_pos(),
-	      ext.get(),
-	      leaf_node.get_size() - 1 /*the size before the insert*/);
 	    TRACET("inserted {}", c.trans, *ext);
 	    ret.emplace(ret.begin(), LBAMapping::create_direct(it.get_cursor(c)));
 	    iter = it;
@@ -501,14 +493,10 @@ BtreeLBAManager::clone_mapping(
               inter_key,
               EXTENT_DEFAULT_REF_COUNT,
               0,
-              extent_types_t::NONE});
+              extent_types_t::NONE},
+            get_reserved_ptr<LBALeafNode, laddr_t>());
 	}).si_then([c, &state](auto p) {
 	  auto &[iter, inserted] = p;
-	  auto &leaf_node = *iter.get_leaf_node();
-	  leaf_node.insert_child_ptr(
-	    iter.get_leaf_pos(),
-	    get_reserved_ptr<LBALeafNode, laddr_t>(),
-	    leaf_node.get_size() - 1 /*the size before the insert*/);
 	  auto cursor = iter.get_cursor(c);
 	  return state.mapping.refresh(
 	  ).si_then([cursor=std::move(cursor)](auto mapping) mutable {
@@ -687,20 +675,16 @@ BtreeLBAManager::insert_mappings(
       [c, &btree, &iter](auto &info)
     {
       assert(info.key != L_ADDR_NULL);
+      bool need_reserved_ptr =
+        info.is_indirect_mapping() || info.is_zero_mapping();
       return btree.insert(
-	c, iter, info.key, info.value
+	c, iter, info.key, info.value,
+        need_reserved_ptr
+          ? get_reserved_ptr<LBALeafNode, laddr_t>()
+          : static_cast<BaseChildNode<LBALeafNode, laddr_t>*>(info.extent)
       ).si_then([c, &iter, &info](auto p) {
 	ceph_assert(p.second);
 	iter = std::move(p.first);
-	auto &leaf_node = *iter.get_leaf_node();
-	bool need_reserved_ptr =
-	  info.is_indirect_mapping() || info.is_zero_mapping();
-	leaf_node.insert_child_ptr(
-	  iter.get_leaf_pos(),
-	  need_reserved_ptr
-	    ? get_reserved_ptr<LBALeafNode, laddr_t>()
-	    : static_cast<BaseChildNode<LBALeafNode, laddr_t>*>(info.extent),
-	  leaf_node.get_size() - 1 /*the size before the insert*/);
 	if (is_valid_child_ptr(info.extent)) {
 	  ceph_assert(info.value.pladdr.is_paddr());
 	  assert(info.value.pladdr == iter.get_val().pladdr);
@@ -1114,6 +1098,7 @@ BtreeLBAManager::_update_mapping(
   update_func_t &&f,
   LogicalChildNode* nextent)
 {
+  assert(!is_reserved_ptr(nextent));
   assert(cursor.is_viewable());
   auto c = get_context(t);
   return with_btree<LBABtree>(
@@ -1135,14 +1120,12 @@ BtreeLBAManager::_update_mapping(
       return btree.update(
 	c,
 	iter,
-	ret
-      ).si_then([c, nextent](auto iter) {
+	ret,
 	// child-ptr may already be correct,
 	// see LBAManager::update_mappings()
-	if (nextent && !nextent->has_parent_tracker()) {
-	  iter.get_leaf_node()->update_child_ptr(
-	    iter.get_leaf_pos(), nextent);
-	}
+        nextent && !nextent->has_parent_tracker()
+          ? nextent : nullptr
+      ).si_then([c, nextent](auto iter) {
 	assert(!nextent ||
 	  (nextent->has_parent_tracker()
 	    && nextent->peek_parent_node().get() == iter.get_leaf_node().get()));
@@ -1161,6 +1144,7 @@ BtreeLBAManager::_update_mapping(
   update_func_t &&f,
   LogicalChildNode* nextent)
 {
+  assert(!is_reserved_ptr(nextent));
   auto c = get_context(t);
   return with_btree<LBABtree>(
     cache,
@@ -1186,18 +1170,15 @@ BtreeLBAManager::_update_mapping(
 	    return update_mapping_ret_bare_t(addr, ret, iter.get_cursor(c));
 	  });
 	} else {
+          // nextent is provided iff unlinked,
+          // also see TM::rewrite_logical_extent()
+          assert(!nextent || !nextent->has_parent_tracker());
 	  return btree.update(
 	    c,
 	    iter,
-	    ret
+	    ret,
+            nextent ? nextent : nullptr
 	  ).si_then([c, nextent](auto iter) {
-	    if (nextent) {
-	      // nextent is provided iff unlinked,
-              // also see TM::rewrite_logical_extent()
-	      assert(!nextent->has_parent_tracker());
-	      iter.get_leaf_node()->update_child_ptr(
-		iter.get_leaf_pos(), nextent);
-	    }
 	    assert(!nextent || 
 	           (nextent->has_parent_tracker() &&
 		    nextent->peek_parent_node().get() == iter.get_leaf_node().get()));
@@ -1362,23 +1343,18 @@ BtreeLBAManager::remap_mappings(
 	  val.refcount = EXTENT_DEFAULT_REF_COUNT;
 	  // Checksum will be updated when the committing the transaction
 	  val.checksum = CRC_NULL;
-	  return btree.insert(c, iter, new_key, std::move(val)
-	  ).si_then([c, &remap, old_indirect, &ret, &iter](auto p) {
+	  return btree.insert(
+            c, iter, new_key, std::move(val),
+            old_indirect
+              ? get_reserved_ptr<LBALeafNode, laddr_t>()
+              : remap.extent
+	  ).si_then([c, old_indirect, &ret, &iter](auto p) {
 	    auto &[it, inserted] = p;
 	    ceph_assert(inserted);
-	    auto &leaf_node = *it.get_leaf_node();
 	    if (old_indirect) {
-	      leaf_node.insert_child_ptr(
-		it.get_leaf_pos(),
-		get_reserved_ptr<LBALeafNode, laddr_t>(),
-		leaf_node.get_size() - 1 /*the size before the insert*/);
 	      ret.push_back(
 		LBAMapping::create_indirect(nullptr, it.get_cursor(c)));
 	    } else {
-	      leaf_node.insert_child_ptr(
-		it.get_leaf_pos(),
-		remap.extent,
-		leaf_node.get_size() - 1 /*the size before the insert*/);
 	      ret.push_back(
 		LBAMapping::create_direct(it.get_cursor(c)));
 	    }
