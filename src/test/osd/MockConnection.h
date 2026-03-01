@@ -21,9 +21,16 @@
 //MockConnection - simple stub. Required because PeeringState needs
 //to know the features of the peer OSD which sent a peering message
 class MockConnection : public Connection {
+ private:
+  int peer_osd;
+  
  public:
-  MockConnection() : Connection(g_ceph_context, nullptr) {
+  MockConnection(int peer = -1) : Connection(g_ceph_context, nullptr), peer_osd(peer) {
     set_features(CEPH_FEATURES_ALL);
+  }
+
+  int get_peer_osd() const {
+    return peer_osd;
   }
 
   bool is_connected() override {
@@ -48,4 +55,3 @@ class MockConnection : public Connection {
     return entity_addr_t();
   }
 };
-
