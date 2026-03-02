@@ -27,7 +27,6 @@ set(mgr_modules
   devicehealth
   diskprediction_local
   # hello is an example for developers, not for user
-  nvmeof
   influx
   insights
   iostat
