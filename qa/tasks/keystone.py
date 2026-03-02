@@ -203,8 +203,7 @@ def setup_venv(ctx, config):
 
         run_in_keystone_venv(ctx, client,
             [   'pip', 'install',
-                'python-openstackclient',
-                'uwsgi'
+                'python-openstackclient'
              ])
     try:
         yield
