@@ -238,9 +238,10 @@ class ExternalCephClusterEntry(CommonResourceEntry):
         return self.get_resource_type(resources.ExternalCephCluster)
 
 
-def _map_resource_entry(
-    resource: Union[SMBResource, Type[SMBResource]]
+def map_resource_entry(
+    resource: Union[SMBResource, Type[SMBResource]],
 ) -> Type[ResourceEntry]:
+    """Return an entry type class given a resource object or resource class."""
     rcls = resource if isinstance(resource, type) else type(resource)
     _map = {
         resources.Cluster: ClusterEntry,
@@ -262,14 +263,14 @@ def resource_entry(
     store: ConfigStore, resource: SMBResource
 ) -> ResourceEntry:
     """Return a bound store entry object given a resource object."""
-    entry_cls = _map_resource_entry(resource)
+    entry_cls = map_resource_entry(resource)
     key = entry_cls.to_key(resource)
     return entry_cls.from_store_by_key(store, key)
 
 
 def resource_key(resource: SMBResource) -> EntryKey:
     """Return a store entry key for an smb resource object."""
-    entry_cls = _map_resource_entry(resource)
+    entry_cls = map_resource_entry(resource)
     key = entry_cls.to_key(resource)
     return str(entry_cls.namespace), str(key)
 
