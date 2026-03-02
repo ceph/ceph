@@ -1,6 +1,8 @@
 import logging
 from typing import Any
 
+from .cli import NVMeoFCLICommand
+
 from mgr_module import MgrModule
 import rbd
 
@@ -10,6 +12,8 @@ POOL_NAME = ".nvmeof"
 
 
 class NVMeoF(MgrModule):
+    CLICommand = NVMeoFCLICommand
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(NVMeoF, self).__init__(*args, **kwargs)
 
