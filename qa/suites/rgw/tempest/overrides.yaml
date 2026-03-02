@@ -23,4 +23,4 @@ overrides:
     ceph:
       extra_system_packages:
         rpm: [pcre, pcre-devel]
-        deb: [libpcre3 libpcre3-dev]
+        deb: [libpcre3, libpcre3-dev]
