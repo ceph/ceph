@@ -19,3 +19,8 @@ overrides:
         rgw keystone admin user: admin
         rgw keystone admin password: ADMIN
         rgw keystone admin project: admin
+  install:
+    ceph:
+      extra_system_packages:
+        rpm: [pcre, pcre-devel]
+        deb: [libpcre3 libpcre3-dev]
