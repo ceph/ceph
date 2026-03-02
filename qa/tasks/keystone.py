@@ -46,10 +46,9 @@ def run_in_keystone_venv(ctx, client, args, **kwargs):
 
 def get_keystone_uwsgi_cmd(ctx, conf_file):
     kdir = get_keystone_dir(ctx)
-    uwsgibin = f'{kdir}/.tox/venv/bin/uwsgi'
     keystoneini = f'{kdir}/httpd/keystone-uwsgi-public.ini'
     conf_env = f'OS_KEYSTONE_CONFIG_FILES={conf_file}'
-    cmd = [uwsgibin, '--env', conf_env, '--uwsgi-socket', '127.0.0.1:5001',
+    cmd = ['uwsgi', '--env', conf_env, '--uwsgi-socket', '127.0.0.1:5001',
            '--buffer-size', '65535', '--master', '--enable-threads',
            '--processes', '4', '--thunder-lock', '--plugins', 'python',
            '--lazy-apps', '--ini', keystoneini]
