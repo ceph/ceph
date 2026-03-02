@@ -161,7 +161,8 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
   }
 
   constexpr bool exclusive = true;
-  op_ret = driver->store_oidc_provider(this, y, info, exclusive);
+  RGWObjVersionTracker objv_tracker;
+  op_ret = driver->store_oidc_provider(this, y, info, exclusive, &objv_tracker);
   if (op_ret == 0) {
     s->formatter->open_object_section_in_ns("CreateOpenIDConnectProviderResponse", RGW_REST_IAM_XMLNS);
     s->formatter->open_object_section("CreateOpenIDConnectProviderResult");
@@ -307,7 +308,8 @@ static void dump_oidc_provider(const RGWOIDCProviderInfo& info, Formatter *f)
 void RGWGetOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+  op_ret = driver->load_oidc_provider(
+      this, y, resource.account, url, info, nullptr);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
@@ -392,7 +394,9 @@ int RGWAddClientIdToOIDCProvider::init_processing(optional_yield y)
 void RGWAddClientIdToOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+  RGWObjVersionTracker objv_tracker;
+  op_ret = driver->load_oidc_provider(
+      this, y, resource.account, url, info, &objv_tracker);
 
   if (op_ret < 0) {
     if (op_ret != -ENOENT && op_ret != -EINVAL) {
@@ -418,7 +422,8 @@ void RGWAddClientIdToOIDCProvider::execute(optional_yield y)
     info.client_ids.emplace_back(client_id);
 
     constexpr bool exclusive = false;
-    op_ret = driver->store_oidc_provider(this, y, info, exclusive);
+    op_ret = driver->store_oidc_provider(
+        this, y, info, exclusive, &objv_tracker);
   }
   if (op_ret == 0 || op_ret == -EEXIST) {
     op_ret = 0;
@@ -471,7 +476,9 @@ void
 RGWRemoveClientIdFromOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+  RGWObjVersionTracker objv_tracker;
+  op_ret = driver->load_oidc_provider(
+      this, y, resource.account, url, info, &objv_tracker);
 
   if (op_ret < 0) {
     if (op_ret != -ENOENT && op_ret != -EINVAL) {
@@ -495,7 +502,8 @@ RGWRemoveClientIdFromOIDCProvider::execute(optional_yield y)
   if(position != info.client_ids.end()) {
     info.client_ids.erase(position);
     constexpr bool exclusive = false;
-    op_ret = driver->store_oidc_provider(this, y, info, exclusive);
+    op_ret = driver->store_oidc_provider(
+        this, y, info, exclusive, &objv_tracker);
   }
 
   if (op_ret == 0) {
@@ -553,7 +561,9 @@ int RGWUpdateOIDCProviderThumbprint::init_processing(optional_yield y)
 void RGWUpdateOIDCProviderThumbprint::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+  RGWObjVersionTracker objv_tracker;
+  op_ret = driver->load_oidc_provider(
+      this, y, resource.account, url, info, &objv_tracker);
 
   if (op_ret < 0) {
     if (op_ret != -ENOENT && op_ret != -EINVAL) {
@@ -575,7 +585,7 @@ void RGWUpdateOIDCProviderThumbprint::execute(optional_yield y)
   info.thumbprints = std::move(thumbprints);
 
   constexpr bool exclusive = false;
-  op_ret = driver->store_oidc_provider(this, y, info, exclusive);
+  op_ret = driver->store_oidc_provider(this, y, info, exclusive, &objv_tracker);
   if (op_ret == 0) {
     s->formatter->open_object_section("AddClientIDToOpenIDConnectProviderResponse");
     s->formatter->open_object_section("ResponseMetadata");

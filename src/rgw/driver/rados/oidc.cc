@@ -137,9 +137,9 @@ write(
     librados::Rados& rados,
     const RGWZoneParams& zone,
     const RGWOIDCProviderInfo& info,
-    RGWObjVersionTracker& objv,
     ceph::real_time mtime,
-    bool exclusive)
+    bool exclusive,
+    RGWObjVersionTracker* objv)
 {
   const std::string url = url_remove_prefix(info.provider_url);
   const rgw_raw_obj obj = get_oidc_obj(zone, info.tenant, url);
@@ -149,7 +149,7 @@ write(
 
   int r = rgw_put_system_obj(
       dpp, &sysobj, obj.pool, obj.oid,
-      bl, exclusive, &objv, mtime, y);
+      bl, exclusive, objv, mtime, y);
   if (r < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to write OIDC provider obj " << obj.oid
         << " with: " << cpp_strerror(r) << dendl;
@@ -171,7 +171,7 @@ write(
   // record in the mdlog on success
   if (mdlog) {
     const std::string oidc_key = get_oidc_metadata_key(info.tenant, url);
-    return mdlog->complete_entry(dpp, y, "oidc", oidc_key, &objv);
+    return mdlog->complete_entry(dpp, y, "oidc", oidc_key, objv);
   }
   return 0;
 }
@@ -186,13 +186,13 @@ remove(
     const RGWZoneParams& zone,
     std::string_view tenant,
     std::string_view url,
-    RGWObjVersionTracker& objv)
+    RGWObjVersionTracker* objv)
 {
   const std::string oidc_key = get_oidc_metadata_key(tenant, url);
   const rgw_raw_obj obj = get_oidc_obj(zone, tenant, url);
 
   // delete OIDC provider info
-  int r = rgw_delete_system_obj(dpp, &sysobj, obj.pool, obj.oid, &objv, y);
+  int r = rgw_delete_system_obj(dpp, &sysobj, obj.pool, obj.oid, objv, y);
   if (r < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to remove OIDC provider obj "
         << obj.oid << " with: " << cpp_strerror(r) << dendl;
@@ -211,7 +211,7 @@ remove(
 
   // record in the mdlog on success
   if (mdlog) {
-    return mdlog->complete_entry(dpp, y, "oidc", oidc_key, &objv);
+    return mdlog->complete_entry(dpp, y, "oidc", oidc_key, objv);
   }
   return 0;
 }
@@ -467,7 +467,7 @@ public:
     constexpr bool exclusive = false;
     int ret = write(
         dpp, y, sysobj, &mdlog, rados, zone,
-        info, objv_tracker, mtime, exclusive);
+        info, mtime, exclusive, &objv_tracker);
     return ret < 0 ? ret : STATUS_APPLIED;
   }
 
@@ -484,7 +484,7 @@ public:
 
     return oidc::remove(
         dpp, y, sysobj, &mdlog, rados, zone,
-        tenant, url, objv_tracker);
+        tenant, url, &objv_tracker);
   }
 
   int

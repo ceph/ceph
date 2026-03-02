@@ -2623,24 +2623,26 @@ int RadosStore::list_roles(const DoutPrefixProvider *dpp,
 int RadosStore::store_oidc_provider(const DoutPrefixProvider *dpp,
                                     optional_yield y,
                                     const RGWOIDCProviderInfo& info,
-                                    bool exclusive)
+                                    bool exclusive,
+                                    RGWObjVersionTracker* objv_tracker)
 {
   const RGWZoneParams& zone = svc()->zone->get_zone_params();
-  RGWObjVersionTracker objv;
-  objv.generate_new_write_ver(dpp->get_cct());
-  return rgwrados::oidc::write(dpp, y, *svc()->sysobj, svc()->mdlog,
-                               *getRados()->get_rados_handle(), zone,
-                               info, objv, ceph::real_clock::now(), exclusive);
+  return rgwrados::oidc::write(
+      dpp, y, *svc()->sysobj, svc()->mdlog, *getRados()->get_rados_handle(),
+      zone, info, ceph::real_clock::now(), exclusive, objv_tracker);
 }
 
 int RadosStore::load_oidc_provider(const DoutPrefixProvider *dpp,
                                    optional_yield y,
                                    std::string_view account,
                                    std::string_view url,
-                                   RGWOIDCProviderInfo& info)
+                                   RGWOIDCProviderInfo& info,
+                                   RGWObjVersionTracker* objv_tracker)
 {
   const RGWZoneParams& zone = svc()->zone->get_zone_params();
-  return rgwrados::oidc::read(dpp, y, *svc()->sysobj, zone, account, url, info);
+  return rgwrados::oidc::read(
+      dpp, y, *svc()->sysobj, zone, account, url, info,
+      nullptr, objv_tracker);
 }
 
 int RadosStore::delete_oidc_provider(const DoutPrefixProvider *dpp,
@@ -2649,16 +2651,15 @@ int RadosStore::delete_oidc_provider(const DoutPrefixProvider *dpp,
                                      std::string_view url)
 {
   const RGWZoneParams& zone = svc()->zone->get_zone_params();
-  RGWObjVersionTracker objv;
   return rgwrados::oidc::remove(dpp, y, *svc()->sysobj, svc()->mdlog,
                                 *getRados()->get_rados_handle(), zone,
-                                account, url, objv);
+                                account, url);
 }
 
 int RadosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
-				   optional_yield y,
-				   std::string_view tenant,
-				   vector<RGWOIDCProviderInfo>& providers)
+                                   optional_yield y,
+                                   std::string_view tenant,
+                                   vector<RGWOIDCProviderInfo>& providers)
 {
   const RGWZoneParams& zone = svc()->zone->get_zone_params();
   return rgwrados::oidc::list(dpp, y, *svc()->sysobj,

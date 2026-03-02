@@ -53,9 +53,9 @@ int write(
     librados::Rados& rados,
     const RGWZoneParams& zone,
     const RGWOIDCProviderInfo& info,
-    RGWObjVersionTracker& objv,
     ceph::real_time mtime,
-    bool exclusive);
+    bool exclusive,
+    RGWObjVersionTracker* objv = nullptr);
 
 /// Remove an OIDC provider by URL.
 int remove(
@@ -67,7 +67,7 @@ int remove(
     const RGWZoneParams& zone,
     std::string_view tenant,
     std::string_view url,
-    RGWObjVersionTracker& objv);
+    RGWObjVersionTracker* objv = nullptr);
 
 /// List all OIDC providers for a given tenant.
 int list(

@@ -673,18 +673,20 @@ int FilterDriver::list_roles(const DoutPrefixProvider *dpp,
 int FilterDriver::store_oidc_provider(const DoutPrefixProvider* dpp,
                                       optional_yield y,
                                       const RGWOIDCProviderInfo& info,
-                                      bool exclusive)
+                                      bool exclusive,
+                                      RGWObjVersionTracker* objv_tracker)
 {
-  return next->store_oidc_provider(dpp, y, info, exclusive);
+  return next->store_oidc_provider(dpp, y, info, exclusive, objv_tracker);
 }
 
 int FilterDriver::load_oidc_provider(const DoutPrefixProvider* dpp,
                                      optional_yield y,
                                      std::string_view tenant,
                                      std::string_view url,
-                                     RGWOIDCProviderInfo& info)
+                                     RGWOIDCProviderInfo& info,
+                                     RGWObjVersionTracker* objv_tracker)
 {
-  return next->load_oidc_provider(dpp, y, tenant, url, info);
+  return next->load_oidc_provider(dpp, y, tenant, url, info, objv_tracker);
 }
 
 int FilterDriver::delete_oidc_provider(const DoutPrefixProvider* dpp,
