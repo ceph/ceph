@@ -115,7 +115,8 @@ class GrafanaService(CephadmService):
         for service in ['prometheus', 'loki', 'mgmt-gateway', 'oauth2-proxy']:
             deps += [d.name() for d in mgr.cache.get_daemons_by_service(service)]
 
-        return sorted(deps)
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
 
     def generate_prom_services(self, security_enabled: bool, mgmt_gw_enabled: bool) -> List[str]:
 
@@ -194,7 +195,7 @@ class GrafanaService(CephadmService):
                     dashboard = f.read()
                     config_file['files'][f'/etc/grafana/provisioning/dashboards/{file_name}'] = dashboard
 
-        return config_file, self.get_dependencies(self.mgr)
+        return config_file, self.get_dependencies(self.mgr, spec)
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # Use the least-created one as the active daemon

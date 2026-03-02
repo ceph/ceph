@@ -15,7 +15,6 @@ from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
 from .service_registry import register_cephadm_service
 
 from orchestrator import DaemonDescription, OrchestratorError
-from cephadm import utils
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
@@ -84,15 +83,12 @@ class NFSService(CephService):
         deps: List[str] = []
         nfs_spec = cast(NFSServiceSpec, spec)
         # add dependency of tls fields
-        if (spec.ssl and spec.ssl_cert and spec.ssl_key and spec.ssl_ca_cert):
-            deps.append(f'ssl_cert: {str(utils.md5_hash(spec.ssl_cert))}')
-            deps.append(f'ssl_key: {str(utils.md5_hash(spec.ssl_key))}')
-            deps.append(f'ssl_ca_cert: {str(utils.md5_hash(spec.ssl_ca_cert))}')
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         deps.append(f'tls_ktls: {nfs_spec.tls_ktls}')
         deps.append(f'tls_debug: {nfs_spec.tls_debug}')
         deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
         deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
-        return sorted(deps)
+        return sorted(deps + parent_deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -101,8 +97,7 @@ class NFSService(CephService):
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-
-        super().register_for_certificates(daemon_spec)
+        super().prepare_certificates(daemon_spec)
         daemon_type = daemon_spec.daemon_type
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
