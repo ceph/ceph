@@ -817,9 +817,7 @@ class TestMonitoring:
                   resolve_timeout: 5m
                   http_config:
                     tls_config:
-                      ca_file: root_cert.pem
-                      cert_file: alertmanager.crt
-                      key_file: alertmanager.key
+                      insecure_skip_verify: true
 
                 route:
                   receiver: 'default'
@@ -838,6 +836,12 @@ class TestMonitoring:
                 - name: 'ceph-dashboard'
                   webhook_configs:
                   - url: 'https://host_fqdn:29443/internal/dashboard/api/prometheus_receiver'
+                    http_config:
+                      tls_config:
+                        insecure_skip_verify: false
+                        ca_file: root_cert.pem
+                        cert_file: alertmanager.crt
+                        key_file: alertmanager.key
                 """).lstrip()
 
                 web_config = dedent("""
@@ -919,9 +923,7 @@ class TestMonitoring:
                   resolve_timeout: 5m
                   http_config:
                     tls_config:
-                      ca_file: root_cert.pem
-                      cert_file: alertmanager.crt
-                      key_file: alertmanager.key
+                      insecure_skip_verify: true
 
                 route:
                   receiver: 'default'
