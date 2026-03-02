@@ -3,7 +3,7 @@ server {
 {% if not spec.ssl %}
     listen {{ spec.port or 80 }};
 {% else %}
-    {% if spec.virutal_ip %}
+    {% if spec.virtual_ip %}
     listen                    {{ spec.virtual_ip }}:{{ spec.port or 443 }} ssl;
     {% else %}
     listen                    0.0.0.0:{{ spec.port or 443 }} ssl;
