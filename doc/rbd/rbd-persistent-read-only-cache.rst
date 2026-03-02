@@ -38,7 +38,8 @@ Enable RBD Shared Read-only Parent Image Cache
 ----------------------------------------------
 
 To enable RBD shared read-only parent image cache, the following Ceph settings
-need to added in the ``[client]`` `section`_ of your ``ceph.conf`` file::
+need to added in the ``[client]`` :ref:`section <ceph-conf-file>` of
+your ``ceph.conf`` file::
 
         rbd parent cache enabled = true
         rbd plugins = parent_cache
@@ -121,8 +122,8 @@ Running the Immutable Object Cache Daemon
 -----------------------------------------
 
 ``ceph-immutable-object-cache`` daemon should use a unique Ceph user ID.
-To `create a Ceph user`_, with ``ceph`` specify the ``auth get-or-create``
-command, user name, monitor caps, and OSD caps::
+To :ref:`create a Ceph user <rados_ops_adding_a_user>`, with ``ceph`` specify
+the ``auth get-or-create`` command, user name, monitor caps, and OSD caps::
 
   ceph auth get-or-create client.ceph-immutable-object-cache.{unique id} mon 'allow r' osd 'profile rbd-read-only'
 
@@ -196,6 +197,4 @@ The immutable object cache supports throttling, controlled by the following sett
 :Default: ``1``
 
 .. _Cloned RBD Images: ../rbd-snapshot/#layering
-.. _section: ../../rados/configuration/ceph-conf/#configuration-sections
-.. _create a Ceph user: ../../rados/operations/user-management#add-a-user
 

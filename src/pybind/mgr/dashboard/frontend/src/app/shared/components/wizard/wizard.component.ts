@@ -10,7 +10,8 @@ import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 @Component({
   selector: 'cd-wizard',
   templateUrl: './wizard.component.html',
-  styleUrls: ['./wizard.component.scss']
+  styleUrls: ['./wizard.component.scss'],
+  standalone: false
 })
 export class WizardComponent implements OnInit, OnDestroy, OnChanges {
   @Input()

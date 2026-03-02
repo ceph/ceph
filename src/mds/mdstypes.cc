@@ -842,7 +842,7 @@ void MDSCacheObjectInfo::decode(bufferlist::const_iterator& p)
 void MDSCacheObjectInfo::dump(Formatter *f) const
 {
   f->dump_unsigned("ino", ino);
-  f->dump_stream("dirfrag") << dirfrag;
+  f->dump_object("dirfrag", dirfrag);
   f->dump_string("name", dname);
   f->dump_unsigned("snapid", snapid);
 }
@@ -864,12 +864,12 @@ std::list<MDSCacheObjectInfo> MDSCacheObjectInfo::generate_test_instances()
   ls.emplace_back();
   ls.emplace_back();
   ls.back().ino = 1;
-  ls.back().dirfrag = dirfrag_t(2, 3);
+  ls.back().dirfrag = dirfrag_t(2, frag_t((1<<22), 2));
   ls.back().dname = "fooname";
   ls.back().snapid = CEPH_NOSNAP;
   ls.emplace_back();
   ls.back().ino = 121;
-  ls.back().dirfrag = dirfrag_t(222, 0);
+  ls.back().dirfrag = dirfrag_t(222, frag_t((1<<19), 8));
   ls.back().dname = "bar foo";
   ls.back().snapid = 21322;
   return ls;
@@ -948,8 +948,8 @@ void dirfrag_t::dump(ceph::Formatter *f) const {
 std::list<dirfrag_t> dirfrag_t::generate_test_instances() {
   std::list<dirfrag_t> ls;
   ls.emplace_back();
-  ls.push_back(dirfrag_t(1, frag_t()));
-  ls.push_back(dirfrag_t(2, frag_t(3)));
+  ls.push_back(dirfrag_t(1, frag_t((1<<23), 2)));
+  ls.push_back(dirfrag_t(2, frag_t()));
   return ls;
 }
 

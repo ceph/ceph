@@ -446,6 +446,31 @@ def test_deploy_ceph_osd_container(cephadm_fs, funkypatch):
     assert _make_run_dir.call_args[0][2] == 8765
 
 
+def test_deploy_ceph_osd_container_crimson(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
+    _make_run_dir = funkypatch.patch('cephadmlib.file_utils.make_run_dir')
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'osd.quux'
+        ctx.image = 'quay.io/ceph/ceph:latest'
+        ctx.reconfig = False
+        ctx.allow_ptrace = False
+        ctx.osd_fsid = '00000000-0000-0000-0000-000000000000'
+        ctx.config_blobs = {
+            'config': 'XXXXXXX',
+            'keyring': 'YYYYYY',
+            'osd_type': 'crimson',
+        }
+        _cephadm._common_deploy(ctx)
+
+    basedir = pathlib.Path(f'/var/lib/ceph/{fsid}/osd.quux')
+    with open(basedir / 'unit.run') as f:
+        runfile_lines = f.read().splitlines()
+    assert '--entrypoint /usr/bin/ceph-osd-crimson' in runfile_lines[-1]
+
+
 def test_deploy_ceph_exporter_container(cephadm_fs, funkypatch):
     mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']

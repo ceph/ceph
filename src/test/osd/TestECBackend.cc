@@ -56,7 +56,7 @@ TEST(ECUtil, stripe_info_t)
 
   ASSERT_EQ(s.aligned_ro_offset_to_chunk_offset(2*swidth),
 	    2*s.get_chunk_size());
-  ASSERT_EQ(s.chunk_aligned_shard_offset_to_ro_offset(2*s.get_chunk_size()),
+  ASSERT_EQ(s.shard_offset_to_ro_offset(shard_id_t(0), 2*s.get_chunk_size()),
 	    2*s.get_stripe_width());
 
   // Stripe 1 + 1 chunk for 10 stripes needs to read 11 stripes starting
@@ -1286,9 +1286,12 @@ bufferlist create_buf(uint64_t len) {
   bufferlist bl;
 
   while (bl.length() < len) {
-    uint64_t pages = std::rand() % 5;
+    uint64_t pages = std::rand() % 5 + 1;  // 1-5 pages to avoid infinite loop
     uint64_t len_to_add = std::min(len - bl.length(), pages * EC_ALIGN_SIZE);
-    bl.append_zero(len_to_add);
+    // Create page-aligned buffer to ensure memory alignment
+    bufferptr ptr = buffer::create_page_aligned(len_to_add);
+    memset(ptr.c_str(), 0, len_to_add);
+    bl.append(ptr);
   }
   ceph_assert(bl.is_aligned(EC_ALIGN_SIZE));
   ceph_assert(len == bl.length());

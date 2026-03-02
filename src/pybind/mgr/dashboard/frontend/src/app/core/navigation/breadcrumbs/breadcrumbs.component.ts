@@ -27,15 +27,17 @@ import { Title } from '@angular/platform-browser';
 import { ActivatedRouteSnapshot, NavigationEnd, NavigationStart, Router } from '@angular/router';
 
 import { concat, from, Observable, of, Subscription } from 'rxjs';
-import { distinct, filter, first, mergeMap, toArray } from 'rxjs/operators';
+import { distinct, filter, first, mergeMap, toArray, take } from 'rxjs/operators';
 import { AppConstants } from '~/app/shared/constants/app.constants';
 
 import { BreadcrumbsResolver, IBreadcrumb } from '~/app/shared/models/breadcrumbs';
+import { BreadcrumbService } from '~/app/shared/services/breadcrumb.service';
 
 @Component({
   selector: 'cd-breadcrumbs',
   templateUrl: './breadcrumbs.component.html',
-  styleUrls: ['./breadcrumbs.component.scss']
+  styleUrls: ['./breadcrumbs.component.scss'],
+  standalone: false
 })
 export class BreadcrumbsComponent implements OnDestroy {
   crumbs: IBreadcrumb[] = [];
@@ -48,13 +50,21 @@ export class BreadcrumbsComponent implements OnDestroy {
    */
   finished = false;
   subscription: Subscription;
+  private tabCrumbSubscription: Subscription;
   private defaultResolver = new BreadcrumbsResolver();
+  private baseCrumbs: IBreadcrumb[] = [];
 
-  constructor(private router: Router, private injector: Injector, private titleService: Title) {
+  constructor(
+    private router: Router,
+    private injector: Injector,
+    private titleService: Title,
+    private breadcrumbService: BreadcrumbService
+  ) {
     this.subscription = this.router.events
       .pipe(filter((x) => x instanceof NavigationStart))
       .subscribe(() => {
         this.finished = false;
+        this.breadcrumbService.clearTabCrumb();
       });
 
     this.subscription = this.router.events
@@ -74,15 +84,29 @@ export class BreadcrumbsComponent implements OnDestroy {
           )
           .subscribe((x) => {
             this.finished = true;
-            this.crumbs = x;
-            const title = this.getTitleFromCrumbs(this.crumbs);
-            this.titleService.setTitle(title);
+            this.baseCrumbs = x;
+            this.breadcrumbService.tabCrumb$.pipe(take(1)).subscribe((tabCrumb) => {
+              this.crumbs = tabCrumb && x.length > 0 ? [...x.slice(0, -1), tabCrumb] : [...x];
+              const title = this.getTitleFromCrumbs(this.crumbs);
+              this.titleService.setTitle(title);
+            });
           });
       });
+
+    this.tabCrumbSubscription = this.breadcrumbService.tabCrumb$.subscribe((tabCrumb) => {
+      if (tabCrumb && this.baseCrumbs.length > 0) {
+        this.crumbs = [...this.baseCrumbs.slice(0, -1), tabCrumb];
+      } else {
+        this.crumbs = [...this.baseCrumbs];
+      }
+      const title = this.getTitleFromCrumbs(this.crumbs);
+      this.titleService.setTitle(title);
+    });
   }
 
   ngOnDestroy(): void {
     this.subscription.unsubscribe();
+    this.tabCrumbSubscription.unsubscribe();
   }
 
   private _resolveCrumbs(route: ActivatedRouteSnapshot): Observable<IBreadcrumb[]> {

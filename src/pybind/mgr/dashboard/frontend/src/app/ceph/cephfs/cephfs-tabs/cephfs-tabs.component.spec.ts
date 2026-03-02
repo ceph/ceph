@@ -71,7 +71,7 @@ describe('CephfsTabsComponent', () => {
     component.softRefresh();
   };
 
-  @Component({ selector: 'cd-cephfs-chart', template: '' })
+  @Component({ selector: 'cd-cephfs-chart', template: '', standalone: false })
   class CephfsChartStubComponent {
     @Input()
     mdsCounter: any;

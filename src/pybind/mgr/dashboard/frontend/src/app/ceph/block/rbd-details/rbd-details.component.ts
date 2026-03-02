@@ -7,7 +7,8 @@ import { RbdFormModel } from '../rbd-form/rbd-form.model';
 @Component({
   selector: 'cd-rbd-details',
   templateUrl: './rbd-details.component.html',
-  styleUrls: ['./rbd-details.component.scss']
+  styleUrls: ['./rbd-details.component.scss'],
+  standalone: false
 })
 export class RbdDetailsComponent implements OnChanges {
   @Input()

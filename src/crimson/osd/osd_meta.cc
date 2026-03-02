@@ -11,6 +11,8 @@
 #include "os/Transaction.h"
 #include "osd/OSDMap.h"
 
+SET_SUBSYS(osd);
+
 using std::string;
 
 void OSDMeta::create(ceph::os::Transaction& t)
@@ -68,11 +70,15 @@ void OSDMeta::store_superblock(ceph::os::Transaction& t,
 
 OSDMeta::load_superblock_ret OSDMeta::load_superblock()
 {
+  LOG_PREFIX(OSDMeta::load_superblock);
+  DEBUG("");
   return store.read(
     coll, superblock_oid(), 0, 0
-  ).safe_then([] (bufferlist&& bl) {
+  ).safe_then([FNAME] (bufferlist&& bl) {
+    DEBUG("successfully read superblock");
     auto p = bl.cbegin();
     OSDSuperblock superblock;
+    DEBUG("decoding superblock bufferlist");
     decode(superblock, p);
     return seastar::make_ready_future<OSDSuperblock>(std::move(superblock));
   });

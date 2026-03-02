@@ -1,11 +1,8 @@
-from typing import Dict, Any
+from typing import Any, Dict
 
 
 class BaseClient:
-    def __init__(self,
-                 host: str,
-                 username: str,
-                 password: str) -> None:
+    def __init__(self, host: str, username: str, password: str) -> None:
         self.host = host
         self.username = username
         self.password = password

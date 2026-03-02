@@ -28,7 +28,8 @@
 	((_type *)((uintptr_t)(_ptr) - offset_of(_type, _field)))
 
 enum {
-	/* Support for ceph_ll_nonblocking_readv_writev */
+	/* Support for asynchronous I/O operations, like
+	 * ceph_ll_nonblocking_readv_writev and ceph_ll_nonblocking_fsync */
 	PROXY_FEAT_ASYNC_IO = 0x00000001,
 
 	/* Support for embedding the user credentials inside the request itself
@@ -44,6 +45,9 @@ enum {
 
 struct _list;
 typedef struct _list list_t;
+
+struct _proxy_settings;
+typedef struct _proxy_settings proxy_settings_t;
 
 struct _proxy_buffer_ops;
 typedef struct _proxy_buffer_ops proxy_buffer_ops_t;
@@ -83,12 +87,19 @@ typedef void (*proxy_worker_destroy_t)(proxy_worker_t *);
 
 typedef int32_t (*proxy_manager_start_t)(proxy_manager_t *);
 
-typedef int32_t (*proxy_link_start_t)(proxy_link_t *, int32_t);
+typedef int32_t (*proxy_link_start_t)(proxy_link_t *, proxy_settings_t *,
+				      int32_t);
 typedef bool (*proxy_link_stop_t)(proxy_link_t *);
 
 struct _list {
 	list_t *next;
 	list_t *prev;
+};
+
+struct _proxy_settings {
+	const char *socket_path;
+	const char *work_dir;
+	bool disable_copy;
 };
 
 #endif

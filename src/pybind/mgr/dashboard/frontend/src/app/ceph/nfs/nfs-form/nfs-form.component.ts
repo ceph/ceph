@@ -38,7 +38,8 @@ import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant'
 @Component({
   selector: 'cd-nfs-form',
   templateUrl: './nfs-form.component.html',
-  styleUrls: ['./nfs-form.component.scss']
+  styleUrls: ['./nfs-form.component.scss'],
+  standalone: false
 })
 export class NfsFormComponent extends CdForm implements OnInit {
   @ViewChild('nfsClients', { static: true })
@@ -642,8 +643,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   }
 
   private buildRequest() {
-    const requestModel: any = _.cloneDeep(this.nfsForm.value);
-    requestModel.fsal = this.nfsForm.get('fsal').value;
+    const requestModel: any = _.cloneDeep(this.nfsForm.getRawValue());
     if (this.isEdit) {
       requestModel.export_id = _.parseInt(this.export_id);
       requestModel.path = this.nfsForm.get('path').value;

@@ -1,4 +1,4 @@
-import { Component, HostListener, Input } from '@angular/core';
+import { Component, EventEmitter, HostListener, Input, Output } from '@angular/core';
 
 import { detect } from 'detect-browser';
 
@@ -14,7 +14,8 @@ const CLIPBOARD_SUCCESS_MESSAGE = $localize`Copied text to the clipboard success
 @Component({
   selector: 'cd-copy-2-clipboard-button',
   templateUrl: './copy2clipboard-button.component.html',
-  styleUrls: ['./copy2clipboard-button.component.scss']
+  styleUrls: ['./copy2clipboard-button.component.scss'],
+  standalone: false
 })
 export class Copy2ClipboardButtonComponent {
   // The text to be copied
@@ -32,6 +33,12 @@ export class Copy2ClipboardButtonComponent {
   // Optional: Adds text to the left of copy icon
   @Input()
   text?: string;
+
+  @Output()
+  toastSuccess = new EventEmitter<void>();
+
+  @Output()
+  toastError = new EventEmitter<void>();
 
   icons = Icons;
 
@@ -53,9 +60,11 @@ export class Copy2ClipboardButtonComponent {
           SUCCESS_TITLE,
           CLIPBOARD_SUCCESS_MESSAGE
         );
+        this.toastSuccess.emit();
       };
       const showError = () => {
         this.notificationService.show(NotificationType.error, ERROR_TITLE, CLIPBOARD_ERROR_MESSAGE);
+        this.toastError.emit();
       };
       if (['firefox', 'ie', 'ios', 'safari'].includes(browser.name)) {
         // Various browsers do not support the `Permissions API`.
@@ -80,6 +89,7 @@ export class Copy2ClipboardButtonComponent {
       }
     } catch (_) {
       this.notificationService.show(NotificationType.error, ERROR_TITLE, CLIPBOARD_ERROR_MESSAGE);
+      this.toastError.emit();
     }
   }
 }

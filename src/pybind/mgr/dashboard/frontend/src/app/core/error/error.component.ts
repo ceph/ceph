@@ -14,7 +14,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Component({
   selector: 'cd-error',
   templateUrl: './error.component.html',
-  styleUrls: ['./error.component.scss']
+  styleUrls: ['./error.component.scss'],
+  standalone: false
 })
 export class ErrorComponent implements OnDestroy, OnInit {
   header: string;

@@ -61,7 +61,8 @@ enum ConfigType {
 @Component({
   selector: 'cd-rgw-multisite-wizard',
   templateUrl: './rgw-multisite-wizard.component.html',
-  styleUrls: ['./rgw-multisite-wizard.component.scss']
+  styleUrls: ['./rgw-multisite-wizard.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
   multisiteSetupForm: CdFormGroup;
@@ -222,6 +223,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
       zoneName: new UntypedFormControl('default_zone', {
         validators: [Validators.required]
       }),
+      archive_zone: new UntypedFormControl(false, {}),
       zone_endpoints: new UntypedFormControl(null, {
         validators: [Validators.required]
       }),
@@ -295,7 +297,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
       const zoneName = values['zoneName'];
       const zoneEndpoints = this.rgwEndpoints.value.join(',');
       const username = values['username'];
-
+      const tierType = values['archive_zone'] ? 'archive' : '';
       if (!this.isMultiClusterConfigured || this.stepsToSkip['Select Cluster']) {
         this.rgwMultisiteService
           .setUpMultisiteReplication(
@@ -303,6 +305,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
             zonegroupName,
             zonegroupEndpoints,
             zoneName,
+            tierType,
             zoneEndpoints,
             username
           )
@@ -328,6 +331,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
             zonegroupName,
             zonegroupEndpoints,
             zoneName,
+            tierType,
             zoneEndpoints,
             username,
             cluster,

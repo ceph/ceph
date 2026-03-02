@@ -160,6 +160,7 @@ except ModuleNotFoundError:
 import requests
 import signal
 import sys
+import textwrap
 
 from os.path import expanduser
 
@@ -324,8 +325,6 @@ def build_branch(args):
         branch = branch + "-" + args.branch_release
     if args.branch_append:
         branch += f"-{args.branch_append}"
-    if args.debug_build:
-        branch += "-debug"
     label = args.label
     merge_branch_name = args.merge_branch_name
     if merge_branch_name is False:
@@ -440,14 +439,27 @@ def build_branch(args):
                 sys.exit(1)
             log.info("Labeled PR #{pr} {label}".format(pr=pr, label=label))
 
-    if args.distros or args.archs:
-        message = "ceph-dev-pipeline: configure\n\n"
-        if args.distros:
-            message += f"DISTROS: {' '.join(args.distros)}\n"
-        if args.archs:
-            message += f"ARCHS: {' '.join(args.archs)}\n"
-        if args.flavors:
-            message += f"FLAVORS: {' '.join(args.flavors)}\n"
+    message = """
+    ceph-dev-pipeline: configure
+
+    See documentation: https://github.com/ceph/ceph-build/tree/main/ceph-trigger-build#git-trailer-parameters
+
+    """
+    message = textwrap.dedent(message)
+    trailer_commit = False
+    if args.build_job:
+        message += f"CEPH-BUILD-JOB: {args.build_job}\n"
+        trailer_commit = True
+    if args.distros:
+        message += f"DISTROS: {' '.join(args.distros)}\n"
+        trailer_commit = True
+    if args.archs:
+        message += f"ARCHS: {' '.join(args.archs)}\n"
+        trailer_commit = True
+    if args.flavors:
+        message += f"FLAVORS: {' '.join(args.flavors)}\n"
+        trailer_commit = True
+    if trailer_commit:
         G.git.commit('--allow-empty', '-m', message)
 
     if args.stop_at_built:
@@ -480,6 +492,11 @@ def build_branch(args):
             tag = git.refs.tag.Tag.create(G, tag_name)
             log.info("Created tag %s" % tag)
 
+    do_qa = args.create_qa or args.update_qa
+    if args.push_ci or (not args.no_push_ci and do_qa):
+        G.git.push(CI_REMOTE_URL, branch) # for shaman
+        G.git.push(CI_REMOTE_URL, tag.name) # for archival
+
     if args.create_qa or args.update_qa:
         if not created_branch:
             log.error("branch already exists!")
@@ -505,9 +522,6 @@ def build_branch(args):
         if args.qa_tags:
             custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_TAGS, 'value': args.qa_tags})
 
-        if not args.no_push_ci:
-            G.git.push(CI_REMOTE_URL, branch) # for shaman
-            G.git.push(CI_REMOTE_URL, tag.name) # for archival
         origin_url = f'{BASE_PROJECT}/{CI_REPO}/commits/{tag.name}'
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_GIT_BRANCH, 'value': origin_url})
 
@@ -519,6 +533,9 @@ def build_branch(args):
           "subject": branch,
           "watcher_user_ids": user['id'],
         }
+
+        if args.qa_private:
+            issue_kwargs['is_private'] = True
 
         if args.update_qa:
             issue = R.issue.get(args.update_qa)
@@ -559,14 +576,19 @@ class SplitCommaAppendAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         # 1. Get the list that's already stored in the namespace.
         #    'default=[]' in add_argument ensures this is always a list.
-        current_list = getattr(namespace, self.dest)
+        current = getattr(namespace, self.dest)
 
         # 2. Split the new value(s) by comma
         #    Use strip() to remove any whitespace around items
         new_items = [item.strip() for item in values.split(',')]
 
         # 3. Extend the existing list with the new items
-        current_list.extend(new_items)
+        if isinstance(current, list):
+            current.extend(new_items)
+        elif isinstance(current, set):
+            current.update(new_items)
+        else:
+            raise NotImplementedError("type not supported")
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
@@ -600,16 +622,21 @@ def main():
 
     group = parser.add_argument_group('Build Control Options')
     group.add_argument('--archs', dest='archs', action=SplitCommaAppendAction, default=[], help='add arch(s) to build. Specify one or more times. Comma separated values are split.')
-    group.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
-    group.add_argument('--distros', dest='distros', action=SplitCommaAppendAction, default=[], help='add distro(s) to build. Specify one or more times. Comma separated values are split.')
-    group.add_argument('--flavors', dest='flavors', action=SplitCommaAppendAction, default=[], help='add flavors(s) to build. Specify one or more times. Comma separated values are split.')
-    group.add_argument('--no-push-ci', dest='no_push_ci', action='store_true', help='don\'t push branch to ceph-ci repo')
+    group.add_argument('--build-job', dest='build_job', action='store', help='add ceph build job to execute in CI')
+    group.add_argument('--debug-build', dest='debug_build', action='store_true', help='add \'debug\' flavor (build with CMAKE_BUILD_TYPE=Debug)')
+    group.add_argument('--distros', dest='distros', action=SplitCommaAppendAction, default=set(), help='add distro(s) to build. Specify one or more times. Comma separated values are split.')
+    group.add_argument('--flavors', dest='flavors', action=SplitCommaAppendAction, default=set(), help='add flavors(s) to build. Specify one or more times. Comma separated values are split.')
 
     group = parser.add_argument_group('QA Control Options')
     group.add_argument('--create-qa', dest='create_qa', action='store_true', help='create QA run ticket')
+    group.add_argument('--qa-private', dest='qa_private', action='store_true', help='make the QA run ticket private')
     group.add_argument('--qa-release', dest='qa_release', action='store', help='QA release for tracker')
     group.add_argument('--qa-tags', dest='qa_tags', action='store', help='QA tags for tracker')
     group.add_argument('--update-qa', dest='update_qa', action='store', help='update QA run ticket')
+
+    group = parser.add_argument_group('CI Repository Options')
+    group.add_argument('--no-push-ci', dest='no_push_ci', action='store_true', help='don\'t push branch to ceph-ci repo (when making QA tickets)')
+    group.add_argument('--push-ci', dest='push_ci', action='store_true', help='push branch and tag to CI repository (even when not making QA tickets)')
 
     group = parser.add_argument_group('PRs to Merge')
     group.add_argument('prs', metavar="PRs...", type=int, nargs='*', help='Pull Requests to Merge')
@@ -622,6 +649,9 @@ def main():
 
     if args.debug:
         log.setLevel(logging.DEBUG)
+
+    if args.debug_build:
+        args.flavors.add('debug')
 
     if (args.create_qa or args.update_qa) and Redmine is None:
         log.error("redmine library is not available so cannot create qa tracker ticket")

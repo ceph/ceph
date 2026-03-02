@@ -11,6 +11,7 @@
             [hasDetails]="hasDetails"
             [serverSide]="true"
             [count]="count"
+            updateExpandedOnRefresh="always"
             (setExpandedRow)="setExpandedRow($event)"
             (updateSelection)="updateSelection($event)">
     <cd-table-actions class="table-actions"
@@ -20,7 +21,8 @@
     </cd-table-actions>
     <cd-service-details *cdTableDetail
                         [permissions]="permissions"
-                        [selection]="expandedRow">
+                        [selection]="expandedRow"
+                        (editService)="openModal(true, $event)">
     </cd-service-details>
   </cd-table>
 </ng-container>
@@ -61,4 +63,16 @@
     </ng-template>
   </ng-container>
   <ng-template #noUrl>{{row.service_name}}</ng-template>
+</ng-template>
+
+<ng-template #certificateStatusTpl
+             let-row="data.row">
+@if (row.certificate?.requires_certificate && row.certificate?.status && row.certificate?.status !== 'not_configured') {
+  <span class="d-flex align-items-center gap-1">
+    <cd-icon [type]="statusIconMap[row.certificate.status] || statusIconMap['default']"></cd-icon>
+    {{ formatCertificateStatus(row.certificate) }}
+  </span>
+} @else {
+  -
+}
 </ng-template>

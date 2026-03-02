@@ -8,7 +8,8 @@ import { CustomLoginBannerService } from '~/app/shared/api/custom-login-banner.s
 @Component({
   selector: 'cd-custom-login-banner',
   templateUrl: './custom-login-banner.component.html',
-  styleUrls: ['./custom-login-banner.component.scss']
+  styleUrls: ['./custom-login-banner.component.scss'],
+  standalone: false
 })
 export class CustomLoginBannerComponent implements OnInit {
   bannerText$: Observable<string>;

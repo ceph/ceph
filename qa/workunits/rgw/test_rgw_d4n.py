@@ -48,7 +48,7 @@ def exec_cmd(cmd):
         return False
 
 def get_radosgw_endpoint():
-    out = exec_cmd('sudo netstat -nltp | egrep "rados|valgr"')  # short for radosgw/valgrind
+    out = exec_cmd('sudo ss -nltp | egrep "rados|valgr|memcheck-"')  # short for radosgw/valgrind
     x = out.decode('utf8').split(" ")
     port = [i for i in x if ':' in i][0].split(':')[1]
     log.info('radosgw port: %s' % port)
@@ -190,7 +190,7 @@ def test_small_object(r, client, s3):
         assert(data.get('objName') == 'test.txt')
         assert(data.get('bucketName') == bucketID)
         assert(data.get('dirty') == '0')
-        assert(data.get('hosts') == '127.0.0.1:6379')
+        assert(data.get('hosts') == '127.0.0.1:8000')
 
     # second get call
     response_get = obj.get()
@@ -225,7 +225,7 @@ def test_small_object(r, client, s3):
         assert(data.get('objName') == 'test.txt')
         assert(data.get('bucketName') == bucketID)
         assert(data.get('dirty') == '0')
-        assert(data.get('hosts') == '127.0.0.1:6379')
+        assert(data.get('hosts') == '127.0.0.1:8000')
 
     r.flushall()
 
@@ -286,7 +286,7 @@ def test_large_object(r, client, s3):
             assert(data.get('objName') == '_:null_mymultipart')
             assert(data.get('bucketName') == bucketID)
             assert(data.get('dirty') == '0')
-            assert(data.get('hosts') == '127.0.0.1:6379')
+            assert(data.get('hosts') == '127.0.0.1:8000')
             continue
 
         assert(data.get('blockID') == entry_name[2])
@@ -296,7 +296,7 @@ def test_large_object(r, client, s3):
         assert(data.get('objName') == 'mymultipart')
         assert(data.get('bucketName') == bucketID)
         assert(data.get('dirty') == '0')
-        assert(data.get('hosts') == '127.0.0.1:6379')
+        assert(data.get('hosts') == '127.0.0.1:8000')
 
     # second get
     try:
@@ -340,7 +340,7 @@ def test_large_object(r, client, s3):
             assert(data.get('objName') == '_:null_mymultipart')
             assert(data.get('bucketName') == bucketID)
             assert(data.get('dirty') == '0')
-            assert(data.get('hosts') == '127.0.0.1:6379')
+            assert(data.get('hosts') == '127.0.0.1:8000')
             continue
 
         assert(data.get('blockID') == entry_name[2])
@@ -350,7 +350,7 @@ def test_large_object(r, client, s3):
         assert(data.get('objName') == 'mymultipart')
         assert(data.get('bucketName') == bucketID)
         assert(data.get('dirty') == '0')
-        assert(data.get('hosts') == '127.0.0.1:6379')
+        assert(data.get('hosts') == '127.0.0.1:8000')
 
     r.flushall()
 

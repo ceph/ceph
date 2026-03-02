@@ -1,3 +1,5 @@
+.. _rados-crush-map-edits:
+
 Manually editing the CRUSH Map
 ==============================
 
@@ -17,8 +19,8 @@ To edit an existing CRUSH map, carry out the following procedure:
 #. `Recompile`_ the CRUSH map.
 #. `Set the CRUSH map`_.
 
-For details on setting the CRUSH map rule for a specific pool, see `Set Pool
-Values`_.
+For details on setting the CRUSH map rule for a specific pool,
+see :ref:`setpoolvalues`.
 
 .. _Get the CRUSH map: #getcrushmap
 .. _Decompile: #decompilecrushmap
@@ -27,7 +29,6 @@ Values`_.
 .. _Rules: #crushmaprules
 .. _Recompile: #compilecrushmap
 .. _Set the CRUSH map: #setcrushmap
-.. _Set Pool Values: ../pools#setpoolvalues
 
 .. _getcrushmap:
 

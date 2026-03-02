@@ -795,7 +795,7 @@ Parameters are XML encoded in the body of the request, in the following format:
 | ``LoggingType``               | String    | The type of logging. Valid values are:                                               | No       |
 |                               |           | ``Standard`` (default) all bucket operations are logged after being performed.       |          |
 |                               |           | The log record will contain all fields.                                              |          |
-|                               |           | ``Journal`` only operations that modify and object are logged.                       |          |
+|                               |           | ``Journal`` only operations that modify an object are logged.                        |          |
 |                               |           | Will record the minimum subset of fields in the log record that is needed            |          |
 |                               |           | for journaling.                                                                      |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+

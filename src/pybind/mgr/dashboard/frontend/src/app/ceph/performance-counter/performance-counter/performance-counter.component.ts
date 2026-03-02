@@ -4,7 +4,8 @@ import { ActivatedRoute } from '@angular/router';
 @Component({
   selector: 'cd-performance-counter',
   templateUrl: './performance-counter.component.html',
-  styleUrls: ['./performance-counter.component.scss']
+  styleUrls: ['./performance-counter.component.scss'],
+  standalone: false
 })
 export class PerformanceCounterComponent {
   static defaultFromLink = '/hosts';

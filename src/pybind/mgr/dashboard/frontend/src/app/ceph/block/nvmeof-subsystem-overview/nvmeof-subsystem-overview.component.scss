@@ -1,0 +1,18 @@
+@use '@carbon/layout';
+
+.tile-title {
+  margin-bottom: layout.$spacing-06;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  row-gap: layout.$spacing-06;
+  column-gap: layout.$spacing-07;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: layout.$spacing-02;
+}

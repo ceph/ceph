@@ -9,7 +9,7 @@ import { configureTestBed, modalServiceShow } from '~/testing/unit-test-helper';
 import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
 import { LoadingPanelComponent } from '../loading-panel/loading-panel.component';
 import { DeleteConfirmationModalComponent } from './delete-confirmation-modal.component';
-import { ModalService, PlaceholderService } from 'carbon-components-angular';
+import { ModalService, PlaceholderService, CheckboxModule } from 'carbon-components-angular';
 import { ModalCdsService } from '../../services/modal-cds.service';
 import { DeletionImpact } from '../../enum/delete-confirmation-modal-impact.enum';
 
@@ -32,7 +32,8 @@ export class MockModule {}
         The spinner is handled by the modal if your given deletion function returns a Observable.
       </ng-template>
     </button>
-  `
+  `,
+  standalone: false
 })
 class MockComponent {
   @ViewChild('ctrlDescription', { static: true })
@@ -97,7 +98,7 @@ describe('DeleteConfirmationModalComponent', () => {
       AlertPanelComponent
     ],
     schemas: [NO_ERRORS_SCHEMA],
-    imports: [ReactiveFormsModule, MockModule, DirectivesModule],
+    imports: [ReactiveFormsModule, MockModule, DirectivesModule, CheckboxModule],
     providers: [
       ModalService,
       PlaceholderService,

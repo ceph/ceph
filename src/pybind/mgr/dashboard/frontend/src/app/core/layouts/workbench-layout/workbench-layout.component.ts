@@ -1,7 +1,8 @@
 import { Component, HostBinding, OnDestroy, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRouteSnapshot, NavigationEnd, Router } from '@angular/router';
 
-import { Subscription } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
+import { filter } from 'rxjs/operators';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -11,18 +12,27 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskManagerService } from '~/app/shared/services/task-manager.service';
 import { TelemetryNotificationService } from '../../../shared/services/telemetry-notification.service';
 import { MotdNotificationService } from '~/app/shared/services/motd-notification.service';
+import {
+  FeatureTogglesMap,
+  FeatureTogglesService
+} from '~/app/shared/services/feature-toggles.service';
 import _ from 'lodash';
 
 @Component({
   selector: 'cd-workbench-layout',
   templateUrl: './workbench-layout.component.html',
   styleUrls: ['./workbench-layout.component.scss'],
-  providers: [FaviconService]
+  providers: [FaviconService],
+  standalone: false
 })
 export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
   notifications: string[] = [];
   private subs = new Subscription();
   permissions: Permissions;
+  pageHeaderTitle: string | null = null;
+  pageHeaderDescription: string | null = null;
+  enabledFeature$: Observable<FeatureTogglesMap>;
+
   @HostBinding('class') get class(): string {
     return 'top-notification-' + this.notifications.length;
   }
@@ -35,9 +45,11 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
     private faviconService: FaviconService,
     private authStorageService: AuthStorageService,
     private telemetryNotificationService: TelemetryNotificationService,
-    private motdNotificationService: MotdNotificationService
+    private motdNotificationService: MotdNotificationService,
+    private featureTogglesService: FeatureTogglesService
   ) {
     this.permissions = this.authStorageService.getPermissions();
+    this.enabledFeature$ = this.featureTogglesService.get();
   }
 
   ngOnInit() {
@@ -64,7 +76,27 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
       })
     );
     this.faviconService.init();
+
+    this.updatePageHeaderFromRoute();
+    this.subs.add(
+      this.router.events
+        .pipe(filter((e) => e instanceof NavigationEnd))
+        .subscribe(() => this.updatePageHeaderFromRoute())
+    );
   }
+
+  private updatePageHeaderFromRoute(): void {
+    let route: ActivatedRouteSnapshot | null = this.router.routerState.snapshot.root;
+    while (route?.firstChild) {
+      route = route.firstChild;
+    }
+    const pageHeader = route?.routeConfig?.data?.['pageHeader'] as
+      | { title?: string; description?: string }
+      | undefined;
+    this.pageHeaderTitle = pageHeader?.title ?? null;
+    this.pageHeaderDescription = pageHeader?.description ?? null;
+  }
+
   showTopNotification(name: string, isDisplayed: boolean) {
     if (isDisplayed) {
       if (!this.notifications.includes(name)) {

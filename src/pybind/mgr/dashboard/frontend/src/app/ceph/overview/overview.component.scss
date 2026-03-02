@@ -1,0 +1,18 @@
+.overview {
+  &-check-header {
+    display: flex;
+    align-items: center;
+    gap: var(--cds-spacing-02);
+    margin-bottom: var(--cds-spacing-02);
+  }
+
+  &-check-name {
+    color: var(--cds-text-primary);
+    margin-bottom: var(--cds-spacing-01);
+    margin-top: var(--cds-spacing-02);
+  }
+
+  &-check-description {
+    color: var(--cds-text-secondary);
+  }
+}

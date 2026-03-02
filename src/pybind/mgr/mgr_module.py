@@ -9,6 +9,7 @@ from typing import (
     List,
     Mapping,
     NamedTuple,
+    no_type_check,
     Optional,
     Sequence,
     Set,
@@ -407,9 +408,7 @@ def _extract_target_func(
     return f, extra_args
 
 
-class CLICommand(object):
-    COMMANDS = {}  # type: Dict[str, CLICommand]
-
+class CLICommandBase(object):
     def __init__(self,
                  prefix: str,
                  perm: str = 'rw',
@@ -475,8 +474,8 @@ class CLICommand(object):
 
     def _register_handler(self, func: HandlerFuncType) -> HandlerFuncType:
         self.store_func_metadata(func)
+        self.COMMANDS[self.prefix] = self  # type: ignore[attr-defined]
         self.func = func
-        self.COMMANDS[self.prefix] = self
         return self.func
 
     def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
@@ -504,7 +503,7 @@ class CLICommand(object):
         special_args = set()
         kwargs_switch = False
         for index, (name, tp) in enumerate(self.arg_spec.items()):
-            if name in CLICommand.KNOWN_ARGS:
+            if name in self.KNOWN_ARGS:
                 special_args.add(name)
                 continue
             assert self.first_default >= 0
@@ -542,16 +541,23 @@ class CLICommand(object):
         }
 
     @classmethod
+    def Read(cls, prefix: str, poll: bool = False) -> 'CLICommandBase':
+        return cls(prefix, "r", poll)
+
+    @classmethod
+    def Write(cls, prefix: str, poll: bool = False) -> 'CLICommandBase':
+        return cls(prefix, "w", poll)
+
+    @classmethod
     def dump_cmd_list(cls) -> List[Dict[str, Union[str, bool]]]:
-        return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]
+        return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]  # type: ignore[attr-defined]
 
-
-def CLIReadCommand(prefix: str, poll: bool = False) -> CLICommand:
-    return CLICommand(prefix, "r", poll)
-
-
-def CLIWriteCommand(prefix: str, poll: bool = False) -> CLICommand:
-    return CLICommand(prefix, "w", poll)
+    @classmethod
+    @no_type_check
+    def make_registry_subtype(cls, name) -> 'CLICommandBase':
+        return type(name, (cls,), {
+            'COMMANDS': {},
+        })
 
 
 def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerFuncType]:
@@ -659,55 +665,6 @@ class Option(Dict):
         super(Option, self).__init__(
             (k, v) for k, v in vars().items()
             if k != 'self' and v is not None)
-
-
-class Command(dict):
-    """
-    Helper class to declare options for COMMANDS list.
-
-    It also allows to specify prefix and args separately, as well as storing a
-    handler callable.
-
-    Usage:
-    >>> def handler(): return 0, "", ""
-    >>> Command(prefix="example",
-    ...         handler=handler,
-    ...         perm='w')
-    {'perm': 'w', 'poll': False}
-    """
-
-    def __init__(
-            self,
-            prefix: str,
-            handler: HandlerFuncType,
-            perm: str = "rw",
-            poll: bool = False,
-    ):
-        super().__init__(perm=perm,
-                         poll=poll)
-        self.prefix = prefix
-        self.handler = handler
-
-    @staticmethod
-    def returns_command_result(instance: Any,
-                               f: HandlerFuncType) -> Callable[..., HandleCommandResult]:
-        @functools.wraps(f)
-        def wrapper(mgr: Any, *args: Any, **kwargs: Any) -> HandleCommandResult:
-            retval, stdout, stderr = f(instance or mgr, *args, **kwargs)
-            return HandleCommandResult(retval, stdout, stderr)
-        wrapper.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
-        return wrapper
-
-    def register(self, instance: bool = False) -> HandlerFuncType:
-        """
-        Register a CLICommand handler. It allows an instance to register bound
-        methods. In that case, the mgr instance is not passed, and it's expected
-        to be available in the class instance.
-        It also uses HandleCommandResult helper to return a wrapped a tuple of 3
-        items.
-        """
-        cmd = CLICommand(prefix=self.prefix, perm=self['perm'])
-        return cmd(self.returns_command_result(instance, self.handler))
 
 
 class CPlusPlusHandler(logging.Handler):
@@ -888,20 +845,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     from their active peer), and to configuration settings (read only).
     """
 
-    MODULE_OPTIONS: List[Option] = []
-    MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
-
     def __init__(self, module_name: str, capsule: Any):
         super(MgrStandbyModule, self).__init__(capsule)
         self.module_name = module_name
-
-        # see also MgrModule.__init__()
-        for o in self.MODULE_OPTIONS:
-            if 'default' in o:
-                if 'type' in o:
-                    self.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
-                else:
-                    self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
         # mock does not return a str
         mgr_level = cast(str, self.get_ceph_option("debug_mgr"))
@@ -914,7 +860,14 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         self._logger = self.getLogger()
 
     @classmethod
+    @no_type_check
     def _register_options(cls, module_name: str) -> None:
+        if not hasattr(cls, 'MODULE_OPTIONS'):
+            cls.MODULE_OPTIONS = []
+
+        if not hasattr(cls, 'MODULE_OPTION_DEFAULTS'):
+            cls.MODULE_OPTION_DEFAULTS = {}
+
         cls.MODULE_OPTIONS.append(
             Option(name='log_level', type='str', default="", runtime=True,
                    enum_allowed=['info', 'debug', 'critical', 'error',
@@ -932,6 +885,13 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
                    runtime=True,
                    enum_allowed=['info', 'debug', 'critical', 'error',
                                  'warning', '']))
+
+        for o in cls.MODULE_OPTIONS:
+            if 'default' in o:
+                if 'type' in o:
+                    cls.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
+                else:
+                    cls.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     @property
     def log(self) -> logging.Logger:
@@ -955,7 +915,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         """
         r = self._ceph_get_module_option(key)
         if r is None:
-            return self.MODULE_OPTION_DEFAULTS.get(key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)  # type: ignore[attr-defined]
         else:
             return r
 
@@ -997,7 +957,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     def get_localized_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
-            return self.MODULE_OPTION_DEFAULTS.get(key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)  # type: ignore[attr-defined]
         else:
             return r
 
@@ -1037,14 +997,6 @@ class API:
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     MGR_POOL_NAME = ".mgr"
 
-    COMMANDS = []  # type: List[Any]
-    MODULE_OPTIONS: List[Option] = []
-    MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
-
-    # Database Schema
-    SCHEMA = None  # type: Optional[List[str]]
-    SCHEMA_VERSIONED = None  # type: Optional[List[List[str]]]
-
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
     PRIO_INTERESTING = 8
@@ -1078,18 +1030,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self.module_name = module_name
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
 
-        for o in self.MODULE_OPTIONS:
-            if 'default' in o:
-                if 'type' in o:
-                    # we'll assume the declared type matches the
-                    # supplied default value's type.
-                    self.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
-                else:
-                    # module not declaring it's type, so normalize the
-                    # default value to be a string for consistent behavior
-                    # with default and user-supplied option values.
-                    self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
-
         mgr_level = cast(str, self.get_ceph_option("debug_mgr"))
         log_level = cast(str, self.get_module_option("log_level"))
         cluster_level = cast(str, self.get_module_option('log_to_cluster_level'))
@@ -1120,7 +1060,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._db_lock = threading.Lock()
 
     @classmethod
+    @no_type_check
     def _register_options(cls, module_name: str) -> None:
+        if not hasattr(cls, 'MODULE_OPTIONS'):
+            cls.MODULE_OPTIONS = []
+
+        if not hasattr(cls, 'MODULE_OPTION_DEFAULTS'):
+            cls.MODULE_OPTION_DEFAULTS = {}
+
         cls.MODULE_OPTIONS.append(
             Option(name='log_level', type='str', default="", runtime=True,
                    enum_allowed=['info', 'debug', 'critical', 'error',
@@ -1139,9 +1086,25 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                    enum_allowed=['info', 'debug', 'critical', 'error',
                                  'warning', '']))
 
+        for o in cls.MODULE_OPTIONS:
+            if 'default' in o:
+                if 'type' in o:
+                    # we'll assume the declared type matches the
+                    # supplied default value's type.
+                    cls.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
+                else:
+                    # module not declaring it's type, so normalize the
+                    # default value to be a string for consistent behavior
+                    # with default and user-supplied option values.
+                    cls.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
+
     @classmethod
+    @no_type_check
     def _register_commands(cls, module_name: str) -> None:
-        cls.COMMANDS.extend(CLICommand.dump_cmd_list())
+        if not hasattr(cls, 'COMMANDS'):
+            cls.COMMANDS = []
+
+        cls.COMMANDS.extend(cls.CLICommand.dump_cmd_list())
 
     @property
     def log(self) -> logging.Logger:
@@ -1280,12 +1243,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     def maybe_upgrade(self, db: sqlite3.Connection, version: int) -> None:
         if version <= 0:
+            assert hasattr(self, 'SCHEMA')
             self.log.info(f"creating main.db for {self.module_name}")
             assert self.SCHEMA is not None
             for sql in self.SCHEMA:
                 db.execute(sql)
             self.update_schema_version(db, 1)
         else:
+            assert hasattr(self, 'SCHEMA_VERSIONED')
             assert self.SCHEMA_VERSIONED is not None
             latest = len(self.SCHEMA_VERSIONED)
             if latest < version:
@@ -2004,10 +1969,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         inbuf: str,
                         cmd: Dict[str, Any]) -> Union[HandleCommandResult,
                                                       Tuple[int, str, str]]:
-        if cmd['prefix'] not in CLICommand.COMMANDS:
+        if cmd['prefix'] not in self.CLICommand.COMMANDS:  # type: ignore[attr-defined]
             return self.handle_command(inbuf, cmd)
 
-        return CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
+        return self.CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)  # type: ignore[attr-defined]
 
     def handle_command(self,
                        inbuf: str,
@@ -2074,7 +2039,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         access config options that they didn't declare
         in their schema.
         """
-        if key not in [o['name'] for o in self.MODULE_OPTIONS]:
+        if key not in [o['name'] for o in self.MODULE_OPTIONS]:  # type: ignore[attr-defined]
             raise RuntimeError("Config option '{0}' is not in {1}.MODULE_OPTIONS".
                                format(key, self.__class__.__name__))
 
@@ -2085,7 +2050,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         r = self._ceph_get_module_option(self.module_name, key,
                                          localized_prefix)
         if r is None:
-            return self.MODULE_OPTION_DEFAULTS.get(key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)  # type: ignore[attr-defined]
         else:
             return r
 

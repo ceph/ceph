@@ -35,7 +35,8 @@ import { TaskMessageService } from '~/app/shared/services/task-message.service';
   selector: 'cd-notifications-sidebar',
   templateUrl: './notifications-sidebar.component.html',
   styleUrls: ['./notifications-sidebar.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   @HostBinding('class.active') isSidebarOpened = false;
@@ -103,7 +104,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
 
     this.subs.add(
       this.notificationService.panelState$.subscribe((state) => {
-        this.isSidebarOpened = state.isOpen && !state.useNewPanel;
+        this.isSidebarOpened = state;
         this.cdRef.detectChanges();
       })
     );
@@ -159,7 +160,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   }
 
   closeSidebar() {
-    this.notificationService.toggleSidebar(false, false);
+    this.notificationService.togglePanel(false);
   }
 
   trackByFn(index: number) {

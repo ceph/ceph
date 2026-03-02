@@ -32,6 +32,7 @@
 #include "common/simple_cache.hpp"
 #include "common/PriorityCache.h"
 #include "msg/Messenger.h"
+#include "common/prime.h"
 
 #include "osd/OSDMap.h"
 #include "osd/OSDMapMapping.h"
@@ -274,12 +275,16 @@ public:
 
     void process(const std::vector<pg_t>& to_check) override {
       std::vector<pg_t> to_cancel;
+      std::vector<pg_t> to_cancel_upmap_primary_only;
+      std::set<uint64_t> affected_pools;
       std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>> to_remap;
-      osdmap.check_pg_upmaps(cct, to_check, &to_cancel, &to_remap);
+      osdmap.check_pg_upmaps(cct, to_check, &to_cancel, &to_cancel_upmap_primary_only,
+		             &affected_pools, &to_remap);
       // don't bother taking lock if nothing changes
-      if (!to_cancel.empty() || !to_remap.empty()) {
+      if (!to_cancel.empty() || !to_remap.empty() || !to_cancel_upmap_primary_only.empty()) {
         std::lock_guard l(pending_inc_lock);
-        osdmap.clean_pg_upmaps(cct, &pending_inc, to_cancel, to_remap);
+        osdmap.clean_pg_upmaps(cct, &pending_inc, to_cancel, to_cancel_upmap_primary_only,
+			       affected_pools, to_remap);
       }
     }
 
@@ -745,6 +750,7 @@ public:
   int enable_pool_ec_optimizations(pg_pool_t &pool,
                                    std::stringstream *ss,
                                    bool enable);
+  void enable_pool_ec_direct_reads(pg_pool_t &p);
   int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                std::stringstream& ss);
 

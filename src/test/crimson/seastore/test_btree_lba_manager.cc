@@ -45,7 +45,7 @@ struct btree_test_base :
 
   mutable segment_info_t tmp_info;
 
-  btree_test_base() = default;
+  btree_test_base() : JournalTrimmer(true) {}
 
   /*
    * JournalTrimmer interfaces
@@ -312,8 +312,8 @@ struct lba_btree_test : btree_test_base {
       }).unsafe_get();
   }
 
-  static auto get_map_val(extent_len_t len) {
-    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, len, 0};
+  static auto get_map_val(extent_len_t len, extent_types_t type) {
+    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, len, 0, type};
   }
 
   device_off_t next_off = 0;
@@ -324,7 +324,7 @@ struct lba_btree_test : btree_test_base {
 
   void insert(laddr_t addr, extent_len_t len) {
     ceph_assert(check.count(addr) == 0);
-    check.emplace(addr, get_map_val(len));
+    check.emplace(addr, get_map_val(len, TestBlock::TYPE));
     lba_btree_update([=, this](auto &btree, auto &t) {
       auto extents = cache->alloc_new_data_extents<TestBlock>(
 	  t,
@@ -339,7 +339,7 @@ struct lba_btree_test : btree_test_base {
 	  extents,
 	  [this, addr, len, &t, &btree](auto &extent) {
 	  return btree.insert(
-	    get_op_context(t), addr, get_map_val(len)
+	    get_op_context(t), addr, get_map_val(len, extent->get_type())
 	  ).si_then([addr, extent](auto p){
 	    auto& [iter, inserted] = p;
 	    iter.get_leaf_node()->insert_child_ptr(

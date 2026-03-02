@@ -27,6 +27,7 @@
 #include "rgw_common.h"
 #include "rgw_bucket.h"
 #include "rgw_restore.h"
+#include "rgw_restore_waiter.h"
 #include "rgw_zone.h"
 #include "rgw_string.h"
 #include "rgw_multi.h"
@@ -48,6 +49,7 @@
 
 constexpr int32_t hours_in_a_day = 24;
 constexpr int32_t secs_in_a_day = hours_in_a_day * 60 * 60;
+static constexpr size_t listing_max_entries = 1000;
 
 using namespace std;
 using namespace rgw::sal;
@@ -151,6 +153,11 @@ int Restore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
   cct = _cct;
   driver = _driver;
 
+  // Initialize waiter registry
+  if (!waiter_registry) {
+    waiter_registry = std::make_shared<RestoreWaiterRegistry>();
+  }
+
   ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": initializing Restore handle" << dendl;
   /* max_objs indicates the number of shards or objects
    * used to store Restore Entries */
@@ -187,6 +194,10 @@ void Restore::finalize()
 {
   sal_restore.reset(nullptr);
   obj_names.clear();
+  if (waiter_registry) {
+    waiter_registry->shutdown();
+    waiter_registry.reset();
+  }
   ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": finalize Restore handle" << dendl;
 }
 
@@ -231,6 +242,14 @@ void Restore::stop_processor()
     worker->join();
   }
   worker.reset(nullptr);
+}
+
+void Restore::wake_worker()
+{
+  if (worker) {
+    std::lock_guard lock(worker->lock);
+    worker->cond.notify_one();
+  }
 }
 
 unsigned Restore::get_subsys() const
@@ -551,6 +570,18 @@ done:
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Restore of entry:'" << entry << "' failed" << ret << dendl;	  
     entry.status = rgw::sal::RGWRestoreStatus::RestoreFailed;
   }
+
+  // Notify any waiting GET requests
+  if (waiter_registry && !in_progress) {
+    bool success = (ret >= 0);
+    waiter_registry->notify_completion(
+      entry.bucket,
+      entry.obj_key,
+      success,
+      ret
+    );
+  }
+
   return ret;
 }
 
@@ -727,7 +758,14 @@ int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
     return ret;
   }
 
-  ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Restore of object " << pobj->get_key() << " is in progress." << dendl;  
+  // For cloud-s3 tier (not glacier), wake the restore worker immediately
+  // to start the download instead of waiting for the next periodic cycle
+  if (tier && tier->get_tier_type() == "cloud-s3") {
+    ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Waking restore worker for immediate processing (cloud-s3 tier)" << dendl;
+    wake_worker();
+  }
+
+  ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Restore of object " << pobj->get_key() << " is in progress." << dendl;
 
   if (notify) {
     auto& attrs = pobj->get_attrs();
@@ -744,6 +782,152 @@ int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
                         << ret << " for lc object: " << pobj->get_name()
                         << " for event_types: rgw::notify::ObjectRestoreInitiated" << dendl;
     }
+  }
+
+
+  return ret;
+}
+
+int Restore::list(const DoutPrefixProvider* dpp, RestoreEntry& entry,
+                  std::optional<string> restore_status_filter,
+                  std::string& err_msg, RGWFormatterFlusher& flusher, optional_yield y)
+{
+  int ret = 0;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  ret = driver->load_bucket(dpp, entry.bucket, &bucket, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not init bucket: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  params.list_versions = bucket->versioned();
+  params.allow_unordered = true;
+  flusher.start(0);
+  auto f = flusher.get_formatter();
+  f->open_object_section("restore_list");
+  do {
+    ret = bucket->list(dpp, params, listing_max_entries, results, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: driver->list_objects(): " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    for (vector<rgw_bucket_dir_entry>::iterator iter = results.objs.begin(); iter != results.objs.end(); ++iter) {
+      std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(iter->key.name);
+      if (obj) {
+        ret = obj->get_obj_attrs(y, dpp);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
+          return -ret;
+        }
+        for (map<string, bufferlist>::iterator getattriter = obj->get_attrs().begin(); getattriter != obj->get_attrs().end(); ++getattriter) {
+          bufferlist& bl = getattriter->second;
+          if (getattriter->first == RGW_ATTR_RESTORE_STATUS) {
+            rgw::sal::RGWRestoreStatus rs;
+            {
+              using ceph::decode;
+              try {
+                decode(rs, bl);
+              } catch (const JSONDecoder::err& e) {
+                ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
+                return EINVAL;
+              }
+            }
+            if (restore_status_filter) {
+              if (restore_status_filter == rgw::sal::rgw_restore_status_dump(rs)) {
+                f->dump_string(iter->key.name, rgw::sal::rgw_restore_status_dump(rs));
+              }
+            } else {
+              f->dump_string(iter->key.name, rgw::sal::rgw_restore_status_dump(rs));
+            }
+          }
+        }
+      }
+    }
+  } while (results.is_truncated);
+  f->close_section();
+  flusher.flush();
+
+  return ret;
+}
+
+int Restore::status(const DoutPrefixProvider* dpp, RestoreEntry& entry,
+                    std::string& err_msg, RGWFormatterFlusher& flusher,
+                    optional_yield y)
+{
+  int ret = 0;
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  ret = driver->load_bucket(dpp, entry.bucket, &bucket, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not init bucket: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  if (!entry.obj_key.name.empty()) {
+    flusher.start(0);
+    auto f = flusher.get_formatter();
+    f->open_object_section("object restore status");
+    f->dump_string("name", entry.obj_key.name);
+    std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(entry.obj_key);
+    ret = obj->get_obj_attrs(y, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
+      return -ret;
+    }
+    map<string, bufferlist>::iterator iter;
+    for (iter = obj->get_attrs().begin(); iter != obj->get_attrs().end(); ++iter) {
+      bufferlist& bl = iter->second;
+      {
+        using ceph::decode;
+        if (iter->first == RGW_ATTR_RESTORE_STATUS) {
+          rgw::sal::RGWRestoreStatus rs;
+          try {
+            decode(rs, bl);
+          } catch (const JSONDecoder::err& e) {
+            ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
+            return EINVAL;
+          }
+          f->dump_string("RestoreStatus", rgw::sal::rgw_restore_status_dump(rs));
+        } else if (iter->first == RGW_ATTR_RESTORE_TYPE) {
+          rgw::sal::RGWRestoreType rt;
+          try {
+            decode(rt, bl);
+          } catch (const JSONDecoder::err& e) {
+            ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
+            return EINVAL;
+          }
+          f->dump_string("RestoreType", rgw::sal::rgw_restore_type_dump(rt));
+        } else if (iter->first == RGW_ATTR_RESTORE_EXPIRY_DATE) {
+          ceph::real_time restore_expiry_date;
+          try {
+            decode(restore_expiry_date, bl);
+          } catch (const JSONDecoder::err& e) {
+            ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
+            return EINVAL;
+          }
+          encode_json("RestoreExpiryDate", restore_expiry_date, f);
+        } else if (iter->first == RGW_ATTR_RESTORE_TIME) {
+          ceph::real_time restore_time;
+          try {
+            decode(restore_time, bl);
+          } catch (const JSONDecoder::err& e) {
+            ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
+            return EINVAL;
+          }
+          encode_json("RestoreTime", restore_time, f);
+        } else if (iter->first == RGW_ATTR_RESTORE_VERSIONED_EPOCH) {
+          uint64_t versioned_epoch;
+          try {
+            decode(versioned_epoch, bl);
+          } catch (const JSONDecoder::err& e) {
+            ldpp_dout(dpp, 0) << "failed to decode JSON input: " << e.what() << dendl;
+            return EINVAL;
+          }
+          f->dump_unsigned("RestoreVersionedEpoch", versioned_epoch);
+        }
+      }
+    }
+    f->close_section();
+    flusher.flush();
   }
 
   return ret;

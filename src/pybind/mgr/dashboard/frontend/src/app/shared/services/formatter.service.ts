@@ -3,6 +3,9 @@ import { AbstractControl, ValidationErrors } from '@angular/forms';
 import _ from 'lodash';
 import { isEmptyInputValue } from '../forms/cd-validators';
 
+const BINARY_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+const BINARY_FACTOR = 1024;
+
 @Injectable({
   providedIn: 'root'
 })
@@ -178,5 +181,49 @@ export class FormatterService {
       return { rateOpsMaxSize: true };
     }
     return control.value.toString()?.length > 18 ? { rateOpsMaxSize: true } : null;
+  }
+
+  formatToBinary(num: any, split: false, decimals?: number): string;
+  formatToBinary(num: any, split: true, decimals?: number): [number, string];
+  formatToBinary(
+    num: any,
+    split: boolean = false,
+    decimals: number = 1
+  ): string | [number, string] {
+    const convertedString = this.format_number(num, BINARY_FACTOR, BINARY_UNITS, decimals);
+    const FALLBACK: [number, string] = [0, BINARY_UNITS[0]]; // when convertedString is 'N/A', '-', or 'NaN', return [0, 'B']
+    if (!split) return convertedString;
+
+    const parts = convertedString.trim().split(/\s+/);
+
+    if (parts.length < 2) {
+      return FALLBACK;
+    }
+
+    const value = this.convertToNumber(parts[0]);
+    const unit = parts[1];
+
+    if (!Number.isFinite(value) || !unit) {
+      return FALLBACK;
+    }
+
+    return [value, unit];
+  }
+
+  convertToUnit(value: string, fromUnit: string, toUnit: string, decimals: number = 1): number {
+    if (!value) return 0;
+    const convertedString = this.formatNumberFromTo(
+      value,
+      fromUnit,
+      toUnit,
+      BINARY_FACTOR,
+      BINARY_UNITS,
+      decimals
+    );
+    return this.convertToNumber(convertedString.split(/\s+/)[0]);
+  }
+
+  convertToNumber(num: string) {
+    return Number(num.replace(/,/g, '').trim());
   }
 }

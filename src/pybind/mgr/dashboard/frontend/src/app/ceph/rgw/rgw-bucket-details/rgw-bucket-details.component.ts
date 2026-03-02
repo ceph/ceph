@@ -8,7 +8,8 @@ import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 @Component({
   selector: 'cd-rgw-bucket-details',
   templateUrl: './rgw-bucket-details.component.html',
-  styleUrls: ['./rgw-bucket-details.component.scss']
+  styleUrls: ['./rgw-bucket-details.component.scss'],
+  standalone: false
 })
 export class RgwBucketDetailsComponent implements OnChanges {
   @Input()

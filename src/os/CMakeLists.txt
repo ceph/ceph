@@ -11,11 +11,6 @@ add_subdirectory(memstore)
 target_link_libraries(os
   PRIVATE memstore)
 
-add_subdirectory(kstore)
-target_link_libraries(os
-  PRIVATE
-    kstore)
-
 if(WITH_BLUESTORE)
   add_subdirectory(bluestore)
   target_link_libraries(os

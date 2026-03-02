@@ -10,34 +10,27 @@
 #include "acconfig.h"
 #include "include/buffer_fwd.h"
 #include "kv/KeyValueDB.h"
-#ifdef WITH_BLUESTORE
-#include "os/bluestore/BlueStore.h"
-#endif
+#include "os/ObjectStore.h"
 
 class KeyValueDB;
 
 class StoreTool
 {
-#ifdef WITH_BLUESTORE
   struct Deleter {
-    BlueStore *bluestore;
-    Deleter()
-      : bluestore(nullptr) {}
-    Deleter(BlueStore *store)
-      : bluestore(store) {}
+    ObjectStore *store = nullptr;
+    Deleter() {}
+    Deleter(ObjectStore *_store)
+      : store(_store) {}
     void operator()(KeyValueDB *db) {
-      if (bluestore) {
-	bluestore->umount();
-	delete bluestore;
+      if (store) {
+	store->umount();
+	delete store;
       } else {
 	delete db;
       }
     }
   };
   std::unique_ptr<KeyValueDB, Deleter> db;
-#else
-  std::unique_ptr<KeyValueDB> db;
-#endif
 
   const std::string store_path;
 
@@ -80,8 +73,6 @@ public:
   int print_stats() const;
   int build_size_histogram(const std::string& prefix) const;
 
-#ifdef WITH_BLUESTORE
 private:
   int load_bluestore(const std::string& path, bool read_only, bool need_open_db);
-#endif // WITH_BLUESTORE
 };

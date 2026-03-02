@@ -22,7 +22,8 @@ import { KmipConfig, VaultConfig } from '~/app/shared/models/rgw-encryption-conf
 @Component({
   selector: 'cd-rgw-config-modal',
   templateUrl: './rgw-config-modal.component.html',
-  styleUrls: ['./rgw-config-modal.component.scss']
+  styleUrls: ['./rgw-config-modal.component.scss'],
+  standalone: false
 })
 export class RgwConfigModalComponent implements OnInit {
   kmsProviders: string[];

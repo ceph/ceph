@@ -1,0 +1,65 @@
+@let storage = (storageVm$ | async);
+@let health = (healthCardVm$ | async);
+<div cdsGrid
+     [fullWidth]="true"
+     [narrow]="true"
+     class="cds-mt-5 cds-mb-5">
+  <div cdsRow>
+    <div cdsCol
+         class="cds-mb-5"
+         [columnNumbers]="{lg: 11}">
+      <cd-overview-health-card
+          [vm]="health"
+          (viewIncidents)="togglePanel()"
+          (activeSectionChange)="activeHealthTab = $event"
+        ></cd-overview-health-card>
+    </div>
+    <div cdsCol
+         class="cds-mb-5"
+         [columnNumbers]="{lg: 5}">
+      <cd-overview-alerts-card [compact]="!activeHealthTab"></cd-overview-alerts-card>
+    </div>
+  </div>
+  <div cdsRow>
+    <div cdsCol
+         class="cds-mb-5"
+         [columnNumbers]="{lg: 16}">
+      <cd-overview-storage-card
+        [total]="storage?.total"
+        [used]="storage?.used">
+      </cd-overview-storage-card>
+    </div>
+  </div>
+  <div cdsRow>
+    <div cdsCol
+         class="cds-mb-5"
+         [columnNumbers]="{ lg: 16 }">
+      <cd-performance-card></cd-performance-card>
+    </div>
+  </div>
+</div>
+@if (isHealthPanelOpen && health?.incidents > 0) {
+  <cd-side-panel
+    [headerText]="'Health incidents ('+ health?.incidents +')'"
+    [expanded]="isHealthPanelOpen"
+    size="md"
+    (closed)="togglePanel()">
+    <div panel-header-description
+         class="cds--type-body-01">
+      <span i18n>Health incidents are Ceph health checks warnings indicating conditions that require attention and remain until resolved.</span>
+    </div>
+    <div class="panel-content">
+      @for (check of health?.checks; track key) {
+      <div>
+        <div class="overview-check-header">
+          <cd-icon [type]="check?.icon"></cd-icon>
+          <span class="cds--type-body-compact-01 overview-check-name">
+            {{ check?.name }}
+          </span>
+        </div>
+        <p class="cds--type-body-compact-01 overview-check-description">{{ check?.description }}</p>
+      </div>
+      }
+    </div>
+  </cd-side-panel>
+}

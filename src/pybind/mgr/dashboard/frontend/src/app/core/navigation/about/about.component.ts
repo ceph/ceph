@@ -12,7 +12,8 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 @Component({
   selector: 'cd-about',
   templateUrl: './about.component.html',
-  styleUrls: ['./about.component.scss']
+  styleUrls: ['./about.component.scss'],
+  standalone: false
 })
 export class AboutComponent extends BaseModal implements OnInit, OnDestroy {
   modalVariables: any;

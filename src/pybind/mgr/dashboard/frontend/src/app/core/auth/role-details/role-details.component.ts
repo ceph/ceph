@@ -8,7 +8,8 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 @Component({
   selector: 'cd-role-details',
   templateUrl: './role-details.component.html',
-  styleUrls: ['./role-details.component.scss']
+  styleUrls: ['./role-details.component.scss'],
+  standalone: false
 })
 export class RoleDetailsComponent implements OnChanges, OnInit {
   @Input()

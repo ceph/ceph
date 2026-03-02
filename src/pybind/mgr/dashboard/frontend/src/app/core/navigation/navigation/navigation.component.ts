@@ -22,7 +22,8 @@ import { USER } from '~/app/shared/constants/app.constants';
 @Component({
   selector: 'cd-navigation',
   templateUrl: './navigation.component.html',
-  styleUrls: ['./navigation.component.scss']
+  styleUrls: ['./navigation.component.scss'],
+  standalone: false
 })
 export class NavigationComponent implements OnInit, OnDestroy {
   clusterDetails: any[] = [];
@@ -32,7 +33,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
   clusterTokenStatus: object = {};
   summaryData: any;
 
-  rightSidebarOpen = false; // rightSidebar only opens when width is less than 768px
   showMenuSidebar = true;
 
   simplebar = {
@@ -102,10 +102,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
     );
   }
 
-  ngOnDestroy(): void {
-    this.subs.unsubscribe();
-  }
-
   checkClusterConnectionStatus() {
     this.clustersMap.forEach((clusterDetails, clusterName) => {
       const clusterTokenStatus = this.clusterTokenStatus[clusterDetails.name];
@@ -160,10 +156,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
     this.displayedSubMenu[menu] = !this.displayedSubMenu[menu];
   }
 
-  toggleRightSidebar() {
-    this.rightSidebarOpen = !this.rightSidebarOpen;
-  }
-
   onClusterSelection(value: object) {
     this.multiClusterService.setCluster(value).subscribe(
       (resp: any) => {
@@ -185,7 +177,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
               const clusterUser = clusterDetails[USER];
 
               if (
-                clusterName === this.selectedCluster[USER] &&
+                clusterName === this.selectedCluster['name'] &&
                 clusterUser === this.selectedCluster[USER] &&
                 clusterDetails['cluster_alias'] !== 'local-cluster'
               ) {
@@ -209,10 +201,18 @@ export class NavigationComponent implements OnInit, OnDestroy {
       }
     );
   }
-  toggleSidebar() {
-    this.notificationService.toggleSidebar(true, true);
+
+  onNotificationSelected(event) {
+    event.stopPropagation();
+    const currentState = this.notificationService.getPanelState();
+    this.notificationService.setPanelState(!currentState);
   }
+
   trackByFn(item: any) {
     return item;
+  }
+
+  ngOnDestroy(): void {
+    this.subs.unsubscribe();
   }
 }

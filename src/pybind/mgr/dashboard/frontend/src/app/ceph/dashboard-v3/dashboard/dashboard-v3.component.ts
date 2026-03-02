@@ -44,7 +44,8 @@ import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 @Component({
   selector: 'cd-dashboard-v3',
   templateUrl: './dashboard-v3.component.html',
-  styleUrls: ['./dashboard-v3.component.scss']
+  styleUrls: ['./dashboard-v3.component.scss'],
+  standalone: false
 })
 export class DashboardV3Component extends PrometheusListHelper implements OnInit, OnDestroy {
   telemetryURL = 'https://telemetry-public.ceph.com/';
@@ -72,7 +73,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   alertType: string;
   alertClass = AlertClass;
 
-  queriesResults: { [key: string]: [] } = {
+  queriesResults: Record<string, [number, string][]> = {
     USEDCAPACITY: [],
     IPS: [],
     OPS: [],
@@ -184,11 +185,12 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   }
 
   public getPrometheusData(selectedTime: any) {
-    this.queriesResults = this.prometheusService.getRangeQueriesData(
-      selectedTime,
-      UtilizationCardQueries,
-      this.queriesResults
-    );
+    this.prometheusService
+      .getRangeQueriesData(selectedTime, UtilizationCardQueries, true)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((results) => {
+        this.queriesResults = results;
+      });
   }
 
   getCapacityQueryValues(data: PromqlGuageMetric['result']) {

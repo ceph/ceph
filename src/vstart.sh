@@ -194,7 +194,6 @@ if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
     with_mgr_dashboard=false
 fi
 
-kstore_path=
 declare -a block_devs
 declare -a bluestore_db_devs
 declare -a bluestore_wal_devs
@@ -244,7 +243,6 @@ options:
 	--rgw_store storage backend: rados|dbstore|posix
 	--seastore use seastore as crimson osd backend
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
-	-K, --kstore use kstore as the osd objectstore backend
 	--cyanstore use cyanstore as the osd objectstore backend
 	--memstore use memstore as the osd objectstore backend
 	--cache <pool>: enable cache tiering on pool
@@ -283,6 +281,7 @@ options:
 	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
 	--require-osd-and-client-version: if supplied, do set-require-min-compat-client and require-osd-release to specified value
 	--use-crush-tunables: if supplied, set tunables to specified value
+	--reactor-backend: configre seastar reactor backend options like io_uring or linux-aio
 \n
 EOF
 
@@ -533,10 +532,6 @@ case $1 in
         rgw_store=$2
         shift
         ;;
-    --kstore_path)
-        kstore_path=$2
-        shift
-        ;;
     -m)
         [ -z "$2" ] && usage_exit
         MON_ADDR=$2
@@ -574,9 +569,6 @@ case $1 in
         ;;
     -b | --bluestore)
         objectstore="bluestore"
-        ;;
-    -K | --kstore)
-        objectstore="kstore"
         ;;
     --hitset)
         hitset="$hitset $2 $3"
@@ -623,6 +615,10 @@ case $1 in
         ;;
     --crimson-smp)
         crimson_smp=$2
+        shift
+        ;;
+    --reactor-backend)
+        crimson_reactor_backend=$2
         shift
         ;;
     --crimson-alien-num-threads)
@@ -1030,13 +1026,9 @@ $DAEMONOPTS
 
         bluestore fsck on mount = true
         bluestore block create = true
-        bluestore allocator = bitmap
-        bluestore alloc favor spatial locality = false
         
 $BLUESTORE_OPTS
 
-        ; kstore
-        kstore fsck on mount = true
         osd objectstore = $objectstore
 $SEASTORE_OPTS
 $COSDSHORT
@@ -1269,6 +1261,10 @@ start_osd() {
             echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_poll_mode true"
             $CEPH_BIN/ceph -c $conf_fn config set "osd.$osd" crimson_poll_mode true
         fi
+        if [ -n "$crimson_reactor_backend" ]; then
+            echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_reactor_backend $crimson_reactor_backend"
+            $CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_reactor_backend $crimson_reactor_backend
+        fi
     fi
 	if [ "$new" -eq 1 -o $inc_osd_num -gt 0 ]; then
             wconf <<EOF
@@ -1295,27 +1291,23 @@ EOF
             if command -v btrfs > /dev/null; then
                 for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
             fi
-            if [ -n "$kstore_path" ]; then
-                ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
-            else
-                mkdir -p $CEPH_DEV_DIR/osd$osd
-                if [ -n "${block_devs[$osd]}" ]; then
-                    dd if=/dev/zero of=${block_devs[$osd]} bs=1M count=1
-                    ln -s ${block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block
-                fi
-                if [ -n "${bluestore_db_devs[$osd]}" ]; then
-                    dd if=/dev/zero of=${bluestore_db_devs[$osd]} bs=1M count=1
-                    ln -s ${bluestore_db_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.db
-                fi
-                if [ -n "${bluestore_wal_devs[$osd]}" ]; then
-                    dd if=/dev/zero of=${bluestore_wal_devs[$osd]} bs=1M count=1
-                    ln -s ${bluestore_wal_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.wal
-                fi
-                if [ -n "${secondary_block_devs[$osd]}" ]; then
-                    dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
-                    mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
-                    ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
-                fi
+            mkdir -p $CEPH_DEV_DIR/osd$osd
+            if [ -n "${block_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${block_devs[$osd]} bs=1M count=1
+                ln -s ${block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block
+            fi
+            if [ -n "${bluestore_db_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${bluestore_db_devs[$osd]} bs=1M count=1
+                ln -s ${bluestore_db_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.db
+            fi
+            if [ -n "${bluestore_wal_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${bluestore_wal_devs[$osd]} bs=1M count=1
+                ln -s ${bluestore_wal_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.wal
+            fi
+            if [ -n "${secondary_block_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
+                mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
+                ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
             fi
             if [ "$objectstore" == "bluestore" ]; then
                 wconf <<EOF
@@ -1677,7 +1669,7 @@ if [ -z "$CEPH_PORT" ]; then
     while [ true ]
     do
         CEPH_PORT="$(echo $(( RANDOM % 1000 + 40000 )))"
-        ss -a -n | egrep "\<LISTEN\>.+:${CEPH_PORT}\s+" 1>/dev/null 2>&1 || break
+        ss -a -n | grep -E "\<LISTEN\>.+:${CEPH_PORT}\s+" 1>/dev/null 2>&1 || break
     done
 fi
 

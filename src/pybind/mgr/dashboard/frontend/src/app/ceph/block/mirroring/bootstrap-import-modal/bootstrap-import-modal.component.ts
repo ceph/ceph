@@ -16,7 +16,8 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 @Component({
   selector: 'cd-bootstrap-import-modal',
   templateUrl: './bootstrap-import-modal.component.html',
-  styleUrls: ['./bootstrap-import-modal.component.scss']
+  styleUrls: ['./bootstrap-import-modal.component.scss'],
+  standalone: false
 })
 export class BootstrapImportModalComponent extends BaseModal implements OnInit, OnDestroy {
   pools: any[] = [];

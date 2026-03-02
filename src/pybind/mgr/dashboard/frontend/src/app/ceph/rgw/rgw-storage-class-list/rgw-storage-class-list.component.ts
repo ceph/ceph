@@ -31,7 +31,8 @@ const BASE_URL = 'rgw/storage-class';
   selector: 'cd-rgw-storage-class-list',
   templateUrl: './rgw-storage-class-list.component.html',
   styleUrls: ['./rgw-storage-class-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class RgwStorageClassListComponent extends ListWithDetails implements OnInit {
   @ViewChild('table', { static: true })
@@ -75,7 +76,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       },
       {
-        name: $localize`Zone Group`,
+        name: $localize`Zonegroup`,
         prop: 'zonegroup_name',
         flexGrow: 2
       },

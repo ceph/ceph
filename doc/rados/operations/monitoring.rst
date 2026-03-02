@@ -147,7 +147,7 @@ lines from the cluster log.
 Monitoring Health Checks
 ========================
 
-Ceph continuously runs various *health checks*. When
+Ceph continuously runs various :ref:`health-checks`. When
 a health check fails, this failure is reflected in the output of ``ceph status`` and
 ``ceph health``. The cluster log receives messages that
 indicate when a check has failed and when the cluster has recovered.
@@ -295,6 +295,7 @@ following command to the mgr:
         },
         ...
 
+.. _rados-monitoring-muting-health-checks:
 
 
 Muting Health Checks
@@ -374,6 +375,8 @@ Most health mutes disappear if the unhealthy condition that triggered the health
 For example, suppose that there is one OSD down and the health check is muted. In that case, if
 one or more additional OSDs go down, then the health mute disappears. This behavior occurs in any health check with a threshold value.
 
+
+.. _rados-monitoring-pool-usage:
 
 Checking a Cluster's Usage Stats
 ================================
@@ -842,12 +845,12 @@ it is not possible to set this interval less than the config value set
 for ``paxos_propose_interval``.
 
 
-This feature is on by default. To turn the feature off, e.g. - for an expected
-downtime, the ``enable_availability_tracking`` config option can be set to ``false``.
+This feature is off by default. To turn the feature on, the 
+``enable_availability_tracking`` config option can be set to ``true``.
 
 .. prompt:: bash #
 
-   ceph config set mon enable_availability_tracking false
+   ceph config set mon enable_availability_tracking true
 
 While the feature is turned off, the last calculated score will be preserved. The
 score will again start updating once the feature is turned on again.

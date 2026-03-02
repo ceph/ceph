@@ -135,8 +135,8 @@ class NvmeofGatewaysConfig(object):
         return root_ca_cert.encode() if root_ca_cert else None
 
     @classmethod
-    def get_server_cert(cls, service_name: str):
-        server_cert = cls.from_cert_store('nvmeof_server_cert', service_name)
+    def get_ssl_cert(cls, service_name: str):
+        server_cert = cls.from_cert_store('nvmeof_ssl_cert', service_name)
         return server_cert.encode() if server_cert else None
 
     @classmethod
@@ -216,3 +216,12 @@ def is_mtls_enabled(service_name: str):
         return orch.services.get(service_name)[0].spec.enable_auth
     except OrchestratorError:
         return False
+
+
+def get_pool_group_name(service_name: str):
+    try:
+        orch = OrchClient.instance()
+        spec = orch.services.get(service_name)[0].spec
+        return (spec.pool, spec.group)
+    except OrchestratorError:
+        return None

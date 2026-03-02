@@ -13,7 +13,8 @@ import { BaseModal } from 'carbon-components-angular';
 @Component({
   selector: 'cd-rgw-user-subuser-modal',
   templateUrl: './rgw-user-subuser-modal.component.html',
-  styleUrls: ['./rgw-user-subuser-modal.component.scss']
+  styleUrls: ['./rgw-user-subuser-modal.component.scss'],
+  standalone: false
 })
 export class RgwUserSubuserModalComponent extends BaseModal {
   /**

@@ -77,12 +77,14 @@ class HostControllerTest(ControllerTestCase):
     def test_host_list_with_facts(self, mock_get_hosts):
         hosts_without_facts = [{
             'hostname': 'host-0',
+            'addr': '192.168.1.1',
             'sources': {
                 'ceph': True,
                 'orchestrator': False
             }
         }, {
             'hostname': 'host-1',
+            'addr': '192.168.1.2',
             'sources': {
                 'ceph': False,
                 'orchestrator': True
@@ -101,11 +103,11 @@ class HostControllerTest(ControllerTestCase):
 
         hosts_with_facts = [{
             'hostname': 'host-0',
+            'addr': '192.168.1.1',
             'sources': {
                 'ceph': True,
                 'orchestrator': False
             },
-            'addr': '',
             'cpu_cores': 0,
             'model': '',
             'nic_count': 0,
@@ -118,11 +120,11 @@ class HostControllerTest(ControllerTestCase):
             'services': []
         }, {
             'hostname': 'host-1',
+            'addr': '192.168.1.2',
             'sources': {
                 'ceph': False,
                 'orchestrator': True
             },
-            'addr': '',
             'cpu_cores': 0,
             'model': '',
             'nic_count': 0,

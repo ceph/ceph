@@ -14,7 +14,8 @@ import { BaseModal } from 'carbon-components-angular';
 @Component({
   selector: 'cd-rgw-multisite-realm-form',
   templateUrl: './rgw-multisite-realm-form.component.html',
-  styleUrls: ['./rgw-multisite-realm-form.component.scss']
+  styleUrls: ['./rgw-multisite-realm-form.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteRealmFormComponent extends BaseModal implements OnInit {
   multisiteRealmForm: CdFormGroup;
@@ -37,12 +38,9 @@ export class RgwMultisiteRealmFormComponent extends BaseModal implements OnInit 
     @Optional() @Inject('resource') public resource: string,
     @Optional() @Inject('info') public info: any,
     @Optional() @Inject('multisiteInfo') public multisiteInfo: object[],
-    @Optional() @Inject('defaultsInfo') public defaultsInfo: string[],
-    @Optional() @Inject('editing') public editing: boolean
+    @Optional() @Inject('defaultsInfo') public defaultsInfo: string[]
   ) {
     super();
-
-    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.createForm();
   }
 

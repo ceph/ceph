@@ -18,7 +18,8 @@ import { TelemetryNotificationService } from '~/app/shared/services/telemetry-no
 @Component({
   selector: 'cd-telemetry',
   templateUrl: './telemetry.component.html',
-  styleUrls: ['./telemetry.component.scss']
+  styleUrls: ['./telemetry.component.scss'],
+  standalone: false
 })
 export class TelemetryComponent extends CdForm implements OnInit {
   configForm: CdFormGroup;

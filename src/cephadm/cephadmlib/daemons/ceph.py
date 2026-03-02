@@ -332,6 +332,15 @@ class OSD(Ceph):
     def osd_fsid(self) -> Optional[str]:
         return self._osd_fsid
 
+    def default_entrypoint(self) -> str:
+        config_json = fetch_configs(self.ctx)
+        if (
+            config_json is not None
+            and config_json.get('osd_type') == 'crimson'
+        ):
+            return '/usr/bin/ceph-osd-crimson'
+        return '/usr/bin/ceph-osd'
+
 
 @register_daemon_form
 class CephExporter(ContainerDaemonForm):

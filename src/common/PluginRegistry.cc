@@ -197,7 +197,7 @@ int PluginRegistry::load(const std::string &type,
   Plugin *plugin = get(type, name);
   if (plugin == 0) {
     lderr(cct) << __func__ << " " << fname << " "
-	       << PLUGIN_INIT_FUNCTION << "()"
+	       << PLUGIN_INIT_FUNCTION << "() "
 	       << "did not register plugin type " << type << " name " << name
 	       << dendl;
     dlclose(library);

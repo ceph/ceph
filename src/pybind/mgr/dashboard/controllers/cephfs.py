@@ -16,8 +16,8 @@ from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
 from ..services.exception import handle_cephfs_error
 from ..tools import ViewCache, str_to_bool
-from . import APIDoc, APIRouter, DeletePermission, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, UIRouter, UpdatePermission, \
+from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, UIRouter, UpdatePermission, \
     allow_empty_body
 
 GET_QUOTAS_SCHEMA = {
@@ -29,6 +29,39 @@ GET_STATFS_SCHEMA = {
     'files': (int, ''),
     'subdirs': (int, '')
 }
+
+LIST_PEERS_SCHEMA = [{
+    'uuid': ({
+        'client_name': (str, 'Ceph client name'),
+        'site_name': (str, 'Remote site name'),
+        'fs_name': (str, 'File system name'),
+    }, 'Peer ID'),
+}]
+
+BOOTSTRAP_PEERS_SCHEMA = {
+    'token': (str, 'Bootstrap token'),
+}
+
+DAEMON_STATUS_SCHEMA = [{
+    'daemon_id': (int, 'Daemon ID'),
+    'filesystems': ([{
+        'filesystem_id': (int, 'Filesystem ID'),
+        'name': (str, 'Filesystem name'),
+        'directory_count': (int, 'Directory count'),
+        'peers': ([{
+            'uuid': (str, 'Peer UUID'),
+            'remote': ({
+                'client_name': (str, 'Ceph client name'),
+                'cluster_name': (str, 'Remote cluster name'),
+                'fs_name': (str, 'Remote filesystem name'),
+            }, 'Remote peer information'),
+            'stats': ({
+                'failure_count': (int, 'Number of sync failures'),
+                'recovery_count': (int, 'Number of peer recoveries'),
+            }, 'Peer statistics'),
+        }], 'List of peer objects'),
+    }], 'List of filesystems on daemon'),
+}]
 
 
 # pylint: disable=R0904
@@ -1206,3 +1239,106 @@ class CephFSSnapshotSchedule(RESTController):
             )
 
         return f'Snapshot schedule for path {path} activated successfully'
+
+
+@APIRouter('/cephfs/mirror', Scope.CEPHFS_MIRROR)
+@APIDoc("Cephfs Mirror Management API", "CephfsMirror")
+class CephFSMirror(RESTController):
+
+    @EndpointDoc("Get peers",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                 },
+                 responses={200: LIST_PEERS_SCHEMA})
+    def list(self, fs_name: str):
+        error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_peer_list', fs_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to get Cephfs mirror peers: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out)
+
+    @EndpointDoc("Create bootstrap token",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'client_name': (str, 'Client entity\'s name'),
+                     'site_name': (str, 'Site name'),
+                 },
+                 responses={200: BOOTSTRAP_PEERS_SCHEMA})
+    @Endpoint('POST')
+    @CreatePermission
+    def token(self, fs_name: str, client_name: str, site_name: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_peer_bootstrap_create', fs_name, client_name, site_name)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to create bootstrap token: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out)
+
+    @EndpointDoc("Create bootstrap peer",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'token': (str, 'Bootstrap token'),
+                 },
+                 responses={200: {}})
+    @CreatePermission
+    def create(self, fs_name: str, token: str):
+        error_code, out, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_peer_bootstrap_import', fs_name, token)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to import the token to create bootstrap peer: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out)
+
+    @EndpointDoc("Delete peer",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'peer_uuid': (str, 'Peer UUID'),
+                 })
+    @DeletePermission
+    def delete(self, fs_name: str, peer_uuid: str):
+        error_code, _, err = mgr.remote(
+            'mirroring', 'snapshot_mirror_peer_remove', fs_name, peer_uuid)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to delete peer: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+
+    @EndpointDoc("Get mirror daemon and peers information",
+                 responses={200: DAEMON_STATUS_SCHEMA})
+    @Endpoint('GET', path='/daemon-status')
+    @ReadPermission
+    def daemon_status(self):
+        error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_daemon_status')
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to get Cephfs mirror daemon status: {err}',
+                code=error_code,
+                component='cephfs.mirror'
+            )
+        return json.loads(out)
+
+
+@UIRouter('/cephfs/mirror')
+class CephFSMirrorStatus(RESTController):
+    @ReadPermission
+    @EndpointDoc("Get Cephfs mirror status")
+    @Endpoint()
+    def status(self):
+        status: Dict[str, Any] = {'available': False, 'message': None}
+        try:
+            mgr.remote('mirroring', 'snapshot_mirror_daemon_status')
+            status['available'] = True
+        except (ImportError, RuntimeError):
+            status['message'] = 'Cephfs mirror module is not enabled'
+        return status

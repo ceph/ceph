@@ -1,4 +1,31 @@
-<ng-container *ngIf="selection">
-  <cd-service-daemon-list [serviceName]="selection['service_name']">
-  </cd-service-daemon-list>
-</ng-container>
+@if (service) {
+  <cds-tabs [cacheActive]="false">
+    <cds-tab heading="Daemons"
+             i18n-heading>
+      <cd-service-daemon-list
+        [serviceName]="service?.service_name"
+        mode="daemons">
+      </cd-service-daemon-list>
+    </cds-tab>
+
+    @if (hasCertificate) {
+      <cds-tab heading="Certificate"
+               i18n-heading>
+        <cd-service-certificate-details
+          [certificate]="certificate"
+          [serviceName]="service?.service_name"
+          [serviceType]="service?.service_type"
+          (editService)="onEditService($event)">
+        </cd-service-certificate-details>
+      </cds-tab>
+    }
+
+    <cds-tab heading="Service Events"
+             i18n-heading>
+      <cd-service-daemon-list
+        [serviceName]="service?.service_name"
+        mode="events">
+      </cd-service-daemon-list>
+    </cds-tab>
+  </cds-tabs>
+}

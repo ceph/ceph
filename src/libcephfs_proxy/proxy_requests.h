@@ -2,6 +2,8 @@
 #ifndef __LIBCEPHFSD_PROXY_REQUESTS_H__
 #define __LIBCEPHFSD_PROXY_REQUESTS_H__
 
+#include "include/cephfs/libcephfs.h"
+
 #include "proxy.h"
 #include "proxy_link.h"
 
@@ -126,6 +128,14 @@ enum {
 	LIBCEPHFSD_OP_LL_RELEASEDIR,
 	LIBCEPHFSD_OP_MOUNT_PERMS,
 	LIBCEPHFSD_OP_LL_NONBLOCKING_RW,
+	LIBCEPHFSD_OP_ADD_FSCRYPT_KEY,
+	LIBCEPHFSD_OP_REMOVE_FSCRYPT_KEY,
+	LIBCEPHFSD_OP_GET_FSCRYPT_KEY_STATUS,
+	LIBCEPHFSD_OP_LL_SET_FSCRYPT_POLICY_V2,
+	LIBCEPHFSD_OP_LL_GET_FSCRYPT_POLICY_V2,
+	LIBCEPHFSD_OP_LL_IS_ENCRYPTED,
+	LIBCEPHFSD_OP_LL_NONBLOCKING_FSYNC,
+	LIBCEPHFSD_OP_BATCH_READDIR,
 
 	/* Add more operations above this comment. */
 
@@ -135,6 +145,7 @@ enum {
 enum {
 	LIBCEPHFSD_CBK_NULL = 0,
 	LIBCEPHFSD_CBK_LL_NONBLOCKING_RW,
+	LIBCEPHFSD_CBK_LL_NONBLOCKING_FSYNC,
 
 	/* Add more callbacks above this comment. */
 
@@ -989,6 +1000,122 @@ PROTO_CALL(ceph_ll_nonblocking_readv_writev,
 	)
 );
 
+PROTO_CALL(ceph_add_fscrypt_key,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint32_t user;
+			uint32_t kid;
+			uint16_t key;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
+
+PROTO_CALL(ceph_remove_fscrypt_key,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint32_t user;
+			uint32_t arg;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
+
+PROTO_CALL(ceph_get_fscrypt_key_status,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint32_t arg;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
+
+PROTO_CALL(ceph_ll_set_fscrypt_policy_v2,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t inode;
+			uint32_t policy;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
+
+PROTO_CALL(ceph_ll_get_fscrypt_policy_v2,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t inode;
+			uint32_t policy;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+		)
+	)
+);
+
+PROTO_CALL(ceph_ll_is_encrypted,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t inode;
+			uint16_t tag;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			uint32_t policy;
+		)
+	)
+);
+
+PROTO_CALL(ceph_ll_nonblocking_fsync,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t info;
+			uint64_t inode;
+			bool syncdataonly;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			int32_t res;
+		)
+	)
+);
+
+PROTO_CALL(ceph_batch_readdir,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t dir;
+			uint32_t size;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			bool eod;
+		)
+	)
+);
+
 typedef union _proxy_req {
 	proxy_link_req_t header;
 
@@ -1040,6 +1167,14 @@ typedef union _proxy_req {
 	proxy_ceph_ll_releasedir_req_t ll_releasedir;
 	proxy_ceph_mount_perms_req_t mount_perms;
 	proxy_ceph_ll_nonblocking_readv_writev_req_t ll_nonblocking_rw;
+	proxy_ceph_add_fscrypt_key_req_t add_fscrypt_key;
+	proxy_ceph_remove_fscrypt_key_req_t remove_fscrypt_key;
+	proxy_ceph_get_fscrypt_key_status_req_t get_fscrypt_key_status;
+	proxy_ceph_ll_set_fscrypt_policy_v2_req_t ll_set_fscrypt_policy_v2;
+	proxy_ceph_ll_get_fscrypt_policy_v2_req_t ll_get_fscrypt_policy_v2;
+	proxy_ceph_ll_is_encrypted_req_t ll_is_encrypted;
+	proxy_ceph_ll_nonblocking_fsync_req_t ll_nonblocking_fsync;
+	proxy_ceph_batch_readdir_req_t batch_readdir;
 } proxy_req_t;
 
 PROTO_NOTIFY(ceph_ll_nonblocking_readv_writev,
@@ -1051,9 +1186,19 @@ PROTO_NOTIFY(ceph_ll_nonblocking_readv_writev,
 	)
 );
 
+PROTO_NOTIFY(ceph_ll_nonblocking_fsync,
+	PROTO_CBK(
+		PROTO_VER(v0,
+			uint64_t info;
+			int64_t res;
+		)
+	)
+);
+
 typedef union _proxy_cbk {
 	proxy_link_req_t header;
 	proxy_ceph_ll_nonblocking_readv_writev_cbk_t ll_nonblocking_rw;
+	proxy_ceph_ll_nonblocking_fsync_cbk_t ll_nonblocking_fsync;
 } proxy_cbk_t;
 
 #endif

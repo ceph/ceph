@@ -3,7 +3,8 @@ import { Component, Input } from '@angular/core';
 @Component({
   selector: 'cd-code-block',
   templateUrl: './code-block.component.html',
-  styleUrls: ['./code-block.component.scss']
+  styleUrls: ['./code-block.component.scss'],
+  standalone: false
 })
 export class CodeBlockComponent {
   @Input()

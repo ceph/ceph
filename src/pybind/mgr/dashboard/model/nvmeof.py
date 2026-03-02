@@ -30,7 +30,6 @@ class GatewayInfo(NamedTuple):
     status: int
     error_message: str
     hostname: str
-    cli_version: Annotated[str, CliFlags.DROP]
     version: str
     name: str
     group: str
@@ -98,6 +97,7 @@ class SubsystemStatus(NamedTuple):
 
 
 class Connection(NamedTuple):
+    nqn: str
     traddr: str
     trsvcid: int
     trtype: str
@@ -107,6 +107,7 @@ class Connection(NamedTuple):
     controller_id: int
     use_psk: Optional[bool]
     use_dhchap: Optional[bool]
+    dhchap_controller_origin: Optional[str]
     subsystem: Optional[str]
     disconnected_due_to_keepalive_timeout: Optional[bool]
 
@@ -127,6 +128,7 @@ class NamespaceCreation(NamedTuple):
 class Namespace(NamedTuple):
     bdev_name: str
     rbd_image_name: Annotated[str, CliHeader("RBD Image")]
+    rados_namespace_name: Annotated[Optional[str], CliHeader("RADOS Namespace")]
     rbd_pool_name: Annotated[str, CliHeader("RBD Pool")]
     load_balancing_group: Annotated[int, CliHeader('LB Group')]
     rbd_image_size: Annotated[int, CliFlags.SIZE]
@@ -201,6 +203,7 @@ class Host(NamedTuple):
     nqn: str
     use_psk: Optional[bool]
     use_dhchap: Optional[bool]
+    dhchap_controller_origin: Optional[str]
     disconnected_due_to_keepalive_timeout: Annotated[Optional[bool], CliFlags.DROP]
 
 
@@ -267,3 +270,43 @@ class GatewayListenersInfo(NamedTuple):
 class RequestStatus(NamedTuple):
     status: Annotated[int, CliFlags.EXCLUSIVE_RESULT]
     error_message: str
+
+
+class ListenAdress(NamedTuple):
+    trtype: str
+    adrfam: str
+    traddr: str
+    trsvcid: str
+    transport: Optional[str]
+    secure: Optional[bool]
+
+
+class NamespaceInfo(NamedTuple):
+    nsid: int
+    name: str
+    bdev_name: Optional[str]
+    nguid: Optional[str]
+    uuid: Optional[str]
+    anagrpid: Optional[int]
+    nonce: Optional[str]
+    auto_visible: Optional[bool]
+    hosts: List[Host]
+
+
+class SubsystemInfo(NamedTuple):
+    nqn: str
+    subtype: str
+    listen_addresses: List[ListenAdress]
+    hosts: List[Host]
+    allow_any_host: bool
+    serial_number: Optional[str]
+    model_number: Optional[str]
+    max_namespaces: Optional[int]
+    min_cntlid: Optional[int]
+    max_cntlid: Optional[int]
+    namespaces: List[Namespace]
+    has_dhchap_key: Optional[bool]
+
+
+class GetSubsystems(NamedTuple):
+    subsystems: List[Subsystem]

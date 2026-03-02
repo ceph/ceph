@@ -13,7 +13,7 @@ import ssl
 import threading
 import time
 
-from orchestrator import DaemonDescriptionStatus
+from orchestrator import DaemonDescriptionStatus, OrchestratorError
 from orchestrator._interface import daemon_type_to_service
 from ceph.utils import datetime_now, http_req
 from ceph.deployment.inventory import Devices
@@ -25,6 +25,7 @@ import tempfile
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmAgent
 from cephadm.tlsobject_types import TLSCredentials
+from cephadm.utils import get_node_proxy_status_value
 
 from urllib.error import HTTPError, URLError
 from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO
@@ -186,6 +187,12 @@ class NodeProxyEndpoint:
         except AttributeError:
             raise cherrypy.HTTPError(400, 'Malformed data received.')
 
+    def _get_health_value(self, member_data: Any) -> str:
+        return get_node_proxy_status_value(member_data, 'health', lower=True)
+
+    def _get_state_value(self, member_data: Any) -> str:
+        return get_node_proxy_status_value(member_data, 'state')
+
     # TODO(guits): refactor this
     # TODO(guits): use self.node_proxy.get_critical_from_host() ?
     def get_nok_members(self,
@@ -206,16 +213,18 @@ class NodeProxyEndpoint:
 
         for sys_id in data.keys():
             for member in data[sys_id].keys():
-                _status = data[sys_id][member]['status']['health'].lower()
-                if _status.lower() != 'ok':
-                    state = data[sys_id][member]['status']['state']
-                    _member = dict(
-                        sys_id=sys_id,
-                        member=member,
-                        status=_status,
-                        state=state
-                    )
-                    nok_members.append(_member)
+                member_data = data[sys_id][member]
+                if member == 'firmwares':
+                    continue
+                _status = self._get_health_value(member_data)
+                if _status and _status != 'ok':
+                    state = self._get_state_value(member_data)
+                    nok_members.append({
+                        'sys_id': sys_id,
+                        'member': member,
+                        'status': _status,
+                        'state': state
+                    })
 
         return nok_members
 
@@ -409,7 +418,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.fullreport(**kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -433,7 +442,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.criticals(**kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -457,7 +466,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.summary(**kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -482,7 +491,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.common('memory', **kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -507,7 +516,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.common('network', **kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -532,7 +541,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.common('processors', **kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -557,7 +566,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.common('storage', **kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -582,7 +591,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.common('power', **kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -607,7 +616,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.common('fans', **kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 
@@ -631,7 +640,7 @@ class NodeProxyEndpoint:
         """
         try:
             results = self.mgr.node_proxy_cache.firmwares(**kw)
-        except KeyError:
+        except (KeyError, OrchestratorError):
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
 

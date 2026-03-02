@@ -3,11 +3,14 @@ Ceph teuthology task for managed smb features.
 """
 from io import StringIO
 import contextlib
-import logging
+import copy
 import json
+import logging
+import shlex
 import time
 
 from teuthology.exceptions import ConfigError, CommandFailedError
+from teuthology.task import ssh_keys
 
 
 log = logging.getLogger(__name__)
@@ -297,3 +300,148 @@ def deploy_samba_ad_dc(ctx, config):
         _reset_systemd_resolved(ctx, remote)
         setattr(ctx, 'samba_ad_dc_ip', None)
         setattr(ctx, 'samba_client_container_cmd', None)
+
+
+def _marks(marks_value):
+    if not marks_value:
+        return ''
+    if isinstance(marks_value, str):
+        return marks_value
+    if isinstance(marks_value, list):
+        return ' or '.join(marks_value)
+    raise ValueError(f'unexpected type: {marks_value!r}')
+
+
+def _workunit_commands(
+    key, values, *, default_script='smb/smb_tests.sh', default_target='tests'
+):
+    commands = []
+    if isinstance(values, str):
+        values = values.split()
+    for value in values:
+        script = default_script
+        target = default_target
+        custom_args = []
+        if isinstance(value, str):
+            # direct marks expression
+            marks = _marks(value)
+        elif isinstance(value, list):
+            # just a list of marks to include
+            marks = _marks(value)
+        elif isinstance(value, dict):
+            # full control
+            opts = value
+            script = opts.get('script', script)
+            target = opts.get('target', target)
+            marks = _marks(opts.get('marks', []))
+            custom_args = [str(v) for v in (opts.get('custom_args') or [])]
+
+        cmd = [script]
+        if marks:
+            cmd.append('-m')
+            cmd.append(marks)
+        cmd += custom_args
+        cmd.append(target)
+        commands.append(shlex.join(cmd))
+    return commands
+
+
+def workunit(ctx, config):
+    """Workunit wrapper with special behaviors for smb."""
+    from . import workunit
+
+    _config = copy.deepcopy(config)
+    clients = _config.get('clients') or {}
+    env = _config.get('env') or {}
+
+    clients = {k: _workunit_commands(k, v) for k, v in clients.items()}
+    mfile = _config.get('metadata_file_path', _DEFAULT_META_FILE)
+    env['SMB'] = 'yes'
+    env['SMB_TEST_META'] = mfile
+
+    _config['clients'] = clients
+    _config['env'] = env
+    # annoyingly the stock workunit helper script command uses a tool (from the
+    # ceph/teuthology repo) called adjust-ulimits *and* a tool (from packages)
+    # called ceph-coverage. They're glued together under the
+    # no_coverage_and_limits option that defaults to false for the stock
+    # workunit task. Since, for SMB on Ceph, we are using containers and NOT
+    # using packages the latter tool is not available even if we invoke other
+    # teuthology tasks that installs adjust-ulimits. Just skip the whole thing
+    # for now and we can set ulimits via pytest if we really want to set
+    # ulimits. Allow the yaml to override our default, however unlikely.
+    _config['no_coverage_and_limits'] = config.get(
+        'no_coverage_and_limits', True
+    )
+    _ssh_keys_config = config.get('ssh_keys', {})
+    _config['enable_ssh_keys'] = _ssh_keys_config not in (False, None)
+    log.info('Passing workunit config: %r', _config)
+    with contextlib.ExitStack() as estack:
+        if _config['enable_ssh_keys']:
+            estack.enter_context(ssh_keys.task(ctx, _ssh_keys_config))
+        estack.enter_context(write_metadata_file(ctx, _config))
+        return workunit.task(ctx, _config)
+
+
+def _node_info(ctx, role_name, **kwargs):
+    (remote,) = ctx.cluster.only(role_name).remotes.keys()
+    info = dict(remote.inventory_info)
+    info['_role_name'] = role_name
+    info['shortname'] = remote.shortname
+    info['ip_address'] = remote.ip_address
+    info.update(kwargs)
+    return info
+
+
+@contextlib.contextmanager
+def write_metadata_file(ctx, config, *, roles=None):
+    obj = {
+        'samba_client_container_cmd': getattr(
+            ctx, 'samba_client_container_cmd', ''
+        ),
+        'samba_ad_dc_ip': getattr(ctx, 'samba_ad_dc_ip', ''),
+        'smb_users': config.get('smb_users') or [],
+        'smb_shares': config.get('smb_shares') or [],
+    }
+    if config.get('admin_node'):
+        role = config.get('admin_node')
+        obj['admin_node'] = _node_info(ctx, role)
+    if config.get('smb_nodes'):
+        obj['smb_nodes'] = [
+            _node_info(ctx, node) for node in config.get('smb_nodes')
+        ]
+    if config.get('clients'):
+        obj['client_nodes'] = [
+            _node_info(ctx, node, client_name=node)
+            for node in config.get('clients')
+        ]
+    data = json.dumps(obj)
+    log.debug('smb metadata: %r', obj)
+
+    mfile = config.get('metadata_file_path', _DEFAULT_META_FILE)
+    if not roles:
+        roles = list(config.get('clients') or [])
+    remotes = []
+    for role in roles:
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        remotes.append(remote)
+        remote.write_file(
+            path=mfile,
+            data=data,
+            sudo=True,
+            mode='0644',
+        )
+    yield
+    for remote in remotes:
+        remote.run(
+            args=[
+                'sudo',
+                'rm',
+                '-rf',
+                '--',
+                mfile,
+            ],
+        )
+
+
+_DEFAULT_META_FILE = '/var/tmp/ceph-smb-test-meta.json'

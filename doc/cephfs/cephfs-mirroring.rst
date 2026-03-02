@@ -552,6 +552,7 @@ Configuration Options
 ---------------------
 
 .. confval:: cephfs_mirror_max_concurrent_directory_syncs
+.. confval:: cephfs_mirror_max_datasync_threads
 .. confval:: cephfs_mirror_action_update_interval
 .. confval:: cephfs_mirror_restart_mirror_on_blocklist_interval
 .. confval:: cephfs_mirror_max_snapshot_sync_per_cycle
@@ -561,6 +562,7 @@ Configuration Options
 .. confval:: cephfs_mirror_restart_mirror_on_failure_interval
 .. confval:: cephfs_mirror_mount_timeout
 .. confval:: cephfs_mirror_perf_stats_prio
+.. confval:: cephfs_mirror_blockdiff_min_file_size
 
 Re-adding Peers
 ---------------
@@ -572,3 +574,14 @@ in the command output). Also, it is recommended to purge synchronized directorie
 from the peer  before re-adding it to another file system (especially those directories
 which might exist in the new primary file system). This is not required if re-adding
 a peer to the same primary file system it was earlier synchronized from.
+
+Multi-threaded snapshot sync
+----------------------------
+
+CephFS mirroring now utilizes a multi-threaded architecture to improve synchronization
+performance. The workload is split into two distinct thread pools: a crawler thread pool, which
+manages snapshot crawl and a data synchronization thread pool, which handles concurrent file
+transfers. Users can fine-tune these operations using configuration parameters:
+- ``cephfs_mirror_max_concurrent_directory_syncs``: controls the number of concurrent snapshots being crawled.
+- ``cephfs_mirror_max_datasync_threads``: controls the total threads available for data sync.
+For more information, see https://tracker.ceph.com/issues/73452

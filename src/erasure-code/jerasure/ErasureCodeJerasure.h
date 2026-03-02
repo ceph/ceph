@@ -51,7 +51,8 @@ public:
     flags = FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
       FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
       FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
-      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION |
+      FLAG_EC_PLUGIN_DIRECT_READS;
 
     if (technique == "reed_sol_van"sv) {
       flags |= FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED;
@@ -305,6 +306,7 @@ public:
   ErasureCodeJerasureBlaumRoth() :
     ErasureCodeJerasureLiberation("blaum_roth")
   {
+    DEFAULT_W = "6"; //The recommended default value of w when using blaum-roth is 6, see Jerasure documentation for more details.
   }
 
   bool check_w(std::ostream *ss) const override;

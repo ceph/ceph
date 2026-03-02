@@ -692,10 +692,10 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
      * we can simply go ahead and add the monitor.
      */
 
-    pending_map.add(name, addrs);
-    pending_map.mon_info[name].crush_loc = loc;
+    auto& info = pending_map.add(name, addrs);
+    info.crush_loc = loc;
     pending_map.last_changed = ceph_clock_now();
-    ss << "adding mon." << name << " at " << addrs;
+    ss << "adding " << info;
     dout(0) << __func__ << " proposing new mon." << name << dendl;
 
   } else if (prefix == "mon remove" ||
@@ -1423,8 +1423,8 @@ bool MonmapMonitor::prepare_join(MonOpRequestRef op)
   }
   if (pending_map.contains(join->name))
     pending_map.remove(join->name);
-  pending_map.add(join->name, join->addrs);
-  pending_map.mon_info[join->name].crush_loc =
+  auto& mon_info = pending_map.add(join->name, join->addrs);
+  mon_info.crush_loc =
     ((join->force_loc || existing_loc.empty()) ?
      join->crush_loc : existing_loc);
   pending_map.last_changed = ceph_clock_now();

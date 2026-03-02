@@ -13,7 +13,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-feedback',
   templateUrl: './feedback.component.html',
-  styleUrls: ['./feedback.component.scss']
+  styleUrls: ['./feedback.component.scss'],
+  standalone: false
 })
 export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
   title = 'Feedback';

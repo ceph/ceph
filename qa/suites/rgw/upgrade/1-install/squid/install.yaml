@@ -1,3 +1,6 @@
 tasks:
 - install:
     branch: squid
+    exclude_packages:
+      - ceph-osd-classic
+      - ceph-osd-crimson

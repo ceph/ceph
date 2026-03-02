@@ -186,14 +186,9 @@ export class MultiClusterService {
     this.refresh();
     this.refreshTokenStatus();
     this.summaryService.refresh();
-    if (currentRoute.includes('dashboard')) {
-      this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
-        this.router.navigate([currentRoute]);
-      });
-    } else {
-      this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
-        this.router.navigate([currentRoute]);
-      });
-    }
+    this.router.navigate([currentRoute], {
+      onSameUrlNavigation: 'reload',
+      skipLocationChange: false
+    });
   }
 }

@@ -60,6 +60,17 @@ options:
   default: 1_min
   services:
   - mon
+  flags:
+  - runtime
+- name: mon_down_added_grace
+  type: secs
+  level: advanced
+  desc: Period in seconds that the cluster may have a newly added mon down
+  default: 3_min
+  services:
+  - mon
+  flags:
+  - runtime
 - name: mon_down_uptime_grace
   type: secs
   level: advanced
@@ -82,7 +93,7 @@ options:
   level: advanced
   desc: Period in seconds from last beacon to monitor marking a  NVMeoF gateway as
     failed
-  default: 10
+  default: 7
   services:
   - mon
 - name: mon_nvmeofgw_skip_failovers_interval
@@ -1404,7 +1415,7 @@ options:
   type: secs
   level: advanced
   desc: Period in seconds of nvmeof gateway beacon messages to monitor
-  default: 2
+  default: 1
   services:
   - mon
 - name: enable_availability_tracking

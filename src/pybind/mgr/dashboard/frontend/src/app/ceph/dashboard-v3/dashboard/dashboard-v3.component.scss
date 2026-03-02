@@ -84,3 +84,10 @@
     max-width: 83vw;
   }
 }
+
+.details-card {
+  dl,
+  dd:last-of-type {
+    margin-bottom: 0;
+  }
+}

@@ -18,7 +18,7 @@ namespace ceph { class Formatter; }
 namespace librbd {
 namespace mirroring_watcher {
 
-enum NotifyOp {
+enum NotifyOp : uint32_t {
   NOTIFY_OP_MODE_UPDATED  = 0,
   NOTIFY_OP_IMAGE_UPDATED = 1
 };

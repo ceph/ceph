@@ -469,6 +469,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectRead)
 	     &tag,
 	     nullptr,
 	     nullptr,
+       nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -580,6 +581,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectRead)
 	     &tag,
 	     nullptr,
 	     nullptr,
+       nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -667,6 +669,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectRead)
 	     &tag,
 	     nullptr,
 	     nullptr,
+       nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -955,6 +958,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1009,6 +1013,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1094,6 +1099,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1148,6 +1154,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1233,6 +1240,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1287,6 +1295,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1653,6 +1662,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
 	     &tag,
 	     nullptr,
 	     nullptr,
+       nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -1774,6 +1784,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
 	     &tag,
 	     nullptr,
 	     nullptr,
+       nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -1895,6 +1906,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
 	     &tag,
 	     nullptr,
 	     nullptr,
+       nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -1962,7 +1974,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
 TEST_F(D4NFilterFixture, DeleteObjectWrite)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 1;
   const std::string testName = "DeleteObjectWrite";
   std::string version;
  
@@ -2000,10 +2012,12 @@ TEST_F(D4NFilterFixture, DeleteObjectWrite)
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
     EXPECT_EQ(del_op->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
 
+    std::string key = TEST_BUCKET + testName + "#" + version + "#" + TEST_OBJ + testName; 
+    d4nFilter->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(env->dpp, key, rgw::d4n::RefCount::DECR, optional_yield{yield});
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(null_yield);
   }, rethrow);
 
-  io.run_for(std::chrono::seconds(2)); // Allow cleaning cycle to complete
+  io.run_for(std::chrono::seconds(3)); // Allow cleaning cycle to complete
 
   net::spawn(io, [this, &testName, &version] (net::yield_context yield) {
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
@@ -2409,6 +2423,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2500,6 +2515,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2628,6 +2644,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2719,6 +2736,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2847,6 +2865,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2938,6 +2957,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+         nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -3008,8 +3028,8 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
-  const std::string testName = "DeleteVersionedObjectRead";
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 1;
+  const std::string testName = "DeleteVersionedObjectWrite";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
   std::string version, instance;
  
@@ -3062,10 +3082,14 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_suspended = objSuspended->get_delete_op();
     EXPECT_EQ(del_op_suspended->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
 
+    d4nFilter->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(env->dpp, 
+                                     url_encode(bucketName, true) + "#" + instance + "#" + TEST_OBJ + testName, rgw::d4n::RefCount::DECR, optional_yield{yield});
+    d4nFilter->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(env->dpp, 
+                                     url_encode(bucketName, true) + "#" + version + "#" + TEST_OBJ + testName, rgw::d4n::RefCount::DECR, optional_yield{yield});
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(null_yield);
   }, rethrow);
 
-  io.run_for(std::chrono::seconds(2)); // Allow cleaning cycle to complete
+  io.run_for(std::chrono::seconds(3)); // Allow cleaning cycle to complete
 
   net::spawn(io, [this, &testName, &bucketName, &version, &instance] (net::yield_context yield) {
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
@@ -3198,7 +3222,7 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
 TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 1;
   const std::string testName = "VersionedDeleteBeforeCleaning";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
   std::vector<std::string> instances;
@@ -3260,10 +3284,12 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
     EXPECT_EQ(objEnabled->get_instance(), instances[0]); // Next latest version
 
     objEnabled->set_instance(instances[0]);
+    d4nFilter->get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists(env->dpp, 
+                                     url_encode(bucketName, true) + "#" + instances[1] + "#" + TEST_OBJ + testName, rgw::d4n::RefCount::DECR, optional_yield{yield});
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(null_yield);
   }, rethrow);
 
-  io.run_for(std::chrono::seconds(2)); // Allow cleaning cycle to complete
+  io.run_for(std::chrono::seconds(3)); // Allow cleaning cycle to complete
 
   net::spawn(io, [this, &testName, &bucketName, &instances] (net::yield_context yield) {
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});

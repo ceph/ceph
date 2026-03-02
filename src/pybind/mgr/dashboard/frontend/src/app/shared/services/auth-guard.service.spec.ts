@@ -14,7 +14,7 @@ describe('AuthGuardService', () => {
   let route: ActivatedRouteSnapshot;
   let state: RouterStateSnapshot;
 
-  @Component({ selector: 'cd-login', template: '' })
+  @Component({ selector: 'cd-login', template: '', standalone: false })
   class LoginComponent {}
 
   const routes: Routes = [{ path: 'login', component: LoginComponent }];

@@ -127,7 +127,8 @@ HEALTH_SNAPSHOT_SCHEMA = ({
         'mutes': ([str], 'List of muted check names')
     }, 'Cluster health overview'),
     'monmap': ({
-        'num_mons': (int, 'Number of monitors')
+        'num_mons': (int, 'Number of monitors'),
+        'quorum': ([int], 'List of monitors in quorum')
     }, 'Monitor map details'),
     'osdmap': ({
         'in': (int, 'Number of OSDs in'),
@@ -157,7 +158,8 @@ HEALTH_SNAPSHOT_SCHEMA = ({
         'up': (int, 'Count of iSCSI gateways running'),
         'down': (int, 'Count of iSCSI gateways not running')
     }, 'Iscsi gateways status'),
-    'num_hosts': (int, 'Count of hosts')
+    'num_hosts': (int, 'Count of hosts'),
+    'num_hosts_available': (int, 'Count of available hosts')
 })
 
 
@@ -389,6 +391,7 @@ class Health(BaseController):
         if self._has_permissions(Permission.READ, Scope.MONITOR):
             summary['monmap'] = {
                 'num_mons': data.get('monmap', {}).get('num_mons'),
+                'quorum': data.get('quorum', {})
             }
 
         if self._has_permissions(Permission.READ, Scope.OSD):
@@ -449,6 +452,12 @@ class Health(BaseController):
             summary['num_iscsi_gateways'] = self.health_minimal.iscsi_daemons()
 
         if self._has_permissions(Permission.READ, Scope.HOSTS):
-            summary['num_hosts'] = len(get_hosts())
+            hosts = get_hosts()
+            summary['num_hosts'] = len(hosts)
+            available_hosts = [
+                h for h in hosts
+                if h.get("status") == "Available"
+            ]
+            summary['num_hosts_available'] = len(available_hosts)
 
         return summary

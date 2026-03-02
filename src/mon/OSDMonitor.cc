@@ -66,6 +66,7 @@
 #include "common/PriorityCache.h"
 #include "common/strtol.h"
 #include "common/numa.h"
+#include "common/prime.h"
 
 #include "common/config.h"
 #include "common/errno.h"
@@ -8269,7 +8270,6 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->use_gmt_hitset = false;
   if (crimson) {
     pi->set_flag(pg_pool_t::FLAG_CRIMSON);
-    pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   }
 
   pi->size = size;
@@ -8356,6 +8356,8 @@ int OSDMonitor::prepare_new_pool(string& name,
     // This will fail if the pool cannot support ec optimizations.
     enable_pool_ec_optimizations(*pi, nullptr, true);
   }
+
+  enable_pool_ec_direct_reads(*pi);
 
   pending_inc.new_pool_names[pool] = name;
   return 0;
@@ -8449,6 +8451,29 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
     }
   }
   return 0;
+}
+
+void OSDMonitor::enable_pool_ec_direct_reads(pg_pool_t &p) {
+  if (p.is_erasure()) {
+    ErasureCodeInterfaceRef erasure_code;
+    stringstream tmp;
+    int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+
+    // Once this feature is finished, we will replace this with upgrade code.
+    // The upgrade code will enable the split read flag once all OSDs are at
+    // Umbrella. For now, if the plugin does not support direct reads, we just
+    // disable it.  All plugins and techniques should be capable of supporting
+    // direct reads, but we put in place this capability to reduce the test
+    // matrix for less important plugins/techniques.
+    //
+    // To enable direct reads in development, set the osd_pool_default_flags to
+    // 1<<20 = 0x100000 = 1048576
+    if (err != 0 || !p.allows_ecoptimizations() ||
+          (erasure_code->get_supported_optimizations() &
+            ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) == 0) {
+      p.flags &= ~pg_pool_t::FLAG_CLIENT_SPLIT_READS;
+    }
+  }
 }
 
 int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
@@ -8600,6 +8625,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
     }
+    // check for Crimson pools
+    // pg merging is not yet supported in Crimson
+    if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      if (n < (int)p.get_pg_num()) {
+        ss << "crimson-osd does not support decreasing pg_num_actual (shrinking)";
+        return -ENOTSUP;
+      }
+      if (n > (int)p.get_pg_num() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
+        ss << "crimson_allow_pg_split is false; pg_num_actual increase denied";
+        return -EPERM;
+      }
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -8650,6 +8687,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
+    }
+    // check for Crimson pools
+    // pg merging is not yet supported in Crimson
+    if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      if (n < (int)p.get_pg_num_target()) {
+        ss << "crimson-osd does not support decreasing pg_num";
+        return -ENOTSUP;
+      }
+      if (n > (int)p.get_pg_num_target() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
+        ss << "crimson_allow_pg_split is false; pg_num increase denied for crimson pool";
+        return -EPERM;
+      }
     }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -8720,6 +8769,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
     }
+    // check for Crimson pools
+    // pg merging is not yet supported in Crimson
+    if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      if (n < (int)p.get_pgp_num()) {
+        ss << "crimson-osd does not support decreasing pgp_num_actual";
+        return -ENOTSUP;
+      }
+      if (n > (int)p.get_pgp_num() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
+        ss << "crimson_allow_pg_split is false; pgp_num_actual increase denied";
+        return -EPERM;
+      }
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -8742,6 +8803,18 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
+    }
+    // check for Crimson pools
+    // pg merging is not yet supported in Crimson
+    if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
+      if (n < (int)p.get_pgp_num_target()) {
+        ss << "crimson-osd does not support decreasing pgp_num";
+        return -ENOTSUP;
+      }
+      if (n > (int)p.get_pgp_num_target() && !g_conf().get_val<bool>("crimson_allow_pg_split")) {
+        ss << "crimson_allow_pg_split is false; pgp_num increase denied";
+        return -EPERM;
+      }
     }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -11664,10 +11737,49 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (profile_map.find("plugin") == profile_map.end()) {
       ss << "erasure-code-profile " << profile_map
-	 << " must contain a plugin entry" << std::endl;
+      << " must contain a plugin entry" << std::endl;
       err = -EINVAL;
       goto reply_no_propose;
     }
+
+    bool force_no_fake = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", force_no_fake);
+
+    //This is the start of the validation for the w value in a blaum_roth profile
+    //this will search the Profile map, which contains the values for the parameters given in the command, for the technique parameter
+    if (auto found = profile_map.find("technique"); found != profile_map.end()) {
+      //if the technique parameter is found then save the value of it
+      string technique = found->second;
+      //then search the profile map again for the w value, which doesnt have to be specified, and if it is found and the technique used is blaum-roth then check that the w value is correct.
+      if (found = profile_map.find("w"); technique == "blaum_roth" 
+      && found != profile_map.end()) {
+        int w = std::stoi(found->second);
+        if ((w <= 2) || (w >= 256)) {
+          ss << "erasure-code-profile: " << profile_map
+          << " The value of w must be greater than 2 and less than 256." << std::endl;
+          err = -EINVAL;
+          goto reply_no_propose;
+        }
+
+        //checks if w+1 is not prime
+        if (!is_prime(w + 1)) {
+          if (force ^ force_no_fake) {
+            err = -EPERM;
+            ss << "Creating a blaum-roth erasure code profile with a w+1 value"
+            << " that is not prime is dangerous, as it can cause data corruption."
+            << " You need to use both --yes-i-really-mean-it and --force flags."
+            << std::endl;
+            goto reply_no_propose;
+          } else if (!force && !force_no_fake) {
+            ss << "erasure-code-profile: " << profile_map 
+            << " must use a w value such that w+1 is prime." << std::endl;
+            err = -EINVAL;
+            goto reply_no_propose;
+          }
+        }
+      }
+    }
+
     string plugin = profile_map["plugin"];
 
     if (pending_inc.has_erasure_code_profile(name)) {
@@ -11689,8 +11801,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  err = 0;
 	  goto reply_no_propose;
 	}
-	bool force_no_fake = false;
-	cmd_getval(cmdmap, "yes_i_really_mean_it", force_no_fake);
+
 	if (!force) {
 	  err = -EPERM;
 	  ss << "will not override erasure code profile " << name
@@ -15271,6 +15382,26 @@ int OSDMonitor::_prepare_remove_pool(
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
   }
+
+  // remove any crush rules for this pool
+  const pg_pool_t *pi = osdmap.get_pg_pool(pool);
+  if (pi->is_erasure() && newcrush.rule_exists(pi->get_crush_rule())) {
+    int ruleno = pi->get_crush_rule();
+    ceph_assert(ruleno >= 0);
+
+    auto rule_in_use = false;
+    for (const auto &_pool : osdmap.pools) {
+      if (_pool.second.get_crush_rule() == ruleno && pool != _pool.first)
+        rule_in_use = true;
+    }
+    if (!rule_in_use) {
+      dout(10) << __func__ << " removing crush rule for pool " << pool << dendl;
+      newcrush.remove_rule(ruleno);
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    }
+  }
+
   return 0;
 }
 

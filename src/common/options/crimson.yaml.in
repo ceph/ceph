@@ -30,6 +30,23 @@ options:
 
 # Reactor options:
 
+- name: crimson_reactor_backend
+  type: str
+  level: advanced
+  default:
+  enum_values:
+  - io_uring
+  - linux-aio
+  - epoll
+  desc: Select which Seastar's internal reactor implementation
+  long_desc: Controls which asynchronous I/O engine the Seastar reactor will use
+             during OSD startup. Different backends have different
+             performance characteristics and require different kernel capabilities.
+             Note, If none is non is selected, let seastar choose.
+
+  flags:
+  - startup
+
 - name: crimson_reactor_task_quota_ms
   type: float
   level: advanced
@@ -88,6 +105,17 @@ options:
   desc: Let the seastar reactor poll continuously without sleeping at the expense of 100% cpu usage.
   flags:
   - startup
+
+- name: crimson_allow_pg_split
+  type: bool
+  level: advanced
+  default: true
+  desc: Allow Crimson pools to increase their PG count (split)
+  long_desc: When enabled, allows the monitor to increase pg_num for pools using
+             the crimson flag.
+  services:
+  - osd
+  - mon
 
 # Bluestore options:
 

@@ -7,7 +7,8 @@ import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 @Component({
   selector: 'cd-rgw-user-swift-key-modal',
   templateUrl: './rgw-user-swift-key-modal.component.html',
-  styleUrls: ['./rgw-user-swift-key-modal.component.scss']
+  styleUrls: ['./rgw-user-swift-key-modal.component.scss'],
+  standalone: false
 })
 export class RgwUserSwiftKeyModalComponent extends BaseModal {
   user: string;

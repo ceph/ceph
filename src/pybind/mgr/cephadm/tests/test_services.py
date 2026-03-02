@@ -477,10 +477,12 @@ verify_listener_ip = True
 # This is a development flag, do not change it
 abort_on_errors = True
 # This is a development flag, do not change it
+abort_on_update_error = True
+# This is a development flag, do not change it
 omap_file_ignore_unlock_errors = False
 # This is a development flag, do not change it
 omap_file_lock_on_read = True
-omap_file_lock_duration = 20
+omap_file_lock_duration = 40
 omap_file_lock_retries = 30
 omap_file_lock_retry_sleep_interval = 1.0
 omap_file_update_reloads = 10
@@ -489,7 +491,7 @@ allowed_consecutive_spdk_ping_failures = 1
 spdk_ping_interval_in_seconds = 2.0
 ping_spdk_under_lock = False
 enable_monitor_client = True
-max_hosts_per_namespace = 8
+max_hosts_per_namespace = 16
 max_namespaces_with_netmask = 1000
 max_subsystems = 128
 max_hosts = 2048
@@ -498,6 +500,9 @@ max_namespaces_per_subsystem = 512
 max_hosts_per_subsystem = 128
 subsystem_cache_expiration = 30
 force_tls = False
+# This is a development flag, do not change it
+max_message_length_in_mb = 4
+io_stats_enabled = True
 
 [gateway-logs]
 log_level = INFO
@@ -514,6 +519,8 @@ addr = 192.168.100.100
 port = 8009
 # This is a development flag, do not change it
 abort_on_errors = True
+bind_retries_limit = 10
+bind_sleep_interval = 0.5
 
 [ceph]
 pool = {pool}
@@ -538,6 +545,7 @@ conn_retries = 10
 transports = tcp
 transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}
 enable_dsa_acceleration = False
+rbd_with_crc32c = True
 tgt_cmd_extra_args = {tgt_cmd_extra_args}
 qos_timeslice_in_usecs = 0
 notifications_interval = 60

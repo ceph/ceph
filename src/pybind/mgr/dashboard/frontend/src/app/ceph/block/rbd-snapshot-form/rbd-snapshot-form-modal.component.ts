@@ -17,7 +17,8 @@ import { TaskManagerService } from '~/app/shared/services/task-manager.service';
 @Component({
   selector: 'cd-rbd-snapshot-form-modal',
   templateUrl: './rbd-snapshot-form-modal.component.html',
-  styleUrls: ['./rbd-snapshot-form-modal.component.scss']
+  styleUrls: ['./rbd-snapshot-form-modal.component.scss'],
+  standalone: false
 })
 export class RbdSnapshotFormModalComponent extends BaseModal implements OnInit {
   snapshotForm: CdFormGroup;

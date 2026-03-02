@@ -5,13 +5,38 @@ options:
 - name: cephfs_mirror_max_concurrent_directory_syncs
   type: uint
   level: advanced
-  desc: maximum number of concurrent snapshot synchronization threads
-  long_desc: maximum number of directory snapshots that can be synchronized concurrently
-    by cephfs-mirror daemon. Controls the number of synchronization threads.
+  desc: maximum number of concurrent snapshot synchronization crawler threads
+  long_desc: maximum number of directory snapshots that can be crawled concurrently
+    by cephfs-mirror daemon. Controls the number of synchronization crawler threads.
+    Note that the crawler threads also does entry operations like directory creations,
+    file deletes and snapshot deletes/renames.
   default: 3
   services:
   - cephfs-mirror
   min: 1
+- name: cephfs_mirror_max_datasync_threads
+  type: uint
+  level: advanced
+  desc: maximum number of concurrent snapshot data synchronization threads
+  long_desc: specifies the maximum number of worker threads in the CephFS mirror
+    data synchronization thread pool. These threads process file synchronization tasks
+    produced by crawler threads for mirrored directory snapshots.
+  default: 6
+  services:
+  - cephfs-mirror
+  min: 1
+- name: cephfs_mirror_blockdiff_min_file_size
+  type: size
+  level: advanced
+  desc: minimum file size threshold in bytes above which block-level diff is used during CephFS mirroring.
+  long_desc: defines the minimum file size, in bytes, required for CephFS mirroring to use block-level
+    delta synchronization instead of performing a full file copy. When a file’s size is greater than to
+    this threshold, the mirroring engine attempts to synchronize only the modified block extents between
+    snapshots. For files smaller than or equal to this value, a full file copy is performed instead, as
+    block-level diff may not provide meaningful performance benefits for small files.
+  default: 16_M
+  services:
+  - cephfs-mirror
 - name: cephfs_mirror_action_update_interval
   type: secs
   level: advanced

@@ -2427,7 +2427,7 @@ OSD::OSD(CephContext *cct_,
 				  "osd_pg_epoch_max_lag_factor")),
   osd_compat(get_osd_compat_set()),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
-	    get_num_op_threads()),
+	    get_num_op_threads(), get_num_op_shards()),
   heartbeat_stop(false),
   heartbeat_need_update(true),
   hb_front_client_messenger(hb_client_front),
@@ -2781,6 +2781,7 @@ void OSD::asok_command(
       prefix == "list_unfound" ||
       prefix == "scrub" ||
       prefix == "deep-scrub" ||
+      prefix == "scrub-abort" ||
       prefix == "schedule-scrub" ||      ///< dev/tests only!
       prefix == "schedule-deep-scrub"    ///< dev/tests only!
     ) {
@@ -4545,6 +4546,12 @@ void OSD::final_init()
     asok_hook,
     "Trigger a deep scrub");
   ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "scrub-abort "
+    "name=pgid,type=CephPgid,req=false",
+    asok_hook,
+    "Abort an ongoing scrub. Cancel any operator-initiated scrub");
+  ceph_assert(r == 0);
   // debug/test commands (faking the timestamps)
   r = admin_socket->register_command(
     "schedule-scrub "
@@ -5054,7 +5061,7 @@ void OSD::clear_temp_objects()
     }
     if (!temps.empty()) {
       ObjectStore::Transaction t;
-      int removed = 0;
+      unsigned removed = 0;
       for (vector<ghobject_t>::iterator q = temps.begin(); q != temps.end(); ++q) {
 	dout(20) << "  removing " << *p << " object " << *q << dendl;
 	t.remove(*p, *q);
@@ -11069,9 +11076,8 @@ void OSD::ShardedOpWQ::_add_slot_waiter(
 #undef dout_prefix
 #define dout_prefix *_dout << "osd." << osd->whoami << " op_wq(" << shard_index << ") "
 
-void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
+void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, heartbeat_handle_d *hb)
 {
-  uint32_t shard_index = thread_index % osd->num_shards;
   auto& sdata = osd->shards[shard_index];
   ceph_assert(sdata);
 
@@ -11261,7 +11267,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	   << " waiting_peering " << slot->waiting_peering << dendl;
 
   ThreadPool::TPHandle tp_handle(osd->cct, hb, timeout_interval.load(),
-				 suicide_interval.load());
+				 suicide_interval.load(), &osd->osd_op_tp);
 
   // take next item
   auto qi = std::move(slot->to_process.front());

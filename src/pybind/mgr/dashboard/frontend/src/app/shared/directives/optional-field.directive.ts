@@ -1,7 +1,8 @@
 import { AfterViewInit, Directive, ElementRef, Input, Renderer2 } from '@angular/core';
 
 @Directive({
-  selector: '[cdOptionalField]'
+  selector: '[cdOptionalField]',
+  standalone: false
 })
 export class OptionalFieldDirective implements AfterViewInit {
   @Input('cdOptionalField') label: string;

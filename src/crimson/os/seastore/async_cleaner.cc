@@ -8,6 +8,7 @@
 
 #include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/backref_manager.h"
+#include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/transaction_manager.h"
 
 SET_SUBSYS(seastore_cleaner);
@@ -413,8 +414,10 @@ JournalTrimmerImpl::JournalTrimmerImpl(
   config_t config,
   backend_type_t type,
   device_off_t roll_start,
-  device_off_t roll_size)
-  : backref_manager(backref_manager),
+  device_off_t roll_size,
+  bool tail_include_alloc)
+  : JournalTrimmer(tail_include_alloc),
+    backref_manager(backref_manager),
     config(config),
     backend_type(type),
     roll_start(roll_start),
@@ -487,7 +490,7 @@ void JournalTrimmerImpl::update_journal_tails(
     }
   }
 
-  if (alloc_tail != JOURNAL_SEQ_NULL) {
+  if (tail_include_alloc && alloc_tail != JOURNAL_SEQ_NULL) {
     ceph_assert(journal_head == JOURNAL_SEQ_NULL ||
                 journal_head >= alloc_tail);
     if (journal_alloc_tail != JOURNAL_SEQ_NULL &&
@@ -584,7 +587,8 @@ std::size_t JournalTrimmerImpl::get_dirty_journal_size() const
 
 std::size_t JournalTrimmerImpl::get_alloc_journal_size() const
 {
-  if (!background_callback->is_ready()) {
+  if (!background_callback->is_ready() ||
+      !tail_include_alloc) {
     return 0;
   }
   auto ret = journal_head.relative_to(
@@ -1567,7 +1571,7 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_no_tail_segment(
   });
 }
 
-bool SegmentCleaner::check_usage()
+bool SegmentCleaner::check_usage(bool)
 {
   SpaceTrackerIRef tracker(space_tracker->make_empty());
   extent_callback->with_transaction_weak(
@@ -1767,10 +1771,12 @@ void SegmentCleaner::print(std::ostream &os, bool is_detailed) const
 RBMCleaner::RBMCleaner(
   RBMDeviceGroupRef&& rb_group,
   BackrefManager &backref_manager,
+  LBAManager &lba_manager,
   bool detailed)
   : detailed(detailed),
     rb_group(std::move(rb_group)),
-    backref_manager(backref_manager)
+    backref_manager(backref_manager),
+    lba_manager(lba_manager)
 {}
 
 void RBMCleaner::print(std::ostream &os, bool is_detailed) const
@@ -1873,7 +1879,7 @@ RBMCleaner::mount_ret RBMCleaner::mount()
   });
 }
 
-bool RBMCleaner::check_usage()
+bool RBMCleaner::check_usage(bool has_cold_tier)
 {
   assert(detailed);
   const auto& rbms = rb_group->get_rb_managers();
@@ -1881,39 +1887,56 @@ bool RBMCleaner::check_usage()
   extent_callback->with_transaction_weak(
       "check_usage",
       CACHE_HINT_NOCACHE,
-      [this, &tracker, &rbms](auto &t) {
-    return backref_manager.scan_mapped_space(
-      t,
-      [&tracker, &rbms](
-        paddr_t paddr,
-	paddr_t backref_key,
-        extent_len_t len,
-        extent_types_t type,
-        laddr_t laddr)
-    {
-      for (auto rbm : rbms) {
-	if (rbm->get_device_id() == paddr.get_device_id()) {
-	  if (is_backref_node(type)) {
-	    assert(laddr == L_ADDR_NULL);
-	    assert(backref_key.is_absolute_random_block()
-	           || backref_key == P_ADDR_MIN);
-	    tracker.allocate(
-	      paddr,
-	      len);
-	  } else if (laddr == L_ADDR_NULL) {
-	    assert(backref_key == P_ADDR_NULL);
-	    tracker.release(
-	      paddr,
-	      len);
-	  } else {
-	    assert(backref_key == P_ADDR_NULL);
-	    tracker.allocate(
-	      paddr,
-	      len);
-	  }
-	}
-      }
-    });
+      [this, &tracker, &rbms, has_cold_tier](auto &t) {
+    if (has_cold_tier) {
+      return backref_manager.scan_mapped_space(
+        t,
+        [&tracker, &rbms](
+          paddr_t paddr,
+          paddr_t backref_key,
+          extent_len_t len,
+          extent_types_t type,
+          laddr_t laddr)
+      {
+        for (auto rbm : rbms) {
+          if (rbm->get_device_id() == paddr.get_device_id()) {
+            if (is_backref_node(type)) {
+              assert(laddr == L_ADDR_NULL);
+              assert(backref_key.is_absolute_random_block()
+                     || backref_key == P_ADDR_MIN);
+              tracker.allocate(
+                paddr,
+                len);
+            } else if (laddr == L_ADDR_NULL) {
+              assert(backref_key == P_ADDR_NULL);
+              tracker.release(
+                paddr,
+                len);
+            } else {
+              assert(backref_key == P_ADDR_NULL);
+              tracker.allocate(
+                paddr,
+                len);
+            }
+          }
+        }
+      });
+    } else {
+      return lba_manager.scan_mapped_space(
+        t,
+        [&tracker, &rbms](
+          paddr_t paddr,
+          extent_len_t len,
+          extent_types_t type,
+          laddr_t laddr)
+      {
+        for (auto rbm : rbms) {
+          if (rbm->get_device_id() == paddr.get_device_id()) {
+            tracker.allocate(paddr, len);
+          }
+        }
+      });
+    }
   }).unsafe_get();
   return equals(tracker);
 }

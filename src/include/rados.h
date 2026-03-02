@@ -481,7 +481,11 @@ enum {
 	CEPH_OSD_FLAG_IGNORE_REDIRECT = 0x2000000,  /* ignore redirection */
 	CEPH_OSD_FLAG_RETURNVEC = 0x4000000, /* allow overall result >= 0, and return >= 0 and buffer for each op in opvec */
 	CEPH_OSD_FLAG_SUPPORTSPOOLEIO = 0x8000000,   /* client understands pool EIO flag */
+        CEPH_OSD_FLAG_EC_DIRECT_READ = 0x10000000,  /* Erasure code doing a partial read direct to OSD. */
 };
+
+// Indicates an IO which is direct-to-OSD and may not be on the primary.
+#define CEPH_OSD_FLAGS_DIRECT_READ (CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS | CEPH_OSD_FLAG_EC_DIRECT_READ)
 
 enum {
 	CEPH_OSD_OP_FLAG_EXCL = 0x1,      /* EXCL object create */
@@ -492,7 +496,12 @@ enum {
 	CEPH_OSD_OP_FLAG_FADVISE_DONTNEED   = 0x20,/* data will not be accessed in the near future */
 	CEPH_OSD_OP_FLAG_FADVISE_NOCACHE   = 0x40, /* data will be accessed only once by this client */
 	CEPH_OSD_OP_FLAG_WITH_REFERENCE   = 0x80, /* need reference couting */
-	CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE = 0x100, /* bypass ObjectStore cache, mainly for deep-scrub */
+	CEPH_OSD_OP_FLAG_SCRUB = 0x100,	/* hint ObjectStore for deep-scrub ops
+									 * Marks op as scrub or deep-scrub operations.
+									 * This flag allows ObjectStore to identify scrub-originated ops
+									 * and handle them separately from normal ops,
+									 * apply scrub-specific behavior (e.g. bypassing clean cache)
+									 */
 };
 
 #define EOLDSNAPC    85  /* ORDERSNAP flag set; writer has old snapc*/

@@ -281,7 +281,8 @@ function TEST_mon_features() {
     jq_success "$jqinput" "$jqfilter" "squid" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "tentacle")'
     jq_success "$jqinput" "$jqfilter" "tentacle" || return 1
-    jqfilter='.monmap.features.persistent | length == 12'
+    jq_success "$jqinput" "$jqfilter" "nvmeof_beacon_diff" || return 1
+    jqfilter='.monmap.features.persistent | length == 13'
     jq_success "$jqinput" "$jqfilter" || return 1
 
     CEPH_ARGS=$CEPH_ARGS_orig

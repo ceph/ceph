@@ -512,7 +512,7 @@ public:
    */
   alloc_paddr_iertr::future<> write_preallocated_ool_extents(
     Transaction &t,
-    std::list<CachedExtentRef> extents);
+    std::list<CachedExtentRef> &extents);
 
   seastar::future<> stop_background() {
     return background_process.stop_background();
@@ -558,6 +558,13 @@ public:
     // for test
     assert(primary_device);
     return primary_device->get_backend_type();
+  }
+
+
+  bool is_pure_rbm() const {
+    return get_main_backend_type() == backend_type_t::RANDOM_BLOCK &&
+      // as of now, cold tier can only be segmented.
+      !background_process.has_cold_tier();
   }
 
   // Testing interfaces
@@ -855,8 +862,8 @@ private:
     // Testing interfaces
 
     bool check_usage() {
-      return main_cleaner->check_usage() &&
-        (!has_cold_tier() || cold_cleaner->check_usage());
+      return main_cleaner->check_usage(has_cold_tier()) &&
+        (!has_cold_tier() || cold_cleaner->check_usage(true));
     }
 
     seastar::future<> run_until_halt();

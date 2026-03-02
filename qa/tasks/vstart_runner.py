@@ -670,7 +670,7 @@ class LocalCephFSMount():
         d = "./asok"
         with open(self.config_path) as f:
             for line in f:
-                asok_conf = re.search("^\s*admin\s+socket\s*=\s*(.*?)[^/]+$", line)
+                asok_conf = re.search(r"^\s*admin\s+socket\s*=\s*(.*?)[^/]+$", line)
                 if asok_conf:
                     d = asok_conf.groups(1)[0]
                     break
@@ -795,7 +795,7 @@ class LocalFuseMount(LocalCephFSMount, tasks.cephfs.fuse_mount.FuseMountBase):
                     except (RuntimeError, CommandFailedError):
                         continue
 
-                    self.fuse_daemon.fuse_pid = int(re.match(".*\.(\d+)\.asok$",
+                    self.fuse_daemon.fuse_pid = int(re.match(r".*\.(\d+)\.asok$",
                                                              sock).group(1))
                     break
         except MaxWhileTries:
@@ -902,13 +902,13 @@ class LocalCephCluster(tasks.cephfs.filesystem.CephClusterBase):
                 log.debug("Searching for existing instance {0}/{1}".format(
                     key, subsys
                 ))
-                existing_section = re.search("^\[{0}\]$([\n]|[^\[])+".format(
+                existing_section = re.search(r"^\[{0}\]$([\n]|[^\[])+".format(
                     subsys
                 ), existing_str, re.MULTILINE)
 
                 if existing_section:
                     section_str = existing_str[existing_section.start():existing_section.end()]
-                    existing_val = re.search("^\s*[^#]({0}) =".format(key), section_str, re.MULTILINE)
+                    existing_val = re.search(r"^\s*[^#]({0}) =".format(key), section_str, re.MULTILINE)
                     if existing_val:
                         start = existing_section.start() + existing_val.start(1)
                         log.debug("Found string to replace at {0}".format(
@@ -1069,7 +1069,7 @@ class LocalContext(object):
                 prefixed_type = "ceph." + svc_type
                 if prefixed_type not in self.daemons.daemons:
                     self.daemons.daemons[prefixed_type] = {}
-                match = re.match("^\[{0}\.(.+)\]$".format(svc_type), conf_line)
+                match = re.match(r"^\[{0}\.(.+)\]$".format(svc_type), conf_line)
                 if match:
                     svc_id = match.group(1)
                     self.daemons.daemons[prefixed_type][svc_id] = LocalDaemon(svc_type, svc_id)
@@ -1182,7 +1182,7 @@ class LogStream(object):
         if self.omit_result_lines:
             self.buffer = re.sub('-'*70+'\nran [0-9]* test in [0-9.]*s\n*',
                                  '', self.buffer, flags=re.I)
-        self.buffer = re.sub('failed \(failures=[0-9]*\)\n', '', self.buffer,
+        self.buffer = re.sub(r'failed \(failures=[0-9]*\)\n', '', self.buffer,
                              flags=re.I)
         self.buffer = self.buffer.replace('OK\n', '')
 

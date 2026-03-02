@@ -270,14 +270,14 @@ ECTransaction::WritePlanObj::WritePlanObj(
      * for the partial stripe and update the parity. For the purposes of
      * parity, the truncated shards are all zero.
      */
-    extent_set truncate_write;
-
-    if (next_align != 0) {
-      truncate_write = truncate_read.at(shard_id_t(0));
-      truncate_write.align(EC_ALIGN_SIZE);
-    }
-
     if (!truncate_read.empty()) {
+      extent_set truncate_write;
+
+      if (next_align != 0) {
+        truncate_write = truncate_read.at(shard_id_t(0));
+        truncate_write.align(EC_ALIGN_SIZE);
+      }
+
       if (to_read) {
         to_read->insert(truncate_read);
       } else {
@@ -590,7 +590,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   } else {
     // All primary shards must always be written, regardless of the write plan.
     shards_written(sinfo.get_parity_shards());
-    shard_written(shard_id_t(0));
+    shard_written(sinfo.get_shard(raw_shard_id_t(0)));
   }
 
   written_shards();

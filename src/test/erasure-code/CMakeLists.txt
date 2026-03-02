@@ -106,7 +106,6 @@ target_link_libraries(unittest_erasure_code_isa
   global
   ceph-common
   ec_isa
-  erasure_code
   )
 
 #unittest_erasure_code_plugin_isa
@@ -120,7 +119,6 @@ target_link_libraries(unittest_erasure_code_plugin_isa
   global
   ceph-common
   ${CMAKE_DL_LIBS}
-  erasure_code
   )
 add_dependencies(unittest_erasure_code_plugin_isa
   ec_isa)
@@ -176,7 +174,6 @@ target_link_libraries(unittest_erasure_code_example
   global
   ${CMAKE_DL_LIBS}
   ceph-common
-  erasure_code
   ${UNITTEST_LIBS}
   )
 

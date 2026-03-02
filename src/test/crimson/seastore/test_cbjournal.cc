@@ -142,7 +142,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   uint64_t block_size;
   WritePipeline pipeline;
 
-  cbjournal_test_t() = default;
+  cbjournal_test_t() : JournalTrimmer(true) {}
 
   /*
    * JournalTrimmer interfaces

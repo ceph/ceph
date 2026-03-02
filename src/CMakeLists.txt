@@ -246,7 +246,7 @@ endif()
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD 11)
 # we use `asm()` to inline assembly, so enable the GNU extension
 set(CMAKE_C_EXTENSIONS ON)
 set(C_STANDARD_REQUIRED ON)
@@ -463,7 +463,7 @@ if(WITH_CRIMSON)
     endif()
   endmacro ()
   set(Seastar_API_LEVEL "6" CACHE STRING "" FORCE)
-  set(Seastar_IO_URING OFF CACHE BOOL "" FORCE)
+  set(Seastar_IO_URING ${HAVE_LIBURING} CACHE BOOL "" FORCE)
   set(Seastar_DEPRECATED_OSTREAM_FORMATTERS OFF CACHE BOOL "" FORCE)
   if(Seastar_DPDK)
     find_package(dpdk QUIET)
@@ -472,7 +472,21 @@ if(WITH_CRIMSON)
       build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
     endif()
   endif()
+  set(old_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+  if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    # - Debug: shared seastar for faster development iteration
+    #   shared seastar is allowed for faster linking and smaller executables during
+    #   development.
+    #   Note: shared seastar won't be packaged, so this is for developers only
+    # - RelWithDebInfo/Release/MinSizeRel: static seastar for production packages
+    #   This ensures packages don't depend on libseastar.so, and avoids the performance penalty
+    #   of calling functions in shared library.
+    set(BUILD_SHARED_LIBS FALSE)
+  endif()
   add_subdirectory(seastar)
+  set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
+  unset(old_BUILD_SHARED_LIBS)
+
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/include")
@@ -532,6 +546,7 @@ set(libcommon_files
   osdc/Striper.cc
   osdc/Objecter.cc
   osdc/error_code.cc
+  osdc/SplitOp.cc
   librbd/Features.cc
   librbd/io/IoOperations.cc
   ${mds_files})
@@ -566,12 +581,13 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
-  $<TARGET_OBJECTS:crush_objs>)
+  $<TARGET_OBJECTS:crush_objs>
+  $<TARGET_OBJECTS:json_spirit>
+  $<TARGET_OBJECTS:erasure_code>)
 set(ceph_common_deps
-  json_spirit erasure_code extblkdev arch crc32
+  common_utf8 extblkdev arch crc32
   ${LIB_RESOLV}
   Boost::thread
-  Boost::system
   Boost::random
   Boost::program_options
   Boost::date_time
@@ -1081,6 +1097,7 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
     ${nvmeof_monitor_grpc_hdrs}
     ceph_nvmeof_monitor_client.cc
     nvmeof/NVMeofGwClient.cc
+    nvmeof/NVMeofGwUtils.cc
     nvmeof/NVMeofGwMonitorGroupClient.cc
     nvmeof/NVMeofGwMonitorClient.cc)
   add_executable(ceph-nvmeof-monitor-client ${ceph_nvmeof_monitor_client_srcs})

@@ -14,7 +14,8 @@ import { TreeViewService } from '~/app/shared/services/tree-view.service';
 @Component({
   selector: 'cd-iscsi-target-details',
   templateUrl: './iscsi-target-details.component.html',
-  styleUrls: ['./iscsi-target-details.component.scss']
+  styleUrls: ['./iscsi-target-details.component.scss'],
+  standalone: false
 })
 export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   @Input()

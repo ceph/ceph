@@ -197,8 +197,7 @@ the following diagram, we assume a pool with three replicas of the PG:
                 |          Peering             |
 
 The OSDs also report their status to the monitor. For details, see `Configuring Monitor/OSD
-Interaction`_. To troubleshoot peering issues, see `Peering
-Failure`_.
+Interaction`_. To troubleshoot peering issues, see :ref:`failures-osd-peering`.
 
 
 Monitoring PG States
@@ -487,7 +486,7 @@ To identify stuck PGs, run the following command:
     ceph pg dump_stuck [unclean|inactive|stale|undersized|degraded]
 
 For more detail, see `Placement Group Subsystem`_. To troubleshoot stuck PGs,
-see `Troubleshooting PG Errors`_.
+see :ref:`failures-pg-stuck`.
 
 
 Finding an Object Location
@@ -554,8 +553,6 @@ performing the migration. For details, see the `Architecture`_ section.
 .. _mClock backfill: ../../configuration/mclock-config-ref#recovery-backfill-options
 .. _Architecture: ../../../architecture
 .. _OSD Not Running: ../../troubleshooting/troubleshooting-osd#osd-not-running
-.. _Troubleshooting PG Errors: ../../troubleshooting/troubleshooting-pg#troubleshooting-pg-errors
-.. _Peering Failure: ../../troubleshooting/troubleshooting-pg#failures-osd-peering
 .. _CRUSH map: ../crush-map
 .. _Configuring Monitor/OSD Interaction: ../../configuration/mon-osd-interaction/
 .. _Placement Group Subsystem: ../control#placement-group-subsystem

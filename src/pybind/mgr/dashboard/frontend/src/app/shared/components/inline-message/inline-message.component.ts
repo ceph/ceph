@@ -4,7 +4,8 @@ import { Icons } from '../../enum/icons.enum';
 @Component({
   selector: 'cd-inline-message',
   templateUrl: './inline-message.component.html',
-  styleUrl: './inline-message.component.scss'
+  styleUrl: './inline-message.component.scss',
+  standalone: false
 })
 export class InlineMessageComponent {
   // collapsible when true will show read more/read less button

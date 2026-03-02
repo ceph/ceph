@@ -1,3 +1,5 @@
+.. _rados-crush-map:
+
 ============
  CRUSH Maps
 ============
@@ -44,7 +46,7 @@ CRUSH Location
 The location of an OSD within the CRUSH map's hierarchy is referred to as its
 ``CRUSH location``. The specification of a CRUSH location takes the form of a
 list of key-value pairs. For example, if an OSD is in a particular row, rack,
-chassis, and host, and is also part of the 'default' CRUSH root (which is the
+chassis, and host, and is also part of the `default` CRUSH root (which is the
 case for most clusters), its CRUSH location can be specified as follows::
 
   root=default row=a rack=a2 chassis=a2a host=a2a1
@@ -74,7 +76,7 @@ section::
 Note that this action is unnecessary in most cases.
 
 If the ``crush_location`` is not set explicitly,
-a default of ``root=default host=HOSTNAME`` is used for ``OSD``s,
+a default of ``root=default host=HOSTNAME`` is used for OSDs,
 where the hostname is determined by the output of the ``hostname -s`` command.
 
 .. note:: If you switch from this default to an explicitly set ``crush_location``,
@@ -217,6 +219,7 @@ CRUSH rules can be created via the command-line by specifying the *pool type*
 that they will govern (replicated or erasure coded), the *failure domain*, and
 optionally a *device class*.  In rare cases, CRUSH rules must be created by
 manually editing the CRUSH map.
+For more information, see :ref:`rados-crush-map-edits`.
 
 To see the rules that are defined for the cluster, run the following command:
 
@@ -430,7 +433,7 @@ Removing an OSD
 ---------------
 
 .. note:: OSDs are normally removed from the CRUSH map as a result of the
-   `ceph osd purge`` command. This command is rarely needed.
+   ``ceph osd purge`` command. This command is rarely needed.
 
 To remove an OSD from the CRUSH map of a running cluster, run a command of the
 following form:
@@ -747,10 +750,12 @@ The relevant erasure-code profile properties are as follows:
 
    ceph osd crush rule create-erasure {name} {profile-name}
 
-.. note: When creating a new pool, it is not necessary to create the rule
+.. note:: When creating a new pool, it is not necessary to create the rule
    explicitly. If only the erasure-code profile is specified and the rule
    argument is omitted, then Ceph will create the CRUSH rule automatically.
 
+
+.. _rados-crush-msr-rules:
 
 CRUSH MSR Rules
 ---------------

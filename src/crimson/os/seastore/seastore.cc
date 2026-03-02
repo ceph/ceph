@@ -1420,9 +1420,9 @@ SeaStore::Shard::fiemap(
   });
 }
 
-void SeaStore::Shard::on_error(ceph::os::Transaction &t) {
-  LOG_PREFIX(SeaStoreS::on_error);
-  ERROR(" transaction dump:\n");
+void SeaStore::Shard::transaction_dump(ceph::os::Transaction &t) {
+  LOG_PREFIX(SeaStoreS::transaction_dump);
+  ERROR("");
   JSONFormatter f(true);
   f.open_object_section("transaction");
   t.dump(&f);
@@ -1430,7 +1430,6 @@ void SeaStore::Shard::on_error(ceph::os::Transaction &t) {
   std::stringstream str;
   f.flush(str);
   ERROR("{}", str.str());
-  abort();
 }
 
 seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
@@ -1494,16 +1493,28 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 
       ctx.reset_preserve_handle(*transaction_manager);
       std::vector<OnodeRef> onodes(ctx.iter.objects.size());
+
+      // Get the total number of operations from the transaction
+      const size_t total_ops = ctx.ext_transaction.get_num_ops();
+      size_t current_op = 0;
+
       while (ctx.iter.have_op()) {
+        current_op++;
+
+        DEBUGT("processing op {} of {} for cid={}",
+               t, current_op, total_ops, ctx.ch->get_cid());
 	co_await _do_transaction_step(
 	  ctx, ctx.ch, onodes, ctx.iter);
       }
 
+      DEBUGT("completed all {} ops for cid={}",
+             t, total_ops, ctx.ch->get_cid());
       co_await transaction_manager->submit_transaction(*ctx.transaction);
     })
   ).handle_error(
-    crimson::ct_error::all_same_way([&ctx](auto e) {
-      on_error(ctx.ext_transaction);
+    crimson::ct_error::all_same_way([FNAME, &ctx](auto e) {
+      transaction_dump(ctx.ext_transaction);
+      ceph_abort_msg(fmt::format("{} unexpected error: {}", FNAME, e));
       return seastar::now();
     })
   );
@@ -2941,11 +2952,8 @@ SeaStore::Shard::omaptree_rm_keyrange(
     [&t, &onode, FNAME]
     (auto &omap_manager, auto &root, auto &first, auto &last)
   {
-    auto config = OMapManager::omap_list_config_t()
-      .with_inclusive(true, false)
-      .without_max();
     return omap_manager.omap_rm_key_range(
-      root, t, first, last, config
+      root, t, first, last
     ).si_then([&t, &root, &onode, FNAME] {
       if (root.must_update()) {
         omaptree_update_root(t, root, onode);

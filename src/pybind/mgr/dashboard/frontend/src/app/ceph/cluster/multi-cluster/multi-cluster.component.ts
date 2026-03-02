@@ -3,8 +3,6 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscription } from 'rxjs';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { ModalService } from '~/app/shared/services/modal.service';
-import { MultiClusterFormComponent } from './multi-cluster-form/multi-cluster-form.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -24,7 +22,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-multi-cluster',
   templateUrl: './multi-cluster.component.html',
-  styleUrls: ['./multi-cluster.component.scss']
+  styleUrls: ['./multi-cluster.component.scss'],
+  standalone: false
 })
 export class MultiClusterComponent implements OnInit, OnDestroy {
   COUNT_OF_UTILIZATION_CHARTS = 5;
@@ -50,7 +49,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     POOL_CAPACITY_UTILIZATION: 0,
     POOL_IOPS_UTILIZATION: 0,
     POOL_THROUGHPUT_UTILIZATION: 0,
-    TOTAL_CAPACITY: 0,
+    TOTAL_CAPACITY: [],
     USED_CAPACITY: 0,
     HOSTS: 0,
     POOLS: 0,
@@ -91,7 +90,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   PROMETHEUS_DELAY = 20000;
   LOAD_DELAY = 5000;
   CLUSTERS_REFRESH_INTERVAL = 30000;
-  interval: NodeJS.Timer;
+  interval: number;
   selectedTime: any;
   multiClusterQueries: any = {};
   managedByConfig$: Observable<any>;
@@ -102,7 +101,6 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   constructor(
     private multiClusterService: MultiClusterService,
     private settingsService: SettingsService,
-    private modalService: ModalService,
     private router: Router,
     private prometheusService: PrometheusService,
     private notificationService: NotificationService
@@ -212,21 +210,8 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     }
   }
 
-  openRemoteClusterInfoModal() {
-    const initialState = {
-      action: 'connect'
-    };
-    this.bsModalRef = this.modalService.show(MultiClusterFormComponent, initialState, {
-      size: 'lg'
-    });
-    this.bsModalRef.componentInstance.submitAction.subscribe(() => {
-      this.loading = true;
-      setTimeout(() => {
-        const currentRoute = this.router.url.split('?')[0];
-        this.multiClusterService.refreshMultiCluster(currentRoute);
-        this.getPrometheusData(this.prometheusService.lastHourDateObject);
-      }, this.PROMETHEUS_DELAY);
-    });
+  openConnectClusterForm() {
+    this.router.navigate(['multi-cluster/manage-clusters/connect']);
   }
 
   getPrometheusData(selectedTime: any, selectedQueries?: string) {
@@ -286,7 +271,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
         this.alerts = this.queriesResults.ALERTS;
         this.getAlertsInfo();
         this.getClustersInfo();
-        this.interval = setInterval(() => {
+        this.interval = window.setInterval(() => {
           this.getClustersInfo();
         }, this.CLUSTERS_REFRESH_INTERVAL);
       });

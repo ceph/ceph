@@ -1,3 +1,5 @@
+.. _radosgw-iam:
+
 =============================
  Ceph Object Gateway IAM API
 =============================
@@ -8,7 +10,7 @@ The Ceph Object Gateway supports a subset of the `Amazon IAM API`_ for
 the RESTful management of account users, roles, and associated policies.
 
 This REST API is served by the same HTTP endpoint as the
-`Ceph Object Gateway S3 API`_.
+:ref:`radosgw s3`.
 
 Authorization
 =============
@@ -194,4 +196,3 @@ AmazonS3ReadOnlyAccess
 
 
 .. _Amazon IAM API: https://docs.aws.amazon.com/IAM/latest/APIReference/welcome.html
-.. _Ceph Object Gateway S3 API: ../s3/

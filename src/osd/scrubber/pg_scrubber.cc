@@ -713,7 +713,7 @@ void asok_response_section(
   Formatter::ObjectSection asok_resp_section{*f, "result"sv};
   f->dump_bool("deep", (scrub_level == scrub_level_t::deep));
   f->dump_bool("must", !is_periodic);
-  f->dump_stream("stamp") << stamp;
+  f->dump_named_fmt("stamp", "{}", stamp);
 }
 }  // namespace
 
@@ -768,6 +768,98 @@ void PgScrubber::on_operator_forced_scrub(
 {
   auto deep_req = scrub_requested(scrub_level, scrub_type_t::not_repair);
   asok_response_section(f, false, deep_req);
+}
+
+
+/**
+ * Operation:
+ * - if the PG is being scrubbed - just send the operator-abort event to
+ *   the FSM. That would stop the ongoing scrub session, and remove the
+ *   (possible) operator-requested priority from both PG targets (shallow
+ *   and deep).
+ * - otherwise - manually manipulate the two urgencies.
+ */
+void PgScrubber::on_operator_abort_scrub(ceph::Formatter* f)
+{
+  Formatter::ObjectSection asok_resp_section{*f, "result"sv};
+  if (!is_primary() || !m_scrub_job) {
+    dout(10) << fmt::format(
+		    "{}: pg[{}]: not Primary or no scrub-job", __func__,
+		    m_pg_id.pgid)
+	     << dendl;
+    f->dump_bool("applicable", false);
+    f->dump_bool("active", false);
+    return;
+  }
+
+  dout(5) << fmt::format(
+                 "{}: pg[{}]: job on entry: {}", __func__, m_pg_id.pgid,
+                 *m_scrub_job)
+          << dendl;
+  ceph_assert(m_pg->is_locked());
+  if (is_scrub_active()) {
+    m_fsm->process_event(OperatorAbort{});
+    f->dump_bool("applicable", true);
+    f->dump_bool("active", true);
+
+  } else if (is_queued_or_active()) {
+    // instead of adding logic to the FSM to handle this rare
+    // occasion, we will simply ignore it (and let the operators
+    // know they can reissue the command, if still needed).
+    const auto err_text = fmt::format(
+        "{}: pg[{}] scrub not stopped due to transitory state. Reissue!",
+        __func__, m_pg_id.pgid);
+    dout(10) << err_text << dendl;
+
+    f->dump_bool("applicable", false);
+    f->dump_bool("active", true);
+    f->dump_string("error", err_text);
+
+  } else if (!m_scrub_job->is_registered()) {
+    const auto err_text = fmt::format(
+        "{}: pg[{}] is not registered for scrubbing", __func__, m_pg_id.pgid);
+    dout(5) << err_text << dendl;
+    f->dump_bool("applicable", false);
+    f->dump_bool("active", false);
+    f->dump_string("error", err_text);
+
+  } else {
+    // not scrubbing now. Remove any operator-requested priority from
+    // both targets.
+
+    if (m_scrub_job->is_queued()) {
+      // one or both of the targets are in the queue. Remove them.
+      m_osds->get_scrub_services().remove_from_osd_queue(m_pg_id);
+      m_scrub_job->clear_both_targets_queued();
+      dout(20) << fmt::format(
+                      "{}: pg[{}] dequeuing for an update", __func__,
+                      m_pg_id.pgid)
+               << dendl;
+    }
+
+    // if any of the targets was set to operator-initiated urgency -
+    // remove that designation, and reschedule both.
+    const auto scrub_time_now = ceph_clock_now();
+    const bool adj_shallow = downgrade_on_operator_abort(
+        m_scrub_job->get_target(scrub_level_t::shallow), scrub_time_now);
+    // note: must not short-circuit!
+    const bool adj_deep = downgrade_on_operator_abort(
+        m_scrub_job->get_target(scrub_level_t::deep), scrub_time_now);
+    if (adj_shallow || adj_deep) {
+      update_targets(scrub_time_now);
+      dout(10) << fmt::format("{}: adjusted job: {}", __func__, *m_scrub_job)
+               << dendl;
+    }
+    m_osds->get_scrub_services().enqueue_scrub_job(*m_scrub_job);
+    m_scrub_job->set_both_targets_queued();
+    f->dump_bool("applicable", true);
+    f->dump_bool("active", false);
+  }
+  dout(5) << fmt::format(
+                 "{}: pg[{}] job at exit: {}", __func__, m_pg_id.pgid,
+                 *m_scrub_job)
+          << dendl;
+  m_pg->publish_stats_to_osd();
 }
 
 
@@ -2065,6 +2157,26 @@ void PgScrubber::on_digest_updates()
   }
 }
 
+bool PgScrubber::downgrade_on_operator_abort(
+    Scrub::SchedTarget& targ,
+    utime_t scrub_clock_now)
+{
+  if (targ.urgency() != urgency_t::operator_requested &&
+      targ.urgency() != urgency_t::must_repair) {
+    return false;  // no need to downgrade
+  }
+
+  targ.sched_info.urgency = urgency_t::periodic_regular;
+  targ.sched_info.schedule.scheduled_at = scrub_clock_now;
+  targ.sched_info.schedule.not_before = scrub_clock_now;
+  dout(10)
+      << fmt::format(
+             "{}: removing operator-requested urgency from target. Updated: {}",
+             __func__, targ)
+      << dendl;
+  return true;
+}
+
 
 /**
  * The scrub session was aborted. We are left with two sets of parameters
@@ -2076,6 +2188,10 @@ void PgScrubber::on_digest_updates()
  * have had its priority, flags, or schedule modified in the meantime.
  * And - it does not (at least initially, i.e. immediately after
  * set_op_parameters()), have high priority.
+ *
+ * Updated functionality ('Tentacle', 2025): if the abort cause was an explicit
+ * operator request - make sure we are not left with a high-priority
+ * target (one that would immediately restart, against the operator wishes).
  */
 void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 {
@@ -2090,38 +2206,54 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 
   dout(10) << fmt::format(
 		  "{}: executing target: {}. Session flags: {} up-to-date job: "
-		  "{}",
-		  __func__, *m_active_target, m_flags, *m_scrub_job)
+		  "{}. Abort cause: {}",
+		  __func__, *m_active_target, m_flags, *m_scrub_job, issue)
 	   << dendl;
 
   // copy the aborted target
-  const auto aborted_target = *m_active_target;
+  auto aborted_target = *m_active_target;
   m_active_target.reset();
 
   const auto scrub_clock_now = ceph_clock_now();
   auto& current_targ = m_scrub_job->get_target(aborted_target.level());
   ceph_assert(!current_targ.queued);
 
-  // merge the aborted target with the current one
-  auto& curr_sched = current_targ.sched_info.schedule;
-  auto& abrt_sched = aborted_target.sched_info.schedule;
+  // if the abort trigger was an explicit operator abort command, and the
+  // aborted target had operator-initiated urgency:
+  // - do not perform a 'merge' of the aborted target and the 'next'
+  //   target in the scrub-job. Instead - just reinstate the 'next' target.
+  //   (the aborted target has more than its urgency attribute wrong. The
+  //   scheduled-at was also made irrelevant by the original operator
+  //   command that initiated the aborted scrub).
+  bool should_merge = true;
+  if (issue == delay_cause_t::operator_abort) {
+    should_merge = !downgrade_on_operator_abort(aborted_target, scrub_clock_now);
+  }
 
-  current_targ.sched_info.urgency =
-      std::max(current_targ.urgency(), aborted_target.urgency());
-  curr_sched.scheduled_at =
-      std::min(curr_sched.scheduled_at, abrt_sched.scheduled_at);
-  curr_sched.not_before =
-      std::min(curr_sched.not_before, abrt_sched.not_before);
+  if (should_merge) {
+    // the regular case. merge the aborted target with the current one
+    auto& curr_sched = current_targ.sched_info.schedule;
+    auto& abrt_sched = aborted_target.sched_info.schedule;
 
-  dout(10) << fmt::format(
-		  "{}: merged target (before delay): {}", __func__,
-		  current_targ)
-	   << dendl;
+    current_targ.sched_info.urgency =
+        std::max(current_targ.urgency(), aborted_target.urgency());
+    curr_sched.scheduled_at =
+        std::min(curr_sched.scheduled_at, abrt_sched.scheduled_at);
+    curr_sched.not_before =
+        std::min(curr_sched.not_before, abrt_sched.not_before);
+    dout(10) << fmt::format(
+		    "{}: merged target (before delay): {}", __func__,
+		    current_targ)
+	     << dendl;
+  } else {
+    dout(10) << fmt::format(
+                    "{}: aborted oper-urgency target discarded: {}",
+                    __func__, current_targ)
+             << dendl;
+  }
 
   // affect a delay, as there was a failure mid-scrub
   m_scrub_job->delay_on_failure(current_targ.level(), issue, scrub_clock_now);
-
-  // reinstate both targets in the queue
   m_osds->get_scrub_services().enqueue_target(current_targ);
   current_targ.queued = true;
 
@@ -2129,7 +2261,13 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
   auto& sister = m_scrub_job->get_target(
       aborted_target.level() == scrub_level_t::deep ? scrub_level_t::shallow
 						    : scrub_level_t::deep);
+  // if 'operator-aborted' - that one should be downgraded, too (the scenario
+  // we are trying to help the operator with: trying to recover from a set of
+  // scrub requests issued by mistake).
   if (!sister.queued) {
+    if (issue == delay_cause_t::operator_abort) {
+      downgrade_on_operator_abort(sister, scrub_clock_now);
+    }
     m_osds->get_scrub_services().enqueue_target(sister);
     sister.queued = true;
   }
@@ -2290,8 +2428,7 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
 
 
 ///\todo modify the fields dumped here to match the new scrub-job structure
-void PgScrubber::dump_scrubber(
-    ceph::Formatter* f) const
+void PgScrubber::dump_scrubber(ceph::Formatter* f) const
 {
   Formatter::ObjectSection scrubber_section{*f, "scrubber"sv};
 
@@ -2304,15 +2441,15 @@ void PgScrubber::dump_scrubber(
     const auto& earliest = m_scrub_job->earliest_target(now_is);
     f->dump_bool("must_scrub", earliest.is_high_priority());
     f->dump_bool(
-	"must_deep_scrub", m_scrub_job->deep_target.is_high_priority());
+        "must_deep_scrub", m_scrub_job->deep_target.is_high_priority());
     // the following data item is deprecated. Will be replaced by a set
     // of reported attributes that match the updated scrub-job state.
     f->dump_bool("must_repair", earliest.urgency() == urgency_t::must_repair);
-
-    f->dump_stream("scrub_reg_stamp")
-	<< earliest.sched_info.schedule.not_before;
+    f->dump_named_fmt(
+        "sched_time", "{}", earliest.sched_info.schedule.not_before);
     auto sched_state = m_scrub_job->scheduling_state(now_is);
     f->dump_string("schedule", sched_state);
+    f->dump_named_fmt("urgency", "{}", earliest.urgency());
   }
 
   if (m_publish_sessions) {
@@ -2320,16 +2457,44 @@ void PgScrubber::dump_scrubber(
     // The 'test_sequence' is an ever-increasing number used by tests.
     f->dump_int("test_sequence", m_sessions_counter);
   }
+
+  // always (also) dump the two targets (as some tests expect their specific
+  // format)
+  const auto query_time = ceph_clock_now();
+  {
+    Formatter::ObjectSection shallow_section{*f, "shallow-target"sv};
+    m_scrub_job->shallow_target.queued_element().dump(*f);
+    f->dump_bool(
+        "eligible",
+        m_scrub_job->shallow_target.queued_element().schedule.not_before <=
+            query_time);
+    f->dump_bool("queued", m_scrub_job->shallow_target.queued);
+    f->dump_bool(
+        "active",
+        (m_active_target && m_active_target->is_shallow()) ? true : false);
+  }
+  {
+    Formatter::ObjectSection deep_section{*f, "deep-target"sv};
+    m_scrub_job->deep_target.queued_element().dump(*f);
+    f->dump_bool(
+        "eligible",
+        m_scrub_job->deep_target.queued_element().schedule.not_before <=
+            query_time);
+    f->dump_bool("queued", m_scrub_job->deep_target.queued);
+    f->dump_bool(
+        "active",
+        (m_active_target && m_active_target->is_deep()) ? true : false);
+  }
 }
 
 
 void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
 {
-  f->dump_stream("epoch_start") << m_interval_start;
-  f->dump_stream("start") << m_start;
-  f->dump_stream("end") << m_end;
-  f->dump_stream("max_end") << m_max_end;
-  f->dump_stream("subset_last_update") << m_subset_last_update;
+  f->dump_named_fmt("epoch_start", "{}", m_interval_start);
+  f->dump_named_fmt("start", "{}", m_start);
+  f->dump_named_fmt("end", "{}", m_end);
+  f->dump_named_fmt("max_end", "{}", m_max_end);
+  f->dump_named_fmt("subset_last_update", "{}", m_subset_last_update);
   f->dump_bool("deep", m_active_target->is_deep());
 
   // dump the scrub-type flags
@@ -2344,7 +2509,9 @@ void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
   f->dump_int("fixed", m_fixed_count);
   f->with_array_section(
       "waiting_on_whom"sv, m_maps_status.get_awaited(),
-      [](Formatter& f, const pg_shard_t& sh) { f.dump_stream("shard") << sh; });
+      [](Formatter& f, const pg_shard_t& sh) {
+        f.dump_named_fmt("shard", "{}", sh);
+      });
 
   if (m_scrub_job->blocked) {
     f->dump_string("schedule", "blocked");
@@ -2356,11 +2523,13 @@ void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
     f->dump_bool("is_reserving_replicas", true);
     f->dump_int("osd_to_respond", maybe_register->m_osd_to_respond);
     f->dump_int("duration_seconds", maybe_register->m_duration_seconds);
-    f->dump_int("requested_in_order", maybe_register->m_ordinal_of_requested_replica);
+    f->dump_int(
+        "requested_in_order", maybe_register->m_ordinal_of_requested_replica);
     f->dump_int("num_to_reserve", maybe_register->m_num_to_reserve);
   } else {
     f->dump_bool("is_reserving_replicas", false);
   }
+  f->dump_named_fmt("urgency", "{}", m_active_target->urgency());
 }
 
 pg_scrubbing_status_t PgScrubber::get_schedule() const
@@ -2471,16 +2640,18 @@ void PgScrubber::handle_query_state(ceph::Formatter* f)
   dout(15) << __func__ << dendl;
 
   Formatter::ObjectSection scrub_section{*f, "scrub"sv};
-  f->dump_stream("scrubber.epoch_start") << m_interval_start;
+  f->dump_named_fmt("scrubber.epoch_start", "{}", m_interval_start);
   f->dump_bool("scrubber.active", m_active);
-  f->dump_stream("scrubber.start") << m_start;
-  f->dump_stream("scrubber.end") << m_end;
-  f->dump_stream("scrubber.max_end") << m_max_end;
-  f->dump_stream("scrubber.subset_last_update") << m_subset_last_update;
+  f->dump_named_fmt("scrubber.start", "{}", m_start);
+  f->dump_named_fmt("scrubber.end", "{}", m_end);
+  f->dump_named_fmt("scrubber.max_end", "{}", m_max_end);
+  f->dump_named_fmt("scrubber.subset_last_update", "{}", m_subset_last_update);
   f->dump_bool("scrubber.deep", m_is_deep);
   f->with_array_section(
       "waiting_on_whom"sv, m_maps_status.get_awaited(),
-      [](Formatter& f, const pg_shard_t& sh) { f.dump_stream("shard") << sh; });
+      [](Formatter& f, const pg_shard_t& sh) {
+        f.dump_named_fmt("shard", "{}", sh);
+      });
   f->dump_string("comment", "DEPRECATED - may be removed in the next release");
 }
 

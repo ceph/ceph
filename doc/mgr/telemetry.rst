@@ -108,7 +108,7 @@ List all channels with:
 
   ceph telemetry channel ls
 
-::
+.. code-block:: none
 
   NAME      ENABLED    DEFAULT    DESC
   basic     ON         ON         Share basic cluster information (size, version)
@@ -226,7 +226,7 @@ To list all collections, run the following command:
 
    ceph telemetry collection ls
 
-::
+.. code-block:: none
 
   NAME                            STATUS                                               DESC
   basic_base                      NOT REPORTING: NOT OPTED-IN                          Basic information about the cluster (capacity, number and type of daemons, version, etc.)
@@ -235,7 +235,7 @@ To list all collections, run the following command:
   basic_pool_options_bluestore    NOT REPORTING: NOT OPTED-IN                          Per-pool bluestore config options
   basic_pool_usage                NOT REPORTING: NOT OPTED-IN                          Default pool application and usage statistics
   basic_rook_v01                  NOT REPORTING: NOT OPTED-IN                          Basic Rook deployment data
-  basic_stretch_cluster           NOT REPORTING: NOT OPTED-IN                          Stretch Mode information for stretch clusters deployments
+  basic_stretch_cluster           NOT REPORTING: NOT OPTED-IN                          Stretch mode information for stretch clusters
   basic_usage_by_class            NOT REPORTING: NOT OPTED-IN                          Default device class usage statistics
   crash_base                      NOT REPORTING: NOT OPTED-IN                          Information about daemon crashes (daemon type and version, backtrace, etc.)
   device_base                     NOT REPORTING: NOT OPTED-IN                          Information about device health metrics

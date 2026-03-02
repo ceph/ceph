@@ -38,6 +38,11 @@ Make sure X (and, ideally, X+1) is defined:
 - [x] src/mon/mon_types.h (`ceph::features::mon::FEATURE_*` and related structs and helpers)
 - [x] src/mds/cephfs_features.h (`CEPHFS_CURRENT_RELEASE`)
 
+Github Actions
+~~~~~~~~~~~~~~
+
+- [ ] .github/workflows/redmine-upkeep.yml add release branch to pull_request_target trigger
+
 Scripts
 ~~~~~~~
 
@@ -110,6 +115,7 @@ QA suite
 - [x] update qa/ upgrade suites require-osd-release calls to tentacle
 - [x] create qa/releases/X.yaml
 - [x] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
+- [x] update qa/suites/rados/encoder/1-task.yaml to remove (X-3) and add X
 
 
 ceph-build
@@ -151,3 +157,4 @@ First stable release
 - [ ] src/cephadm/cephadmlib/constants.py: update `LATEST_STABLE_RELEASE`
 - [ ] activate latest release in readthedocs, as described in `the readthedocs
   documentation <https://docs.readthedocs.io/en/stable/versions.html>`_ 
+- [ ] add release and supported distros to tables in `doc/start/os-recommendations.rst`

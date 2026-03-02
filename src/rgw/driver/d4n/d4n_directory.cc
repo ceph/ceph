@@ -51,14 +51,15 @@ void redis_exec(std::shared_ptr<connection> conn,
 }
 
 template <typename... Types>
-void redis_exec_cp(std::shared_ptr<rgw::d4n::RedisPool> pool,
+void redis_exec_cp(const DoutPrefixProvider* dpp,
+                std::shared_ptr<rgw::d4n::RedisPool> pool,
                 boost::system::error_code& ec,
                 const boost::redis::request& req,
                 boost::redis::response<Types...>& resp,
 		optional_yield y)
 {
 //purpose: Execute a Redis command using a connection from the pool
-	std::shared_ptr<connection> conn = pool->acquire();
+	std::shared_ptr<connection> conn = pool->acquire(dpp);
 	try {
 
   		if (y) {
@@ -89,13 +90,14 @@ void redis_exec(std::shared_ptr<connection> conn,
   }
 }
 
-void redis_exec_cp(std::shared_ptr<rgw::d4n::RedisPool> pool,
+void redis_exec_cp(const DoutPrefixProvider* dpp,
+                std::shared_ptr<rgw::d4n::RedisPool> pool,
                 boost::system::error_code& ec,
                 const boost::redis::request& req,
                 boost::redis::generic_response& resp, optional_yield y)
 {
 	//purpose: Execute a Redis command using a connection from the pool
-	std::shared_ptr<connection> conn = pool->acquire();
+	std::shared_ptr<connection> conn = pool->acquire(dpp);
 
 	try {
   		if (y) {
@@ -136,7 +138,7 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
 	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
     }
     else[[likely]]
-    	redis_exec_cp(redis_pool, ec, req, resp, y);
+    	redis_exec_cp(dpp, redis_pool, ec, req, resp, y);
 }
 
 template <typename... Types>
@@ -154,7 +156,7 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
 	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
     }
     else[[likely]]
-    	redis_exec_cp(redis_pool, ec, req, resp, y);
+    	redis_exec_cp(dpp, redis_pool, ec, req, resp, y);
 }
 
 int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, Pipeline* pipeline)

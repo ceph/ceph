@@ -163,10 +163,16 @@ repopath=${CONTAINER_REPO_HOSTNAME}/${CONTAINER_REPO_ORGANIZATION}/${CONTAINER_R
 if [[ ${CI_CONTAINER} == "true" ]] ; then
     # ceph-ci conventions for remote tags:
     # requires ARCH, BRANCH, CEPH_SHA1, FLAVOR
-    full_repo_tag=${repopath}:${BRANCH}-${fromtag}-${ARCH}-devel
-    branch_repo_tag=${repopath}:${BRANCH}
-    sha1_repo_tag=${repopath}:${CEPH_SHA1}
-
+    if [[ ${FLAVOR} == "debug" ]]; then
+        # add -debug suffix to flavor debug builds
+        full_repo_tag=${repopath}:${BRANCH}-${fromtag}-${ARCH}-devel-${FLAVOR}
+        branch_repo_tag=${repopath}:${BRANCH}-${FLAVOR}
+        sha1_repo_tag=${repopath}:${CEPH_SHA1}-${FLAVOR}
+    else
+        full_repo_tag=${repopath}:${BRANCH}-${fromtag}-${ARCH}-devel
+        branch_repo_tag=${repopath}:${BRANCH}
+        sha1_repo_tag=${repopath}:${CEPH_SHA1}
+    fi
     # while we have more than just centos9 containers:
     # anything that's not gets suffixed with its fromtag
     # for the branch and sha1 tags (for example, <branch>-rocky-10).
@@ -185,18 +191,6 @@ if [[ ${CI_CONTAINER} == "true" ]] ; then
     podman tag ${image_id} ${full_repo_tag}
     podman tag ${image_id} ${branch_repo_tag}
     podman tag ${image_id} ${sha1_repo_tag}
-
-    if [[ (${FLAVOR} == "crimson-debug" || ${FLAVOR} == "crimson-release") && ${ARCH} == "x86_64" ]] ; then
-        sha1_flavor_repo_tag=${sha1_repo_tag}-${FLAVOR}
-        podman tag ${image_id} ${sha1_flavor_repo_tag}
-        if [[ -z "${NO_PUSH}" ]] ; then
-            podman push ${sha1_flavor_repo_tag}
-            if [[ ${REMOVE_LOCAL_IMAGES} == "true" ]] ; then
-                podman rmi -f ${sha1_flavor_repo_tag}
-            fi
-        fi
-        exit
-    fi
 
     if [[ -z "${NO_PUSH}" ]] ; then
         podman push ${full_repo_tag}

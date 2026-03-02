@@ -1,69 +1,89 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">Export Multi-site Realm Token</ng-container>
+<cds-modal
+  size="sm"
+  [open]="open"
+  [hasScrollingContent]="true"
+  (overlaySelected)="closeModal()"
+>
+  <cds-modal-header
+    (closeSelect)="closeModal()"
+    i18n
+  >
+      Export multi-site realm token
+  </cds-modal-header>
 
-  <ng-container class="modal-content">
-    <form name="exportTokenForm"
-          #frm="ngForm"
-          [formGroup]="exportTokenForm">
-    <span *ngIf="loading"
-          class="d-flex justify-content-center">
-      <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i>
-    <svg [cdsIcon]="icons.down"
-         [size]="icons.size24"
-         class="cds-info-color"></svg>
-  </span>
-    <div class="modal-body"
-         *ngIf="!loading">
-      <cd-alert-panel *ngIf="!tokenValid"
-                      type="warning"
-                      class="mx-3"
-                      i18n>
-      <div *ngFor="let realminfo of realms">
-        <b>{{realminfo.realm}}</b> -
-        {{realminfo.token}}
-      </div>
-      </cd-alert-panel>
-      <div *ngFor="let realminfo of realms">
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="realmName"
-                 i18n>Realm Name
-          </label>
-          <div class="cd-col-form-input">
-            <input id="realmName"
-                   name="realmName"
-                   type="text"
-                   value="{{ realminfo.realm }}"
-                   readonly>
-          </div>
+  <ng-container *cdFormLoading="loading">
+    <form
+      name="exportTokenForm"
+      [formGroup]="exportTokenForm"
+      novalidate
+    >
+      <div cdsModalContent>
+        <div class="form-item">
+          @if (!tokenValid) {
+          <cd-alert-panel
+            type="warning"
+            i18n
+          >
+            @for (realminfo of realms; track realminfo) {
+            <div>
+              <b>{{ realminfo.realm }}</b> - {{ realminfo.token }}
+            </div>
+            }
+          </cd-alert-panel>
+          }
         </div>
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="token"
-                 i18n>Token
-          </label>
-          <div class="cd-col-form-input">
-            <input id="realmToken"
-                   name="realmToken"
-                   type="text"
-                   value="{{ realminfo.token }}"
-                   class="me-2 mb-4"
-                   readonly>
+
+        @for (realminfo of realms; track realminfo) {
+        <div>
+          <div class="form-item">
+            <cds-text-label
+              labelInputID="realmName"
+              i18n
+            >
+              Realm Name
+              <input
+                cdsText
+                readonly
+                type="text"
+                id="realmName"
+                [value]="realminfo.realm"
+                modal-primary-focus
+                [autofocus]="true"
+              />
+            </cds-text-label>
+          </div>
+
+          <div class="form-item form-item-append">
+            <cds-text-label
+              labelInputID="realmToken"
+              i18n
+            >
+              Token
+              <input
+                cdsText
+                readonly
+                type="text"
+                id="realmToken"
+                [value]="realminfo.token"
+              />
+            </cds-text-label>
             <cd-copy-2-clipboard-button
-                      source="{{ realminfo.token }}"
-                      [byId]="false">
+              class="clipboard"
+              [source]="realminfo.token"
+              [byId]="false"
+              size="md"
+            >
             </cd-copy-2-clipboard-button>
           </div>
-          <hr *ngIf="realms.length > 1">
         </div>
+        }
       </div>
-    </div>
-    <div class="modal-footer">
-      <cd-back-button class="m-2 float-end"
-                      aria-label="Close"
-                      (backAction)="activeModal.close()"></cd-back-button>
-    </div>
+      <cd-form-button-panel
+        [modalForm]="true"
+        [showSubmit]="false"
+        (backActionEvent)="closeModal()"
+      >
+      </cd-form-button-panel>
     </form>
   </ng-container>
-</cd-modal>
+</cds-modal>

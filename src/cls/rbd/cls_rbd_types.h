@@ -423,7 +423,7 @@ struct GroupSpec {
 
 WRITE_CLASS_ENCODER(GroupSpec);
 
-enum SnapshotNamespaceType {
+enum SnapshotNamespaceType : uint32_t {
   SNAPSHOT_NAMESPACE_TYPE_USER   = 0,
   SNAPSHOT_NAMESPACE_TYPE_GROUP  = 1,
   SNAPSHOT_NAMESPACE_TYPE_TRASH  = 2,

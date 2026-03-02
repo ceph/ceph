@@ -34,7 +34,7 @@ public:
       cancel_all();
     }
 
-    std::shared_ptr<connection> acquire() {
+    std::shared_ptr<connection> acquire(const DoutPrefixProvider* dpp = nullptr) {
         std::unique_lock<std::mutex> lock(m_aquire_release_mtx);
 
 	if (!m_is_pool_connected) {
@@ -46,10 +46,12 @@ public:
 	}
 
         if (m_pool.empty()) {
-		maybe_warn_about_blocking(nullptr);
+		if (dpp) {
+			maybe_warn_about_blocking(dpp);
+		}
 		//wait until m_pool is not empty
 		m_cond_var.wait(lock, [this] { return !m_pool.empty(); });
-        } 
+        }
         auto conn = m_pool.front();
         m_pool.pop_front();
         return conn;

@@ -60,7 +60,7 @@ typedef std::vector<std::string> InstanceIds;
 typedef std::set<std::string> GlobalImageIds;
 typedef std::map<std::string, ActionType> ImageActionTypes;
 
-enum PolicyMetaType {
+enum PolicyMetaType : uint32_t {
   POLICY_META_TYPE_NONE = 0,
 };
 

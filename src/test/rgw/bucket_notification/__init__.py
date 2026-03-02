@@ -1,5 +1,6 @@
 import configparser
 import os
+import pytest
 from .api import admin
 
 def setup():
@@ -72,3 +73,7 @@ def get_access_key():
 def get_secret_key():
     global main_secret_key
     return main_secret_key
+
+@pytest.fixture(autouse=True, scope="package")
+def configfile():
+    setup()

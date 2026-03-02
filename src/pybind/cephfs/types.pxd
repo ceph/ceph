@@ -40,18 +40,3 @@ cdef extern from "<sys/uio.h>":
         void *iov_base
         size_t iov_len
 
-IF UNAME_SYSNAME == "FreeBSD" or UNAME_SYSNAME == "Darwin":
-    cdef extern from "dirent.h":
-        cdef struct dirent:
-            long int d_ino
-            unsigned short int d_reclen
-            unsigned char d_type
-            char d_name[256]
-ELSE:
-    cdef extern from "dirent.h":
-        cdef struct dirent:
-            long int d_ino
-            unsigned long int d_off
-            unsigned short int d_reclen
-            unsigned char d_type
-            char d_name[256]

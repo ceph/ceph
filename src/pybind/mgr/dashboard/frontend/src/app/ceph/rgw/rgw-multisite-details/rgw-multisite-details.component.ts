@@ -50,7 +50,8 @@ const BASE_URL = 'rgw/multisite/configuration';
   selector: 'cd-rgw-multisite-details',
   templateUrl: './rgw-multisite-details.component.html',
   styleUrls: ['./rgw-multisite-details.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, OnInit {
   private sub = new Subscription();
@@ -59,9 +60,9 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
 
   messages = {
     noDefaultRealm: $localize`Please create a default realm first to enable this feature`,
-    noMasterZone: $localize`Please create a master zone for each zone group to enable this feature`,
+    noMasterZone: $localize`Please create a master zone for each zonegroup to enable this feature`,
     noRealmExists: $localize`No realm exists`,
-    disableExport: $localize`Please create master zone group and master zone for each of the realms`
+    disableExport: $localize`Please create master zonegroup and master zone for each of the realms`
   };
 
   icons = Icons;
@@ -199,9 +200,7 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
       defaultsInfo: this.defaultsInfo,
       multisiteInfo: this.multisiteInfo
     };
-    this.bsModalRef = this.modalService.show(RgwMultisiteExportComponent, initialState, {
-      size: 'lg'
-    });
+    this.cdsModalService.show(RgwMultisiteExportComponent, initialState);
   }
 
   getDisableExport() {
@@ -246,7 +245,7 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
       {
         permission: 'create',
         icon: Icons.add,
-        name: this.actionLabels.CREATE + ' Zone Group',
+        name: this.actionLabels.CREATE + ' Zonegroup',
         click: () => this.openModal('zonegroup'),
         disable: () => this.getDisable(),
         visible: () => !this.showMigrateAndReplicationActions
@@ -607,11 +606,11 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
         }
       });
     } else if (node?.data?.type === 'zonegroup') {
-      this.modalRef = this.modalService.show(RgwMultisiteZonegroupDeletionFormComponent, {
+      this.cdsModalService.show(RgwMultisiteZonegroupDeletionFormComponent, {
         zonegroup: node.data
       });
     } else if (node?.data?.type === 'zone') {
-      this.modalRef = this.modalService.show(RgwMultisiteZoneDeletionFormComponent, {
+      this.cdsModalService.show(RgwMultisiteZoneDeletionFormComponent, {
         zone: node.data
       });
     }

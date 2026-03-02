@@ -35,7 +35,8 @@ export interface CrushmapNode {
 @Component({
   selector: 'cd-crushmap',
   templateUrl: './crushmap.component.html',
-  styleUrls: ['./crushmap.component.scss']
+  styleUrls: ['./crushmap.component.scss'],
+  standalone: false
 })
 export class CrushmapComponent implements OnDestroy, OnInit {
   private sub = new Subscription();

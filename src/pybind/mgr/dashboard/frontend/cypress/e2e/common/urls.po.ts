@@ -6,7 +6,7 @@ export class UrlsCollection extends PageHelper {
     welcome: { url: '#/expand-cluster?welcome=true', id: 'cd-create-cluster' },
 
     // Landing page
-    dashboard: { url: '#/dashboard', id: 'cd-dashboard' },
+    overview: { url: '#/overview', id: 'cd-dashboard' },
 
     // Hosts
     hosts: { url: '#/hosts', id: 'cd-hosts' },

@@ -7,13 +7,15 @@ import _ from 'lodash';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdFormModalFieldConfig } from '~/app/shared/models/cd-form-modal-field-config';
+import { ComboBoxItem } from '~/app/shared/models/combo-box.model';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 
 @Component({
   selector: 'cd-form-modal',
   templateUrl: './form-modal.component.html',
-  styleUrls: ['./form-modal.component.scss']
+  styleUrls: ['./form-modal.component.scss'],
+  standalone: false
 })
 export class FormModalComponent extends BaseModal implements OnInit {
   // Internal
@@ -135,5 +137,16 @@ export class FormModalComponent extends BaseModal implements OnInit {
     const field = this.formGroup.get(name);
     field.setAsyncValidators(validator);
     field.updateValueAndValidity();
+  }
+
+  onLabelsUpdated(field: CdFormModalFieldConfig, updatedItems: ComboBoxItem[]) {
+    const control = this.formGroup.get(field.name);
+    const currentValue: string[] = control?.value || [];
+    // Sync selected state based on current form control value to preserve existing selections
+    const itemsWithSelection: ComboBoxItem[] = updatedItems.map((item: ComboBoxItem) => ({
+      ...item,
+      selected: currentValue.includes(item.content)
+    }));
+    field.typeConfig.options = itemsWithSelection;
   }
 }

@@ -16,7 +16,7 @@ Beast
 .. versionadded:: Mimic
 
 The ``beast`` frontend uses the Boost.Beast library for HTTP parsing
-and the Boost.Asio library for asynchronous network i/o.
+and the Boost.Asio library for asynchronous network I/O.
 
 Options
 -------
@@ -73,7 +73,7 @@ Options
               reload fails, the previous context continues to be used.
 
 :Type: Integer
-:Default: 0
+:Default: ``0``
 
 ``ssl_options``
 
@@ -101,7 +101,7 @@ Options
 ``ssl_ciphers``
 
 :Description: Optional list of one or more cipher strings separated by colons.
-              The format of the string is described in openssl's ciphers(1)
+              The format of the string is described in OpenSSL's ciphers(1)
               manual.
 
 :Type: String

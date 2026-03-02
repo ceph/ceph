@@ -480,7 +480,8 @@ void PG::prepare_write(pg_info_t &info,
 std::pair<ghobject_t, bool>
 PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
 {
-  logger().info("removing pg {}", pgid);
+  LOG_PREFIX(PG::do_delete_work);
+  DEBUGDPP("removing pg {}", *this, pgid);
   auto fut = interruptor::make_interruptible(
     shard_services.get_store().list_objects(
       coll_ref,
@@ -490,7 +491,7 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
 
   auto [objs_to_rm, next] = fut.get();
   if (objs_to_rm.empty()) {
-    logger().info("all objs removed, removing coll for {}", pgid);
+    DEBUGDPP("all objs removed, removing coll for {}", *this, pgid);
     t.remove(coll_ref->get_cid(), pgid.make_snapmapper_oid());
     t.remove(coll_ref->get_cid(), pgmeta_oid);
     t.remove_collection(coll_ref->get_cid());
@@ -500,17 +501,19 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
     });
     return {next, false};
   } else {
+    DEBUGDPP("pg {}, removing {} objects in this batch",
+        *this, pgid, objs_to_rm.size());
     for (auto &obj : objs_to_rm) {
       if (obj == pgmeta_oid || obj.is_internal_pg_local()) {
         continue;
       }
-      logger().trace("pg {}, removing obj {}", pgid, obj);
+      TRACEDPP("pg {}, removing obj {}", *this, pgid, obj);
       t.remove(coll_ref->get_cid(), obj);
     }
     t.register_on_commit(
-      new LambdaContext([this](int r) {
+      new LambdaContext([this, FNAME](int r) {
       ceph_assert(r == 0);
-      logger().trace("triggering more pg delete {}", pgid);
+      DEBUGDPP("triggering more pg delete {}", *this, pgid);
       (void) shard_services.start_operation<LocalPeeringEvent>(
         this,
         pg_whoami,
@@ -1388,7 +1391,7 @@ void PG::log_operation(
 
   if (!is_primary()) { // && !is_ec_pg()
     DEBUGDPP("on replica, clearing obc", *this);
-    replica_clear_repop_obc(logv);
+    clear_repop_obc(logv);
   }
   if (!logv.empty()) {
     scrubber.on_log_update(logv.rbegin()->version);
@@ -1402,9 +1405,9 @@ void PG::log_operation(
                            false);
 }
 
-void PG::replica_clear_repop_obc(
+void PG::clear_repop_obc(
   const std::vector<pg_log_entry_t> &logv) {
-  LOG_PREFIX(PG::replica_clear_repop_obc);
+  LOG_PREFIX(PG::clear_repop_obc);
   DEBUGDPP("clearing obc for {} log entries", *this, logv.size());
   for (auto &&e: logv) {
     DEBUGDPP("clearing entry for {} from: {} to: {}",
@@ -1615,8 +1618,7 @@ bool PG::can_discard_op(const MOSDOp& m) const {
     return true;
   }
 
-  if ((m.get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-                        CEPH_OSD_FLAG_LOCALIZE_READS))
+  if ((m.get_flags() & CEPH_OSD_FLAGS_DIRECT_READ)
     && !is_primary()
     && (m.get_map_epoch() <
         peering_state.get_info().history.same_interval_since))

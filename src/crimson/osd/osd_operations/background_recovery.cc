@@ -37,7 +37,7 @@ BackgroundRecoveryT<T>::BackgroundRecoveryT(
   Ref<PG> pg,
   ShardServices &ss,
   epoch_t epoch_started,
-  crimson::osd::scheduler::scheduler_class_t scheduler_class,
+  SchedulerClass scheduler_class,
   float delay)
   : pg(pg),
     epoch_started(epoch_started),
@@ -94,7 +94,7 @@ UrgentRecovery::UrgentRecovery(
     ShardServices& ss,
     epoch_t epoch_started)
   : BackgroundRecoveryT{pg, ss, epoch_started,
-                        crimson::osd::scheduler::scheduler_class_t::immediate},
+                        SchedulerClass::immediate},
     soid{soid}, need(need)
 {
 }
@@ -147,7 +147,7 @@ PglogBasedRecovery::PglogBasedRecovery(
       std::move(pg),
       ss,
       epoch_started,
-      crimson::osd::scheduler::scheduler_class_t::background_recovery,
+      SchedulerClass::background_recovery,
       delay)
 {}
 

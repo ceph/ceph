@@ -21,7 +21,7 @@ describe('ModuleStatusGuardService', () => {
   let ngZone: NgZone;
   let mgrModuleService: MgrModuleService;
 
-  @Component({ selector: 'cd-foo', template: '' })
+  @Component({ selector: 'cd-foo', template: '', standalone: false })
   class FooComponent {}
 
   const fakeService = {

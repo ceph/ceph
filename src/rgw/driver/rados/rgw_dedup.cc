@@ -418,10 +418,11 @@ namespace rgw::dedup {
                                                const rgw::sal::Bucket *p_bucket,
                                                const parsed_etag_t    *p_parsed_etag,
                                                const std::string      &obj_name,
+                                               const std::string      &instance,
                                                uint64_t                obj_size,
                                                const std::string      &storage_class)
   {
-    disk_record_t rec(p_bucket, obj_name, p_parsed_etag, obj_size, storage_class);
+    disk_record_t rec(p_bucket, obj_name, p_parsed_etag, instance, obj_size, storage_class);
     // First pass using only ETAG and size taken from bucket-index
     rec.s.flags.set_fastlane();
 
@@ -464,7 +465,9 @@ namespace rgw::dedup {
                        << "::ETAG=" << std::hex << p_rec->s.md5_high
                        << p_rec->s.md5_low << std::dec << dendl;
 
-    int ret = p_table->add_entry(&key, block_id, rec_id, has_shared_manifest);
+    int ret = p_table->add_entry(&key, block_id, rec_id, has_shared_manifest,
+                                 &p_stats->small_objs_stat, &p_stats->big_objs_stat,
+                                 &p_stats->dup_head_bytes_estimate);
     if (ret == 0) {
       p_stats->loaded_objects ++;
       ldpp_dout(dpp, 20) << __func__ << "::" << p_rec->bucket_name << "/"
@@ -682,10 +685,10 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   static int get_ioctx(const DoutPrefixProvider* const dpp,
                        rgw::sal::Driver* driver,
-                       RGWRados* rados,
+                       rgw::sal::RadosStore* store,
                        const disk_record_t *p_rec,
                        librados::IoCtx *p_ioctx,
-                       std::string *oid)
+                       std::string *p_oid)
   {
     unique_ptr<rgw::sal::Bucket> bucket;
     {
@@ -698,23 +701,12 @@ namespace rgw::dedup {
       }
     }
 
-    build_oid(p_rec->bucket_id, p_rec->obj_name, oid);
-    //ldpp_dout(dpp, 0) << __func__ << "::OID=" << oid << " || bucket_id=" << bucket_id << dendl;
-    rgw_pool data_pool;
-    rgw_obj obj{bucket->get_key(), *oid};
-    if (!rados->get_obj_data_pool(bucket->get_placement_rule(), obj, &data_pool)) {
-      ldpp_dout(dpp, 1) << __func__ << "::failed to get data pool for bucket "
-                        << bucket->get_name()  << dendl;
-      return -EIO;
-    }
-    int ret = rgw_init_ioctx(dpp, rados->get_rados_handle(), data_pool, *p_ioctx);
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to get ioctx from data pool:"
-                        << data_pool.to_str() << dendl;
-      return -EIO;
-    }
-
-    return 0;
+    string dummy_locator;
+    const rgw_obj_index_key key(p_rec->obj_name, p_rec->instance);
+    rgw_obj obj(bucket->get_key(), key);
+    get_obj_bucket_and_oid_loc(obj, *p_oid, dummy_locator);
+    RGWBucketInfo& bucket_info = bucket->get_info();
+    return store->get_obj_head_ioctx(dpp, bucket_info, obj, p_ioctx);
   }
 
   //---------------------------------------------------------------------------
@@ -786,8 +778,8 @@ namespace rgw::dedup {
 
     std::string src_oid, tgt_oid;
     librados::IoCtx src_ioctx, tgt_ioctx;
-    int ret1 = get_ioctx(dpp, driver, rados, p_src_rec, &src_ioctx, &src_oid);
-    int ret2 = get_ioctx(dpp, driver, rados, p_tgt_rec, &tgt_ioctx, &tgt_oid);
+    int ret1 = get_ioctx(dpp, driver, store, p_src_rec, &src_ioctx, &src_oid);
+    int ret2 = get_ioctx(dpp, driver, store, p_tgt_rec, &tgt_ioctx, &tgt_oid);
     if (unlikely(ret1 != 0 || ret2 != 0)) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: failed get_ioctx()" << dendl;
       return (ret1 ? ret1 : ret2);
@@ -1071,6 +1063,24 @@ namespace rgw::dedup {
       return 0;
     }
 
+    // limit the number of ref_count in the SRC-OBJ to MAX_COPIES_PER_OBJ
+    // check <= because we also count the SRC-OBJ
+    if (src_val.get_count() <= MAX_COPIES_PER_OBJ) {
+      disk_block_id_t src_block_id = src_val.get_src_block_id();
+      record_id_t     src_rec_id   = src_val.get_src_rec_id();
+      // update the number of identical copies we got
+      ldpp_dout(dpp, 20) << __func__ << "::Obj " << p_rec->obj_name
+                         << " has " << src_val.get_count() << " copies" << dendl;
+      p_table->inc_count(&key_from_bucket_index, src_block_id, src_rec_id);
+    }
+    else {
+      // We don't want more than @MAX_COPIES_PER_OBJ to prevent OMAP overload
+      p_stats->skipped_too_many_copies++;
+      ldpp_dout(dpp, 10) << __func__ << "::Obj " << p_rec->obj_name
+                         << " has too many copies already" << dendl;
+      return 0;
+    }
+
     // Every object after this point was counted as a dedup potential
     // If we conclude that it can't be dedup it should be accounted for
     rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
@@ -1083,8 +1093,8 @@ namespace rgw::dedup {
                          << cpp_strerror(-ret) << dendl;
       return 0;
     }
-
-    unique_ptr<rgw::sal::Object> p_obj = bucket->get_object(p_rec->obj_name);
+    const rgw_obj_index_key roi_key(p_rec->obj_name, p_rec->instance);
+    unique_ptr<rgw::sal::Object> p_obj = bucket->get_object(roi_key);
     if (unlikely(!p_obj)) {
       // could happen when the object is removed between passes
       p_stats->ingress_failed_get_object++;
@@ -1190,7 +1200,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   static int write_blake3_object_attribute(const DoutPrefixProvider* const dpp,
                                            rgw::sal::Driver* driver,
-                                           RGWRados* rados,
+                                           rgw::sal::RadosStore *store,
                                            const disk_record_t *p_rec)
   {
     bufferlist etag_bl;
@@ -1203,7 +1213,7 @@ namespace rgw::dedup {
 
     std::string oid;
     librados::IoCtx ioctx;
-    int ret = get_ioctx(dpp, driver, rados, p_rec, &ioctx, &oid);
+    int ret = get_ioctx(dpp, driver, store, p_rec, &ioctx, &oid);
     if (unlikely(ret != 0)) {
       ldpp_dout(dpp, 5) << __func__ << "::ERR: failed get_ioctx()" << dendl;
       return ret;
@@ -1260,8 +1270,8 @@ namespace rgw::dedup {
       return 0;
     }
 
-    disk_block_id_t src_block_id = src_val.block_idx;
-    record_id_t src_rec_id = src_val.rec_id;
+    disk_block_id_t src_block_id = src_val.get_src_block_id();
+    record_id_t     src_rec_id   = src_val.get_src_rec_id();
     if (block_id == src_block_id && rec_id == src_rec_id) {
       // the table entry point to this record which means it is a dedup source so nothing to do
       p_stats->skipped_source_record++;
@@ -1298,10 +1308,11 @@ namespace rgw::dedup {
                        << "/" << src_rec.obj_name << dendl;
     // verify that SRC and TGT records don't refer to the same physical object
     // This could happen in theory if we read the same objects twice
-    if (src_rec.obj_name == p_tgt_rec->obj_name && src_rec.bucket_name == p_tgt_rec->bucket_name) {
+    if (src_rec.ref_tag == p_tgt_rec->ref_tag) {
       p_stats->duplicate_records++;
-      ldpp_dout(dpp, 10) << __func__ << "::WARN: Duplicate records for object="
-                         << src_rec.obj_name << dendl;
+      ldpp_dout(dpp, 10) << __func__ << "::WARN::REF_TAG::Duplicate records for "
+                         << src_rec.obj_name << "::" << src_rec.ref_tag << "::"
+                         << p_tgt_rec->obj_name << dendl;
       return 0;
     }
 
@@ -1320,11 +1331,11 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 10) << __func__ << "::HASH mismatch" << dendl;
       // TBD: set hash attributes on head objects to save calc next time
       if (src_rec.s.flags.hash_calculated()) {
-        write_blake3_object_attribute(dpp, driver, rados, &src_rec);
+        write_blake3_object_attribute(dpp, driver, store, &src_rec);
         p_stats->set_hash_attrs++;
       }
       if (p_tgt_rec->s.flags.hash_calculated()) {
-        write_blake3_object_attribute(dpp, driver, rados, p_tgt_rec);
+        write_blake3_object_attribute(dpp, driver, store, p_tgt_rec);
         p_stats->set_hash_attrs++;
       }
       return 0;
@@ -1582,8 +1593,8 @@ namespace rgw::dedup {
     }
 
     return add_disk_rec_from_bucket_idx(disk_arr, p_bucket, &parsed_etag,
-                                        entry.key.name, entry.meta.size,
-                                        storage_class);
+                                        entry.key.name, entry.key.instance,
+                                        entry.meta.size, storage_class);
   }
 
   //---------------------------------------------------------------------------
@@ -1682,15 +1693,21 @@ namespace rgw::dedup {
       obj_count += result.dir.m.size();
       for (auto& entry : result.dir.m) {
         const rgw_bucket_dir_entry& dirent = entry.second;
+        // make sure to advance marker in all cases!
+        marker = dirent.key;
+        ldpp_dout(dpp, 20) << __func__ << "::dirent = " << bucket->get_name() << "/"
+                           << marker.name << "::instance=" << marker.instance << dendl;
         if (unlikely((!dirent.exists && !dirent.is_delete_marker()) || !dirent.pending_map.empty())) {
           // TBD: should we bailout ???
-          ldpp_dout(dpp, 1) << __func__ << "::ERR: calling check_disk_state bucket="
-                            << bucket->get_name() << " entry=" << dirent.key << dendl;
-          // make sure we're advancing marker
-          marker = dirent.key;
+          ldpp_dout(dpp, 1) << __func__ << "::ERR: bad dirent::" << bucket->get_name()
+                            << "/" << marker.name << "::instance=" << marker.instance << dendl;
           continue;
         }
-        marker = dirent.key;
+        else if (unlikely(dirent.is_delete_marker())) {
+          ldpp_dout(dpp, 20) << __func__ << "::skip delete_marker::" << bucket->get_name()
+                             << "/" << marker.name << "::instance=" << marker.instance << dendl;
+          continue;
+        }
         ret = ingress_bucket_idx_single_object(disk_arr, bucket, dirent, p_worker_stats);
       }
       // TBD: advance marker only once here!
@@ -1797,8 +1814,7 @@ namespace rgw::dedup {
         return -ECANCELED;
       }
     }
-    p_table->count_duplicates(&p_stats->small_objs_stat, &p_stats->big_objs_stat,
-                              &p_stats->dup_head_bytes_estimate);
+    p_table->count_duplicates(&p_stats->small_objs_stat, &p_stats->big_objs_stat);
     display_table_stat_counters(dpp, p_stats);
 
     ldpp_dout(dpp, 10) << __func__ << "::MD5 Loop::" << d_ctl.dedup_type << dendl;

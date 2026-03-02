@@ -14,10 +14,6 @@
 #include "cls/rgw_gc/cls_rgw_gc_const.h"
 #include "cls/queue/cls_queue_src.h"
 
-#include "common/ceph_context.h"
-#include "global/global_context.h"
-
-
 #define GC_LIST_DEFAULT_MAX 128
 
 using std::string;
@@ -51,7 +47,8 @@ static int cls_rgw_gc_queue_init(cls_method_context_t hctx, bufferlist *in, buff
   CLS_LOG(10, "INFO: cls_rgw_gc_queue_init: queue size is %lu\n", op.size);
 
   init_op.queue_size = op.size;
-  init_op.max_urgent_data_size = g_ceph_context->_conf->rgw_gc_max_deferred_entries_size;
+  const auto& conf = cls_get_config(hctx);
+  init_op.max_urgent_data_size = conf->rgw_gc_max_deferred_entries_size;
   encode(urgent_data, init_op.bl_urgent_data);
 
   return queue_init(hctx, init_op);

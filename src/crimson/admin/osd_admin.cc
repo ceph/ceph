@@ -347,7 +347,7 @@ public:
 	seastar::scollectd::get_value_map(),
 	f,
 	[prefix](const auto &full_name) {
-	  return prefix.empty() || full_name.compare(0, prefix.size(), prefix) != 0;
+	  return prefix.empty() || full_name.compare(0, prefix.size(), prefix) == 0;
 	});
     });
     fref->close_section();

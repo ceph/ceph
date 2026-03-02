@@ -310,6 +310,7 @@ create the first two OSDs with the short form procedure, execute the following f
 #. Create the OSD. ::
 
 	copy /var/lib/ceph/bootstrap-osd/ceph.keyring from monitor node (mon-node1) to /var/lib/ceph/bootstrap-osd/ceph.keyring on osd node (osd-node1)
+	copy /etc/ceph/ceph.conf from monitor node (mon-node1) to /etc/ceph/ceph.conf on osd node (osd-node1)
 	ssh {osd node}
 	sudo ceph-volume lvm create --data {data-path}
 

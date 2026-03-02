@@ -16,7 +16,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-upgrade-start-modal.component',
   templateUrl: './upgrade-start-modal.component.html',
-  styleUrls: ['./upgrade-start-modal.component.scss']
+  styleUrls: ['./upgrade-start-modal.component.scss'],
+  standalone: false
 })
 export class UpgradeStartModalComponent implements OnInit {
   permission: Permission;

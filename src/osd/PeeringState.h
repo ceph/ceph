@@ -2439,7 +2439,7 @@ public:
   bool needs_recovery() const;
   bool needs_backfill() const;
 
-  bool can_serve_replica_read(const hobject_t &hoid);
+  bool can_serve_read(const hobject_t &hoid);
 
   /**
    * Returns whether the current acting set is able to go active

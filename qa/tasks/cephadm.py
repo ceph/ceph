@@ -21,7 +21,7 @@ from teuthology import packaging
 from teuthology.orchestra import run
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
-from teuthology.exceptions import ConfigError, CommandFailedError
+from teuthology.exceptions import ConfigError, CommandFailedError, MaxWhileTries
 from textwrap import dedent
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from tasks.daemonwatchdog import DaemonWatchdog
@@ -393,15 +393,15 @@ def ceph_log(ctx, config):
             """
             args = [
                 'sudo',
-                'egrep', pattern,
+                'grep', '-E', pattern,
                 '/var/log/ceph/{fsid}/ceph.log'.format(
                     fsid=fsid),
             ]
             if only_match:
-                args.extend([run.Raw('|'), 'egrep', '|'.join(only_match)])
+                args.extend([run.Raw('|'), 'grep', '-E', '|'.join(only_match)])
             if excludes:
                 for exclude in excludes:
-                    args.extend([run.Raw('|'), 'egrep', '-v', exclude])
+                    args.extend([run.Raw('|'), 'grep', '-E', '-v', exclude])
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
@@ -804,11 +804,40 @@ def ceph_bootstrap(ctx, config):
                 'ceph', 'orch', 'host', 'add',
                 remote.shortname
             ])
-            r = _shell(ctx, cluster_name, bootstrap_remote,
-                       ['ceph', 'orch', 'host', 'ls', '--format=json'],
-                       stdout=StringIO())
-            hosts = [node['hostname'] for node in json.loads(r.stdout.getvalue())]
-            assert remote.shortname in hosts
+            try:
+                with contextutil.safe_while(sleep=5, tries=10) as proceed:
+                    while proceed():
+                        # check host has been added
+                        r = _shell(ctx, cluster_name, bootstrap_remote,
+                                   ['ceph', 'orch', 'host', 'ls', '--format=json'],
+                                   stdout=StringIO())
+                        hosts = [node['hostname'] for node in json.loads(r.stdout.getvalue())]
+                        # check host has been given config-key store entry
+                        r = _shell(ctx, cluster_name, bootstrap_remote,
+                                   ['ceph', 'config-key', 'ls'],
+                                   stdout=StringIO())
+                        key_entries = r.stdout.getvalue()
+                        # check host has been added to config-key inventory entry
+                        r = _shell(ctx, cluster_name, bootstrap_remote,
+                                   ['ceph', 'config-key', 'get', 'mgr/cephadm/inventory'],
+                                   stdout=StringIO())
+                        stored_inventory = json.loads(r.stdout.getvalue())
+                        if (
+                            remote.shortname in hosts
+                            and  remote.shortname in key_entries
+                            and remote.shortname in stored_inventory
+                        ):
+                            break
+                        else:
+                            log.info(
+                                f'Host add for {remote.shortname} incomplete\n'
+                                f'Host in host ls: {str(remote.shortname in hosts)}\n'
+                                f'Host got config-key entry: {str(remote.shortname in key_entries)}\n'
+                                f'Host in cephadm inventory config-key entry: {str(remote.shortname in stored_inventory)}\n'
+                            )
+            except MaxWhileTries as e:
+                log.error(f'Hit timeout while adding host {remote.shortname}: {str(e)}')
+                raise e
 
         yield
 
@@ -1524,14 +1553,15 @@ def apply(ctx, config):
 
 
 
-def _orch_ls(ctx, cluster_name):
+def _orch_ls(ctx, cluster_name, refresh=False):
+    args = ['ceph', 'orch', 'ls', '-f', 'json']
+    if refresh:
+        args += ['--refresh']
     r = _shell(
         ctx=ctx,
         cluster_name=cluster_name,
         remote=ctx.ceph[cluster_name].bootstrap_remote,
-        args=[
-            'ceph', 'orch', 'ls', '-f', 'json',
-        ],
+        args=args,
         stdout=StringIO(),
     )
     return json.loads(r.stdout.getvalue())
@@ -1545,11 +1575,13 @@ def wait_for_service(ctx, config):
         - cephadm.wait_for_service:
             service: rgw.foo
             timeout: 60    # defaults to 300
+            refresh: True  # defaults to False
 
     """
     cluster_name = config.get('cluster', 'ceph')
     timeout = config.get('timeout', 300)
     service = config.get('service')
+    refresh = config.get('refresh', False)
     assert service
 
     log.info(
@@ -1557,7 +1589,7 @@ def wait_for_service(ctx, config):
     )
     with contextutil.safe_while(sleep=1, tries=timeout) as proceed:
         while proceed():
-            j = _orch_ls(ctx, cluster_name)
+            j = _orch_ls(ctx, cluster_name, refresh)
             svc = None
             for s in j:
                 if s['service_name'] == service:
@@ -1965,19 +1997,20 @@ def task(ctx, config):
                             "section.")
         sha1 = config.get('sha1')
         flavor = config.get('flavor', 'default')
+        distro_suffix = config.get('distro-suffix', None)
 
         if any(_ in container_image_name for _ in (':', '@')):
             log.info('Provided image contains tag or digest, using it as is')
             ctx.ceph[cluster_name].image = container_image_name
-        elif sha1:
-            if flavor == "crimson-debug" or flavor == "crimson-release":
-                ctx.ceph[cluster_name].image = container_image_name + ':' + sha1 + '-' + flavor
-            else:
-                ctx.ceph[cluster_name].image = container_image_name + ':' + sha1
-            ref = sha1
         else:
-            # fall back to using the branch value
+            if sha1:
+                ref = sha1
             ctx.ceph[cluster_name].image = container_image_name + ':' + ref
+
+            if distro_suffix is not None:
+                ctx.ceph[cluster_name].image += '-' + distro_suffix
+            if flavor == "crimson-debug" or flavor == "crimson-release":
+                ctx.ceph[cluster_name].image += '-' + flavor
     log.info('Cluster image is %s' % ctx.ceph[cluster_name].image)
 
 

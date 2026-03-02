@@ -9,7 +9,7 @@ Placement Targets
 
 .. versionadded:: Jewel
 
-Placement targets control which `Pools`_ are associated with a particular
+Placement targets control which :ref:`radosgw-pools` are associated with a particular
 bucket. A bucket's placement target is selected on creation, and cannot be
 modified. The ``radosgw-admin bucket stats`` command will display its
 ``placement_rule``.
@@ -271,4 +271,3 @@ names be used with Ceph, including ``INTELLIGENT-TIERING``, ``STANDARD_IA``,
 ``CHEAPNDEEP`` are accepted by Ceph but might not be by some clients and
 libraries.
 
-.. _`Pools`: ../pools

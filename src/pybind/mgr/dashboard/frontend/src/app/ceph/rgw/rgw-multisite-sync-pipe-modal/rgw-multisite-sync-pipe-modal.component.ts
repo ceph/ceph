@@ -19,7 +19,7 @@ import { ComboBoxItem } from '~/app/shared/models/combo-box.model';
 
 const ALL_ZONES = $localize`All zones (*)`;
 const ALL_BUCKET_SELECTED_HELP_TEXT =
-  'If no value is provided, all the buckets in the zone group will be selected.';
+  'If no value is provided, all the buckets in the zonegroup will be selected.';
 
 interface PipeParams {
   source: { zones: string[]; bucket: string };
@@ -36,7 +36,8 @@ interface GroupParams {
 @Component({
   selector: 'cd-rgw-multisite-sync-pipe-modal',
   templateUrl: './rgw-multisite-sync-pipe-modal.component.html',
-  styleUrls: ['./rgw-multisite-sync-pipe-modal.component.scss']
+  styleUrls: ['./rgw-multisite-sync-pipe-modal.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteSyncPipeModalComponent extends BaseModal implements OnInit {
   pipeForm: CdFormGroup;

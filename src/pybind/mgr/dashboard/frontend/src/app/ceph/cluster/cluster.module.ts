@@ -17,11 +17,18 @@ import {
   ToggletipModule,
   IconModule,
   IconService,
-  TagModule
+  TagModule,
+  SelectModule,
+  LayoutModule,
+  NumberModule,
+  FileUploaderModule,
+  TabsModule,
+  RadioModule
 } from 'carbon-components-angular';
 import Analytics from '@carbon/icons/es/analytics/16';
 import CloseFilled from '@carbon/icons/es/close--filled/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
+import Connect from '@carbon/icons/es/connect/32';
 import {
   NgbActiveModal,
   NgbDatepickerModule,
@@ -72,6 +79,7 @@ import { SilenceListComponent } from './prometheus/silence-list/silence-list.com
 import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal/silence-matcher-modal.component';
 import { PlacementPipe } from './services/placement.pipe';
 import { ServiceDaemonListComponent } from './services/service-daemon-list/service-daemon-list.component';
+import { ServiceCertificateDetailsComponent } from './services/service-cert-details/service-certificate-details.component';
 import { ServiceDetailsComponent } from './services/service-details/service-details.component';
 import { ServiceFormComponent } from './services/service-form/service-form.component';
 import { ServicesComponent } from './services/services.component';
@@ -119,7 +127,13 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     ToggletipModule,
     IconModule,
     TagModule,
-    TextLabelListComponent
+    TabsModule,
+    TextLabelListComponent,
+    SelectModule,
+    LayoutModule,
+    NumberModule,
+    FileUploaderModule,
+    RadioModule
   ],
   declarations: [
     MonitorComponent,
@@ -152,6 +166,7 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     ActiveAlertListComponent,
     ServiceDetailsComponent,
     ServiceDaemonListComponent,
+    ServiceCertificateDetailsComponent,
     TelemetryComponent,
     PrometheusTabsComponent,
     ServiceFormComponent,
@@ -172,6 +187,6 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
 })
 export class ClusterModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([Analytics, CloseFilled, ProgressBarRoundIcon]);
+    this.iconService.registerAll([Analytics, CloseFilled, ProgressBarRoundIcon, Connect]);
   }
 }

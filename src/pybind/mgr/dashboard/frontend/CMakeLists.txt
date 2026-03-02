@@ -69,7 +69,7 @@ else(WITH_SYSTEM_NPM)
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
-    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv --verbose ${node_mirror_opt} -p --node=20.18.1
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv --verbose ${node_mirror_opt} -p --node=22.21.1
     # ensure that the files that nodeenv unpacks from tarballs are owned by
     # the current user. This can be an issue due to the node tarball using
     # uid 1000 and running the unpack in a id-mapped namespace (container)

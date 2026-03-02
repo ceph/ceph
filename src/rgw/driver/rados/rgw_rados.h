@@ -173,11 +173,6 @@ class RGWObjectCtx {
   std::map<rgw_obj, RGWObjStateManifest> objs_state;
 public:
   explicit RGWObjectCtx(rgw::sal::Driver* _driver) : driver(_driver) {}
-  RGWObjectCtx(RGWObjectCtx& _o) {
-    std::unique_lock wl{lock};
-    this->driver = _o.driver;
-    this->objs_state = _o.objs_state;
-  }
 
   rgw::sal::Driver* get_driver() {
     return driver;
@@ -191,6 +186,15 @@ public:
   void invalidate(const rgw_obj& obj);
 };
 
+// Enforce at compile time that RGWObjectCtx is neither copyable nor movable
+static_assert(!std::is_copy_constructible<RGWObjectCtx>::value,
+              "RGWObjectCtx must not be copy-constructed");
+static_assert(!std::is_copy_assignable<RGWObjectCtx>::value,
+              "RGWObjectCtx must not be copy-assigned");
+static_assert(!std::is_move_constructible<RGWObjectCtx>::value,
+              "RGWObjectCtx must not be move-constructed");
+static_assert(!std::is_move_assignable<RGWObjectCtx>::value,
+              "RGWObjectCtx must not be move-assigned");
 
 struct RGWRawObjState {
   rgw_raw_obj obj;
@@ -341,6 +345,7 @@ class RGWRados
   int open_objexp_pool_ctx(const DoutPrefixProvider *dpp);
   int open_reshard_pool_ctx(const DoutPrefixProvider *dpp);
   int open_notif_pool_ctx(const DoutPrefixProvider *dpp);
+  int open_logging_pool_ctx(const DoutPrefixProvider *dpp);
 
   int open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx&  io_ctx,
 		    bool mostly_omap, bool bulk);
@@ -361,6 +366,7 @@ class RGWRados
   bool run_sync_thread{false};
   bool run_reshard_thread{false};
   bool run_notification_thread{false};
+  bool run_bucket_logging_thread{false};
 
   RGWMetaNotifier* meta_notifier{nullptr};
   RGWDataNotifier* data_notifier{nullptr};
@@ -436,6 +442,7 @@ protected:
   librados::IoCtx objexp_pool_ctx;
   librados::IoCtx reshard_pool_ctx;
   librados::IoCtx notif_pool_ctx;     // .rgw.notif
+  librados::IoCtx logging_pool_ctx;     // .rgw.logging
 
   bool pools_initialized{false};
 
@@ -523,6 +530,11 @@ public:
     return *this;
   }
 
+  RGWRados& set_run_bucket_logging_thread(bool _run_bucket_logging_thread) {
+    run_bucket_logging_thread = _run_bucket_logging_thread;
+    return *this;
+  }
+
   librados::IoCtx* get_lc_pool_ctx() {
     return &lc_pool_ctx;
   }
@@ -537,6 +549,10 @@ public:
   
   librados::IoCtx& get_notif_pool_ctx() {
     return notif_pool_ctx;
+  }
+
+  librados::IoCtx& get_logging_pool_ctx() {
+    return logging_pool_ctx;
   }
   
   void set_context(CephContext *_cct) {
@@ -1235,6 +1251,7 @@ public:
                std::string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
+               rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
                jspan_context& trace);
@@ -1251,6 +1268,7 @@ public:
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
                std::string *petag,
+               rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
                bool log_op = true);

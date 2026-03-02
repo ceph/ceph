@@ -95,7 +95,6 @@ set(cls_refcount_srcs
   refcount/cls_refcount_ops.cc
   ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
 add_library(cls_refcount SHARED ${cls_refcount_srcs})
-target_link_libraries(cls_refcount json_spirit)
 set_target_properties(cls_refcount PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
@@ -198,7 +197,7 @@ if (WITH_RADOSGW)
     rgw/cls_rgw_types.cc
     ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
   add_library(cls_rgw SHARED ${cls_rgw_srcs})
-  target_link_libraries(cls_rgw ${FMT_LIB} json_spirit)
+  target_link_libraries(cls_rgw ${FMT_LIB})
   target_include_directories(cls_rgw
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
@@ -252,8 +251,7 @@ if (NOT WIN32)
     CXX_VISIBILITY_PRESET hidden)
   install(TARGETS cls_lua DESTINATION ${cls_dir})
   target_link_libraries(cls_lua
-      ${LUA_LIBRARIES}
-      json_spirit)
+      ${LUA_LIBRARIES})
   target_include_directories(cls_lua PRIVATE "${LUA_INCLUDE_DIR}")
 endif (NOT WIN32)
 

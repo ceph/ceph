@@ -16,6 +16,7 @@
 #include "WorkQueue.h"
 #include "include/compat.h"
 #include "common/errno.h"
+#include "common/ceph_time.h"
 
 #include <sstream>
 
@@ -45,8 +46,19 @@ void ThreadPool::TPHandle::suspend_tp_timeout()
 
 void ThreadPool::TPHandle::reset_tp_timeout()
 {
-  cct->get_heartbeat_map()->reset_timeout(
-    hb, grace, suicide_grace);
+  const auto now = ceph::coarse_mono_clock::now();
+  if (now + grace - std::chrono::milliseconds(500) <
+      hb->timeout.load(std::memory_order_relaxed)) {
+    // Don't reset the timeout until 0.5 seconds has passed indiciating
+    // the thread is actually slow
+    return;
+  }
+  if (sharded_pool) {
+    sharded_pool->reset_tp_timeout(hb, grace, suicide_grace);
+  } else {
+    cct->get_heartbeat_map()->reset_timeout(
+      hb, grace, suicide_grace);
+  }
 }
 
 ThreadPool::~ThreadPool()
@@ -247,18 +259,39 @@ void ThreadPool::drain(WorkQueue_* wq)
 }
 
 ShardedThreadPool::ShardedThreadPool(CephContext *pcct_, std::string nm, std::string tn,
-				     uint32_t pnum_threads):
+				     uint32_t pnum_threads, uint32_t pnum_shards):
   cct(pcct_),
   name(std::move(nm)),
   thread_name(std::move(tn)),
   lockname(name + "::lock"),
   shardedpool_lock(ceph::make_mutex(lockname)),
   num_threads(pnum_threads),
+  num_shards(pnum_shards),
   num_paused(0),
   num_drained(0),
   wq(NULL) {}
 
-void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
+void ShardedThreadPool::reset_tp_timeout(heartbeat_handle_d *hb,
+                                         ceph::timespan grace,
+                                         ceph::timespan suicide_grace)
+{
+  // For sharded pools reset the timeout for the set of shards
+  // as shards are likely to share locks
+  std::lock_guard lck(shardedpool_lock);
+  uint32_t thread_index = hb_to_thread_index[hb];
+  uint32_t shard_index = thread_index % num_shards;
+  for (uint32_t index = shard_index;
+       index < num_threads;
+       index += num_shards) {
+    auto shardhb = thread_index_to_hb.find(index);
+    if (shardhb != thread_index_to_hb.end()) {
+      cct->get_heartbeat_map()->reset_timeout(
+        shardhb->second, grace, suicide_grace);
+    }
+  }
+}
+
+void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index, uint32_t shard_index)
 {
   ceph_assert(wq != NULL);
   ldout(cct,10) << "worker start" << dendl;
@@ -266,6 +299,11 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
   std::stringstream ss;
   ss << name << " thread " << (void *)pthread_self();
   auto hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
+  {
+      std::lock_guard lck(shardedpool_lock);
+      hb_to_thread_index[hb] = thread_index;
+      thread_index_to_hb[thread_index] = hb;
+  }
 
   while (!stop_threads) {
     if (pause_threads) {
@@ -285,7 +323,7 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
     }
     if (drain_threads) {
       std::unique_lock ul(shardedpool_lock);
-      if (wq->is_shard_empty(thread_index)) {
+      if (wq->is_shard_empty(thread_index, shard_index)) {
         ++num_drained;
         wait_cond.notify_all();
         while (drain_threads) {
@@ -305,11 +343,16 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
 	hb,
 	wq->timeout_interval.load(),
 	wq->suicide_interval.load());
-	wq->_process(thread_index, hb);
+    wq->_process(thread_index, shard_index, hb);
   }
 
   ldout(cct,10) << "sharded worker finish" << dendl;
 
+  {
+      std::lock_guard lck(shardedpool_lock);
+      hb_to_thread_index.erase(hb);
+      thread_index_to_hb.erase(thread_index);
+  }
   cct->get_heartbeat_map()->remove_worker(hb);
 
 }
@@ -319,8 +362,10 @@ void ShardedThreadPool::start_threads()
   ceph_assert(ceph_mutex_is_locked(shardedpool_lock));
   int32_t thread_index = 0;
   while (threads_shardedpool.size() < num_threads) {
-
-    WorkThreadSharded *wt = new WorkThreadSharded(this, thread_index);
+    uint32_t shard_index = thread_index % num_shards;
+    WorkThreadSharded *wt = new WorkThreadSharded(this,
+                                                  thread_index,
+                                                  shard_index);
     ldout(cct, 10) << "start_threads creating and starting " << wt << dendl;
     threads_shardedpool.push_back(wt);
     wt->create(thread_name.c_str());

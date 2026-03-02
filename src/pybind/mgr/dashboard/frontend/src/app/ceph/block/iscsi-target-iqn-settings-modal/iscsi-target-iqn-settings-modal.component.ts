@@ -11,7 +11,8 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 @Component({
   selector: 'cd-iscsi-target-iqn-settings-modal',
   templateUrl: './iscsi-target-iqn-settings-modal.component.html',
-  styleUrls: ['./iscsi-target-iqn-settings-modal.component.scss']
+  styleUrls: ['./iscsi-target-iqn-settings-modal.component.scss'],
+  standalone: false
 })
 export class IscsiTargetIqnSettingsModalComponent implements OnInit {
   target_controls: UntypedFormControl;

@@ -61,7 +61,7 @@ WRITE_CLASS_ENCODER(Dependency);
 
 typedef std::vector<Dependency> Dependencies;
 
-enum ActionType {
+enum ActionType : uint8_t {
   ACTION_TYPE_START_THREAD    = 0,
   ACTION_TYPE_STOP_THREAD     = 1,
   ACTION_TYPE_READ            = 2,

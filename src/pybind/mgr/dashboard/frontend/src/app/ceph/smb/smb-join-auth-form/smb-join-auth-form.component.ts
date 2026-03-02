@@ -17,7 +17,8 @@ import { Location } from '@angular/common';
 @Component({
   selector: 'cd-smb-join-auth-form',
   templateUrl: './smb-join-auth-form.component.html',
-  styleUrls: ['./smb-join-auth-form.component.scss']
+  styleUrls: ['./smb-join-auth-form.component.scss'],
+  standalone: false
 })
 export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
   form: CdFormGroup;

@@ -1,5 +1,7 @@
 :orphan:
 
+.. _man-radosgw-admin:
+
 =================================================================
  radosgw-admin -- rados REST gateway user administration utility
 =================================================================
@@ -122,6 +124,16 @@ as follows:
 :command:`bucket sync enable`
   Enable bucket sync.
 
+:command:`bucket logging list`
+  List pending log objects for a source bucket.
+
+:command:`bucket logging info`
+  Show logging configuration for a source bucket, or list source buckets
+  logging to a specific log bucket.
+
+:command:`bucket logging flush`
+  Flush pending log objects to the log bucket immediately.
+
 :command:`bi get`
   Retrieve bucket index object entries.
 
@@ -240,7 +252,7 @@ as follows:
 :command:`zonegroup default`
   Set the default zone group.
 
-:command:`zonegroup rm`
+:command:`zonegroup delete`
   Remove a zone group info.
 
 :command:`zonegroup get`

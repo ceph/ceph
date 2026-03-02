@@ -22,7 +22,8 @@ import { BehaviorSubject, Observable, of, Subject, Subscription } from 'rxjs';
 
 import { TableStatus } from '~/app/shared/classes/table-status';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { Icons, IconSize, ICON_TYPE } from '~/app/shared/enum/icons.enum';
+
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableColumnFilter } from '~/app/shared/models/cd-table-column-filter';
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
@@ -47,7 +48,8 @@ type TPaginationOutput = { start: number; end: number };
   selector: 'cd-table',
   templateUrl: './table.component.html',
   styleUrls: ['./table.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestroy {
   @ViewChild('tableCellBoldTpl', { static: true })
@@ -167,7 +169,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   // Allows other components to specify which type of selection they want,
   // e.g. 'single' or 'multi'.
   @Input()
-  selectionType: string = undefined;
+  selectionType: 'single' | 'multiClick' | 'singleRadio' = undefined;
   // By default selected item details will be updated on table refresh, if data has changed
   @Input()
   updateSelectionOnRefresh: 'always' | 'never' | 'onChange' = 'onChange';
@@ -224,6 +226,22 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
    */
   @Input()
   scrollable: boolean = true;
+
+  /**
+   * Title to be displayed when there is no data
+   */
+  @Input()
+  emptyStateTitle: string = $localize`No data available`;
+  /**
+   * Helper text to be displayed when there is no data
+   */
+  @Input()
+  emptyStateMessage: string = $localize`There are currently no records to display.`;
+  /**
+   * Icon to be displayed when there is no data
+   */
+  @Input()
+  emptyStateIcon: string = ICON_TYPE.deploy;
 
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
@@ -295,11 +313,11 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   get showSelectionColumn() {
-    return this.selectionType === 'multiClick';
+    return this.selectionType === 'multiClick' || this.selectionType === 'singleRadio';
   }
 
   get enableSingleSelect() {
-    return this.selectionType === 'single';
+    return this.selectionType === 'single' || this.selectionType === 'singleRadio';
   }
 
   get headerTitle(): string | TemplateRef<any> {
@@ -362,6 +380,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   icons = Icons;
+  iconSize = IconSize;
   cellTemplates: {
     [key: string]: TemplateRef<any>;
   } = {};
@@ -1104,7 +1123,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   onSelect(selectedRowIndex: number) {
-    if (this.selectionType === 'single') {
+    if (this.selectionType === 'single' || this.selectionType === 'singleRadio') {
       this.model.selectAll(false);
       this.selection.selected = [_.get(this.model.data?.[selectedRowIndex], [0, 'selected'])];
       this.model.selectRow(selectedRowIndex, true);
@@ -1127,7 +1146,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   onDeselect(deselectedRowIndex: number) {
     this.model.selectRow(deselectedRowIndex, false);
-    if (this.selectionType === 'single') {
+    if (this.selectionType === 'single' || this.selectionType === 'singleRadio') {
       return;
     }
     this._toggleSelection(deselectedRowIndex, false);
@@ -1214,7 +1233,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.userConfig.sorts = sorts;
     if (this.serverSide) {
       this.userConfig.offset = 0;
-      this.reloadData();
+      this.loadingIndicator = true;
+      this.debouncedSearch();
     }
 
     this.doSorting(columnIndex);

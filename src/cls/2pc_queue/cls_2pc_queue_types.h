@@ -62,14 +62,22 @@ using cls_2pc_reservations = std::unordered_map<cls_2pc_reservation::id_t, cls_2
 
 struct cls_2pc_urgent_data
 {
-  uint64_t reserved_size{0};   // pending reservations size in bytes
-  cls_2pc_reservation::id_t last_id{cls_2pc_reservation::NO_ID}; // last allocated id
-  cls_2pc_reservations reservations; // reservation list (keyed by id)
+  uint64_t reserved_size{0};
+  // pending reservations size in bytes
+  // For version >= 3: this counter is accurate and can be used directly
+  // For version < 3: ignore this value and compute from reservations (fixes
+  // historical drift)
+  cls_2pc_reservation::id_t last_id{cls_2pc_reservation::NO_ID};
+  // last allocated id
+  cls_2pc_reservations reservations;  // reservation list (keyed by id)
   bool has_xattrs{false};
   uint32_t committed_entries{0}; // how many entries have been committed so far
+  // Transient field (not persisted) - stores the version from which this was
+  // decoded
+  uint8_t decoded_struct_v{3};
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(reserved_size, bl);
     encode(last_id, bl);
     encode(reservations, bl);
@@ -79,7 +87,7 @@ struct cls_2pc_urgent_data
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(reserved_size, bl);
     decode(last_id, bl);
     decode(reservations, bl);
@@ -87,6 +95,7 @@ struct cls_2pc_urgent_data
     if (struct_v >= 2) {
       decode(committed_entries, bl);
     }
+    decoded_struct_v = struct_v;
     DECODE_FINISH(bl);
   }
 

@@ -4,6 +4,7 @@ import base64
 import dataclasses
 import errno
 import json
+from dataclasses import replace
 
 import yaml
 
@@ -13,12 +14,14 @@ from ceph.deployment.service_spec import (
     SMBClusterPublicIPSpec,
     SpecValidationError,
 )
+from ceph.smb.network import to_network
 from object_format import ErrorResponseBase
 
 from . import resourcelib, validation
 from .enums import (
     AuthMode,
     CephFSStorageProvider,
+    HostAccess,
     Intent,
     JoinSourceType,
     LoginAccess,
@@ -132,6 +135,18 @@ class _RBase:
 
 
 @resourcelib.component()
+class QoSConfig(_RBase):
+    """Quality of Service configuration for CephFS shares."""
+
+    read_iops_limit: Optional[int] = None
+    write_iops_limit: Optional[int] = None
+    read_bw_limit: Optional[int] = None
+    write_bw_limit: Optional[int] = None
+    read_delay_max: Optional[int] = 30
+    write_delay_max: Optional[int] = 30
+
+
+@resourcelib.component()
 class CephFSStorage(_RBase):
     """Description of where in a CephFS file system a share is located."""
 
@@ -140,6 +155,12 @@ class CephFSStorage(_RBase):
     subvolumegroup: str = ''
     subvolume: str = ''
     provider: CephFSStorageProvider = CephFSStorageProvider.SAMBA_VFS
+    qos: Optional[QoSConfig] = None
+    DELAY_MAX_LIMIT = 300
+    # Maximal value for iops_limit
+    IOPS_LIMIT_MAX = 1_000_000
+    # Maximal value for bw_limit (1 << 40 = 1 TB)
+    BYTES_LIMIT_MAX = 1 << 40
 
     def __post_init__(self) -> None:
         # Allow a shortcut form of <subvolgroup>/<subvol> in the subvolume
@@ -173,7 +194,52 @@ class CephFSStorage(_RBase):
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.subvolumegroup.quiet = True
         rc.subvolume.quiet = True
+        rc.qos.quiet = True
         return rc
+
+    def update_qos(
+        self,
+        *,
+        read_iops_limit: Optional[int] = None,
+        write_iops_limit: Optional[int] = None,
+        read_bw_limit: Optional[int] = None,
+        write_bw_limit: Optional[int] = None,
+        read_delay_max: Optional[int] = 30,
+        write_delay_max: Optional[int] = 30,
+    ) -> Self:
+        """Return a new CephFSStorage instance with updated QoS values."""
+
+        qos_updates = {}
+        new_qos: Optional[QoSConfig] = None
+        if read_iops_limit is not None and read_iops_limit > 0:
+            qos_updates["read_iops_limit"] = min(
+                read_iops_limit, self.IOPS_LIMIT_MAX
+            )
+        if write_iops_limit is not None and write_iops_limit > 0:
+            qos_updates["write_iops_limit"] = min(
+                write_iops_limit, self.IOPS_LIMIT_MAX
+            )
+        if read_bw_limit is not None and read_bw_limit > 0:
+            qos_updates["read_bw_limit"] = min(
+                read_bw_limit, self.BYTES_LIMIT_MAX
+            )
+        if write_bw_limit is not None and write_bw_limit > 0:
+            qos_updates["write_bw_limit"] = min(
+                write_bw_limit, self.BYTES_LIMIT_MAX
+            )
+        if read_delay_max is not None and read_delay_max > 0:
+            qos_updates["read_delay_max"] = min(
+                read_delay_max, self.DELAY_MAX_LIMIT
+            )
+        if write_delay_max is not None and write_delay_max > 0:
+            qos_updates["write_delay_max"] = min(
+                write_delay_max, self.DELAY_MAX_LIMIT
+            )
+
+        if qos_updates:
+            new_qos = replace(self.qos or QoSConfig(), **qos_updates)
+
+        return replace(self, qos=new_qos)
 
 
 @resourcelib.component()
@@ -187,6 +253,30 @@ class LoginAccessEntry(_RBase):
 
     def validate(self) -> None:
         validation.check_access_name(self.name)
+
+
+@resourcelib.component()
+class HostAccessEntry(_RBase):
+    access: HostAccess
+    address: str = ''
+    network: str = ''
+
+    def validate(self) -> None:
+        # to_network raises ValueError if values are invalid
+        to_network(network=self.network, address=self.address)
+
+    @property
+    def normalized_value(self) -> str:
+        if self.address:
+            return self.address
+        # normalize network string
+        return str(to_network(network=self.network))
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.address.quiet = True
+        rc.network.quiet = True
+        return rc
 
 
 @resourcelib.resource('ceph.smb.share')
@@ -229,6 +319,7 @@ class Share(_RBase):
     custom_smb_share_options: Optional[Dict[str, str]] = None
     login_control: Optional[List[LoginAccessEntry]] = None
     restrict_access: bool = False
+    hosts_access: Optional[List[HostAccessEntry]] = None
 
     def __post_init__(self) -> None:
         # if name is not given explicitly, take it from the share_id
@@ -489,6 +580,27 @@ class TLSSource(_RBase):
 
 
 @resourcelib.component()
+class ExternalCephClusterSource(_RBase):
+    """References Ceph cluster configurations for clusters other than the
+    current cluster.
+    """
+
+    source_type: SourceReferenceType = SourceReferenceType.RESOURCE
+    ref: str = ''
+
+    def validate(self) -> None:
+        if not self.ref:
+            raise ValueError('reference value must be specified')
+        else:
+            validation.check_id(self.ref)
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.ref.quiet = True
+        return rc
+
+
+@resourcelib.component()
 class RemoteControl(_RBase):
     # enabled can be set to explicitly toggle the remote control server
     enabled: Optional[bool] = None
@@ -532,6 +644,9 @@ class Cluster(_RBase):
     bind_addrs: Optional[List[ClusterBindIP]] = None
     # configure a remote control sidecar server.
     remote_control: Optional[RemoteControl] = None
+    # connect the smb cluster and all its shares to cephfs file systems
+    # hosted on an external ceph cluster
+    external_ceph_cluster: Optional[ExternalCephClusterSource] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -724,6 +839,41 @@ class TLSCredential(_RBase):
         return self
 
 
+@resourcelib.component()
+class CephUserKey(_RBase):
+    """A Ceph User Key name and value pair."""
+
+    name: str
+    key: str
+
+
+@resourcelib.component()
+class ExternalCephClusterValues(_RBase):
+    """Contains values that can be used to connect to a Ceph cluster
+    other than the current cluster.
+    """
+
+    fsid: str
+    mon_host: str
+    cephfs_user: CephUserKey
+
+
+@resourcelib.resource('ceph.smb.ext.cluster')
+class ExternalCephCluster(_RBase):
+    """Resource used to configure an external Ceph cluster."""
+
+    external_ceph_cluster_id: str
+    intent: Intent = Intent.PRESENT
+    cluster: Optional[ExternalCephClusterValues] = None
+
+    def validate(self) -> None:
+        if not self.external_ceph_cluster_id:
+            raise ValueError('external_ceph_cluster_id requires a value')
+        validation.check_id(self.external_ceph_cluster_id)
+        if self.intent is Intent.PRESENT and not self.cluster:
+            raise ValueError('cluster parameter must be specified')
+
+
 # SMBResource is a union of all valid top-level smb resource types.
 SMBResource = Union[
     Cluster,
@@ -733,6 +883,7 @@ SMBResource = Union[
     Share,
     UsersAndGroups,
     TLSCredential,
+    ExternalCephCluster,
 ]
 
 

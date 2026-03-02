@@ -1,4 +1,5 @@
 import { Component, Inject, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -15,11 +16,18 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
 const BASE_URL = 'silences'; // as only silence actions can be used
 
+const SeverityMap = {
+  critical: $localize`Critical`,
+  warning: $localize`Warning`,
+  all: $localize`All`
+};
+
 @Component({
   selector: 'cd-active-alert-list',
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
   templateUrl: './active-alert-list.component.html',
-  styleUrls: ['./active-alert-list.component.scss']
+  styleUrls: ['./active-alert-list.component.scss'],
+  standalone: false
 })
 export class ActiveAlertListComponent extends PrometheusListHelper implements OnInit {
   @ViewChild('externalLinkTpl', { static: true })
@@ -45,6 +53,18 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         if (value === 'All') return true;
         return false;
       }
+    },
+    {
+      name: $localize`Severity`,
+      prop: 'labels.severity',
+      filterOptions: [SeverityMap['all'], SeverityMap['warning'], SeverityMap['critical']],
+      filterInitValue: SeverityMap['all'],
+      filterPredicate: (row, value) => {
+        if (value === SeverityMap['critical']) return row.labels?.severity === 'critical';
+        else if (value === SeverityMap['warning']) return row.labels?.severity === 'warning';
+        if (value === SeverityMap['all']) return true;
+        return false;
+      }
     }
   ];
 
@@ -53,6 +73,7 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
     private authStorageService: AuthStorageService,
     public prometheusAlertService: PrometheusAlertService,
     private urlBuilder: URLBuilderService,
+    private route: ActivatedRoute,
     @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
     super(prometheusService);
@@ -138,6 +159,10 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
       }
     ];
     this.prometheusAlertService.getGroupedAlerts(true);
+    this.route.queryParams.subscribe((params) => {
+      const severity = params['severity'];
+      this.filters[1].filterInitValue = SeverityMap[severity];
+    });
   }
 
   setExpandedInnerRow(row: any) {

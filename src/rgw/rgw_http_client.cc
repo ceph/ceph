@@ -1181,6 +1181,7 @@ void *RGWHTTPManager::reqs_thread_entry()
   std::unique_lock rl{reqs_lock};
   for (auto r : unregistered_reqs) {
     _unlink_request(r);
+    r->put();
   }
 
   unregistered_reqs.clear();

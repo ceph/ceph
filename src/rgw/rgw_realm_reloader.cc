@@ -128,7 +128,10 @@ void RGWRealmReloader::reload()
           cct->_conf->rgw_enable_quota_threads,
           cct->_conf->rgw_run_sync_thread,
           cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
-	        true, true, null_yield, env.cfgstore, // run notification thread
+          true,
+          true, // run notification thread
+          true, // run bucket logging thread
+          null_yield, env.cfgstore,
           cct->_conf->rgw_cache_enabled);
     }
 

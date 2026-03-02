@@ -398,16 +398,16 @@ Request Parameters
 :Description: The ID of the account to be created.
 :Type: String
 :Example: ``RGW00000000000000001``
-:Required: Yes
+:Required: No
 
-An account ID must be 20 characters long, and in the format of the string "RGW" followed by 17 numeric characters.
+An account ID must be 20 characters long, and in the format of the string "RGW" followed by 17 numeric characters. If not specified, a random unique one will be generated.
 
 ``name``
 
 :Description: The name of the account to be created.
 :Type: String
 :Example: ``account_name``
-:Required: Yes
+:Required: No
 
 ``email``
 
@@ -823,7 +823,7 @@ Special Error Responses
 None.
 
 Get Account Info
-===========
+================
 .. versionadded:: Squid
 
 Get account info. Either an ``id`` or a ``name`` must be provided.
@@ -1189,9 +1189,16 @@ A tenant name may also specified as a part of ``uid``, by following the syntax
 
 ``account-id``
 
-:Description: the account under which a user should exist.
+:Description: The account under which a user should exist.
 :Type: string
 :Example: RGW00000000000000001
+:Required: No
+
+``account-root``
+
+:Description: Whether the user should be root for its account.
+:Type: Boolean
+:Example: False [False]
 :Required: No
 
 Response Entities
@@ -1402,6 +1409,22 @@ Request Parameters
 :Description: default storage class for the user, default-placement must be defined when setting this option.
 :Type: string
 :Example: STANDARD-1A
+:Required: No
+
+.. versionadded:: Squid
+
+``account-id``
+
+:Description: The account under which a user should exist. Cannot be changed or removed once set.
+:Type: string
+:Example: RGW00000000000000001
+:Required: No
+
+``account-root``
+
+:Description: Whether the user should be root for its account.
+:Type: Boolean
+:Example: False [False]
 :Required: No
 
 Response Entities

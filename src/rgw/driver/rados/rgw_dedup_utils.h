@@ -56,6 +56,10 @@ namespace rgw::dedup {
   static_assert(MAX_MD5_SHARD  < NULL_SHARD);
   static_assert(MAX_MD5_SHARD  <= MD5_SHARD_HARD_LIMIT);
 
+  // Limit the number of duplicates allowed per unique object to control
+  // the number of ref_count entries in the SRC-OBJ
+  const uint8_t MAX_COPIES_PER_OBJ = 128;
+
   //---------------------------------------------------------------------------
   enum dedup_req_type_t {
     DEDUP_TYPE_NONE     = 0,
@@ -249,6 +253,7 @@ namespace rgw::dedup {
     uint64_t skipped_purged_small = 0;
     uint64_t skipped_singleton = 0;
     uint64_t skipped_singleton_bytes = 0;
+    uint64_t skipped_too_many_copies = 0;
     uint64_t skipped_source_record = 0;
     uint64_t duplicate_records = 0;
     uint64_t size_mismatch = 0;
@@ -355,14 +360,6 @@ namespace rgw::dedup {
                                 char data_buff[],
                                 size_t len,
                                 const DoutPrefixProvider* dpp);
-
-  //---------------------------------------------------------------------------
-  static inline void build_oid(const std::string &bucket_id,
-                               const std::string &obj_name,
-                               std::string *oid)
-  {
-    *oid = bucket_id + "_" + obj_name;
-  }
 
   //---------------------------------------------------------------------------
   static inline uint64_t calc_deduped_bytes(uint64_t head_obj_size,

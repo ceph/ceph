@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 
 import _ from 'lodash';
 
@@ -11,17 +12,19 @@ import { TelemetryNotificationService } from '~/app/shared/services/telemetry-no
 @Component({
   selector: 'cd-telemetry-notification',
   templateUrl: './telemetry-notification.component.html',
-  styleUrls: ['./telemetry-notification.component.scss']
+  styleUrls: ['./telemetry-notification.component.scss'],
+  standalone: false
 })
 export class TelemetryNotificationComponent implements OnInit, OnDestroy {
   displayNotification = false;
-  notificationSeverity = 'warning';
+  notificationSeverity = 'info';
 
   constructor(
     private mgrModuleService: MgrModuleService,
     private authStorageService: AuthStorageService,
     private notificationService: NotificationService,
-    private telemetryNotificationService: TelemetryNotificationService
+    private telemetryNotificationService: TelemetryNotificationService,
+    private router: Router
   ) {}
 
   ngOnInit() {
@@ -58,5 +61,9 @@ export class TelemetryNotificationComponent implements OnInit, OnDestroy {
       $localize`You can activate the module on the Telemetry configuration \
 page (<b>Dashboard Settings</b> -> <b>Telemetry configuration</b>) at any time.`
     );
+  }
+
+  onConfigure(): void {
+    this.router.navigate(['/telemetry']);
   }
 }

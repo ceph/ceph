@@ -454,6 +454,10 @@ public:
     std::lock_guard l(monc_lock);
     _renew_subs();
   }
+  version_t get_start(const std::string& what) const {
+    std::lock_guard l(monc_lock);
+    return sub.get_start(what);
+  }
   bool sub_want(std::string what, version_t start, unsigned flags) {
     std::lock_guard l(monc_lock);
     return sub.want(what, start, flags);
@@ -801,6 +805,12 @@ public:
     decltype(cb(monmap, std::forward<Args>(args)...)) {
     std::lock_guard l(monc_lock);
     return std::forward<Callback>(cb)(monmap, std::forward<Args>(args)...);
+  }
+
+  mon_feature_t get_monmap_required_features() {
+    return with_monmap([](const auto &monmap) {
+      return monmap.get_required_features();
+    });
   }
 
   void register_config_callback(md_config_t::config_callback fn);

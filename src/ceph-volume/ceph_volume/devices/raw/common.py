@@ -70,4 +70,12 @@ def create_parser(prog: str, description: str) -> argparse.ArgumentParser:
         default=None,
         type=arg_validators.valid_osd_id,
     )
+    parser.add_argument(
+        '--osd-type',
+        dest='osd_type',
+        help='The Ceph OSD type to use.',
+        default='classic',
+        choices=['classic', 'crimson'],
+        type=str,
+    )
     return parser

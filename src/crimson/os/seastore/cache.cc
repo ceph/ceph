@@ -1081,6 +1081,21 @@ void Cache::on_transaction_destruct(Transaction& t)
   }
 }
 
+void Cache::check_full_extent_integrity(
+  uint32_t ref_crc, uint32_t pin_crc)
+{
+  LOG_PREFIX(Cache::check_full_extent_integrity);;
+  DEBUG("checksum in the lba tree: 0x{:x}, actual checksum: 0x{:x}",
+    pin_crc,
+    ref_crc);
+  if (unlikely(pin_crc != ref_crc)) {
+    ERROR("extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}",
+      pin_crc,
+      ref_crc);
+      ceph_abort_msg("extent checksum inconsistent");
+  }
+}
+
 CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   Transaction &t,        ///< [in, out] current transaction
   extent_types_t type,   ///< [in] type tag
@@ -1431,11 +1446,13 @@ record_t Cache::prepare_record(
 	  extent->get_paddr(),
 	  extent->get_length(),
 	  extent->get_type()));
-      backref_entries.emplace_back(
-	backref_entry_t::create_retire(
-	  extent->get_paddr(),
-	  extent->get_length(),
-	  extent->get_type()));
+      if (!can_drop_backref()) {
+        backref_entries.emplace_back(
+          backref_entry_t::create_retire(
+            extent->get_paddr(),
+            extent->get_length(),
+            extent->get_type()));
+      }
     } else if (is_backref_node(extent->get_type())) {
       // The retire alloc deltas are used to identify the invalid backref extent
       // deltas during replay when using CircularBoundedJournal, see
@@ -1445,7 +1462,9 @@ record_t Cache::prepare_record(
 	  extent->get_paddr(),
 	  extent->get_length(),
 	  extent->get_type()));
-      remove_backref_extent(extent->get_paddr());
+      if (!can_drop_backref()) {
+        remove_backref_extent(extent->get_paddr());
+      }
     } else {
       ERRORT("Got unexpected extent type: {}", t, *extent);
       ceph_abort_msg("imposible");
@@ -1617,6 +1636,10 @@ record_t Cache::prepare_record(
 	i->get_length(),
 	i->get_type()));
 
+    if (can_drop_backref()) {
+      continue;
+    }
+
     // Note: commit extents and backref allocations in the same place
     // Note: remapping is split into 2 steps, retire and alloc, they must be
     //       committed atomically together
@@ -1681,8 +1704,10 @@ record_t Cache::prepare_record(
     record.push_back(std::move(delta));
   }
 
-  apply_backref_mset(backref_entries);
-  t.set_backref_entries(std::move(backref_entries));
+  if (!can_drop_backref()) {
+    apply_backref_mset(backref_entries);
+    t.set_backref_entries(std::move(backref_entries));
+  }
 
   ceph_assert(t.get_fresh_block_stats().num ==
               t.inline_block_list.size() +
@@ -1856,6 +1881,9 @@ void Cache::complete_commit(
     i->complete_io();
     epm.commit_space_used(i->get_paddr(), i->get_length());
 
+    if (can_drop_backref()) {
+      return;
+    }
     // Note: commit extents and backref allocations in the same place
     if (is_backref_mapped_type(i->get_type())) {
       DEBUGT("backref_entry alloc {}~0x{:x}",
@@ -1929,8 +1957,10 @@ void Cache::complete_commit(
 
   last_commit = start_seq;
 
-  apply_backref_byseq(t.move_backref_entries(), start_seq);
-  commit_backref_entries(std::move(backref_entries), start_seq);
+  if (!can_drop_backref()) {
+    apply_backref_byseq(t.move_backref_entries(), start_seq);
+    commit_backref_entries(std::move(backref_entries), start_seq);
+  }
 }
 
 void Cache::init()
@@ -2002,7 +2032,9 @@ Cache::replay_delta(
 {
   LOG_PREFIX(Cache::replay_delta);
   assert(dirty_tail != JOURNAL_SEQ_NULL);
-  assert(alloc_tail != JOURNAL_SEQ_NULL);
+  if (!can_drop_backref()) {
+    assert(alloc_tail != JOURNAL_SEQ_NULL);
+  }
   ceph_assert(modify_time != NULL_TIME);
 
   // FIXME: This is specific to the segmented implementation
@@ -2040,6 +2072,11 @@ Cache::replay_delta(
 
   // replay alloc
   if (delta.type == extent_types_t::ALLOC_INFO) {
+    if (can_drop_backref()) {
+      return replay_delta_ertr::make_ready_future<
+        std::pair<bool, CachedExtentRef>>(std::make_pair(false, nullptr));
+    }
+
     if (journal_seq < alloc_tail) {
       DEBUG("journal_seq {} < alloc_tail {}, don't replay {}",
 	journal_seq, alloc_tail, delta);
@@ -2284,7 +2321,8 @@ Cache::_get_absent_extent_by_type(
   paddr_t offset,
   laddr_t laddr,
   extent_len_t length,
-  extent_init_func_t &&extent_init_func)
+  extent_init_func_t &&extent_init_func,
+  uint32_t pin_crc)
 {
   LOG_PREFIX(Cache::_get_absent_extent_by_type);
 
@@ -2379,7 +2417,7 @@ Cache::_get_absent_extent_by_type(
   t.add_to_read_set(CachedExtentRef(ret));
   touch_extent_fully(*ret, &t_src, t.get_cache_hint());
   return trans_intr::make_interruptible(
-    read_extent(std::move(ret), 0, length, &t_src
+    read_extent(std::move(ret), 0, length, &t_src, pin_crc
     ).safe_then([laddr](auto extent) {
       if (extent->is_logical()) {
 	extent->template cast<LogicalCachedExtent>()->set_laddr(laddr);

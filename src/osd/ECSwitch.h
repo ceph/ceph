@@ -267,6 +267,25 @@ public:
     return legacy.objects_read_sync(hoid, off, len, op_flags, bl);
   }
 
+  int objects_readv_sync(const hobject_t &hoid,
+     std::map<uint64_t, uint64_t>& m,
+     uint32_t op_flags,
+     ceph::buffer::list *bl) override
+  {
+    if (is_optimized()) {
+      return optimized.objects_readv_sync(hoid, m, op_flags, bl);
+    }
+    ceph_abort_msg("Sync reads legacy EC");
+  }
+
+  std::pair<uint64_t, uint64_t> extent_to_shard_extent(
+    uint64_t off, uint64_t len) override {
+    if (is_optimized()) {
+      return optimized.extent_to_shard_extent(off, len);
+    }
+    ceph_abort_msg("Extent conversion not supported in legacy EC");
+  }
+
   void objects_read_async(
     const hobject_t &hoid,
     uint64_t object_size,

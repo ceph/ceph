@@ -179,6 +179,7 @@
             [expandable]="model.isRowExpandable(i)"
             [expanded]="model.isRowExpanded(i)"
             [showSelectionColumn]="showSelectionColumn"
+            [enableSingleSelect]="enableSingleSelect"
             [skeleton]="loadingIndicator"
             (selectRow)="onSelect(i)"
             (deselectRow)="onDeselect(i)"
@@ -223,8 +224,26 @@
           class="no-data"
           cdstabledata
           [attr.colspan]="visibleColumns.length + 2">
-        <span class="d-flex justify-content-center align-items-center"
-              i18n>No data to display</span>
+        <div class="empty-state cds-ml-3"
+             cdsStack="vertical"
+             gap="11">
+          <div></div>
+          <div cdsStack="vertical"
+               gap="1">
+            <div>
+              <cd-icon
+                [type]="emptyStateIcon"
+                [size]="iconSize.size32">
+              </cd-icon>
+            </div>
+            <legend class="cds--type-body-compact-02">
+              <ng-container>{{ emptyStateTitle }}</ng-container>
+              <cd-help-text class="cds--type-label-01">
+                {{ emptyStateMessage }}
+              </cd-help-text>
+            </legend>
+          </div>
+        </div>
       </td>
     </tr>
   </tbody>
@@ -302,7 +321,7 @@
 
 <ng-template #checkIconTpl
              let-value="data.value">
-@if (value | boolean) {
+  @if (value | boolean) {
   <cd-icon type="check"></cd-icon>
 }
 </ng-template>
@@ -337,13 +356,14 @@
     </cds-tag>
   </span>
 </ng-template>
+
 <ng-template #tagTpl
              let-column="data.column"
              let-value="data.value">
   <span *ngFor="let item of (value | array); last as last">
     <cds-tag [size]="'md'"
              class="table-tag"
-             [class]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'tags-primary')"
+             [class]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'tag-primary')"
              *ngIf="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item">
       {{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
     </cds-tag>
@@ -481,6 +501,13 @@
 
 <ng-template #redirectTpl
              let-value="data.value"
+             let-row="data.row"
              let-column="data.column">
+@if (column.customTemplateConfig?.customRowProperty && row[column.customTemplateConfig?.customRowProperty]) {
+  <a [routerLink]="row[column.customTemplateConfig?.customRowProperty]">{{value}}</a>
+} @else if (column.customTemplateConfig?.redirectLink) {
   <a [routerLink]="column.customTemplateConfig?.redirectLink | redirectLinkResolver:value">{{value}}</a>
+} @else {
+  {{ value }}
+}
 </ng-template>

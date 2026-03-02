@@ -16,7 +16,16 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper, Mocks } from '~/testing/unit-test-helper';
 import { ServiceFormComponent } from './service-form.component';
 import { PoolService } from '~/app/shared/api/pool.service';
+import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
 import { USER } from '~/app/shared/constants/app.constants';
+import {
+  CheckboxModule,
+  InputModule,
+  ModalModule,
+  NumberModule,
+  RadioModule,
+  SelectModule
+} from 'carbon-components-angular';
 
 // for 'nvmeof' service
 const mockPools = [
@@ -46,7 +55,14 @@ describe('ServiceFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot()
+      ToastrModule.forRoot(),
+      InputModule,
+      SelectModule,
+      NumberModule,
+      ModalModule,
+      CheckboxModule,
+      RadioModule,
+      TextLabelListComponent
     ]
   });
 
@@ -72,7 +88,11 @@ describe('ServiceFormComponent', () => {
     it('should test placement (host)', () => {
       formHelper.setValue('service_type', 'crash');
       formHelper.setValue('placement', 'hosts');
-      formHelper.setValue('hosts', ['mgr0', 'mon0', 'osd0']);
+      formHelper.setValue('hosts', [
+        { content: 'mgr0', selected: true },
+        { content: 'mon0', selected: true },
+        { content: 'osd0', selected: true }
+      ]);
       formHelper.setValue('count', 2);
       component.onSubmit();
       expect(cephServiceService.create).toHaveBeenCalledWith({
@@ -88,12 +108,12 @@ describe('ServiceFormComponent', () => {
     it('should test placement (label)', () => {
       formHelper.setValue('service_type', 'mgr');
       formHelper.setValue('placement', 'label');
-      formHelper.setValue('label', 'foo');
+      formHelper.setValue('label', [{ content: 'foo', selected: true }]);
       component.onSubmit();
       expect(cephServiceService.create).toHaveBeenCalledWith({
         service_type: 'mgr',
         placement: {
-          label: 'foo'
+          label: ['foo']
         },
         unmanaged: false
       });
@@ -236,8 +256,8 @@ describe('ServiceFormComponent', () => {
           placement: {},
           unmanaged: false,
           rgw_frontend_port: 1234,
-          rgw_frontend_ssl_certificate: '',
-          ssl: true
+          ssl: true,
+          certificate_source: 'cephadm-signed'
         });
       });
 
@@ -351,6 +371,21 @@ describe('ServiceFormComponent', () => {
         expect(ssl_key).toBeNull();
       });
 
+      it('should submit rgw with QAT Compression (None)', () => {
+        formHelper.setValue('service_type', 'rgw');
+        formHelper.setValue(component.serviceForm.get('qat').get('compression'), 'none');
+      });
+
+      it('should submit rgw with QAT Compression (Hardware)', () => {
+        formHelper.setValue('service_type', 'rgw');
+        formHelper.setValue(component.serviceForm.get('qat')?.get('compression'), 'hw');
+      });
+
+      it('should submit rgw with QAT Compression (Software)', () => {
+        formHelper.setValue('service_type', 'rgw');
+        formHelper.setValue(component.serviceForm.get('qat')?.get('compression'), 'sw');
+      });
+
       it('should test .pem file', () => {
         const pemCert = `
 -----BEGIN CERTIFICATE-----
@@ -393,7 +428,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 
       it('should submit iscsi with trusted ips', () => {
         formHelper.setValue('ssl', true);
-        formHelper.setValue('trusted_ip_list', ' 172.16.0.5, 192.1.1.10  ');
+        formHelper.setValue('trusted_ip_list', [' 172.16.0.5', '192.1.1.10  ']);
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'iscsi',
@@ -403,9 +438,8 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           api_user: USER,
           api_password: 'password',
           api_secure: true,
-          ssl_cert: '',
-          ssl_key: '',
-          trusted_ip_list: '172.16.0.5, 192.1.1.10'
+          certificate_source: 'cephadm-signed',
+          trusted_ip_list: ['172.16.0.5', '192.1.1.10']
         });
       });
 
@@ -438,13 +472,13 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 
       it('should submit invalid iscsi port (1)', () => {
         formHelper.setValue('api_port', 0);
-        fixture.detectChanges();
+        component.onSubmit();
         formHelper.expectError('api_port', 'min');
       });
 
       it('should submit invalid iscsi port (2)', () => {
         formHelper.setValue('api_port', 65536);
-        fixture.detectChanges();
+        component.onSubmit();
         formHelper.expectError('api_port', 'max');
       });
 
@@ -500,7 +534,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         expect(component.serviceForm.get('pool')?.value).toBe('rbd');
         const poolInput = fixture.debugElement.query(By.css('#pool')).nativeElement;
         // Simulate input value change
-        poolInput.value = 'pool-2';
+        form.get('pool').setValue('pool-2');
         // Trigger the input event
         poolInput.dispatchEvent(new Event('input'));
         // Trigger the change event
@@ -587,6 +621,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         formHelper.setValue('service_id', 'foo');
         formHelper.setValue('cluster_id', 'cluster_foo');
         formHelper.setValue('config_uri', 'rados://.smb/foo/scc.toml');
+        formHelper.setValue('custom_dns', [' 192.168.76.204', '192.168.76.205 ']);
       });
 
       it('should submit smb', () => {
@@ -598,9 +633,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           service_id: 'foo',
           cluster_id: 'cluster_foo',
           config_uri: 'rados://.smb/foo/scc.toml',
-          custom_dns: null,
-          join_sources: undefined,
-          user_sources: undefined
+          custom_dns: ['192.168.76.204', '192.168.76.205']
         });
       });
     });
@@ -622,7 +655,6 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           backend_service: 'rgw.foo',
           service_id: 'rgw.foo',
           virtual_ip: '192.168.20.1/24',
-          virtual_interface_networks: null,
           ssl: false
         });
       });
@@ -637,14 +669,14 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         // min value
         formHelper.setValue('frontend_port', 1);
         formHelper.setValue('monitor_port', 1);
-        fixture.detectChanges();
+        component.onSubmit();
         formHelper.expectValid('frontend_port');
         formHelper.expectValid('monitor_port');
 
         // max value
         formHelper.setValue('frontend_port', 65535);
         formHelper.setValue('monitor_port', 65535);
-        fixture.detectChanges();
+        component.onSubmit();
         formHelper.expectValid('frontend_port');
         formHelper.expectValid('monitor_port');
       });
@@ -653,14 +685,14 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         // min
         formHelper.setValue('frontend_port', 0);
         formHelper.setValue('monitor_port', 0);
-        fixture.detectChanges();
+        component.onSubmit();
         formHelper.expectError('frontend_port', 'min');
         formHelper.expectError('monitor_port', 'min');
 
         // max
         formHelper.setValue('frontend_port', 65536);
         formHelper.setValue('monitor_port', 65536);
-        fixture.detectChanges();
+        component.onSubmit();
         formHelper.expectError('frontend_port', 'max');
         formHelper.expectError('monitor_port', 'max');
 
@@ -674,7 +706,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 
       it('should not show private key field with ssl enabled', () => {
         formHelper.setValue('ssl', true);
-        fixture.detectChanges();
+        component.onSubmit();
         const ssl_key = fixture.debugElement.query(By.css('#ssl_key'));
         expect(ssl_key).toBeNull();
       });
@@ -692,7 +724,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 -----END RSA PRIVATE KEY-----`;
         formHelper.setValue('ssl', true);
         formHelper.setValue('ssl_cert', pemCert);
-        fixture.detectChanges();
+        component.onSubmit();
         formHelper.expectValid('ssl_cert');
       });
     });
@@ -800,8 +832,8 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         component.ngOnInit();
         expect(cephServiceSpy).toBeCalledTimes(2);
         expect(component.action).toBe('Edit');
-        const serviceType = fixture.debugElement.query(By.css('#service_type')).nativeElement;
-        const serviceId = fixture.debugElement.query(By.css('#service_id')).nativeElement;
+        const serviceType = fixture.componentInstance.serviceForm.get('service_type');
+        const serviceId = fixture.componentInstance.serviceForm.get('service_id');
         expect(serviceType.disabled).toBeTruthy();
         expect(serviceId.disabled).toBeTruthy();
       });
@@ -811,7 +843,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         formHelper.setValue('service_type', 'nvmeof');
         component.ngOnInit();
         fixture.detectChanges();
-        const poolId = fixture.debugElement.query(By.css('#pool')).nativeElement;
+        const poolId = fixture.componentInstance.serviceForm.get('pool');
         expect(poolId.disabled).toBeTruthy();
       });
 

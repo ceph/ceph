@@ -147,6 +147,7 @@ def get_hosts(sources=None):
                 merge_dicts(
                     {
                         'ceph_version': mgr.version,
+                        'addr': '',
                         'services': [],
                         'sources': {
                             'ceph': False,
@@ -300,7 +301,6 @@ class Host(RESTController):
                         facts = facts_map.get(hostname, {})
                         host_facts = {
                             'hostname': facts.get('hostname', hostname),
-                            'addr': facts.get('addr', ''),
                             'cpu_cores': facts.get('cpu_cores', 0),
                             'cpu_count': facts.get('cpu_count', 0),
                             'model': facts.get('model', ''),

@@ -42,7 +42,8 @@ const BASE_URL = 'block/rbd';
   providers: [
     TaskListService,
     { provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }
-  ]
+  ],
+  standalone: false
 })
 export class RbdListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })

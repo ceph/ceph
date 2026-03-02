@@ -56,3 +56,41 @@ export enum MultiClusterPromqlsForPoolUtilization {
   POOL_IOPS_UTILIZATION = 'topk(5, (rate(ceph_pool_rd[1m]) + rate(ceph_pool_wr[1m])) * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata )',
   POOL_THROUGHPUT_UTILIZATION = 'topk(5, (irate(ceph_pool_rd_bytes[1m]) + irate(ceph_pool_wr_bytes[1m])) * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata )'
 }
+
+export const AllStoragetypesQueries = {
+  READIOPS: `
+    sum(
+      rate(ceph_pool_rd[1m])
+      * on (pool_id, cluster)
+        group_left(application)
+          ceph_pool_metadata{{applicationFilter}}
+    ) OR vector(0)
+  `,
+
+  WRITEIOPS: `
+    sum(
+      rate(ceph_pool_wr[1m])
+      * on (pool_id, cluster)
+        group_left(application)
+          ceph_pool_metadata{{applicationFilter}}
+    ) OR vector(0)
+  `,
+
+  READCLIENTTHROUGHPUT: `
+    sum(
+      rate(ceph_pool_rd_bytes[1m])
+      * on (pool_id, cluster)
+        group_left(application)
+          ceph_pool_metadata{{applicationFilter}}
+    ) OR vector(0)
+  `,
+
+  WRITECLIENTTHROUGHPUT: `
+    sum(
+      rate(ceph_pool_wr_bytes[1m])
+      * on (pool_id, cluster)
+        group_left(application)
+          ceph_pool_metadata{{applicationFilter}}
+    ) OR vector(0)
+  `
+};

@@ -316,8 +316,18 @@ class CephMgrCommands(Directive):
             ms = [c for c in mgr_mod.__dict__.values()
                   if subclass(c) and 'Standby' not in c.__name__]
             [m] = ms
-            assert isinstance(m.COMMANDS, list)
-            return m.COMMANDS
+
+            # Modules can define commands in two ways:
+            # 1. New decorator pattern: Commands registered via @ModuleCLICommand decorators,
+            #    retrieved via CLICommand.dump_cmd_list()
+            # 2. Old list pattern: Commands defined in a COMMANDS list
+            # Some modules have CLICommand defined but haven't migrated their commands yet,
+            # so we try the new pattern first and fall back to the old COMMANDS list.
+            if hasattr(m, 'CLICommand'):
+                commands = m.CLICommand.dump_cmd_list()
+                if commands:
+                    return commands
+            return getattr(m, 'COMMANDS', [])
 
     def _normalize_command(self, command):
         if 'handler' in command:

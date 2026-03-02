@@ -22,7 +22,8 @@ import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 @Component({
   selector: 'cd-osd-devices-selection-modal',
   templateUrl: './osd-devices-selection-modal.component.html',
-  styleUrls: ['./osd-devices-selection-modal.component.scss']
+  styleUrls: ['./osd-devices-selection-modal.component.scss'],
+  standalone: false
 })
 export class OsdDevicesSelectionModalComponent implements AfterViewInit {
   @ViewChild('inventoryDevices')

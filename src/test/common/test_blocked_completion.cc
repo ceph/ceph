@@ -78,9 +78,10 @@ auto id(const Executor& executor, CompletionToken&& token,
 	Args&& ...args)
 {
   return asio::async_initiate<CompletionToken, void(Args...)>(
-    []<typename ...Args2>(auto handler, Args2&& ...args2) mutable {
-      asio::post(asio::append(std::move(handler),
-			      std::forward<Args2>(args2)...));
+      [executor]<typename... Args2>(auto handler, Args2&&... args2) mutable {
+        asio::post(executor,
+                   asio::append(std::move(handler),
+                                std::forward<Args2>(args2)...));
     }, token, std::forward<Args>(args)...);
 }
 

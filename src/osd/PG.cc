@@ -1291,15 +1291,6 @@ Scrub::schedule_result_t PG::start_scrubbing(
       candidate.level, osd_restrictions, pg_cond);
 }
 
-double PG::next_deepscrub_interval() const
-{
-  double deep_scrub_interval =
-    pool.info.opts.value_or(pool_opts_t::DEEP_SCRUB_INTERVAL, 0.0);
-  if (deep_scrub_interval <= 0.0)
-    deep_scrub_interval = cct->_conf->osd_deep_scrub_interval;
-  return info.history.last_deep_scrub_stamp + deep_scrub_interval;
-}
-
 void PG::on_scrub_schedule_input_change()
 {
   if (is_active() && is_primary() && !is_scrub_queued_or_active()) {
@@ -1940,8 +1931,7 @@ bool PG::can_discard_op(OpRequestRef& op)
     return true;
   }
 
-  if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+  if ((m->get_flags() & CEPH_OSD_FLAGS_DIRECT_READ) &&
       !is_primary() &&
       m->get_map_epoch() < info.history.same_interval_since) {
     // Note: the Objecter will resend on interval change without the primary

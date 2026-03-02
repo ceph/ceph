@@ -21,7 +21,8 @@ import { BaseModal } from 'carbon-components-angular';
 @Component({
   selector: 'cd-crud-table',
   templateUrl: './crud-table.component.html',
-  styleUrls: ['./crud-table.component.scss']
+  styleUrls: ['./crud-table.component.scss'],
+  standalone: false
 })
 export class CRUDTableComponent implements OnInit {
   @ViewChild('tagDictTpl')

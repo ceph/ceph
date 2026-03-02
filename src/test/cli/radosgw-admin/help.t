@@ -53,6 +53,7 @@
     bucket radoslist                 list rados objects backing bucket's objects
     bucket logging flush             flush pending log records object of source bucket to the log bucket
     bucket logging info              get info on bucket logging configuration on source bucket or list of sources in log bucket
+    bucket logging list              list the log objects pending commit for the source bucket
     bi get                           retrieve bucket index object entries
     bi put                           store bucket index object entries
     bi list                          list raw bucket index entries
@@ -107,7 +108,7 @@
     zonegroup get                    show zone group info
     zonegroup modify                 modify an existing zonegroup
     zonegroup set                    set zone group info (requires infile)
-    zonegroup rm                     remove a zone from a zonegroup
+    zonegroup remove                 remove a zone from a zonegroup
     zonegroup rename                 rename a zone group
     zonegroup list                   list all zone groups set on this cluster
     zonegroup placement list         list zonegroup's placement targets

@@ -3,17 +3,21 @@
      *ngIf="expanded && overlay"></div>
 
 <cds-panel [expanded]="expanded"
-           [attr.panel-size]="size">
+           [attr.panel-size]="size"
+           [cdsLayer]="layer"
+           [cdsTheme]="theme">
   <div>
     <cds-icon-button kind="ghost"
                      class="float-end"
                      title="Close"
+                     i18n-title
                      (click)="close()">
       <svg cdsIcon="close"></svg>
     </cds-icon-button>
     <div class="panel-header"
          *ngIf="headerText">
-    {{ headerText }}
+      <p class="cds--type-heading-03">{{ headerText }}</p>
+      <ng-content select="[panel-header-description]"></ng-content>
     </div>
   </div>
   <ng-content select=".panel-content"></ng-content>
