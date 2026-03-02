@@ -65,10 +65,9 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_single_ipv4) {
   const auto& resolved = conn.get_resolved_endpoints();
   ASSERT_EQ(resolved.size(), 1u);
 
-  auto it = resolved.find("http://example.com:8080");
-  ASSERT_NE(it, resolved.end());
-
-  const auto& res_ep = it->second;
+  auto* res_ep_ptr = conn.find_resolved_endpoint("http://example.com:8080");
+  ASSERT_NE(res_ep_ptr, nullptr);
+  const auto& res_ep = *res_ep_ptr;
   EXPECT_EQ(res_ep.host, "example.com");
   EXPECT_EQ(res_ep.scheme, "http");
   EXPECT_EQ(res_ep.port, 8080);
@@ -95,10 +94,9 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_ips) {
   const auto& resolved = conn.get_resolved_endpoints();
   ASSERT_EQ(resolved.size(), 1u);
 
-  auto it = resolved.find("https://multi.example.com");
-  ASSERT_NE(it, resolved.end());
-
-  const auto& res_ep = it->second;
+  auto* res_ep_ptr = conn.find_resolved_endpoint("https://multi.example.com");
+  ASSERT_NE(res_ep_ptr, nullptr);
+  const auto& res_ep = *res_ep_ptr;
   EXPECT_EQ(res_ep.host, "multi.example.com");
   EXPECT_EQ(res_ep.scheme, "https");
   EXPECT_EQ(res_ep.port, 443);  // Default HTTPS port
@@ -147,10 +145,9 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_default_http_port) {
   const auto& resolved = conn.get_resolved_endpoints();
   ASSERT_EQ(resolved.size(), 1u);
 
-  auto it = resolved.find("http://noport.example.com");
-  ASSERT_NE(it, resolved.end());
-
-  const auto& res_ep = it->second;
+  auto* res_ep_ptr = conn.find_resolved_endpoint("http://noport.example.com");
+  ASSERT_NE(res_ep_ptr, nullptr);
+  const auto& res_ep = *res_ep_ptr;
   EXPECT_EQ(res_ep.port, 80);  // Default HTTP port
   EXPECT_EQ(res_ep.scheme, "http");
   EXPECT_EQ(res_ep.ips.size(), 1u);
@@ -173,10 +170,9 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_custom_https_port) {
   const auto& resolved = conn.get_resolved_endpoints();
   ASSERT_EQ(resolved.size(), 1u);
 
-  auto it = resolved.find("https://custom.secure.example.com:8443");
-  ASSERT_NE(it, resolved.end());
-
-  const auto& res_ep = it->second;
+  auto* res_ep_ptr = conn.find_resolved_endpoint("https://custom.secure.example.com:8443");
+  ASSERT_NE(res_ep_ptr, nullptr);
+  const auto& res_ep = *res_ep_ptr;
   EXPECT_EQ(res_ep.port, 8443);
   EXPECT_EQ(res_ep.scheme, "https");
   EXPECT_EQ(res_ep.ips.size(), 1u);
@@ -197,10 +193,9 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_resolution_failure) {
   const auto& resolved = conn.get_resolved_endpoints();
   ASSERT_EQ(resolved.size(), 1u);
 
-  auto it = resolved.find("http://nonexistent.example.com:8080");
-  ASSERT_NE(it, resolved.end());
-
-  const auto& res_ep = it->second;
+  auto* res_ep_ptr = conn.find_resolved_endpoint("http://nonexistent.example.com:8080");
+  ASSERT_NE(res_ep_ptr, nullptr);
+  const auto& res_ep = *res_ep_ptr;
   EXPECT_EQ(res_ep.host, "nonexistent.example.com");
   EXPECT_TRUE(res_ep.ips.empty());
   EXPECT_TRUE(res_ep.connect_to_strings.empty());
@@ -216,9 +211,9 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_invalid_url) {
   const auto& resolved = conn.get_resolved_endpoints();
   EXPECT_EQ(resolved.size(), 1u);
 
-  auto it = resolved.find("not-a-valid-url");
-  ASSERT_NE(it, resolved.end());
-  EXPECT_TRUE(it->second.ips.empty());
+  auto* res_ep_ptr = conn.find_resolved_endpoint("not-a-valid-url");
+  ASSERT_NE(res_ep_ptr, nullptr);
+  EXPECT_TRUE(res_ep_ptr->ips.empty());
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_empty_host) {
@@ -231,9 +226,9 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_empty_host) {
   const auto& resolved = conn.get_resolved_endpoints();
   EXPECT_EQ(resolved.size(), 1u);
 
-  auto it = resolved.find("http://:8080/path");
-  ASSERT_NE(it, resolved.end());
-  EXPECT_TRUE(it->second.ips.empty());
+  auto* res_ep_ptr = conn.find_resolved_endpoint("http://:8080/path");
+  ASSERT_NE(res_ep_ptr, nullptr);
+  EXPECT_TRUE(res_ep_ptr->ips.empty());
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_endpoints) {
@@ -258,26 +253,26 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_endpoints) {
   ASSERT_EQ(resolved.size(), 2u);
 
   // Check first endpoint
-  auto it1 = resolved.find("http://host1.example.com:8080");
-  ASSERT_NE(it1, resolved.end());
-  EXPECT_EQ(it1->second.host, "host1.example.com");
-  EXPECT_EQ(it1->second.scheme, "http");
-  EXPECT_EQ(it1->second.port, 8080);
-  EXPECT_EQ(it1->second.ips.size(), 1u);
-  ASSERT_EQ(it1->second.connect_to_strings.size(), 1u);
-  EXPECT_EQ(it1->second.connect_to_strings[0], "host1.example.com:8080:192.168.1.1:8080");
-  EXPECT_TRUE(ceph::real_clock::is_zero(it1->second.status.load()));
+  auto* res_ep1_ptr = conn.find_resolved_endpoint("http://host1.example.com:8080");
+  ASSERT_NE(res_ep1_ptr, nullptr);
+  EXPECT_EQ(res_ep1_ptr->host, "host1.example.com");
+  EXPECT_EQ(res_ep1_ptr->scheme, "http");
+  EXPECT_EQ(res_ep1_ptr->port, 8080);
+  EXPECT_EQ(res_ep1_ptr->ips.size(), 1u);
+  ASSERT_EQ(res_ep1_ptr->connect_to_strings.size(), 1u);
+  EXPECT_EQ(res_ep1_ptr->connect_to_strings[0], "host1.example.com:8080:192.168.1.1:8080");
+  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep1_ptr->status.load()));
 
   // Check second endpoint
-  auto it2 = resolved.find("https://host2.example.com/rgw");
-  ASSERT_NE(it2, resolved.end());
-  EXPECT_EQ(it2->second.host, "host2.example.com");
-  EXPECT_EQ(it2->second.scheme, "https");
-  EXPECT_EQ(it2->second.port, 443);  // default HTTPS port
-  EXPECT_EQ(it2->second.ips.size(), 1u);
-  ASSERT_EQ(it2->second.connect_to_strings.size(), 1u);
-  EXPECT_EQ(it2->second.connect_to_strings[0], "host2.example.com:443:192.168.1.2:443");
-  EXPECT_TRUE(ceph::real_clock::is_zero(it2->second.status.load()));
+  auto* res_ep2_ptr = conn.find_resolved_endpoint("https://host2.example.com/rgw");
+  ASSERT_NE(res_ep2_ptr, nullptr);
+  EXPECT_EQ(res_ep2_ptr->host, "host2.example.com");
+  EXPECT_EQ(res_ep2_ptr->scheme, "https");
+  EXPECT_EQ(res_ep2_ptr->port, 443);  // default HTTPS port
+  EXPECT_EQ(res_ep2_ptr->ips.size(), 1u);
+  ASSERT_EQ(res_ep2_ptr->connect_to_strings.size(), 1u);
+  EXPECT_EQ(res_ep2_ptr->connect_to_strings[0], "host2.example.com:443:192.168.1.2:443");
+  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep2_ptr->status.load()));
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_with_path) {
@@ -295,10 +290,9 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_with_path) {
   const auto& resolved = conn.get_resolved_endpoints();
   ASSERT_EQ(resolved.size(), 1u);
 
-  auto it = resolved.find("http://api.example.com:9000/datacenter1/rgw");
-  ASSERT_NE(it, resolved.end());
-
-  const auto& res_ep = it->second;
+  auto* res_ep_ptr = conn.find_resolved_endpoint("http://api.example.com:9000/datacenter1/rgw");
+  ASSERT_NE(res_ep_ptr, nullptr);
+  const auto& res_ep = *res_ep_ptr;
 
   EXPECT_EQ(res_ep.host, "api.example.com");
   EXPECT_EQ(res_ep.port, 9000);
@@ -306,7 +300,7 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_with_path) {
   EXPECT_EQ(res_ep.connect_to_strings[0], "api.example.com:9000:10.0.0.1:9000");
 }
 
-TEST_F(RGWRESTConnTest, get_connect_to_mapping_round_robin) {
+TEST_F(RGWRESTConnTest, populate_connect_to_round_robin) {
   // Setup mock to return multiple IP addresses
   entity_addr_t addr1, addr2;
   addr1.parse("192.168.1.1");
@@ -316,47 +310,31 @@ TEST_F(RGWRESTConnTest, get_connect_to_mapping_round_robin) {
   EXPECT_CALL(*mock_resolver, resolve_all_addrs("rr.example.com", _))
        .WillOnce(DoAll(SetArgPointee<1>(mock_addrs), Return(0)));
 
-  std::list<std::string> endpoints = {"http://rr.example.com:8080"};
+  const string test_url = "http://rr.example.com:8080";
+
+  std::list<std::string> endpoints = {test_url};
   RGWRESTConn conn(cct.get(), nullptr, "remote-zone", endpoints, std::nullopt);
+
+  ResolvedEndpoint* res_ep = conn.find_resolved_endpoint(test_url);
+  ASSERT_NE(res_ep, nullptr);
 
   // First call should get first IP (index 0)
   RGWEndpoint ep1;
-  ep1.set_url("http://rr.example.com:8080");
-  conn.get_connect_to_mapping_for_url(ep1);
+  ep1.set_url(test_url);
+  conn.populate_connect_to(ep1, *res_ep);
   EXPECT_EQ(ep1.get_connect_to(), "rr.example.com:8080:192.168.1.1:8080");
 
   // Second call should get second IP (index 1)
   RGWEndpoint ep2;
-  ep2.set_url("http://rr.example.com:8080");
-  conn.get_connect_to_mapping_for_url(ep2);
+  ep2.set_url(test_url);
+  conn.populate_connect_to(ep2, *res_ep);
   EXPECT_EQ(ep2.get_connect_to(), "rr.example.com:8080:192.168.1.2:8080");
 
   // Third call should wrap around to first IP (index 2 % 2 = 0)
   RGWEndpoint ep3;
-  ep3.set_url("http://rr.example.com:8080");
-  conn.get_connect_to_mapping_for_url(ep3);
+  ep3.set_url(test_url);
+  conn.populate_connect_to(ep3, *res_ep);
   EXPECT_EQ(ep3.get_connect_to(), "rr.example.com:8080:192.168.1.1:8080");
-}
-
-TEST_F(RGWRESTConnTest, get_connect_to_mapping_unknown_url) {
-  // Setup mock - won't be called for unknown URL lookup
-  entity_addr_t addr;
-  addr.parse("192.168.1.1");
-  std::vector<entity_addr_t> mock_addrs = {addr};
-
-  EXPECT_CALL(*mock_resolver, resolve_all_addrs("known.example.com", _))
-       .WillOnce(DoAll(SetArgPointee<1>(mock_addrs), Return(0)));
-
-  std::list<std::string> endpoints = {"http://known.example.com:8080"};
-  RGWRESTConn conn(cct.get(), nullptr, "remote-zone", endpoints, std::nullopt);
-
-  // Query with a URL that wasn't in the original endpoints
-  RGWEndpoint ep;
-  ep.set_url("http://unknown.example.com:8080");
-  conn.get_connect_to_mapping_for_url(ep);
-
-  // Should set connect_to to empty string since URL not found
-  EXPECT_EQ(ep.get_connect_to(), "");
 }
 
 TEST_F(RGWRESTConnTest, endpoint_constructor_sets_original_url) {
@@ -408,10 +386,9 @@ TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_uses_original_url) {
   conn.set_endpoint_unconnectable(ep);
 
   // Verify status was updated (endpoint should now be skipped initially)
-  const auto& resolved = conn.get_resolved_endpoints();
-  auto it = resolved.find("http://example.com:8080");
-  ASSERT_NE(it, resolved.end());
-  EXPECT_FALSE(ceph::real_clock::is_zero(it->second.status.load()));
+  auto* res_ep_ptr = conn.find_resolved_endpoint("http://example.com:8080");
+  ASSERT_NE(res_ep_ptr, nullptr);
+  EXPECT_FALSE(ceph::real_clock::is_zero(res_ep_ptr->status.load()));
 }
 
 TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_after_url_modification) {
@@ -440,17 +417,14 @@ TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_after_url_modification) {
   // Mark unconnectable - should use original_url for lookup
   conn.set_endpoint_unconnectable(ep);
 
-  // Verify the ORIGINAL endpoint was marked (not the modified URL)
-  const auto& resolved = conn.get_resolved_endpoints();
-
   // Should find by original URL
-  auto it = resolved.find("http://example.com:8080");
-  ASSERT_NE(it, resolved.end());
-  EXPECT_FALSE(ceph::real_clock::is_zero(it->second.status.load()));
+  auto* res_ep_ptr = conn.find_resolved_endpoint("http://example.com:8080");
+  ASSERT_NE(res_ep_ptr, nullptr);
+  EXPECT_FALSE(ceph::real_clock::is_zero(res_ep_ptr->status.load()));
 
   // Should NOT have created entry for modified URL
-  auto it2 = resolved.find("http://192.168.1.1:8080");
-  EXPECT_EQ(it2, resolved.end());
+  auto* res_ep2_ptr = conn.find_resolved_endpoint("http://192.168.1.1:8080");
+  EXPECT_EQ(res_ep2_ptr, nullptr);
 }
 
 TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_with_unknown_original_url) {
@@ -472,8 +446,7 @@ TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_with_unknown_original_url) {
   conn.set_endpoint_unconnectable(ep);
 
   // Verify original endpoint status unchanged
-  const auto& resolved = conn.get_resolved_endpoints();
-  auto it = resolved.find("http://known.example.com:8080");
-  ASSERT_NE(it, resolved.end());
-  EXPECT_TRUE(ceph::real_clock::is_zero(it->second.status.load()));
+  auto* res_ep_ptr = conn.find_resolved_endpoint("http://known.example.com:8080");
+  ASSERT_NE(res_ep_ptr, nullptr);
+  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep_ptr->status.load()));
 }

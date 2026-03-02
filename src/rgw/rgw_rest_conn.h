@@ -112,9 +112,8 @@ struct ResolvedEndpoint {
 class RGWRESTConn
 {
   CephContext *cct;
-  std::vector<std::string> endpoint_urls;             // For ordered round-robin
-  std::atomic<int64_t> endpoint_urls_counter = { 0 }; // Round-robin counter for endpoint_urls
-  std::unordered_map<std::string, ResolvedEndpoint> resolved_endpoints;
+  std::atomic<int64_t> endpoint_round_robin_counter = { 0 }; // Round-robin counter for resolved_endpoints
+  std::vector<ResolvedEndpoint> resolved_endpoints;
   RGWAccessKey key;
   std::string self_zone_group;
   std::string remote_id;
@@ -146,7 +145,8 @@ public:
 
   int get_endpoint(RGWEndpoint& endpoint);
   RGWEndpoint get_endpoint();
-  const std::unordered_map<std::string, ResolvedEndpoint>& get_resolved_endpoints() const { return resolved_endpoints; }
+  const std::vector<ResolvedEndpoint>& get_resolved_endpoints() const { return resolved_endpoints; }
+  ResolvedEndpoint* find_resolved_endpoint(const std::string& url);
   void set_endpoint_unconnectable(const RGWEndpoint& endpoint);
   const std::string& get_self_zonegroup() {
     return self_zone_group;
@@ -169,7 +169,7 @@ public:
   CephContext *get_ctx() {
     return cct;
   }
-  size_t get_endpoint_count() const { return endpoint_urls.size(); }
+  size_t get_endpoint_count() const { return resolved_endpoints.size(); }
 
   virtual void populate_params(param_vec_t& params, const rgw_owner* uid, const std::string& zonegroup);
 
@@ -194,7 +194,7 @@ public:
                        ceph::real_time *mtime, optional_yield y);
 
   /* pick an IP to 'connect-to' given the endpoint url */
-  void get_connect_to_mapping_for_url(RGWEndpoint& endpoint);
+  void populate_connect_to(RGWEndpoint& endpoint, ResolvedEndpoint& res_ep);
 
   struct get_obj_params {
     const rgw_owner *uid{nullptr};
