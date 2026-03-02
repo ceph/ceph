@@ -289,6 +289,7 @@ struct error_code;
     const char *end_c_str() const;
     char *end_c_str();
     unsigned length() const { return _len; }
+    unsigned size() const { return length(); }
     unsigned offset() const { return _off; }
     unsigned start() const { return _off; }
     unsigned end() const { return _off + _len; }
@@ -1006,6 +1007,7 @@ struct error_code;
     const buffers_t& buffers() const { return _buffers; }
     buffers_t& mut_buffers() { return _buffers; }
     void swap(list& other) noexcept;
+
     unsigned length() const {
 #if 0
       // DEBUG: verify _len
@@ -1023,6 +1025,7 @@ struct error_code;
 #endif
       return _len;
     }
+    unsigned size() const { return length(); }
 
     bool contents_equal(const buffer::list& other) const;
     bool contents_equal(const void* other, size_t length) const;

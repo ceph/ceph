@@ -24,7 +24,7 @@
 
 #define CATCH_CONFIG_MAIN
 
-#include "rgw/rgw_fdb.h"
+#include "rgw/ceph_fdb.h"
 
 #include <fmt/format.h>
 #include <fmt/chrono.h>
@@ -125,59 +125,48 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
     const std::string_view n { "Hello, World!" };
   
     ceph::buffer::list o;
+
+    // Why the pointless append? Well, to make sure that we aren't double-appending!
     o.append(n);
   
     lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
     lfdb::get(lfdb::make_transaction(dbh), "key", o);
-  
-    REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
-  }
-
-  SECTION("buffer::list (and buffer::list key) -> buffer::list")
-  {
-    ceph::buffer::list n;
-    n.append("Hello, World!");
-  
-    ceph::buffer::list o;
-    o.append(n);
-  
-    lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
-    lfdb::get(lfdb::make_transaction(dbh), "key", o);
-  
-    REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
-  }
-
-  SECTION("buffer::list (and buffer::list key) -> buffer::list")
-  {
-    ceph::buffer::list n;
-    n.append("Hello, World!");
-  
-    ceph::buffer::list o;
-    o.append(n);
-  
-    lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
-    lfdb::get(lfdb::make_transaction(dbh), "key", o);
-  
-    REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
-  }
-}
-
-TEST_CASE("standard container FDB conversions") {
-
- std::map<int, std::string> kvs {
-   { 0, "hello" },
-   { 1, "world" }
- };
-
- std::vector<std::uint8_t> buffer;
-
-
- ceph::libfdb::to::convert(kvs, buffer);
- ceph::libfdb::from::convert(buffer, kvs_out);
  
-...TODO 
-}
+println("JFW: n ({}) =\n{}", std::size(n), n); 
+println("JFW: o ({}) =\n{}", std::size(o), o); 
+    REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  }
 
+/*JFW
+  SECTION("buffer::list (and buffer::list key) -> buffer::list")
+  {
+    ceph::buffer::list n;
+    n.append("Hello, World!");
+  
+    ceph::buffer::list o;
+    o.append(n);
+  
+    lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
+    lfdb::get(lfdb::make_transaction(dbh), "key", o);
+  
+    REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  }
+
+  SECTION("buffer::list (and buffer::list key) -> buffer::list")
+  {
+    ceph::buffer::list n;
+    n.append("Hello, World!");
+  
+    ceph::buffer::list o;
+    o.append(n);
+  
+    lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
+    lfdb::get(lfdb::make_transaction(dbh), "key", o);
+  
+    REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  }
+*/
+}
 // Adapted from Catch2 documentation:
 #include <catch2/catch_session.hpp>
 

@@ -443,7 +443,6 @@ class transaction final
 
  private:
  void set(std::span<const std::uint8_t> k, std::span<const std::uint8_t> v) {
- //   maybe_vivify();
     fdb_transaction_set(raw_handle(),
                         (const uint8_t*)k.data(), k.size(),
                         (const uint8_t*)v.data(), v.size());
@@ -461,13 +460,11 @@ class transaction final
  }
 
  void erase(std::span<const std::uint8_t> k) {
-//    maybe_vivify();
     fdb_transaction_clear(raw_handle(),
 			  (const std::uint8_t *)k.data(), k.size());
  }
 
  void erase(const ceph::libfdb::concepts::selector auto& key_range) {
- //   maybe_vivify();
     fdb_transaction_clear_range(raw_handle(),
         (const uint8_t *)key_range.begin_key.data(), key_range.begin_key.size(), 
         (const uint8_t *)key_range.end_key.data(), key_range.end_key.size());

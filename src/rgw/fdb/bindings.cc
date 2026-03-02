@@ -4,7 +4,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2025 International Business Machines Corp. (IBM)
+ * Copyright (C) 2025-2026 International Business Machines Corp. (IBM)
  *      
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -18,7 +18,7 @@
 namespace ceph::libfdb::detail {
 
 // JFW: delaying lookup by putting this in a seperate source file-- possible to do this header only, but it
-// requires additional work and planning:
+// requires additional work:
 std::pair<std::string, std::string> to_decoded_kv_pair(const FDBKeyValue kv)
 {
  std::pair<std::string, std::string> r;
