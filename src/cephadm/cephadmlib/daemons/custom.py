@@ -98,10 +98,10 @@ class CustomContainer(ContainerDaemonForm):
                 f.write(content)
 
     def get_daemon_args(self) -> List[str]:
-        return []
+        return self.args
 
     def get_container_args(self) -> List[str]:
-        return self.args
+        return []
 
     def get_container_envs(self) -> List[str]:
         return self.envs

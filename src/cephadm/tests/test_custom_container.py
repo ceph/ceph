@@ -62,6 +62,10 @@ class TestCustomContainer(unittest.TestCase):
 
     def test_get_container_args(self):
         result = self.cc.get_container_args()
+        self.assertEqual(result, [])
+
+    def test_get_daemon_args(self):
+        result = self.cc.get_daemon_args()
         self.assertEqual(result, [
             '--no-healthcheck',
             '-p 6800:6800'
