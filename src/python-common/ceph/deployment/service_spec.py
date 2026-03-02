@@ -1720,6 +1720,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
                  enable_dsa_acceleration: bool = False,
                  rbd_with_crc32c: bool = True,
+                 rbd_with_spdk_wq: bool = False,
                  tgt_cmd_extra_args: Optional[str] = None,
                  iobuf_options: Optional[Dict[str, int]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
@@ -1922,6 +1923,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.enable_dsa_acceleration = enable_dsa_acceleration
         #: ``rbd_with_crc32c`` enable RBD CRC32C checksum reuse optimization
         self.rbd_with_crc32c = rbd_with_crc32c
+        #: ``rbd_with_spdk_wq`` enable SPDK ContextWQ for RBD image operations
+        self.rbd_with_spdk_wq = rbd_with_spdk_wq
         #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
         #: List of extra arguments for SPDK iobuf in the form opt=value
@@ -2128,6 +2131,7 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_boolean(self.enable_monitor_client, "Enable monitor client")
         verify_boolean(self.enable_dsa_acceleration, "Enable DSA acceleration")
         verify_boolean(self.rbd_with_crc32c, "Enable RBD CRC32C checksum reuse")
+        verify_boolean(self.rbd_with_spdk_wq, "Enable SPDK ContextWQ for RBD operations")
         verify_positive_int(self.spdk_mem_size, "SPDK memory size")
         verify_positive_int(self.spdk_huge_pages, "SPDK huge pages count")
         if self.spdk_mem_size and self.spdk_huge_pages:
