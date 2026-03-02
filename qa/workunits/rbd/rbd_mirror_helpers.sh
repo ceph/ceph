@@ -509,7 +509,7 @@ all_admin_daemons()
 
 status()
 {
-    local cluster daemon image_pool image_ns image
+    local cluster image_pool image_ns image
 
     for cluster in ${CLUSTER1} ${CLUSTER2}
     do
@@ -584,7 +584,7 @@ status()
                 continue
             fi
 
-            echo "${daemon} rbd-mirror process in ps output:"
+            echo "${cluster} rbd-mirror process in ps output:"
             if ps auxww |
                 awk -v pid=${pid} 'NR == 1 {print} $2 == pid {print; exit 1}'
             then
