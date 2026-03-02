@@ -12404,13 +12404,13 @@ void Server::_rmsnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snap
   diri->purge_stale_snap_data(diri->snaprealm->get_snaps());
 }
 
-struct C_MDS_renamesnap_finish : public ServerLogContext {
+struct C_MDS_snap_meta_update_finish : public ServerLogContext {
   CInode *diri;
   snapid_t snapid;
-  C_MDS_renamesnap_finish(Server *s, const MDRequestRef& r, CInode *di, snapid_t sn) :
+  C_MDS_snap_meta_update_finish(Server *s, const MDRequestRef& r, CInode *di, snapid_t sn) :
     ServerLogContext(s, r), diri(di), snapid(sn) {}
   void finish(int r) override {
-    server->_renamesnap_finish(mdr, diri, snapid);
+    server->_snap_metadata_update_finish(mdr, diri, snapid);
   }
 };
 
@@ -12516,14 +12516,16 @@ void Server::handle_client_renamesnap(const MDRequestRef& mdr)
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, diri);
 
   // journal the snaprealm changes
-  submit_mdlog_entry(le, new C_MDS_renamesnap_finish(this, mdr, diri, snapid),
+  submit_mdlog_entry(le, new C_MDS_snap_meta_update_finish(this, mdr, diri, snapid),
                      mdr, __func__);
   mdlog->flush();
 }
 
-void Server::_renamesnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid)
+// Finish method for updating any snapshot metadata, be it custom user metadata
+// or snapshot name
+void Server::_snap_metadata_update_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid)
 {
-  dout(10) << "_renamesnap_finish " << *mdr << " " << snapid << dendl;
+  dout(10) << __func__ << " " << *mdr << " " << snapid << dendl;
 
   mdr->apply();
 

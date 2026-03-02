@@ -346,7 +346,7 @@ public:
   void handle_client_rmsnap(const MDRequestRef& mdr);
   void _rmsnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid);
   void handle_client_renamesnap(const MDRequestRef& mdr);
-  void _renamesnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid);
+  void _snap_metadata_update_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid);
   void handle_client_readdir_snapdiff(const MDRequestRef& mdr);
   void handle_client_file_blockdiff(const MDRequestRef& mdr);
   void handle_file_blockdiff_finish(const MDRequestRef& mdr, CInode *in, const BlockDiff &block_diff,
