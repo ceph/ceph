@@ -175,7 +175,7 @@ inline void erase(ceph::libfdb::transaction_handle txn, const ceph::libfdb::sele
 
 inline void erase(ceph::libfdb::transaction_handle txn, const ceph::libfdb::select& key_range)
 {
- return erase(txn, key_range, commit_after_op::no_commit);
+ return erase(txn, key_range, commit_after_op::commit);
 }
 
 inline void erase(ceph::libfdb::database_handle dbh, const ceph::libfdb::select& key_range)
@@ -192,7 +192,7 @@ inline void erase(ceph::libfdb::transaction_handle txn, std::string_view k, cons
 
 inline void erase(ceph::libfdb::transaction_handle txn, std::string_view k)
 {
- return erase(txn, k, commit_after_op::no_commit);
+ return erase(txn, k, commit_after_op::commit);
 }
 
 inline void erase(ceph::libfdb::database_handle dbh, std::string_view k)

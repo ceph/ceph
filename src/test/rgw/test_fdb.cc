@@ -132,7 +132,6 @@ struct janitor final
  }
 
  static void drop_all() {
-   // Nobody'd better run this in production!
    // Note: technically, 0xFF, 0xFF is needed to include the system keys (if the transaction's allowed to
    // access these), but I don't think any tests will be doing this, at least not for now; the documentation
    // with details is unfortunately light on, for instance, whether or not after 0xFF the NULL character is
@@ -240,12 +239,20 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
 TEST_CASE("fdb simple (delete keys in range)", "[rgw][fdb]") {
  janitor j;
 
- const auto selector = lfdb::select { make_key(0), make_key(25) };
+/*
+const char begin_key[] = { (char)0x00 };
+const char end_key[]   = { (char)0xFF };
+lfdb::erase(lfdb::make_transaction(lfdb::create_database()),
+ lfdb::select { begin_key, end_key },
+ lfdb::commit_after_op::commit);
+*/
+ const auto selector = lfdb::select { "\x00", "\xFF" };
 
  auto dbh = lfdb::create_database();
 
- // Make sure there's nothing in the database:
- CHECK(0 == key_count(dbh, selector));
+ // Make sure there's nothing in the database overlapping our range:
+ lfdb::erase(lfdb::make_transaction(dbh), selector);
+ REQUIRE(0 == key_count(dbh, selector));
 
  // Write a bunch of kvs:
  const auto kvs = make_monotonic_kvs(20);
