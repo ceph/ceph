@@ -458,6 +458,8 @@ public:
   virtual ~POSIXLuaManager() = default;
 
   virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  virtual std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
+                                                                        const std::string& key) override;
   virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
   virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
   virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;

@@ -195,6 +195,7 @@ void RGWRealmReloader::reload()
         env.lua.manager->luarocks_path());
     if (env.lua.background) {
       env.lua.background->set_manager(env.lua.manager.get());
+      env.lua.manager.get()->set_lua_background(env.lua.background);
     }
   }
 
