@@ -103,6 +103,11 @@ public:
                                            "Dump internal statistics for bluefs."
                                            "");
         ceph_assert(r == 0);
+        r = admin_socket->register_command("bluefs stats reset",
+                                           hook,
+                                           "Reset maximum historical value for bluefs statistics."
+                                           "");
+        ceph_assert(r == 0);
 	r = admin_socket->register_command("bluefs files list", hook,
 					   "print files in bluefs");
 	ceph_assert(r == 0);
@@ -161,6 +166,10 @@ private:
       std::stringstream ss;
       bluefs->dump_block_extents(ss);
       bluefs->dump_volume_selector(ss);
+      out.append(ss);
+    } else if (command == "bluefs stats reset") {
+      std::stringstream ss;
+      bluefs->reset_volume_selector(ss);
       out.append(ss);
     } else if (command == "bluefs files list") {
       const char* devnames[3] = {"wal","db","slow"};
@@ -5469,6 +5478,11 @@ void* RocksDBBlueFSVolumeSelector::get_hint_by_dir(std::string_view dirname) con
     }
   }
   return reinterpret_cast<void*>(res);
+}
+
+void RocksDBBlueFSVolumeSelector::reset_history(ostream& sout) {
+  per_level_per_dev_max.clear();
+  sout << "Reset done." << std::endl;
 }
 
 void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {

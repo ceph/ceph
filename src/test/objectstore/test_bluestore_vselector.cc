@@ -125,10 +125,19 @@ TEST(rocksdb_bluefs_vselector, basic) {
   }
   ASSERT_EQ(2, selector.select_prefer_bdev((void*)slow_bdev));
 
-
-  std::stringstream ss;
-  selector.dump(ss);
-  std::cout << ss.str() << std::endl;
+  {
+    std::stringstream ss;
+    selector.dump(ss);
+    std::cout << ss.str() << std::endl;
+  }
+  {
+    std::stringstream ss;
+    ASSERT_NE(0, selector.get_max_db_total());
+    selector.reset_history(ss);
+    ASSERT_EQ(0, selector.get_max_db_total());
+    selector.dump(ss);
+    std::cout << ss.str() << std::endl;
+  }
 }
 
 int main(int argc, char **argv) {
