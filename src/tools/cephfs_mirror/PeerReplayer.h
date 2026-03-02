@@ -292,6 +292,14 @@ private:
       sdq_cv.notify_all();
     }
     bool wait_for_sync();
+    void set_blockdiff_supported(bool supported) {
+      std::unique_lock lock(sdq_lock);
+      m_blockdiff_supported = supported;
+    }
+    bool is_blockdiff_supported() {
+      std::unique_lock lock(sdq_lock);
+      return m_blockdiff_supported;
+    }
 
     int remote_mkdir(const std::string &epath, const struct ceph_statx &stx);
   protected:
@@ -316,6 +324,7 @@ private:
     bool m_datasync_error = false;
     int m_datasync_errno = 0;
     bool m_backoff = false;
+    bool m_blockdiff_supported = true;
   };
 
   class RemoteSync : public SyncMechanism {
