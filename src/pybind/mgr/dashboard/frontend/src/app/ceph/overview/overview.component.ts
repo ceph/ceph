@@ -14,6 +14,8 @@ import { HealthService } from '~/app/shared/api/health.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { HealthCheck, HealthSnapshotMap } from '~/app/shared/models/health.interface';
 import {
+  ACTIVE_CLEAN_CHART_OPTIONS,
+  calcActiveCleanSeverityAndReasons,
   getClusterHealth,
   getHealthChecksAndIncidents,
   getResiliencyDisplay,
@@ -24,6 +26,7 @@ import {
   safeDifference,
   SEVERITY,
   Severity,
+  SEVERITY_TO_COLOR,
   SeverityIconMap
 } from '~/app/shared/models/overview';
 
@@ -34,16 +37,25 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { OverviewAlertsCardComponent } from './alerts-card/overview-alerts-card.component';
 import { PerformanceCardComponent } from '~/app/shared/components/performance-card/performance-card.component';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 /**
  * Mapper: HealthSnapshotMap -> HealthCardVM
  * Runs only when healthData$ emits.
  */
-export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
+function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
   const checksObj: Record<string, HealthCheck> = d.health?.checks ?? {};
   const clusterHealth = getClusterHealth(d.health.status as HealthStatus);
+  const pgStates = d?.pgmap?.pgs_by_state ?? [];
+  const totalPg = d?.pgmap?.num_pgs ?? 0;
+
   const { incidents, checks } = getHealthChecksAndIncidents(checksObj);
-  const resiliencyHealth = getResiliencyDisplay(checks);
+  const resiliencyHealth = getResiliencyDisplay(checks, pgStates);
+  const {
+    activeCleanPercent,
+    severity: activeCleanChartSeverity,
+    reasons: activeCleanChartReason
+  } = calcActiveCleanSeverityAndReasons(pgStates, totalPg);
 
   // --- System sub-states ---
 
@@ -74,8 +86,6 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
   // Overall = worst of the subsystem severities.
   const overallSystemSev = maxSeverity(monSev, mgrSev, osdSev, hostsSev);
 
-  // Resiliency
-
   return {
     fsid: d.fsid,
     overallSystemSev: SeverityIconMap[overallSystemSev],
@@ -84,13 +94,19 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
     checks,
 
     pgs: {
-      total: d?.pgmap?.num_pgs,
-      states: d?.pgmap?.pgs_by_state,
+      total: totalPg,
+      states: pgStates,
       io: [
-        { label: $localize`Client write`, value: d?.pgmap?.write_bytes_sec },
-        { label: $localize`Client read`, value: d?.pgmap?.read_bytes_sec },
-        { label: $localize`Recovery I/O`, value: 0 }
-      ]
+        { label: $localize`Client write`, value: d?.pgmap?.write_bytes_sec ?? 0 },
+        { label: $localize`Client read`, value: d?.pgmap?.read_bytes_sec ?? 0 },
+        { label: $localize`Recovery I/O`, value: d?.pgmap?.recovering_bytes_per_sec ?? 0 }
+      ],
+      activeCleanChartData: [{ group: 'value', value: activeCleanPercent }],
+      activeCleanChartOptions: {
+        ...ACTIVE_CLEAN_CHART_OPTIONS,
+        color: { scale: { value: SEVERITY_TO_COLOR[activeCleanChartSeverity] } }
+      },
+      activeCleanChartReason
     },
 
     clusterHealth,
@@ -101,7 +117,7 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
       value: $localize`${mgrActive} active, ${mgrStandby} standby`,
       severity: SeverityIconMap[mgrSev]
     },
-    osd: { value: $localize`${osdUp}/${osdTotal} in/up`, severity: SeverityIconMap[osdSev] },
+    osd: { value: $localize`${osdIn}/${osdUp} in/up`, severity: SeverityIconMap[osdSev] },
     hosts: {
       value: $localize`${hostsAvailable} / ${hostsTotal} available`,
       severity: SeverityIconMap[hostsSev]
@@ -121,7 +137,8 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
     OverviewAlertsCardComponent,
     PerformanceCardComponent,
     LayoutModule,
-    DataTableModule
+    DataTableModule,
+    PipesModule
   ],
   standalone: true,
   templateUrl: './overview.component.html',
@@ -144,7 +161,7 @@ export class OverviewComponent {
 
   private readonly healthData$: Observable<HealthSnapshotMap> = this.refreshIntervalObs(() =>
     this.healthService.getHealthSnapshot()
-  );
+  ).pipe(shareReplay({ bufferSize: 1, refCount: true }));
 
   readonly healthCardVm$: Observable<HealthCardVM> = this.healthData$.pipe(
     map(buildHealthCardVM),
