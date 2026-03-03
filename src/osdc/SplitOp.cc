@@ -147,7 +147,7 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   ceph_assert(pi);
   uint64_t offset = op.op.extent.offset;
   uint64_t length = op.op.extent.length;
-  uint64_t data_chunk_count = pi->nonprimary_shards.size() + 1;
+  uint64_t data_chunk_count = pi->get_ec_data_shard_count();
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
   uint64_t start_chunk = offset / chunk_size;
   // This calculation is wrong for length = 0, but such IOs should not have
@@ -614,7 +614,7 @@ std::pair<bool, bool> is_single_chunk(const pg_pool_t *pi, uint64_t offset, uint
   if (len > stripe_width / 2) {
     return {false, false};
   }
-  uint64_t data_chunk_count = pi->nonprimary_shards.size() + 1;
+  uint64_t data_chunk_count = pi->get_ec_data_shard_count();
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
 
   // Chunk_size should never be zero, so this is paranoia.
@@ -820,7 +820,7 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContex
   ceph_assert(pi);
 
   objecter._calc_target(&op->target, op);
-  uint64_t data_chunk_count = pi->nonprimary_shards.size() + 1;
+  uint64_t data_chunk_count = pi->get_ec_data_shard_count();
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
 
   // Find the first read to work out where the IO goes.
