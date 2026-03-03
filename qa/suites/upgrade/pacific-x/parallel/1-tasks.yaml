@@ -22,6 +22,7 @@ tasks:
 - print: "**** done start installing pacific cephadm ..."
 - cephadm:
     image: quay.io/ceph/ceph:v16.2.15
+    allow_mismatched_release: true
     conf:
       osd:
         #set config option for which cls modules are allowed to be loaded / used

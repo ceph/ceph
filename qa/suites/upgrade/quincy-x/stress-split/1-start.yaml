@@ -7,6 +7,7 @@ tasks:
 - cephadm:
     # XXX 17.2.9 has no containers (see ML message)
     image: quay.io/ceph/ceph:v17.2.8
+    allow_mismatched_release: true
     conf:
       osd:
         #set config option for which cls modules are allowed to be loaded / used
