@@ -164,6 +164,9 @@ int BitmapFreelistManager::_expand(uint64_t old_size, KeyValueDB* db)
 }
 
 int BitmapFreelistManager::expand(uint64_t new_size, KeyValueDB* db){
+  if (new_size == size){
+    return 0;
+  }
   uint64_t old_size = size;
   size = new_size;
   return _expand(old_size ,db);
