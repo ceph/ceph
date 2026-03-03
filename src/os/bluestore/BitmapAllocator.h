@@ -16,6 +16,7 @@
 class BitmapAllocator : public AllocatorBase,
   public AllocatorLevel02<AllocatorLevel01Loose> {
   CephContext* cct;
+  ceph::mutex expand_lock = ceph::make_mutex("BitmapAllocator::expand_lock");
 public:
   BitmapAllocator(CephContext* _cct, int64_t capacity, int64_t alloc_unit,
 		  std::string_view name);
