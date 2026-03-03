@@ -48,8 +48,6 @@ def install_packages(ctx, config):
     log.info('Installing packages for Keycloak and Java 1.7...')
 
     os_type = teuthology.get_distro(ctx)
-    os_version = teuthology.get_distro_version(ctx)
-
     for (client, _) in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
 
