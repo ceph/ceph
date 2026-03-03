@@ -519,6 +519,12 @@ function TEST_bluestore_expand_online() {
     sleep 5
     create_pool foo 16
 
+    # no device expansion sanity check
+    ceph tell osd.0 bluestore bluefs-bdev-expand || return 1
+    ceph tell osd.1 bluestore bluefs-bdev-expand || return 1
+    ceph tell osd.2 bluestore bluefs-bdev-expand || return 1
+    ceph tell osd.3 bluestore bluefs-bdev-expand || return 1
+
     timeout 60 rados bench -p foo 30 write -b 4096 --no-cleanup #|| return 1
 
     # expand slow devices while OSDs are running
