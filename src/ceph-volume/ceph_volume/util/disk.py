@@ -715,6 +715,12 @@ def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_pat
         name = kname = pname = os.path.join("/dev", dev)
         if not os.path.exists(name):
             continue
+        # Exclude any CDROM devices (ex: IPMI devices)
+        # The linux kernel reports these as SCSI device type 5 under /sys/block/<dev>/device/type
+        # and they appear as /dev/sr* (ex: /dev/sr0)
+        # These are not physical disks and are not valid OSD targets, so skip them.
+        if get_file_contents(os.path.join(_sys_block_path, dev, 'device/type'), '').strip() == '5':
+            continue
         type_: str = 'disk'
         holders: List[str] = os.listdir(os.path.join(_sys_block_path, dev, 'holders'))
         if holder_inner_loop():
