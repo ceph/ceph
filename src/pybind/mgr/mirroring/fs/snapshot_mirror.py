@@ -790,9 +790,23 @@ class FSSnapshotMirror:
                                 'peers'           : []
                             } # type: Dict[str, Any]
                             for peer_uuid, peer_desc in fs_desc['peers'].items():
+                                # Get basic peer info from daemon status (FSMap data)
+                                remote = peer_desc['remote'].copy()  # Don't modify original
+
+                                # Fetch mon_host and fsid from config database
+                                config_key = FSSnapshotMirror.peer_config_key(fs_desc['name'], peer_uuid)
+                                try:
+                                    remote_config = self.config_get(config_key)
+                                    if remote_config:
+                                        if 'mon_host' in remote_config:
+                                            remote['mon_host'] = remote_config['mon_host']
+                                        if 'fsid' in remote_config:
+                                            remote['fsid'] = remote_config['fsid']
+                                except Exception as e:
+                                    log.warning(f'failed to fetch config for fs={fs_desc["name"]}, peer={peer_uuid}: {e}')
                                 peer = {
                                     'uuid'   : peer_uuid,
-                                    'remote' : peer_desc['remote'],
+                                    'remote' : remote,
                                     'stats'  : peer_desc['stats']
                                 }
                                 fs['peers'].append(peer)

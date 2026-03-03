@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 import errno
 import logging
 import random
@@ -878,7 +879,17 @@ class TestMirroring(CephFSTestCase):
 
     def test_cephfs_mirror_service_daemon_status(self):
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
-        self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
+
+        # create a bootstrap token for the peer
+        bootstrap_token = self.bootstrap_peer(self.secondary_fs_name, "client.mirror_peer_bootstrap", "site-remote")
+        # Decode the token to extract the FSID
+        token_str = base64.b64decode(bootstrap_token)
+        token_dct = json.loads(token_str.decode('utf-8'))
+        expected_remote_fsid = token_dct['fsid']
+        expected_remote_mon_host = token_dct['mon_host']
+
+        # import the peer via bootstrap token
+        self.import_peer(self.primary_fs_name, bootstrap_token)
 
         time.sleep(30)
         status = self.get_mirror_daemon_status()
@@ -891,6 +902,11 @@ class TestMirroring(CephFSTestCase):
         self.assertEqual(status['filesystems'][0]['directory_count'], 0)
         self.assertEqual(peer['stats']['failure_count'], 0)
         self.assertEqual(peer['stats']['recovery_count'], 0)
+
+        remote = peer['remote']
+        self.assertEqual(remote['fs_name'], self.secondary_fs_name)
+        self.assertEqual(remote['fsid'], expected_remote_fsid)
+        self.assertEqual(remote['mon_host'], expected_remote_mon_host)
 
         # add a non-existent directory for synchronization -- check if its reported
         # in daemon stats

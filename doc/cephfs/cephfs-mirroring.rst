@@ -290,7 +290,9 @@ CephFS mirroring module provides ``mirror daemon status`` interface to check mir
               "remote": {
                 "client_name": "client.mirror_remote",
                 "cluster_name": "ceph",
-                "fs_name": "backup_fs"
+                "fs_name": "backup_fs",
+                "mon_host": "[v2:192.168.64.5:40183,v1:192.168.64.5:40184]",
+                "fsid": "5682c8e5-50cd-4cfd-b75c-5354dcdda487"
               },
               "stats": {
                 "failure_count": 1,
@@ -304,8 +306,9 @@ CephFS mirroring module provides ``mirror daemon status`` interface to check mir
   ]
 
 An entry per mirror daemon instance is displayed along with information such as configured
-peers and basic stats. For more detailed stats, use the admin socket interface as detailed
-below.
+peers and basic stats. The peer information includes the remote file system name (``fs_name``),
+cluster's monitor addresses (``mon_host``) and cluster FSID (``fsid``). For more detailed
+stats, use the admin socket interface as detailed below.
 
 CephFS mirror daemons provide admin socket commands for querying mirror status. To check
 available commands for mirror status use::
