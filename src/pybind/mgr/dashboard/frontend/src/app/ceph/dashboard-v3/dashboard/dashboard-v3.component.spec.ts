@@ -82,7 +82,8 @@ describe('Dashbord Component', () => {
       bytes_total: 325343772672,
       num_pgs: 497,
       write_bytes_sec: 0,
-      read_bytes_sec: 0
+      read_bytes_sec: 0,
+      recovering_bytes_per_sec: 0
     },
     mgrmap: {
       num_active: 1,

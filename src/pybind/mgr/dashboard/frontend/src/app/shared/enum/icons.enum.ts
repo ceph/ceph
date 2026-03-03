@@ -120,7 +120,8 @@ export enum Icons {
   checkMarkOutline = 'checkmark--outline',
   warningAlt = 'warning--alt',
   arrowUpRight = 'arrow--up-right',
-  inProgress = 'in-progress'
+  inProgress = 'in-progress',
+  arrowDown = 'arrow--down'
 }
 
 export enum IconSize {
@@ -159,5 +160,6 @@ export const ICON_TYPE = {
   warningAlt: 'warning--alt',
   checkMarkOutline: 'checkmark--outline',
   arrowUpRight: ' arrow--up-right',
-  inProgress: 'in-progress'
+  inProgress: 'in-progress',
+  arrowDown: 'arrow--down'
 } as const;

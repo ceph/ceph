@@ -119,6 +119,7 @@ import WarningAlt16 from '@carbon/icons/es/warning--alt/16';
 import CheckMarkOutline16 from '@carbon/icons/es/checkmark--outline/16';
 import ArrowUpRight16 from '@carbon/icons/es/arrow--up-right/16';
 import InProgress16 from '@carbon/icons/es/in-progress/16';
+import ArrowDown16 from '@carbon/icons/es/arrow--down/16';
 
 @NgModule({
   imports: [
@@ -284,7 +285,8 @@ export class ComponentsModule {
       WarningAlt16,
       CheckMarkOutline16,
       ArrowUpRight16,
-      InProgress16
+      InProgress16,
+      ArrowDown16
     ]);
   }
 }

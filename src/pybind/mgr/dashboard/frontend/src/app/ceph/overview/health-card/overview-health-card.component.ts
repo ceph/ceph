@@ -32,6 +32,7 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { HardwareNameMapping } from '~/app/shared/enum/hardware.enum';
+import { GaugeChartComponent } from '@carbon/charts-angular';
 
 type OverviewHealthData = {
   summary: Summary;
@@ -67,7 +68,8 @@ type HwRowVM = {
     PipesModule,
     TooltipModule,
     TabsModule,
-    LayoutModule
+    LayoutModule,
+    GaugeChartComponent
   ],
   standalone: true,
   templateUrl: './overview-health-card.component.html',
@@ -88,7 +90,7 @@ export class OverviewHealthCardComponent {
   @Output() viewPGStates = new EventEmitter<void>();
   @Output() activeSectionChange = new EventEmitter<HealthCardTabSection | null>();
 
-  activeSection: HealthCardTabSection | null = 'resiliency';
+  activeSection: HealthCardTabSection | null;
 
   healthItems: HealthItemConfig[] = [
     { key: 'mon', label: $localize`Monitor` },
