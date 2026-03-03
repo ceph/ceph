@@ -127,13 +127,13 @@ std::string ScrubBackend::extract_crcs_from_map(
 }
 
 std::string ScrubBackend::extract_crc_from_bufferlist(
-    const bufferlist& crc_buffer) {
-  std::string crc_string;
-  constexpr size_t digest_length = sizeof(uint32_t);
-  for (size_t i = 0; i < digest_length; i++) {
-    crc_string += fmt::format("{:02x}", crc_buffer[digest_length - i]);
-  }
-  return crc_string;
+    const bufferlist& crc_buffer)
+{
+  // assuming the CRC is uint32_b, and that we have 8 bits per byte.
+  // also assuming little-endian storage of the digest in the bufferlist
+  return fmt::format(
+      "{:02x}{:02x}{:02x}{:02x}", crc_buffer[3], crc_buffer[2], crc_buffer[1],
+      crc_buffer[0]);
 }
 
 uint64_t ScrubBackend::logical_to_ondisk_size(uint64_t logical_size,
