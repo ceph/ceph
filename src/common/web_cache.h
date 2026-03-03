@@ -325,6 +325,7 @@ template <typename Key, typename Value>
 WebCache<Key, Value>::~WebCache() {
   if (_cct != nullptr && _perf != nullptr) {
     _cct->get_perfcounters_collection()->remove(_perf);
+    delete _perf;
   }
 }
 
