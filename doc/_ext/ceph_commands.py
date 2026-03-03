@@ -285,6 +285,14 @@ class CephMgrCommands(Directive):
         # make diskprediction_local happy
         mock_imports += ['numpy',
                          'scipy']
+        # make cephadm happy
+        mock_imports += ['cherrypy.process',
+                         'cherrypy.process.servers',
+                         'cherrypy._cptree',
+                         'cheroot',
+                         'cheroot.wsgi',
+                         'cheroot.ssl',
+                         'cheroot.ssl.builtin']
 
         for m in mock_imports:
             args = {}
