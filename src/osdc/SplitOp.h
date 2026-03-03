@@ -195,7 +195,7 @@ class SplitOp {
       const pg_pool_t *pi)
       : start_offset(offset),
         total_length(length),
-        data_chunk_count(pi->nonprimary_shards.size() + 1),
+        data_chunk_count(pi->get_ec_data_shard_count()),
         chunk_size(pi->get_stripe_width() / data_chunk_count) {
     }
 

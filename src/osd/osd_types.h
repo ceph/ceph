@@ -1806,6 +1806,10 @@ public:
   snapid_t get_snap_seq() const { return snap_seq; }
   uint64_t get_auid() const { return auid; }
 
+  uint8_t get_ec_data_shard_count() const {
+    return ec_data_shard_count.value_or(nonprimary_shards.size() + 1);
+  }
+
   void set_snap_seq(snapid_t s) { snap_seq = s; }
   void set_snap_epoch(epoch_t e) { snap_epoch = e; }
 
