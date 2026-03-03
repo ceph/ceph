@@ -13,8 +13,6 @@
  *
 */
 
-#include <fmt/ranges.h>
-
 #ifndef CEPH_RGW_FDB_CONVERSION_H
  #define CEPH_RGW_FDB_CONVERSION_H
 
@@ -32,10 +30,11 @@ between FDB's types! If you have a user type to add, this is the place!
 
 namespace ceph::libfdb::to {
 
-inline auto convert(const ceph::buffer::list& from) -> std::vector<std::uint8_t>
+inline auto convert(ceph::buffer::list& from) -> std::vector<std::uint8_t>
+//JFW: inline auto convert(const ceph::buffer::list& from) -> std::vector<std::uint8_t>
 {
  // uint32_t is what zpp::bits uses by default, but we could fiddle with that:
- std::vector<std::uint8_t> out_data(sizeof(std::uint32_t) + 1 + std::size(from)); 
+ std::vector<std::uint8_t> out_data;//JFW: (sizeof(std::uint32_t) + 1 + std::size(from)); 
  zpp::bits::out out(out_data);
 
  auto ptr = const_cast<ceph::buffer::list&>(from).c_str();
@@ -52,6 +51,7 @@ inline auto convert(const ceph::buffer::list& from) -> std::vector<std::uint8_t>
 namespace ceph::libfdb::from {
 
 inline void convert(const std::span<const std::uint8_t>& from, ceph::buffer::list& to) {
+
  to.append(sizeof(std::uint32_t) + reinterpret_cast<const char *>(from.data()), 
            std::size(from) - sizeof(std::uint32_t));
 }

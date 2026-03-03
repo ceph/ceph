@@ -165,7 +165,7 @@ inline void set(database_handle dbh, auto b, auto e)
 
 namespace ceph::libfdb {
 
-// erase() is clear() in FDB parlance:
+// erase() in libfdb is clear() in FDB parlance:
 inline void erase(ceph::libfdb::transaction_handle txn, const ceph::libfdb::select& key_range, const commit_after_op commit_after)
 {
  detail::maybe_commit mc(txn, commit_after);
