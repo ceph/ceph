@@ -437,3 +437,154 @@ TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_with_unknown_original_url) {
   ASSERT_NE(res_ep_ptr, nullptr);
   EXPECT_TRUE(ceph::real_clock::is_zero(res_ep_ptr->resolved_ips[0].last_failure.load()));
 }
+
+TEST_F(RGWRESTConnTest, populate_connect_to_skips_failed_ips) {
+  // Setup mock to return multiple IP addresses
+  entity_addr_t addr1, addr2, addr3;
+  addr1.parse("192.168.1.1");
+  addr2.parse("192.168.1.2");
+  addr3.parse("192.168.1.3");
+  std::vector<entity_addr_t> mock_addrs = {addr1, addr2, addr3};
+
+  EXPECT_CALL(*mock_resolver, resolve_all_addrs("multi.example.com", _))
+       .WillOnce(DoAll(SetArgPointee<1>(mock_addrs), Return(0)));
+
+  const string test_url = "http://multi.example.com:8080";
+  std::list<std::string> endpoints = {test_url};
+  RGWRESTConn conn(cct.get(), nullptr, "remote-zone", endpoints, std::nullopt);
+
+  ResolvedEndpoint* res_ep = conn.find_resolved_endpoint(test_url);
+  ASSERT_NE(res_ep, nullptr);
+  ASSERT_EQ(res_ep->resolved_ips.size(), 3u);
+
+  // Mark second IP (192.168.1.2) as down
+  res_ep->resolved_ips[1].mark_down();
+
+  // Round robin should skip the failed IP
+  RGWEndpoint ep1;
+  ep1.set_url(test_url);
+  conn.populate_connect_to(ep1, *res_ep);
+  EXPECT_EQ(ep1.get_connect_to(), "multi.example.com:8080:192.168.1.1:8080");
+
+  // Next call should skip failed IP and go to third IP
+  RGWEndpoint ep2;
+  ep2.set_url(test_url);
+  conn.populate_connect_to(ep2, *res_ep);
+  EXPECT_EQ(ep2.get_connect_to(), "multi.example.com:8080:192.168.1.3:8080");
+
+  // Should wrap back to first IP (skipping second)
+  RGWEndpoint ep3;
+  ep3.set_url(test_url);
+  conn.populate_connect_to(ep3, *res_ep);
+  EXPECT_EQ(ep3.get_connect_to(), "multi.example.com:8080:192.168.1.1:8080");
+}
+
+TEST_F(RGWRESTConnTest, populate_connect_to_ip_failure_expiration) {
+  entity_addr_t addr1, addr2;
+  addr1.parse("10.0.0.1");
+  addr2.parse("10.0.0.2");
+  std::vector<entity_addr_t> mock_addrs = {addr1, addr2};
+
+  EXPECT_CALL(*mock_resolver, resolve_all_addrs("expire.example.com", _))
+       .WillOnce(DoAll(SetArgPointee<1>(mock_addrs), Return(0)));
+
+  const string test_url = "http://expire.example.com:8080";
+  std::list<std::string> endpoints = {test_url};
+
+  // Set a very short timeout for testing (1 second)
+  cct.get()->_conf->rgw_rest_conn_ip_fail_timeout_secs = 1;
+
+  RGWRESTConn conn(cct.get(), nullptr, "remote-zone", endpoints, std::nullopt);
+
+  ResolvedEndpoint* res_ep = conn.find_resolved_endpoint(test_url);
+  ASSERT_NE(res_ep, nullptr);
+
+  // Mark first IP as failed with a timestamp in the past (more than 1 second ago)
+  res_ep->resolved_ips[0].last_failure.store(
+      ceph::real_clock::now() - std::chrono::seconds(2));
+
+  // The failure should be expired, so first IP should be selected and marked up
+  RGWEndpoint ep1;
+  ep1.set_url(test_url);
+  conn.populate_connect_to(ep1, *res_ep);
+  EXPECT_EQ(ep1.get_connect_to(), "expire.example.com:8080:10.0.0.1:8080");
+
+  // Verify IP was marked up (last_failure reset to zero)
+  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep->resolved_ips[0].last_failure.load()));
+}
+
+TEST_F(RGWRESTConnTest, populate_connect_to_all_ips_down_fallback) {
+  entity_addr_t addr1, addr2;
+  addr1.parse("172.16.0.1");
+  addr2.parse("172.16.0.2");
+  std::vector<entity_addr_t> mock_addrs = {addr1, addr2};
+
+  EXPECT_CALL(*mock_resolver, resolve_all_addrs("alldown.example.com", _))
+       .WillOnce(DoAll(SetArgPointee<1>(mock_addrs), Return(0)));
+
+  const string test_url = "http://alldown.example.com:8080";
+  std::list<std::string> endpoints = {test_url};
+
+  // Use longer timeout so failures don't expire during test
+  cct.get()->_conf->rgw_rest_conn_ip_fail_timeout_secs = 60;
+
+  RGWRESTConn conn(cct.get(), nullptr, "remote-zone", endpoints, std::nullopt);
+
+  ResolvedEndpoint* res_ep = conn.find_resolved_endpoint(test_url);
+  ASSERT_NE(res_ep, nullptr);
+
+  // Mark ALL IPs as down
+  res_ep->resolved_ips[0].mark_down();
+  res_ep->resolved_ips[1].mark_down();
+
+  // Should still return an IP (best effort fallback)
+  RGWEndpoint ep1;
+  ep1.set_url(test_url);
+  conn.populate_connect_to(ep1, *res_ep);
+
+  // Should get one of the IPs (round-robin among failed IPs)
+  std::string connect_to = ep1.get_connect_to();
+  EXPECT_TRUE(connect_to == "alldown.example.com:8080:172.16.0.1:8080" ||
+              connect_to == "alldown.example.com:8080:172.16.0.2:8080");
+}
+
+TEST_F(RGWRESTConnTest, get_endpoint_skips_endpoint_when_all_ips_down) {
+  entity_addr_t addr1, addr2;
+  addr1.parse("10.1.1.1");
+  addr2.parse("10.2.2.2");
+  std::vector<entity_addr_t> mock_addrs1 = {addr1};
+  std::vector<entity_addr_t> mock_addrs2 = {addr2};
+
+  EXPECT_CALL(*mock_resolver, resolve_all_addrs("ep1.example.com", _))
+       .WillOnce(DoAll(SetArgPointee<1>(mock_addrs1), Return(0)));
+  EXPECT_CALL(*mock_resolver, resolve_all_addrs("ep2.example.com", _))
+       .WillOnce(DoAll(SetArgPointee<1>(mock_addrs2), Return(0)));
+
+  std::list<std::string> endpoints = {
+      "http://ep1.example.com:8080",
+      "http://ep2.example.com:8080"
+  };
+
+  cct.get()->_conf->rgw_rest_conn_ip_fail_timeout_secs = 60;
+
+  RGWRESTConn conn(cct.get(), nullptr, "remote-zone", endpoints, std::nullopt);
+
+  // Mark ALL IPs on first endpoint as down
+  ResolvedEndpoint* res_ep1 = conn.find_resolved_endpoint("http://ep1.example.com:8080");
+  ASSERT_NE(res_ep1, nullptr);
+  res_ep1->resolved_ips[0].mark_down();
+  // Also set endpoint-level failure time for fast-path skip
+  res_ep1->last_failure_time.store(ceph::real_clock::now());
+
+  // get_endpoint should skip ep1 and return ep2
+  RGWEndpoint ep;
+  int ret = conn.get_endpoint(ep);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(ep.get_url(), "http://ep2.example.com:8080");
+
+  // Calling again should continue to prefer ep2
+  RGWEndpoint ep2;
+  ret = conn.get_endpoint(ep2);
+  ASSERT_EQ(ret, 0);
+  EXPECT_EQ(ep2.get_url(), "http://ep2.example.com:8080");
+}
