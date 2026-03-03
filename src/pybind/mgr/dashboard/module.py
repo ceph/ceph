@@ -33,9 +33,10 @@ from . import mgr
 from .controllers import nvmeof  # noqa # pylint: disable=unused-import
 from .controllers import Router, json_error_page
 from .grafana import push_local_dashboards
-from .services import nvmeof_cli  # noqa # pylint: disable=unused-import
+from .services import nvmeof_cli, nvmeof_top_cli  # noqa # pylint: disable=unused-import
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
+from .services.nvmeof_top_cli import NvmeofTopCollector
 from .services.service import RgwServiceManager
 from .services.sso import SSO_COMMANDS, handle_sso_command
 from .settings import handle_option_command, options_command_list, options_schema_list
@@ -302,6 +303,7 @@ class Module(MgrModule, CherryPyConfig):
         self.ACCESS_CTRL_DB = None
         self.SSO_DB = None
         self.health_checks = {}
+        self.nvmeof_collectors = {}
 
     @classmethod
     def can_run(cls):
@@ -553,6 +555,39 @@ class Module(MgrModule, CherryPyConfig):
                 self.__pool_stats[pool_id][stat_name].append((now, stat_val))
 
         return self.__pool_stats
+
+    def get_nvmeof_collector(self, session_id: str = '', ttl: int = 3600):
+        STALE_POLL_THRESHOLD = 5  # expire if 5 poll intervals have passed without activity
+
+        def _expire_old_sessions():
+            now = time.time()
+            expired = []
+
+            for _id in list(self.nvmeof_collectors.keys()):
+                collector = self.nvmeof_collectors[_id]
+                delay = collector.delay
+                if delay < 1:  # for first poll iteration
+                    expire_time = collector.timestamp + ttl
+                else:
+                    expire_time = collector.timestamp + (STALE_POLL_THRESHOLD * delay)
+                if now > expire_time:
+                    expired.append(_id)
+
+            for _id in expired:
+                self.nvmeof_collectors.pop(_id, None)
+
+        if NvmeofTopCollector is None:
+            logger.error("NVMeoFClient is not available")
+            return None
+
+        if not session_id:
+            return None
+
+        _expire_old_sessions()
+
+        if session_id not in self.nvmeof_collectors:
+            self.nvmeof_collectors[session_id] = NvmeofTopCollector()
+        return self.nvmeof_collectors[session_id]
 
     def config_notify(self):
         """
