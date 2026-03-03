@@ -1204,6 +1204,10 @@ protected:
   /// set when we get GRANT from all target PGs and can start copy_from
   bool pool_migration_reservations_established;
   /// waiting for GRANT from target PGs
+  /// objects waiting for lock retry to delete source after successful copy_from
+  std::list<hobject_t> pool_migration_source_delete_pending_lock;
+  /// set when target PG has reservations and can accept pool migration copy_from
+  bool pool_migration_target_has_reservations = false;
   bool pool_migration_waiting_for_reservations;
   hobject_t next_pool_migration(std::optional<hobject_t> start);
   hobject_t earliest_pool_migration()
@@ -1649,7 +1653,8 @@ public:
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
 
-  void pool_migration_delete(hobject_t oid);
+  void handle_pool_migration_copy_failure(hobject_t oid, int r);
+  bool pool_migration_source_delete(hobject_t oid);
 
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);

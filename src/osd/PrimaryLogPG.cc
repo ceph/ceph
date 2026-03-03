@@ -2214,12 +2214,10 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       bool block_write = false;
       for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
         OSDOp& osd_op = *p;
-        if (((osd_op.op.op != CEPH_OSD_OP_COPY_FROM) &&
-             (osd_op.op.op != CEPH_OSD_OP_COPY_FROM)) ||
-	    //BILL:FIXME need to check for copy_from migration flag not being set
-	    //!(osd_op.op.copy_from.flags & CEPH_OSD_COPY_FROM_FLAG_MIGRATION)) {
-	    false) {
-	  dout(20) << __func__ << " BILL " << osd_op.op.op << dendl;
+        if ((osd_op.op.op != CEPH_OSD_OP_COPY_FROM) ||
+             ((osd_op.op.op == CEPH_OSD_OP_COPY_FROM) &&
+	    !(osd_op.op.copy_from.flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION))) {
+	  dout(20) << __func__ << " copy_from pool migration flag not set" << osd_op.op.op << dendl;
           block_write = true;
 	}
       }
@@ -8215,6 +8213,21 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  break;
 	}
+
+	// Check if this is a pool migration copy_from
+	bool is_pool_migration = (op.copy_from.flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION);
+	if (is_pool_migration) {
+	  // Verify target has reservations for pool migration
+    // FIXME: Needs Jamie's reservation code for pool_migration_target_has_reservations to be set correctly
+//	  if (!pool_migration_target_has_reservations) {
+//	    dout(10) << "copy_from with pool migration flag but target does not have reservations" << dendl;
+//	    result = -EAGAIN;  // Tell source to retry after getting reservations
+//	    break;
+//	  }
+
+	  dout(20) << "copy_from for pool migration with reservations, proceeding" << dendl;
+	}
+
 	try {
 	  decode(src_name, bp);
 	  decode(src_oloc, bp);
@@ -13504,6 +13517,7 @@ void PrimaryLogPG::_clear_recovery_state()
   }
 
   pool_migrations_in_flight.clear();
+  pool_migration_source_delete_pending_lock.clear();
 
   list<OpRequestRef> blocked_ops;
   for (map<hobject_t, ObjectContextRef>::iterator i = recovering.begin();
@@ -14981,26 +14995,44 @@ struct C_Migrate : public Context {
     if (r == -ECANCELED)
       return;
     std::scoped_lock l{*pg};
-    if (last_peering_reset == pg->get_last_peering_reset())
-      pg->pool_migration_delete(oid);
+    // Only process if PG hasn't been reset since we started this operation
+    // If peering reset, the PG state was rebuilt and will restart migration
+    if (last_peering_reset != pg->get_last_peering_reset())
+      return;
+
+    if (r < 0) {
+      pg->handle_pool_migration_copy_failure(oid, r);
+    } else {
+      bool list_was_empty = pg->pool_migration_source_delete_pending_lock.empty();
+      pg->pool_migration_source_delete_pending_lock.push_back(oid);
+
+      // If the list is not empty, this object will be processed when earlier objects complete
+      if (list_was_empty) {
+        pg->pool_migration_source_delete(oid);
+      }
+    }
   }
 };
 
-void PrimaryLogPG::pool_migration_delete(hobject_t oid)
+bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
 {
     ObjectContextRef obc = get_object_context(oid, false);
     ceph_assert(obc);
     OpContextUPtr ctx = simple_opc_create(obc);
 
-    // FIXME: what if this fails? we return with no mechanism to retry the delete
     if (!ctx->lock_manager.get_pool_migration_write(
     oid,
     obc)) {
       close_op_ctx(ctx.release());
+      // Lock acquisition failed - object is already in pending list
       dout(20) << "pool migration delayed on " << oid
-         << "; could not get rw_manager lock" << dendl;
-      return;
+         << "; could not get lock, will retry" << dendl;
+      return false;
     }
+
+    // Lock acquired successfully - remove from pending list
+    pool_migration_source_delete_pending_lock.remove(oid);
+
     ctx->register_on_finish(
             [this, oid]() {
                 dout(20) << "pool migration finished migrating " << oid << dendl;
@@ -15020,6 +15052,45 @@ void PrimaryLogPG::pool_migration_delete(hobject_t oid)
     dout(20) << "pool migration deleting " << oid << dendl;
     finish_ctx(ctx.get(), pg_log_entry_t::DELETE);
     simple_opc_submit(std::move(ctx));
+    return true;
+}
+
+void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
+{
+  dout(10) << __func__ << " " << oid << " failed with " << r << dendl;
+
+  // Remove from in-flight tracking
+  pool_migrations_in_flight.erase(oid);
+
+  // Check error type and take appropriate action
+  if (r == -EAGAIN || r == -EBUSY) {
+    // Target doesn't have reservations or is busy
+    // Schedule reservation request and retry
+    dout(10) << "copy_from failed due to no reservation, requesting reservation" << dendl;
+
+    // Request reservation from target PG and let the reservation system handle retry
+    if (pool_migration_target_pg) {
+      send_request_remote_reservation_message(*pool_migration_target_pg, oid);
+    }
+
+  } else if (r == -ENOENT) {
+    // Source object not found - this is an unfound object situation
+    dout(10) << "copy_from failed due to unfound object" << dendl;
+    stop_pool_migration_unfound();
+
+  } else {
+    // Other errors - log and stop migration
+    dout(1) << "copy_from failed with unexpected error " << r << dendl;
+    stop_pool_migration_unfound();
+  }
+
+  // Clean up recovering state
+  // Must remove from recovering and call finish_recovery_op to balance start_recovery_op
+  auto i = recovering.find(oid);
+  if (i != recovering.end()) {
+    recovering.erase(i);
+    finish_recovery_op(oid);
+  }
 }
 
 /**
@@ -15110,8 +15181,26 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 	   << dendl;
 
   unsigned ops = 0;
-  while (ops < max) {
 
+  // First, retry any pending lock acquisitions for source deletes
+  // This ensures we complete in-progress migrations before starting new ones
+  while (!pool_migration_source_delete_pending_lock.empty() && ops < max) {
+    hobject_t oid = pool_migration_source_delete_pending_lock.front();
+
+    dout(20) << __func__ << " retrying source delete lock acquisition for " << oid << dendl;
+
+    // Try to delete - returns true if lock acquired, false otherwise
+    // Object remains in list and will be removed by pool_migration_source_delete if successful
+    if (!pool_migration_source_delete(oid)) {
+      dout(20) << __func__ << " lock retry failed for " << oid << ", will try again later" << dendl;
+      break;  // Don't process more retries this iteration
+    }
+
+    ops++;
+    *work_started = true;
+  }
+
+  while (ops < max) {
     if (last_pool_migration_started.is_max()) {
       // Finished pool migration
       if (!pool_migrations_in_flight.empty()) {
@@ -15203,7 +15292,7 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 
     ObjectOperation o;
     object_locator_t oloc(soid);
-    o.copy_from(soid.oid.name, soid.snap, oloc, obc->obs.oi.user_version, 0, 0);
+    o.copy_from(soid.oid.name, soid.snap, oloc, obc->obs.oi.user_version, CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION, 0);
     object_locator_t base_oloc(soid);
     base_oloc.pool = *pool.info.migration_target;
     C_Migrate *fin = new C_Migrate(this, soid, get_last_peering_reset());
@@ -15286,15 +15375,17 @@ void PrimaryLogPG::stop_pool_migration_revoked()
 
 void PrimaryLogPG::on_pool_migration_target_reserved()
 {
+  dout(10) << __func__ << " target has reservations, can accept pool migration copy_from" << dendl;
+  pool_migration_target_has_reservations = true;
   //BILL:FIXME - Kick Jamies message reply (must be one waiting)
   //BILL:FIXME - Reminder: If on_change happens need to drop Jamies message reply
-  //BILL:FIXME - Set flag indicating we have reservations and copy_from is allowed
 }
 
 void PrimaryLogPG::on_pool_migration_target_suspended(bool toofull)
 {
+  dout(10) << __func__ << " target suspending, cannot accept pool migration copy_from" << dendl;
+  pool_migration_target_has_reservations = false;
   //BILL:FIXME - Kick Jamies message reply (may be one waiting)
-  //BILL:FIXME - Set flag indicating copy_from must be failed
 }
 
 // ===========================
