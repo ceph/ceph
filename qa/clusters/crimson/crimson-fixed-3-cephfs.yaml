@@ -6,6 +6,7 @@ overrides:
         osd crush chooseleaf type: 0
         osd pool default pg num:  128
         osd pool default pgp num:  128
+    fs: xfs
   ceph:
     conf:
       osd:

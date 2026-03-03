@@ -1,7 +1,6 @@
 tasks:
-# - install:
-#     cleanup: true
 - ceph:
+    fs: xfs
     conf:
       osd:
         debug monc: 20
