@@ -532,6 +532,7 @@ enum {
 						     * cloneid */
 	CEPH_OSD_COPY_FROM_FLAG_RWORDERED = 16, /* order with write */
 	CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ = 32, /* use provided truncate_{seq,size} (copy-from2 only) */
+	CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION = 64, /* used to track pool migration */
 };
 
 #define CEPH_OSD_COPY_FROM_FLAGS			\
@@ -540,7 +541,8 @@ enum {
 	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |		\
 	 CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE |	\
 	 CEPH_OSD_COPY_FROM_FLAG_RWORDERED |		\
-	 CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ)
+	 CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ | \
+	 CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION)
 
 enum {
 	CEPH_OSD_TMAP2OMAP_NULLOK = 1,
