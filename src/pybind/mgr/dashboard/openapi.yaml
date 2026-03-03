@@ -13918,6 +13918,9 @@ paths:
                 load_balancing_group:
                   description: Load balancing group
                   type: integer
+                location:
+                  description: Gateway location for namespace
+                  type: string
                 no_auto_visible:
                   default: false
                   description: Namespace will be visible only for the allowed hosts
@@ -14129,6 +14132,9 @@ paths:
                 load_balancing_group:
                   description: Load balancing group
                   type: integer
+                location:
+                  description: Namespace location
+                  type: string
                 r_mbytes_per_second:
                   description: Read MB/s
                   type: integer
