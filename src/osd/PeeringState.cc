@@ -3394,6 +3394,7 @@ void PeeringState::proc_master_log(
 	       &olog);
   }
 
+  std::optional<bool> head_is_partial_write;
   bool invalidate_stats = false;
 
   // For partial writes we may be able to keep some of the divergent entries
@@ -3403,7 +3404,10 @@ void PeeringState::proc_master_log(
     while (p != pg_log.get_log().log.begin()) {
       --p;
       if (p->version <= olog.head) {
-	break;
+        if (p->version == olog.head) {
+          head_is_partial_write = !p->written_shards.empty();
+        }
+        break;
       }
     }
     if (p == pg_log.get_log().log.end()) {
@@ -3501,17 +3505,74 @@ void PeeringState::proc_master_log(
       }
       rollbacker.get()->partial_write(&info, previous_version, *p);
       olog.head = p->version;
+      head_is_partial_write = !p->written_shards.empty();
 
       // Process the next entry
       ++p;
     }
   }
+
+  // Find the version we want to roll forwards to
+  // Iterate over all shards and see if any have a last_update equal to where we want to roll to
+  // Copy the stats for this shard into oinfo
+  // Set invalidate_stats to false again if we do copy these stats
+  // We will only copy stats if they are copied from a primary, or if they are
+  // copied from a non-primary where the last write was a non-partial write
+  // as the stats of non-primaries are stale after partial writes on objects with clones
+  if (invalidate_stats && pool.info.allows_ecoptimizations()) {
+    for (const auto& [shard, my_info] : peer_info) {
+      if (invalidate_stats && my_info.stats.version == olog.head &&
+          (!pool.info.is_nonprimary_shard(shard.shard) ||
+           (head_is_partial_write.has_value() &&
+            !head_is_partial_write.value()))) {
+        oinfo.stats = my_info.stats;
+        invalidate_stats = false;
+        psdout(10) << "keeping stats for " << shard
+                   << " (wanted last update: " << olog.head
+                   << ", stats version: " << my_info.stats.version
+                   << ", shard last update: " << my_info.last_update << ")."
+                   << " Stats: ";
+
+        JSONFormatter f;
+        oinfo.stats.dump(&f);
+        f.flush(*_dout);
+
+        *_dout << dendl;
+      } else {
+        psdout(20) << "not using stats for " << shard
+                   << " (wanted last update: " << olog.head
+                   << ", stats version: " << my_info.stats.version
+                   << ", shard last update: " << my_info.last_update << ")."
+                   << " Stats: ";
+
+        JSONFormatter f;
+        my_info.stats.dump(&f);
+        f.flush(*_dout);
+
+        *_dout << dendl;
+      }
+    }
+  }
+
   // merge log into our own log to build master log.  no need to
   // make any adjustments to their missing map; we are taking their
   // log to be authoritative (i.e., their entries are by definitely
   // non-divergent).
   merge_log(t, oinfo, std::move(olog), from);
+  if (info.last_backfill.is_max() &&
+      (pool.info.allows_ecoptimizations() &&
+       pool.info.is_nonprimary_shard(from.shard) &&
+      (!head_is_partial_write.has_value() || head_is_partial_write.value()))){
+    invalidate_stats = true;
+  }
+
   info.stats.stats_invalid |= invalidate_stats;
+  increment_stats_invalidations_counter(rs_process_log_stats_invalidated,
+                                        invalidate_stats);
+  if (invalidate_stats)
+  {
+    psdout(10) << "invalidating stats for " << pg_whoami << dendl;
+  }
   peer_info[from] = oinfo;
   psdout(10) << " peer osd." << from << " now " << oinfo
 	     << " " << omissing << dendl;
@@ -3765,6 +3826,11 @@ void PeeringState::split_into(
   child->info.stats.snaptrim_duration = 0.0;
   child->info.last_epoch_started = info.last_epoch_started;
   child->info.last_interval_started = info.last_interval_started;
+
+  increment_stats_invalidations_counter(rs_pg_split_parent_stats_invalidated,
+                                        info.stats.stats_invalid);
+  increment_stats_invalidations_counter(rs_pg_split_child_stats_invalidated,
+                                        child->info.stats.stats_invalid);
 
   // There can't be recovery/backfill going on now
   int primary, up_primary;
@@ -4436,6 +4502,13 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   }
 }
 
+void PeeringState::increment_stats_invalidations_counter(int stats_invalidation_counter,
+                                                         bool invalidation_state) {
+  if (invalidation_state) {
+    pl->get_peering_perf().inc(stats_invalidation_counter);
+  }
+}
+
 void PeeringState::init(
   int role,
   const vector<int>& newup, int new_up_primary,
@@ -4529,8 +4602,14 @@ void PeeringState::dump_peering_state(Formatter *f)
 void PeeringState::update_stats(
   std::function<bool(pg_history_t &, pg_stat_t &)> f,
   ObjectStore::Transaction *t) {
+  bool previous_stats_invalidation = info.stats.stats_invalid;
   if (f(info.history, info.stats)) {
     pl->publish_stats_to_osd();
+  }
+
+  if (previous_stats_invalidation != info.stats.stats_invalid) {
+    increment_stats_invalidations_counter(rs_update_stats_invalidated,
+                                          info.stats.stats_invalid);
   }
 
   if (t) {
@@ -4579,7 +4658,8 @@ bool PeeringState::append_log_entries_update_missing(
     info.last_complete = info.last_update;
   }
   info.stats.stats_invalid = info.stats.stats_invalid || invalidate_stats;
-
+  increment_stats_invalidations_counter(rs_append_log_stats_invalidated,
+                                        invalidate_stats);
   psdout(20) << "trim_to bool = " << bool(trim_to)
 	     << " trim_to = " << (trim_to ? *trim_to : eversion_t()) << dendl;
   if (trim_to) {
@@ -4633,6 +4713,8 @@ void PeeringState::merge_new_log_entries(
       dpp);
     pinfo.last_update = info.last_update;
     pinfo.stats.stats_invalid = pinfo.stats.stats_invalid || invalidate_stats;
+    increment_stats_invalidations_counter(rs_merge_log_stats_invalidated,
+                                          invalidate_stats);
     rebuild_missing = rebuild_missing || invalidate_stats;
   }
 
