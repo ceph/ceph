@@ -1180,6 +1180,7 @@ A tenant name may also specified as a part of ``uid``, by following the syntax
 :Required: No
 
 ``default-storage-class``
+
 :Description: default storage class for the user, default-placement must be defined when setting this option.
 :Type: string
 :Example: STANDARD-1A
@@ -1406,6 +1407,7 @@ Request Parameters
 :Required: No
 
 ``default-storage-class``
+
 :Description: default storage class for the user, default-placement must be defined when setting this option.
 :Type: string
 :Example: STANDARD-1A
