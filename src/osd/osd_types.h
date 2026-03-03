@@ -1517,6 +1517,9 @@ private:
 public:
   std::map<std::string, std::string> properties;  ///< OBSOLETE
   std::string erasure_code_profile; ///< name of the erasure code profile in OSDMap
+  // Profile values stored in integer format to allow reading efficiently
+  // without parsing the erasure_code_profile string
+  std::optional<uint8_t> ec_data_shard_count, ec_coding_shard_count; ///< ec profile values
   epoch_t last_change = 0;      ///< most recent epoch changed, exclusing snapshot changes
   // If non-zero, require OSDs in at least this many different instances...
   uint32_t peering_crush_bucket_count = 0;

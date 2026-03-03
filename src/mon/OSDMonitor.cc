@@ -1957,6 +1957,25 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       t->erase_range(OSD_SNAP_PREFIX, "removed_snap_", "removed_snap`");
       t->erase_range(OSD_SNAP_PREFIX, "removed_epoch_", "removed_epoch`");
     }
+
+    if (osdmap.require_osd_release <= ceph_release_t::tentacle &&
+        tmp.require_osd_release > ceph_release_t::tentacle) {
+      for (auto& [id, pool] : tmp.get_pools()) {
+        if (pool.is_erasure() && !pool.ec_data_shard_count &&
+            !pool.ec_coding_shard_count) {
+          ErasureCodeInterfaceRef erasure_code;
+          stringstream err_str;
+          int err = get_erasure_code(pool.erasure_code_profile, &erasure_code, &err_str);
+          if (err == 0) {
+            pool.ec_data_shard_count = erasure_code->get_data_chunk_count();
+            pool.ec_coding_shard_count = erasure_code->get_coding_chunk_count();
+          } else {
+            derr << fmt::format("{} Warning: could not parse erasure code "
+              "profile for pool {}: {}", __func__, id, err_str.str()) << dendl;
+          }
+        }
+      }
+    }
   }
 
   // tell me about it
@@ -5432,7 +5451,7 @@ namespace {
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
-    EC_OPTIMIZATIONS };
+    EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6238,7 +6257,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"dedup_cdc_chunk_size", DEDUP_CDC_CHUNK_SIZE},
       {"bulk", BULK},
       {"read_ratio", READ_RATIO},
-      {"allow_ec_optimizations", EC_OPTIMIZATIONS}
+      {"allow_ec_optimizations", EC_OPTIMIZATIONS},
+      {"ec_data_shard_count", EC_DATA_SHARD_COUNT},
+      {"ec_coding_shard_count", EC_CODING_SHARD_COUNT},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6253,7 +6274,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N
     };
     const choices_set_t ONLY_ERASURE_CHOICES = {
-      EC_OVERWRITES, ERASURE_CODE_PROFILE, EC_OPTIMIZATIONS
+      EC_OVERWRITES, ERASURE_CODE_PROFILE, EC_OPTIMIZATIONS,
+      EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT
     };
     const choices_set_t ONLY_REPLICA_CHOICES = {
       READ_RATIO
@@ -6501,7 +6523,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case EC_OPTIMIZATIONS:
 	    f->dump_bool("allow_ec_optimizations",
 			 p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS));
-	    break;
+            break;
+          case EC_DATA_SHARD_COUNT:
+            f->dump_unsigned("ec_data_shard_count",
+                             p->ec_data_shard_count.value_or(0));
+          break;
+          case EC_CODING_SHARD_COUNT:
+            f->dump_unsigned("ec_coding_shard_count",
+                             p->ec_coding_shard_count.value_or(0));
+	  break;
 	}
       }
       f->close_section();
@@ -6678,6 +6708,16 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      (p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS) ? "true" : "false") <<
 	      "\n";
 	    break;
+          case EC_DATA_SHARD_COUNT:
+            ss << "ec_data_shard_count: "
+               << static_cast<unsigned int>(p->ec_data_shard_count.value_or(0))
+               << "\n";
+            break;
+          case EC_CODING_SHARD_COUNT:
+            ss << "ec_coding_shard_count: "
+               << static_cast<unsigned int>(p->ec_coding_shard_count.value_or(0))
+               << "\n";
+            break;
 	}
 	rdata.append(ss.str());
 	ss.str("");
@@ -8325,6 +8365,18 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->auid = 0;
 
   if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      ErasureCodeInterfaceRef erasure_code;
+      stringstream tmp;
+      int err = get_erasure_code(erasure_code_profile, &erasure_code, &tmp);
+      if (err == 0) {
+        pi->ec_data_shard_count = erasure_code->get_data_chunk_count();
+        pi->ec_coding_shard_count = erasure_code->get_coding_chunk_count();
+      } else {
+        if (ss) {
+          *ss << "get_erasure_code failed: " << tmp.str();
+        }
+        return -EINVAL;
+      }
       pi->erasure_code_profile = erasure_code_profile;
   } else {
       pi->erasure_code_profile = "";
