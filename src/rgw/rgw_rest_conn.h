@@ -111,7 +111,7 @@ struct ResolvedEndpoint {
   std::string host;               // e.g., "s3.abc.com"
   int port = -1;                  // e.g., 8443
   std::vector<ResolvedIP> resolved_ips;  // Per-IP connect_to strings with health status
-  mutable size_t endpoint_ips_round_robin_counter = 0;    // round-robin index for IPs
+  mutable std::atomic<size_t> ip_rr_index{0};    // round-robin index for IPs
   mutable std::atomic<ceph::real_time> last_failure_time; // most recent IP failure seen on this endpoint
 
   ResolvedEndpoint() : last_failure_time(ceph::real_clock::zero()) {}
@@ -123,7 +123,7 @@ struct ResolvedEndpoint {
       host(std::move(other.host)),
       port(other.port),
       resolved_ips(std::move(other.resolved_ips)),
-      endpoint_ips_round_robin_counter(other.endpoint_ips_round_robin_counter),
+      ip_rr_index(other.ip_rr_index.load()),
       last_failure_time(other.last_failure_time.load())
   {}
 
@@ -134,7 +134,7 @@ struct ResolvedEndpoint {
     host = std::move(other.host);
     port = other.port;
     resolved_ips = std::move(other.resolved_ips);
-    endpoint_ips_round_robin_counter = other.endpoint_ips_round_robin_counter;
+    ip_rr_index.store(other.ip_rr_index.load());
     last_failure_time.store(other.last_failure_time.load());
     return *this;
   }
@@ -155,7 +155,7 @@ struct ResolvedEndpoint {
 class RGWRESTConn
 {
   CephContext *cct;
-  std::atomic<int64_t> endpoint_round_robin_counter = { 0 }; // Round-robin counter for resolved_endpoints
+  std::atomic<int64_t> endpoint_rr_index = { 0 }; // Round-robin counter for resolved_endpoints
   std::vector<ResolvedEndpoint> resolved_endpoints;
   RGWAccessKey key;
   std::string self_zone_group;
