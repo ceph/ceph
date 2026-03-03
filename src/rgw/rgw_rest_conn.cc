@@ -134,7 +134,7 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct,
 
 RGWRESTConn::RGWRESTConn(RGWRESTConn&& other)
   : cct(other.cct),
-    endpoint_round_robin_counter(other.endpoint_round_robin_counter.load()),
+    endpoint_rr_index(other.endpoint_rr_index.load()),
     resolved_endpoints(std::move(other.resolved_endpoints)),
     key(std::move(other.key)),
     self_zone_group(std::move(other.self_zone_group)),
@@ -147,7 +147,7 @@ RGWRESTConn::RGWRESTConn(RGWRESTConn&& other)
 RGWRESTConn& RGWRESTConn::operator=(RGWRESTConn&& other)
 {
   cct = other.cct;
-  endpoint_round_robin_counter = other.endpoint_round_robin_counter.load();
+  endpoint_rr_index = other.endpoint_rr_index.load();
   resolved_endpoints = std::move(other.resolved_endpoints);
   key = std::move(other.key);
   self_zone_group = std::move(other.self_zone_group);
@@ -179,10 +179,11 @@ void RGWRESTConn::populate_connect_to(RGWEndpoint& endpoint, ResolvedEndpoint& r
 
   const auto ip_fail_timeout = cct->_conf->rgw_rest_conn_ip_fail_timeout_secs;
   const size_t num_ips = resolved_endpoint.resolved_ips.size();
+  auto now = ceph::real_clock::now();
 
   // Round-robin through IPs, skipping any that are marked down
   for (size_t i = 0; i < num_ips; ++i) {
-    size_t idx = resolved_endpoint.endpoint_ips_round_robin_counter++ % num_ips;
+    size_t idx = resolved_endpoint.ip_rr_index++ % num_ips;
     ResolvedIP& ip_status = resolved_endpoint.resolved_ips[idx];
 
     const auto& last_fail = ip_status.last_failure.load();
@@ -191,7 +192,7 @@ void RGWRESTConn::populate_connect_to(RGWEndpoint& endpoint, ResolvedEndpoint& r
       return;
     }
 
-    auto diff = ceph::to_seconds<double>(ceph::real_clock::now() - last_fail);
+    auto diff = ceph::to_seconds<double>(now - last_fail);
     if (diff >= ip_fail_timeout) {
       // Failure expired, mark IP as up and use it
       ip_status.mark_up();
@@ -248,7 +249,7 @@ int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
   size_t num = 0;
   size_t selected_idx = 0;
   while (num < resolved_endpoints.size()) {
-    int i = ++endpoint_round_robin_counter;
+    int i = ++endpoint_rr_index;
     selected_idx = i % resolved_endpoints.size();
 
     ResolvedEndpoint& res_ep = resolved_endpoints[selected_idx];
