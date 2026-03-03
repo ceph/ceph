@@ -65,6 +65,11 @@ jspan_ptr Tracer::start_trace(opentelemetry::nostd::string_view trace_name, bool
   return noop_tracer->StartSpan(trace_name);
 }
 
+// WARNING: When working with Messages, do NOT use Message::trace as parent_span!
+// Message::trace is NOT serialized over the network and will be noop_span on the
+// receiving side (IsRecording() will return false). Instead, use the overload that
+// takes jspan_context and pass Message::otel_trace, which contains the serialized
+// span context (trace_id, span_id) needed to create proper child spans.
 jspan_ptr Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_ptr& parent_span) {
   if (is_enabled() && parent_span && parent_span->IsRecording()) {
     opentelemetry::trace::StartSpanOptions span_opts;
@@ -92,8 +97,4 @@ bool Tracer::is_enabled() const {
 
 } // namespace tracing
 
-#else // !HAVE_JAEGER
-namespace tracing {
-const jspan_ptr Tracer::noop_span{};
-}
-#endif // !HAVE_JAEGER
+#endif // HAVE_JAEGER
