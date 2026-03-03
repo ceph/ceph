@@ -276,8 +276,6 @@ enum {
   scrbcnt_chunks_busy,
   /// # waiting on object events
   scrbcnt_blocked,
-  /// # write blocked by the scrub
-  scrbcnt_write_blocked,
 
   scrbcnt_last,
 };
