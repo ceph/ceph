@@ -134,7 +134,7 @@ void LinuxKeyringSecret::initialize_process_keyring() noexcept {
   if (_serial == -1) {
     return {-EINVAL, std::generic_category()};
   }
-  if (const auto ret = remove(); !ret) {
+  if (const auto ret = remove(); ret) {
     return ret;
   }
   _serial = -1;
