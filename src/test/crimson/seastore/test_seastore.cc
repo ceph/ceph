@@ -1646,7 +1646,7 @@ TEST_P(seastore_test_t, pgmeta_io)
       encode(ss, l2);
 
       CTransaction t;
-      if (i % 2 == 0) {
+      if ((i / 2) % 2 == 0) {
 	test_obj2.set_omap(t, key, l);
 	test_obj2.set_omap(t, key2, l2); // x2
       } else {

@@ -204,7 +204,13 @@ LogManager::omap_set_keys(
       // remove duplicate keys first
       co_await remove_kv(t, log_root.addr, p.first, nullptr);
     }
+    laddr_t last_addr = log_root.addr;
     co_await f(p.first, p.second, has_ow_key);
+    if (last_addr != log_root.addr) {
+      ext = co_await log_load_extent<LogNode>(
+	t, log_root.addr, BEGIN_KEY, END_KEY);
+      last_addr = log_root.addr;
+    }
   }
 
   if (!ow_kv.first.empty()) {
@@ -216,13 +222,17 @@ LogManager::omap_set_keys(
 
 
   if (!dup_kvs.empty()) {
-    ext = co_await log_load_extent<LogNode>(
-        t,
-        co_await get_dup_addr_from_root(t, log_root.addr),
-        BEGIN_KEY,
-        END_KEY);
+    laddr_t last_addr = co_await get_dup_addr_from_root(t, log_root.addr);
+    ext = co_await log_load_extent<LogNode>(t, last_addr, BEGIN_KEY, END_KEY);
     for (auto &p: dup_kvs) {
       co_await f(p.first, p.second, false);
+      if (&p != &*dup_kvs.rbegin()) {
+	laddr_t current_addr = co_await get_dup_addr_from_root(t, log_root.addr);
+	if (last_addr != current_addr) {
+	  ext = co_await log_load_extent<LogNode>(t, current_addr, BEGIN_KEY, END_KEY);
+	  last_addr = current_addr;
+	}
+      }
     }
   }
   co_return;
