@@ -22,7 +22,7 @@ To deploy a NFS Ganesha gateway, run the following command:
 
 .. prompt:: bash #
 
-    ceph orch apply nfs *<svc_id>* [--port *<port>*] [--placement ...]
+    ceph orch apply nfs <svc_id> [--port <port>] [--placement ...]
 
 For example, to deploy NFS with a service id of *foo* on the default
 port 2049 with the default placement of a single daemon:
@@ -206,7 +206,7 @@ A few notes:
 
     .. prompt:: bash #
 
-	ceph config-key get mgr/cephadm/ingress.*{svc_id}*/monitor_password
+	ceph config-key get mgr/cephadm/ingress.<svc_id>/monitor_password
 
     For example:
 
