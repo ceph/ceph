@@ -4,7 +4,7 @@
 #include <string>
 
 #include "include/encoding.h"
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 
 struct cls_lua_eval_op {
   std::string script;

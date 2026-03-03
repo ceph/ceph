@@ -6,7 +6,7 @@
 
 #include "include/types.h"
 #include "common/hobject.h"
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 
 struct cls_refcount_get_op {
   std::string tag;

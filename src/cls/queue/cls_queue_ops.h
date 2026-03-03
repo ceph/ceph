@@ -5,7 +5,7 @@
 #define CEPH_CLS_QUEUE_OPS_H
 
 #include "common/ceph_json.h"
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 #include "cls_queue_const.h"
 #include "cls_queue_types.h"
 

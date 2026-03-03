@@ -5,7 +5,7 @@
 
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls_rgw_gc_const.h"
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 
 struct cls_rgw_gc_queue_init_op {
   uint64_t size;

@@ -14,7 +14,7 @@
 
 #include "rgw/rgw_basic_types.h"
 
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 
 #include "cls_rgw_const.h"
 

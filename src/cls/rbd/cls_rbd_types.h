@@ -11,7 +11,7 @@
 #include "include/stringify.h"
 #include "include/utime.h"
 #include "msg/msg_types.h"
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 #include <iosfwd>
 #include <map>
 #include <string>

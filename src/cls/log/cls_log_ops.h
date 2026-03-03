@@ -11,7 +11,7 @@
 #include "common/ceph_time.h"
 
 #include "cls_log_types.h"
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 
 namespace cls::log::ops {
 struct add_op {

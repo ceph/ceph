@@ -6,7 +6,7 @@
 
 #include "cls_version_types.h"
 #include "common/ceph_json.h"
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 
 struct cls_version_set_op {
   obj_version objv;

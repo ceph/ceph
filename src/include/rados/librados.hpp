@@ -14,7 +14,7 @@
 #include "librados_fwd.hpp"
 #include "rados_types.hpp"
 
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 
 namespace libradosstriper
 {

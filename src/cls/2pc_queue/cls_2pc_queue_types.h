@@ -7,7 +7,7 @@
 #include "common/Formatter.h"
 #include "include/encoding.h"
 #include "include/types.h"
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 #include "cls_2pc_queue_const.h"
 
 #include <unordered_map>

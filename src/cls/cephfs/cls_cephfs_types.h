@@ -11,7 +11,7 @@
  */
 
 #pragma once
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 namespace cls::cephfs {
 struct ClassId {
   static constexpr auto name = "cephfs";

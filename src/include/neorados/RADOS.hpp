@@ -65,7 +65,7 @@
 #include "common/ceph_time.h"
 
 // For compile-time policing of class calls.
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 
 namespace neorados {
 class Object;

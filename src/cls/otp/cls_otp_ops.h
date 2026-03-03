@@ -7,7 +7,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "cls/otp/cls_otp_types.h"
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 
 struct cls_otp_set_otp_op
 {

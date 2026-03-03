@@ -6,7 +6,7 @@
 
 #include "common/ceph_json.h"
 #include "cls_timeindex_types.h"
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 
 struct cls_timeindex_add_op {
   std::list<cls_timeindex_entry> entries;

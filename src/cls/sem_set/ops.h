@@ -12,7 +12,7 @@
 #include <boost/container/flat_map.hpp>
 
 #include "include/encoding.h"
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 
 namespace cls::sem_set {
 using namespace std::literals;

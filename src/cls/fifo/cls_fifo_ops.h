@@ -26,7 +26,7 @@
 #include "include/types.h"
 
 #include "cls/fifo/cls_fifo_types.h"
-#include "include/rados/cls_traits.h"
+#include "include/rados/cls_traits.hpp"
 
 namespace rados::cls::fifo {
 namespace op {
