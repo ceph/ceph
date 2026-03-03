@@ -69,7 +69,7 @@ inline param_vec_t make_param_list(const std::map<std::string, std::string> *pp)
  * ResolvedIP - Per-IP connection status tracking.
  *
  * Each resolved IP address has its own failure status. An IP is considered
- * "down" if last_failure is non-zero and less than CONN_STATUS_EXPIRE_SECS old.
+ * "down" if last_failure is non-zero and less than rgw_rest_conn_ip_fail_timeout_secs old.
  * After the timeout, the IP becomes eligible for retry.
  */
 struct ResolvedIP {
