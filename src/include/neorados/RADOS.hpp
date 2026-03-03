@@ -391,9 +391,9 @@ public:
    *
    * The OSD has a plugin mechanism for performing complicated
    * operations on an object atomically. These plugins are called
-   * classes. This function allows librados users to call the custom
-   * methods. The input and output formats are defined by the class.
-   * Classes in ceph.git can be found in src/cls subdirectories
+   * "Ceph Classes". This function allows librados users to call the custom
+   * methods. The input and output formats are defined by the Ceph Class.
+   * Ceph Classes in ceph.git can be found in src/cls subdirectories
    *
    * This Op may be a read, so only read execs are permitted with this interface
    *
@@ -1034,9 +1034,9 @@ public:
    *
    * The OSD has a plugin mechanism for performing complicated
    * operations on an object atomically. These plugins are called
-   * classes. This function allows librados users to call the custom
-   * methods. The input and output formats are defined by the class.
-   * Classes in ceph.git can be found in src/cls subdirectories
+   * "Ceph Classes". This function allows librados users to call the custom
+   * methods. The input and output formats are defined by the Ceph Class.
+   * Ceph Classes in ceph.git can be found in src/cls subdirectories
    *
    * This is a write op, so all execs are permitted (including reads)
    *
