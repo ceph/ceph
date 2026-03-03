@@ -9267,9 +9267,7 @@ int BlueStore::expand_devices(ostream& out)
                 << std::dec << "(" << byte_u_t(size) << ")"
                 << std::endl;
           }
-          if (mounted) {
-            bluefs->expand_device(devid, size, old_size);
-          }
+          bluefs->expand_device(devid, size, old_size);
         }
       }
     }
