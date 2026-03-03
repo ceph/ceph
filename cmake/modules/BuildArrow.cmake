@@ -18,7 +18,7 @@ function(build_arrow)
   # transitive dependencies
   if (thrift_VERSION VERSION_GREATER_EQUAL 0.17)
     # build arrow with system thrift, and include the transitive dependency on the Arrow::Arrow target
-    list(APPEND arrow_INTERFACE_LINK_LIBRARIES thrift)
+    list(APPEND arrow_INTERFACE_LINK_LIBRARIES thrift::libthrift)
   else()
     # build arrow with bundled thrift to work around missing boost dependency
     list(APPEND arrow_CMAKE_ARGS -DThrift_SOURCE=BUNDLED -DARROW_THRIFT_USE_SHARED=OFF)
@@ -123,6 +123,14 @@ function(build_arrow)
 
   set(arrow_BYPRODUCTS ${arrow_LIBRARY})
   list(APPEND arrow_BYPRODUCTS ${parquet_LIBRARY})
+
+  # Add bundled thrift library if using bundled version
+  if (NOT thrift_VERSION VERSION_GREATER_EQUAL 0.17)
+    # Arrow bundles thrift into libarrow_bundled_dependencies.a
+    set(bundled_deps_LIBRARY "${arrow_LIBRARY_DIR}/libarrow_bundled_dependencies.a")
+    list(APPEND arrow_BYPRODUCTS ${bundled_deps_LIBRARY})
+    list(APPEND arrow_INTERFACE_LINK_LIBRARIES ${bundled_deps_LIBRARY})
+  endif()
 
   if(WITH_RADOSGW_ARROW_FLIGHT)
     set(arrow_flight_LIBRARY "${arrow_LIBRARY_DIR}/libarrow_flight.a")
