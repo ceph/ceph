@@ -263,6 +263,7 @@ if(WITH_RADOSGW_POSIX)
 	      driver/posix/rgw_sal_posix.cc
 	      driver/posix/lmdb-safe.cc
 	      driver/posix/posixDB.cc
+	      driver/posix/posix_system_user.cc
 	      driver/posix/notify.cpp)
 endif()
 if(WITH_JAEGER)
