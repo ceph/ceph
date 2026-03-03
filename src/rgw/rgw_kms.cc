@@ -1211,6 +1211,19 @@ int reconstitute_actual_key_from_kms(
                      << dendl;
   ldpp_dout(dpp, 20) << "SSE-KMS backend is " << kms_backend << dendl;
 
+  std::string cache_key_id = key_id;
+  if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend &&
+      kctx.secret_engine() == RGW_SSE_KMS_VAULT_SE_TRANSIT) {
+    const std::string wrapped_key =
+        get_str_attribute(attrs, RGW_ATTR_CRYPT_DATAKEY);
+    // Vault Transit in "old" compat mode behaves like the other K/V
+    // style KMS in that it does not use DATAKEY.
+    if (!wrapped_key.empty()) {
+      cache_key_id = string_cat_reserve(
+          key_id, "T", calc_hash_sha256(wrapped_key).to_str());
+    }
+  }
+
   const auto fetch = [&](std::string& out_secret) -> int {
     PerfGuard perf(perfcounter, l_rgw_kms_fetch_lat);
     if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend) {
@@ -1240,7 +1253,7 @@ int reconstitute_actual_key_from_kms(
   };
   const std::string cache_prefix = string_cat_reserve("kms_", kms_backend);
   return maybe_cache_kms_fetch(
-      dpp, cache_prefix, key_id, kms_cache, fetch, actual_key, y);
+      dpp, cache_prefix, cache_key_id, kms_cache, fetch, actual_key, y);
 }
 
 int make_actual_key_from_kms(const DoutPrefixProvider *dpp,
