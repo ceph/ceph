@@ -30,6 +30,7 @@ export class TearsheetComponent implements OnInit, AfterViewChecked {
   @Input() type: 'full' | 'wide' = 'wide';
 
   @Output() submitRequested = new EventEmitter<void>();
+  @Output() closeRequested = new EventEmitter<void>();
 
   @ContentChildren(TearsheetStepComponent)
   stepContents!: QueryList<TearsheetStepComponent>;
@@ -69,6 +70,7 @@ export class TearsheetComponent implements OnInit, AfterViewChecked {
   }
 
   closeWideTearsheet() {
+    this.closeRequested.emit();
     this.isOpen = false;
     if (this.hasModalOutlet) {
       this.location.back();
