@@ -1,3 +1,5 @@
+# cython: language_level=3
+# cython: legacy_implicit_noexcept=True
 # cython: embedsignature=True
 
 from libc.stdint cimport *
