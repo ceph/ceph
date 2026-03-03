@@ -121,6 +121,7 @@ class LinuxKeyringSecret : public KeyringSecret {
     return os << "LinuxKeyringSecret{" << secret._serial << "}";
   }
   friend class LinuxKeyringTest_LifecycleMoveAssignResetsDestination_Test;
+  friend class LinuxKeyringTest_ResetClearsState_Test;
   friend class LinuxKeyring;
 };
 
