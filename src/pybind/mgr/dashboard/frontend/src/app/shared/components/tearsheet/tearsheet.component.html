@@ -130,8 +130,22 @@
         @if (currentStep === lastStep) {
         <button cdsButton="primary"
                 size="xl"
-                (click)="onSubmit()"
-                i18n>{{submitButtonLabel}}</button>
+                class="tearsheet-footer-submit"
+                [disabled]="isSubmitLoading"
+                (click)="handleSubmit()"
+                i18n>
+          @if (isSubmitLoading) {
+          <cds-loading
+            [isActive]="isSubmitLoading"
+            [overlay]="false"
+            size="sm">
+          </cds-loading>
+           {{submitButtonLoadingLabel}}...
+          }
+          @else {
+            {{submitButtonLabel}}
+          }
+        </button>
         }
         @else {
         <button cdsButton="primary"
