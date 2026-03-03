@@ -475,6 +475,10 @@ export class TaskMessageService {
     'cephfs/subvolume/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
       this.subvolume(metadata)
     ),
+    'cephfs/subvolume/snapshot_visibility/set': this.newTaskMessage(
+      this.commonOperations.update,
+      (metadata) => $localize`subvolume snapshot visibility for '${metadata.subVolumeName}'`
+    ),
     'cephfs/subvolume/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.subvolume(metadata)
     ),
