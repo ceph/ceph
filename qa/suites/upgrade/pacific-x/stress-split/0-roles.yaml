@@ -29,3 +29,5 @@ overrides:
     conf:
       osd:
         osd shutdown pgref assert: true
+    log-ignorelist:
+      - OSD_UPGRADE_FINISHED

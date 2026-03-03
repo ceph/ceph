@@ -43,6 +43,18 @@ tasks:
         - test_telemetry_pacific.sh
 - print: "**** done end telemetry pacific..."
 
+# This is fun: A bug was introduced that started with
+# 6c097015bbc1bcfa8abe518680a3d3a17ff39884. The MON_SINGLE_PAXOS was
+# deprecated but kept in CEPH_FEATURES_ALL and not removed until
+# f1ecf99a86edfe899392b6b734351f1015a93be6 which didn't get released
+# until Quincy. So Pacific OSDs are still advertising MON_SINGLE_PAXOS
+# which is interpreted as SERVER_REEF by reef monitors. So why didn't we
+# catch that during upgrades to reef from pacific for v18.2.0 QA testing?
+# WELL, have I got a surprise for you. We didn't check that all OSDs are
+# running reef until 25e8b22c6f29cd3947b501f6aaf7614ba204a2c8 which was
+# released in v18.2.5.
+- ceph health mute OSD_UPGRADE_FINISHED --sticky
+
 - print: "**** done start parallel"
 - parallel:
     - workload
