@@ -66,8 +66,8 @@ void add_rgw_frontend_counters(PerfCountersBuilder *pcb) {
 
   pcb->add_time_avg(l_rgw_kms_fetch_lat, "kms_fetch_lat", "Uncached KMS secret fetch latency");
   pcb->add_u64_counter(l_rgw_kms_error_permanent, "kms_error_permanent", "Permanent (e.g key not found) errors returned from KMS");
-  pcb->add_u64_counter(l_rgw_kms_error_transient, "kms_error_transient", "Trainsient (e.g timeout, overloaded) errors returned from KMS");
-  pcb->add_u64_counter(l_rgw_kms_error_secret_store, "kms_error_secret_store", "Secrt store errors (e.g kernel keyring quota)");
+  pcb->add_u64_counter(l_rgw_kms_error_transient, "kms_error_transient", "Transient (e.g timeout, overloaded) errors returned from KMS");
+  pcb->add_u64_counter(l_rgw_kms_error_secret_store, "kms_error_secret_store", "Secret store errors (e.g kernel keyring quota)");
 }
 
 void add_rgw_op_counters(PerfCountersBuilder *lpcb) {
