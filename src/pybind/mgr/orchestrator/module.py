@@ -523,7 +523,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             'summary': ['HOST', 'SN', 'STORAGE', 'CPU', 'NET', 'MEMORY', 'POWER', 'FANS'],
             'fullreport': [],
             'firmwares': ['HOST', 'COMPONENT', 'NAME', 'DATE', 'VERSION', 'STATUS'],
-            'criticals': ['HOST', 'COMPONENT', 'NAME', 'STATUS', 'STATE'],
+            'criticals': ['HOST', 'SYS_ID', 'COMPONENT', 'NAME', 'STATUS', 'STATE'],
             'memory': ['HOST', 'SYS_ID', 'NAME', 'STATUS', 'STATE'],
             'storage': ['HOST', 'SYS_ID', 'NAME', 'MODEL', 'SIZE', 'PROTOCOL', 'SN', 'STATUS', 'STATE'],
             'processors': ['HOST', 'SYS_ID', 'NAME', 'MODEL', 'CORES', 'THREADS', 'STATUS', 'STATE'],
@@ -588,14 +588,18 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     def _criticals_table(self, hostname: Optional[str], table: PrettyTable, format: Format) -> str:
         completion = self.node_proxy_criticals(hostname=hostname)
         data = raise_if_exception(completion)
-        # data = self.node_proxy_criticals(hostname=hostname)
+
         if format == Format.json:
             return json.dumps(data)
         for host, host_details in data.items():
-            for component, component_details in host_details.items():
-                for member, member_details in component_details.items():
-                    description = member_details.get('description') or member_details.get('name')
-                    table.add_row((host, component, description, member_details['status']['health'], member_details['status']['state']))
+            for sys_id, components in host_details.items():
+                for component, component_details in components.items():
+                    for _, member_details in component_details.items():
+                        description = member_details.get('description') or member_details.get('name') or member_details.get('id')
+                        status = member_details.get('status') or {}
+                        health = status.get('health', 'N/A')
+                        state = status.get('state', 'N/A')
+                        table.add_row((host, sys_id, component, description, health, state))
         return table.get_string()
 
     def _common_table(self, category: str, hostname: Optional[str], table: PrettyTable, format: Format) -> str:
