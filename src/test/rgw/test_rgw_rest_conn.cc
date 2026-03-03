@@ -71,10 +71,10 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_single_ipv4) {
   EXPECT_EQ(res_ep.host, "example.com");
   EXPECT_EQ(res_ep.scheme, "http");
   EXPECT_EQ(res_ep.port, 8080);
-  EXPECT_EQ(res_ep.ips.size(), 1u);
-  ASSERT_EQ(res_ep.connect_to_strings.size(), 1u);
-  EXPECT_EQ(res_ep.connect_to_strings[0], "example.com:8080:192.168.1.100:8080");
-  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep.status.load()));
+  EXPECT_EQ(res_ep.resolved_ips.size(), 1u);
+  ASSERT_EQ(res_ep.resolved_ips.size(), 1u);
+  EXPECT_EQ(res_ep.resolved_ips[0].connect_to, "example.com:8080:192.168.1.100:8080");
+  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep.resolved_ips[0].last_failure.load()));
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_ips) {
@@ -100,22 +100,9 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_ips) {
   EXPECT_EQ(res_ep.host, "multi.example.com");
   EXPECT_EQ(res_ep.scheme, "https");
   EXPECT_EQ(res_ep.port, 443);  // Default HTTPS port
-  EXPECT_EQ(res_ep.ips.size(), 3u);
-  ASSERT_EQ(res_ep.connect_to_strings.size(), 3u);
+  EXPECT_EQ(res_ep.resolved_ips.size(), 3u);
+  ASSERT_EQ(res_ep.resolved_ips.size(), 3u);
 
-  // Verify all IP contents
-  std::set<std::string> expected_ips = {
-    "v2:192.168.1.100:0/0",
-    "v2:192.168.1.101:0/0",
-    "v2:[2001:db8::1]:0/0"
-  };
-  std::set<std::string> actual_ips;
-  for (const auto& ip : res_ep.ips) {
-    std::ostringstream os;
-    os << ip;
-    actual_ips.insert(os.str());
-  }
-  EXPECT_EQ(actual_ips, expected_ips);
 
   // Verify all connect_to strings
   std::set<std::string> expected_connect_to = {
@@ -123,10 +110,10 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_ips) {
     "multi.example.com:443:192.168.1.101:443",
     "multi.example.com:443:2001:db8::1:443"
   };
-  std::set<std::string> actual_connect_to(
-    res_ep.connect_to_strings.begin(),
-    res_ep.connect_to_strings.end()
-  );
+  std::set<std::string> actual_connect_to;
+  for (const auto& ip_status : res_ep.resolved_ips) {
+    actual_connect_to.insert(ip_status.connect_to);
+  }
   EXPECT_EQ(actual_connect_to, expected_connect_to);
 }
 
@@ -150,9 +137,9 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_default_http_port) {
   const auto& res_ep = *res_ep_ptr;
   EXPECT_EQ(res_ep.port, 80);  // Default HTTP port
   EXPECT_EQ(res_ep.scheme, "http");
-  EXPECT_EQ(res_ep.ips.size(), 1u);
-  ASSERT_EQ(res_ep.connect_to_strings.size(), 1u);
-  EXPECT_EQ(res_ep.connect_to_strings[0], "noport.example.com:80:10.0.0.1:80");
+  EXPECT_EQ(res_ep.resolved_ips.size(), 1u);
+  ASSERT_EQ(res_ep.resolved_ips.size(), 1u);
+  EXPECT_EQ(res_ep.resolved_ips[0].connect_to, "noport.example.com:80:10.0.0.1:80");
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_custom_https_port) {
@@ -175,9 +162,9 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_custom_https_port) {
   const auto& res_ep = *res_ep_ptr;
   EXPECT_EQ(res_ep.port, 8443);
   EXPECT_EQ(res_ep.scheme, "https");
-  EXPECT_EQ(res_ep.ips.size(), 1u);
-  ASSERT_EQ(res_ep.connect_to_strings.size(), 1u);
-  EXPECT_EQ(res_ep.connect_to_strings[0], "custom.secure.example.com:8443:10.0.0.1:8443");
+  EXPECT_EQ(res_ep.resolved_ips.size(), 1u);
+  ASSERT_EQ(res_ep.resolved_ips.size(), 1u);
+  EXPECT_EQ(res_ep.resolved_ips[0].connect_to, "custom.secure.example.com:8443:10.0.0.1:8443");
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_resolution_failure) {
@@ -197,8 +184,8 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_resolution_failure) {
   ASSERT_NE(res_ep_ptr, nullptr);
   const auto& res_ep = *res_ep_ptr;
   EXPECT_EQ(res_ep.host, "nonexistent.example.com");
-  EXPECT_TRUE(res_ep.ips.empty());
-  EXPECT_TRUE(res_ep.connect_to_strings.empty());
+  EXPECT_TRUE(res_ep.resolved_ips.empty());
+  EXPECT_TRUE(res_ep.resolved_ips.empty());
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_invalid_url) {
@@ -213,7 +200,7 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_invalid_url) {
 
   auto* res_ep_ptr = conn.find_resolved_endpoint("not-a-valid-url");
   ASSERT_NE(res_ep_ptr, nullptr);
-  EXPECT_TRUE(res_ep_ptr->ips.empty());
+  EXPECT_TRUE(res_ep_ptr->resolved_ips.empty());
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_empty_host) {
@@ -228,7 +215,7 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_empty_host) {
 
   auto* res_ep_ptr = conn.find_resolved_endpoint("http://:8080/path");
   ASSERT_NE(res_ep_ptr, nullptr);
-  EXPECT_TRUE(res_ep_ptr->ips.empty());
+  EXPECT_TRUE(res_ep_ptr->resolved_ips.empty());
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_endpoints) {
@@ -258,10 +245,10 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_endpoints) {
   EXPECT_EQ(res_ep1_ptr->host, "host1.example.com");
   EXPECT_EQ(res_ep1_ptr->scheme, "http");
   EXPECT_EQ(res_ep1_ptr->port, 8080);
-  EXPECT_EQ(res_ep1_ptr->ips.size(), 1u);
-  ASSERT_EQ(res_ep1_ptr->connect_to_strings.size(), 1u);
-  EXPECT_EQ(res_ep1_ptr->connect_to_strings[0], "host1.example.com:8080:192.168.1.1:8080");
-  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep1_ptr->status.load()));
+  EXPECT_EQ(res_ep1_ptr->resolved_ips.size(), 1u);
+  ASSERT_EQ(res_ep1_ptr->resolved_ips.size(), 1u);
+  EXPECT_EQ(res_ep1_ptr->resolved_ips[0].connect_to, "host1.example.com:8080:192.168.1.1:8080");
+  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep1_ptr->resolved_ips[0].last_failure.load()));
 
   // Check second endpoint
   auto* res_ep2_ptr = conn.find_resolved_endpoint("https://host2.example.com/rgw");
@@ -269,10 +256,10 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_multiple_endpoints) {
   EXPECT_EQ(res_ep2_ptr->host, "host2.example.com");
   EXPECT_EQ(res_ep2_ptr->scheme, "https");
   EXPECT_EQ(res_ep2_ptr->port, 443);  // default HTTPS port
-  EXPECT_EQ(res_ep2_ptr->ips.size(), 1u);
-  ASSERT_EQ(res_ep2_ptr->connect_to_strings.size(), 1u);
-  EXPECT_EQ(res_ep2_ptr->connect_to_strings[0], "host2.example.com:443:192.168.1.2:443");
-  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep2_ptr->status.load()));
+  EXPECT_EQ(res_ep2_ptr->resolved_ips.size(), 1u);
+  ASSERT_EQ(res_ep2_ptr->resolved_ips.size(), 1u);
+  EXPECT_EQ(res_ep2_ptr->resolved_ips[0].connect_to, "host2.example.com:443:192.168.1.2:443");
+  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep2_ptr->resolved_ips[0].last_failure.load()));
 }
 
 TEST_F(RGWRESTConnTest, resolve_endpoints_with_path) {
@@ -296,8 +283,8 @@ TEST_F(RGWRESTConnTest, resolve_endpoints_with_path) {
 
   EXPECT_EQ(res_ep.host, "api.example.com");
   EXPECT_EQ(res_ep.port, 9000);
-  EXPECT_EQ(res_ep.ips.size(), 1u);
-  EXPECT_EQ(res_ep.connect_to_strings[0], "api.example.com:9000:10.0.0.1:9000");
+  EXPECT_EQ(res_ep.resolved_ips.size(), 1u);
+  EXPECT_EQ(res_ep.resolved_ips[0].connect_to, "api.example.com:9000:10.0.0.1:9000");
 }
 
 TEST_F(RGWRESTConnTest, populate_connect_to_round_robin) {
@@ -388,7 +375,7 @@ TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_uses_original_url) {
   // Verify status was updated (endpoint should now be skipped initially)
   auto* res_ep_ptr = conn.find_resolved_endpoint("http://example.com:8080");
   ASSERT_NE(res_ep_ptr, nullptr);
-  EXPECT_FALSE(ceph::real_clock::is_zero(res_ep_ptr->status.load()));
+  EXPECT_FALSE(ceph::real_clock::is_zero(res_ep_ptr->resolved_ips[0].last_failure.load()));
 }
 
 TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_after_url_modification) {
@@ -420,7 +407,7 @@ TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_after_url_modification) {
   // Should find by original URL
   auto* res_ep_ptr = conn.find_resolved_endpoint("http://example.com:8080");
   ASSERT_NE(res_ep_ptr, nullptr);
-  EXPECT_FALSE(ceph::real_clock::is_zero(res_ep_ptr->status.load()));
+  EXPECT_FALSE(ceph::real_clock::is_zero(res_ep_ptr->resolved_ips[0].last_failure.load()));
 
   // Should NOT have created entry for modified URL
   auto* res_ep2_ptr = conn.find_resolved_endpoint("http://192.168.1.1:8080");
@@ -448,5 +435,5 @@ TEST_F(RGWRESTConnTest, set_endpoint_unconnectable_with_unknown_original_url) {
   // Verify original endpoint status unchanged
   auto* res_ep_ptr = conn.find_resolved_endpoint("http://known.example.com:8080");
   ASSERT_NE(res_ep_ptr, nullptr);
-  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep_ptr->status.load()));
+  EXPECT_TRUE(ceph::real_clock::is_zero(res_ep_ptr->resolved_ips[0].last_failure.load()));
 }

@@ -54,17 +54,16 @@ void RGWRESTConn::resolve_endpoints() {
     std::vector<entity_addr_t> addrs;
     int rr = rgw_resolver->resolve_all_addrs(res_ep.host, &addrs);
     if (rr >= 0 && !addrs.empty()) {
-      res_ep.ips = std::move(addrs);
       ldout(cct, 2) << "endpoint=" << ep_url << " resolved to "
-                << res_ep.ips.size() << " IP addresses" << dendl;
+        << addrs.size() << " IP addresses" << dendl;
 
       // Pre-compute host:port prefix and port string once
       std::string port_str = std::to_string(res_ep.port);
       std::string host_port_prefix = res_ep.host + ":" + port_str + ":";
 
-      // Pre-compute full connect_to strings
-      res_ep.connect_to_strings.reserve(res_ep.ips.size());
-      for (const auto& ea : res_ep.ips) {
+      // Pre-compute full connect_to strings with per-IP status
+      res_ep.resolved_ips.reserve(addrs.size());
+      for (const auto& ea : addrs) {
         char ipbuf[INET6_ADDRSTRLEN] = {0};
         const sockaddr* sa = ea.get_sockaddr();
         if (sa->sa_family == AF_INET) {
@@ -75,8 +74,8 @@ void RGWRESTConn::resolve_endpoints() {
           inet_ntop(AF_INET6, &sin6->sin6_addr, ipbuf, sizeof(ipbuf));
         }
         if (ipbuf[0] != '\0') {
-          // Pre-compute: "host:port:ip:port"
-          res_ep.connect_to_strings.emplace_back(host_port_prefix + ipbuf + ":" + port_str);
+          // Pre-compute: "host:port:ip:port" with the initial status 'available'
+          res_ep.resolved_ips.emplace_back(host_port_prefix + ipbuf + ":" + port_str);
           ldout(cct, 2) << "endpoint_url=" << ep_url << " resolved to ip=" << ipbuf << dendl;
         }
       }
@@ -100,7 +99,6 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::Driver* driver,
   for (const auto& ep_url : remote_endpoints) {
     ResolvedEndpoint res_ep;
     res_ep.url = ep_url;
-    res_ep.status.store(ceph::real_clock::zero());  // Initial status: connectable
     resolved_endpoints.push_back(std::move(res_ep));
   }
   resolve_endpoints();
@@ -129,7 +127,6 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct,
   for (const auto& ep_url : remote_endpoints) {
     ResolvedEndpoint res_ep;
     res_ep.url = ep_url;
-    res_ep.status.store(ceph::real_clock::zero());  // Initial status: connectable
     resolved_endpoints.push_back(std::move(res_ep));
   }
   resolve_endpoints();
@@ -176,10 +173,38 @@ void RGWRESTConn::populate_connect_to(RGWEndpoint& endpoint, ResolvedEndpoint& r
     return;
   }
 
-  if (!resolved_endpoint.connect_to_strings.empty()) {
-    size_t idx = resolved_endpoint.rr_index++;
-    endpoint.set_connect_to(resolved_endpoint.connect_to_strings[idx % resolved_endpoint.connect_to_strings.size()]);
+  if (resolved_endpoint.resolved_ips.empty()) {
+    return;
   }
+
+  static constexpr uint32_t CONN_STATUS_EXPIRE_SECS = 2;
+  const size_t num_ips = resolved_endpoint.resolved_ips.size();
+
+  // Round-robin through IPs, skipping any that are marked down
+  for (size_t i = 0; i < num_ips; ++i) {
+    size_t idx = resolved_endpoint.endpoint_ips_round_robin_counter++ % num_ips;
+    ResolvedIP& ip_status = resolved_endpoint.resolved_ips[idx];
+
+    const auto& last_fail = ip_status.last_failure.load();
+    if (ceph::real_clock::is_zero(last_fail)) {
+      endpoint.set_connect_to(ip_status.connect_to);  // IP is up
+      return;
+    }
+
+    auto diff = ceph::to_seconds<double>(ceph::real_clock::now() - last_fail);
+    if (diff >= CONN_STATUS_EXPIRE_SECS) {
+      // Failure expired, mark IP as up and use it
+      ip_status.mark_up();
+      ldout(cct, 5) << "IP " << ip_status.connect_to << " failure expired, marking up" << dendl;
+      endpoint.set_connect_to(ip_status.connect_to);
+      return;
+    }
+  }
+
+  // All IPs are down - do not populate connect_to; i.e.,
+  // let libcurl handle it without connect_to hint.
+  ldout(cct, 5) << "All IPs down for endpoint=" << resolved_endpoint.url
+    << " - skip connect_to hint" << dendl;
 }
 
 int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
@@ -189,6 +214,37 @@ int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
     return -EINVAL;
   }
 
+  static constexpr uint32_t CONN_STATUS_EXPIRE_SECS = 2;
+  auto now = ceph::real_clock::now();
+
+  // Helper to check if an endpoint has at least one available IP
+  auto endpoint_has_available_ip = [&](ResolvedEndpoint& res_ep) -> bool {
+    // If no IP resolution, endpoint is available (will use DNS directly)
+    if (res_ep.resolved_ips.empty()) {
+      return true;
+    }
+
+    // Fast path: if no recent failures at endpoint level, all IPs are available
+    const auto& ep_last_fail = res_ep.last_failure_time.load();
+    if (ceph::real_clock::is_zero(ep_last_fail) ||
+        ceph::to_seconds<double>(now - ep_last_fail) >= CONN_STATUS_EXPIRE_SECS) {
+      return true;
+    }
+
+    // Slow path: check individual IPs (only when there's a recent failure)
+    for (auto& ip_status : res_ep.resolved_ips) {
+      const auto& last_fail = ip_status.last_failure.load();
+      if (ceph::real_clock::is_zero(last_fail)) {
+        return true;  // This IP is up
+      }
+      auto diff = ceph::to_seconds<double>(now - last_fail);
+      if (diff >= CONN_STATUS_EXPIRE_SECS) {
+        return true;  // This IP's failure has expired
+      }
+    }
+    return false;  // All IPs are down
+  };
+
   size_t num = 0;
   size_t selected_idx = 0;
   while (num < resolved_endpoints.size()) {
@@ -196,33 +252,18 @@ int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
     selected_idx = i % resolved_endpoints.size();
 
     ResolvedEndpoint& res_ep = resolved_endpoints[selected_idx];
-    const std::string& ep_url = res_ep.url;
-    endpoint.set_url(ep_url);
 
-    const auto& upd_time = res_ep.status.load();
-
-    if (ceph::real_clock::is_zero(upd_time)) {
+    if (endpoint_has_available_ip(res_ep)) {
+      endpoint.set_url(res_ep.url);
       break;
     }
 
-    auto diff = ceph::to_seconds<double>(ceph::real_clock::now() - upd_time);
-
-    ldout(cct, 20) << "endpoint url=" << ep_url
-                   << " last endpoint status update time="
-                   << ceph::real_clock::to_double(upd_time)
-                   << " diff=" << diff << dendl;
-
-    static constexpr uint32_t CONN_STATUS_EXPIRE_SECS = 2;
-    if (diff >= CONN_STATUS_EXPIRE_SECS) {
-      res_ep.status.store(ceph::real_clock::zero());
-      ldout(cct, 10) << endpoint << " unconnectable status expired. mark it connectable" << dendl;
-      break;
-    }
+    ldout(cct, 5) << "endpoint url=" << res_ep.url << " all IPs down, trying next" << dendl;
     num++;
-  };
+  }
 
   if (num == resolved_endpoints.size()) {
-    ldout(cct, 5) << "ERROR: no valid endpoint" << dendl;
+    ldout(cct, 1) << "ERROR: no valid endpoint (all IPs down for all endpoints)" << dendl;
     return -EINVAL;
   }
 
@@ -242,17 +283,34 @@ RGWEndpoint RGWRESTConn::get_endpoint()
 void RGWRESTConn::set_endpoint_unconnectable(const RGWEndpoint& endpoint)
 {
   const string& orig_url = endpoint.get_original_url();
+  const string& connect_to = endpoint.get_connect_to();
 
   ResolvedEndpoint* res_ep = find_resolved_endpoint(orig_url);
   if (orig_url.empty() || !res_ep) {
-    ldout(cct, 0) << "ERROR: endpoint is not a valid or doesn't have status: "
-                  << endpoint << dendl;
+    ldout(cct, 0) << "ERROR: endpoint is not valid or not found: "
+      << endpoint << dendl;
     return;
   }
 
-  res_ep->status.store(ceph::real_clock::now());
+  // Update endpoint-level last_failure_time for fast-path optimization
+  auto now = ceph::real_clock::now();
+  res_ep->last_failure_time.store(now);
 
-  ldout(cct, 10) << "set endpoint unconnectable. url=" << orig_url << dendl;
+  // If we have a connect_to string, mark that specific IP as down as well
+  if (!connect_to.empty()) {
+    ResolvedIP* res_ip = res_ep->find_ip_status(connect_to);
+    if (res_ip) {
+      res_ip->mark_down();
+      ldout(cct, 10) << "set IP unconnectable: " << connect_to << dendl;
+      return;
+    }
+  }
+
+  // Fallback: mark all IPs for this endpoint as down
+  for (auto& res_ip : res_ep->resolved_ips) {
+    res_ip.mark_down();
+  }
+  ldout(cct, 10) << "set all IPs unconnectable for endpoint url=" << orig_url << dendl;
 }
 
 void RGWRESTConn::populate_params(param_vec_t& params, const rgw_owner* uid, const string& zonegroup)

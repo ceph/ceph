@@ -65,48 +65,91 @@ inline param_vec_t make_param_list(const std::map<std::string, std::string> *pp)
   return params;
 }
 
+/**
+ * ResolvedIP - Per-IP connection status tracking.
+ *
+ * Each resolved IP address has its own failure status. An IP is considered
+ * "down" if last_failure is non-zero and less than CONN_STATUS_EXPIRE_SECS old.
+ * After the timeout, the IP becomes eligible for retry.
+ */
+struct ResolvedIP {
+  std::string connect_to;  // Pre-computed "host:port:ip:port" for CURLOPT_CONNECT_TO
+  mutable std::atomic<ceph::real_time> last_failure;
+
+  ResolvedIP() : last_failure(ceph::real_clock::zero()) {}
+
+  explicit ResolvedIP(std::string _connect_to)
+    : connect_to(std::move(_connect_to)), last_failure(ceph::real_clock::zero()) {}
+
+  // Move & assignment operations (required because std::atomic is not movable)
+  ResolvedIP(ResolvedIP&& o) noexcept
+    : connect_to(std::move(o.connect_to)), last_failure(o.last_failure.load()) {}
+
+  ResolvedIP& operator=(ResolvedIP&& o) noexcept {
+    connect_to = std::move(o.connect_to);
+    last_failure.store(o.last_failure.load());
+    return *this;
+  }
+
+  // Delete copy (std::atomic is not copyable)
+  ResolvedIP(const ResolvedIP&) = delete;
+  ResolvedIP& operator=(const ResolvedIP&) = delete;
+
+  void mark_down() const { last_failure.store(ceph::real_clock::now()); }
+  void mark_up() const { last_failure.store(ceph::real_clock::zero()); }
+};
+
+/**
+ * ResolvedEndpoint - A zone endpoint URL with its resolved IP addresses.
+ *
+ * Tracks per-IP connection status. An endpoint is considered "down" only when
+ * ALL of its IPs are marked as failed (within the retry timeout window).
+ */
 struct ResolvedEndpoint {
   std::string url;                // e.g., "https://s3.abc.com:8443"
   std::string scheme;             // e.g., "https"
   std::string host;               // e.g., "s3.abc.com"
   int port = -1;                  // e.g., 8443
-  std::vector<entity_addr_t> ips; // the IPs the endpoint resolves to
-  std::vector<std::string> connect_to_strings;  // Pre-computed full connect_to strings for each IP
-  size_t rr_index = 0;            // round-robin index for IPs
+  std::vector<ResolvedIP> resolved_ips;  // Per-IP connect_to strings with health status
+  mutable size_t endpoint_ips_round_robin_counter = 0;    // round-robin index for IPs
+  mutable std::atomic<ceph::real_time> last_failure_time; // most recent IP failure seen on this endpoint
 
-  /* endpoint health state: the endpoint is not able to connect if the timestamp is not real_clock::zero */
-  std::atomic<ceph::real_time> status;
+  ResolvedEndpoint() : last_failure_time(ceph::real_clock::zero()) {}
 
-  ResolvedEndpoint() = default;
-
-  // Custom move constructor (required because std::atomic is not movable)
+  // Custom move constructor (required because of atomics in ResolvedIP)
   ResolvedEndpoint(ResolvedEndpoint&& other) noexcept
     : url(std::move(other.url)),
       scheme(std::move(other.scheme)),
       host(std::move(other.host)),
       port(other.port),
-      ips(std::move(other.ips)),
-      connect_to_strings(std::move(other.connect_to_strings)),
-      rr_index(other.rr_index),
-      status(other.status.load())
+      resolved_ips(std::move(other.resolved_ips)),
+      endpoint_ips_round_robin_counter(other.endpoint_ips_round_robin_counter),
+      last_failure_time(other.last_failure_time.load())
   {}
 
-  // Custom move assignment (required because std::atomic is not movable)
+  // Custom move assignment
   ResolvedEndpoint& operator=(ResolvedEndpoint&& other) noexcept {
     url = std::move(other.url);
     scheme = std::move(other.scheme);
     host = std::move(other.host);
     port = other.port;
-    ips = std::move(other.ips);
-    connect_to_strings = std::move(other.connect_to_strings);
-    rr_index = other.rr_index;
-    status.store(other.status.load());
+    resolved_ips = std::move(other.resolved_ips);
+    endpoint_ips_round_robin_counter = other.endpoint_ips_round_robin_counter;
+    last_failure_time.store(other.last_failure_time.load());
     return *this;
   }
 
-  // Delete copy operations (std::atomic is not copyable)
+  // Delete copy operations
   ResolvedEndpoint(const ResolvedEndpoint&) = delete;
   ResolvedEndpoint& operator=(const ResolvedEndpoint&) = delete;
+
+  // Find IP status by connect_to string
+  ResolvedIP* find_ip_status(const std::string& connect_to_str) {
+    for (auto& ip : resolved_ips) {
+      if (ip.connect_to == connect_to_str) return &ip;
+    }
+    return nullptr;
+  }
 };
 
 class RGWRESTConn
