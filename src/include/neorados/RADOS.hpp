@@ -77,6 +77,10 @@ struct hash<neorados::IOContext>;
 namespace neorados {
 namespace detail {
 class Client;
+template<std::size_t S, std::size_t Alignment = alignof(std::max_align_t)>
+struct alignas(Alignment) aligned_storage {
+  std::byte data[S];
+};
 }
 
 class RADOS;
