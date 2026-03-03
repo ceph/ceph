@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from .. import mgr
 from . import rbd  # pylint: disable=no-name-in-module
 
-logger = logging.getLogger('progress')
+logger = logging.getLogger(__name__)
 
 
 def _progress_event_to_dashboard_task_common(event, task):

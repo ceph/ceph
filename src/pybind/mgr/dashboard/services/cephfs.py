@@ -9,7 +9,7 @@ import cephfs
 
 from .. import mgr
 
-logger = logging.getLogger('cephfs')
+logger = logging.getLogger(__name__)
 
 
 class CephFS(object):
