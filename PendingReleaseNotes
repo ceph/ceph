@@ -267,6 +267,10 @@
   to ensure compatibility during upgrades, but can be disabled once old usage logs
   are no longer present to avoid performance overhead.
 
+* NVMe-oF: A new Ceph Manager module, `nvmeof`, is now available. When enabled, it provisions the
+  dedicated `.nvmeof` RADOS Block Device (RBD) pool required for NVMe-oF integration,
+  simplifying initial setup and ensuring the pool is created consistently across deployments.
+  
 * MGR: A new command, `ceph osd ok-to-upgrade`, has been added that allows
   users and orchestration tools to determine a safe set of OSDs within a CRUSH
   bucket to upgrade simultaneously without impacting data availability. To help
