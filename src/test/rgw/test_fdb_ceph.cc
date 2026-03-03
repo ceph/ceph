@@ -81,7 +81,7 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
   ceph::buffer::list n;
   n.append(msg);
 
-  std::span<const std::uint8_t> x;
+  std::vector<std::uint8_t> x;
   x = ceph::libfdb::to::convert(n);
 
   std::string o;
@@ -95,7 +95,7 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
  ceph::buffer::list n;
  n.append(msg);
 
- std::span<const std::uint8_t> x;
+ std::vector<std::uint8_t> x;
  x = ceph::libfdb::to::convert(n);
 
  ceph::buffer::list o;
@@ -103,6 +103,34 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
 
  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
  }
+}
+
+TEST_CASE("non-owning conversions are bad") {
+
+// It's possible to write an innocent-looking but actually
+// bad conversion (we may be able to fix this through some
+// resdesign, but it's how it is for now, and not user-facing). Anyway
+// DON'T DO THIS! :-)
+// ...since it won't throw consistently, I'll leave it as a cautionary
+// tale:
+/*
+ const char *msg = "Greetings!";
+
+ ceph::buffer::list n;
+ n.append(msg);
+
+ // This looks innocuous... however...
+ std::span<const std::uint8_t> x;
+
+ // BAD: span<> is non-owning!
+ x = ceph::libfdb::to::convert(n);
+
+ ceph::buffer::list o;
+
+ // Unfortunately, this won't /always/ throw... but, don't do it! :-)
+ CHECK_THROWS(ceph::libfdb::from::convert(x, o));
+*/
+ SUCCEED();
 }
 
 TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
@@ -132,12 +160,9 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
     lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
     lfdb::get(lfdb::make_transaction(dbh), "key", o);
  
-println("JFW: n ({}) =\n{}", std::size(n), n); 
-println("JFW: o ({}) =\n{}", std::size(o), o); 
     REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
 
-/*JFW
   SECTION("buffer::list (and buffer::list key) -> buffer::list")
   {
     ceph::buffer::list n;
@@ -165,7 +190,6 @@ println("JFW: o ({}) =\n{}", std::size(o), o);
   
     REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
-*/
 }
 // Adapted from Catch2 documentation:
 #include <catch2/catch_session.hpp>
