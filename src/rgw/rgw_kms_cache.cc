@@ -177,7 +177,7 @@ int KMSCache::do_cache(
   const std::string cache_key =
       string_cat_reserve(key_prefix, key_prefix_kms, "_", key_id);
   std::shared_ptr<KMSCache::CacheValue> value =
-      cache->lookup_or(key_id, std::make_shared<KMSCache::CacheValue>());
+      cache->lookup_or(cache_key, std::make_shared<KMSCache::CacheValue>());
   auto result = call_once(
       *value, y,
       [&dpp, &fetch, &cache_key, &value, &key_prefix_kms, &key_id,
