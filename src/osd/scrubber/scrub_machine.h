@@ -247,6 +247,12 @@ MEV(IntervalChanged)
  */
 MEV(FullReset)
 
+/**
+ * (Primary only) stops the running scrub. Removes any higher-than-periodic
+ * 'urgency' attributes.
+ */
+MEV(OperatorAbort)
+
 /// finished handling this chunk. Go get the next one
 MEV(NextChunk)
 
@@ -557,9 +563,12 @@ struct Session : sc::state<Session, PrimaryActive, ReservingReplicas>,
   ~Session();
 
   using reactions = mpl::list<sc::transition<FullReset, PrimaryIdle>,
-                              sc::custom_reaction<IntervalChanged>>;
+                              sc::custom_reaction<IntervalChanged>,
+                              sc::custom_reaction<OperatorAbort>>;
 
   sc::result react(const IntervalChanged&);
+
+  sc::result react(const OperatorAbort&);
 
   /// managing the scrub session's reservations (optional, as
   /// it's an RAII wrapper around the state of 'holding reservations')
