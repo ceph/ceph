@@ -9184,7 +9184,8 @@ int BlueStore::expand_devices(ostream& out)
 
       fm->expand(aligned_size, db);
       alloc->expand(aligned_size);
-      alloc->init_add_free(size0, aligned_size - size0);
+      uint64_t aligned_size0 = p2roundup(size0, min_alloc_size);
+      alloc->init_add_free(aligned_size0, aligned_size - aligned_size0);
 
       dout(1) << __func__
               << " : size updated to 0x" << std::hex << size
