@@ -17,6 +17,10 @@
 #include "osdc/Journaler.h"
 
 #include <typeinfo>
+#include <fstream>
+#include <iterator>
+#include <vector>
+#include <cstdlib>
 #include "common/DecayCounter.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -4084,6 +4088,14 @@ std::string MDSRank::get_path(inodeno_t ino) {
   std::string res;
   inode->make_path_string(res);
   return res;
+}
+
+uint64_t MDSRank::get_inode_rbytes(inodeno_t ino) {
+  std::lock_guard locker(mds_lock);
+  CInode* inode = mdcache->get_inode(ino);
+  if (!inode) return 0;
+  const auto& pi = inode->get_projected_inode();
+  return pi->rstat.rbytes > 0 ? static_cast<uint64_t>(pi->rstat.rbytes) : 0;
 }
 
 std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
