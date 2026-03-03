@@ -31,7 +31,9 @@
 // define as static when RGWBucket implementation completes
 extern void rgw_get_buckets_obj(const rgw_user& user_id, std::string& buckets_obj_id);
 
+#ifdef WITH_RADOSGW_RADOS
 class RGWBucketMetadataHandler;
+#endif
 class RGWBucketInstanceMetadataHandler;
 class RGWUserCtl;
 class RGWBucketCtl;
@@ -316,6 +318,7 @@ struct RGWBucketAdminOpState {
                             fix_index(false), delete_child_objects(false),
                             bucket_stored(false), sync_bucket(true),
                             dump_keys(false), hide_progress(false) {}
+  ~RGWBucketAdminOpState() { bucket.release(); }
 };
 
 
