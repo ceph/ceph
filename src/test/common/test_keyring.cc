@@ -68,4 +68,16 @@ TEST_F(LinuxKeyringTest, LifecycleMoveAssignResetsDestination) {
   ASSERT_EQ(ENOKEY, errno);
 }
 
+TEST_F(LinuxKeyringTest, ResetClearsState) {
+  auto maybe = keyring->add("testkey", "secret");
+  auto* ptr = dynamic_cast<LinuxKeyringSecret*>(maybe.value().get());
+  auto err = ptr->reset();
+  ASSERT_FALSE(err) << err;
+  ASSERT_FALSE(ptr->initialized());
+  ASSERT_EQ(-1, ptr->_serial);
+
+  err = ptr->reset();
+  ASSERT_TRUE(err);
+}
+
 }  // namespace ceph
