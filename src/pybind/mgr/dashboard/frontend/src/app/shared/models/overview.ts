@@ -1,6 +1,18 @@
+import { ChartTabularData, GaugeChartOptions } from '@carbon/charts-angular';
 import { HealthCheck, PgStateCount } from './health.interface';
+import _ from 'lodash';
 
-export type HealthStatus = 'HEALTH_OK' | 'HEALTH_WARN' | 'HEALTH_ERR';
+// Types
+type ResileincyHealthType = {
+  title: string;
+  description: string;
+  icon: string;
+  severity: ResiliencyState;
+};
+
+type ResiliencyState = typeof DATA_RESILIENCY_STATE[keyof typeof DATA_RESILIENCY_STATE];
+
+type PG_STATES = typeof PG_STATES[number];
 
 export const HealthIconMap = {
   HEALTH_OK: 'success',
@@ -15,8 +27,12 @@ export const SeverityIconMap = {
   3: 'inProgress'
 };
 
-/** 0 ok, 1 warn, 2 err , 3 sync*/
-export type Severity = 0 | 1 | 2 | 3;
+export type HealthStatus = 'HEALTH_OK' | 'HEALTH_WARN' | 'HEALTH_ERR';
+
+export type HealthCardTabSection = 'system' | 'hardware' | 'resiliency';
+
+/** 0 ok, 1 warn, 2 err */
+export type Severity = 0 | 1 | 2;
 
 export type Health = {
   message: string;
@@ -24,7 +40,103 @@ export type Health = {
   icon: string;
 };
 
+// Interfaces
+
+export interface HealthDisplayVM {
+  title: string;
+  message: string;
+  icon: string;
+}
+
+export interface HealthCardCheckVM {
+  name: string;
+  description: string;
+  icon: string;
+}
+
+export interface HealthCardSubStateVM {
+  value: string;
+  severity: string;
+}
+
+export interface HealthCardVM {
+  fsid: string;
+  overallSystemSev: string;
+
+  incidents: number;
+  checks: HealthCardCheckVM[];
+
+  clusterHealth: HealthDisplayVM;
+
+  resiliencyHealth: ResileincyHealthType;
+
+  pgs: {
+    total: number;
+    states: PgStateCount[];
+    io: Array<{ label: string; value: number }>;
+    activeCleanChartData: ChartTabularData;
+    activeCleanChartOptions: GaugeChartOptions;
+    activeCleanChartReason: Array<{ state: string; count: number }>;
+  };
+
+  mon: HealthCardSubStateVM;
+  mgr: HealthCardSubStateVM;
+  osd: HealthCardSubStateVM;
+  hosts: HealthCardSubStateVM;
+}
+
+// Constants
+
 const WarnAndErrMessage = $localize`There are active alerts and unresolved health warnings.`;
+
+const DATA_RESILIENCY_STATE = {
+  ok: 'ok',
+  error: 'error',
+  warn: 'warn',
+  warnDataLoss: 'warnDataLoss',
+  progress: 'progress'
+} as const;
+
+const CHECK_TO_STATE: Record<string, ResiliencyState> = {
+  PG_DAMAGED: DATA_RESILIENCY_STATE.error,
+  PG_RECOVERY_FULL: DATA_RESILIENCY_STATE.error,
+
+  PG_DEGRADED: DATA_RESILIENCY_STATE.warn,
+  PG_AVAILABILITY: DATA_RESILIENCY_STATE.warnDataLoss,
+  PG_BACKFILL_FULL: DATA_RESILIENCY_STATE.warn
+} as const;
+
+const RESILIENCY_PRIORITY: Record<ResiliencyState, number> = {
+  ok: 0,
+  progress: 1,
+  warn: 2,
+  warnDataLoss: 3,
+  error: 4
+};
+
+// Priority: DO NOT CHANGE ORDER HERE
+const PG_STATES = [
+  // ERROR OR WARN
+  'offline',
+  'inconsistent',
+  'down',
+  'stale',
+  'degraded',
+  'undersized',
+  'recovering',
+  'recovery_wait',
+  'backfilling',
+  'backfill_wait',
+  'remapped',
+  // PROGRESS
+  'deep',
+  'scrubbing'
+] as const;
+
+const LABELS: Record<string, string> = {
+  scrubbing: 'Scrub',
+  deep: 'Deep-Scrub'
+};
 
 export const HealthMap: Record<HealthStatus, Health> = {
   HEALTH_OK: {
@@ -44,54 +156,6 @@ export const HealthMap: Record<HealthStatus, Health> = {
   }
 };
 
-export interface HealthDisplayVM {
-  title: string;
-  message: string;
-  icon: string;
-}
-
-export interface HealthCardCheckVM {
-  name: string;
-  description: string;
-  icon: string;
-}
-
-export interface HealthCardSubStateVM {
-  value: string;
-  severity: string;
-}
-
-type ResileincyHealthType = {
-  title: string;
-  description: string;
-  icon: string;
-};
-
-export interface HealthCardVM {
-  fsid: string;
-  overallSystemSev: string;
-
-  incidents: number;
-  checks: HealthCardCheckVM[];
-
-  clusterHealth: HealthDisplayVM;
-
-  resiliencyHealth: ResileincyHealthType;
-
-  pgs: {
-    total: number;
-    states: PgStateCount[];
-    io: Array<{ label: string; value: number }>;
-  };
-
-  mon: HealthCardSubStateVM;
-  mgr: HealthCardSubStateVM;
-  osd: HealthCardSubStateVM;
-  hosts: HealthCardSubStateVM;
-}
-
-export type HealthCardTabSection = 'system' | 'hardware' | 'resiliency';
-
 export const SEVERITY = {
   ok: 0 as Severity,
   warn: 1 as Severity,
@@ -99,70 +163,63 @@ export const SEVERITY = {
   sync: 3 as Severity
 } as const;
 
-export const RESILIENCY_CHECK = {
-  error: ['PG_DAMAGED', 'PG_RECOVERY_FULL'],
-  warn: ['PG_DEGRADED', 'PG_AVAILABILITY', 'PG_BACKFILL_FULL']
+export const ACTIVE_CLEAN_CHART_OPTIONS: GaugeChartOptions = {
+  resizable: true,
+  height: '100px',
+  width: '100px',
+  gauge: { type: 'full' },
+  toolbar: {
+    enabled: false
+  }
 };
 
-const DATA_RESILIENCY_STATE = {
-  ok: 'ok',
-  error: 'error',
-  warn: 'warn',
-  warnDataLoss: 'warnDataLoss',
-  progress: 'progress'
-};
-
-export const DATA_RESILIENCY = {
+export const DATA_RESILIENCY: Record<ResiliencyState, ResileincyHealthType> = {
   [DATA_RESILIENCY_STATE.ok]: {
     icon: 'success',
     title: $localize`Data is fully replicated and available.`,
-    description: $localize`All replicas are in place and I/O is operating normally. No action is required.`
+    description: $localize`All replicas are in place and I/O is operating normally. No action is required.`,
+    severity: DATA_RESILIENCY_STATE.ok
   },
   [DATA_RESILIENCY_STATE.progress]: {
     icon: 'inProgress',
     title: $localize`Data integrity checks in progress`,
-    description: $localize`Ceph is running routine consistency checks on stored data and metadata to ensure data integrity. Data remains safe and accessible.`
+    description: $localize`Ceph is running routine consistency checks on stored data and metadata to ensure data integrity. Data remains safe and accessible.`,
+    severity: DATA_RESILIENCY_STATE.progress
   },
   [DATA_RESILIENCY_STATE.warn]: {
     icon: 'warning',
     title: $localize`Restoring data redundancy`,
-    description: $localize`Some data replicas are missing or not yet in their final location. Ceph is actively rebalancing data to return to a healthy state.`
+    description: $localize`Some data replicas are missing or not yet in their final location. Ceph is actively rebalancing data to return to a healthy state.`,
+    severity: DATA_RESILIENCY_STATE.warn
   },
   [DATA_RESILIENCY_STATE.warnDataLoss]: {
     icon: 'warning',
     title: $localize`Status unavailable for some data`,
-    description: $localize`Ceph cannot reliably determine the current state of some data. Availability may be affected.`
+    description: $localize`Ceph cannot reliably determine the current state of some data. Availability may be affected.`,
+    severity: DATA_RESILIENCY_STATE.warnDataLoss
   },
   [DATA_RESILIENCY_STATE.error]: {
     icon: 'error',
     title: $localize`Data unavailable or inconsistent, manual intervention required`,
-    description: $localize`Some data is currently unavailable or inconsistent. Ceph could not automatically restore these resources, and manual intervention is required to restore data availability and consistency.`
+    description: $localize`Some data is currently unavailable or inconsistent. Ceph could not automatically restore these resources, and manual intervention is required to restore data availability and consistency.`,
+    severity: DATA_RESILIENCY_STATE.error
   }
+} as const;
+
+export const SEVERITY_TO_COLOR: Record<ResiliencyState, string> = {
+  ok: '#24A148',
+  progress: '#24A148',
+  warn: '#F1C21B',
+  warnDataLoss: '#F1C21B',
+  error: '#DA1E28'
 };
+
+// Utilities
 
 export const maxSeverity = (...values: Severity[]): Severity => Math.max(...values) as Severity;
 
 export function getClusterHealth(status: HealthStatus): HealthDisplayVM {
   return HealthMap[status] ?? HealthMap['HEALTH_OK'];
-}
-
-export function getResiliencyDisplay(checks: HealthCardCheckVM[] = []): ResileincyHealthType {
-  let resileincyState: string = DATA_RESILIENCY_STATE.ok;
-  checks.forEach((check) => {
-    switch (check?.name) {
-      case RESILIENCY_CHECK.error[0]:
-      case RESILIENCY_CHECK.error[1]:
-        resileincyState = DATA_RESILIENCY_STATE.error;
-        break;
-      case RESILIENCY_CHECK.warn[0]:
-        resileincyState = DATA_RESILIENCY_STATE.warn;
-        break;
-      case RESILIENCY_CHECK.warn[1]:
-        resileincyState = DATA_RESILIENCY_STATE.warnDataLoss;
-        break;
-    }
-  });
-  return DATA_RESILIENCY[resileincyState];
 }
 
 export function getHealthChecksAndIncidents(checksObj: Record<string, HealthCheck>) {
@@ -182,4 +239,126 @@ export function getHealthChecksAndIncidents(checksObj: Record<string, HealthChec
 
 export function safeDifference(a: number, b: number): number | null {
   return a != null && b != null ? a - b : null;
+}
+
+export function getResiliencyDisplay(
+  checks: HealthCardCheckVM[] = [],
+  pgStates: PgStateCount[] = []
+): ResileincyHealthType {
+  let state: ResiliencyState = DATA_RESILIENCY_STATE.ok;
+
+  for (const check of checks) {
+    const next = CHECK_TO_STATE[check?.name];
+    if (next && RESILIENCY_PRIORITY[next] > RESILIENCY_PRIORITY[state]) state = next;
+    if (state === DATA_RESILIENCY_STATE.error) break;
+  }
+
+  if (state === DATA_RESILIENCY_STATE.ok) {
+    const hasScrubbing = pgStates.some((s) => {
+      const n = s?.state_name ?? '';
+      return n.includes('scrubbing') || n.includes('deep');
+    });
+    if (hasScrubbing) state = DATA_RESILIENCY_STATE.progress;
+  }
+
+  return DATA_RESILIENCY[state];
+}
+
+export function getActiveCleanChartSeverity(
+  pgStates: PgStateCount[] = [],
+  activeCleanRatio: number
+): ResiliencyState {
+  if (activeCleanRatio >= 1) return DATA_RESILIENCY_STATE.ok;
+
+  const hasActive = pgStates.some((s) => (s?.state_name ?? '').includes('active'));
+  return hasActive ? DATA_RESILIENCY_STATE.warn : DATA_RESILIENCY_STATE.error;
+}
+
+function labelOf(key: string) {
+  return LABELS[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function isActiveCleanRow(pgRow: string) {
+  // E.g active+clean+remapped
+  return pgRow.includes('active') && pgRow.includes('clean');
+}
+
+function isScrubbing(pgRow: string) {
+  return pgRow.includes('scrubbing') || pgRow.includes('deep');
+}
+
+/**
+ * If any PG state is active and not clean => Warn
+ * If any PG state is not active -> Error
+ *
+ * In case above is true, the states contributing to that as per
+ * PG_STATES priotity List will be added.
+ *
+ * If all OKAY. then scrubbing shown (if active)
+ */
+export function calcActiveCleanSeverityAndReasons(
+  pgStates: PgStateCount[] = [],
+  totalPg: number
+): {
+  activeCleanPercent: number;
+  severity: ResiliencyState;
+  reasons: Array<{ state: string; count: number }>;
+} {
+  if (totalPg <= 0) {
+    return { activeCleanPercent: 0, severity: DATA_RESILIENCY_STATE.ok, reasons: [] };
+  }
+
+  const reasonCounts = new Map<PG_STATES, number>();
+  let severity: ResiliencyState = DATA_RESILIENCY_STATE.ok;
+  let activeCleanTotal = 0;
+  let hasProgress = false;
+  let hasNotActiveNotClean = false;
+  let hasActiveNotClean = false;
+
+  for (const state of pgStates) {
+    const stateName = (state?.state_name ?? '').trim();
+    const stateCount = state?.count ?? 0;
+    const isActive = stateName.includes('active');
+    const isClean = stateName.includes('clean');
+
+    if (!isActive && !isClean) hasNotActiveNotClean = true;
+    if (isActive && !isClean) hasActiveNotClean = true;
+
+    // If all okay then only scrubbing state is shown
+    if (!hasProgress && isScrubbing(stateName)) {
+      hasProgress = true;
+    }
+
+    // active+clean*: no reasons required hence continuing
+    if (isActiveCleanRow(stateName)) {
+      activeCleanTotal += stateCount;
+      continue;
+    }
+
+    // Non active, non-clean or non-active+clean: reasons needed
+    for (const state of PG_STATES) {
+      if (stateName.includes(state)) {
+        reasonCounts.set(state, (reasonCounts.get(state) ?? 0) + stateCount);
+        break;
+      }
+    }
+  }
+
+  if (hasNotActiveNotClean) severity = DATA_RESILIENCY_STATE.error;
+  else if (hasActiveNotClean) severity = DATA_RESILIENCY_STATE.warn;
+  else if (hasProgress) severity = DATA_RESILIENCY_STATE.progress;
+
+  const reasons =
+    reasonCounts.size === 0
+      ? []
+      : [...reasonCounts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([state, count]) => ({
+            state: labelOf(state),
+            count: Number(((count / totalPg) * 100).toFixed(2))
+          }));
+
+  const activeCleanPercent = Number(((activeCleanTotal / totalPg) * 100).toFixed(2));
+
+  return { activeCleanPercent, severity, reasons };
 }

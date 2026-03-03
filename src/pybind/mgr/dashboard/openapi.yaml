@@ -6259,28 +6259,21 @@ paths:
                       num_mons:
                         description: Number of monitors
                         type: integer
-<<<<<<< HEAD
-                    required:
-=======
                       quorum:
                         description: List of monitors in quorum
                         items:
                           type: integer
                         type: array
                     required: &id054
->>>>>>> 07e9ab519ce (mgr/dashboard: Add systems tab to health card)
                     - num_mons
                     - quorum
                     type: object
-<<<<<<< HEAD
-=======
                   num_hosts:
                     description: Count of hosts
                     type: integer
                   num_hosts_available:
                     description: Count of available hosts
                     type: integer
->>>>>>> 07e9ab519ce (mgr/dashboard: Add systems tab to health card)
                   num_iscsi_gateways:
                     description: Iscsi gateways status
                     properties:
@@ -6344,12 +6337,16 @@ paths:
                           - count
                           type: object
                         type: array
-                    required:
+                      recovering_bytes_per_sec:
+                        description: Total recovery in bytes
+                        type: integer
+                    required: &id058
                     - pgs_by_state
                     - num_pools
                     - num_pgs
                     - bytes_used
                     - bytes_total
+                    - recovering_bytes_per_sec
                     type: object
                 required:
                 - fsid
@@ -6507,6 +6504,9 @@ paths:
                           required: *id057
                           type: object
                         type: array
+                      recovering_bytes_per_sec:
+                        description: Total recovery in bytes
+                        type: integer
                     required: *id058
                     type: object
                 required: *id059

@@ -86,7 +86,7 @@
           class="overview-pg-side-panel-rw-item"
           [class.overview-pg-side-panel-rw-item--border]="!isLast">
           <p class="cds--type-label-01 cds-mb-2">{{data.label}}</p>
-          <p class="cds--type-heading-03 cds-mb-0">{{data.value}}</p>
+          <p class="cds--type-heading-03 cds-mb-0">{{data.value | dimlessBinary }} / s</p>
         </div>
         }
       </div>
