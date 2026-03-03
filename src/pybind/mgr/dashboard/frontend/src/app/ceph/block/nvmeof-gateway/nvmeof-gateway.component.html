@@ -1,85 +1,44 @@
-<cd-nvmeof-tabs></cd-nvmeof-tabs>
-
-<div class="pb-3"
-     cdsCol
-     [columnNumbers]="{md: 4}">
-  <cds-combo-box
-      type="single"
-      label="Selected Gateway Group"
-      i18n-label
-      [placeholder]="gwGroupPlaceholder"
-      [items]="gwGroups"
-      (selected)="onGroupSelection($event)"
-      (clear)="onGroupClear()"
-      [disabled]="gwGroupsEmpty">
-    <cds-dropdown-list></cds-dropdown-list>
-  </cds-combo-box>
-</div>
-
-<ng-template #statusTpl
-             let-row="data.row">
-  <cds-tag [class]="row | pipeFunction:getStatusClass">
-    {{ row.status_desc }}
-</cds-tag>
-</ng-template>
-
-<cds-tabs
-  type="contained"
-  followFocus="true"
-  isNavigation="true"
-  [cacheActive]="false">
+<fieldset>
+  <legend>
+    <h1 class="cds--type-heading-03">NVMe over Fabrics (TCP)</h1>
+  <cd-help-text>Monitor and manage NVMe-over-TCP resources for high-performance block storage.</cd-help-text>
+  </legend>
+</fieldset>
+<section>
+  <cds-tabs type="contained"
+            followFocus="true"
+            isNavigation="true"
+            [cacheActive]="false">
   <cds-tab
-    heading="Gateways"
+    heading="Gateway groups"
     [tabContent]="gateways_content"
     i18n-heading
     (selected)="onSelected(Tabs.gateways)">
   </cds-tab>
   <cds-tab
-    heading="Overview"
-    [tabContent]="overview_content"
+    heading="Subsystem"
+    [tabContent]="subsystem_content"
     i18n-heading
-    (selected)="onSelected(Tabs.overview)">
+    (selected)="onSelected(Tabs.subsystem)">
   </cds-tab>
   <cds-tab
-    heading="Performance"
-    [tabContent]="performance_content"
+    heading="Namespace"
+    [tabContent]="namespace_content"
     i18n-heading
-    (selected)="onSelected(Tabs.overview)">
+    (selected)="onSelected(Tabs.namespace)">
   </cds-tab>
 </cds-tabs>
 
 <ng-template #gateways_content>
-  <legend *ngIf="selectedTab === Tabs.gateways"
-          i18n>
-    Gateways
-    <cd-help-text>
-      Ceph NVMe-oF gateways provide Ceph Block Device storage through NVMe/TCP. For VMware clients the NVMe/TCP volumes display as  VMFS Datastores. For Linux clients the NVMe/TCP volumes display as as block devices.
-    </cd-help-text>
-  </legend>
-  <div>
-    <cd-table [data]="gateways"
-              (fetchData)="getGateways()"
-              [columns]="gatewayColumns">
-    </cd-table>
-  </div>
+  <cd-nvmeof-gateway-group></cd-nvmeof-gateway-group>
 </ng-template>
 
-<ng-template #overview_content>
-  <cd-grafana i18n-title
-              title="Gateway overview"
-              grafanaPath="ceph-nvme-of-gateways-overview?var-group={{selectedGatewayGroup}}&var-gateway=All"
-              [type]="'metrics'"
-              uid="feeuv1dno43r4ddjhjssdd"
-              grafanaStyle="three">
-  </cd-grafana>
+<ng-template #subsystem_content>
+  <cd-nvmeof-subsystems></cd-nvmeof-subsystems>
 </ng-template>
 
-<ng-template #performance_content>
-  <cd-grafana i18n-title
-              title="Gateway performance"
-              grafanaPath="ceph-nvme-of-gateways-performance?var-group={{selectedGatewayGroup}}"
-              [type]="'metrics'"
-              uid="feeuv1dno43r4deed"
-              grafanaStyle="three">
-  </cd-grafana>
+<ng-template #namespace_content>
+  <cd-nvmeof-namespaces-list></cd-nvmeof-namespaces-list>
 </ng-template>
+</section>
+
