@@ -138,8 +138,8 @@ class WebCache {
 
   // sieve_expire_erase_unmutexed removes all expired nodes from the
   // sieve_queue in place. It writes the expired nodes to out_expired.
-  // Updates the sieve hand
-  static void sieve_expire_erase_unmutexed(
+  // Returns the updated sieve hand.
+  static Node* sieve_expire_erase_unmutexed(
       SieveQueue& sieve_queue, Node* sieve_hand,
       ceph::real_time eviction_cutoff, SieveQueue& out_expired);
 
@@ -511,7 +511,7 @@ WebCache<Key, Value>::lookup(const Key& key) {
 }
 
 template <typename Key, typename Value>
-void WebCache<Key, Value>::sieve_expire_erase_unmutexed(
+typename WebCache<Key, Value>::Node* WebCache<Key, Value>::sieve_expire_erase_unmutexed(
     SieveQueue& sieve_queue, Node* sieve_hand, ceph::real_time eviction_cutoff,
     SieveQueue& out_expired) {
   // The sieve queue is ordered by ascending insertion time which
@@ -532,6 +532,7 @@ void WebCache<Key, Value>::sieve_expire_erase_unmutexed(
       ++it;
     }
   }
+  return sieve_hand;
 }
 
 template <typename Key, typename Value>
@@ -540,7 +541,7 @@ size_t WebCache<Key, Value>::expire_erase() {
   const auto expiration_cutoff = ceph::real_clock::now();
   const auto lookup_size_before = _lookup.size();
   SieveQueue expired;
-  sieve_expire_erase_unmutexed(
+  _sieve_hand = sieve_expire_erase_unmutexed(
       _sieve_queue, _sieve_hand, expiration_cutoff, expired);
   const auto expired_size = expired.size();
   expired.clear_and_dispose(
