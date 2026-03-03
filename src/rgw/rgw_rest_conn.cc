@@ -177,7 +177,7 @@ void RGWRESTConn::populate_connect_to(RGWEndpoint& endpoint, ResolvedEndpoint& r
     return;
   }
 
-  static constexpr uint32_t CONN_STATUS_EXPIRE_SECS = 2;
+  const auto ip_fail_timeout = cct->_conf->rgw_rest_conn_ip_fail_timeout_secs;
   const size_t num_ips = resolved_endpoint.resolved_ips.size();
 
   // Round-robin through IPs, skipping any that are marked down
@@ -192,7 +192,7 @@ void RGWRESTConn::populate_connect_to(RGWEndpoint& endpoint, ResolvedEndpoint& r
     }
 
     auto diff = ceph::to_seconds<double>(ceph::real_clock::now() - last_fail);
-    if (diff >= CONN_STATUS_EXPIRE_SECS) {
+    if (diff >= ip_fail_timeout) {
       // Failure expired, mark IP as up and use it
       ip_status.mark_up();
       ldout(cct, 5) << "IP " << ip_status.connect_to << " failure expired, marking up" << dendl;
@@ -214,7 +214,7 @@ int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
     return -EINVAL;
   }
 
-  static constexpr uint32_t CONN_STATUS_EXPIRE_SECS = 2;
+  const auto ip_fail_timeout = cct->_conf->rgw_rest_conn_ip_fail_timeout_secs;
   auto now = ceph::real_clock::now();
 
   // Helper to check if an endpoint has at least one available IP
@@ -227,7 +227,7 @@ int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
     // Fast path: if no recent failures at endpoint level, all IPs are available
     const auto& ep_last_fail = res_ep.last_failure_time.load();
     if (ceph::real_clock::is_zero(ep_last_fail) ||
-        ceph::to_seconds<double>(now - ep_last_fail) >= CONN_STATUS_EXPIRE_SECS) {
+        ceph::to_seconds<double>(now - ep_last_fail) >= ip_fail_timeout) {
       return true;
     }
 
@@ -238,7 +238,7 @@ int RGWRESTConn::get_endpoint(RGWEndpoint& endpoint)
         return true;  // This IP is up
       }
       auto diff = ceph::to_seconds<double>(now - last_fail);
-      if (diff >= CONN_STATUS_EXPIRE_SECS) {
+      if (diff >= ip_fail_timeout) {
         return true;  // This IP's failure has expired
       }
     }
