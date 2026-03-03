@@ -9123,6 +9123,7 @@ int BlueStore::expand_devices(ostream& out)
                 << std::dec << "(" << byte_u_t(size) << ")"
                 << std::endl;
           }
+          ceph_assert(mounted);
           bluefs->expand_device(devid, size, old_size);
         }
       }
