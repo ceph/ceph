@@ -377,3 +377,27 @@ options:
   services:
   - mgr
   with_legacy: true
+- name: mgr_osd_upgrade_check_convergence_factor
+  type: float
+  level: advanced
+  desc: The factor used to converge to a subset of OSDs within a CRUSH bucket
+    that can be upgraded without affecting immediate data availability.
+  fmt_desc: The factor used in calculations to converge to a subset of OSDs that
+    can be safely upgraded simultaneously. Each iteration of the calculation
+    uses this factor until a safe subset is found. The smaller the factor, the
+    lower the number of iterations needed to find a safe set. But the number of
+    OSDs found may not be optimal. Conversely, with a larger factor, a higher
+    number of iterations and time would be consumed to find a safe set. The
+    number of OSDs found in this case would be closer to optimal.
+  default: 0.8
+  min: 0.1
+  max: 0.9
+  services:
+  - mgr
+- name: mgr_test_metadata_error
+  type: bool
+  level: dev
+  desc: Used for simulating errors during operations involving metadata.
+  default: false
+  services:
+  - mgr
