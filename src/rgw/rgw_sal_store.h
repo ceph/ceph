@@ -533,7 +533,7 @@ public:
 
   StoreLuaManager() = default;
   StoreLuaManager(const std::string& __luarocks_path) :
-    _luarocks_path(__luarocks_path) {}
+    _luarocks_path(__luarocks_path), lua_background(nullptr) {}
   virtual ~StoreLuaManager() = default;
 };
 
