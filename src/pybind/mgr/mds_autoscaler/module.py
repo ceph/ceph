@@ -9,10 +9,13 @@ from orchestrator._interface import MDSSpec, ServiceSpec
 import orchestrator
 import copy
 
+from .cli import MDSAutoscalerCLICommand
+
 log = logging.getLogger(__name__)
 
 
 class MDSAutoscaler(orchestrator.OrchestratorClientMixin, MgrModule):
+    CLICommand = MDSAutoscalerCLICommand
     """
     MDS autoscaler.
     """
