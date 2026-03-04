@@ -517,6 +517,8 @@ enum OLHLogOp {
   CLS_RGW_OLH_OP_UNLINK_OLH      = 2, /* object does not exist */
   // remove a specific instance of an object, such as <obj_name>.<obj_version>
   CLS_RGW_OLH_OP_REMOVE_INSTANCE = 3,
+  // a stale op to be used to cleanup olh.pending attribute of the olh object
+  CLS_RGW_OLH_OP_STALE           = 4,
 };
 
 struct rgw_bucket_olh_log_entry {
