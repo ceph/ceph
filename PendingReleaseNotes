@@ -1,5 +1,7 @@
 >=20.0.0
 
+* RGW: Bucket Logging suppports creating log buckets in EC pools.
+  Implicit logging object commits are now performed asynchronously.
 * RADOS: leader monitor and stretch mode status are now included in the `ceph status` output.
   Related Tracker: https://tracker.ceph.com/issues/70406
 * RGW: The User Account feature introduced in Squid provides first-class support for

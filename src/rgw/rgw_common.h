@@ -1255,7 +1255,7 @@ struct req_info {
   meta_map_t crypt_attribute_map;
 
   std::string host;
-  const char *method;
+  const char *method = nullptr;
   std::string script_uri;
   std::string request_uri;
   std::string request_uri_aws4;
