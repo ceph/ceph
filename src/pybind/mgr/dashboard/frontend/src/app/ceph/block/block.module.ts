@@ -101,6 +101,7 @@ import { NvmeofSubsystemOverviewComponent } from './nvmeof-subsystem-overview/nv
 import { NvmeSubsystemViewBreadcrumbResolver } from './nvme-subsystem-view/nvme-subsystem-view-breadcrumb.resolver';
 import { NvmeSubsystemViewComponent } from './nvme-subsystem-view/nvme-subsystem-view.component';
 import { NvmeofSubsystemPerformanceComponent } from './nvmeof-subsystem-performance/nvmeof-subsystem-performance.component';
+import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
 
 @NgModule({
   imports: [
@@ -186,7 +187,8 @@ import { NvmeofSubsystemPerformanceComponent } from './nvmeof-subsystem-performa
     NvmeofEditHostKeyModalComponent,
     NvmeofSubsystemsStepFourComponent,
     NvmeofSubsystemOverviewComponent,
-    NvmeofSubsystemPerformanceComponent
+    NvmeofSubsystemPerformanceComponent,
+    NvmeofTabsComponent
   ],
 
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
@@ -345,123 +347,137 @@ const routes: Routes = [
       { path: '', redirectTo: 'gateways', pathMatch: 'full' },
       {
         path: 'gateways',
-        component: NvmeofGatewayComponent,
         data: { breadcrumbs: 'Gateways' },
         children: [
           {
-            path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,
-            component: NvmeofNamespaceExpandModalComponent,
-            outlet: 'modal'
-          }
-        ]
-      },
-      {
-        path: `gateways/${URLVerbs.CREATE}`,
-        component: NvmeofGroupFormComponent,
-        data: { breadcrumbs: `${ActionLabels.CREATE}${URLVerbs.GATEWAY_GROUP}` }
-      },
-
-      {
-        path: `gateways/${URLVerbs.VIEW}/:group`,
-        component: NvmeGatewayViewComponent,
-        data: { breadcrumbs: NvmeGatewayViewBreadcrumbResolver }, // Use resolver here
-        children: [
-          { path: '', redirectTo: 'nodes', pathMatch: 'full' },
-          {
-            path: 'nodes',
-            component: NvmeofGatewayNodeComponent,
-            data: { breadcrumbs: $localize`Gateway nodes`, mode: NvmeofGatewayNodeMode.DETAILS }
+            path: '',
+            component: NvmeofGatewayGroupComponent
           },
           {
-            path: 'subsystems',
-            component: NvmeofGatewaySubsystemComponent,
-            data: { breadcrumbs: $localize`Subsystems` }
+            path: URLVerbs.CREATE,
+            component: NvmeofGroupFormComponent,
+            data: {
+              breadcrumbs: ActionLabels.CREATE,
+              pageHeader: {
+                title: $localize`Create Gateway Group`,
+                description: $localize`A logical group of gateways that hosts will connect to.`
+              }
+            }
+          },
+          {
+            path: `${URLVerbs.VIEW}/:group`,
+            component: NvmeGatewayViewComponent,
+            data: { breadcrumbs: NvmeGatewayViewBreadcrumbResolver },
+            children: [
+              { path: '', redirectTo: 'nodes', pathMatch: 'full' },
+              {
+                path: 'nodes',
+                component: NvmeofGatewayNodeComponent,
+                data: { breadcrumbs: $localize`Gateway nodes`, mode: NvmeofGatewayNodeMode.DETAILS }
+              },
+              {
+                path: 'subsystems',
+                component: NvmeofGatewaySubsystemComponent,
+                data: { breadcrumbs: $localize`Subsystems` }
+              }
+            ]
           }
         ]
-      },
-      {
-        path: `namespaces/${URLVerbs.CREATE}`,
-        component: NvmeofNamespacesFormComponent,
-        data: { breadcrumbs: ActionLabels.CREATE + ' ' + $localize`Namespace` }
       },
       {
         path: 'subsystems',
-        component: NvmeofSubsystemsComponent,
         data: { breadcrumbs: 'Subsystems' },
         children: [
-          // subsystems
-
           {
-            path: URLVerbs.CREATE,
-            component: NvmeofSubsystemsFormComponent,
-            outlet: 'modal'
+            path: '',
+            component: NvmeofSubsystemsComponent,
+            children: [
+              {
+                path: URLVerbs.CREATE,
+                component: NvmeofSubsystemsFormComponent,
+                outlet: 'modal'
+              },
+              {
+                path: `${URLVerbs.CREATE}/:subsystem_nqn/listener`,
+                component: NvmeofListenersFormComponent,
+                outlet: 'modal'
+              },
+              {
+                path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,
+                component: NvmeofNamespaceExpandModalComponent,
+                outlet: 'modal'
+              },
+              {
+                path: `${URLVerbs.ADD}/:subsystem_nqn/initiator`,
+                component: NvmeofInitiatorsFormComponent,
+                outlet: 'modal'
+              }
+            ]
           },
-          // listeners
           {
-            path: `${URLVerbs.CREATE}/:subsystem_nqn/listener`,
-            component: NvmeofListenersFormComponent,
-            outlet: 'modal'
-          },
-          // namespaces
-          {
-            path: `${URLVerbs.CREATE}/:subsystem_nqn/namespace`,
-            component: NvmeofNamespacesFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE + ' ' + $localize`Namespace` }
-          },
-          {
-            path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,
-            component: NvmeofNamespaceExpandModalComponent,
-            outlet: 'modal'
-          },
-          // initiators
-          {
-            path: `${URLVerbs.ADD}/:subsystem_nqn/initiator`,
-            component: NvmeofInitiatorsFormComponent,
-            outlet: 'modal'
+            path: ':subsystem_nqn',
+            component: NvmeSubsystemViewComponent,
+            data: { breadcrumbs: NvmeSubsystemViewBreadcrumbResolver },
+            children: [
+              { path: '', redirectTo: 'overview', pathMatch: 'full' },
+              {
+                path: 'overview',
+                component: NvmeofSubsystemOverviewComponent
+              },
+              {
+                path: 'hosts',
+                component: NvmeofInitiatorsListComponent
+              },
+              {
+                path: 'namespaces',
+                component: NvmeofSubsystemNamespacesListComponent
+              },
+              {
+                path: 'listeners',
+                component: NvmeofListenersListComponent
+              },
+              {
+                path: 'performance',
+                component: NvmeofSubsystemPerformanceComponent
+              },
+              {
+                path: `${URLVerbs.ADD}/initiator`,
+                component: NvmeofInitiatorsFormComponent,
+                outlet: 'modal'
+              },
+              {
+                path: `${URLVerbs.ADD}/listener`,
+                component: NvmeofListenersFormComponent,
+                outlet: 'modal'
+              },
+              {
+                path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,
+                component: NvmeofNamespaceExpandModalComponent,
+                outlet: 'modal'
+              }
+            ]
           }
         ]
       },
       {
-        path: `subsystems/:subsystem_nqn`,
-        component: NvmeSubsystemViewComponent,
-        data: { breadcrumbs: NvmeSubsystemViewBreadcrumbResolver },
+        path: 'namespaces',
+        data: { breadcrumbs: 'Namespaces' },
         children: [
-          { path: '', redirectTo: 'overview', pathMatch: 'full' },
           {
-            path: 'overview',
-            component: NvmeofSubsystemOverviewComponent
+            path: '',
+            component: NvmeofNamespacesListComponent,
+            children: [
+              {
+                path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,
+                component: NvmeofNamespaceExpandModalComponent,
+                outlet: 'modal'
+              }
+            ]
           },
           {
-            path: 'hosts',
-            component: NvmeofInitiatorsListComponent
-          },
-
-          {
-            path: 'namespaces',
-            component: NvmeofSubsystemNamespacesListComponent
-          },
-          {
-            path: 'listeners',
-            component: NvmeofListenersListComponent
-          },
-          {
-            path: 'performance',
-            component: NvmeofSubsystemPerformanceComponent
-          },
-          {
-            path: `${URLVerbs.ADD}/initiator`,
-            component: NvmeofInitiatorsFormComponent,
-            outlet: 'modal'
-          },
-          {
-            path: `${URLVerbs.ADD}/listener`,
-            component: NvmeofListenersFormComponent,
-            outlet: 'modal'
-          },
-          {
-            path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,
-            component: NvmeofNamespaceExpandModalComponent,
-            outlet: 'modal'
+            path: URLVerbs.CREATE,
+            component: NvmeofNamespacesFormComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
           }
         ]
       }

@@ -43,6 +43,8 @@ export class NvmeofGatewayComponent implements OnInit, OnDestroy {
     this.route.queryParams.subscribe((params) => {
       if (params['tab'] && Object.values(TABS).includes(params['tab'])) {
         this.activeTab = params['tab'] as TABS;
+      } else {
+        this.activeTab = TABS.gateways;
       }
       this.breadcrumbService.setTabCrumb(TAB_LABELS[this.activeTab]);
     });

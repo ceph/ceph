@@ -73,7 +73,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().nvmeof;
     this.poolPermission = this.authStorageService.getPermissions().pool;
     this.resource = $localize`Namespace`;
-    this.pageURL = 'block/nvmeof/gateways';
+    this.pageURL = 'block/nvmeof/namespaces';
   }
 
   init() {
@@ -91,7 +91,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
         this.group = params['group'];
       }
       if (this.subsystemNQN && this.group) {
-        this.pageURL = `block/nvmeof/subsystems/${this.subsystemNQN}/${this.group}`;
+        this.pageURL = `block/nvmeof/subsystems/${this.subsystemNQN}/namespaces`;
         this.action = this.actionLabels.ADD;
         this.title = this.action + ' ' + this.resource;
         this.description = $localize`Create a new namespace associated with this subsystem.`;
@@ -435,7 +435,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       },
       complete: () => {
         this.router.navigate([this.pageURL], {
-          queryParams: { group: this.group, tab: 'namespace' }
+          queryParams: { group: this.group }
         });
       }
     });
