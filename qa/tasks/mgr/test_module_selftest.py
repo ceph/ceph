@@ -41,6 +41,9 @@ class TestModuleSelftest(MgrTestCase):
         self._selftest_plugin("prometheus")
 
     def test_influx(self):
+        #before we are enabling influx, set config options to avoid errors
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "config", "set", "mgr", "mgr/influx/hostname", "testhost")
         self._selftest_plugin("influx")
 
     def test_diskprediction_local(self):
