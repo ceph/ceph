@@ -219,6 +219,9 @@ enum action_t {
   allCount
 };
 
+boost::optional<rgw::auth::Principal>
+parse_principal(std::string&& s, std::string* errmsg);
+
 using Action_t = std::bitset<allCount>;
 using NotAction_t = Action_t;
 
@@ -835,6 +838,8 @@ inline bool is_public(const DoutPrefixProvider* dpp, const Policy& p)
   }
   return b;
 }
+
+boost::optional<action_t> parse_action(std::string_view s);
 }
 }
 
