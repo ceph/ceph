@@ -5,14 +5,6 @@ teuthology:
       if (yaml.os_type == "centos") or (yaml.os_type == "ubuntu" and yaml.os_version == "22.04") then
         reject()
       end
-
-overrides:
-  ceph:
-    log-ignorelist:
-      - mons down
-      - mon down
-      - MON_DOWN
-      - out of quorum
 tasks:
 - install:
     branch: pacific

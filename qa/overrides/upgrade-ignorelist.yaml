@@ -1,0 +1,56 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CACHE_POOL_NEAR_FULL
+      - CACHE_POOL_NO_HIT_SET
+      - CEPHADM_FAILED_DAEMON
+      - FS_DEGRADED
+      - Health detail
+      - MDS_ALL_DOWN
+      - MDS_INSUFFICIENT_STANDBY
+      - MON_DOWN
+      - Monitor daemon marked
+      - OBJECT_MISPLACED
+      - OBJECT_UNFOUND
+      - OSDMAP_FLAGS
+      - OSD_DOWN
+      - OSD_SLOW_PING_TIME_BACK
+      - OSD_SLOW_PING_TIME_FRONT
+      - PG_AVAILABILITY
+      - PG_DAMAGED
+      - PG_DEGRADED
+      - POOL_APP_NOT_ENABLED
+      - POOL_FULL
+      - Reduced data availability
+      - SLOW_OPS
+      - SMALLER_PG
+      - Slow OSD heartbeats
+      - all OSDs are running reef
+      - application not enabled
+      - cache pools at or near target size
+      - degraded
+      - do not have an application enabled
+      - filesystem is degraded
+      - freeform for custom applications
+      - have.*want.*more
+      - is down
+      - is down, acting
+      - is in unknown state
+      - is stuck inactive
+      - missing hit_sets
+      - mon down
+      - mons down
+      - needs hit_set_type to be set
+      - nodeep-scrub
+      - noscrub flag
+      - osd_map_max_advance
+      - out of quorum
+      - out of quota
+      - pool\(s\) full
+      - reached quota
+      - scrub
+      - slow request
+      - stuck peering for
+      - undersized
+      - with standby daemon mds
+      - wrongly marked

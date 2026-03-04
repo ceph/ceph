@@ -12,26 +12,6 @@ meta:
    Overall upgrade path is - reef-latest.point-1 => reef-latest.point => reef-latest
 overrides:
   ceph:
-    log-ignorelist:
-    - reached quota
-    - scrub
-    - osd_map_max_advance
-    - wrongly marked
-    - FS_DEGRADED
-    - POOL_APP_NOT_ENABLED
-    - CACHE_POOL_NO_HIT_SET
-    - POOL_FULL
-    - SMALLER_PG
-    - pool\(s\) full
-    - OSD_DOWN
-    - missing hit_sets
-    - CACHE_POOL_NEAR_FULL
-    - PG_AVAILABILITY
-    - PG_DEGRADED
-    - application not enabled
-    - cache pools at or near target size
-    - filesystem is degraded
-    - OBJECT_MISPLACED
     ### ref: https://tracker.ceph.com/issues/40251
     #removed see ^ - failed to encode map
 
