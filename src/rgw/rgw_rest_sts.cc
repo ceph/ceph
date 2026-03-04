@@ -584,10 +584,6 @@ bool WebTokenEngine::verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const
   if (thumbprints.empty()) {
     return true;
   }
-  if (!cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification")) {
-    ldpp_dout(dpp, 5) << "Verification of JWKS endpoint is turned off." << dendl;
-    return true;
-  }
 
   // Fetch and verify cert according to https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc_verify-thumbprint.html
   const auto hostname = get_top_level_domain_from_host(dpp, cert_url);
@@ -655,13 +651,10 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
             if (JSONDecoder::decode_json("x5c", x5c, &k_parser)) {
               string cert;
               bool found_valid_cert = false;
-              bool skip_thumbprint_verification = cct->_conf.get_val<bool>(
-                                                      "rgw_enable_jwks_url_verification")
-                                                  || thumbprints.empty();
               for (auto& it : x5c) {
                 cert = "-----BEGIN CERTIFICATE-----\n" + it + "\n-----END CERTIFICATE-----";
                 ldpp_dout(dpp, 20) << "Certificate is: " << cert.c_str() << dendl;
-                if (skip_thumbprint_verification || is_cert_valid(thumbprints, cert)) {
+                if (thumbprints.empty() || is_cert_valid(thumbprints, cert)) {
                   found_valid_cert = true;
                   break;
                 }
