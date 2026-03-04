@@ -92,6 +92,7 @@ seastar::future<> PGAdvanceMap::start()
       DEBUG("{}: advancing map to {}", *this, next_map->get_epoch());
       pg->handle_advance_map(next_map, rctx);
       co_await check_for_splits(*from, next_map);
+      from = next_epoch;
     }
     pg->handle_activate_map(rctx);
     DEBUG("{}: map activated", *this);
