@@ -126,3 +126,8 @@ export const ICON_TYPE = {
   add: 'add',
   emptySearch: 'emptySearch'
 } as const;
+
+export const EMPTY_STATE_IMAGE = {
+  default: 'assets/empty-state.png',
+  search: 'assets/empty-state-search.png'
+} as const;
