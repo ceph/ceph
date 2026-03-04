@@ -853,6 +853,68 @@ class CephFSSubvolume(RESTController):
             return False
         return True
 
+    @RESTController.Resource('GET', path='/snapshot-visibility')
+    def snapshot_visibility(
+        self,
+        vol_name: str,
+        subvol_name: str,
+        group_name: str = ''
+    ):
+        params = {
+            'vol_name': vol_name,
+            'sub_name': subvol_name
+        }
+
+        if group_name:
+            params['group_name'] = group_name
+
+        error_code, out, err = mgr.remote(
+            'volumes',
+            '_cmd_fs_subvolume_snapshot_visibility_get',
+            None,
+            params
+        )
+
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to get snapshot visibility for subvolume '
+                f'{subvol_name}: {err}'
+            )
+
+        return out
+
+    @RESTController.Resource('PUT', path='/snapshot-visibility')
+    def set_snapshot_visibility(
+        self,
+        vol_name: str,
+        subvol_name: str,
+        value: str,
+        group_name: str = ''
+    ):
+        params = {
+            'vol_name': vol_name,
+            'sub_name': subvol_name,
+            'value': value
+        }
+
+        if group_name:
+            params['group_name'] = group_name
+
+        error_code, out, err = mgr.remote(
+            'volumes',
+            '_cmd_fs_subvolume_snapshot_visibility_set',
+            None,
+            params
+        )
+
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to set snapshot visibility for subvolume '
+                f'{subvol_name}: {err}'
+            )
+
+        return out
+
 
 @APIRouter('/cephfs/subvolume/group', Scope.CEPHFS)
 @APIDoc("Cephfs Subvolume Group Management API", "CephfsSubvolumeGroup")

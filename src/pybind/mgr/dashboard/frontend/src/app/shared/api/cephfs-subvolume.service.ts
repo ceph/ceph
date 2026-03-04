@@ -103,6 +103,28 @@ export class CephfsSubvolumeService {
     });
   }
 
+  getSnapshotVisibility(fsName: string, subVolumeName: string, groupName: string = '') {
+    return this.http.get<string | number>(`${this.baseURL}/${fsName}/snapshot-visibility`, {
+      params: {
+        subvol_name: subVolumeName,
+        group_name: groupName
+      }
+    });
+  }
+
+  setSnapshotVisibility(
+    fsName: string,
+    subVolumeName: string,
+    visible: boolean,
+    groupName: string = ''
+  ) {
+    return this.http.put(`${this.baseURL}/${fsName}/snapshot-visibility`, {
+      subvol_name: subVolumeName,
+      group_name: groupName,
+      value: visible.toString()
+    });
+  }
+
   getSnapshots(
     fsName: string,
     subVolumeName: string,
