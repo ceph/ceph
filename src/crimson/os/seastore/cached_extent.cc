@@ -425,7 +425,8 @@ void ExtentCommitter::commit_and_share_paddr() {
       prior.set_paddr(extent.get_paddr());
     }
     item.t->post_stable_extent_paddr_mod(item, retired);
-    item.t->maybe_update_pending_paddr(old_paddr, extent.get_paddr());
+    item.t->maybe_update_pending_paddr(
+      old_paddr, extent.get_paddr(), extent.get_length());
   }
 }
 
