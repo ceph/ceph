@@ -47,3 +47,14 @@ DEFAULT_PORTS = {
     CTDB: CTDB_PORT,
     REMOTE_CONTROL: REMOTE_CONTROL_PORT,
 }
+
+
+# Debugging levels (names/translation)
+DEBUG_LEVEL_TIERS = [
+    ("ERROR", 0, 0),
+    ("WARNING", 1, 2),
+    ("NOTICE", 3, 4),
+    ("INFO", 5, 8),
+    ("DEBUG", 9, 10),
+]
+DEBUG_LEVEL_TERMS = {t[0] for t in DEBUG_LEVEL_TIERS}

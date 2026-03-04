@@ -189,6 +189,8 @@ class SMBService(CephService):
             _add_cfg(files, c_name, _to_conf(ext_cluster))
             k_name = f'{ext_cluster.alias}.ceph.keyring'
             _add_cfg(files, k_name, _to_keyring(ext_cluster))
+        if smb_spec.tunables:
+            config_blobs['tunables'] = smb_spec.tunables
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
