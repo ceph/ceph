@@ -62,6 +62,9 @@ import NotificationFilledIcon from '@carbon/icons/es/notification--filled/16';
 import CircleDashIcon20 from '@carbon/icons/es/circle-dash/20';
 import CheckmarkOutlineIcon20 from '@carbon/icons/es/checkmark--outline/20';
 import ArrowRightIcon from '@carbon/icons/es/arrow--right/20';
+import IbmCloudBareMetalServerIcon from '@carbon/icons/es/ibm-cloud--bare-metal-server/20';
+import IbmCloudDedicatedHostIcon from '@carbon/icons/es/ibm-cloud--dedicated-host/20';
+import VmdkDiskIcon from '@carbon/icons/es/vmdk-disk/20';
 
 import CloseIcon from '@carbon/icons/es/close/16';
 import { NotificationPanelComponent } from './notification-panel/notification-panel/notification-panel.component';
@@ -137,6 +140,8 @@ export class NavigationModule {
       FileIcon,
       ObservabilityIcon,
       AdminIcon,
+      IbmCloudBareMetalServerIcon,
+      IbmCloudDedicatedHostIcon,
       LockedIcon,
       LogoutIcon,
       CheckmarkFilledIcon,
@@ -148,7 +153,8 @@ export class NavigationModule {
       CloseIcon,
       CircleDashIcon20,
       CheckmarkOutlineIcon20,
-      ArrowRightIcon
+      ArrowRightIcon,
+      VmdkDiskIcon
     ]);
   }
 }
