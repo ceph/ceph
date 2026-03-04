@@ -63,7 +63,7 @@ ObjectContextLoader::load_and_lock_clone(
     manager.head_state.obc->loading_started = true;
     co_await load_obc(
       manager.head_state.obc,
-      backend.load_metadata(manager.target_state.obc->get_oid()));
+      backend.load_metadata(manager.head_state.obc->get_oid()));
     manager.head_state.demote_excl_to(RWState::RWREAD);
   } else if (lock_head) {
     co_await manager.head_state.lock_to(RWState::RWREAD);
