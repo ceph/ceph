@@ -208,6 +208,8 @@ void NVMeofGwMon::restore_pending_map_info(NVMeofGwMap & tmp_map) {
       }
       pending_map.created_gws[group_key][gw_id].last_gw_down_ts =
           gw_created_pair.second.last_gw_down_ts;
+      pending_map.created_gws[group_key][gw_id].delay_failbacks_ts =
+          gw_created_pair.second.delay_failbacks_ts;
       pending_map.created_gws[group_key][gw_id].last_gw_map_epoch_valid =
 	  gw_created_pair.second.last_gw_map_epoch_valid;
       pending_map.created_gws[group_key][gw_id].beacon_index =
