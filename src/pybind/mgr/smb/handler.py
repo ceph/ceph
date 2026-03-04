@@ -8,6 +8,7 @@ from typing import (
     Optional,
     Set,
     Tuple,
+    Type,
     Union,
     cast,
 )
@@ -34,11 +35,13 @@ from .enums import (
 )
 from .internal import (
     ClusterEntry,
+    CommonResourceEntry,
     ExternalCephClusterEntry,
     JoinAuthEntry,
     ShareEntry,
     TLSCredentialEntry,
     UsersAndGroupsEntry,
+    map_resource_entry,
 )
 from .proto import (
     AccessAuthorizer,
@@ -239,6 +242,9 @@ class _Matcher:
             f'{txt!r} does not match a valid resource type'
         )
 
+    def resources(self) -> List[Type[SMBResource]]:
+        return list(self._match_resources)
+
 
 class ClusterConfigHandler:
     """The central class for ingesting and handling smb configuration change
@@ -383,6 +389,7 @@ class ClusterConfigHandler:
     def _search_resources(self, matcher: _Matcher) -> List[SMBResource]:
         log.debug("performing search with matcher: %s", matcher)
         out: List[SMBResource] = []
+        # clusters and shares (with parent-child relationship)
         if resources.Cluster in matcher or resources.Share in matcher:
             log.debug("searching for clusters and/or shares")
             cluster_shares = self.share_ids_by_cluster()
@@ -396,21 +403,20 @@ class ClusterConfigHandler:
                                 cluster_id, share_id
                             ).get_share()
                         )
-        _resources = (
-            (resources.JoinAuth, JoinAuthEntry),
-            (resources.UsersAndGroups, UsersAndGroupsEntry),
-            (resources.TLSCredential, TLSCredentialEntry),
-        )
-        for rtype, ecls in _resources:
-            if rtype in matcher:
-                log.debug("searching for %s", cast(Any, rtype).resource_type)
-                out.extend(
-                    ecls.from_store(
-                        self.internal_store, rid
-                    ).get_resource_type(rtype)
-                    for rid in ecls.ids(self.internal_store)
-                    if (rtype, rid) in matcher
-                )
+        # other common top-level resources
+        for rtype in matcher.resources():
+            if rtype in (resources.Cluster, resources.Share):
+                continue  # already handled above
+            if rtype not in matcher:
+                continue
+            log.debug("searching for %s", cast(Any, rtype).resource_type)
+            ecls = map_resource_entry(rtype)
+            assert issubclass(ecls, CommonResourceEntry)
+            for rid in ecls.ids(self.internal_store):
+                if (rtype, rid) in matcher:
+                    entry = ecls.from_store(self.internal_store, rid)
+                    res = entry.get_resource_type(rtype)
+                    out.append(cast(SMBResource, res))
         log.debug("search found %d resources", len(out))
         return out
 
