@@ -1,8 +1,11 @@
-<legend>
-  <cd-help-text>
-    A listener defines the IP address and port on the gateway that is used to process NVMe/TCP admin and I/O commands to a subsystem.
-  </cd-help-text>
-</legend>
+<cd-alert-panel *ngIf="listeners && listeners.length === 0"
+                type="error"
+                title="No listeners exists"
+                spacingClass="cds-mb-3"
+                i18n-title>
+  <ng-container i18n>Currently, there are no listeners available in the NVMe subsystem. Please check your configuration or try again later.</ng-container>
+</cd-alert-panel>
+
 <cd-table [data]="listeners"
           columnMode="flex"
           (fetchData)="listListeners()"
@@ -10,6 +13,11 @@
           identifier="id"
           forceIdentifier="true"
           selectionType="single"
+          emptyStateTitle="No listener found."
+          i18n-emptyStateTitle
+          emptyStateMessage="No listeners found. Add listeners to define network endpoints for hosts"
+          i18n-emptyStateMessage
+          [emptyStateImage]="emptyStateImage.search"
           (updateSelection)="updateSelection($event)">
   <div class="table-actions">
     <cd-table-actions [permission]="permission"

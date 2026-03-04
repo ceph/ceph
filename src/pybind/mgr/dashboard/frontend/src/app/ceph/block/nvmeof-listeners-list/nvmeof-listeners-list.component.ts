@@ -1,25 +1,26 @@
 import { Component, Input, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { Icons, EMPTY_STATE_IMAGE } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NvmeofListener } from '~/app/shared/models/nvmeof';
+import { Host } from '~/app/shared/models/host.interface';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
-const BASE_URL = 'block/nvmeof/subsystems';
-
 @Component({
   selector: 'cd-nvmeof-listeners-list',
   templateUrl: './nvmeof-listeners-list.component.html',
-  styleUrls: ['./nvmeof-listeners-list.component.scss']
+  styleUrls: ['./nvmeof-listeners-list.component.scss'],
+  standalone: false
 })
 export class NvmeofListenersListComponent implements OnInit {
   @Input()
@@ -27,11 +28,13 @@ export class NvmeofListenersListComponent implements OnInit {
   @Input()
   group: string;
 
-  listenerColumns: any;
+  listenerColumns: CdTableColumn[];
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
   permission: Permission;
   listeners: NvmeofListener[];
+  hasAvailableNodes = true;
+  emptyStateImage = EMPTY_STATE_IMAGE;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -39,15 +42,36 @@ export class NvmeofListenersListComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService,
     private nvmeofService: NvmeofService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
 
   ngOnInit() {
+    // If inputs are not provided, try to get from route params (when used as routed component)
+    if (!this.subsystemNQN || !this.group) {
+      this.route.parent?.params.subscribe((params) => {
+        if (params['subsystem_nqn']) {
+          this.subsystemNQN = params['subsystem_nqn'];
+        }
+        if (this.subsystemNQN && this.group) {
+          this.listListeners();
+        }
+      });
+      this.route.queryParams.subscribe((qp) => {
+        if (qp['group']) {
+          this.group = qp['group'];
+        }
+        if (this.subsystemNQN && this.group) {
+          this.listListeners();
+        }
+      });
+    }
+
     this.listenerColumns = [
       {
-        name: $localize`Host`,
+        name: $localize`Name`,
         prop: 'host_name'
       },
       {
@@ -62,15 +86,17 @@ export class NvmeofListenersListComponent implements OnInit {
     ];
     this.tableActions = [
       {
-        name: this.actionLabels.CREATE,
+        name: this.actionLabels.ADD,
         permission: 'create',
         icon: Icons.add,
         click: () =>
-          this.router.navigate(
-            [BASE_URL, { outlets: { modal: [URLVerbs.CREATE, this.subsystemNQN, 'listener'] } }],
-            { queryParams: { group: this.group } }
-          ),
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+          this.router.navigate([{ outlets: { modal: [URLVerbs.ADD, 'listener'] } }], {
+            queryParams: { group: this.group },
+            relativeTo: this.route.parent
+          }),
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
+        disable: () =>
+          !this.hasAvailableNodes ? $localize`All available nodes already have listeners` : false
       },
       {
         name: this.actionLabels.DELETE,
@@ -94,7 +120,21 @@ export class NvmeofListenersListComponent implements OnInit {
           listener['full_addr'] = `${listener.traddr}:${listener.trsvcid}`;
           return listener;
         });
+        this.checkAvailableNodes();
       });
+  }
+
+  checkAvailableNodes() {
+    if (!this.group) return;
+    this.nvmeofService.getHostsForGroup(this.group).subscribe({
+      next: (allHosts: Host[]) => {
+        const listenerHostNames = new Set((this.listeners || []).map((l) => l.host_name));
+        this.hasAvailableNodes = allHosts.some((h) => !listenerHostNames.has(h.hostname));
+      },
+      error: () => {
+        this.hasAvailableNodes = true;
+      }
+    });
   }
 
   deleteListenerModal() {

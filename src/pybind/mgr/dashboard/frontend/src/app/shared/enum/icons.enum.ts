@@ -117,3 +117,8 @@ export const ICON_TYPE = {
   error: 'error--filled',
   notification: 'notification'
 } as const;
+
+export const EMPTY_STATE_IMAGE = {
+  default: 'assets/empty-state.png',
+  search: 'assets/empty-state-search.png'
+} as const;

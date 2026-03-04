@@ -227,10 +227,8 @@
           <div cdsStack="vertical"
                gap="1">
             <div>
-              <cd-icon
-                [type]="emptyStateIcon"
-                [size]="iconSize.size32">
-              </cd-icon>
+              <img src="{{ emptyStateImage }}"
+                   alt="No data available" />
             </div>
             <legend class="cds--type-body-compact-02">
               <ng-container>{{ emptyStateTitle }}</ng-container>

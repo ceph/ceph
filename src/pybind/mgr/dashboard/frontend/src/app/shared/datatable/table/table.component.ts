@@ -22,7 +22,7 @@ import { BehaviorSubject, Observable, of, Subject, Subscription } from 'rxjs';
 
 import { TableStatus } from '~/app/shared/classes/table-status';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { Icons, IconSize, ICON_TYPE } from '~/app/shared/enum/icons.enum';
+import { Icons, IconSize, EMPTY_STATE_IMAGE } from '~/app/shared/enum/icons.enum';
 
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableColumnFilter } from '~/app/shared/models/cd-table-column-filter';
@@ -223,10 +223,10 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   @Input()
   emptyStateMessage: string = $localize`There are currently no records to display.`;
   /**
-   * Icon to be displayed when there is no data
+   * Illustration image to be displayed when there is no data
    */
   @Input()
-  emptyStateIcon: string = ICON_TYPE.deploy;
+  emptyStateImage: string = EMPTY_STATE_IMAGE.default;
 
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
