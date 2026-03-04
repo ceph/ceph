@@ -1641,19 +1641,26 @@ public:
    * This timestamp is then used later on to guard against OLH updates for add/remove instance ops that happened *before*
    * the latest op that updated the OLH entry.
    * @param candidate_epoch - this is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
+   * @param replace - true to replace the epoch if larger than the old one;
    */
-  bool start_modify (uint64_t candidate_epoch) {
+  bool start_modify (uint64_t candidate_epoch, bool replace = true) {
     // only update the olh.epoch if it is newer than the current one.
     if (candidate_epoch < olh_data_entry.epoch) {
       return false; /* olh cannot be modified, old epoch */
     }
 
-    olh_data_entry.epoch = candidate_epoch;
+    if (replace) {
+      olh_data_entry.epoch = candidate_epoch;
+    }
     return true;
   }
 
   uint64_t get_epoch() {
     return olh_data_entry.epoch;
+  }
+
+  void set_epoch(uint64_t epoch) {
+    olh_data_entry.epoch = epoch;
   }
 
   rgw_bucket_olh_entry& get_entry() {
@@ -2087,7 +2094,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
   uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch :
     duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
-  if (olh.start_modify(candidate_epoch)) {
+  if (olh.start_modify(candidate_epoch, false)) {
     rgw_bucket_olh_entry &olh_entry = olh.get_entry();
     cls_rgw_obj_key &olh_key = olh_entry.key;
     CLS_LOG(20, "%s: updating olh log: existing olh entry: %s[%s] (delete_marker=%d)", __func__,
@@ -2115,13 +2122,16 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
                 next_key.name.c_str(), next_key.instance.c_str(), (int) next.is_delete_marker());
 
         olh.update(next_key, next.is_delete_marker());
-        olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker());
+        olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker(), candidate_epoch);
+        // use the next entry's versioned_epoch in the olh entry since it's the new head now
+        olh.set_epoch(next.get_dir_entry().versioned_epoch);
       } else {
         // next_key is empty, but we need to preserve its name in case this entry
         // gets resharded, because this key is used for hash placement
         next_key.name = dest_key.name;
         olh.update(next_key, false);
         olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false);
+        olh.set_epoch(0);
         olh.set_exists(false);
         olh.set_pending_removal(true);
       }
