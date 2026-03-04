@@ -109,6 +109,26 @@ export class BreadcrumbsComponent implements OnDestroy {
     this.tabCrumbSubscription.unsubscribe();
   }
 
+  navigateTo(event: Event | string, path?: string): void {
+    // Support being called with either (path) or (event, path)
+    let navPath: string | undefined;
+    if (typeof event === 'string') {
+      navPath = event as string;
+    } else {
+      event.preventDefault?.();
+      navPath = path;
+    }
+
+    if (!navPath) return;
+
+    // Normalize path to ensure it starts with '/'
+    if (!navPath.startsWith('/')) {
+      navPath = '/' + navPath;
+    }
+
+    this.router.navigateByUrl(navPath);
+  }
+
   private _resolveCrumbs(route: ActivatedRouteSnapshot): Observable<IBreadcrumb[]> {
     let crumbs$: Observable<IBreadcrumb[]>;
 
