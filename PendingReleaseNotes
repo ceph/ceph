@@ -54,6 +54,9 @@
   ``ceph fs snapshot mirror daemon status`` now shows the remote cluster's
   monitor addresses and cluster ID for each configured peer, making it easier
   to verify peer connectivity and troubleshoot mirroring issues.
+* RBD: Mirror snapshot creation and trash purge schedules are now automatically
+  staggered when no explicit "start-time" is specified. This reduces scheduling
+  spikes and distributes work more evenly over time.
 
 >=20.0.0
 
