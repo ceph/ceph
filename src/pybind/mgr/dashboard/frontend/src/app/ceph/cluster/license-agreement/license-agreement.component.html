@@ -1,0 +1,118 @@
+<cds-modal
+  [open]="open"
+  [size]="'lg'"
+  [hasScrollingContent]="true"
+  (overlaySelected)="closeModal()">
+  <cds-modal-header>
+    <h3 cdsModalHeaderHeading>Software license agreement</h3>
+  </cds-modal-header>
+  <div cdsModalContent>
+    <form
+      [formGroup]="licenceForm"
+      #formDir="ngForm">
+      <div
+        [cdsStack]="'vertical'"
+        [gap]="6">
+        <cd-alert-panel
+          type="info"
+          [showTitle]="false">
+          <div cdsStack="vertical"
+               [gap]="1">
+            <div class="cds--type-heading-compact-01">Action required</div>
+            <div class="cds--type-body-compact-01">
+                Please review and accept the software license agreement to proceed with the cluster
+                upgrade.
+            </div>
+          </div>
+        </cd-alert-panel>
+        @if (loading) {
+        <cd-alert-panel
+          type="info"
+          [showTitle]="false">
+          <div cdsStack="vertical"
+               [gap]="1">
+            <div class="cds--type-heading-compact-01">Loading</div>
+            <div class="cds--type-body-compact-01">
+                {{ loadingMessage }}
+            </div>
+          </div>
+        </cd-alert-panel>
+        <cds-skeleton-text
+            [lines]="10"
+            [minLineWidth]="100"
+            [maxLineWidth]="900"></cds-skeleton-text>
+        } 
+        @else if (licenceFetchingError) {
+        <cd-alert-panel
+          type="error"
+          [showTitle]="false">
+          <div class="cds--type-body-compact-01">
+            Failed to load license agreement. Please try again later.
+          </div>
+        </cd-alert-panel>
+        }
+        @else {
+        <section>
+          <div cdsStack="vertical"
+               [gap]="2">
+            <div class="cds--type-heading-compact-02">License agreement</div>
+            <cds-textarea-label [fluid]="true">
+                <textarea cdsTextArea
+                          [readonly]="true"
+                          rows="15"
+                          formControlName="licenceText"
+                          (scroll)="onScroll($event)"></textarea>
+            </cds-textarea-label>
+          </div>
+        </section>
+        <section>
+          <div cdsStack="vertical"
+               [gap]="4">
+            <div class="cds--type-heading-compact-02">Acknowledgement and acceptance</div>
+            <cds-progress-bar
+                label="Reading progress"
+                [helperText]="
+                    readingProgress === 100
+                        ? 'You may now accept the agreement'
+                        : 'You may accept the agreement upon completion'
+                "
+                [max]="100"
+                size="small"
+                [status]="readingProgress === 100 ? 'finished' : 'active'"
+                [value]="readingProgress">
+            </cds-progress-bar>
+            <cds-checkbox
+                formControlName="accepted"
+                [required]="true">I have read and agree to the Software License Agreement.</cds-checkbox>
+            </div>
+        </section>
+        <section>
+          <div cdsStack="vertical"
+               [gap]="2">
+            <button
+                cdsButton="tertiary"
+                type="button"
+                (click)="download()">
+                Download as PDF
+            </button>
+          </div>
+        </section>
+        }
+      </div>
+    </form>
+  </div>
+  <cds-modal-footer>
+    <button
+        cdsButton="secondary"
+        [attr.modal-secondary-focus]="true"
+        (click)="reject()">
+        Decline and go back
+    </button>
+    <button
+        cdsButton="primary"
+        [disabled]="!licenceForm.valid || licenceFetchingError || !licenceForm.get('accepted').value"
+        (click)="accept()">
+        Accept and continue
+    </button>
+  </cds-modal-footer>
+</cds-modal>

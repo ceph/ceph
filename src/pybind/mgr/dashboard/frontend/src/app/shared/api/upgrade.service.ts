@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { ApiClient } from './api-client';
 import { map, shareReplay, tap } from 'rxjs/operators';
@@ -104,6 +104,18 @@ export class UpgradeService extends ApiClient {
   startUpgradeModal(): NgbModalRef {
     return this.modalService.show(UpgradeStartModalComponent, {
       versions: this._upgradableVersions
+    });
+  }
+
+  getLicenceInfo(manifest: string) {
+    const headers = new HttpHeaders().set('Accept', 'text/plain');
+    return this.http.get('/api/ceph/license', {
+      headers: headers,
+      params: {
+        manifest: manifest
+      },
+      responseType: 'text',
+      observe: 'response'
     });
   }
 }

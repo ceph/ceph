@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import { Observable, ReplaySubject, Subscription } from 'rxjs';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
@@ -24,7 +25,7 @@ import { UpgradeStatusInterface } from '~/app/shared/models/upgrade.interface';
   styleUrls: ['./upgrade-progress.component.scss'],
   standalone: false
 })
-export class UpgradeProgressComponent implements OnInit, OnDestroy {
+export class UpgradeProgressComponent extends BaseModal implements OnInit, OnDestroy {
   permission: Permission;
   icons = Icons;
   modalRef: NgbModalRef;
@@ -43,6 +44,7 @@ export class UpgradeProgressComponent implements OnInit, OnDestroy {
     private router: Router,
     private refreshIntervalService: RefreshIntervalService
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().configOpt;
   }
 
@@ -101,7 +103,7 @@ export class UpgradeProgressComponent implements OnInit, OnDestroy {
         this.fetchStatus();
         this.notificationService.show(NotificationType.success, $localize`Upgrade is resumed`);
         if (modal) {
-          this.modalRef.close();
+          this.closeModal();
         }
       }
     });
@@ -119,7 +121,7 @@ export class UpgradeProgressComponent implements OnInit, OnDestroy {
   }
 
   stopUpgrade() {
-    this.modalRef.close();
+    this.closeModal();
     this.upgradeService.stop().subscribe({
       error: (error) => {
         this.notificationService.show(

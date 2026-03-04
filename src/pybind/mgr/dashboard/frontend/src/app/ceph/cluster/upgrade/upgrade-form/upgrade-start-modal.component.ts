@@ -12,6 +12,8 @@ import { UpgradeInfoInterface } from '~/app/shared/models/upgrade.interface';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { LicenceAgreementComponent } from '../../license-agreement/license-agreement.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-upgrade-start-modal.component',
@@ -34,7 +36,8 @@ export class UpgradeStartModalComponent implements OnInit {
     private authStorageService: AuthStorageService,
     public activeModal: NgbActiveModal,
     private upgradeService: UpgradeService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private modalCdsService: ModalCdsService
   ) {
     this.permission = this.authStorageService.getPermissions().configOpt;
   }
@@ -51,6 +54,33 @@ export class UpgradeStartModalComponent implements OnInit {
       const customImageNameControl = this.upgradeForm.get('customImageName');
       customImageNameControl.setValidators(Validators.required);
       customImageNameControl.updateValueAndValidity();
+    }
+  }
+
+  showLicenceAgreement() {
+    const version = this.upgradeForm.getValue('availableVersions');
+    const useImage = this.upgradeForm.getValue('useImage');
+
+    // If using custom image, skip license agreement and start upgrade directly
+    if (useImage) {
+      this.startUpgrade();
+      return;
+    }
+
+    const [major, minor] = version.split('.').map(Number);
+
+    // Show licence agreement modal if the version is 9.1 or above
+    if (major > 9 || (major === 9 && minor >= 1)) {
+      const modalRef = this.modalCdsService.show(LicenceAgreementComponent, {
+        manifest: version
+      });
+      modalRef.acceptanceEvent.subscribe((accepted: boolean) => {
+        if (accepted) {
+          this.startUpgrade();
+        }
+      });
+    } else {
+      this.startUpgrade();
     }
   }
 
