@@ -174,6 +174,27 @@ To later access the collected measurements for a given name, use:
     // m->dump_to_stringstream(ss, HW_PROFILE_INS|HW_PROFILE_CYC);
   }
 
+Groups of measurements
+----------------------
+
+Keeps all measurements together. Allows to very easily add a CPU probe.
+This method is limited to measuring only scopes of execution, where RAII rules can be used.
+
+Define your measurements group:
+
+.. code-block:: cpp
+
+  cpucounter_group BlueStore::cputrace_bluestore("bluestore");
+
+And put some probes:
+
+.. code-block:: cpp
+
+  MEASURE_SCOPE(cputrace_bluestore, txc_state_proc)
+
+The values are easily available for read and reset via admin socket commands.
+Unlike named measurements, probes in groups cannot be stopped and started.
+
 Admin socket integration
 ------------------------
 
