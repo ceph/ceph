@@ -205,8 +205,8 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
             errorMsg
           );
           this.isSubmitLoading = false;
-          this.router.navigate(['block/nvmeof/gateways'], {
-            queryParams: { group: this.group, tab: 'subsystem' }
+          this.router.navigate(['block/nvmeof/subsystems'], {
+            queryParams: { group: this.group }
           });
         }
       });
@@ -251,10 +251,9 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
       : $localize`Subsystem created`;
 
     this.notificationService.show(type, title, sanitizedHtml);
-    this.router.navigate(['block/nvmeof/gateways'], {
+    this.router.navigate(['block/nvmeof/subsystems'], {
       queryParams: {
         group: this.group,
-        tab: 'subsystem',
         nqn: stepResults[0]?.success ? this.lastCreatedNqn : null
       }
     });
