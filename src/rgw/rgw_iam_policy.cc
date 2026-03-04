@@ -10,6 +10,7 @@
 #include <fmt/ranges.h>
 #include <fmt/std.h>
 
+
 #include <arpa/inet.h>
 
 #include <experimental/iterator>
@@ -87,7 +88,7 @@ namespace IAM {
 #include "rgw_iam_policy_keywords.frag.cc"
 
 struct actpair {
-  const char* name;
+  const std::string name;
   const uint64_t bit;
 };
 
@@ -363,6 +364,79 @@ const Keyword top[1]{{"<Top>", TokenKind::pseudo, TokenID::Top, 0, false,
 			false}};
 const Keyword cond_key[1]{{"<Condition Key>", TokenKind::cond_key,
 			     TokenID::CondKey, 0, true, false}};
+
+namespace {
+boost::optional<Principal>
+parse_principal_(const struct Keyword* w, std::string&& s,
+                 string* errmsg) {
+  if ((w->id == TokenID::AWS) && (s == "*")) {
+    // Wildcard!
+    return Principal::wildcard();
+  } else if (w->id == TokenID::CanonicalUser) {
+    // Do nothing for now.
+    if (errmsg)
+      *errmsg = "RGW does not support canonical users.";
+    return boost::none;
+  } else if (w->id == TokenID::AWS || w->id == TokenID::Federated) {
+    // AWS and Federated ARNs
+    if (auto a = ARN::parse(std::string{s})) {
+      if (a->resource == "root") {
+	return Principal::account(std::move(a->account));
+      }
+
+      static const char rx_str[] = "([^/]*)/(.*)";
+      static const regex rx(rx_str, sizeof(rx_str) - 1,
+			    std::regex_constants::ECMAScript |
+			    std::regex_constants::optimize);
+      smatch match;
+      if (regex_match(a->resource, match, rx) && match.size() == 3) {
+	if (match[1] == "user") {
+	  return Principal::user(std::move(a->account),
+				 match[2]);
+	}
+
+	if (match[1] == "role") {
+	  return Principal::role(std::move(a->account),
+				 match[2]);
+	}
+
+        if (match[1] == "oidc-provider") {
+                return Principal::oidc_provider(std::move(match[2]));
+        }
+	if (match[1] == "assumed-role") {
+	  return Principal::assumed_role(std::move(a->account), match[2]);
+	}
+      }
+    } else if (std::none_of(s.begin(), s.end(),
+		       [](const char& c) {
+			 return (c == ':') || (c == '/');
+		       })) {
+      // Since tenants are simply prefixes, there's no really good
+      // way to see if one exists or not. So we return the thing and
+      // let them try to match against it.
+      return Principal::account(std::move(s));
+    }
+    if (errmsg)
+      *errmsg =
+	fmt::format(
+	  "`{}` is not a supported AWS or Federated ARN. Supported ARNs are "
+	  "forms like: "
+	  "`arn:aws:iam::tenant:root` or a bare tenant name for a tenant, "
+	  "`arn:aws:iam::tenant:role/role-name` for a role, "
+	  "`arn:aws:sts::tenant:assumed-role/role-name/role-session-name` "
+	  "for an assumed role, "
+	  "`arn:aws:iam::tenant:user/user-name` for a user, "
+	  "`arn:aws:iam::tenant:oidc-provider/idp-url` for OIDC.", s);
+  } else if (w->id == TokenID::Service) {
+      return Principal::service(std::move(s));
+  }
+
+  if (errmsg)
+    *errmsg = fmt::format("RGW does not support principals of type `{}`.",
+			  w->name);
+  return boost::none;
+}
+}
 
 struct ParseState {
   PolicyParser* pp;
@@ -663,72 +737,7 @@ bool ParseState::key(const char* s, size_t l) {
 // which will make all of this ever so much nicer.
 boost::optional<Principal> ParseState::parse_principal(string&& s,
 						       string* errmsg) {
-  if ((w->id == TokenID::AWS) && (s == "*")) {
-    // Wildcard!
-    return Principal::wildcard();
-  } else if (w->id == TokenID::CanonicalUser) {
-    // Do nothing for now.
-    if (errmsg)
-      *errmsg = "RGW does not support canonical users.";
-    return boost::none;
-  } else if (w->id == TokenID::AWS || w->id == TokenID::Federated) {
-    // AWS and Federated ARNs
-    if (auto a = ARN::parse(s)) {
-      if (a->resource == "root") {
-	return Principal::account(std::move(a->account));
-      }
-
-      static const char rx_str[] = "([^/]*)/(.*)";
-      static const regex rx(rx_str, sizeof(rx_str) - 1,
-			    std::regex_constants::ECMAScript |
-			    std::regex_constants::optimize);
-      smatch match;
-      if (regex_match(a->resource, match, rx) && match.size() == 3) {
-	if (match[1] == "user") {
-	  return Principal::user(std::move(a->account),
-				 match[2]);
-	}
-
-	if (match[1] == "role") {
-	  return Principal::role(std::move(a->account),
-				 match[2]);
-	}
-
-        if (match[1] == "oidc-provider") {
-                return Principal::oidc_provider(std::move(match[2]));
-        }
-	if (match[1] == "assumed-role") {
-	  return Principal::assumed_role(std::move(a->account), match[2]);
-	}
-      }
-    } else if (std::none_of(s.begin(), s.end(),
-		       [](const char& c) {
-			 return (c == ':') || (c == '/');
-		       })) {
-      // Since tenants are simply prefixes, there's no really good
-      // way to see if one exists or not. So we return the thing and
-      // let them try to match against it.
-      return Principal::account(std::move(s));
-    }
-    if (errmsg)
-      *errmsg =
-	fmt::format(
-	  "`{}` is not a supported AWS or Federated ARN. Supported ARNs are "
-	  "forms like: "
-	  "`arn:aws:iam::tenant:root` or a bare tenant name for a tenant, "
-	  "`arn:aws:iam::tenant:role/role-name` for a role, "
-	  "`arn:aws:sts::tenant:assumed-role/role-name/role-session-name` "
-	  "for an assumed role, "
-	  "`arn:aws:iam::tenant:user/user-name` for a user, "
-	  "`arn:aws:iam::tenant:oidc-provider/idp-url` for OIDC.", s);
-  } else if (w->id == TokenID::Service) {
-      return Principal::service(std::move(s));
-  }
-
-  if (errmsg)
-    *errmsg = fmt::format("RGW does not support principals of type `{}`.",
-			  w->name);
-  return boost::none;
+  return ::rgw::IAM::parse_principal_(w, std::move(s), errmsg);
 }
 
 bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
@@ -2143,6 +2152,40 @@ bool is_public(const Policy& p, const LogOut& eval_log)
 {
   return std::any_of(p.statements.begin(), p.statements.end(),
                      IsPublicStatement(eval_log));
+}
+
+boost::optional<Principal> parse_principal(std::string&& s, string* errmsg) {
+  keyword_hash tokens;
+  auto colon = s.find(':') ;
+  if (colon == s.npos) {
+    if (errmsg) {
+      *errmsg = "Identities are of the form SCHEMA:STRING";
+    }
+    return boost::none;
+  }
+  const auto w = tokens.lookup(s.data(), colon);
+  if (!w || w->kind != TokenKind::princ_type) {
+    if (errmsg) {
+      *errmsg = fmt::format("`{}` is not a valid identity schema",
+                            std::string_view{s.data(), colon});
+    }
+    return boost::none;
+  }
+  s.erase(0, colon + 1);
+  return parse_principal_(w, std::move(s), errmsg);
+}
+
+// This function is only use from the policy testing tool, so it makes
+// no sense for it to handle wildcards.
+boost::optional<action_t>
+parse_action(std::string_view s)
+{
+  for (const auto& [key, n] : actpairs) {
+    if (boost::iequals(key, s)) {
+      return rgw::IAM::action_t(n);
+    }
+  }
+  return boost::none;
 }
 } // namespace IAM
 } // namespace rgw
