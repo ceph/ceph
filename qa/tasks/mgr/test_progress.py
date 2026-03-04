@@ -131,6 +131,50 @@ class TestProgress(MgrTestCase):
         else:
             return marked_out_count
 
+    def _wait_for_osd_marked_out_event(self, timeout):
+        """
+        Wait for and atomically capture an OSD marked out event.
+        Returns the event or None if timeout.
+        """
+        captured_event = None
+        
+        def get_out_event():
+            """
+            Couldn't pass an arguemnt in to wait_until_true, so
+            use nonlocal to make captured_event available in this scope.
+            """
+            nonlocal captured_event
+            events = self._get_osd_in_out_events('out')
+            if len(events) > 0:
+                captured_event = events[0]
+                return True
+            return False
+        
+        self.wait_until_true(get_out_event, timeout=timeout)
+        return captured_event
+
+    def _wait_for_osd_marked_in_event(self, timeout):
+        """
+        Wait for and atomically capture an OSD marked in event.
+        Returns the event or raises RuntimeError on timeout.
+        """
+        captured_event = None
+        
+        def get_in_event():
+            """
+            Couldn't pass an arguemnt in to wait_until_true, so
+            use nonlocal to make captured_event available in this scope.
+            """
+            nonlocal captured_event
+            events = self._get_osd_in_out_events('in')
+            if len(events) > 0:
+                captured_event = events[0]
+                return True
+            return False
+        
+        self.wait_until_true(get_in_event, timeout=timeout)
+        return captured_event
+
     def _write_some_data(self, t):
         """
         To adapt to test systems of varying performance, we write
@@ -200,17 +244,16 @@ class TestProgress(MgrTestCase):
 
         self._setup_pool()
         self._write_some_data(self.WRITE_PERIOD)
+        
         with self.recovery_backfill_disabled():
             for osd_id in osd_ids:
                 self.mgr_cluster.mon_manager.raw_cluster_cmd(
                     'osd', 'out', str(osd_id))
 
             # Wait for a progress event to pop up
-            self.wait_until_equal(lambda: self._osd_in_out_events_count('out'), 1,
-                                  timeout=self.EVENT_CREATION_PERIOD,
-                                  period=1)
+            ev = self._wait_for_osd_marked_out_event(
+                timeout=self.EVENT_CREATION_PERIOD)
 
-        ev = self._get_osd_in_out_events('out')[0]
         log.info(json.dumps(ev, indent=1))
         self.assertIn("Rebalancing after osd.0 marked out", ev['message'])
         return ev
@@ -224,13 +267,12 @@ class TestProgress(MgrTestCase):
         self.wait_until_true(lambda: self._is_complete(initial_event['id']),
                              timeout=self.RECOVERY_PERIOD)
 
+        new_event = None
         with self.recovery_backfill_disabled():
-
             try:
                 # Wait for progress event marked in to pop up
-                self.wait_until_equal(lambda: self._osd_in_out_events_count('in'), 1,
-                                      timeout=self.EVENT_CREATION_PERIOD,
-                                      period=1)
+                new_event = self._wait_for_osd_marked_in_event(
+                    timeout=self.EVENT_CREATION_PERIOD)
             except RuntimeError as ex:
                 if not "Timed out after" in str(ex):
                     raise ex
@@ -238,7 +280,6 @@ class TestProgress(MgrTestCase):
                 log.info("There was no PGs affected by osd being marked in")
                 return None
 
-            new_event = self._get_osd_in_out_events('in')[0]
         return new_event
 
     def _no_events_anywhere(self):
@@ -394,11 +435,8 @@ class TestProgress(MgrTestCase):
                     'osd', 'out', '0')
 
             # Wait for a progress event to pop up
-            self.wait_until_equal(lambda: self._osd_in_out_events_count('out'), 1,
-                                  timeout=self.EVENT_CREATION_PERIOD,
-                                  period=1)
-
-        ev1 = self._get_osd_in_out_events('out')[0]
+            ev1 = self._wait_for_osd_marked_out_event(
+                timeout=self.EVENT_CREATION_PERIOD)
 
         log.info(json.dumps(ev1, indent=1))
 
