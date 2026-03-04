@@ -41,6 +41,7 @@ import {
   TagModule,
   LinkModule,
   LayerModule,
+  LayoutModule,
   TilesModule
 } from 'carbon-components-angular';
 
@@ -88,6 +89,8 @@ import { UpgradableComponent } from './upgradable/upgradable.component';
 import { ProgressComponent } from './progress/progress.component';
 import { TearsheetComponent } from './tearsheet/tearsheet.component';
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
+import { DetailsCardComponent } from './details-card/details-card.component';
+
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
@@ -140,6 +143,7 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     TagModule,
     LinkModule,
     LayerModule,
+    LayoutModule,
     TilesModule
   ],
   declarations: [
@@ -186,7 +190,8 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     IconComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent
+    ProductiveCardComponent,
+    DetailsCardComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -229,7 +234,8 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     IconComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent
+    ProductiveCardComponent,
+    DetailsCardComponent
   ]
 })
 export class ComponentsModule {
