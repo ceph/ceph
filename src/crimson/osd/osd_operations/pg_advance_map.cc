@@ -70,7 +70,7 @@ seastar::future<> PGAdvanceMap::start()
   IRef ref = this;
   return enter_stage<>(
     peering_pp(*pg).process
-  ).then([this, FNAME] {
+  ).then([this, FNAME] -> seastar::future<> {
     /*
      * PGAdvanceMap is scheduled at pg creation and when
      * broadcasting new osdmaps to pgs. We are not able to serialize
@@ -86,28 +86,20 @@ seastar::future<> PGAdvanceMap::start()
       pg->handle_activate_map(rctx);
     }
     ceph_assert(std::cmp_less_equal(*from, to));
-    return seastar::do_for_each(
-      boost::make_counting_iterator(*from + 1),
-      boost::make_counting_iterator(to + 1),
-      [this, FNAME](epoch_t next_epoch) {
-	DEBUG("{}: start: getting map {}",
-		       *this, next_epoch);
-	return shard_services.get_map(next_epoch).then(
-	  [this, FNAME] (cached_map_t&& next_map) {
-	    DEBUG("{}: advancing map to {}",
-		  *this, next_map->get_epoch());
-	    pg->handle_advance_map(next_map, rctx);
-	    return check_for_splits(*from, next_map);
-	  });
-      }).then([this, FNAME] {
-	pg->handle_activate_map(rctx);
-	DEBUG("{}: map activated", *this);
-	if (do_init) {
-	  shard_services.pg_created(pg->get_pgid(), pg);
-	  INFO("PGAdvanceMap::start new pg {}", *pg);
-	}
-	return pg->complete_rctx(std::move(rctx));
-      });
+    for (epoch_t next_epoch = *from + 1; next_epoch <= to; next_epoch++) {
+      DEBUG("{}: start: getting map {}", *this, next_epoch);
+      cached_map_t next_map = co_await shard_services.get_map(next_epoch);
+      DEBUG("{}: advancing map to {}", *this, next_map->get_epoch());
+      pg->handle_advance_map(next_map, rctx);
+      co_await check_for_splits(*from, next_map);
+    }
+    pg->handle_activate_map(rctx);
+    DEBUG("{}: map activated", *this);
+    if (do_init) {
+      shard_services.pg_created(pg->get_pgid(), pg);
+      INFO("PGAdvanceMap::start new pg {}", *pg);
+    }
+    co_await pg->complete_rctx(std::move(rctx));
   }).then([this, FNAME] {
     DEBUG("{}: complete", *this);
     return handle.complete();
