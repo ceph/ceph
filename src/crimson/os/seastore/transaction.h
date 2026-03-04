@@ -442,15 +442,37 @@ public:
   }
   void maybe_update_pending_paddr(
     const paddr_t &old_paddr,
-    const paddr_t &new_paddr) {
-    if (!new_paddr.is_absolute()) {
-      return;
+    const paddr_t &new_paddr,
+    extent_len_t len) {
+    assert(new_paddr.is_absolute());
+
+    std::vector<CachedExtent*> exts;
+    for (auto [bottom, top] = write_set.get_overlap(old_paddr, len);
+         bottom != top;
+         bottom++) {
+      auto &mextent = *bottom;
+      if (mextent.is_initial_pending()) {
+        continue;
+      }
+      exts.emplace_back(&mextent);
     }
-    auto where2 = write_set.find_offset(old_paddr);
-    if (where2 != write_set.end()) {
-      auto &mextent = *where2;
-      write_set.erase(where2);
-      mextent.set_paddr(new_paddr);
+    for (auto i : exts) {
+      auto &mextent = *i;
+      write_set.erase(mextent);
+      extent_len_t off = 0;
+      if (new_paddr.is_absolute_segmented()) {
+        assert(mextent.get_paddr().as_seg_paddr().get_segment_id()
+          == old_paddr.as_seg_paddr().get_segment_id());
+        assert(mextent.get_paddr().as_seg_paddr().get_segment_off()
+          >= old_paddr.as_seg_paddr().get_segment_off());
+        off = mextent.get_paddr().as_seg_paddr().get_segment_off()
+          - old_paddr.as_seg_paddr().get_segment_off();
+      } else {
+        assert(new_paddr.is_absolute_random_block());
+        off = mextent.get_paddr().as_blk_paddr().get_device_off() -
+          old_paddr.as_blk_paddr().get_device_off();
+      }
+      mextent.set_paddr(new_paddr + off);
       write_set.insert(mextent);
     }
   }
