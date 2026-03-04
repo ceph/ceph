@@ -20,3 +20,12 @@ cd-osd-form {
     margin-left: -1.5rem;
   }
 }
+
+.storage-requirements-body {
+  border: 1px solid var(--cds-border-subtle);
+}
+
+.storage-requirements-header {
+  border: 1px solid var(--cds-border-subtle);
+  border-bottom: 0;
+}
