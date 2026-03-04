@@ -212,4 +212,10 @@ else
     exit 1
 fi
 
+echo "Re-enabling the balancer module..."
+"$ceph" mgr module enable balancer
+
+# Give the health error a bit of time to clear
+sleep 10
+
 echo "All tests passed."
