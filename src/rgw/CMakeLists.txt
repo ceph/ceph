@@ -931,6 +931,12 @@ if(WITH_RADOSGW_RADOS)
 endif()
 install(TARGETS rgw-policy-check DESTINATION bin)
 
+set(radosgw_poltester_srcs
+  rgw_poltester.cc)
+add_executable(rgw-policy-test ${radosgw_poltester_srcs})
+target_link_libraries(rgw-policy-test ${rgw_libs})
+install(TARGETS rgw-policy-test DESTINATION bin)
+
 set(librgw_srcs
   librgw.cc)
 add_library(rgw SHARED ${librgw_srcs})
