@@ -418,12 +418,37 @@ public:
   std::pair<ghobject_t, bool>
   do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final;
 
-  // merge/split not ready
-  void clear_ready_to_merge() final {}
-  void set_not_ready_to_merge_target(pg_t pgid, pg_t src) final {}
-  void set_not_ready_to_merge_source(pg_t pgid) final {}
-  void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {}
-  void set_ready_to_merge_source(eversion_t lu) final {}
+  void merge_from(
+      std::map<spg_t, crimson::local_shared_foreign_ptr<Ref<PG>>>& sources,
+      PeeringCtx &rctx,
+      unsigned split_bits,
+      const pg_merge_meta_t& last_pg_merge_meta);
+
+  void clear_ready_to_merge() final {
+    LOG_PREFIX(PG::clear_ready_to_merge);
+    SUBDEBUGDPP(osd, "", *this);
+    (void)shard_services.clear_ready_to_merge(pgid.pgid).discard_result();
+  }
+  void set_not_ready_to_merge_target(pg_t pgid, pg_t src) final {
+    LOG_PREFIX(PG::set_not_ready_to_merge_target);
+    SUBDEBUGDPP(osd, "", *this);
+    (void)shard_services.set_not_ready_to_merge_target(pgid, src).discard_result();
+  }
+  void set_not_ready_to_merge_source(pg_t pgid) final {
+    LOG_PREFIX(PG::set_not_ready_to_merge_source);
+    SUBDEBUGDPP(osd, "", *this);
+    (void)shard_services.set_not_ready_to_merge_source(pgid).discard_result();
+  }
+  void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {
+    LOG_PREFIX(PG::set_ready_to_merge_target);
+    SUBDEBUGDPP(osd, "", *this);
+    (void)shard_services.set_ready_to_merge_target(pgid.pgid, lu, les, lec).discard_result();
+  }
+  void set_ready_to_merge_source(eversion_t lu) final {
+    LOG_PREFIX(PG::set_ready_to_merge_source);
+    SUBDEBUGDPP(osd, "", *this);
+    (void)shard_services.set_ready_to_merge_source(pgid.pgid, lu).discard_result();
+  }
 
   void on_active_actmap() final;
   void on_active_advmap(const OSDMapRef &osdmap) final;
@@ -1006,6 +1031,7 @@ private:
   bool can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const;
   bool can_discard_op(const MOSDOp& m) const;
   void context_registry_on_change();
+
   bool is_missing_object(const hobject_t& soid) const {
     return get_local_missing().is_missing(soid);
   }
