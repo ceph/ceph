@@ -15,20 +15,4 @@
 
 #include "bindings.h"
 
-namespace ceph::libfdb::detail {
-
-// JFW: delaying lookup by putting this in a seperate source file-- possible to do this header only, but it
-// requires additional work:
-std::pair<std::string, std::string> to_decoded_kv_pair(const FDBKeyValue kv)
-{
- std::pair<std::string, std::string> r;
-
- r.first.assign((const char *)kv.key, static_cast<std::string::size_type>(kv.key_length));
-
- ceph::libfdb::from::convert(std::span<const std::uint8_t>(kv.value, kv.value_length), r.second);
-
- return r;
-}
-
-} // namespace ceph::libfdb::detail
 

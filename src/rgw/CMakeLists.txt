@@ -293,8 +293,8 @@ if(WITH_RADOSGW_D4N)
     rgw/driver/)
 
   list(APPEND librgw_common_srcs
-        driver/redis/rgw_redis_driver.cc
-        driver/ssd/rgw_ssd_driver.cc
+        rgw_redis_driver.cc
+        rgw_ssd_driver.cc
         driver/d4n/d4n_directory.cc
         driver/d4n/d4n_policy.cc
         driver/d4n/rgw_sal_d4n.cc)

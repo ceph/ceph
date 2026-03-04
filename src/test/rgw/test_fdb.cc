@@ -36,6 +36,7 @@
 #include <list>
 #include <chrono>
 #include <vector>
+#include <ranges>
 #include <unordered_map>
 
 using Catch::Matchers::AllMatch;
@@ -57,11 +58,6 @@ using namespace std::literals::string_literals;
 
 namespace lfdb = ceph::libfdb;
 
-namespace {
-// make a database handle:
-//JFW: auto dbh = lfdb::create_database();
-} // namespace
-
 // Be nice to Catch2's template-test macros:
 using string_pair = std::pair<std::string, std::string>;
 
@@ -70,8 +66,8 @@ time to write a fancy generator, so I've taken a "dumb as bones" approach and wr
 fixed prefix followed by integers: */
 
 // As we manipulate keys and values quite a bit, it's helpful to have a recipe for them:
-std::string make_key(const int n) {
- return fmt::format("key_{:04d}", n);
+std::string make_key(const int n, std::string_view prefix = "key") {
+ return fmt::format("{}_{:04d}", prefix, n);
 }
 
 std::string make_value(const int n) {
@@ -83,8 +79,7 @@ auto key_counter(auto txn, const auto& selector, auto& out_values) -> auto {
  out_values.clear();
 
  lfdb::get(txn, selector, 
-           std::inserter(out_values, std::begin(out_values)), 
-           lfdb::commit_after_op::no_commit);
+           std::inserter(out_values, std::begin(out_values)));
 
  return out_values.size();
 };
@@ -95,13 +90,27 @@ auto key_count(auto& dbh, const auto& selector) {
 }
 
 // Note that the generated keys are ONE based, not zero:
-inline std::map<std::string, std::string> make_monotonic_kvs(const int N)
+inline std::map<std::string, std::string> make_monotonic_kvs(const int N, std::string_view prefix = "key")
 {
  std::map<std::string, std::string> kvs;
 
  for(const auto i : std::ranges::iota_view(1, 1 + N)) {
-  kvs.insert({ make_key(i), make_value(i) });
+  kvs.insert({ make_key(i, prefix), make_value(i) });
  }
+
+ fmt::println("JFW: generated {} kv pairs", kvs.size());
+
+ return kvs;
+}
+
+inline auto write_monotonic_kvs(lfdb::database_handle dbh, const int N, std::string_view prefix = "key")
+{
+ auto kvs = make_monotonic_kvs(N, prefix);
+
+ for(const auto& [k, v] : kvs)
+  lfdb::set(lfdb::make_transaction(dbh), k, v, lfdb::commit_after_op::commit);
+
+ fmt::println("JFW: wrote {} kv pairs to the database", kvs.size());
 
  return kvs;
 }
@@ -122,11 +131,13 @@ struct janitor final
 
  janitor()
  {
+fmt::println("JFW: janitor tidying up before tasks...");
   drop_all();
  } 
 
  ~janitor()
  {
+fmt::println("JFW: janitor tidying up after scope...");
   if(drop_after_scope)
    drop_all();
  }
@@ -141,6 +152,7 @@ struct janitor final
    lfdb::erase(lfdb::make_transaction(lfdb::create_database()),
               lfdb::select { begin_key, end_key }, 
               lfdb::commit_after_op::commit);
+sleep(1);
    }
 };
 
@@ -181,7 +193,6 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
  SECTION("CRD single-key") {
     std::string out_value;
 
-    REQUIRE(nullptr != dbh);
 
     // The key initially either exists, or we'll write it anew, either is fine:
     CHECK_NOTHROW(lfdb::set(lfdb::make_transaction(dbh), k, v, lfdb::commit_after_op::commit));
@@ -239,6 +250,7 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
 TEST_CASE("fdb simple (delete keys in range)", "[rgw][fdb]") {
  janitor j;
 
+//JFW: j.drop_after_scope = false; // JFW TESTING
 /*
 const char begin_key[] = { (char)0x00 };
 const char end_key[]   = { (char)0xFF };
@@ -254,8 +266,8 @@ lfdb::erase(lfdb::make_transaction(lfdb::create_database()),
  lfdb::erase(lfdb::make_transaction(dbh), selector);
  REQUIRE(0 == key_count(dbh, selector));
 
- // Write a bunch of kvs:
- const auto kvs = make_monotonic_kvs(20);
+ // Write a bunch of kvs-- for this particular test, we use a hard-coded number specifically:
+ const auto kvs = write_monotonic_kvs(dbh, 20);
 
  lfdb::set(lfdb::make_transaction(dbh), begin(kvs), end(kvs), lfdb::commit_after_op::commit);
  CHECK(20 == key_count(dbh, selector));
@@ -282,9 +294,7 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
  CHECK(nullptr != dbh);
 
  // Write a sequence of keys so we have some data to work with:
- const auto kvs = make_monotonic_kvs(100);
-
- lfdb::set(lfdb::make_transaction(dbh), begin(kvs), end(kvs), lfdb::commit_after_op::commit);
+ const auto kvs = write_monotonic_kvs(dbh, 100);
 
  SECTION("check multiple key write", "[fdb]") {
   auto txn = lfdb::make_transaction(dbh);
@@ -306,7 +316,7 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
 
   auto txn = lfdb::make_transaction(dbh);
 
-  lfdb::get(txn, lfdb::select { make_key(0), make_value(100) }, std::back_inserter(out_values), lfdb::commit_after_op::no_commit);
+  lfdb::get(txn, lfdb::select { make_key(0), make_key(99) }, std::back_inserter(out_values), lfdb::commit_after_op::no_commit);
 
   CHECK(100 == out_values.size());
 
@@ -316,58 +326,6 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
   }
  }
 }
-
-/* JFW:
-TEST_CASE("cancel a transaction", "[fdb][rgw]") {
-given
-  write some data in a transaction
-then:
-  read it in the transaction should work
-when cancel the tranaction
-  should fail to read
-}
-
-template <typename SeqT=std::vector<std::pair<std::string, std::string>>>
-std::generator<SeqT> get(transaction_handle& txn, const selector, const stride)
-{
-JFW
-}
-
-TEST_CASE("multi-key \"infinite\" results", "[fdb][rgw]") {
- janitor j;
-
- // This really should be left at 1000 for the test to make sense:
- constexpr int nkeys = 1000;
-
- auto kvs = make_monotonic_kvs(nkeys);
-
- lfdb::set(dbh, kvs);
-
- // Note that while this will select all keys, FoundationDB system keys begin with 0xFF and cannot
- // be modified without ACCESS_SYSTEM_KEYS being turned on for the transaction:
- constexpr auto all_keys = lfdb::select { "", fmt::format("\xFF") };
-
- // Make sure they were written:
- REQUIRE(nkeys == lfdb::key_count(dbh, all_keys));
-
-
-FDBFuture *fdb_transaction_get_range(FDBTransaction *transaction, uint8_t const *begin_key_name, int begin_key_name_length, fdb_bool_t begin_or_equal, int begin_offset, uint8_t const *end_key_name, int end_key_name_length, fdb_bool_t end_or_equal, int end_offset, int limit, int target_bytes, FDBStreamingMode mode, int iteration, fdb_bool_t snapshot, fdb_bool_t reverse)
-
-check w/ generator
- for(const auto stride : { 1, 10, 100, 1000 }) {
-  auto results = lfdb::get(dbh, all_keys, stride);
-
-  while(std::vector<std::string> rs = results) {
-    ; print n results
-  } 
- }
-
-generators have iterator hooks:
- auto results = lfdb::get(dbh, all_keys, stride);
-
- for(auto b = std::begin(results); std::end(results) != b; ++b) {
- }
-}*/
 
 TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
  // Manual tests of conversions to and from supported FDB built-in types.
@@ -469,6 +427,47 @@ TEST_CASE("fdb conversions (functions)", "[fdb][rgw]")
  }
 }
 
+TEST_CASE("generators", "[fdb]") {
+ janitor j;
+
+fmt::println("JFW: explicitly clearing DB and disabling tidy-up flag...");
+ j.drop_all();
+/*JFW:
+ j.drop_after_scope = false;
+sleep(5);*/
+
+ const unsigned nkeys = GENERATE(100'000); // 0, 1, 2, 3, 10, 1'000, 5'000, 10'000); // JFW: , 100'000, 200'000); // JFW: , 1'000'000);
+fmt::println("JFW: run with nkeys = {}", nkeys);
+
+ auto dbh = lfdb::create_database();
+
+ const auto kvs_in = write_monotonic_kvs(dbh, nkeys);
+ REQUIRE(nkeys == kvs_in.size());
+
+ SECTION("block_generator, kv pair return") {
+    int total_processed = 0;
+    std::map<std::string, std::string> out;
+
+    // pair_generator returns key-value pairs, keeping the specified transaction (or implicitly created one)
+    // alive until exhausted:
+    for(auto&& kvp : lfdb::pair_generator(dbh, lfdb::select { make_key(1), make_key(nkeys) }))
+{
+     out.emplace(kvp);
+    total_processed++;
+}
+
+fmt::println("JFW: out: {} records ({})", out.size(), total_processed);
+    CHECK(nkeys == out.size());
+
+    // Be sure we captured the head and the tail:
+    CHECK(out.contains(make_key(1)));
+    CHECK(out.contains(make_key(nkeys)));
+ }
+
+ // JFW: we can build some helpful machinery for whole containers, demonstrate C++23 range-ctors (for map and friends),
+ // etc., but the above will let us build that stuff. 
+}
+
 TEMPLATE_PRODUCT_TEST_CASE("associative data", "[fdb][rgw]",
 (std::map, std::unordered_map), ((std::string, std::string)))
 {
@@ -528,14 +527,18 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
   // With an implicit transaction, transactions should commit by default:
   const auto selector = lfdb::select { make_key(0), make_key(20) };
 
-  const auto kvs = make_monotonic_kvs(20);
-
-  CHECK_NOTHROW(lfdb::set(dbh, begin(kvs), end(kvs)));
+  const auto kvs = write_monotonic_kvs(dbh, 20);
 
   lfdb::erase(dbh, lfdb::select { make_key(1), make_key(6) });
+
   CHECK(15 == key_count(dbh, selector));
 
-  CHECK_FALSE(lfdb::key_exists(dbh, "key_03"));
+  // Let's look around the edge cases of the selection:   
+  CHECK_FALSE(lfdb::key_exists(dbh, "key_00"));
+  CHECK_FALSE(lfdb::key_exists(dbh, "key_05"));
+
+  CHECK(lfdb::key_exists(dbh, "key_00"));
+  CHECK(lfdb::key_exists(dbh, "key_06"));
  }
 
  SECTION("test behavior with shared transaction") {
@@ -611,7 +614,7 @@ SCENARIO("options", "[fdb]")
  }
 }
 
-TEST_CASE("Gal demo", "[fdb]") {
+TEST_CASE("mini-demo", "[fdb]") {
  janitor j;
 
  using std::map;
