@@ -152,6 +152,7 @@ class QoSConfig(_RBase):
     write_bw_limit: Optional[str] = None
     read_burst_mult: Optional[int] = 15
     write_burst_mult: Optional[int] = 15
+    cluster_mode: Optional[bool] = None
 
 
 @resourcelib.component()
@@ -230,6 +231,7 @@ class CephFSStorage(_RBase):
         write_bw_limit: Optional[str] = None,
         read_burst_mult: Optional[int] = None,
         write_burst_mult: Optional[int] = None,
+        cluster_mode: Optional[bool] = None,
     ) -> Self:
         """Return a new CephFSStorage instance with updated QoS values."""
         qos_updates: Dict[str, Union[int, str, None]] = {}
@@ -264,6 +266,9 @@ class CephFSStorage(_RBase):
             qos_updates["write_burst_mult"] = min(
                 write_burst_mult, BURST_MULT_MAX
             )
+
+        if cluster_mode is not None:
+            qos_updates["cluster_mode"] = cluster_mode
 
         if qos_updates:
             new_qos = replace(self.qos or QoSConfig(), **qos_updates)  # type: ignore
