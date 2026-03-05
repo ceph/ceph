@@ -12,6 +12,7 @@ CEPHFS_PROXY = 'cephfs-proxy'
 CLUSTERED = 'clustered'
 DOMAIN = 'domain'
 REMOTE_CONTROL = 'remote-control'
+REMOTE_CONTROL_LOCAL = 'remote-control-local'
 SMBMETRICS = 'smbmetrics'
 
 
@@ -23,6 +24,7 @@ FEATURES = {
     CLUSTERED,
     DOMAIN,
     REMOTE_CONTROL,
+    REMOTE_CONTROL_LOCAL,
 }
 
 # Services are components that listen on a "public" network port, to expose
