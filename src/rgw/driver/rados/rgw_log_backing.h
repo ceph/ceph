@@ -371,4 +371,10 @@ public:
     co_await lazy_init(dpp);
     co_return co_await fifo->last_entry_info(dpp, asio::use_awaitable);
   }
+
+  std::tuple<std::string, ceph::real_time>
+  last_entry_info(const DoutPrefixProvider *dpp, asio::yield_context y) {
+    lazy_init(dpp, y);
+    return fifo->last_entry_info(dpp, y);
+  }
 };
