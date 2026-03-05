@@ -2192,9 +2192,25 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
     // invalid?
     if (m->get_snapid() != CEPH_NOSNAP) {
-      dout(20) << __func__ << ": write to clone not valid " << *m << dendl;
-      osd->reply_op_error(op, -EINVAL);
-      return;
+      // writes to clones are invalid, except for a copy_from op used by
+      // pool migration to migrate clones
+      bool block_write = false;
+      for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
+        OSDOp& osd_op = *p;
+        if (((osd_op.op.op != CEPH_OSD_OP_COPY_FROM) &&
+             (osd_op.op.op != CEPH_OSD_OP_COPY_FROM)) ||
+	    //BILL:FIXME need to check for copy_from migration flag not being set
+	    //!(osd_op.op.copy_from.flags & CEPH_OSD_COPY_FROM_FLAG_MIGRATION)) {
+	    false) {
+	  dout(20) << __func__ << " BILL " << osd_op.op.op << dendl;
+          block_write = true;
+	}
+      }
+      if (block_write) {
+	dout(20) << __func__ << ": write to clone not valid " << *m << dendl;
+	osd->reply_op_error(op, -EINVAL);
+	return;
+      }
     }
 
     // too big?
@@ -12115,8 +12131,8 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 {
   FUNCTRACE(cct);
   ceph_assert(oid.pool == static_cast<int64_t>(info.pgid.pool()));
-  // want the head?
-  if (oid.snap == CEPH_NOSNAP) {
+  // want the head? OR using copy_from to create a snap
+  if (oid.snap == CEPH_NOSNAP || can_create) {
     ObjectContextRef obc = get_object_context(oid, can_create);
     if (!obc) {
       if (pmissing)
@@ -14960,7 +14976,7 @@ void PrimaryLogPG::pool_migration_delete(hobject_t oid)
             });
     ctx->at_version = get_next_version();
     ceph_assert(ctx->new_obs.exists);
-    int ret = _delete_oid(ctx.get(), false, false);
+    int ret = _delete_oid(ctx.get(), true, false);
     ceph_assert(ret == 0);
     if (obc->obs.oi.is_omap()) {
       ctx->delta_stats.num_objects_omap--;
@@ -15015,11 +15031,9 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 
     ObjectContextRef obc = get_object_context(soid, false);
     ceph_assert(obc);
-    OpContextUPtr ctx = simple_opc_create(obc);
 
     if (!obc->obs.exists) {
       // Object was deleted after last_pool_migration_started was previously incremented
-      close_op_ctx(ctx.release());
       dout(20) << __func__ << " skip (dne) " << obc->obs.oi.soid << dendl;
       last_pool_migration_started = next_pool_migration(last_pool_migration_started);
       continue;
@@ -15049,21 +15063,21 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     ObjectOperation o;
     object_locator_t oloc(soid);
     o.copy_from(soid.oid.name, soid.snap, oloc, obc->obs.oi.user_version, 0, 0);
-    ctx->at_version = get_next_version();
-    SnapContext snapc = ctx->snapc;
     object_locator_t base_oloc(soid);
     base_oloc.pool = *pool.info.migration_target;
     C_Migrate *fin = new C_Migrate(this, soid, get_last_peering_reset());
-    ceph_tid_t tid = osd->objecter->mutate(
-      soid.oid, base_oloc, o, snapc,
+    // Use prepare_mutate_op because we need to set the snap id so snap
+    // objects get copied correctly
+    Objecter::Op *objecter_op = osd->objecter->prepare_mutate_op(
+      soid.oid, base_oloc, o, SnapContext(),
       ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
       0,
       new C_OnFinisher(fin,
            osd->get_objecter_finisher(get_pg_shard())));
-    fin->tid = tid;
+    objecter_op->snapid = soid.snap;
+    osd->objecter->op_submit(objecter_op, &fin->tid);
+
     dout(20) << "pool migration copying " << soid << dendl;
-    finish_ctx(ctx.get(), pg_log_entry_t::CLONE);
-    simple_opc_submit(std::move(ctx));
   }
 
   return ops;
