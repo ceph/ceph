@@ -107,6 +107,9 @@ public:
     uint64_t truncate_seq;
     uint64_t truncate_size;
     bool whiteout; ///< Source object is whiteout
+    bool clone_trimmed_on_target; ///< All clone snaps trimmed on target; skip the copy-from write
+    std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> watchers;
+
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -122,7 +125,7 @@ public:
 	source_data_digest(-1), source_omap_digest(-1),
 	data_digest(-1), omap_digest(-1),
 	truncate_seq(0), truncate_size(0),
-        whiteout(false)
+        whiteout(false), clone_trimmed_on_target(false), watchers()
     {}
   };
 
@@ -700,6 +703,7 @@ public:
     bool ignore_log_op_stats;  // don't log op stats
     bool update_log_only; ///< this is a write that returned an error - just record in pg log for dup detection
     bool use_replace_op = false;  ///< use REPLACE op type instead of MODIFY/DELETE (set by finish_copyfrom)
+    bool pool_migration;  ///< true if this is a pool migration copy — suppresses clone_overlap update in make_writeable
     ObjectCleanRegions clean_regions;
 
     // side effects
@@ -803,6 +807,7 @@ public:
       new_obs(obs->oi, obs->exists),
       modify(false), user_modify(false), undirty(false), cache_operation(false),
       ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
+      pool_migration(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       obc(obc),
@@ -822,6 +827,7 @@ public:
       op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
       modify(false), user_modify(false), undirty(false), cache_operation(false),
       ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
+      pool_migration(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       reply(NULL), pg(_pg),
@@ -1695,8 +1701,11 @@ public:
 
   void handle_backoff(OpRequestRef& op);
 
+  int add_trim_to_ctx(OpContext *ctx, const hobject_t &coid, snapid_t snap_to_trim,
+                      ObjectContextRef obc, ObjectContextRef head_obc,
+                      int64_t src_pool = -1);
   int trim_object(bool first, const hobject_t &coid, snapid_t snap_to_trim,
-		  OpContextUPtr *ctxp);
+                  OpContextUPtr *ctxp);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;
@@ -1711,8 +1720,9 @@ public:
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
 
-  void handle_pool_migration_copy_failure(hobject_t oid, int r);
+  bool handle_pool_migration_copy_failure(hobject_t oid, int r);
   void handle_pool_migration_quiesce_complete();
+
   void pool_migration_source_start_delete_head(hobject_t oid);
   void pool_migration_source_start_delete(hobject_t oid);
   bool pool_migration_source_delete(hobject_t oid);
