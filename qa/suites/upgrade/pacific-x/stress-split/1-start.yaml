@@ -1,3 +1,11 @@
+teuthology:
+  postmerge:
+    - |
+      -- centos 9 is not available for Pacific ; centos 8 is not available for reef on new lab
+      if (yaml.os_type == "centos") or (yaml.os_type == "ubuntu" and yaml.os_version == "22.04") then
+        reject()
+      end
+
 tasks:
 - install:
     branch: pacific
@@ -5,9 +13,8 @@ tasks:
       - ceph-volume
 
 - cephadm:
-    image: quay.ceph.io/ceph-ci/ceph:pacific
-    cephadm_branch: pacific
-    cephadm_git_url: https://github.com/ceph/ceph
+    image: quay.io/ceph/ceph:v16.2.15
+    allow_mismatched_release: true
     conf:
       osd:
         #set config option for which cls modules are allowed to be loaded / used
@@ -53,6 +60,19 @@ first-half-sequence:
     mon.a:
       - ceph config set mgr mgr/cephadm/daemon_cache_timeout 60
       - ceph config set global log_to_journald false --force
+
+      # This is fun: A bug was introduced that started with
+      # 6c097015bbc1bcfa8abe518680a3d3a17ff39884. The MON_SINGLE_PAXOS was
+      # deprecated but kept in CEPH_FEATURES_ALL and not removed until
+      # f1ecf99a86edfe899392b6b734351f1015a93be6 which didn't get released
+      # until Quincy. So Pacific OSDs are still advertising MON_SINGLE_PAXOS
+      # which is interpreted as SERVER_REEF by reef monitors. So why didn't we
+      # catch that during upgrades to reef from pacific for v18.2.0 QA testing?
+      # WELL, have I got a surprise for you. We didn't check that all OSDs are
+      # running reef until 25e8b22c6f29cd3947b501f6aaf7614ba204a2c8 which was
+      # released in v18.2.5.
+
+      - ceph health mute OSD_UPGRADE_FINISHED --sticky
 
       - echo wait for mgr daemons to upgrade
       # upgrade the mgr daemons first
