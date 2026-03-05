@@ -97,6 +97,7 @@ class SubsystemStatus(NamedTuple):
 
 
 class Connection(NamedTuple):
+    nqn: str
     traddr: str
     trsvcid: int
     trtype: str
@@ -106,6 +107,7 @@ class Connection(NamedTuple):
     controller_id: int
     use_psk: Optional[bool]
     use_dhchap: Optional[bool]
+    dhchap_controller_origin: Optional[str]
     subsystem: Optional[str]
     disconnected_due_to_keepalive_timeout: Optional[bool]
 
@@ -200,6 +202,7 @@ class Host(NamedTuple):
     nqn: str
     use_psk: Optional[bool]
     use_dhchap: Optional[bool]
+    dhchap_controller_origin: Optional[str]
     disconnected_due_to_keepalive_timeout: Annotated[Optional[bool], CliFlags.DROP]
 
 
