@@ -6,12 +6,12 @@
 
 #include "include/buffer_fwd.h"
 
+#include <cstdarg>
+#include <cstdint>
 #include <functional>
 #include <list>
 #include <memory>
 #include <string>
-
-#include <stdarg.h>
 
 #include "common/fmt_common.h"
 

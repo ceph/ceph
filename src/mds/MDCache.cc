@@ -10744,7 +10744,7 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
 
 
   CInode *cur = 0;
-  auto reply = make_message<MDiscoverReply>(*dis);
+  auto reply = ceph::make_message<MDiscoverReply>(*dis);
 
   snapid_t snapid = dis->get_snapid();
 
