@@ -4,14 +4,14 @@ import { HostsPageHelper } from './hosts.po';
 import { ServicesPageHelper } from './services.po';
 
 const pages = {
-  index: { url: '#/expand-cluster?welcome=true', id: 'cd-create-cluster' }
+  index: { url: '#/add-storage?welcome=true', id: 'cd-create-cluster' }
 };
 export class CreateClusterWizardHelper extends PageHelper {
   pages = pages;
 
   createCluster() {
     cy.get('cd-create-cluster').should('contain.text', 'Please expand your cluster first');
-    cy.get('[name=expand-cluster]').click();
+    cy.get('[name=add-storage]').click();
     cy.get('cd-wizard').should('exist');
   }
 
@@ -22,13 +22,13 @@ export class CreateClusterWizardHelper extends PageHelper {
     cy.get('cd-dashboard').should('exist');
     const notification = new NotificationSidebarPageHelper();
     notification.open();
-    notification.getNotifications().should('contain', 'Cluster expansion skipped by user');
+    notification.getNotifications().should('contain', 'Storage setup skipped by user');
   }
 }
 
 export class CreateClusterHostPageHelper extends HostsPageHelper {
   pages = {
-    index: { url: '#/expand-cluster?welcome=true', id: 'cd-wizard' },
+    index: { url: '#/add-storage?welcome=true', id: 'cd-wizard' },
     add: { url: '', id: 'cd-host-form' }
   };
 
@@ -42,7 +42,7 @@ export class CreateClusterHostPageHelper extends HostsPageHelper {
 
 export class CreateClusterServicePageHelper extends ServicesPageHelper {
   pages = {
-    index: { url: '#/expand-cluster?welcome=true', id: 'cd-wizard' },
+    index: { url: '#/add-storage?welcome=true', id: 'cd-wizard' },
     create: { url: '', id: 'cd-service-form' }
   };
 
