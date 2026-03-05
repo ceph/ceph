@@ -6,6 +6,7 @@ See https://ceph.com/ for current information about Ceph.
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/2220/badge)](https://www.bestpractices.dev/projects/2220)
 [![Issue Backporting](https://github.com/ceph/ceph/actions/workflows/create-backport-trackers.yml/badge.svg)](https://github.com/ceph/ceph/actions/workflows/create-backport-trackers.yml)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ceph/ceph)
 
 ## Contributing Code
 
