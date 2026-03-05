@@ -316,6 +316,7 @@ struct Inode : RefCountedObject {
 
   void get_cap_ref(int cap);
   int put_cap_ref(int cap);
+  bool is_last_cap_ref(int c);
   bool is_any_caps();
   bool cap_is_valid(const Cap &cap) const;
   int caps_issued(int *implemented = 0) const;
@@ -349,6 +350,7 @@ struct Inode : RefCountedObject {
 
   void recall_deleg(bool skip_read);
   bool has_recalled_deleg();
+  bool is_write_delegated();
   int set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv);
   void unset_deleg(Fh *fh);
 
