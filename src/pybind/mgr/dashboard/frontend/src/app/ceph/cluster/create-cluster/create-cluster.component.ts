@@ -112,7 +112,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
       steps.onClick = () => (this.currentStep.stepIndex = index);
     });
     this.route.queryParams.subscribe((params) => {
-      // reading 'welcome' value true/false to toggle expand-cluster wizand view and welcome view
+      // reading 'welcome' value true/false to toggle add-storage wizand view and welcome view
       const showWelcomeScreen = params['welcome'];
       if (showWelcomeScreen) {
         this.startClusterCreation = showWelcomeScreen;
@@ -150,7 +150,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
           complete: () => {
             this.notificationService.show(
               NotificationType.info,
-              $localize`Cluster expansion skipped by user`
+              $localize`Storage setup skipped by user`
             );
             this.router.navigate(['/overview']);
             this.modalService.dismissAll();
@@ -274,9 +274,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
   }
 
   showSubmitButtonLabel() {
-    return !this.wizardStepsService.isLastStep()
-      ? this.actionLabels.NEXT
-      : $localize`Expand Cluster`;
+    return !this.wizardStepsService.isLastStep() ? this.actionLabels.NEXT : $localize`Add Storage`;
   }
 
   showCancelButtonLabel() {

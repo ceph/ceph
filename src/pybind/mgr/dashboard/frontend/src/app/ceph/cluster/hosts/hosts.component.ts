@@ -135,11 +135,11 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
     this.permissions = this.authStorageService.getPermissions();
     this.expandClusterActions = [
       {
-        name: this.actionLabels.EXPAND_CLUSTER,
+        name: this.actionLabels.ADD_STORAGE,
         permission: 'create',
         buttonKind: 'secondary',
         icon: Icons.expand,
-        routerLink: '/expand-cluster',
+        routerLink: '/add-storage',
         disable: (selection: CdTableSelection) => this.getDisable('add', selection),
         visible: () => this.showExpandClusterBtn
       }

@@ -66,12 +66,12 @@ export class LoginComponent implements OnInit {
   login() {
     localStorage.setItem('cluster_api_url', window.location.origin);
     this.authService.login(this.model).subscribe(() => {
-      const urlPath = this.postInstalled ? '/' : '/expand-cluster';
+      const urlPath = this.postInstalled ? '/' : '/add-storage';
       let url = _.get(this.route.snapshot.queryParams, 'returnUrl', urlPath);
       if (!this.postInstalled && this.route.snapshot.queryParams['returnUrl'] === '/overview') {
-        url = '/expand-cluster';
+        url = '/add-storage';
       }
-      if (url == '/expand-cluster') {
+      if (url === '/add-storage') {
         this.router.navigate([url], { queryParams: { welcome: true } });
       } else {
         this.router.navigate([url]);

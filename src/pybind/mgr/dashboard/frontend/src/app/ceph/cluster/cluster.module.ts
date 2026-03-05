@@ -21,7 +21,6 @@ import {
   LayoutModule,
   NumberModule,
   FileUploaderModule,
-  TabsModule,
   RadioModule,
   TilesModule,
   LayerModule

@@ -126,7 +126,7 @@ describe('CreateClusterComponent', () => {
     component.onNextStep();
     fixture.detectChanges();
     submitBtnLabel = component.showSubmitButtonLabel();
-    expect(submitBtnLabel).toEqual('Expand Cluster');
+    expect(submitBtnLabel).toEqual('Add Storage');
     cancelBtnLabel = component.showCancelButtonLabel();
     expect(cancelBtnLabel).toEqual('Back');
   });
