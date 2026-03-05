@@ -85,6 +85,11 @@
   align-items: flex-start;
   position: relative;
 
+  cd-icon {
+    position: relative;
+    top: -8px;
+  }
+
   .notification-close {
     position: absolute;
     right: 0;
