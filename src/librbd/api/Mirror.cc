@@ -411,7 +411,6 @@ template <typename I>
 struct C_ImageSnapshotCreate : public Context {
   I *ictx;
   uint64_t snap_create_flags;
-  std::string group_snap_id;
   uint64_t *snap_id;
   Context *on_finish;
 
@@ -419,12 +418,9 @@ struct C_ImageSnapshotCreate : public Context {
   mirror::PromotionState promotion_state;
   std::string primary_mirror_uuid;
 
-  C_ImageSnapshotCreate(I *ictx, uint64_t snap_create_flags,
-                        const std::string &group_snap_id,
-                        uint64_t *snap_id,
+  C_ImageSnapshotCreate(I *ictx, uint64_t snap_create_flags, uint64_t *snap_id,
                         Context *on_finish)
-    : ictx(ictx), snap_create_flags(snap_create_flags),
-      group_snap_id(group_snap_id), snap_id(snap_id),
+    : ictx(ictx), snap_create_flags(snap_create_flags), snap_id(snap_id),
       on_finish(on_finish) {
   }
 
@@ -443,7 +439,7 @@ struct C_ImageSnapshotCreate : public Context {
 
     auto req = mirror::snapshot::CreatePrimaryRequest<I>::create(
       ictx, mirror_image.global_image_id, CEPH_NOSNAP, snap_create_flags, 0U,
-      group_snap_id, snap_id, on_finish);
+      snap_id, on_finish);
     req->send();
   }
 };
@@ -536,20 +532,8 @@ const char* Mirror<I>::pool_or_namespace(IoCtx& ioctx) {
 template <typename I>
 int Mirror<I>::image_enable(I *ictx, mirror_image_mode_t mode,
                             bool relax_same_pool_parent_check) {
-  return Mirror<I>::image_enable(ictx, {}, mode,
-                                 relax_same_pool_parent_check, nullptr);
-}
-
-template <typename I>
-int Mirror<I>::image_enable(I *ictx,
-                            const std::string &group_snap_id,
-                            mirror_image_mode_t mode,
-                            bool relax_same_pool_parent_check,
-                            uint64_t *snap_id) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << " mode=" << mode
-                 << "group_snap=(" << ictx->group_spec.pool_id << " "
-                 << ictx->group_spec.group_id << " " << group_snap_id << ")"
                  << " relax_same_pool_parent_check="
                  << relax_same_pool_parent_check <<  dendl;
 
@@ -559,8 +543,7 @@ int Mirror<I>::image_enable(I *ictx,
     return r;
   }
 
-  if (group_snap_id.empty() &&
-      (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL)) {
+  if (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL) {
     r = -EINVAL;
     lderr(cct) << "cannot enable mirroring on an image that is member of a group"
                << cpp_strerror(r) << dendl;
@@ -623,8 +606,7 @@ int Mirror<I>::image_enable(I *ictx,
 
   C_SaferCond ctx;
   auto req = mirror::EnableRequest<ImageCtx>::create(
-      ictx, static_cast<cls::rbd::MirrorImageMode>(mode), "", false,
-      group_snap_id, snap_id, &ctx);
+      ictx, static_cast<cls::rbd::MirrorImageMode>(mode), "", false, &ctx);
   req->send();
 
   r = ctx.wait();
@@ -638,11 +620,6 @@ int Mirror<I>::image_enable(I *ictx,
 
 template <typename I>
 int Mirror<I>::image_disable(I *ictx, bool force) {
-  return Mirror<I>::image_disable(ictx, force, false);
-}
-
-template <typename I>
-int Mirror<I>::image_disable(I *ictx, bool force, bool allow_group_member) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
@@ -652,8 +629,7 @@ int Mirror<I>::image_disable(I *ictx, bool force, bool allow_group_member) {
     return r;
   }
 
-  if (!allow_group_member &&
-      (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL)) {
+  if (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL) {
     r = -EINVAL;
     lderr(cct) << "cannot disable mirroring on an image that is member of a group"
                << cpp_strerror(r) << dendl;
@@ -837,14 +813,6 @@ int Mirror<I>::image_promote(I *ictx, bool force) {
 
 template <typename I>
 void Mirror<I>::image_promote(I *ictx, bool force, Context *on_finish) {
-  return Mirror<I>::image_promote(ictx, {}, force, nullptr, on_finish);
-}
-
-template <typename I>
-void Mirror<I>::image_promote(I *ictx,
-                              const std::string &group_snap_id,
-                              bool force, uint64_t *snap_id,
-                              Context *on_finish) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << ", "
                  << "force=" << force << dendl;
@@ -863,25 +831,21 @@ void Mirror<I>::image_promote(I *ictx,
       on_finish->complete(r);
     });
 
-  auto on_refresh = new LambdaContext(
-    [ictx, force, group_snap_id, snap_id, on_promote](int r) {
+  auto on_refresh = new LambdaContext([ictx, force, on_promote](int r) {
       if (r < 0) {
         lderr(ictx->cct) << "refresh failed: " << cpp_strerror(r) << dendl;
         on_promote->complete(r);
         return;
       }
 
-      if (group_snap_id.empty() &&
-          (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL)) {
+      if (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL) {
         lderr(ictx->cct) << "cannot promote an image that is member of a group"
                          << cpp_strerror(-EINVAL) << dendl;
         on_promote->complete(-EINVAL);
         return;
       }
 
-      auto req = mirror::PromoteRequest<>::create(*ictx, force,
-                                                  group_snap_id, snap_id,
-                                                  on_promote);
+      auto req = mirror::PromoteRequest<>::create(*ictx, force, on_promote);
       req->send();
     });
   ictx->state->refresh(on_refresh);
@@ -904,47 +868,33 @@ int Mirror<I>::image_demote(I *ictx) {
 
 template <typename I>
 void Mirror<I>::image_demote(I *ictx, Context *on_finish) {
-  return Mirror<I>::image_demote(ictx, {}, nullptr, on_finish);
-}
-
-template <typename I>
-void Mirror<I>::image_demote(I *ictx,
-                             const std::string &group_snap_id,
-                             uint64_t *snap_id, Context *on_finish) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
-  auto on_cleanup = new LambdaContext([ictx, group_snap_id, on_finish](int r) {
-      // for images part of the group do it as part of the group demote.
-      if (group_snap_id.empty()) {
-        ictx->image_lock.lock();
-        ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
-        ictx->image_lock.unlock();
-      }
+  auto on_cleanup = new LambdaContext([ictx, on_finish](int r) {
+      ictx->image_lock.lock();
+      ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+      ictx->image_lock.unlock();
 
       ictx->state->handle_update_notification();
 
       on_finish->complete(r);
     });
-  auto on_refresh = new LambdaContext(
-    [ictx, group_snap_id, snap_id, on_cleanup](int r) {
+  auto on_refresh = new LambdaContext([ictx, on_cleanup](int r) {
       if (r < 0) {
         lderr(ictx->cct) << "refresh failed: " << cpp_strerror(r) << dendl;
         on_cleanup->complete(r);
         return;
       }
 
-      if (group_snap_id.empty() &&
-          (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL)) {
+      if (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL) {
         lderr(ictx->cct) << "cannot demote an image that is member of a group"
                          << cpp_strerror(-EINVAL) << dendl;
         on_cleanup->complete(-EINVAL);
         return;
       }
 
-      auto req = mirror::DemoteRequest<>::create(*ictx,
-                                                 group_snap_id,
-                                                 snap_id, on_cleanup);
+      auto req = mirror::DemoteRequest<>::create(*ictx, on_cleanup);
       req->send();
     });
 
@@ -2312,14 +2262,6 @@ int Mirror<I>::image_snapshot_create(I *ictx, uint32_t flags,
 template <typename I>
 void Mirror<I>::image_snapshot_create(I *ictx, uint32_t flags,
                                       uint64_t *snap_id, Context *on_finish) {
-  return Mirror<I>::image_snapshot_create(ictx, flags, {}, snap_id,
-                                          on_finish);
-}
-
-template <typename I>
-void Mirror<I>::image_snapshot_create(I *ictx, uint32_t flags,
-                                      const std::string &group_snap_id,
-                                      uint64_t *snap_id, Context *on_finish) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
@@ -2332,15 +2274,14 @@ void Mirror<I>::image_snapshot_create(I *ictx, uint32_t flags,
   }
 
   auto on_refresh = new LambdaContext(
-    [ictx, snap_create_flags, group_snap_id, snap_id, on_finish](int r) {
+    [ictx, snap_create_flags, snap_id, on_finish](int r) {
       if (r < 0) {
         lderr(ictx->cct) << "refresh failed: " << cpp_strerror(r) << dendl;
         on_finish->complete(r);
         return;
       }
 
-      if (group_snap_id.empty() &&
-          (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL)) {
+      if (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL) {
         lderr(ictx->cct) << "cannot create mirror snapshot of an image "
                          << "that is member of a group"
                          << cpp_strerror(-EINVAL) << dendl;
@@ -2349,8 +2290,7 @@ void Mirror<I>::image_snapshot_create(I *ictx, uint32_t flags,
       }
 
       auto ctx = new C_ImageSnapshotCreate<I>(ictx, snap_create_flags,
-                                              group_snap_id, snap_id,
-                                              on_finish);
+                                              snap_id, on_finish);
       auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
                                                    &ctx->promotion_state,
                                                    &ctx->primary_mirror_uuid,
