@@ -161,7 +161,7 @@ export class ActionLabelsI18n {
   DISCONNECT: string;
   RECONNECT: string;
   AUTHORIZE: string;
-  EXPAND_CLUSTER: string;
+  ADD_STORAGE: string;
   SETUP_MULTISITE_REPLICATION: string;
   NFS_EXPORT: string;
   VIEW: string;
@@ -253,7 +253,7 @@ export class ActionLabelsI18n {
     this.CONNECT = $localize`Connect`;
     this.DISCONNECT = $localize`Disconnect`;
     this.RECONNECT = $localize`Reconnect`;
-    this.EXPAND_CLUSTER = $localize`Expand Cluster`;
+    this.ADD_STORAGE = $localize`Add Storage`;
 
     this.NFS_EXPORT = $localize`Create NFS Export`;
     this.VIEW = $localize`View`;

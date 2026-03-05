@@ -1,17 +1,17 @@
+@if (startClusterCreation) {
 <div class="container-fluid">
-  @if (startClusterCreation) {
   <div cdsRow
-       class="cds-ml-5 cds-mt-5">
+       class="cds-ml-5 cds-mt-6">
     <div cdsCol
          [columnNumbers]="{'lg': 13, 'md': 8, 'sm': 8}">
-      <div class="mb-5">
+      <div class="mb-4">
         <!-- htmllint img-req-src="false" -->
         <img [src]="projectConstants.cephLogo"
              alt="Ceph"
-             class="img-fluid">
+             class="ceph-logo">
       </div>
 
-      <div class="mb-5">
+      <div class="mb-4">
         <span class="cds--type-fluid-heading-05"
               i18n>Welcome to {{ projectConstants.projectName }}
         </span>
@@ -48,7 +48,7 @@
               i18n>Set up storage for your cluster to run workloads and store data. You can configure storage and data services now, or skip and configure them later.</span>
       </div>
 
-      <cds-tile class="storage-requirements-header"
+      <cds-tile class="border-subtle no-border-bottom"
                 [cdsLayer]="1">
         <div cdsStack="horizontal"
              gap="3">
@@ -62,7 +62,7 @@
         </div>
       </cds-tile>
 
-      <cds-tile class="storage-requirements-body mb-3"
+      <cds-tile class="border-subtle mb-3"
                 [cdsLayer]="2">
         <div cdsStack="horizontal"
              gap="4">
@@ -84,12 +84,14 @@
 
         <hr/>
 
-        <div cdsStack="horizontal" gap="4">
+        <div cdsStack="horizontal"
+             gap="4">
           <cd-icon type="vmdkDisk"
                    [size]="icons.size20">
           </cd-icon>
 
-          <div cdsStack="vertical" gap="1">
+          <div cdsStack="vertical"
+               gap="1">
             <span class="cds--type-heading-compact-01"
                   i18n>
               Disks
@@ -107,10 +109,11 @@
         <div cdsStack="horizontal"
              gap="4">
           <cd-icon type="clusterIcon"
-                  [size]="icons.size20">
+                   [size]="icons.size20">
           </cd-icon>
 
-          <div cdsStack="vertical" gap="1">
+          <div cdsStack="vertical"
+               gap="1">
             <span class="cds--type-heading-compact-01"
                   i18n>
               Data services (optional)
@@ -133,7 +136,7 @@
         </cd-alert-panel>
       </div>
 
-      <div class="mb-4">
+      <div class="mb-5">
         <button cdsButton="primary"
                 class="me-3"
                 (click)="createCluster()"
@@ -157,18 +160,18 @@
       </div>
     </div>
   </div>
- }
 </div>
+}
 
+@else {
 <div cdsRow
-     class="form"
-     *ngIf="!startClusterCreation">
+     class="form cds-mt-6">
   <div cdsCol
        [columnNumbers]="{'lg': 2, 'md': 2, 'sm': 2}"
        class="indicator-wrapper">
 
     <div class="form-header"
-         i18n>Expand Cluster</div>
+         i18n>Add Storage</div>
     <cd-wizard [stepsTitle]="stepTitles"></cd-wizard>
   </div>
 
@@ -214,13 +217,14 @@
     </ng-container>
     <div cdsRow
          class="m-5">
+      @if (stepTitles[currentStep?.stepIndex]?.label === 'Create OSDs') {
       <button cdsButton="secondary"
               class="me-3"
               id="skipStepBtn"
               (click)="onSkip()"
               aria-label="Skip this step"
-              *ngIf="stepTitles[currentStep?.stepIndex]?.label === 'Create OSDs'"
               i18n>Skip</button>
+      }
       <cd-back-button buttonType="secondary"
                       aria-label="Close"
                       (backAction)="onPreviousStep()"
@@ -232,11 +236,12 @@
     </div>
   </div>
 </div>
+}
 
 <ng-template #skipConfirmTpl>
-  <span i18n>You are about to skip the cluster expansion process.
-             You’ll need to <strong>navigate through the menu to add hosts and services.</strong></span>
+  <span i18n>You are about to skip the storage setup process.
+             You'll need to <strong>navigate through the menu to add hosts and services.</strong></span>
 
-  <div class="mt-4"
+  <div class="cds-mt-4"
        i18n>Are you sure you want to continue?</div>
 </ng-template>
