@@ -2096,6 +2096,8 @@ void PeerReplayer::set_changed_mirroring_configurations() {
                                           "cephfs_mirror_blockdiff_min_file_size");
   bool distribute_datasync_threads_conf = g_ceph_context->_conf.get_val<bool>(
                                           "cephfs_mirror_distribute_datasync_threads");
+  uint64_t datasync_files_per_batch_conf = g_ceph_context->_conf.get_val<uint64_t>(
+                                          "cephfs_mirror_datasync_files_per_batch");
 
   // Compare and set configs
   uint64_t blockdiff_min_file_size = set_blockdiff_min_file_size(blockdiff_min_file_size_conf);
@@ -2108,6 +2110,12 @@ void PeerReplayer::set_changed_mirroring_configurations() {
     dout(10) << ": cephfs_mirror_distribute_datasync_threads changed"
             << " old=" << distribute_datasync_threads
             << " new=" << distribute_datasync_threads_conf << dendl;
+  }
+  uint64_t datasync_files_per_batch = set_datasync_files_per_batch(datasync_files_per_batch_conf);
+  if (datasync_files_per_batch != datasync_files_per_batch_conf) {
+    dout(10) << ":  cephfs_mirror_datasync_files_per_batch changed"
+             << " old=" << datasync_files_per_batch
+             << " new=" << datasync_files_per_batch_conf << dendl;
   }
 }
 
@@ -2435,9 +2443,10 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
     }
 
     // Wait on data sync queue for entries to process
-    uint64_t batch = 100;
+    uint64_t batch = get_datasync_files_per_batch();
     SyncEntry entry;
-    while (batch-- && syncm->pop_dataq_entry(entry)) {
+    //Only batch if distribute datasync threads config is enabled
+    while ((!distribute_datasync_threads || batch--) && syncm->pop_dataq_entry(entry)) {
       bool need_data_sync = true;
       bool need_attr_sync = true;
       if (entry.sync_check) {
