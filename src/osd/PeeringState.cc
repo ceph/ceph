@@ -105,14 +105,24 @@ void PGPool::update(OSDMapRef map)
   info = *pi;
   name = map->get_pool_name(id);
 
+  // Pool snaps live on the migration chain root
+  const pg_pool_t *snap_pi = pi;
+  int64_t root = map->get_pool_migration_root(id);
+  if (root >= 0 && root != id) {
+    if (const pg_pool_t *rpi = map->get_pg_pool(root)) {
+      snap_pi = rpi;
+    }
+  }
+
   bool updated = false;
   if ((map->get_epoch() != cached_epoch + 1) ||
-      (pi->get_snap_epoch() == map->get_epoch())) {
+      (snap_pi->get_snap_epoch() == map->get_epoch())) {
     updated = true;
   }
 
-  if (info.is_pool_snaps_mode() && updated) {
-    snapc = pi->get_snap_context();
+  pool_snaps_mode = snap_pi->is_pool_snaps_mode();
+  if (pool_snaps_mode && updated) {
+    snapc = snap_pi->get_snap_context();
   }
   cached_epoch = map->get_epoch();
 }
