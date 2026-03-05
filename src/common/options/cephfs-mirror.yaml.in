@@ -40,6 +40,20 @@ options:
   default: true
   services:
   - cephfs-mirror
+- name: cephfs_mirror_datasync_files_per_batch
+  type: uint
+  level: advanced
+  desc: maximum number of files processed by datasync threads per scheduling cycle before yielding.
+  long_desc: defines the maximum number of files a data synchronization thread will process for a
+    specific snapshot before yielding the thread to re-check scheduling logic. This is applicable
+    only when cephfs_mirror_distribute_datasync_threads is enabled. This batch size determines the
+    granularity of thread distribution; smaller batches allow threads to rotate between snapshots
+    more frequently, while larger batches improve throughput by minimizing the overhead of thread
+    re-assignment.
+  default: 64
+  services:
+  - cephfs-mirror
+  min: 1
 - name: cephfs_mirror_blockdiff_min_file_size
   type: size
   level: advanced

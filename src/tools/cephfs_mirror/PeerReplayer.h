@@ -519,6 +519,7 @@ private:
 
   std::atomic<uint64_t> blockdiff_min_file_size{0};
   std::atomic<bool> distribute_datasync_threads{true};
+  std::atomic<uint64_t> datasync_files_per_batch{64};
 
   ServiceDaemonStats m_service_daemon_stats;
 
@@ -600,6 +601,12 @@ private:
   }
   bool set_distribute_datasync_threads(bool value) {
     return distribute_datasync_threads.exchange(value, std::memory_order_relaxed);
+  }
+  uint64_t get_datasync_files_per_batch() const {
+    return datasync_files_per_batch.load(std::memory_order_relaxed);
+  }
+  uint64_t set_datasync_files_per_batch(uint64_t value) {
+    return datasync_files_per_batch.exchange(value, std::memory_order_relaxed);
   }
 };
 
