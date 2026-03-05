@@ -75,8 +75,7 @@ void DemoteRequest<I>::create_snapshot() {
     m_image_ctx, m_global_image_id, CEPH_NOSNAP,
     SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE,
     (snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS |
-     snapshot::CREATE_PRIMARY_FLAG_DEMOTED),
-    m_group_snap_id, m_snap_id, ctx);
+     snapshot::CREATE_PRIMARY_FLAG_DEMOTED), nullptr, ctx);
   req->send();
 }
 

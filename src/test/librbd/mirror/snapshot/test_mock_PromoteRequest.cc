@@ -126,7 +126,6 @@ struct CreatePrimaryRequest<MockTestImageCtx> {
                                       uint64_t clean_since_snap_id,
                                       uint64_t snap_create_flags,
                                       uint32_t flags,
-                                      const std::string &group_snap_id,
                                       uint64_t *snap_id,
                                       Context *on_finish) {
     ceph_assert(s_instance != nullptr);

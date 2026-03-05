@@ -90,24 +90,11 @@ struct Mirror {
 
   static int image_enable(ImageCtxT *ictx, mirror_image_mode_t mode,
                           bool relax_same_pool_parent_check);
-  static int image_enable(ImageCtxT *ictx,
-                          const std::string &group_snap_id,
-                          mirror_image_mode_t mode,
-                          bool relax_same_pool_parent_check,
-                          uint64_t *snap_id);
   static int image_disable(ImageCtxT *ictx, bool force);
-  static int image_disable(ImageCtxT *ictx, bool force,
-                           bool allow_group_member);
   static int image_promote(ImageCtxT *ictx, bool force);
   static void image_promote(ImageCtxT *ictx, bool force, Context *on_finish);
-  static void image_promote(ImageCtxT *ictx,
-                            const std::string &group_snap_id, bool force,
-                            uint64_t *snap_id, Context *on_finish);
   static int image_demote(ImageCtxT *ictx);
   static void image_demote(ImageCtxT *ictx, Context *on_finish);
-  static void image_demote(ImageCtxT *ictx,
-                           const std::string &group_snap_id, uint64_t *snap_id,
-                           Context *on_finish);
   static int image_resync(ImageCtxT *ictx);
   static int image_get_info(ImageCtxT *ictx,
                             mirror_image_info_t *mirror_image_info);
@@ -136,9 +123,6 @@ struct Mirror {
   static int image_snapshot_create(ImageCtxT *ictx, uint32_t flags,
                                    uint64_t *snap_id);
   static void image_snapshot_create(ImageCtxT *ictx, uint32_t flags,
-                                    uint64_t *snap_id, Context *on_finish);
-  static void image_snapshot_create(ImageCtxT *ictx, uint32_t flags,
-                                    const std::string &group_snap_id,
                                     uint64_t *snap_id, Context *on_finish);
 
   static int group_list(IoCtx &io_ctx, std::vector<std::string> *names);
