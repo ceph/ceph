@@ -9078,6 +9078,9 @@ int BlueStore::expand_devices(ostream& out)
     }
 
     auto my_bdev = bluefs->get_block_device(devid);
+    if (!my_bdev) {
+      continue;
+    }
     my_bdev->refresh_size();
     uint64_t size = my_bdev ? my_bdev->get_size() : 0;
 
