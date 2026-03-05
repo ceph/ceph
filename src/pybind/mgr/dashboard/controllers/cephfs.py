@@ -830,7 +830,30 @@ class CephFSSubvolume(RESTController):
             )
         return json.loads(out)
 
-    def create(self, vol_name: str, subvol_name: str, **kwargs):
+    def _set_snapshot_visibility(self, vol_name: str, subvol_name: str,
+                                 value: str, group_name: str = ''):
+        """Helper method to set snapshot visibility for a subvolume."""
+        params = {
+            'vol_name': vol_name,
+            'sub_name': subvol_name,
+            'value': value
+        }
+        if group_name:
+            params['group_name'] = group_name
+        error_code, out, err = mgr.remote(
+            'volumes',
+            '_cmd_fs_subvolume_snapshot_visibility_set',
+            None,
+            params
+        )
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to set snapshot visibility for subvolume {subvol_name}: {err}'
+            )
+        return out
+
+    def create(self, vol_name: str, subvol_name: str, snapshot_visibility: str = None, **kwargs):
+        group_name = kwargs.get('group_name', '')
         error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolume_create', None, {
             'vol_name': vol_name, 'sub_name': subvol_name, **kwargs})
         if error_code != 0:
@@ -838,9 +861,13 @@ class CephFSSubvolume(RESTController):
                 f'Failed to create subvolume {subvol_name}: {err}'
             )
 
+        if snapshot_visibility is not None:
+            self._set_snapshot_visibility(vol_name, subvol_name, snapshot_visibility, group_name)
+
         return f'Subvolume {subvol_name} created successfully'
 
-    def set(self, vol_name: str, subvol_name: str, size: str, group_name: str = ""):
+    def set(self, vol_name: str, subvol_name: str, size: str, group_name: str = "",
+            snapshot_visibility: str = None):
         params = {'vol_name': vol_name, 'sub_name': subvol_name}
         if size:
             params['new_size'] = size
@@ -852,6 +879,9 @@ class CephFSSubvolume(RESTController):
                 raise DashboardException(
                     f'Failed to update subvolume {subvol_name}: {err}'
                 )
+
+        if snapshot_visibility is not None:
+            self._set_snapshot_visibility(vol_name, subvol_name, snapshot_visibility, group_name)
 
         return f'Subvolume {subvol_name} updated successfully'
 
@@ -916,7 +946,7 @@ class CephFSSubvolume(RESTController):
 
         return out
 
-    @RESTController.Resource('PUT', path='/snapshot-visibility')
+    @RESTController.Resource('PATCH', path='/snapshot-visibility')
     def set_snapshot_visibility(
         self,
         vol_name: str,
@@ -924,29 +954,7 @@ class CephFSSubvolume(RESTController):
         value: str,
         group_name: str = ''
     ):
-        params = {
-            'vol_name': vol_name,
-            'sub_name': subvol_name,
-            'value': value
-        }
-
-        if group_name:
-            params['group_name'] = group_name
-
-        error_code, out, err = mgr.remote(
-            'volumes',
-            '_cmd_fs_subvolume_snapshot_visibility_set',
-            None,
-            params
-        )
-
-        if error_code != 0:
-            raise DashboardException(
-                f'Failed to set snapshot visibility for subvolume '
-                f'{subvol_name}: {err}'
-            )
-
-        return out
+        return self._set_snapshot_visibility(vol_name, subvol_name, value, group_name)
 
 
 @APIRouter('/cephfs/subvolume/group', Scope.CEPHFS)
