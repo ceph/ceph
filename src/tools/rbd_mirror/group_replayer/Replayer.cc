@@ -602,9 +602,10 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
       handle_replay_complete(&locker, 0, "local group is primary");
       return;
     }
-    dout(10) << "found incomplete primary group snapshot: "
+    derr << "found incomplete primary group snapshot: "
              << last_local_snap->id << dendl;
-    m_retry_validate_snap = true;
+    handle_replay_complete(&locker, -EINVAL, "incomplete local primary mirror group snapshot");
+    return;
   }
 
   load_remote_group_snapshots();
