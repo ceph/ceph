@@ -15,10 +15,11 @@ Storage Interfaces
 ------------------
 
 Ceph offers several "storage interfaces", which is another
-way of saying "ways of storing data". These storage interfaces include: 
-- CephFS (a file system) 
-- RBD (block devices) 
-- RADOS (an object store).
+way of saying "ways of storing data". These storage interfaces include:
+
+- CephFS (a file system)
+- RBD (block devices)
+- RGW (an object store)
 
 Deep down, though, all three of these are really RADOS object stores. CephFS
 and RBD are just presenting themselves as file systems and block devices.
@@ -30,42 +31,46 @@ Ceph is a clustered and distributed storage manager that offers data
 redundancy. This sentence might be too cryptic for first-time readers of the
 Ceph Beginner's Guide, so let's explain all of the terms in it:
 
-- **Storage Manager.** Ceph is a storage manager. This means that Ceph is
+- **Storage manager.** Ceph is a storage manager. This means that Ceph is
   software that helps storage resources store data. Storage resources come in
   several forms: hard disk drives (HDD), solid-state drives (SSD), magnetic
   tape, floppy disks, punched tape, Hollerith-style punch cards, and magnetic
   drum memory are all forms of storage resources. In this beginner's guide,
   we'll focus on hard disk drives (HDD) and solid-state drives (SSD).
-- **Clustered storage manager.** Ceph is a clustered storage manager. That
-  means that the storage manager installed not just on a single machine but on
-  several machines that work together as a system.
-- **Distributed storage manager.** Ceph is a clustered and distributed storage
-  manager. That means that the data that is stored and the infrastructure that
-  supports it is spread across multiple machines and is not centralized in a
-  single machine. To better understand what distributed means in this context,
-  it might be helpful to describe what it is not: it is not a system ISCSI,
-  which is a system that exposes a single logical disk over the network in a
-  1:1 (one-to-one) mapping.
+- **Clustered and distributed storage manager.** Ceph is a clustered and
+  distributed storage manager. This means that the storage manager is deployed
+  not just on a single server but on several servers that work together as a
+  system: the data that is stored and the infrastructure that supports it is
+  spread across multiple servers and is not centralized in a single server. To
+  better understand what distributed means in this context, it might be helpful
+  to describe what it is not: it is not a system like a traditional enterprise
+  storage array, which is a system that exposes a single logical disk over the
+  network in a 1:1 (one-to-one) mapping.
 - **Data Redundancy.** Having a second copy of your data somewhere.
 
-Ceph Monitor 
+Ceph Monitor
 ------------
 
 The Ceph Monitor is one of the daemons essential to the functioning of a Ceph
 cluster. Monitors know the location of all the data in the Ceph cluster.
 Monitors maintain maps of the cluster state, and those maps make it possible
-for Ceph daemons to work together. These maps include the monitor map, the OSD
-map, the MDS map, and the CRUSH map. Three monitors are required to reach
-quorum. Quorum is a state that is necessary for a Ceph cluster to work
-properly. Quorum means that a majority of the monitors are in the "up" state.
+for Ceph daemons to work together. These maps include the Monitor map, the OSD
+map, the MDS map, and the CRUSH map. At least three Monitors are required for
+the daemons to be resistant to failures. A majority of the Monitors must be in
+the "up" state in order for them to reach quorum. Quorum is a state that is
+necessary for a Ceph cluster to work properly.
 
-MANAGER
+Manager
 -------
-The manager balances the data in the Ceph cluster, distributing load evenly so
-that no part of the cluster gets overloaded. The manager is one of the daemons
-essential to the functioning of the Ceph cluster. Managers keep track of
-runtime metrics, system utilization, CPU performance, disk load, and they host
-the Ceph dashboard web GUI.
+
+The Ceph Manager is one of the daemons essential to the functioning of the Ceph
+cluster. Managers are in charge of various Ceph cluster management and
+monitoring tasks that are provided by Manager modules. These tasks include
+orchestration, the Ceph dashboard web GUI, balancing the data and load evenly
+in the Ceph cluster, keeping track of runtime metrics, and providing
+connectivity to non-native clients. Offloading less than critical and
+resource-intensive tasks from Monitors to Managers simplifies scaling the
+Ceph cluster.
 
 OSD
 ---
@@ -75,7 +80,7 @@ Object Storage Daemons (OSDs) store objects.
 An OSD is a process that runs on a storage server. The OSD is responsible for
 managing a single unit of storage, which is usually a single disk.
 
-POOLS
+Pools
 -----
 
 A pool is an abstraction that can be designated as either "replicated" or
@@ -87,13 +92,14 @@ allocated space on a disk or a single tape cartridge. The server uses the
 storage volumes to store backed-up, archived, or space-managed files." (IBM
 Tivoli Storage Manager, Version 7.1, "Storage Pools")
 
-PLACEMENT GROUPS
+Placement Groups
 ----------------
 
 Placement groups are a part of pools.
 
 MDS
 ---
+
 A metadata server (MDS) is necessary for the proper functioning of CephFS.
 See :ref:`orchestrator-cli-cephfs` and :ref:`arch-cephfs`.
 
@@ -109,7 +115,7 @@ Vstart Cluster Installation and Configuration Procedure
 #. Update the submodules in the ``ceph/ceph`` repository:
 
    .. prompt:: bash #
-    
+
       git submodule update --init --recursive --progress
 
 #. Run ``install-deps.sh`` from within the directory into which you cloned the
@@ -172,7 +178,7 @@ Vstart Cluster Installation and Configuration Procedure
 #. Start the vstart cluster:
 
    .. prompt:: bash #
-      
+
       ../src/vstart.sh --debug --new -x --localhost --bluestore
 
    .. note:: Run this command from within the ``ceph/build`` directory.
@@ -180,7 +186,7 @@ Vstart Cluster Installation and Configuration Procedure
 
 
 
-LINKS
+Links
 -----
 
 #. `Ceph Wiki (requires Ceph Redmine Tracker account) <https://tracker.ceph.com/projects/ceph/wiki>`_
