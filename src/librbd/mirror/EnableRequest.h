@@ -27,21 +27,10 @@ public:
   static EnableRequest *create(ImageCtxT *image_ctx,
                                cls::rbd::MirrorImageMode mode,
                                const std::string &non_primary_global_image_id,
-                               bool image_clean,
-                               const std::string &group_snap_id,
-                               uint64_t *snap_id, Context *on_finish) {
-    return new EnableRequest(image_ctx->md_ctx, image_ctx->id, image_ctx, mode,
-                             non_primary_global_image_id, image_clean,
-                             image_ctx->op_work_queue, group_snap_id, snap_id,
-                             on_finish);
-  }
-  static EnableRequest *create(ImageCtxT *image_ctx,
-                               cls::rbd::MirrorImageMode mode,
-                               const std::string &non_primary_global_image_id,
                                bool image_clean, Context *on_finish) {
     return new EnableRequest(image_ctx->md_ctx, image_ctx->id, image_ctx, mode,
                              non_primary_global_image_id, image_clean,
-                             image_ctx->op_work_queue, {}, nullptr, on_finish);
+                             image_ctx->op_work_queue, on_finish);
   }
   static EnableRequest *create(librados::IoCtx &io_ctx,
                                const std::string &image_id,
@@ -51,7 +40,7 @@ public:
                                Context *on_finish) {
     return new EnableRequest(io_ctx, image_id, nullptr, mode,
                              non_primary_global_image_id, image_clean,
-                             op_work_queue, {}, nullptr, on_finish);
+                             op_work_queue, on_finish);
   }
 
   void send();
@@ -93,7 +82,6 @@ private:
                 ImageCtxT* image_ctx, cls::rbd::MirrorImageMode mode,
                 const std::string &non_primary_global_image_id,
                 bool image_clean, asio::ContextWQ *op_work_queue,
-                const std::string &group_snap_id, uint64_t *snap_id,
                 Context *on_finish);
 
   librados::IoCtx &m_io_ctx;
@@ -103,8 +91,6 @@ private:
   const std::string m_non_primary_global_image_id;
   const bool m_image_clean;
   asio::ContextWQ *m_op_work_queue;
-  const std::string m_group_snap_id;
-  uint64_t *m_snap_id;
   Context *m_on_finish;
 
   CephContext *m_cct = nullptr;
