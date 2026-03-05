@@ -9,8 +9,10 @@ import {
   ViewChild
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { Observable, Subject, Subscription } from 'rxjs';
-import { finalize } from 'rxjs/operators';
+import { Observable, Subject, Subscription, of } from 'rxjs';
+import { catchError, finalize, tap } from 'rxjs/operators';
+
+import _ from 'lodash';
 
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
@@ -26,9 +28,16 @@ import { Permission } from '~/app/shared/models/permissions';
 import { Host } from '~/app/shared/models/host.interface';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NvmeofGatewayNodeAddModalComponent } from './nvmeof-gateway-node-add-modal/nvmeof-gateway-node-add-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 
 @Component({
   selector: 'cd-nvmeof-gateway-node',
@@ -81,8 +90,11 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   constructor(
     private authStorageService: AuthStorageService,
     private nvmeofService: NvmeofService,
+    private cephServiceService: CephServiceService,
+    private modalService: ModalCdsService,
     private route: ActivatedRoute,
-    private modalService: ModalCdsService
+    private taskWrapper: TaskWrapperService,
+    private notificationService: NotificationService
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
   }
@@ -163,7 +175,45 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy {
   }
 
   removeGateway(): void {
-    // TODO
+    const hostname = this.selection.first().hostname;
+    this.modalService.show(DeleteConfirmationModalComponent, {
+      itemDescription: $localize`gateway node`,
+      itemNames: [hostname],
+      actionDescription: $localize`remove`,
+      hideDefaultWarning: true,
+      impact: DeletionImpact.high,
+      bodyContext: {
+        deletionMessage: $localize`Removing <strong>${hostname}</strong> will detach it from the gateway group and stop handling new I/O requests. Active connections may be disrupted.<br><br>You can re-add this node later if required.`
+      },
+      submitActionObservable: () => {
+        const updatedSpec = _.cloneDeep(this.serviceSpec);
+        updatedSpec.placement.hosts = updatedSpec.placement.hosts.filter((h) => h !== hostname);
+        delete updatedSpec.status;
+        if (updatedSpec['events']) {
+          delete updatedSpec['events'];
+        }
+        return this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('nvmeof/gateway-node/delete', {
+              hostname: hostname
+            }),
+            call: this.cephServiceService.update(updatedSpec)
+          })
+          .pipe(
+            tap(() => {
+              this.table.refreshBtn();
+            }),
+            catchError((error) => {
+              this.table.refreshBtn();
+              this.notificationService.show(
+                NotificationType.error,
+                $localize`Failed to remove gateway node ${hostname}. ${error.message}`
+              );
+              return of(null);
+            })
+          );
+      }
+    });
   }
 
   ngOnDestroy(): void {

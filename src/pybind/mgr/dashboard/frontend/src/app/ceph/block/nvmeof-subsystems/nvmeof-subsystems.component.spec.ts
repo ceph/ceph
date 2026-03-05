@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientModule } from '@angular/common/http';
 import { of } from 'rxjs';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -112,17 +112,19 @@ describe('NvmeofSubsystemsComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should retrieve subsystems', fakeAsync(() => {
-    component.getSubsystems();
-    tick();
+  it('should retrieve subsystems', (done) => {
     const expected = mockSubsystems.map((s) => ({
       ...s,
       gw_group: component.group,
       auth: 'No authentication',
       initiator_count: 0
     }));
-    expect(component.subsystems).toEqual(expected);
-  }));
+    component.subsystems$.subscribe((subsystems) => {
+      expect(subsystems).toEqual(expected);
+      done();
+    });
+    component.getSubsystems();
+  });
 
   it('should load gateway groups correctly', () => {
     expect(component.gwGroups.length).toBe(2);

@@ -61,12 +61,14 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() steps!: Array<Step>;
   @Input() description!: string;
   @Input() type: 'full' | 'wide' = 'wide';
+  @Input() size: 'xs' | 'sm' | 'md' | 'lg' = 'lg';
   @Input() submitButtonLabel: string = $localize`Create`;
   @Input() submitButtonLoadingLabel: string = $localize`Creating`;
   @Input() isSubmitLoading: boolean = true;
 
   @Output() submitRequested = new EventEmitter<void>();
   @Output() closeRequested = new EventEmitter<void>();
+  @Output() stepChanged = new EventEmitter<{ current: number }>();
 
   @ContentChildren(TearsheetStepComponent)
   stepContents!: QueryList<TearsheetStepComponent>;
@@ -81,6 +83,21 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
 
   get showRightInfluencer(): boolean {
     return this.stepContents?.toArray()[this.currentStep]?.showRightInfluencer;
+  }
+
+  getStepValue<T = any>(index: number): T | null {
+    const wrapper = this.stepContents?.toArray()?.[index];
+    return wrapper?.stepComponent?.formGroup?.value ?? null;
+  }
+
+  getStepIndexByLabel(label: string): number {
+    return this.steps?.findIndex((s) => s.label === label) ?? -1;
+  }
+
+  getStepValueByLabel<T = any>(label: string): T | null {
+    const idx = this.getStepIndexByLabel(label);
+    if (idx < 0) return null;
+    return this.getStepValue<T>(idx);
   }
 
   currentStep: number = 0;
@@ -108,6 +125,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onStepSelect(event: { step: Step; index: number }) {
     this.currentStep = event.index;
+    this.stepChanged.emit({ current: this.currentStep });
   }
 
   closeTearsheet() {
@@ -131,6 +149,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   onPrevious() {
     if (this.currentStep !== 0) {
       this.currentStep = this.currentStep - 1;
+      this.stepChanged.emit({ current: this.currentStep });
     }
   }
 
@@ -139,6 +158,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
     formEl?.dispatchEvent(new Event('submit', { bubbles: true }));
     if (this.currentStep !== this.lastStep && !this.steps[this.currentStep].invalid) {
       this.currentStep = this.currentStep + 1;
+      this.stepChanged.emit({ current: this.currentStep });
     }
   }
 
@@ -150,7 +170,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   handleSubmit() {
-    if (this.steps[this.currentStep].invalid) return;
+    if (this.steps.some((step) => step?.invalid)) return;
 
     const mergedPayloads = this.getMergedPayload();
 
@@ -174,19 +194,29 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    if (!this.stepContents?.length) return;
+    const setup = () => {
+      // keep lastStep in sync with steps input
+      this.lastStep = this.steps.length - 1;
 
-    this.stepContents.forEach((wrapper, index) => {
-      const form = wrapper.stepComponent?.formGroup;
-      if (!form) return;
+      // clamp currentStep so template lookup never goes out of range
+      if (this.currentStep > this.lastStep) {
+        this.currentStep = this.lastStep;
+      }
 
-      // initial state
-      this._updateStepInvalid(index, form.invalid);
+      // subscribe to each form statusChanges
+      this.stepContents.forEach((wrapper, index) => {
+        const form = wrapper.stepComponent?.formGroup;
+        if (!form) return;
 
-      form.statusChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
-        this._updateStepInvalid(index, form.invalid);
+        form.statusChanges
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe(() => this._updateStepInvalid(index, form.invalid));
       });
-    });
+    };
+
+    setup();
+
+    this.stepContents.changes.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => setup());
   }
 
   ngOnDestroy() {

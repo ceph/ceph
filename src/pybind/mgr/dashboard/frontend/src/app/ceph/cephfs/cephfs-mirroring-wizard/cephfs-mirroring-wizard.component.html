@@ -9,7 +9,7 @@
       <div>
         <div class="cds--type-heading-03"
              i18n>Choose mirror peer role</div>
-        <p i18n>Select how the cluster will participate in the CephFS Mirroring relationship.</p>
+        <p i18n>Select how the cluster will participate in the CephFS mirroring relationship.</p>
       </div>
 
       <div cdsStack="horizontal">
@@ -69,16 +69,19 @@
         dismissible="true"
         (dismissed)="showMessage = false">
         <div>
-          <div class="cds--type-heading-compact-01 cds-mb-2"
-               i18n>About Remote Peer Setup</div>
-          <div class="cds--type-body-compact-01 cds-mb-3"
-               i18n>
+          <div
+            class="cds--type-heading-compact-01 cds-mb-2"
+            i18n>About remote peer setup</div>
+          <div
+            class="cds--type-body-compact-01 cds-mb-3"
+            i18n>
             As a remote peer, this cluster prepares to receive mirrored data from an initiating
             cluster. The setup includes environment validation, enabling filesystem mirroring,
             creating required Ceph users, and generating a bootstrap token.
           </div>
-          <div class="cds--type-heading-compact-01 cds-mb-1 cds-mt-6"
-               i18n>What happens next:</div>
+          <div
+            class="cds--type-heading-compact-01 cds-mb-1 cds-mt-6"
+            i18n>What happens next:</div>
           <ul class="list-disc cds-ml-5 cds--type-body-compact-01">
             <li i18n>Environment validation</li>
             <li i18n>Ceph user creation</li>
@@ -93,19 +96,21 @@
 
   <!-- Step 1 -->
   <cd-tearsheet-step>
-    <cd-cephfs-filesystem-selector>
+    <cd-cephfs-filesystem-selector (filesystemSelected)="onFilesystemSelected($event)">
     </cd-cephfs-filesystem-selector>
   </cd-tearsheet-step>
 
   <!-- Step 2 -->
   <cd-tearsheet-step>
-    <div>Test 2</div>
+    <cd-cephfs-mirroring-entity [selectedFilesystem]="selectedFilesystem"
+                                (entitySelected)="onEntitySelected($event)">
+    </cd-cephfs-mirroring-entity>
   </cd-tearsheet-step>
 
   <!-- Step 3 -->
   <cd-tearsheet-step>
     <div>
-      <p>Test3</p>
+      Test 3
     </div>
   </cd-tearsheet-step>
 </cd-tearsheet>

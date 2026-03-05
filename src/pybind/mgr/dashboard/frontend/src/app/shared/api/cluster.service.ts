@@ -3,6 +3,8 @@ import { Injectable } from '@angular/core';
 
 import { Observable } from 'rxjs';
 
+import { CephClusterUser } from '~/app/shared/models/cluster.model';
+
 @Injectable({
   providedIn: 'root'
 })
@@ -23,5 +25,13 @@ export class ClusterService {
       { status: status },
       { headers: { Accept: 'application/vnd.ceph.api.v0.1+json' } }
     );
+  }
+
+  listUser(): Observable<CephClusterUser[]> {
+    return this.http.get<CephClusterUser[]>(`${this.baseURL}/user`);
+  }
+
+  createUser(payload: CephClusterUser) {
+    return this.http.post(`${this.baseURL}/user`, payload);
   }
 }

@@ -1066,7 +1066,7 @@ class RedmineUpkeep:
             if current_status_id != REDMINE_STATUS_ID_RESOLVED:
                 issue_update.logger.info("No backports defined. Setting status to 'Resolved'.")
 
-                if self.pull_request_id:
+                if self.pull_request_id and issue_update.issue.tracker.id != REDMINE_TRACKER_ID_BACKPORT:
                     comment_body = f"""
                         This is an automated message by src/script/redmine-upkeep.py.
 
@@ -1289,9 +1289,13 @@ h2. Update Payload
         issues = self.R.issue.filter(**filters)
 
         processed_issue_ids = set()
+        is_backport_pr = False
+
         if len(issues) > 0:
             log.info(f"Found {len(issues)} linked issue(s). Applying transformations.")
             for issue in issues:
+                if issue.tracker.id == REDMINE_TRACKER_ID_BACKPORT:
+                    is_backport_pr = True
                 self._process_issue_transformations(issue)
                 processed_issue_ids.add(issue.id)
             # Still, check commit logs.
@@ -1308,8 +1312,22 @@ h2. Update Payload
                 fixes_regex = re.compile(r"Fixes: https://tracker.ceph.com/issues/(\d+)", re.MULTILINE)
                 commit_fixes = set(fixes_regex.findall(commit.message))
                 for tracker_id in commit_fixes:
-                    log.info(f"Commit {commit.hexsha} claims to fix https://tracker.ceph.com/issues/{tracker_id}")
-                    found_tracker_ids.add(int(tracker_id))
+                    try:
+                        t_id = int(tracker_id)
+
+                        # If this is a backport PR, ignore "Fixes:" tags pointing to main trackers
+                        if is_backport_pr:
+                            referenced_issue = self.R.issue.get(t_id)
+                            if referenced_issue.tracker.id != REDMINE_TRACKER_ID_BACKPORT:
+                                log.info(f"Ignoring 'Fixes:' tag for main tracker #{t_id} in backport PR context.")
+                                continue
+
+                        log.info(f"Commit {commit.hexsha} claims to fix https://tracker.ceph.com/issues/{t_id}")
+                        found_tracker_ids.add(t_id)
+                    except Exception as e:
+                        log.warning(f"Could not verify tracker #{tracker_id}: {e}")
+                        # Fallback to adding it if verification fails just in case
+                        found_tracker_ids.add(int(tracker_id))
         except git.exc.GitCommandError as e:
             log.error(f"Git command failed for commit SHA '{merge_commit_sha}': {e}. Ensure the commit exists in the local repository.")
             return

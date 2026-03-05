@@ -518,6 +518,21 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_read_through_timeout_ms
+  type: int
+  level: advanced
+  desc: Maximum time in milliseconds for read-through GET requests to wait for cloud
+    object restore completion
+  long_desc: When a GET request is made for a cloud-tiered object that must be restored,
+    the request will wait up to this many milliseconds for the restore to complete.
+    If the restore completes within this time, the GET request succeeds and returns the
+    object data. If the time is exceeded, the request fails with ERR_REQUEST_TIMEOUT.
+    Set to 0 to fail immediately without waiting.
+  default: 10000
+  min: 0
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_restore_max_objs
   type: int
   level: advanced
@@ -920,6 +935,42 @@ options:
   - '1'
   - none
   with_legacy: true
+- name: rgw_keystone_scope_enabled
+  type: bool
+  level: advanced
+  desc: Enable logging of Keystone scope information in ops log
+  long_desc: When enabled, operations authenticated via Keystone will include scope
+    information (project, domain, roles) in the ops log. This is disabled by default
+    as it adds additional data to each log entry and most deployments do not require
+    this level of Keystone audit detail. User identity logging is controlled separately
+    by rgw_keystone_scope_include_user for privacy considerations. Requires
+    rgw_enable_ops_log to be enabled.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_scope_include_user
+  type: bool
+  level: advanced
+  desc: Include human-readable identity names in Keystone scope logs
+  long_desc: When false (default), only opaque IDs are logged for all identity fields
+    (project_id, domain_id, user_id, app_cred_id), which is GDPR-compliant and
+    privacy-friendly. When true, human-readable names (project_name, domain names,
+    user_name, app_cred_name) are included. Opaque IDs are always logged regardless
+    of this setting, allowing operators to correlate with Keystone without exposing
+    names in logs.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_scope_include_roles
+  type: bool
+  level: advanced
+  desc: Include role names in Keystone scope logs
+  default: true
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_cross_domain_policy
   type: str
   level: advanced
@@ -1314,8 +1365,8 @@ options:
 - name: rgw_nfs_run_quota_threads
   type: bool
   level: advanced
-  desc: run quota threads in librgw (default off)
-  default: false
+  desc: run quota threads in librgw (default on)
+  default: true
   services:
   - rgw
   with_legacy: true

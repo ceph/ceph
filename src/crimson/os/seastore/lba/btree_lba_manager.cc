@@ -222,7 +222,7 @@ BtreeLBAManager::resolve_indirect_cursor(
   ).si_then([&indirect_cursor](auto cursors) {
     ceph_assert(cursors.size() == 1);
     auto& direct_cursor = cursors.front();
-    auto intermediate_key = indirect_cursor.get_intermediate_key();
+    [[maybe_unused]] auto intermediate_key = indirect_cursor.get_intermediate_key();
     assert(!direct_cursor->is_indirect());
     assert(direct_cursor->get_laddr() <= intermediate_key);
     assert(direct_cursor->get_laddr() + direct_cursor->get_length()

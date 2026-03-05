@@ -34,6 +34,24 @@ enum GwLogLevel {
 	critical = 50;
 }
 
+enum EncryptionFormat {
+	none = 0;
+	luks1 = 1;
+	luks2 = 2;
+}
+
+enum EncryptionAlgorithm {
+	no_algorithm = 0;
+	aes128 = 1;
+	aes256 = 2;
+}
+
+enum DHCHAPControllerKeyOrigin {
+	no_key = 0;
+	host_specific = 1;
+	subsystem_implicit = 2;
+}
+
 service Gateway {
 	// Creates a namespace from an RBD image
 	rpc namespace_add(namespace_add_req) returns (nsid_status) {}
@@ -61,6 +79,9 @@ service Gateway {
 
 	// Gets namespace's IO stats
 	rpc namespace_get_io_stats(namespace_get_io_stats_req) returns (namespace_io_stats_info) {}
+
+	// List namespaces IO stats
+	rpc list_namespaces_io_stats(list_namespaces_io_stats_req) returns (list_namespaces_io_stats_info) {}
 
 	// Sets namespace's qos limits
 	rpc namespace_set_qos_limits(namespace_set_qos_req) returns (req_status) {}
@@ -103,6 +124,9 @@ service Gateway {
 
 	// List connections
 	rpc list_connections(list_connections_req) returns(connections_info) {}
+
+	// Gets connection's IO statistics
+	rpc get_connection_io_statistics(get_connection_io_statistics_req) returns (connection_io_statistics) {}
 
 	// Creates a listener for a subsystem at a given IP/Port
 	rpc create_listener(create_listener_req) returns(req_status) {}
@@ -148,6 +172,9 @@ service Gateway {
 
 	// Gets spdk thread stats
 	rpc get_thread_stats(get_thread_stats_req) returns (thread_stats_info) {}
+
+	// Set gateway IO stats on or off
+	rpc set_gateway_io_stats_mode(set_gateway_io_stats_mode_req) returns (req_status) {}
 }
 
 // Request messages
@@ -170,6 +197,8 @@ message namespace_add_req {
 	optional string rbd_data_pool_name = 15;
 	optional string location = 16;
 	optional string rados_namespace_name = 17;
+	repeated encryption_entry encryption_entries = 18;
+	optional EncryptionAlgorithm encryption_algorithm = 19;
 }
 
 message namespace_resize_req {
@@ -183,6 +212,11 @@ message namespace_get_io_stats_req {
 	string subsystem_nqn = 1;
 	uint32 nsid = 2;
 	optional string OBSOLETE_uuid = 3;
+}
+
+message list_namespaces_io_stats_req {
+	optional string subsystem_nqn = 1;
+	optional uint32 nsid = 2;
 }
 
 message namespace_set_qos_req {
@@ -306,9 +340,16 @@ message change_host_key_req {
 	optional string dhchap_ctrlr_key = 4;
 }
 
+message get_connection_io_statistics_req {
+	string subsystem_nqn = 1;
+	string host_nqn = 2;
+	optional bool reset = 3;
+}
+
 message remove_host_req {
 	string subsystem_nqn = 1;
 	string host_nqn = 2;
+	optional bool force = 3;
 }
 
 message list_hosts_req {
@@ -385,6 +426,10 @@ message get_gateway_stats_req {
 }
 
 message get_thread_stats_req {
+}
+
+message set_gateway_io_stats_mode_req {
+	bool enabled = 1;
 }
 
 // From https://nvmexpress.org/wp-content/uploads/NVM-Express-1_4-2019.06.10-Ratified.pdf page 138
@@ -519,6 +564,7 @@ message gateway_info {
 	optional uint32 max_namespaces_per_subsystem = 16;
 	optional uint32 max_hosts = 17;
 	optional bool gateway_initialization_over = 18;
+	optional bool io_stats_enabled = 19;
 }
 
 message cli_version {
@@ -558,7 +604,7 @@ message gateway_stats_info {
 message thread_stats_info {
 	int32 status = 1;
 	string error_message = 2;
-    repeated spdk_thread_info threads = 3;
+	repeated spdk_thread_info threads = 3;
 	uint64 tick_rate = 4;
 }
 
@@ -601,6 +647,36 @@ message host {
 	optional bool use_psk = 2;
 	optional bool use_dhchap = 3;
 	optional bool disconnected_due_to_keepalive_timeout = 4;
+	optional DHCHAPControllerKeyOrigin dhchap_controller_origin = 5;
+}
+
+message latency_stats {
+	uint64 min = 1;
+	uint64 max = 2;
+	uint64 mean = 3;
+}
+
+message latency_group {
+	uint64 io_count = 1;
+	latency_stats total = 2;
+	latency_stats bdev = 3;
+	latency_stats net = 4;
+	latency_stats qos = 5;
+}
+
+message bucket_info {
+	uint32 size = 1;
+	latency_group read = 2;
+	latency_group write = 3;
+}
+
+message connection_io_statistics {
+	int32 status = 1;
+	string error_message = 2;
+	string subsystem_nqn = 3;
+	string host_nqn = 4;
+	optional uint64 total_num_ios = 5;
+	repeated bucket_info buckets = 6;
 }
 
 message hosts_info {
@@ -625,6 +701,7 @@ message connection {
 	optional bool use_dhchap = 11;
 	optional string subsystem = 12;
 	optional bool disconnected_due_to_keepalive_timeout = 13;
+	optional DHCHAPControllerKeyOrigin dhchap_controller_origin = 14;
 }
 
 message connections_info {
@@ -659,6 +736,8 @@ message namespace_cli {
 	optional string rbd_data_pool_name = 22;
 	optional string location = 23;
 	optional string rados_namespace_name = 24;
+	optional EncryptionAlgorithm encryption_algorithm = 25;
+	repeated encryption_entry encryption_entries = 26;
 }
 
 message namespaces_info {
@@ -671,6 +750,39 @@ message namespaces_info {
 message namespace_io_error {
 	string name = 1;
 	uint32 value = 2;
+}
+
+message list_namespaces_io_stats_info {
+	int32 status = 1;
+	string error_message = 2;
+	uint64 tick_rate = 3;
+	uint64 ticks = 4;
+	repeated bdev_io_stats_info namespaces = 5;
+}
+
+message bdev_io_stats_info {
+	string bdev_name = 1;
+	uint64 bytes_read = 2;
+	uint64 num_read_ops = 3;
+	uint64 bytes_written = 4;
+	uint64 num_write_ops = 5;
+	uint64 bytes_unmapped = 6;
+	uint64 num_unmap_ops = 7;
+	uint64 bytes_copied = 8;
+	uint64 num_copy_ops = 9;
+	uint64 read_latency_ticks = 10;
+	uint64 max_read_latency_ticks = 11;
+	uint64 min_read_latency_ticks = 12;
+	uint64 write_latency_ticks = 13;
+	uint64 max_write_latency_ticks = 14;
+	uint64 min_write_latency_ticks = 15;
+	uint64 unmap_latency_ticks = 16;
+	uint64 max_unmap_latency_ticks = 17;
+	uint64 min_unmap_latency_ticks = 18;
+	uint64 copy_latency_ticks = 19;
+	uint64 max_copy_latency_ticks = 20;
+	uint64 min_copy_latency_ticks = 21;
+	repeated namespace_io_error io_error = 22;
 }
 
 message namespace_io_stats_info {
@@ -720,4 +832,9 @@ message gateway_log_level_info {
 	int32 status = 1;
 	string error_message = 2;
 	GwLogLevel log_level = 3;
+}
+
+message encryption_entry {
+	EncryptionFormat format = 1;
+	string key_id = 2;
 }

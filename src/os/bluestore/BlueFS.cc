@@ -16,6 +16,7 @@
 #include "Allocator.h"
 #include "include/buffer_fwd.h"
 #include "include/ceph_assert.h"
+#include "include/stringify.h"
 #include "common/admin_socket.h"
 #include "os/bluestore/bluefs_types.h"
 
@@ -1117,6 +1118,9 @@ int BlueFS::mount()
     _stop_alloc();
     goto out;
   }
+  if (cct->_conf->bluefs_check_volume_selector_on_mount) {
+    _check_vselector_LNF();
+  }
 
   conf_wal_envelope_mode = cct->_conf.get_val<bool>("bluefs_wal_envelope_mode");
   log.uses_envelope_mode = conf_wal_envelope_mode;
@@ -1201,7 +1205,7 @@ void BlueFS::umount(bool avoid_compact)
   dout(1) << __func__ << dendl;
 
   sync_metadata(avoid_compact);
-  if (cct->_conf->bluefs_check_volume_selector_on_umount) {
+  if (cct->_conf->bluefs_check_volume_selector_on_mount) {
     _check_vselector_LNF();
   }
   _close_writer(log.writer);
@@ -2544,7 +2548,10 @@ void BlueFS::_envmode_index_file(
   }
   file->envelopes_indexed = true;
   file->fnode.content_size = env_ofs;
+  // we need to update volume selector as file gets updated size at this point
+  vselector->sub_usage(file->vselector_hint, file->fnode);
   file->fnode.size = scan_ofs;
+  vselector->add_usage(file->vselector_hint, file->fnode);
   delete h;
 }
 
@@ -5394,3 +5401,190 @@ void OriginalVolumeSelector::dump(ostream& sout) {
 void FitToFastVolumeSelector::get_paths(const std::string& base, paths& res) const {
   res.emplace_back(base, 1);  // size of the last db_path has no effect
 }
+
+uint8_t RocksDBBlueFSVolumeSelector::select_prefer_bdev(void* h) {
+  ceph_assert(h != nullptr);
+  uint64_t hint = reinterpret_cast<uint64_t>(h);
+  uint8_t res;
+  switch (hint) {
+  case LEVEL_SLOW:
+    res = BlueFS::BDEV_SLOW;
+    if (db_avail4slow > 0) {
+      // considering statically available db space vs.
+      // - observed maximums on DB dev for DB/WAL/UNSORTED data
+      // - observed maximum spillovers
+      uint64_t max_db_use = 0; // max db usage we potentially observed
+      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_LOG - LEVEL_FIRST);
+      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_WAL - LEVEL_FIRST);
+      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_DB - LEVEL_FIRST);
+      // this could go to db hence using it in the estimation
+      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_SLOW, LEVEL_DB - LEVEL_FIRST);
+
+      auto db_total = l_totals[LEVEL_DB - LEVEL_FIRST];
+      uint64_t avail = std::min(
+	db_avail4slow,
+	max_db_use < db_total ? db_total - max_db_use : 0);
+
+      // considering current DB dev usage for SLOW data
+      if (avail > per_level_per_dev_usage.at(BlueFS::BDEV_DB, LEVEL_SLOW - LEVEL_FIRST)) {
+	res = BlueFS::BDEV_DB;
+      }
+    }
+    break;
+  case LEVEL_LOG:
+  case LEVEL_WAL:
+    res = BlueFS::BDEV_WAL;
+    break;
+  case LEVEL_DB:
+  default:
+    res = BlueFS::BDEV_DB;
+    break;
+  }
+  return res;
+}
+
+void RocksDBBlueFSVolumeSelector::get_paths(const std::string& base, paths& res) const
+{
+  auto db_size = l_totals[LEVEL_DB - LEVEL_FIRST];
+  res.emplace_back(base, db_size);
+  auto slow_size = l_totals[LEVEL_SLOW - LEVEL_FIRST];
+  if (slow_size == 0) {
+    slow_size = db_size;
+  }
+  res.emplace_back(base + ".slow", slow_size);
+}
+
+void* RocksDBBlueFSVolumeSelector::get_hint_by_dir(std::string_view dirname) const {
+  uint8_t res = LEVEL_DB;
+  if (dirname.length() > 5) {
+    // the "db.slow" and "db.wal" directory names are hard-coded at
+    // match up with bluestore.  the slow device is always the second
+    // one (when a dedicated block.db device is present and used at
+    // bdev 0).  the wal device is always last.
+    if (boost::algorithm::ends_with(dirname, ".slow")) {
+      res = LEVEL_SLOW;
+    }
+    else if (boost::algorithm::ends_with(dirname, ".wal")) {
+      res = LEVEL_WAL;
+    }
+  }
+  return reinterpret_cast<void*>(res);
+}
+
+void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
+  auto max_x = per_level_per_dev_usage.get_max_x();
+  auto max_y = per_level_per_dev_usage.get_max_y();
+
+  sout << "RocksDBBlueFSVolumeSelector " << std::endl;
+  sout << ">>Settings<<"
+    << " extra=" << byte_u_t(db_avail4slow)
+    << ", extra level=" << extra_level
+    << ", l0_size=" << byte_u_t(level0_size)
+    << ", l_base=" << byte_u_t(level_base)
+    << ", l_multi=" << byte_u_t(level_multiplier)
+    << std::endl;
+  constexpr std::array<const char*, 8> names{ {
+    "LEV/DEV",
+    "WAL",
+    "DB",
+    "SLOW",
+    "*",
+    "*",
+    "REAL",
+    "FILES",
+  } };
+  const size_t width = 12;
+  for (size_t i = 0; i < names.size(); ++i) {
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    sout << names[i];
+  }
+  sout << std::endl;
+  for (size_t l = 0; l < max_y; l++) {
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    switch (l + LEVEL_FIRST) {
+    case LEVEL_LOG:
+      sout << "log"; break;
+    case LEVEL_WAL:
+      sout << "db.wal"; break;
+    case LEVEL_DB:
+      sout << "db"; break;
+    case LEVEL_SLOW:
+      sout << "db.slow"; break;
+    case LEVEL_MAX:
+      sout << "TOTAL"; break;
+    }
+    for (size_t d = 0; d < max_x; d++) {
+      sout.setf(std::ios::left, std::ios::adjustfield);
+      sout.width(width);
+      sout << stringify(byte_u_t(per_level_per_dev_usage.at(d, l)));
+    }
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    sout << stringify(per_level_files[l]) << std::endl;
+  }
+  ceph_assert(max_x == per_level_per_dev_max.get_max_x());
+  ceph_assert(max_y == per_level_per_dev_max.get_max_y());
+  sout << "MAXIMUMS:" << std::endl;
+  for (size_t l = 0; l < max_y; l++) {
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    switch (l + LEVEL_FIRST) {
+    case LEVEL_LOG:
+      sout << "log"; break;
+    case LEVEL_WAL:
+      sout << "db.wal"; break;
+    case LEVEL_DB:
+      sout << "db"; break;
+    case LEVEL_SLOW:
+      sout << "db.slow"; break;
+    case LEVEL_MAX:
+      sout << "TOTAL"; break;
+    }
+    for (size_t d = 0; d < max_x - 1; d++) {
+      sout.setf(std::ios::left, std::ios::adjustfield);
+      sout.width(width);
+      sout << stringify(byte_u_t(per_level_per_dev_max.at(d, l)));
+    }
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    sout << stringify(byte_u_t(per_level_per_dev_max.at(max_x - 1, l)));
+    sout << std::endl;
+  }
+  string sizes[] = {
+    ">> SIZE <<",
+    stringify(byte_u_t(l_totals[LEVEL_WAL - LEVEL_FIRST])),
+    stringify(byte_u_t(l_totals[LEVEL_DB - LEVEL_FIRST])),
+    stringify(byte_u_t(l_totals[LEVEL_SLOW - LEVEL_FIRST])),
+  };
+  for (size_t i = 0; i < (sizeof(sizes) / sizeof(sizes[0])); i++) {
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    sout << sizes[i];
+  }
+  sout << std::endl;
+}
+
+BlueFSVolumeSelector* RocksDBBlueFSVolumeSelector::clone_empty() const {
+  RocksDBBlueFSVolumeSelector* ns =
+    new RocksDBBlueFSVolumeSelector(0, 0, 0, 0, 0, 0, false);
+  return ns;
+}
+
+bool RocksDBBlueFSVolumeSelector::compare(BlueFSVolumeSelector* other) {
+  RocksDBBlueFSVolumeSelector* o = dynamic_cast<RocksDBBlueFSVolumeSelector*>(other);
+  ceph_assert(o);
+  bool equal = true;
+  for (size_t x = 0; x < BlueFS::MAX_BDEV + 1; x++) {
+    for (size_t y = 0; y < LEVEL_MAX - LEVEL_FIRST + 1; y++) {
+      equal &= (per_level_per_dev_usage.at(x, y) == o->per_level_per_dev_usage.at(x, y));
+    }
+  }
+  for (size_t t = 0; t < LEVEL_MAX - LEVEL_FIRST + 1; t++) {
+    equal &= (per_level_files[t] == o->per_level_files[t]);
+  }
+  return equal;
+}
+
+// =======================================================

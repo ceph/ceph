@@ -69,3 +69,20 @@
     </form>
   </ng-container>
 </cd-modal>
+<cd-tearsheet
+  [steps]="steps"
+  [title]="title"
+  [description]="description"
+  (submitRequested)="onSubmit($event)"
+  [isSubmitLoading]="isSubmitLoading"
+  submitButtonLabel="Add"
+  i18n-submitButtonLabel>
+
+  <cd-tearsheet-step>
+    <cd-nvmeof-subsystem-step-two
+      #tearsheetStep
+               modal-primary-focus
+      [group]="group"
+      [existingHosts]="existingHosts"></cd-nvmeof-subsystem-step-two>
+  </cd-tearsheet-step>
+</cd-tearsheet>

@@ -1,16 +1,9 @@
-try:
-    import cherrypy
-    from cherrypy._cpserver import Server
-except ImportError:
-    # to avoid sphinx build crash
-    class Server:  # type: ignore
-        pass
-
+import cherrypy
 import logging
 
 import orchestrator  # noqa
 from mgr_util import build_url
-from typing import Dict, List, TYPE_CHECKING, cast, Collection, Callable, NamedTuple, Optional, IO
+from typing import Dict, List, TYPE_CHECKING, cast, Collection, Callable, NamedTuple, Optional, IO, Tuple
 from cephadm.services.nfs import NFSService
 from cephadm.services.ingress import IngressService
 from cephadm.services.monitoring import AlertmanagerService, NodeExporterService, PrometheusService
@@ -28,16 +21,6 @@ if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
 
 
-def cherrypy_filter(record: logging.LogRecord) -> bool:
-    blocked = [
-        'TLSV1_ALERT_DECRYPT_ERROR'
-    ]
-    msg = record.getMessage()
-    return not any([m for m in blocked if m in msg])
-
-
-logging.getLogger('cherrypy.error').addFilter(cherrypy_filter)
-cherrypy.log.access_log.propagate = False
 logger = logging.getLogger(__name__)
 
 
@@ -62,27 +45,32 @@ class ServiceDiscovery:
     def validate_password(self, realm: str, username: str, password: str) -> bool:
         return (password == self.password and username == self.username)
 
-    def configure_routes(self, server: Server, enable_auth: bool) -> None:
+    def get_cherrypy_config(self, enable_auth: bool) -> Dict:
+        config = {
+            '/': {
+                'environment': 'production',
+                'tools.gzip.on': True,
+                'engine.autoreload.on': False,
+            }
+        }
+        if enable_auth:
+            config['/'].update({
+                'tools.auth_basic.on': True,
+                'tools.auth_basic.realm': 'localhost',
+                'tools.auth_basic.checkpassword': self.validate_password,
+            })
+        return config
+
+    def configure_routes(self, root: 'Root') -> cherrypy.dispatch.RoutesDispatcher:
         ROUTES = [
-            Route('index', '/', server.index),
-            Route('sd-config', '/prometheus/sd-config', server.get_sd_config),
-            Route('rules', '/prometheus/rules', server.get_prometheus_rules),
+            Route('index', '/', root.index),
+            Route('sd-config', '/prometheus/sd-config', root.get_sd_config),
+            Route('rules', '/prometheus/rules', root.get_prometheus_rules),
         ]
         d = cherrypy.dispatch.RoutesDispatcher()
         for route in ROUTES:
             d.connect(**route._asdict())
-        if enable_auth:
-            conf = {
-                '/': {
-                    'request.dispatch': d,
-                    'tools.auth_basic.on': True,
-                    'tools.auth_basic.realm': 'localhost',
-                    'tools.auth_basic.checkpassword': self.validate_password
-                }
-            }
-        else:
-            conf = {'/': {'request.dispatch': d}}
-        cherrypy.tree.mount(None, '/sd', config=conf)
+        return d
 
     def enable_auth(self) -> None:
         self.username = self.mgr.get_store('service_discovery/root/username')
@@ -93,7 +81,7 @@ class ServiceDiscovery:
             self.mgr.set_store('service_discovery/root/password', self.password)
             self.mgr.set_store('service_discovery/root/username', self.username)
 
-    def configure_tls(self, server: Server) -> None:
+    def configure_tls(self) -> Dict[str, str]:
         addr = self.mgr.get_mgr_ip()
         host = self.mgr.get_hostname()
         tls_pair = self.mgr.cert_mgr.generate_cert(host, addr, duration_in_days=CEPHADM_SVC_DISCOVERY_CERT_DURATION)
@@ -106,40 +94,33 @@ class ServiceDiscovery:
         self.key_file.flush()  # pkey_tmp must not be gc'ed
 
         verify_tls_files(self.cert_file.name, self.key_file.name)
+        return {
+            'cert': self.cert_file.name,
+            'key': self.key_file.name,
+        }
 
-        server.ssl_certificate, server.ssl_private_key = self.cert_file.name, self.key_file.name
-
-    def configure(self, port: int, addr: str, enable_security: bool) -> None:
+    def configure(self, port: int, addr: str, enable_security: bool) -> Tuple[Dict, Optional[Dict[str, str]]]:
         # we create a new server to enforce TLS/SSL config refresh
-        self.root_server = Root(self.mgr, port, addr)
-        self.root_server.ssl_certificate = None
-        self.root_server.ssl_private_key = None
+        self.root_server = Root(self.mgr)
+        ssl_info = None
         if enable_security:
             self.enable_auth()
-            self.configure_tls(self.root_server)
-        self.configure_routes(self.root_server, enable_security)
+            ssl_info = self.configure_tls()
+        config = self.get_cherrypy_config(enable_security)
+        dispatcher = self.configure_routes(self.root_server)
+        config['/'].update({'request.dispatch': dispatcher})
+        return config, ssl_info
 
 
-class Root(Server):
+class Root:
 
     # collapse everything to '/'
     def _cp_dispatch(self, vpath: str) -> 'Root':
         cherrypy.request.path = ''
         return self
 
-    def stop(self) -> None:
-        # we must call unsubscribe before stopping the server,
-        # otherwise the port is not released and we will get
-        # an exception when trying to restart it
-        self.unsubscribe()
-        super().stop()
-
-    def __init__(self, mgr: "CephadmOrchestrator", port: int = 0, host: str = ''):
+    def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr = mgr
-        super().__init__()
-        self.socket_port = port
-        self.socket_host = host
-        self.subscribe()
 
     @cherrypy.expose
     def index(self) -> str:

@@ -41,8 +41,8 @@ def verify_search(bucket_name, src_keys, result_keys, f):
             check_keys.append(k)
     check_keys.sort(key = lambda l: (l.bucket.name, l.name, l.version_id))
 
-    log.debug('check keys:' + dump_json(check_keys))
-    log.debug('result keys:' + dump_json(result_keys))
+    log.debug('check keys:' + json.dumps(check_keys, indent=4))
+    log.debug('result keys:' + json.dumps(result_keys, indent=4))
 
     for k1, k2 in zip_longest(check_keys, result_keys):
         assert k1

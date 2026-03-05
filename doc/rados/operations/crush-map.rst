@@ -46,7 +46,7 @@ CRUSH Location
 The location of an OSD within the CRUSH map's hierarchy is referred to as its
 ``CRUSH location``. The specification of a CRUSH location takes the form of a
 list of key-value pairs. For example, if an OSD is in a particular row, rack,
-chassis, and host, and is also part of the 'default' CRUSH root (which is the
+chassis, and host, and is also part of the `default` CRUSH root (which is the
 case for most clusters), its CRUSH location can be specified as follows::
 
   root=default row=a rack=a2 chassis=a2a host=a2a1
@@ -76,7 +76,7 @@ section::
 Note that this action is unnecessary in most cases.
 
 If the ``crush_location`` is not set explicitly,
-a default of ``root=default host=HOSTNAME`` is used for ``OSD``s,
+a default of ``root=default host=HOSTNAME`` is used for OSDs,
 where the hostname is determined by the output of the ``hostname -s`` command.
 
 .. note:: If you switch from this default to an explicitly set ``crush_location``,

@@ -54,7 +54,8 @@
             }
             </p>
             <ng-template #labelTemplate>
-              <span i18n>Type <strong>{{ itemNames[0] }}</strong> to confirm (required)</span>
+              <span i18n
+                    class="cds--type-label-01">Type <strong>{{ itemNames[0] }}</strong> to confirm (required)</span>
             </ng-template>
             <cds-text-label [labelTemplate]="labelTemplate"
                             labelInputID="resource_name"
@@ -104,7 +105,7 @@
   <h2 class="cds--type-heading-03"
       cdsModalHeaderHeading
       i18n>
-    Confirm delete
+    Confirm {{ actionDescription }}
   </h2>
   } @else {
   <h3 cdsModalHeaderHeading

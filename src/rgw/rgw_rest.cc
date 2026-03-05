@@ -871,6 +871,8 @@ int RESTArgs::get_string(req_state *s, const string& name,
     return 0;
   }
 
+  constexpr bool in_query = true; // url-decode query params
+  *val = url_decode(*val, in_query);
   return 0;
 }
 

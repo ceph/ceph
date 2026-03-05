@@ -16,6 +16,16 @@ export enum CephCertificateStatus {
   invalid = 'invalid'
 }
 
+export const CERTIFICATE_STATUS_ICON_MAP: Record<string, string> = {
+  valid: 'success',
+  expiring: 'warning',
+  expiring_soon: 'warning',
+  expired: 'danger',
+  not_configured: 'warning',
+  invalid: 'danger',
+  default: 'warning'
+};
+
 export interface CephServiceCertificate {
   cert_name: string;
   scope: string;
@@ -71,6 +81,7 @@ export interface CephServiceAdditionalSpec {
   ssl_certificate_key: string;
   ssl_protocols: string[];
   ssl_ciphers: string[];
+  certificate_source: string;
   port: number;
   initial_admin_password: string;
   rgw_realm: string;

@@ -87,6 +87,9 @@ export enum Icons {
   userAccessLocked = 'user--access-locked', // User access locked
   chevronDown = 'chevron--down',
   connect = 'connect',
+  checkmarkOutline = 'checkmark--outline',
+  circleDash = 'circle-dash',
+  datastore = 'datastore',
   /* Icons for special effect */
   size16 = '16',
   size20 = '20',
@@ -105,7 +108,21 @@ export enum Icons {
   error = 'error--filled',
   notificationOff = 'notification--off',
   notificationNew = 'notification--new',
-  emptySearch = 'search'
+  emptySearch = 'search',
+  dataViewAlt = 'data--view--alt',
+  dataCenter = 'data--center',
+  upgrade = 'upgrade',
+  warningAltFilled = 'warning--alt--filled',
+  help = 'help',
+  incidentReporter = 'incident-reporter',
+  ibmStreamSets = 'ibm--streamsets',
+  dataEnrichment = 'data-enrichment',
+  network1 = 'network--1',
+  chip = 'chip',
+  plug = 'plug',
+  vmdkDisk = 'vmdk-disk',
+  checkMarkOutline = 'checkmark--outline',
+  warningAlt = 'warning--alt'
 }
 
 export enum IconSize {
@@ -129,5 +146,19 @@ export const ICON_TYPE = {
   success: 'success',
   warning: 'warning',
   add: 'add',
-  emptySearch: 'emptySearch'
+  emptySearch: 'emptySearch',
+  dataViewAlt: 'data--view--alt',
+  dataCenter: 'data--center',
+  upgrade: 'upgrade',
+  warningAltFilled: 'warning--alt--filled',
+  help: 'help',
+  incidentReporter: 'incident-reporter',
+  ibmStreamSets: 'ibm--streamsets',
+  dataEnrichment: 'data-enrichment',
+  network1: 'network--1',
+  chip: 'chip',
+  plug: 'plug',
+  vmdkDisk: 'vmdk-disk',
+  warningAlt: 'warning--alt',
+  checkMarkOutline: 'checkmark--outline'
 } as const;

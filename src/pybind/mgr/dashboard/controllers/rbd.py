@@ -163,11 +163,11 @@ class Rbd(RESTController):
     def set(self, image_spec, name=None, size=None, features=None,
             configuration=None, metadata=None, enable_mirror=None, primary=None,
             force=False, resync=False, mirror_mode=None, image_mirror_mode=None,
-            schedule_interval='', remove_scheduling=False):
+            schedule_interval='', remove_scheduling=False, schedule_level=None):
         return RbdService.set(image_spec, name, size, features,
                               configuration, metadata, enable_mirror, primary,
                               force, resync, mirror_mode, image_mirror_mode,
-                              schedule_interval, remove_scheduling)
+                              schedule_interval, remove_scheduling, schedule_level)
 
     @RbdTask('copy',
              {'src_image_spec': '{image_spec}',

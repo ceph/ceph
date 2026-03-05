@@ -63,10 +63,12 @@ set(librgw_common_srcs
   rgw_formats.cc
   rgw_http_client.cc
   rgw_keystone.cc
+  rgw_keystone_scope.cc
   rgw_ldap.cc
   rgw_lc.cc
   rgw_lc_s3.cc
   rgw_restore.cc
+  rgw_restore_waiter.cc
   rgw_metadata.cc
   rgw_multi.cc
   rgw_multi_del.cc
@@ -311,6 +313,7 @@ target_link_libraries(rgw_common
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     Boost::context
+    Boost::url
     ${FMT_LIB}
     OpenSSL::SSL
     BLAKE3::blake3)

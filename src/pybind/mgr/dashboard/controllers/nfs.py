@@ -132,10 +132,6 @@ class NFSGaneshaExports(RESTController):
     @RESTController.MethodMap(version=APIVersion(2, 0))  # type: ignore
     def create(self, path, cluster_id, pseudo, access_type,
                squash, security_label, protocols, transports, fsal, clients) -> Dict[str, Any]:
-        export_mgr = mgr.remote('nfs', 'fetch_nfs_export_obj')
-        if export_mgr.get_export_by_pseudo(cluster_id, pseudo):
-            raise DashboardException(msg=f'Pseudo {pseudo} is already in use.',
-                                     component='nfs')
         if hasattr(fsal, 'user_id'):
             fsal.pop('user_id')  # mgr/nfs does not let you customize user_id
         raw_ex = {
@@ -150,11 +146,13 @@ class NFSGaneshaExports(RESTController):
             'fsal': fsal,
             'clients': clients
         }
-        applied_exports = export_mgr.apply_export(cluster_id, json.dumps(raw_ex))
-        if not applied_exports.has_error:
-            return self._get_schema_export(
-                export_mgr.get_export_by_pseudo(cluster_id, pseudo))
-        raise NFSException(f"Export creation failed {applied_exports.changes[0].msg}")
+        result = mgr.remote('nfs', 'export_apply', cluster_id, json.dumps(raw_ex))
+        if result.has_error:
+            raise NFSException(
+                result.mgr_status_value() or 'Failed to create export'
+            )
+
+        return self._get_schema_export(raw_ex)
 
     @EndpointDoc("Get an NFS-Ganesha export",
                  parameters={
@@ -197,16 +195,17 @@ class NFSGaneshaExports(RESTController):
         }
 
         existing_export = mgr.remote('nfs', 'export_get', cluster_id, export_id)
-        export_mgr = mgr.remote('nfs', 'fetch_nfs_export_obj')
         if existing_export and raw_ex:
             ss_export_fsal = existing_export.get('fsal', {})
             for key, value in ss_export_fsal.items():
                 raw_ex['fsal'][key] = value
-        applied_exports = export_mgr.apply_export(cluster_id, json.dumps(raw_ex))
-        if not applied_exports.has_error:
-            return self._get_schema_export(
-                export_mgr.get_export_by_pseudo(cluster_id, pseudo))
-        raise NFSException(f"Export creation failed {applied_exports.changes[0].msg}")
+
+        result = mgr.remote('nfs', 'export_apply', cluster_id, json.dumps(raw_ex))
+        if result.has_error:
+            raise NFSException(
+                result.mgr_status_value() or 'Failed to update export'
+            )
+        return self._get_schema_export(raw_ex)
 
     @NfsTask('delete', {'cluster_id': '{cluster_id}',
                         'export_id': '{export_id}'}, 2.0)

@@ -169,6 +169,10 @@ class TestLuaManager : public rgw::sal::StoreLuaManager {
       script = lua_script;
       return 0;
     }
+    std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override {
+      std::this_thread::sleep_for(std::chrono::seconds(read_time));
+      return std::make_tuple(lua_script, 0);
+    }
     int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override {
       return 0;
     }
@@ -1674,3 +1678,53 @@ TEST(TestRGWLua, NestedLoop)
   ASSERT_EQ(rc, 0);
 }
 
+TEST(TestRGWLua, ReturnError)
+{
+  const std::string script = R"(
+  return RGW_ABORT_REQUEST
+  )";
+  int return_code = 0;
+  DEFINE_REQ_STATE;
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script, return_code);
+  EXPECT_EQ(rc, 0);
+  EXPECT_EQ(return_code, -EPERM);
+}
+
+TEST(TestRGWLua, ReturnString)
+{
+  const std::string script = R"(
+  return "NoSuchBucket"
+  )";
+
+  int return_code = 0;
+  DEFINE_REQ_STATE;
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script, return_code);
+  ASSERT_EQ(rc, 0);
+  EXPECT_NE(return_code, -EPERM);
+}
+
+TEST(TestRGWLua, SuccessNoReturn)
+{
+  const std::string script = R"(
+  -- do nothing and return nothing
+  )";
+
+  int return_code = 0;
+  DEFINE_REQ_STATE;
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script, return_code);
+  ASSERT_EQ(rc, 0);
+  EXPECT_NE(return_code, -EPERM);
+}
+
+TEST(TestRGWLua, NotValidLua)
+{
+  const std::string script = R"(
+  this is not valid lua code
+  )";
+
+  int return_code = 0;
+  DEFINE_REQ_STATE;
+  const auto rc = lua::request::execute(nullptr, nullptr, &s, nullptr, script, return_code);
+  ASSERT_EQ(rc, -1);
+  EXPECT_NE(return_code, -EPERM);
+}

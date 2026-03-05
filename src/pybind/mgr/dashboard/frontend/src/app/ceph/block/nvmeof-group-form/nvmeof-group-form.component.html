@@ -89,6 +89,38 @@
         </div>
       </div>
 
+      <!-- CDS Checkbox -->
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-checkbox id="enableCds"
+                        formControlName="enableEncryption"
+                        i18n>Enable encryption
+          </cds-checkbox>
+        </div>
+      </div>
+
+      <!-- CDS Input (shown when checkbox is checked) -->
+      @if (groupForm.controls.enableEncryption.value) {
+      <div cdsRow
+           class="form-item">
+        <div cdsCol>
+          <cds-textarea-label
+            labelInputID="cdsInput"
+            helperText="Provide the encryption configuration details."
+            i18n
+            i18n-helperText>Encryption configuration
+            <textarea cdsTextArea
+                      id="cdsInput"
+                      formControlName="encryptionConfig"
+                      cols="100"
+                      rows="4">
+            </textarea>
+          </cds-textarea-label>
+        </div>
+      </div>
+      }
+
       <!-- Target Nodes Selection -->
       <div
         cdsRow

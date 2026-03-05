@@ -245,12 +245,18 @@ endif()
 
 option(WITH_BLUESTORE "Bluestore OSD backend" ON)
 if(WITH_BLUESTORE)
+  if(FREEBSD)
+    # POSIX AIO is integrated into FreeBSD kernel, and exposed by libc.
+    set(HAVE_POSIXAIO ON)
+  endif()
+endif()
+
+option(WITH_CRIMSON "Build Crimson components" OFF)
+
+if(WITH_BLUESTORE OR WITH_CRIMSON)
   if(LINUX)
     find_package(aio)
     set(HAVE_LIBAIO ${AIO_FOUND})
-  elseif(FREEBSD)
-    # POSIX AIO is integrated into FreeBSD kernel, and exposed by libc.
-    set(HAVE_POSIXAIO ON)
   endif()
 endif()
 
@@ -268,12 +274,12 @@ endif()
 
 include(CMakeDependentOption)
 
-CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Enable io_uring bluestore backend" ON
-  "WITH_BLUESTORE;HAVE_LIBAIO" OFF)
+CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Enable io_uring for bluestore backend or crimson" ON
+  "HAVE_LIBAIO" OFF)
 set(HAVE_LIBURING ${WITH_LIBURING})
 
 CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_LIBURING "Require and build with system liburing" OFF
-  "HAVE_LIBAIO;WITH_BLUESTORE" OFF)
+  "HAVE_LIBAIO" OFF)
 
 if(WITH_LIBURING)
   if(WITH_SYSTEM_LIBURING)
@@ -737,8 +743,6 @@ option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
 if (WITH_SYSTEM_ROCKSDB)
   find_package(RocksDB 5.14 REQUIRED)
 endif()
-
-option(WITH_CRIMSON "Build Crimson components" OFF)
 
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)

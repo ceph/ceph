@@ -9,6 +9,7 @@ import {
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 import { WizardStepModel } from '~/app/shared/models/wizard-steps';
 import { FormBuilder, FormGroup } from '@angular/forms';
+import { FilesystemRow } from '~/app/shared/models/cephfs.model';
 @Component({
   selector: 'cd-cephfs-mirroring-wizard',
   templateUrl: './cephfs-mirroring-wizard.component.html',
@@ -21,6 +22,8 @@ export class CephfsMirroringWizardComponent implements OnInit {
   description: string = $localize`Configure a new mirroring relationship between clusters`;
   form: FormGroup;
   showMessage: boolean = true;
+  selectedFilesystem: FilesystemRow | null = null;
+  selectedEntity: string | null = null;
 
   LOCAL_ROLE = LOCAL_ROLE;
   REMOTE_ROLE = REMOTE_ROLE;
@@ -54,8 +57,23 @@ export class CephfsMirroringWizardComponent implements OnInit {
     const stepsData = this.wizardStepsService.steps$.value;
     this.steps = STEP_TITLES_MIRRORING_CONFIGURED.map((title, index) => ({
       label: title,
-      onClick: () => this.goToStep(stepsData[index])
+      onClick: () => this.goToStep(stepsData[index]),
+      invalid: true
     }));
+  }
+
+  onFilesystemSelected(filesystem: FilesystemRow) {
+    this.selectedFilesystem = filesystem;
+    if (this.steps[1]) {
+      this.steps[1].invalid = !filesystem;
+    }
+  }
+
+  onEntitySelected(entity: string) {
+    this.selectedEntity = entity;
+    if (this.steps[2]) {
+      this.steps[2].invalid = !entity;
+    }
   }
 
   goToStep(step: WizardStepModel) {
@@ -67,11 +85,17 @@ export class CephfsMirroringWizardComponent implements OnInit {
   onLocalRoleChange() {
     this.form.patchValue({ localRole: LOCAL_ROLE, remoteRole: null });
     this.showMessage = false;
+    if (this.steps[0]) {
+      this.steps[0].invalid = false;
+    }
   }
 
   onRemoteRoleChange() {
     this.form.patchValue({ localRole: null, remoteRole: REMOTE_ROLE });
     this.showMessage = true;
+    if (this.steps[0]) {
+      this.steps[0].invalid = false;
+    }
   }
 
   onSubmit() {}

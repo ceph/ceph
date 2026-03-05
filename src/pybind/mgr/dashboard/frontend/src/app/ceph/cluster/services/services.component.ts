@@ -1,6 +1,5 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
-
 import { delay } from 'rxjs/operators';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -21,7 +20,8 @@ import { Permissions } from '~/app/shared/models/permissions';
 import {
   CephCertificateStatus,
   CephServiceCertificate,
-  CephServiceSpec
+  CephServiceSpec,
+  CERTIFICATE_STATUS_ICON_MAP
 } from '~/app/shared/models/service.interface';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
@@ -86,6 +86,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   icons = Icons;
   serviceUrls = { grafana: '', prometheus: '', alertmanager: '' };
   isMgmtGateway: boolean = false;
+  statusIconMap = CERTIFICATE_STATUS_ICON_MAP;
 
   constructor(
     private actionLabels: ActionLabelsI18n,
@@ -160,6 +161,9 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
           });
       let modalRef = this.cdsModalService.show(ServiceFormComponent);
       Object.assign(modalRef, initialState);
+      modalRef.serviceUpdated.subscribe(() => {
+        this.table?.reloadData();
+      });
     }
   }
 

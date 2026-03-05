@@ -31,8 +31,12 @@ Using `color` in css and seyting svg will fill="currentColor does not work.
   fill: theme.$support-caution-major !important;
 }
 
+.warningAltFilled-icon {
+  fill: theme.$support-caution-major !important;
+}
+
 .error-icon {
-  fill: theme.$support-error !important;
+  fill: var(--cds-text-error) !important;
 }
 
 .info-icon {
@@ -49,4 +53,12 @@ Using `color` in css and seyting svg will fill="currentColor does not work.
 
 .emptySearch-icon {
   fill: theme.$layer-selected-disabled !important;
+}
+
+.warningAlt-icon {
+  fill: theme.$support-caution-major !important;
+}
+
+.checkMarkOutline-icon {
+  fill: theme.$support-success !important;
 }

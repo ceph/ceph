@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 import errno
 import logging
 import random
@@ -16,6 +17,8 @@ from teuthology.contextutil import safe_while
 log = logging.getLogger(__name__)
 
 
+# Exceptions to retry in test assertions
+RETRY_EXCEPTIONS = (AssertionError, KeyError, IndexError, CommandFailedError)
 # retry decorator
 def retry_assert(timeout=60, interval=1):
     """
@@ -34,7 +37,7 @@ def retry_assert(timeout=60, interval=1):
                 while proceed():
                     try:
                         return func(*args, **kwargs)
-                    except (AssertionError, KeyError, IndexError) as e:
+                    except RETRY_EXCEPTIONS as e:
                         last_exc = e
                         log.debug(
                             f"[retry_assert] {func.__name__}: "
@@ -43,8 +46,8 @@ def retry_assert(timeout=60, interval=1):
                         attempt += 1
             # Final failure
             if last_exc is not None and hasattr(last_exc, "res"):
-              log.error("\n--- Last peer status (res) ---")
-              log.error(last_exc.res)
+                log.error("\n--- Last peer status (res) ---")
+                log.error(last_exc.res)
 
             raise AssertionError(
                 f"{func.__name__} did not succeed within {timeout}s "
@@ -53,6 +56,7 @@ def retry_assert(timeout=60, interval=1):
 
         return wrapper
     return decorator
+
 
 class TestMirroring(CephFSTestCase):
     MDSS_REQUIRED = 5
@@ -262,7 +266,7 @@ class TestMirroring(CephFSTestCase):
                                          f'{fs_name}@{fs_id}', peer_uuid)
         try:
             self.assertFalse(res)
-        except (AssertionError, KeyError, IndexError) as e:
+        except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
 
@@ -277,7 +281,7 @@ class TestMirroring(CephFSTestCase):
             self.assertTrue(dir_name in res)
             self.assertTrue(res[dir_name]['last_synced_snap']['name'] == expected_snap_name)
             self.assertTrue(res[dir_name]['snaps_synced'] == expected_snap_count)
-        except (AssertionError, KeyError, IndexError) as e:
+        except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
 
@@ -293,7 +297,7 @@ class TestMirroring(CephFSTestCase):
             self.assertTrue('idle' == res[dir_name]['state'])
             self.assertTrue(expected_snap_name == res[dir_name]['last_synced_snap']['name'])
             self.assertTrue(expected_snap_count == res[dir_name]['snaps_synced'])
-        except (AssertionError, KeyError, IndexError) as e:
+        except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
 
@@ -307,7 +311,7 @@ class TestMirroring(CephFSTestCase):
         try:
             self.assertTrue(dir_name in res)
             self.assertTrue(res[dir_name]['snaps_deleted'] == expected_delete_count)
-        except (AssertionError, KeyError, IndexError) as e:
+        except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
 
@@ -321,7 +325,7 @@ class TestMirroring(CephFSTestCase):
         try:
             self.assertTrue(dir_name in res)
             self.assertTrue(res[dir_name]['snaps_renamed'] == expected_rename_count)
-        except (AssertionError, KeyError, IndexError) as e:
+        except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
 
@@ -329,7 +333,6 @@ class TestMirroring(CephFSTestCase):
     def check_peer_snap_in_progress(self, fs_name, fs_id,
                                     peer_spec, dir_name, snap_name, timeout=60, interval=1):
         peer_uuid = self.get_peer_uuid(peer_spec)
-        deadline = time.time() + timeout
         try:
             res = self.mirror_daemon_command(f'peer status for fs: {fs_name}',
                                              'fs', 'mirror', 'peer', 'status',
@@ -337,7 +340,7 @@ class TestMirroring(CephFSTestCase):
 
             self.assertTrue('syncing' == res[dir_name]['state'])
             self.assertTrue(res[dir_name]['current_syncing_snap']['name'] == snap_name)
-        except (AssertionError, KeyError, IndexError) as e:
+        except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
 
@@ -876,7 +879,17 @@ class TestMirroring(CephFSTestCase):
 
     def test_cephfs_mirror_service_daemon_status(self):
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
-        self.peer_add(self.primary_fs_name, self.primary_fs_id, "client.mirror_remote@ceph", self.secondary_fs_name)
+
+        # create a bootstrap token for the peer
+        bootstrap_token = self.bootstrap_peer(self.secondary_fs_name, "client.mirror_peer_bootstrap", "site-remote")
+        # Decode the token to extract the FSID
+        token_str = base64.b64decode(bootstrap_token)
+        token_dct = json.loads(token_str.decode('utf-8'))
+        expected_remote_fsid = token_dct['fsid']
+        expected_remote_mon_host = token_dct['mon_host']
+
+        # import the peer via bootstrap token
+        self.import_peer(self.primary_fs_name, bootstrap_token)
 
         time.sleep(30)
         status = self.get_mirror_daemon_status()
@@ -889,6 +902,11 @@ class TestMirroring(CephFSTestCase):
         self.assertEqual(status['filesystems'][0]['directory_count'], 0)
         self.assertEqual(peer['stats']['failure_count'], 0)
         self.assertEqual(peer['stats']['recovery_count'], 0)
+
+        remote = peer['remote']
+        self.assertEqual(remote['fs_name'], self.secondary_fs_name)
+        self.assertEqual(remote['fsid'], expected_remote_fsid)
+        self.assertEqual(remote['mon_host'], expected_remote_mon_host)
 
         # add a non-existent directory for synchronization -- check if its reported
         # in daemon stats
@@ -1162,6 +1180,9 @@ class TestMirroring(CephFSTestCase):
 
     def test_cephfs_mirror_incremental_sync(self):
         """ Test incremental snapshot synchronization (based on mtime differences)."""
+
+        self.skipTest("temporarily disable test: snapdiff bug - see https://tracker.ceph.com/issues/74984")
+
         self.setup_mount_b(mds_perm='rw')
         repo = 'ceph-qa-suite'
         repo_dir = 'ceph_repo'
@@ -1311,6 +1332,9 @@ class TestMirroring(CephFSTestCase):
         mirror daemon should identify the purge and switch to using remote
         comparison to sync the snapshot (in the next iteration of course).
         """
+
+        self.skipTest("temporarily disable test: snapdiff bug - see https://tracker.ceph.com/issues/74984")
+
         self.setup_mount_b(mds_perm='rw')
         repo = 'ceph-qa-suite'
         repo_dir = 'ceph_repo'

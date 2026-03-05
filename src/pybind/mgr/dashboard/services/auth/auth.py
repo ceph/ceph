@@ -22,13 +22,6 @@ from ..access_control import LocalAuthenticator, UserDoesNotExist
 if TYPE_CHECKING:
     from dashboard.services.sso import SsoDB
 
-cherrypy.config.update({
-    'response.headers.server': 'Ceph-Dashboard',
-    'response.headers.content-security-policy': "frame-ancestors 'self';",
-    'response.headers.x-content-type-options': 'nosniff',
-    'response.headers.strict-transport-security': 'max-age=63072000; includeSubDomains; preload'
-})
-
 
 class AuthType(str, Enum):
     LOCAL = 'local'

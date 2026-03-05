@@ -1,46 +1,9 @@
 import copy
-import time
 
 import pytest
 import smbprotocol
 
-import cephutil
 import smbutil
-
-
-def _get_shares(smb_cfg):
-    jres = cephutil.cephadm_shell_cmd(
-        smb_cfg,
-        ["ceph", "smb", "show", "ceph.smb.share"],
-        load_json=True,
-    )
-    assert jres.obj
-    resources = jres.obj['resources']
-    assert len(resources) > 0
-    assert all(r['resource_type'] == 'ceph.smb.share' for r in resources)
-    return resources
-
-
-def _apply(smb_cfg, share):
-    jres = cephutil.cephadm_shell_cmd(
-        smb_cfg,
-        ['ceph', 'smb', 'apply', '-i-'],
-        input_json={'resources': [share]},
-        load_json=True,
-    )
-    assert jres.returncode == 0
-    assert jres.obj and jres.obj.get('success')
-    assert 'results' in jres.obj
-    _results = jres.obj['results']
-    assert len(_results) == 1, "more then one result found"
-    _result = _results[0]
-    assert 'resource' in _result
-    resources_ret = _result['resource']
-    assert resources_ret['resource_type'] == 'ceph.smb.share'
-    # sleep to ensure the settings got applied in smbd
-    # TODO: make this more dynamic somehow
-    time.sleep(60)
-    return resources_ret
 
 
 # BOGUS is an IP that should never be assigned to a test node running in
@@ -56,7 +19,7 @@ class TestHostsAccessToggle1:
     @pytest.fixture(scope='class')
     def config(self, smb_cfg):
         filename = 'TestHostAcess1.txt'
-        orig = _get_shares(smb_cfg)[0]
+        orig = smbutil.get_shares(smb_cfg)[0]
         share_name = orig['name']
 
         print('Testing original share configuration...')
@@ -67,7 +30,7 @@ class TestHostsAccessToggle1:
         yield (filename, orig)
 
         print('Restoring original share configuration...')
-        _apply(smb_cfg, orig)
+        smbutil.apply_share_config(smb_cfg, orig)
         # With the IP restriction removed, access should succeed and we can
         # clean up our test file
         with smbutil.connection(smb_cfg, share_name) as sharep:
@@ -91,7 +54,7 @@ class TestHostsAccessToggle1:
         mod_share['hosts_access'] = [
             {'access': 'allow', 'address': BOGUS},
         ]
-        applied = _apply(smb_cfg, mod_share)
+        applied = smbutil.apply_share_config(smb_cfg, mod_share)
         assert applied['share_id'] == mod_share['share_id']
         assert applied['hosts_access'] == mod_share['hosts_access']
 
@@ -106,7 +69,7 @@ class TestHostsAccessToggle1:
         mod_share['hosts_access'] = [
             {'access': 'deny', 'address': BOGUS},
         ]
-        applied = _apply(smb_cfg, mod_share)
+        applied = smbutil.apply_share_config(smb_cfg, mod_share)
         assert applied['share_id'] == mod_share['share_id']
         assert applied['hosts_access'] == mod_share['hosts_access']
 
@@ -121,7 +84,7 @@ class TestHostsAccessToggle1:
             {'access': 'allow', 'address': BOGUS},
             {'access': 'allow', 'address': smb_cfg.default_client.ip_address},
         ]
-        applied = _apply(smb_cfg, mod_share)
+        applied = smbutil.apply_share_config(smb_cfg, mod_share)
         assert applied['share_id'] == mod_share['share_id']
         assert applied['hosts_access'] == mod_share['hosts_access']
 
@@ -135,7 +98,7 @@ class TestHostsAccessToggle1:
         mod_share['hosts_access'] = [
             {'access': 'deny', 'address': smb_cfg.default_client.ip_address},
         ]
-        applied = _apply(smb_cfg, mod_share)
+        applied = smbutil.apply_share_config(smb_cfg, mod_share)
         assert applied['share_id'] == mod_share['share_id']
         assert applied['hosts_access'] == mod_share['hosts_access']
 
@@ -150,7 +113,7 @@ class TestHostsAccessToggle1:
         mod_share['hosts_access'] = [
             {'access': 'allow', 'network': BOGUS_NET},
         ]
-        applied = _apply(smb_cfg, mod_share)
+        applied = smbutil.apply_share_config(smb_cfg, mod_share)
         assert applied['share_id'] == mod_share['share_id']
         assert applied['hosts_access'] == mod_share['hosts_access']
 

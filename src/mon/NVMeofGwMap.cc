@@ -42,10 +42,10 @@ void NVMeofGwMap::to_gmap(
       const auto& gw_id = gw_created_pair.first;
       const auto& gw_created  = gw_created_pair.second;
       gw_availability_t availability = gw_created.availability;
-      // Gateways expect to see UNAVAILABLE, not DELETING
-      // for entries in DELETING state
       if (gw_created.availability == gw_availability_t::GW_DELETING) {
-         availability = gw_availability_t::GW_UNAVAILABLE;
+         dout (4) << gw_id << "Send empty unicast map in Deleting state"
+                  << dendl;
+         continue;
       }
 
       auto gw_state = NvmeGwClientState(

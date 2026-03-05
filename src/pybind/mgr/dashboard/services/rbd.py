@@ -115,6 +115,13 @@ def get_image_spec(pool_name, namespace, rbd_name):
     return '{}/{}{}'.format(pool_name, namespace, rbd_name)
 
 
+def get_pool_schedule_spec(pool_name, namespace):
+    """Build the schedule level_spec for pool-level schedule (rbd_support format)."""
+    if namespace:
+        return '{}/{}/'.format(pool_name, namespace)
+    return '{}/'.format(pool_name)
+
+
 def parse_image_spec(image_spec):
     namespace_spec, image_name = image_spec.rsplit('/', 1)
     if '/' in namespace_spec:
@@ -586,9 +593,16 @@ class RbdService(object):
     def set(cls, image_spec, name=None, size=None, features=None,
             configuration=None, metadata=None, enable_mirror=None, primary=None,
             force=False, resync=False, mirror_mode=None, image_mirror_mode=None,
-            schedule_interval='', remove_scheduling=False):
+            schedule_interval='', remove_scheduling=False, schedule_level=None):
         # pylint: disable=too-many-branches
         pool_name, namespace, image_name = parse_image_spec(image_spec)
+
+        if schedule_level is not None and schedule_level not in ('image', 'pool', 'cluster'):
+            raise DashboardException(
+                msg='schedule_level must be one of: image, pool, cluster',
+                code='invalid_schedule_level',
+                component='rbd')
+        effective_schedule_level = schedule_level if schedule_level else 'image'
 
         def _edit(ioctx, image):
             rbd_inst = cls._rbd_inst
@@ -652,11 +666,30 @@ class RbdService(object):
             if resync:
                 RbdMirroringService.resync_image(image_name, pool_name, namespace)
 
-            if schedule_interval:
-                RbdMirroringService.snapshot_schedule_add(image_spec, schedule_interval)
+            current_image_name = name if name else image_name
+            image_schedule_spec = get_image_spec(pool_name, namespace, current_image_name)
+            pool_schedule_spec = get_pool_schedule_spec(pool_name, namespace)
 
             if remove_scheduling:
-                RbdMirroringService.snapshot_schedule_remove(image_spec)
+                if effective_schedule_level == 'image':
+                    RbdMirroringService.snapshot_schedule_remove(image_schedule_spec)
+                elif effective_schedule_level == 'pool':
+                    RbdMirroringService.snapshot_schedule_remove(pool_schedule_spec)
+                else:
+                    RbdMirroringService.snapshot_schedule_remove('')
+
+            if schedule_interval:
+                if effective_schedule_level == 'image':
+                    RbdMirroringService.snapshot_schedule_add(
+                        image_schedule_spec, schedule_interval)
+                elif effective_schedule_level == 'pool':
+                    RbdMirroringService.snapshot_schedule_remove(image_schedule_spec)
+                    RbdMirroringService.snapshot_schedule_add(
+                        pool_schedule_spec, schedule_interval)
+                else:
+                    RbdMirroringService.snapshot_schedule_remove(image_schedule_spec)
+                    RbdMirroringService.snapshot_schedule_remove(pool_schedule_spec)
+                    RbdMirroringService.snapshot_schedule_add('', schedule_interval)
 
         return rbd_image_call(pool_name, namespace, image_name, _edit)
 
@@ -836,7 +869,7 @@ class RbdMirroringService:
 
         for _, schedule in schedule_list.items():
             name = schedule.get("name")
-            if not name:
+            if name is None:
                 continue
 
             # find status entry for this schedule
@@ -891,7 +924,7 @@ class RbdMirroringService:
 
         for _, schedule in schedule_list.items():
             name = schedule.get("name")
-            if name and name == schedule_spec:
+            if name is not None and name == schedule_spec:
                 return schedule.get("schedule", [])
         return None
 

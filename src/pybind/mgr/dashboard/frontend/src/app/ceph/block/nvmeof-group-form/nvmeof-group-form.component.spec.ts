@@ -14,7 +14,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
 
 import { NvmeofGroupFormComponent } from './nvmeof-group-form.component';
-import { GridModule, InputModule, SelectModule } from 'carbon-components-angular';
+import { CheckboxModule, GridModule, InputModule, SelectModule } from 'carbon-components-angular';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
@@ -46,6 +46,7 @@ describe('NvmeofGroupFormComponent', () => {
         ReactiveFormsModule,
         RouterTestingModule,
         SharedModule,
+        CheckboxModule,
         GridModule,
         InputModule,
         SelectModule,

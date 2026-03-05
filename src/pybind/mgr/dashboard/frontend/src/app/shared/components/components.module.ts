@@ -106,11 +106,26 @@ import ErrorFilledIcon from '@carbon/icons/es/error--filled/16';
 import InformationFilledIcon from '@carbon/icons/es/information--filled/16';
 import WarningFilledIcon from '@carbon/icons/es/warning--filled/16';
 import NotificationFilledIcon from '@carbon/icons/es/notification--filled/16';
-import { Close16 } from '@carbon/icons';
+import DataViewAlt16 from '@carbon/icons/es/data--view--alt/16';
+import DataCenter16 from '@carbon/icons/es/data--center/16';
+import Upgrade16 from '@carbon/icons/es/upgrade/16';
+import Close16 from '@carbon/icons/es/close/16';
+import WarningAltFilled16 from '@carbon/icons/es/warning--alt--filled/16';
+import Help16 from '@carbon/icons/es/help/16';
+import IncidentReporter16 from '@carbon/icons/es/incident-reporter/16';
+import IbmStreamSets16 from '@carbon/icons/es/ibm--streamsets/16';
+import DataEnrichment16 from '@carbon/icons/es/data-enrichment/16';
+import Network116 from '@carbon/icons/es/network--1/16';
+import Chip16 from '@carbon/icons/es/chip/16';
+import Plug16 from '@carbon/icons/es/plug/16';
+import VmdkDisk16 from '@carbon/icons/es/vmdk-disk/16';
+import WarningAlt16 from '@carbon/icons/es/warning--alt/16';
+import CheckMarkOutline16 from '@carbon/icons/es/checkmark--outline/16';
+
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
-import { ProductiveCardComponent } from './productive-card/productive-card.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
+import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.component';
 
 @NgModule({
   imports: [
@@ -208,9 +223,9 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     ToastComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent,
     PageHeaderComponent,
-    SidebarLayoutComponent
+    SidebarLayoutComponent,
+    NumberWithUnitComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -256,9 +271,9 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     ToastComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    ProductiveCardComponent,
     PageHeaderComponent,
-    SidebarLayoutComponent
+    SidebarLayoutComponent,
+    NumberWithUnitComponent
   ]
 })
 export class ComponentsModule {
@@ -274,7 +289,21 @@ export class ComponentsModule {
       InformationFilledIcon,
       WarningFilledIcon,
       NotificationFilledIcon,
-      Close16
+      Close16,
+      DataViewAlt16,
+      DataCenter16,
+      Upgrade16,
+      WarningAltFilled16,
+      Help16,
+      IncidentReporter16,
+      IbmStreamSets16,
+      DataEnrichment16,
+      Network116,
+      Chip16,
+      Plug16,
+      VmdkDisk16,
+      WarningAlt16,
+      CheckMarkOutline16
     ]);
   }
 }

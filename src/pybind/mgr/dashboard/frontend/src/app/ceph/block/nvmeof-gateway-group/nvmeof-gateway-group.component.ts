@@ -146,11 +146,6 @@ export class NvmeofGatewayGroupComponent implements OnInit {
                 const subsystemsObservable = isRunning
                   ? this.nvmeofService.listSubsystems(group.spec.group).pipe(
                       catchError(() => {
-                        this.notificationService.show(
-                          NotificationType.error,
-                          $localize`Unable to fetch Gateway group`,
-                          $localize`Gateway group does not exist`
-                        );
                         return of([]);
                       })
                     )
@@ -173,11 +168,6 @@ export class NvmeofGatewayGroupComponent implements OnInit {
             );
           }),
           catchError(() => {
-            this.notificationService.show(
-              NotificationType.error,
-              $localize`Unable to fetch Gateway group`,
-              $localize`Gateway group does not exist`
-            );
             return of([]);
           })
         )
@@ -185,7 +175,6 @@ export class NvmeofGatewayGroupComponent implements OnInit {
     );
     this.checkNodesAvailability();
   }
-
   fetchData(): void {
     this.subject.next([]);
     this.checkNodesAvailability();

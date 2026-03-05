@@ -206,8 +206,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Reset NFS-Ganesha Config to default"""
         return self.nfs.reset_nfs_cluster_config(cluster_id=cluster_id)
 
-    def fetch_nfs_export_obj(self) -> ExportMgr:
-        return self.export_mgr
+    def export_apply(self, cluster_id: str, export_config: str) -> AppliedExportResults:
+        """Create or update an export by `export_config` which can be json string or ganesha export specification"""
+        earmark_resolver = CephFSEarmarkResolver(self)
+        return self.export_mgr.apply_export(cluster_id, export_config=export_config,
+                                            earmark_resolver=earmark_resolver)
 
     def export_ls(self, cluster_id: Optional[str] = None, detailed: bool = False) -> List[Dict[Any, Any]]:
         if not (cluster_id):

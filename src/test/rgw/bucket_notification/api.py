@@ -10,11 +10,253 @@ from urllib import parse as urlparse
 from time import gmtime, strftime
 import boto3
 from botocore.client import Config
+from botocore.exceptions import ClientError
 import os
 import subprocess
 import json
 
 log = logging.getLogger('bucket_notification.tests')
+
+
+# Boto3 compatibility wrapper classes to minimize code changes
+class S3Key:
+    """Wrapper class to provide boto-like interface for S3 objects using boto3"""
+    def __init__(self, bucket, key_name, s3_client):
+        self.bucket = bucket
+        self.name = key_name
+        self.key = key_name
+        self._s3_client = s3_client
+        self._metadata = {}
+        self.etag = None
+        self.version_id = None
+
+    def set_contents_from_string(self, content):
+        """Upload object content"""
+        kwargs = {
+            'Bucket': self.bucket.name,
+            'Key': self.name,
+            'Body': content
+        }
+        if self._metadata:
+            kwargs['Metadata'] = self._metadata
+
+        response = self._s3_client.put_object(**kwargs)
+        self.etag = response['ETag']
+        if 'VersionId' in response:
+            self.version_id = response['VersionId']
+        return response
+
+    def set_metadata(self, key, value):
+        """Set metadata for the object"""
+        self._metadata[key] = value
+
+    def delete(self):
+        """Delete the object"""
+        kwargs = {'Bucket': self.bucket.name, 'Key': self.name}
+        if self.version_id:
+            kwargs['VersionId'] = self.version_id
+        return self._s3_client.delete_object(**kwargs)
+
+
+class S3Bucket:
+    """Wrapper class to provide boto-like interface for S3 buckets using boto3"""
+    def __init__(self, connection, bucket_name):
+        self.connection = connection
+        self.name = bucket_name
+        self._s3_client = connection._s3_client
+        self._s3_resource = connection._s3_resource
+        self._bucket = self._s3_resource.Bucket(bucket_name)
+
+    def new_key(self, key_name):
+        """Create a new key object"""
+        return S3Key(self, key_name, self._s3_client)
+
+    def list(self, prefix=''):
+        """List objects in the bucket"""
+        try:
+            if prefix:
+                objects = self._bucket.objects.filter(Prefix=prefix)
+            else:
+                objects = self._bucket.objects.all()
+
+            # Convert to S3Key objects for compatibility
+            keys = []
+            for obj in objects:
+                key = S3Key(self, obj.key, self._s3_client)
+                key.etag = obj.e_tag
+                if hasattr(obj, 'version_id'):
+                    key.version_id = obj.version_id
+                keys.append(key)
+            return keys
+        except Exception:
+            # Return empty list if bucket is empty or error occurs
+            return []
+
+    def delete_key(self, key_name, version_id=None):
+        """Delete a specific key"""
+        kwargs = {'Bucket': self.name, 'Key': key_name}
+        if version_id:
+            kwargs['VersionId'] = version_id
+        response = self._s3_client.delete_object(**kwargs)
+        # Return a key-like object with version_id for compatibility
+        deleted_key = S3Key(self, key_name, self._s3_client)
+        if 'VersionId' in response:
+            deleted_key.version_id = response['VersionId']
+        if 'DeleteMarker' in response:
+            deleted_key.delete_marker = response['DeleteMarker']
+        return deleted_key
+
+    def copy_key(self, new_key_name, src_bucket_name, src_key_name, src_version_id=None, metadata=None):
+        """Copy a key within or between buckets"""
+        copy_source = {'Bucket': src_bucket_name, 'Key': src_key_name}
+        if src_version_id:
+            copy_source['VersionId'] = src_version_id
+
+        kwargs = {
+            'CopySource': copy_source,
+            'Bucket': self.name,
+            'Key': new_key_name
+        }
+
+        if metadata is not None:
+            kwargs['Metadata'] = metadata
+            kwargs['MetadataDirective'] = 'REPLACE'
+
+        response = self._s3_client.copy_object(**kwargs)
+
+        # Return a key object for compatibility
+        new_key = S3Key(self, new_key_name, self._s3_client)
+        if 'CopyObjectResult' in response and 'ETag' in response['CopyObjectResult']:
+            new_key.etag = response['CopyObjectResult']['ETag']
+        if 'VersionId' in response:
+            new_key.version_id = response['VersionId']
+        return new_key
+
+    def configure_versioning(self, enabled):
+        """Enable or disable versioning on the bucket"""
+        status = 'Enabled' if enabled else 'Suspended'
+        self._s3_client.put_bucket_versioning(
+            Bucket=self.name,
+            VersioningConfiguration={'Status': status}
+        )
+
+    def initiate_multipart_upload(self, key_name, metadata=None):
+        """Initiate a multipart upload"""
+        kwargs = {'Bucket': self.name, 'Key': key_name}
+        if metadata:
+            kwargs['Metadata'] = metadata
+
+        response = self._s3_client.create_multipart_upload(**kwargs)
+        return MultipartUpload(self, key_name, response['UploadId'], self._s3_client)
+
+
+class MultipartUpload:
+    """Wrapper for multipart upload operations"""
+    def __init__(self, bucket, key_name, upload_id, s3_client):
+        self.bucket = bucket
+        self.key_name = key_name
+        self.upload_id = upload_id
+        self._s3_client = s3_client
+        self.parts = []
+
+    def upload_part_from_file(self, fp, part_number, size=None):
+        """Upload a part from a file object"""
+        if size:
+            data = fp.read(size)
+        else:
+            data = fp.read()
+
+        response = self._s3_client.upload_part(
+            Bucket=self.bucket.name,
+            Key=self.key_name,
+            PartNumber=part_number,
+            UploadId=self.upload_id,
+            Body=data
+        )
+
+        self.parts.append({
+            'PartNumber': part_number,
+            'ETag': response['ETag']
+        })
+
+    def complete_upload(self):
+        """Complete the multipart upload"""
+        # Sort parts by part number
+        self.parts.sort(key=lambda x: x['PartNumber'])
+
+        response = self._s3_client.complete_multipart_upload(
+            Bucket=self.bucket.name,
+            Key=self.key_name,
+            UploadId=self.upload_id,
+            MultipartUpload={'Parts': self.parts}
+        )
+        return response
+
+
+class S3Connection:
+    """Wrapper class to provide boto-like S3Connection interface using boto3"""
+    def __init__(self, aws_access_key_id, aws_secret_access_key,
+                 is_secure=True, port=None, host=None, calling_format=None):
+        self.aws_access_key_id = aws_access_key_id
+        self.aws_secret_access_key = aws_secret_access_key
+        self.access_key = aws_access_key_id  # Boto compatibility
+        self.secret_key = aws_secret_access_key  # Boto compatibility
+        self.is_secure = is_secure
+        self.port = port
+        self.host = host
+        self.num_retries = 5  # Default for compatibility
+
+        # Build endpoint URL
+        protocol = 'https' if is_secure else 'http'
+        self.endpoint_url = f'{protocol}://{host}:{port}'
+
+        # Create boto3 client and resource
+        # Use path-style addressing to match the old boto OrdinaryCallingFormat
+        self._s3_client = boto3.client(
+            's3',
+            endpoint_url=self.endpoint_url,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            config=Config(
+                retries={'max_attempts': self.num_retries},
+                s3={'addressing_style': 'path'},
+                max_pool_connections=50
+            )
+        )
+
+        self._s3_resource = boto3.resource(
+            's3',
+            endpoint_url=self.endpoint_url,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            config=Config(
+                s3={'addressing_style': 'path'},
+                max_pool_connections=50
+            )
+        )
+
+        # For SSL connections
+        self.secure_conn = self if is_secure else None
+
+    def create_bucket(self, bucket_name, **kwargs):
+        """Create a bucket"""
+        try:
+            self._s3_client.create_bucket(Bucket=bucket_name)
+        except ClientError as e:
+            # Bucket might already exist
+            if e.response['Error']['Code'] != 'BucketAlreadyOwnedByYou':
+                raise
+        return S3Bucket(self, bucket_name)
+
+    def get_bucket(self, bucket_name):
+        """Get a bucket object"""
+        return S3Bucket(self, bucket_name)
+
+    def delete_bucket(self, bucket_name):
+        """Delete a bucket"""
+        return self._s3_client.delete_bucket(Bucket=bucket_name)
+
+
 
 NO_HTTP_BODY = ''
 
@@ -22,7 +264,8 @@ def put_object_tagging(conn, bucket_name, key, tags):
     client = boto3.client('s3',
             endpoint_url='http://'+conn.host+':'+str(conn.port),
             aws_access_key_id=conn.aws_access_key_id,
-            aws_secret_access_key=conn.aws_secret_access_key)
+            aws_secret_access_key=conn.aws_secret_access_key,
+            config=Config(s3={'addressing_style': 'path'}))
     return client.put_object(Body='aaaaaaaaaaa', Bucket=bucket_name, Key=key, Tagging=tags)
 
 def make_request(conn, method, resource, parameters=None, sign_parameters=False, extra_parameters=None):
@@ -62,7 +305,8 @@ def delete_all_objects(conn, bucket_name):
     client = boto3.client('s3',
                       endpoint_url='http://'+conn.host+':'+str(conn.port),
                       aws_access_key_id=conn.aws_access_key_id,
-                      aws_secret_access_key=conn.aws_secret_access_key)
+                      aws_secret_access_key=conn.aws_secret_access_key,
+                      config=Config(s3={'addressing_style': 'path'}))
 
     objects = []
     for key in client.list_objects(Bucket=bucket_name)['Contents']:
@@ -193,7 +437,8 @@ class PSNotificationS3:
         self.client = boto3.client('s3',
                                    endpoint_url='http://'+conn.host+':'+str(conn.port),
                                    aws_access_key_id=conn.aws_access_key_id,
-                                   aws_secret_access_key=conn.aws_secret_access_key)
+                                   aws_secret_access_key=conn.aws_secret_access_key,
+                                   config=Config(s3={'addressing_style': 'path'}))
 
     def send_request(self, method, parameters=None):
         """send request to radosgw"""
@@ -245,7 +490,6 @@ def admin(args, cluster='noname', **kwargs):
 def ceph_admin(args, cluster='noname', **kwargs):
     """ ceph command """
     cmd = [test_path + 'test-rgw-call.sh', 'call_ceph', cluster] + args
-    print(' '.join(cmd))
     return bash(cmd, **kwargs)
 
 def delete_all_topics(conn, tenant, cluster):

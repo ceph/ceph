@@ -11,7 +11,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSubsystemsStepThreeComponent } from './nvmeof-subsystem-step-3.component';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
-import { GridModule, RadioModule, TagModule } from 'carbon-components-angular';
+import { GridModule, InputModule, RadioModule, TagModule } from 'carbon-components-angular';
 import { AUTHENTICATION } from '~/app/shared/models/nvmeof';
 
 describe('NvmeofSubsystemsStepThreeComponent', () => {
@@ -34,6 +34,7 @@ describe('NvmeofSubsystemsStepThreeComponent', () => {
         GridModule,
         RadioModule,
         TagModule,
+        InputModule,
         ToastrModule.forRoot()
       ]
     }).compileComponents();

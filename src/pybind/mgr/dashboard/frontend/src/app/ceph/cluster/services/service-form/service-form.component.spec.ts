@@ -16,12 +16,14 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper, Mocks } from '~/testing/unit-test-helper';
 import { ServiceFormComponent } from './service-form.component';
 import { PoolService } from '~/app/shared/api/pool.service';
+import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
 import { USER } from '~/app/shared/constants/app.constants';
 import {
   CheckboxModule,
   InputModule,
   ModalModule,
   NumberModule,
+  RadioModule,
   SelectModule
 } from 'carbon-components-angular';
 
@@ -58,7 +60,9 @@ describe('ServiceFormComponent', () => {
       SelectModule,
       NumberModule,
       ModalModule,
-      CheckboxModule
+      CheckboxModule,
+      RadioModule,
+      TextLabelListComponent
     ]
   });
 
@@ -252,8 +256,8 @@ describe('ServiceFormComponent', () => {
           placement: {},
           unmanaged: false,
           rgw_frontend_port: 1234,
-          rgw_frontend_ssl_certificate: '',
-          ssl: true
+          ssl: true,
+          certificate_source: 'cephadm-signed'
         });
       });
 
@@ -376,8 +380,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           api_user: USER,
           api_password: 'password',
           api_secure: true,
-          ssl_cert: '',
-          ssl_key: '',
+          certificate_source: 'cephadm-signed',
           trusted_ip_list: ['172.16.0.5', '192.1.1.10']
         });
       });

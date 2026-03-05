@@ -21,7 +21,7 @@ from teuthology import packaging
 from teuthology.orchestra import run
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
-from teuthology.exceptions import ConfigError, CommandFailedError
+from teuthology.exceptions import ConfigError, CommandFailedError, MaxWhileTries
 from textwrap import dedent
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from tasks.daemonwatchdog import DaemonWatchdog
@@ -804,11 +804,40 @@ def ceph_bootstrap(ctx, config):
                 'ceph', 'orch', 'host', 'add',
                 remote.shortname
             ])
-            r = _shell(ctx, cluster_name, bootstrap_remote,
-                       ['ceph', 'orch', 'host', 'ls', '--format=json'],
-                       stdout=StringIO())
-            hosts = [node['hostname'] for node in json.loads(r.stdout.getvalue())]
-            assert remote.shortname in hosts
+            try:
+                with contextutil.safe_while(sleep=5, tries=10) as proceed:
+                    while proceed():
+                        # check host has been added
+                        r = _shell(ctx, cluster_name, bootstrap_remote,
+                                   ['ceph', 'orch', 'host', 'ls', '--format=json'],
+                                   stdout=StringIO())
+                        hosts = [node['hostname'] for node in json.loads(r.stdout.getvalue())]
+                        # check host has been given config-key store entry
+                        r = _shell(ctx, cluster_name, bootstrap_remote,
+                                   ['ceph', 'config-key', 'ls'],
+                                   stdout=StringIO())
+                        key_entries = r.stdout.getvalue()
+                        # check host has been added to config-key inventory entry
+                        r = _shell(ctx, cluster_name, bootstrap_remote,
+                                   ['ceph', 'config-key', 'get', 'mgr/cephadm/inventory'],
+                                   stdout=StringIO())
+                        stored_inventory = json.loads(r.stdout.getvalue())
+                        if (
+                            remote.shortname in hosts
+                            and  remote.shortname in key_entries
+                            and remote.shortname in stored_inventory
+                        ):
+                            break
+                        else:
+                            log.info(
+                                f'Host add for {remote.shortname} incomplete\n'
+                                f'Host in host ls: {str(remote.shortname in hosts)}\n'
+                                f'Host got config-key entry: {str(remote.shortname in key_entries)}\n'
+                                f'Host in cephadm inventory config-key entry: {str(remote.shortname in stored_inventory)}\n'
+                            )
+            except MaxWhileTries as e:
+                log.error(f'Hit timeout while adding host {remote.shortname}: {str(e)}')
+                raise e
 
         yield
 

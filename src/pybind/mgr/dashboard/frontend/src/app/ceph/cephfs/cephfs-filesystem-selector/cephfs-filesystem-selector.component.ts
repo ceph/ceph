@@ -1,4 +1,12 @@
-import { Component, OnInit, TemplateRef, ViewChild, inject } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  TemplateRef,
+  ViewChild,
+  inject,
+  Output,
+  EventEmitter
+} from '@angular/core';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -32,6 +40,7 @@ export class CephfsFilesystemSelectorComponent implements OnInit {
   filesystems$: Observable<FilesystemRow[]> = of([]);
   selection = new CdTableSelection();
   icons = Icons;
+  @Output() filesystemSelected = new EventEmitter<FilesystemRow | null>();
   mdsStatusLabels: Record<MdsStatus, string> = {
     Active: $localize`Active`,
     Warning: $localize`Warning`,
@@ -111,5 +120,7 @@ export class CephfsFilesystemSelectorComponent implements OnInit {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+    const selectedRow = typeof selection?.first === 'function' ? selection.first() : null;
+    this.filesystemSelected.emit(selectedRow as FilesystemRow | null);
   }
 }

@@ -73,7 +73,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   alertType: string;
   alertClass = AlertClass;
 
-  queriesResults: { [key: string]: [] } = {
+  queriesResults: Record<string, [number, string][]> = {
     USEDCAPACITY: [],
     IPS: [],
     OPS: [],
@@ -185,11 +185,12 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   }
 
   public getPrometheusData(selectedTime: any) {
-    this.queriesResults = this.prometheusService.getRangeQueriesData(
-      selectedTime,
-      UtilizationCardQueries,
-      this.queriesResults
-    );
+    this.prometheusService
+      .getRangeQueriesData(selectedTime, UtilizationCardQueries, true)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((results) => {
+        this.queriesResults = results;
+      });
   }
 
   getCapacityQueryValues(data: PromqlGuageMetric['result']) {

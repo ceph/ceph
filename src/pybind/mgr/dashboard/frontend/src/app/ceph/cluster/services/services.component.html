@@ -11,6 +11,7 @@
             [hasDetails]="hasDetails"
             [serverSide]="true"
             [count]="count"
+            updateExpandedOnRefresh="always"
             (setExpandedRow)="setExpandedRow($event)"
             (updateSelection)="updateSelection($event)">
     <cd-table-actions class="table-actions"
@@ -66,9 +67,12 @@
 
 <ng-template #certificateStatusTpl
              let-row="data.row">
-  @if (row.certificate) {
+@if (row.certificate?.requires_certificate && row.certificate?.status && row.certificate?.status !== 'not_configured') {
+  <span class="d-flex align-items-center gap-1">
+    <cd-icon [type]="statusIconMap[row.certificate.status] || statusIconMap['default']"></cd-icon>
     {{ formatCertificateStatus(row.certificate) }}
-  } @else {
-    -
-  }
+  </span>
+} @else {
+  -
+}
 </ng-template>

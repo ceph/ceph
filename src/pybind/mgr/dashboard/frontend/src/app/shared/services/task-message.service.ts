@@ -381,6 +381,10 @@ export class TaskMessageService {
     'nvmeof/gateway/node/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
       this.nvmeofGatewayNode(metadata)
     ),
+    'nvmeof/gateway-node/delete': this.newTaskMessage(
+      this.commonOperations.remove,
+      (metadata) => $localize`gateway node '${metadata.hostname}'`
+    ),
     'nvmeof/subsystem/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofSubsystem(metadata)
     ),
@@ -389,6 +393,9 @@ export class TaskMessageService {
     ),
     'nvmeof/listener/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofListener(metadata)
+    ),
+    'nvmeof/listener/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
+      this.nvmeofListenerPlural(metadata)
     ),
     'nvmeof/listener/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nvmeofListener(metadata)
@@ -403,6 +410,9 @@ export class TaskMessageService {
       this.nvmeofNamespace(metadata)
     ),
     'nvmeof/initiator/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
+      this.nvmeofInitiator(metadata)
+    ),
+    'nvmeof/initiator/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
       this.nvmeofInitiator(metadata)
     ),
     'nvmeof/initiator/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
@@ -464,6 +474,10 @@ export class TaskMessageService {
     ),
     'cephfs/subvolume/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
       this.subvolume(metadata)
+    ),
+    'cephfs/subvolume/snapshot_visibility/set': this.newTaskMessage(
+      this.commonOperations.update,
+      (metadata) => $localize`subvolume snapshot visibility for '${metadata.subVolumeName}'`
     ),
     'cephfs/subvolume/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.subvolume(metadata)
@@ -551,6 +565,10 @@ export class TaskMessageService {
     'cephfs/smb/standalone/delete': this.newTaskMessage(
       this.commonOperations.delete,
       (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
+    ),
+    'ceph-user/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata: { userEntity: string }) => this.cephUser(metadata)
     )
   };
 
@@ -597,7 +615,11 @@ export class TaskMessageService {
     return $localize`hosts to gateway group '${metadata.group_name}'`;
   }
   nvmeofListener(metadata: any) {
-    return $localize`listener '${metadata.host_name} for subsystem ${metadata.nqn}`;
+    return $localize`listener '${metadata.host_name}' for subsystem ${metadata.nqn}`;
+  }
+
+  nvmeofListenerPlural(metadata: { count: number; nqn: string }) {
+    return $localize`${this.pluralize('listener', metadata.count)} to subsystem ${metadata.nqn}`;
   }
 
   nvmeofNamespace(metadata: { nqn: string; nsCount?: number; nsid?: string }) {
@@ -725,5 +747,9 @@ export class TaskMessageService {
 
   getRunningText(task: Task) {
     return this._getTaskTitle(task).operation.running;
+  }
+
+  cephUser(metadata: { userEntity: string }) {
+    return $localize`Ceph user  '${metadata.userEntity}'`;
   }
 }

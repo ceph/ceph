@@ -59,6 +59,11 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_get_io_stats_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_io_stats_info.FromString,
                 )
+        self.list_namespaces_io_stats = channel.unary_unary(
+                '/Gateway/list_namespaces_io_stats',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.list_namespaces_io_stats_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.list_namespaces_io_stats_info.FromString,
+                )
         self.namespace_set_qos_limits = channel.unary_unary(
                 '/Gateway/namespace_set_qos_limits',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_qos_req.SerializeToString,
@@ -128,6 +133,11 @@ class GatewayStub(object):
                 '/Gateway/list_connections',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.list_connections_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.connections_info.FromString,
+                )
+        self.get_connection_io_statistics = channel.unary_unary(
+                '/Gateway/get_connection_io_statistics',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_io_statistics_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_io_statistics.FromString,
                 )
         self.create_listener = channel.unary_unary(
                 '/Gateway/create_listener',
@@ -204,6 +214,11 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_thread_stats_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.thread_stats_info.FromString,
                 )
+        self.set_gateway_io_stats_mode = channel.unary_unary(
+                '/Gateway/set_gateway_io_stats_mode',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_gateway_io_stats_mode_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
 
 
 class GatewayServicer(object):
@@ -267,6 +282,13 @@ class GatewayServicer(object):
 
     def namespace_get_io_stats(self, request, context):
         """Gets namespace's IO stats
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def list_namespaces_io_stats(self, request, context):
+        """List namespaces IO stats
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -365,6 +387,13 @@ class GatewayServicer(object):
 
     def list_connections(self, request, context):
         """List connections
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def get_connection_io_statistics(self, request, context):
+        """Gets connection's IO statistics
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -475,6 +504,13 @@ class GatewayServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def set_gateway_io_stats_mode(self, request, context):
+        """Set gateway IO stats on or off
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GatewayServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -522,6 +558,11 @@ def add_GatewayServicer_to_server(servicer, server):
                     servicer.namespace_get_io_stats,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_get_io_stats_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_io_stats_info.SerializeToString,
+            ),
+            'list_namespaces_io_stats': grpc.unary_unary_rpc_method_handler(
+                    servicer.list_namespaces_io_stats,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.list_namespaces_io_stats_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.list_namespaces_io_stats_info.SerializeToString,
             ),
             'namespace_set_qos_limits': grpc.unary_unary_rpc_method_handler(
                     servicer.namespace_set_qos_limits,
@@ -592,6 +633,11 @@ def add_GatewayServicer_to_server(servicer, server):
                     servicer.list_connections,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.list_connections_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.connections_info.SerializeToString,
+            ),
+            'get_connection_io_statistics': grpc.unary_unary_rpc_method_handler(
+                    servicer.get_connection_io_statistics,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_io_statistics_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_io_statistics.SerializeToString,
             ),
             'create_listener': grpc.unary_unary_rpc_method_handler(
                     servicer.create_listener,
@@ -667,6 +713,11 @@ def add_GatewayServicer_to_server(servicer, server):
                     servicer.get_thread_stats,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_thread_stats_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.thread_stats_info.SerializeToString,
+            ),
+            'set_gateway_io_stats_mode': grpc.unary_unary_rpc_method_handler(
+                    servicer.set_gateway_io_stats_mode,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_gateway_io_stats_mode_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -828,6 +879,23 @@ class Gateway(object):
         return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_get_io_stats',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_get_io_stats_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_io_stats_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def list_namespaces_io_stats(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/list_namespaces_io_stats',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.list_namespaces_io_stats_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.list_namespaces_io_stats_info.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -1066,6 +1134,23 @@ class Gateway(object):
         return grpc.experimental.unary_unary(request, target, '/Gateway/list_connections',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.list_connections_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.connections_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def get_connection_io_statistics(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/get_connection_io_statistics',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.get_connection_io_statistics_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.connection_io_statistics.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -1321,5 +1406,22 @@ class Gateway(object):
         return grpc.experimental.unary_unary(request, target, '/Gateway/get_thread_stats',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.get_thread_stats_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.thread_stats_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def set_gateway_io_stats_mode(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/set_gateway_io_stats_mode',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.set_gateway_io_stats_mode_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

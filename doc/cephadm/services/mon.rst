@@ -41,7 +41,7 @@ format (e.g., ``10.1.2.0/24``):
 
   .. prompt:: bash #
 
-     ceph config set mon public_network *<mon-cidr-network>*
+     ceph config set mon public_network <mon-cidr-network>
 
   For example:
 
@@ -56,7 +56,7 @@ You can also specify two public networks by using a list of networks:
 
   .. prompt:: bash #
 
-     ceph config set mon public_network *<mon-cidr-network1>,<mon-cidr-network2>*
+     ceph config set mon public_network <mon-cidr-network1>,<mon-cidr-network2>
 
   For example:
 
@@ -80,7 +80,7 @@ run this command:
 
   .. prompt:: bash #
 
-    ceph orch daemon add mon *<host1:ip-or-network1>
+    ceph orch daemon add mon <host1:ip-or-network1>
 
   For example, to deploy a second monitor on ``newhost1`` using an IP
   address ``10.1.2.123`` and a third monitor on ``newhost2`` in
@@ -125,7 +125,7 @@ To deploy each additional monitor:
 
   .. prompt:: bash #
 
-    ceph orch daemon add mon *<newhost1:ip-or-network1>*
+    ceph orch daemon add mon <newhost1:ip-or-network1>
 
 For example, to deploy a second monitor on ``newhost1`` using an IP
 address ``10.1.2.123`` and a third monitor on ``newhost2`` in
@@ -147,7 +147,7 @@ network ``10.1.2.0/24``, run the following commands:
 
   .. prompt:: bash #
 
-     ceph config set mon public_network *<mon-cidr-network>*
+     ceph config set mon public_network <mon-cidr-network>
 
   For example:
 

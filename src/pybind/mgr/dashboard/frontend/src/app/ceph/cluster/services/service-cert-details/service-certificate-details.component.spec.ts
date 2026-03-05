@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { expect as jestExpect } from '@jest/globals';
 
+import { ComponentsModule } from '~/app/shared/components/components.module';
 import { IconComponent } from '~/app/shared/components/icon/icon.component';
 import {
   CephCertificateStatus,
@@ -34,6 +35,7 @@ describe('ServiceCertificateDetailsComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [ServiceCertificateDetailsComponent, IconComponent],
+      imports: [ComponentsModule],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
@@ -59,15 +61,17 @@ describe('ServiceCertificateDetailsComponent', () => {
 
   it('should emit editService with service identifiers', () => {
     component.serviceName = 'svc-name';
-    component.serviceType = 'svc-type';
+    component.serviceType = 'rgw';
+    component.certificate = baseCert;
     fixture.detectChanges();
 
     const emitSpy = jest.spyOn(component.editService, 'emit');
     const button = fixture.debugElement.query(By.css('cds-icon-button'));
 
+    jestExpect(button).not.toBeNull();
     button.triggerEventHandler('click', {});
 
-    jestExpect(emitSpy).toHaveBeenCalledWith({ serviceName: 'svc-name', serviceType: 'svc-type' });
+    jestExpect(emitSpy).toHaveBeenCalledWith({ serviceName: 'svc-name', serviceType: 'rgw' });
   });
 
   it('should show success icon and text for valid status', () => {

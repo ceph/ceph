@@ -23,7 +23,7 @@ export interface NvmeofSubsystem {
   enable_ha?: boolean;
   gw_group?: string;
   initiator_count?: number;
-  psk?: string;
+  has_dhchap_key: boolean;
 }
 
 export interface NvmeofSubsystemData extends NvmeofSubsystem {
@@ -33,7 +33,7 @@ export interface NvmeofSubsystemData extends NvmeofSubsystem {
 
 export interface NvmeofSubsystemInitiator {
   nqn: string;
-  dhchap_key?: string;
+  use_dhchap?: boolean;
 }
 
 export interface NvmeofListener {
@@ -53,12 +53,13 @@ export interface NvmeofSubsystemNamespace {
   rbd_image_name: string;
   rbd_pool_name: string;
   load_balancing_group: number;
-  rbd_image_size: number;
+  rbd_image_size: number | string;
   block_size: number;
-  rw_ios_per_second: number;
-  rw_mbytes_per_second: number;
-  r_mbytes_per_second: number;
-  w_mbytes_per_second: number;
+  rw_ios_per_second: number | string;
+  rw_mbytes_per_second: number | string;
+  r_mbytes_per_second: number | string;
+  w_mbytes_per_second: number | string;
+  subsystem_nqn?: string; // Field from JSON (mapped from ns_subsystem_nqn if needed)
 }
 
 export interface NvmeofGatewayGroup extends CephServiceSpec {
@@ -73,13 +74,21 @@ export interface NvmeofGatewayGroup extends CephServiceSpec {
 
 export enum AUTHENTICATION {
   Unidirectional = 'unidirectional',
-  Bidirectional = 'bidirectional'
+  Bidirectional = 'bidirectional',
+  None = 'none'
 }
+
+export const NO_AUTH = 'No authentication';
 
 export const HOST_TYPE = {
   ALL: 'all',
   SPECIFIC: 'specific'
 };
+
+export interface ListenerItem {
+  content: string;
+  addr: string;
+}
 
 /**
  * Determines the authentication status of a subsystem based on PSK and initiators.
@@ -90,13 +99,10 @@ export function getSubsystemAuthStatus(
   _initiators: NvmeofSubsystemInitiator[] | { hosts?: NvmeofSubsystemInitiator[] }
 ): string {
   // Import enum value strings to avoid circular dependency
-  const NO_AUTH = 'No authentication';
   const UNIDIRECTIONAL = 'Unidirectional';
   const BIDIRECTIONAL = 'Bi-directional';
 
-  if (subsystem.psk) {
-    return BIDIRECTIONAL;
-  }
+  let auth = NO_AUTH;
 
   let hostsList: NvmeofSubsystemInitiator[] = [];
   if (_initiators && 'hosts' in _initiators && Array.isArray(_initiators.hosts)) {
@@ -105,10 +111,62 @@ export function getSubsystemAuthStatus(
     hostsList = _initiators as NvmeofSubsystemInitiator[];
   }
 
-  const hasDhchapKey = hostsList.some((host) => !!host.dhchap_key);
-  if (hasDhchapKey) {
-    return UNIDIRECTIONAL;
+  const hostHasDhchapKey = hostsList.some((host) => !!host.use_dhchap);
+
+  if (hostHasDhchapKey) {
+    auth = UNIDIRECTIONAL;
   }
 
-  return NO_AUTH;
+  if (subsystem.has_dhchap_key && hostHasDhchapKey) {
+    auth = BIDIRECTIONAL;
+  }
+
+  return auth;
 }
+
+// Form control names for NvmeofNamespacesFormComponent
+export enum NsFormField {
+  POOL = 'pool',
+  SUBSYSTEM = 'subsystem',
+  IMAGE_SIZE = 'image_size',
+  NS_COUNT = 'nsCount',
+  RBD_IMAGE_CREATION = 'rbd_image_creation',
+  RBD_IMAGE_NAME = 'rbd_image_name',
+  NAMESPACE_SIZE = 'namespace_size',
+  HOST_ACCESS = 'host_access',
+  INITIATORS = 'initiators'
+}
+
+export enum RbdImageCreation {
+  GATEWAY_PROVISIONED = 'gateway_provisioned',
+  EXTERNALLY_MANAGED = 'externally_managed'
+}
+
+export type NvmeofNamespaceListResponse =
+  | NvmeofSubsystemNamespace[]
+  | { namespaces: NvmeofSubsystemNamespace[] };
+
+export type NvmeofInitiatorCandidate = {
+  content: string;
+  selected: boolean;
+};
+
+export type HostStepType = {
+  addedHosts: Array<string>;
+  hostname: string;
+  hostType: string;
+};
+
+export type AuthStepType = {
+  authType: AUTHENTICATION;
+  subsystemDchapKey: string;
+  hostDchapKeyList: Array<{
+    dhchap_key: string;
+    host_nqn: string;
+  }>;
+};
+
+export type DetailsStepType = {
+  nqn: string;
+  listeners: Array<string>;
+};

@@ -10,6 +10,20 @@ from libc.stdlib cimport malloc, realloc, free
 from cstat cimport stat
 cimport libcpp
 
+# Platform-specific errno handling using C preprocessor
+cdef extern from *:
+    """
+    #include <errno.h>
+    #if defined(__FreeBSD__) || defined(__APPLE__)
+    // FreeBSD/Darwin use ENOATTR for "no data"
+    #define CEPH_ENODATA ENOATTR
+    #else
+    // Linux uses ENODATA
+    #define CEPH_ENODATA ENODATA
+    #endif
+    """
+    int CEPH_ENODATA
+
 {{if BUILD_DOC}}
 include "mock_rgw.pxi"
 {{else}}
@@ -92,35 +106,20 @@ class OutOfRange(Error):
     pass
 
 
-# Build errno mapping based on platform
-# FreeBSD uses ENOATTR while Linux uses ENODATA
-{{if UNAME_SYSNAME == "FreeBSD"}}
+# Build errno mapping
+# Use CEPH_ENODATA which resolves to ENOATTR on FreeBSD or ENODATA on Linux
 cdef errno_to_exception =  {
     errno.EPERM      : PermissionError,
     errno.ENOENT     : ObjectNotFound,
     errno.EIO        : IOError,
     errno.ENOSPC     : NoSpace,
     errno.EEXIST     : ObjectExists,
-    errno.ENOATTR    : NoData,
+    CEPH_ENODATA     : NoData,
     errno.EINVAL     : InvalidValue,
     errno.EOPNOTSUPP : OperationNotSupported,
     errno.ERANGE     : OutOfRange,
     errno.EWOULDBLOCK: WouldBlock,
 }
-{{else}}
-cdef errno_to_exception =  {
-    errno.EPERM      : PermissionError,
-    errno.ENOENT     : ObjectNotFound,
-    errno.EIO        : IOError,
-    errno.ENOSPC     : NoSpace,
-    errno.EEXIST     : ObjectExists,
-    errno.ENODATA    : NoData,
-    errno.EINVAL     : InvalidValue,
-    errno.EOPNOTSUPP : OperationNotSupported,
-    errno.ERANGE     : OutOfRange,
-    errno.EWOULDBLOCK: WouldBlock,
-}
-{{endif}}
 
 
 cdef class FileHandle(object):

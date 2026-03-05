@@ -1,0 +1,116 @@
+<div cdsGrid
+     [useCssGrid]="true"
+     [narrow]="true"
+     [fullWidth]="true">
+  <div cdsCol
+       [columnNumbers]="{sm: 4, md: 8, lg: 12}">
+    <h3 class="cds--type-heading-03 cds-mb-5"
+        i18n>Review summary</h3>
+  </div>
+
+  <!-- Subsystem details -->
+  <div cdsCol
+       [columnNumbers]="{sm: 4, md: 8, lg: 12}"
+       class="cds-mt-5">
+    <h4 class="cds--type-heading-compact-01"
+        i18n>Subsystem details</h4>
+  </div>
+
+  <div cdsCol
+       [columnNumbers]="{sm: 2, md: 4, lg: 6}"
+       class="cds-mt-5">
+    <p class="cds--type-label-01"
+       i18n>Subsystem NQN</p>
+    <p class="cds--type-label-02 cds-mt-2">{{ nqn }}</p>
+  </div>
+  <div cdsCol
+       [columnNumbers]="{sm: 2, md: 4, lg: 6}"
+       class="cds-mt-5">
+    <p class="cds--type-label-01"
+       i18n>Gateway group</p>
+    <p class="cds--type-label-02 cds-mt-2">{{ group }}</p>
+  </div>
+
+  <div cdsCol
+       [columnNumbers]="{sm: 4, md: 8, lg: 12}"
+       class="cds-mt-5">
+    <p class="cds--type-label-01"
+       i18n>Listeners</p>
+    @if (listenerCount > 0) {
+    <p class="cds--type-label-02 cds-mt-2"
+       i18n>{{ listenerCount }} listener(s) added</p>
+    } @else {
+    <p class="cds--type-label-02 cds-mt-2"
+       i18n>None selected</p>
+    }
+  </div>
+
+  <!-- Host access control (Initiators) -->
+  <div cdsCol
+       [columnNumbers]="{sm: 4, md: 8, lg: 12}"
+       class="cds-mt-7">
+    <h4 class="cds--type-heading-compact-01"
+        i18n>Host access control (Initiators)</h4>
+  </div>
+
+  <div cdsCol
+       [columnNumbers]="{sm: 2, md: 4, lg: 6}"
+       class="cds-mt-5">
+    <p class="cds--type-label-01"
+       i18n>Host access</p>
+    <p class="cds--type-label-02 cds-mt-2">{{ hostAccessLabel }}</p>
+  </div>
+  @if (hostType === HOST_TYPE.SPECIFIC) {
+  <div cdsCol
+       [columnNumbers]="{sm: 2, md: 4, lg: 6}"
+       class="cds-mt-5">
+    <p class="cds--type-label-01"
+       i18n>Specific hosts</p>
+    <p class="cds--type-label-02 cds-mt-2"
+       i18n>{{ hostCount }} hosts added.</p>
+  </div>
+  }
+
+  <!-- Authentication details -->
+  <div cdsCol
+       [columnNumbers]="{sm: 4, md: 8, lg: 12}"
+       class="cds-mt-7">
+    <h4 class="cds--type-heading-compact-01"
+        i18n>Authentication details</h4>
+  </div>
+
+  <div cdsCol
+       [columnNumbers]="{sm: 2, md: 4, lg: 6}"
+       class="cds-mt-5">
+    <p class="cds--type-label-01"
+       i18n>Authentication type</p>
+    <p class="cds--type-label-02 cds-mt-2">{{ authTypeLabel }}</p>
+  </div>
+  @if (authType === AUTHENTICATION.Bidirectional) {
+  <div cdsCol
+       [columnNumbers]="{sm: 2, md: 4, lg: 6}"
+       class="cds-mt-5">
+    <p class="cds--type-label-01"
+       i18n>Subsystem DH-HMAC-CHAP key</p>
+    @if (hasSubsystemKey) {
+    <p class="cds--type-label-02 cds-mt-2">••••••••••••</p>
+    } @else {
+    <p class="cds--type-label-02 cds-mt-2"
+       i18n>Not set</p>
+    }
+  </div>
+  }
+  <div cdsCol
+       [columnNumbers]="{sm: 4, md: 8, lg: 12}"
+       class="cds-mt-5">
+    <p class="cds--type-label-01"
+       i18n>Host key</p>
+    @if (hostDchapKeyCount > 0) {
+    <p class="cds--type-label-02 cds-mt-2"
+       i18n>{{ hostDchapKeyCount }} keys added</p>
+    } @else {
+    <p class="cds--type-label-02 cds-mt-2"
+       i18n>No keys added</p>
+    }
+  </div>
+</div>

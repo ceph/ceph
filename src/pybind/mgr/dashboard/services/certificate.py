@@ -301,7 +301,8 @@ class CertificateService:
         :return: Tuple of (cert_details, target_key, cert_name, actual_scope)
         """
         user_cert_name = f"{service_type.replace('-', '_')}_ssl_cert"
-        cephadm_cert_name = f"cephadm-signed_{service_type}_cert"
+        cephadm_cert_name_by_service = f"cephadm-signed_{service_name}_cert"
+        cephadm_cert_name_by_type = f"cephadm-signed_{service_type}_cert"
         cert_details = None
         target_key = None
         cert_name = user_cert_name
@@ -322,19 +323,30 @@ class CertificateService:
                 cert_name = user_cert_name
 
         # If user-provided cert not found, try cephadm-signed certificate
-        if not cert_details and cert_ls_data and cephadm_cert_name in cert_ls_data:
+        # First try by service_name (e.g., cephadm-signed_rgw.test-rgw_cert)
+        if not cert_details and cert_ls_data and cephadm_cert_name_by_service in cert_ls_data:
             cert_details, target_key = _find_certificate_in_data(
-                cert_ls_data, cephadm_cert_name, CertificateScope.HOST,
+                cert_ls_data, cephadm_cert_name_by_service, CertificateScope.HOST,
                 service_name, daemon_hostnames)
             if cert_details:
-                cert_name = cephadm_cert_name
+                cert_name = cephadm_cert_name_by_service
+                actual_scope = CertificateScope.HOST.value.upper()
+
+        # Then try by service_type (e.g., cephadm-signed_grafana_cert)
+        if not cert_details and cert_ls_data and cephadm_cert_name_by_type in cert_ls_data:
+            cert_details, target_key = _find_certificate_in_data(
+                cert_ls_data, cephadm_cert_name_by_type, CertificateScope.HOST,
+                service_name, daemon_hostnames)
+            if cert_details:
+                cert_name = cephadm_cert_name_by_type
                 actual_scope = CertificateScope.HOST.value.upper()
 
         return (cert_details, target_key, cert_name, actual_scope)
 
     @staticmethod
     def fetch_certificates_for_service(orch: OrchClient, service_type: str,
-                                       user_cert_name: str, cephadm_cert_name: str
+                                       user_cert_name: str, cephadm_cert_name: str,
+                                       service_name: Optional[str] = None
                                        ) -> Dict[str, Any]:
         """
         Fetch certificates for a specific service, including missing ones.
@@ -342,7 +354,8 @@ class CertificateService:
         :param orch: Orchestrator client instance
         :param service_type: Service type for filter pattern
         :param user_cert_name: User-provided certificate name
-        :param cephadm_cert_name: Cephadm-signed certificate name
+        :param cephadm_cert_name: Cephadm-signed certificate name (by service_type)
+        :param service_name: Optional service name for cephadm-signed cert by service_name
         :return: Dictionary of certificate data
         """
         service_type_for_filter = service_type.replace('-', '_')
@@ -355,11 +368,18 @@ class CertificateService:
         )
         cert_ls_data = cert_ls_result or {}
 
+        # Build list of cert names to check
+        # Cephadm-signed certs may use service_name (e.g., rgw.test-rgw) or service_type
+        cephadm_cert_name_by_service = \
+            f"cephadm-signed_{service_name}_cert" if service_name else None
+
         missing_certs: List[str] = []
         if user_cert_name not in cert_ls_data:
             missing_certs.append(user_cert_name)
         if cephadm_cert_name not in cert_ls_data:
             missing_certs.append(cephadm_cert_name)
+        if cephadm_cert_name_by_service and cephadm_cert_name_by_service not in cert_ls_data:
+            missing_certs.append(cephadm_cert_name_by_service)
 
         # Fetch any missing certificates individually
         for cert_name in missing_certs:
@@ -435,7 +455,8 @@ class CertificateService:
         response.days_to_expiration = remaining_days
         response.signed_by = signed_by
         response.has_certificate = True
-        response.certificate_source = 'reference'
+        is_cephadm_signed = CEPHADM_SIGNED_CERT in cert_name
+        response.certificate_source = 'cephadm-signed' if is_cephadm_signed else 'inline'
         response.expiry_date = expiry_date
         response.issuer = issuer_str
         response.common_name = common_name

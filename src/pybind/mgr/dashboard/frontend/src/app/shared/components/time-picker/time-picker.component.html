@@ -1,0 +1,10 @@
+<cds-dropdown
+  placeholder="Select time range"
+  (selected)="onTimeSelected($event)"
+  size="sm"
+  [inline]="true"
+  class="timepicker-dropdown"
+  [label]="label"
+  i18n>
+  <cds-dropdown-list [items]="timeOptions"></cds-dropdown-list>
+</cds-dropdown>

@@ -1,6 +1,6 @@
 if(NOT Sanitizers_FIND_COMPONENTS)
   set(Sanitizers_FIND_COMPONENTS
-    address undefined_behavior)
+    address undefined_behavior vptr)
 endif()
 if(HAVE_JEMALLOC)
   message(WARNING "JeMalloc does not work well with sanitizers")
@@ -23,7 +23,11 @@ foreach(component ${Sanitizers_FIND_COMPONENTS})
     set(Sanitizers_thread_COMPILE_OPTIONS "-fsanitize=thread")
   elseif(component STREQUAL "undefined_behavior")
     # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=88684
-    set(Sanitizers_undefined_behavior_COMPILE_OPTIONS "-fsanitize=undefined;-fno-sanitize=vptr")
+    set(Sanitizers_undefined_behavior_COMPILE_OPTIONS "-fsanitize=undefined")
+  elseif (component STREQUAL "vptr")
+    # since Clang version 21, -fsanitize=undefined no longer implies vptr,
+    # so we enable it explicitly
+    set(Sanitizers_vptr_COMPILE_OPTIONS "-fno-sanitize=vptr")
   else()
     message(SEND_ERROR "Unsupported sanitizer: ${component}")
   endif()

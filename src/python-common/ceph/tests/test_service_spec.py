@@ -358,6 +358,19 @@ spec:
   termination_grace_period_seconds: 30
   osd_type: classic
 ---
+service_type: osd
+service_id: osd_spec_seastore
+service_name: osd.osd_spec_seastore
+placement:
+  host_pattern: '*'
+spec:
+  data_devices:
+    model: MC-55-44-XZ
+  filter_logic: AND
+  objectstore: seastore
+  termination_grace_period_seconds: 30
+  osd_type: crimson
+---
 service_type: alertmanager
 service_name: alertmanager
 spec:

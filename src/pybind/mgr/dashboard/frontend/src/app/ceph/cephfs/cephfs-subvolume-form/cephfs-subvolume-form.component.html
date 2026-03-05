@@ -99,6 +99,28 @@
           </ng-template>
         </div>
 
+        <cd-alert-panel *ngIf="!showSnapshotVisibility"
+                        type="warning"
+                        class="cds-mb-6"
+                        i18n>
+          To manage snapshot visibility, first enable
+          client_respect_subvolume_snapshot_visibility.
+        </cd-alert-panel>
+
+        <!-- Snapshot visibility -->
+        <div class="form-item">
+          <cds-checkbox id="snapshotVisibility"
+                        name="snapshotVisibility"
+                        formControlName="snapshotVisibility">
+            <span i18n>Allow snapshot browsing</span>
+            <cd-help-text>
+              <span i18n>
+                When enabled, snapshots will be visible inside the subvolume directory under ".snap".
+              </span>
+            </cd-help-text>
+          </cds-checkbox>
+        </div>
+
         <!-- CephFS Pools -->
         <div class="form-item">
           <cds-select label="CephFS Pools"

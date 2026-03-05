@@ -12155,7 +12155,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf.set_val_or_die("bluestore_debug_randomize_serial_transaction",
 				 "10");
 
-  g_ceph_context->_conf.set_val_or_die("bluefs_check_volume_selector_on_umount", "true");
+  g_ceph_context->_conf.set_val_or_die("bluefs_check_volume_selector_on_mount", "true");
 
   g_ceph_context->_conf.set_val_or_die("bdev_debug_aio", "true");
   g_ceph_context->_conf.set_val_or_die("log_max_recent", "10000");

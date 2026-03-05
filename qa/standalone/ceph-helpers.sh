@@ -1720,6 +1720,35 @@ function wait_for_pg_clean() {
 }
 
 ##
+# Wait for PG data to be available from pg dump
+# Usage: wait_for_pg_data <jq_expression> [timeout]
+# Example: wait_for_pg_data '.pg_stats[0].up[]' 30
+#
+# @param jq_expr jq expression to extract data from pg dump
+# @param timeout timeout in seconds (default: 30)
+# @return 0 on success, 1 on timeout
+#
+function wait_for_pg_data() {
+    local jq_expr="$1"
+    local timeout=${2:-30}
+    local count=0
+    
+    while true; do
+        local result=$(ceph pg dump pgs --format=json 2>/dev/null | jq -r "$jq_expr" 2>/dev/null)
+        if [ -n "$result" ] && [ "$result" != "null" ]; then
+            echo "$result"
+            return 0
+        fi
+        sleep 1
+        count=$((count + 1))
+        if [ $count -gt $timeout ]; then
+            echo "ERROR: Timeout waiting for PG data: $jq_expr" >&2
+            return 1
+        fi
+    done
+}
+
+##
 # Wait until the cluster becomes peered or if it does not make progress
 # for $WAIT_FOR_CLEAN_TIMEOUT seconds.
 # Progress is measured either via the **get_is_making_recovery_progress**

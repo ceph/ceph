@@ -59,6 +59,9 @@ import ErrorFilledIcon from '@carbon/icons/es/error--filled/16';
 import InformationFilledIcon from '@carbon/icons/es/information--filled/16';
 import WarningFilledIcon from '@carbon/icons/es/warning--filled/16';
 import NotificationFilledIcon from '@carbon/icons/es/notification--filled/16';
+import CircleDashIcon20 from '@carbon/icons/es/circle-dash/20';
+import CheckmarkOutlineIcon20 from '@carbon/icons/es/checkmark--outline/20';
+import ArrowRightIcon from '@carbon/icons/es/arrow--right/20';
 
 import CloseIcon from '@carbon/icons/es/close/16';
 import { NotificationPanelComponent } from './notification-panel/notification-panel/notification-panel.component';
@@ -142,7 +145,10 @@ export class NavigationModule {
       WarningFilledIcon,
       NotificationFilledIcon,
       NotificationNewIcon,
-      CloseIcon
+      CloseIcon,
+      CircleDashIcon20,
+      CheckmarkOutlineIcon20,
+      ArrowRightIcon
     ]);
   }
 }

@@ -143,7 +143,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_prometheus(self):
         mgr = FakeMgr()
-        root = Root(mgr, 5000, '0.0.0.0')
+        root = Root(mgr)
         cfg = root.get_sd_config('mgr-prometheus')
 
         # check response structure
@@ -157,7 +157,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_node_exporter(self):
         mgr = FakeMgr()
-        root = Root(mgr, 5000, '0.0.0.0')
+        root = Root(mgr)
         cfg = root.get_sd_config('node-exporter')
 
         # check response structure
@@ -174,7 +174,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_alertmgr(self):
         mgr = FakeMgr()
-        root = Root(mgr, 5000, '0.0.0.0')
+        root = Root(mgr)
         cfg = root.get_sd_config('alertmanager')
 
         # check response structure
@@ -188,7 +188,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_haproxy(self):
         mgr = FakeMgr()
-        root = Root(mgr, 5000, '0.0.0.0')
+        root = Root(mgr)
         cfg = root.get_sd_config('haproxy')
 
         # check response structure
@@ -204,7 +204,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_ceph_exporter(self):
         mgr = FakeMgr()
-        root = Root(mgr, 5000, '0.0.0.0')
+        root = Root(mgr)
         cfg = root.get_sd_config('ceph-exporter')
 
         # check response structure
@@ -218,7 +218,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_nvmeof(self):
         mgr = FakeMgr()
-        root = Root(mgr, 5000, '0.0.0.0')
+        root = Root(mgr)
         cfg = root.get_sd_config('nvmeof')
 
         # check response structure
@@ -232,7 +232,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_nfs(self):
         mgr = FakeMgr()
-        root = Root(mgr, 5000, '0.0.0.0')
+        root = Root(mgr)
         cfg = root.get_sd_config('nfs')
 
         # check response structure
@@ -246,7 +246,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_smb(self):
         mgr = FakeMgr()
-        root = Root(mgr, 5000, '0.0.0.0')
+        root = Root(mgr)
         cfg = root.get_sd_config('smb')
 
         # check response structure
@@ -260,7 +260,7 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_custom_container(self):
         mgr = FakeMgr()
-        root = Root(mgr, 5000, '0.0.0.0')
+        root = Root(mgr)
         cfg = root.get_sd_config('container.custom-container')
 
         # check response structure
@@ -274,6 +274,6 @@ class TestServiceDiscovery:
 
     def test_get_sd_config_invalid_service(self):
         mgr = FakeMgr()
-        root = Root(mgr, 5000, '0.0.0.0')
+        root = Root(mgr)
         cfg = root.get_sd_config('invalid-service')
         assert cfg == []

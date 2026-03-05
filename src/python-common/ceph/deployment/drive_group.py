@@ -257,7 +257,7 @@ class DriveGroupSpec(ServiceSpec):
         #: A list of strings, containing paths which should back OSDs
         self.data_directories = data_directories
 
-        #: ``filestore`` or ``bluestore``
+        #: ``filestore`` or ``bluestore`` or ``seastore``
         self.objectstore = objectstore
 
         #: ``true`` or ``false``
@@ -365,10 +365,10 @@ class DriveGroupSpec(ServiceSpec):
                     self.service_id,
                     "`all` is only allowed for data_devices")
 
-        if self.objectstore not in ('bluestore'):
+        if self.objectstore not in ['bluestore', 'seastore']:
             raise DriveGroupValidationError(self.service_id,
                                             f"{self.objectstore} is not supported. Must be "
-                                            f"one of ('bluestore')")
+                                            f"one of bluestore, seastore")
 
         if self.block_wal_size is not None and type(self.block_wal_size) not in [int, str]:
             raise DriveGroupValidationError(
@@ -396,7 +396,10 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError(
                 self.service_id,
                 'method raw only supports bluestore')
-
+        if self.method == 'raw' and self.objectstore == 'seastore':
+            raise DriveGroupValidationError(
+                self.service_id,
+                'method raw only supports bluestore')
         if self.data_devices.paths is not None:
             for device in list(self.data_devices.paths):
                 if not device.path:
@@ -405,6 +408,10 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError(
                 self.service_id,
                 'osd_type must be one of classic, crimson')
+        if self.objectstore == 'seastore' and self.osd_type == 'classic':
+            raise DriveGroupValidationError(
+                self.service_id,
+                'objectstore seastore only supports osd type crimson')
 
 
 yaml.add_representer(DriveGroupSpec, DriveGroupSpec.yaml_representer)

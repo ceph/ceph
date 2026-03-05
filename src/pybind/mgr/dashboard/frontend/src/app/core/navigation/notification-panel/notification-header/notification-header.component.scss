@@ -19,4 +19,10 @@
     padding-top: 0;
     padding-left: spacing.$spacing-06;
   }
+
+  &__heading-and-button {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+  }
 }

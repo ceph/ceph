@@ -7,14 +7,9 @@
   &-header {
     margin: 0;
     padding: var(--cds-spacing-05);
-
-    &-title {
-      margin: 0;
-    }
-
-    &-actions {
-      margin: 0;
-    }
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
   }
 
   &-section {

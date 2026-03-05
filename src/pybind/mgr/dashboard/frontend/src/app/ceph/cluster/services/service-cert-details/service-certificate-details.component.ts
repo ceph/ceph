@@ -1,9 +1,9 @@
 import {
   CephCertificateStatus,
-  CephServiceCertificate
+  CephServiceCertificate,
+  CERTIFICATE_STATUS_ICON_MAP
 } from '~/app/shared/models/service.interface';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 
 @Component({
@@ -20,13 +20,16 @@ export class ServiceCertificateDetailsComponent {
 
   @Output() editService = new EventEmitter<{ serviceName?: string; serviceType?: string }>();
 
-  readonly statusIconMap: Record<string, keyof typeof ICON_TYPE> = {
-    valid: 'success',
-    expiring: 'warning',
-    expiring_soon: 'warning',
-    expired: 'danger',
-    default: 'warning'
-  };
+  readonly SERVICES_SUPPORTING_CERT_EDIT = [
+    'rgw',
+    'ingress',
+    'iscsi',
+    'oauth2-proxy',
+    'mgmt-gateway',
+    'nvmeof',
+    'nfs'
+  ];
+  statusIconMap = CERTIFICATE_STATUS_ICON_MAP;
 
   constructor(private cdDatePipe: CdDatePipe) {}
 
@@ -34,11 +37,11 @@ export class ServiceCertificateDetailsComponent {
     if (!cert || !cert.requires_certificate || !cert.status) {
       return '-';
     }
-
     const formattedDate = this.formatDate(cert.expiry_date);
     switch (cert.status) {
       case CephCertificateStatus.valid:
         return formattedDate ? `Valid - ${formattedDate}` : 'Valid';
+      case CephCertificateStatus.expiring:
       case CephCertificateStatus.expiringSoon:
         return formattedDate ? `Expiring soon - ${formattedDate}` : 'Expiring soon';
       case CephCertificateStatus.expired:

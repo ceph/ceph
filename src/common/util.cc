@@ -17,9 +17,13 @@
 #include <sys/utsname.h>
 #endif
 
+#include <cstdlib>
 #include <fstream>
+#include <iterator>
+#include <vector>
 #include <boost/algorithm/string.hpp>
 
+#include "acconfig.h"
 #include "include/compat.h"
 #include "include/util.h"
 #include "common/debug.h"
@@ -459,3 +463,40 @@ std::string bytes2str(uint64_t count) {
   snprintf(str, sizeof str, "%" PRIu64 "%sB", count, s[i]);
   return std::string(str);
 }
+
+#ifndef _WIN32
+bool ceph::read_process_cpu_ticks(uint64_t* total, std::string* error)
+{
+  ceph_assert(total != nullptr);
+  const char* stat_path = PROCPREFIX "/proc/self/stat";
+  std::ifstream stat_file(stat_path);
+  if (!stat_file.is_open()) {
+    if (error) {
+      *error = std::string("failed to open '") + stat_path + "'";
+    }
+    return false;
+  }
+
+  std::vector<std::string> stat_vec((std::istream_iterator<std::string>{stat_file}),
+                                    std::istream_iterator<std::string>());
+  if (stat_vec.size() < 15) {
+    if (error) {
+      *error = std::string("failed to parse '") + stat_path + "'";
+    }
+    return false;
+  }
+
+  uint64_t utime = std::strtoull(stat_vec[13].c_str(), nullptr, 10);
+  uint64_t stime = std::strtoull(stat_vec[14].c_str(), nullptr, 10);
+  *total = utime + stime;
+  return true;
+}
+#else
+bool ceph::read_process_cpu_ticks(uint64_t* total, std::string* error)
+{
+  if (error) {
+    *error = "/proc/self/stat not available on this platform";
+  }
+  return false;
+}
+#endif

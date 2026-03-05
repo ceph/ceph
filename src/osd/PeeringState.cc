@@ -2920,6 +2920,10 @@ void PeeringState::activate(
   send_notify = false;
 
   if (is_primary()) {
+    // Update the epoch so that pwlc used by the primary during
+    // peering becomes the definitive copy of pwlc
+    info.partial_writes_last_complete_epoch = get_osdmap_epoch();
+
     // only update primary last_epoch_started if we will go active
     if (acting_set_writeable()) {
       ceph_assert(cct->_conf->osd_find_best_info_ignore_history_les ||
@@ -3375,9 +3379,6 @@ void PeeringState::consider_rollback_pwlc(eversion_t last_complete)
 		 << info.partial_writes_last_complete[shard] << dendl;
     }
   }
-  // Update the epoch so that pwlc adjustments made by the whole
-  // proc_master_log process are recognized as the newest updates
-  info.partial_writes_last_complete_epoch = get_osdmap_epoch();
 }
 
 void PeeringState::proc_master_log(
@@ -3510,7 +3511,12 @@ void PeeringState::proc_master_log(
   // log to be authoritative (i.e., their entries are by definitely
   // non-divergent).
   merge_log(t, oinfo, std::move(olog), from);
+  if (info.last_backfill.is_max() &&
+      pool.info.is_nonprimary_shard(from.shard)) {
+    invalidate_stats = true;
+  }
   info.stats.stats_invalid |= invalidate_stats;
+  increment_stats_invalidations_counter(invalidate_stats);
   peer_info[from] = oinfo;
   psdout(10) << " peer osd." << from << " now " << oinfo
 	     << " " << omissing << dendl;
@@ -3764,6 +3770,9 @@ void PeeringState::split_into(
   child->info.stats.snaptrim_duration = 0.0;
   child->info.last_epoch_started = info.last_epoch_started;
   child->info.last_interval_started = info.last_interval_started;
+
+  increment_stats_invalidations_counter(info.stats.stats_invalid);
+  increment_stats_invalidations_counter(child->info.stats.stats_invalid);
 
   // There can't be recovery/backfill going on now
   int primary, up_primary;
@@ -4435,6 +4444,12 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   }
 }
 
+void PeeringState::increment_stats_invalidations_counter(bool invalidation_state) {
+  if (invalidation_state) {
+    pl->get_peering_perf().inc(rs_stats_invalidated);
+  }
+}
+
 void PeeringState::init(
   int role,
   const vector<int>& newup, int new_up_primary,
@@ -4528,8 +4543,13 @@ void PeeringState::dump_peering_state(Formatter *f)
 void PeeringState::update_stats(
   std::function<bool(pg_history_t &, pg_stat_t &)> f,
   ObjectStore::Transaction *t) {
+  bool previous_stats_invalidation = info.stats.stats_invalid;
   if (f(info.history, info.stats)) {
     pl->publish_stats_to_osd();
+  }
+
+  if (previous_stats_invalidation != info.stats.stats_invalid) {
+    increment_stats_invalidations_counter(info.stats.stats_invalid);
   }
 
   if (t) {
@@ -4578,7 +4598,7 @@ bool PeeringState::append_log_entries_update_missing(
     info.last_complete = info.last_update;
   }
   info.stats.stats_invalid = info.stats.stats_invalid || invalidate_stats;
-
+  increment_stats_invalidations_counter(invalidate_stats);
   psdout(20) << "trim_to bool = " << bool(trim_to)
 	     << " trim_to = " << (trim_to ? *trim_to : eversion_t()) << dendl;
   if (trim_to) {
@@ -4632,6 +4652,7 @@ void PeeringState::merge_new_log_entries(
       dpp);
     pinfo.last_update = info.last_update;
     pinfo.stats.stats_invalid = pinfo.stats.stats_invalid || invalidate_stats;
+    increment_stats_invalidations_counter(invalidate_stats);
     rebuild_missing = rebuild_missing || invalidate_stats;
   }
 

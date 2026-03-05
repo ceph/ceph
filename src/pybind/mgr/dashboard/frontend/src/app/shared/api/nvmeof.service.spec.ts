@@ -191,6 +191,7 @@ describe('NvmeofService', () => {
 
   describe('test initiators APIs', () => {
     let request = { host_nqn: '', gw_group: mockGroupName };
+    let addRequest = { hosts: [], allow_all: true, gw_group: mockGroupName };
     it('should call getInitiators', () => {
       service.getInitiators(mockNQN, mockGroupName).subscribe();
       const req = httpTesting.expectOne(
@@ -199,7 +200,7 @@ describe('NvmeofService', () => {
       expect(req.request.method).toBe('GET');
     });
     it('should call addInitiators', () => {
-      service.addInitiators(mockNQN, request).subscribe();
+      service.addSubsystemInitiators(mockNQN, addRequest).subscribe();
       const req = httpTesting.expectOne(`${UI_API_PATH}/subsystem/${mockNQN}/host`);
       expect(req.request.method).toBe('POST');
     });
@@ -247,7 +248,9 @@ describe('NvmeofService', () => {
     const mockNsid = '1';
     it('should call listNamespaces', () => {
       service.listNamespaces(mockGroupName).subscribe();
-      const req = httpTesting.expectOne(`${API_PATH}/gateway_group/${mockGroupName}/namespace`);
+      const req = httpTesting.expectOne(
+        `${API_PATH}/subsystem/*/namespace?gw_group=${mockGroupName}`
+      );
       expect(req.request.method).toBe('GET');
     });
     it('should call getNamespace', () => {
@@ -281,6 +284,136 @@ describe('NvmeofService', () => {
         `${API_PATH}/subsystem/${mockNQN}/namespace/${mockNsid}?gw_group=${mockGroupName}`
       );
       expect(req.request.method).toBe('DELETE');
+    });
+  });
+
+  describe('getHostsForGroup', () => {
+    const allHosts = [
+      { hostname: 'host1', labels: ['nvmeof'], status: '' },
+      { hostname: 'host2', labels: ['storage'], status: '' },
+      { hostname: 'host3', labels: ['nvmeof', 'storage'], status: '' }
+    ];
+
+    it('should filter hosts by direct host placement', (done) => {
+      const mockGroups = [
+        [{ spec: { group: 'default' }, placement: { hosts: ['host1', 'host3'], label: [] } }]
+      ];
+      mockHostService.getAllHosts.mockReturnValue(of(allHosts));
+
+      service.getHostsForGroup('default').subscribe((hosts: any[]) => {
+        expect(hosts.length).toBe(2);
+        expect(hosts.map((h: any) => h.hostname)).toEqual(['host1', 'host3']);
+        done();
+      });
+
+      const req = httpTesting.expectOne(`${API_PATH}/gateway/group`);
+      req.flush(mockGroups);
+    });
+
+    it('should filter hosts by string label placement', (done) => {
+      const mockGroups = [
+        [{ spec: { group: 'default' }, placement: { hosts: [], label: 'nvmeof' } }]
+      ];
+      mockHostService.getAllHosts.mockReturnValue(of(allHosts));
+
+      service.getHostsForGroup('default').subscribe((hosts: any[]) => {
+        expect(hosts.length).toBe(2);
+        expect(hosts.map((h: any) => h.hostname)).toEqual(['host1', 'host3']);
+        done();
+      });
+
+      const req = httpTesting.expectOne(`${API_PATH}/gateway/group`);
+      req.flush(mockGroups);
+    });
+
+    it('should filter hosts by array label placement', (done) => {
+      const mockGroups = [
+        [{ spec: { group: 'default' }, placement: { hosts: [], label: ['nvmeof', 'storage'] } }]
+      ];
+      mockHostService.getAllHosts.mockReturnValue(of(allHosts));
+
+      service.getHostsForGroup('default').subscribe((hosts: any[]) => {
+        expect(hosts.length).toBe(1);
+        expect(hosts[0].hostname).toBe('host3');
+        done();
+      });
+
+      const req = httpTesting.expectOne(`${API_PATH}/gateway/group`);
+      req.flush(mockGroups);
+    });
+
+    it('should return empty array when group not found', (done) => {
+      const mockGroups = [
+        [{ spec: { group: 'other' }, placement: { hosts: ['host1'], label: [] } }]
+      ];
+      mockHostService.getAllHosts.mockReturnValue(of(allHosts));
+
+      service.getHostsForGroup('non-existent').subscribe((hosts: any[]) => {
+        expect(hosts.length).toBe(0);
+        done();
+      });
+
+      const req = httpTesting.expectOne(`${API_PATH}/gateway/group`);
+      req.flush(mockGroups);
+    });
+
+    it('should return empty array when placement has no hosts or labels', (done) => {
+      const mockGroups = [[{ spec: { group: 'default' }, placement: { hosts: [], label: [] } }]];
+      mockHostService.getAllHosts.mockReturnValue(of(allHosts));
+
+      service.getHostsForGroup('default').subscribe((hosts: any[]) => {
+        expect(hosts.length).toBe(0);
+        done();
+      });
+
+      const req = httpTesting.expectOne(`${API_PATH}/gateway/group`);
+      req.flush(mockGroups);
+    });
+  });
+
+  describe('createListeners', () => {
+    it('should call createListener for each listener in the array', () => {
+      const listeners = [
+        { content: 'ceph-node-01', addr: '192.168.1.1' },
+        { content: 'ceph-node-02', addr: '192.168.1.2' }
+      ];
+
+      service.createListeners('nqn.test', 'default', listeners).subscribe();
+
+      const reqs = httpTesting.match(`${API_PATH}/subsystem/nqn.test/listener`);
+      expect(reqs.length).toBe(2);
+      expect(reqs[0].request.method).toBe('POST');
+      expect(reqs[0].request.body).toEqual({
+        gw_group: 'default',
+        host_name: 'ceph-node-01',
+        traddr: '192.168.1.1',
+        trsvcid: 4420
+      });
+      expect(reqs[1].request.body).toEqual({
+        gw_group: 'default',
+        host_name: 'ceph-node-02',
+        traddr: '192.168.1.2',
+        trsvcid: 4420
+      });
+
+      reqs.forEach((req) => req.flush({}, { status: 200, statusText: 'OK' }));
+    });
+
+    it('should call createListener for a single listener', () => {
+      const listeners = [{ content: 'ceph-node-01', addr: '192.168.1.1' }];
+
+      service.createListeners('nqn.test', 'group1', listeners).subscribe();
+
+      const reqs = httpTesting.match(`${API_PATH}/subsystem/nqn.test/listener`);
+      expect(reqs.length).toBe(1);
+      expect(reqs[0].request.body).toEqual({
+        gw_group: 'group1',
+        host_name: 'ceph-node-01',
+        traddr: '192.168.1.1',
+        trsvcid: 4420
+      });
+
+      reqs[0].flush({}, { status: 200, statusText: 'OK' });
     });
   });
 });

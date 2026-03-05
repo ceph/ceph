@@ -1,8 +1,9 @@
 import socket
 from threading import Lock
-from ceph_node_proxy.util import Config, get_logger, BaseThread
-from typing import Dict, Any
+from typing import Any, Dict, Optional, Union
+
 from ceph_node_proxy.baseclient import BaseClient
+from ceph_node_proxy.util import BaseThread, Config, get_logger
 
 
 class BaseSystem(BaseThread):
@@ -10,7 +11,7 @@ class BaseSystem(BaseThread):
         super().__init__()
         self.lock: Lock = Lock()
         self._system: Dict = {}
-        self.config: Config = kw.get('config', {})
+        self.config: Optional[Union[Config, Dict[str, Any]]] = kw.get("config")
         self.client: BaseClient
         self.log = get_logger(__name__)
 
