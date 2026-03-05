@@ -248,7 +248,7 @@ void PromoteRequest<I>::handle_acquire_exclusive_lock(int r) {
 
 template <typename I>
 void PromoteRequest<I>::rollback() {
-  if (!m_group_snap_id.empty() || (m_rollback_snap_id == CEPH_NOSNAP)) {
+  if (m_rollback_snap_id == CEPH_NOSNAP) {
     create_promote_snapshot();
     return;
   }
@@ -301,8 +301,7 @@ void PromoteRequest<I>::create_promote_snapshot() {
     m_image_ctx, m_global_image_id, CEPH_NOSNAP,
     SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE,
     (snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS |
-     snapshot::CREATE_PRIMARY_FLAG_FORCE), m_group_snap_id, m_snap_id,
-    ctx);
+     snapshot::CREATE_PRIMARY_FLAG_FORCE), nullptr, ctx);
   req->send();
 }
 
