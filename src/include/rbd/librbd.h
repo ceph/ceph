@@ -424,7 +424,7 @@ typedef enum {
 typedef enum {
     RBD_ENCRYPTION_ALGORITHM_AES128 = 0,
     RBD_ENCRYPTION_ALGORITHM_AES256 = 1,
-    RBD_ENCRYPTION_ALGORITHM_AES256_SIV = 2,
+    RBD_ENCRYPTION_ALGORITHM_AES256_HMAC_SHA256 = 2,
 } rbd_encryption_algorithm_t;
 
 typedef void *rbd_encryption_options_t;

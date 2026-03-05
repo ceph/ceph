@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include <openssl/rand.h>
+#include "acconfig.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "include/compat.h"
@@ -81,13 +82,15 @@ void FormatRequest<I>::send() {
       openssl_cipher = "aes-256-xts";
       key_size = 64;
       break;
-    case RBD_ENCRYPTION_ALGORITHM_AES256_SIV:
+#ifdef HAVE_CRYPT_FORMAT_INLINE
+    case RBD_ENCRYPTION_ALGORITHM_AES256_HMAC_SHA256:
       cipher = "cipher_null";
       cipher_mode = "ecb";
-      openssl_cipher = "AES-256-SIV";
-      key_size = 64;
-      meta_size = 32;
+      openssl_cipher = "aes-256-xts";
+      key_size = 96;
+      meta_size = 48;
       break;
+#endif
     default:
       lderr(m_image_ctx->cct) << "unsupported cipher algorithm: " << m_alg
                               << dendl;
@@ -139,9 +142,10 @@ void FormatRequest<I>::send() {
     return;
   }
 
+#ifdef HAVE_CRYPT_FORMAT_INLINE
   if (m_format == RBD_ENCRYPTION_FORMAT_LUKS2 &&
-      m_alg == RBD_ENCRYPTION_ALGORITHM_AES256_SIV) {
-    AEADToken token{meta_size, openssl_cipher};
+      m_alg == RBD_ENCRYPTION_ALGORITHM_AES256_HMAC_SHA256) {
+    AEADToken token{meta_size, "authenc(hmac(sha256),xts(aes))"};
     ceph::JSONFormatter jf(false);
     jf.open_object_section("");
     token.encode_json(&jf);
@@ -154,6 +158,7 @@ void FormatRequest<I>::send() {
       return;
     }
   }
+#endif
 
   r = util::build_crypto(m_image_ctx->cct, openssl_cipher, key, key_size,
                          m_header.get_sector_size(),

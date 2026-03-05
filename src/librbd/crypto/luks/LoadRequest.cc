@@ -4,6 +4,7 @@
 #include "LoadRequest.h"
 #include <string>
 
+#include "acconfig.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/Utils.h"
@@ -223,7 +224,7 @@ void LoadRequest<I>::handle_read_keyslots(int r) {
 
 template <typename I>
 void LoadRequest<I>::read_volume_key() {
-  char volume_key[64];
+  char volume_key[96];
   size_t volume_key_size = sizeof(volume_key);
 
   auto r = m_header.read_volume_key(
@@ -245,6 +246,7 @@ void LoadRequest<I>::read_volume_key() {
 
   size_t meta_size = 0;
   std::string openssl_cipher;
+#ifdef HAVE_CRYPT_FORMAT_INLINE
   if (m_format == RBD_ENCRYPTION_FORMAT_LUKS2 ||
       (m_format == RBD_ENCRYPTION_FORMAT_LUKS &&
        strcmp(m_header.get_format_name(), CRYPT_LUKS2) == 0)) {
@@ -256,13 +258,18 @@ void LoadRequest<I>::read_volume_key() {
         AEADToken aead_token;
         aead_token.decode_json(&parser);
         meta_size = aead_token.meta_size;
-        openssl_cipher = aead_token.alg;
+        if (aead_token.alg == "authenc(hmac(sha256),xts(aes))") {
+          openssl_cipher = "aes-256-xts";
+        } else {
+          openssl_cipher = aead_token.alg;
+        }
         ldout(m_image_ctx->cct, 20)
             << "detected AEAD configuration: meta_size=" << meta_size
-            << " alg=" << openssl_cipher << dendl;
+            << " alg=" << aead_token.alg << dendl;
       }
     }
   }
+#endif
 
   if (openssl_cipher.empty()) {
     if (strcmp(m_header.get_cipher(), "aes") == 0 &&
@@ -272,6 +279,12 @@ void LoadRequest<I>::read_volume_key() {
       } else if (volume_key_size == 64) {
         openssl_cipher = "aes-256-xts";
       }
+    } else if (strcmp(m_header.get_cipher(), "cipher_null") == 0 &&
+               strcmp(m_header.get_cipher_mode(), "ecb") == 0) {
+      lderr(m_image_ctx->cct) << "AEAD encrypted image requires "
+                              << "libcryptsetup >= 2.8.0" << dendl;
+      finish(-ENOTSUP);
+      return;
     } else {
       lderr(m_image_ctx->cct) << "unsupported cipher configuration" << dendl;
       finish(-ENOTSUP);
@@ -284,7 +297,7 @@ void LoadRequest<I>::read_volume_key() {
           reinterpret_cast<unsigned char*>(volume_key),
           volume_key_size, m_header.get_sector_size(), 
           m_header.get_data_offset(), meta_size, m_result_crypto);
-  ceph_memzero_s(volume_key, 64, 64);
+  ceph_memzero_s(volume_key, sizeof(volume_key), sizeof(volume_key));
   finish(r);
 }
 

@@ -264,6 +264,9 @@ endif()
 if(WITH_RBD AND LINUX)
   find_package(libcryptsetup 2.0.5 REQUIRED)
   set(HAVE_LIBCRYPTSETUP ${LIBCRYPTSETUP_FOUND})
+  if(LIBCRYPTSETUP_VERSION VERSION_GREATER_EQUAL "2.8.0")
+    set(HAVE_CRYPT_FORMAT_INLINE TRUE)
+  endif()
 endif()
 
 # libnbd

@@ -4,11 +4,12 @@
 #include "librbd/crypto/openssl/DataCryptor.h"
 #include <openssl/err.h>
 #include <openssl/rand.h>
+#include <openssl/crypto.h>
 #include <string.h>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::crypto::openssl::AEADDataCryptor: " << this << " "<< __func__ << ": "
+#define dout_prefix *_dout << "librbd::crypto::openssl::DataCryptor: " << this << " "<< __func__ << ": "
 
 namespace librbd {
 namespace crypto {
@@ -51,11 +52,6 @@ int DataCryptor::init(const char* cipher_name, const unsigned char* key,
   m_key = new unsigned char[key_length];
   memcpy(m_key, key, key_length);
   m_iv_size = static_cast<uint32_t>(EVP_CIPHER_iv_length(m_cipher.get()));
-  if (m_iv_size == 0) {
-    // When AEAD cipher is used IV equals 0. However I still want to use IV 
-    // as AAD.
-    m_iv_size = sizeof(ceph_le64);
-  }
   return 0;
 }
 
@@ -159,125 +155,232 @@ int DataCryptor::decrypt(EVP_CIPHER_CTX *ctx, const CryptArgs& params) const {
   return update_context(ctx, params);
 }
 
-int AEADDataCryptor::init_context(EVP_CIPHER_CTX* ctx, const unsigned char* iv, 
-                                  uint32_t iv_length) const {
-  // IV can be any length since we use it as AAD but this check is nice to have 
-  // to catch some nasty bugs. 
-  if (iv_length != m_iv_size) {
-    lderr(m_cct) << "cipher expects IV of " << m_iv_size << " bytes. got: "
-                 << iv_length << dendl;
+// AuthEncDataCryptor: authenc(hmac(sha256),xts(aes)) implementation
+
+int AuthEncDataCryptor::init(const char* cipher_name, const unsigned char* key,
+                              uint16_t key_length) {
+  if (key_length != TOTAL_KEY_SIZE) {
+    lderr(m_cct) << "authenc expects " << TOTAL_KEY_SIZE
+                 << "-byte key, got: " << key_length << dendl;
     return -EINVAL;
   }
-  // TODO: Maybe Rework AEAD context initialization to match 
-  //  original init_context() semantics
+
+  // Store full volume key for get_key()
+  m_volume_key.reset(new unsigned char[TOTAL_KEY_SIZE]);
+  memcpy(m_volume_key.get(), key, TOTAL_KEY_SIZE);
+
+  // Init XTS cipher with the first 64 bytes
+  int r = DataCryptor::init(cipher_name, key, XTS_KEY_SIZE);
+  if (r != 0) {
+    return r;
+  }
+
+  // Store HMAC key (last 32 bytes)
+  m_hmac_key.reset(new unsigned char[HMAC_KEY_SIZE]);
+  memcpy(m_hmac_key.get(), key + XTS_KEY_SIZE, HMAC_KEY_SIZE);
+
+  // Cache EVP_MAC and pre-initialized HMAC template context
+  m_mac.reset(EVP_MAC_fetch(NULL, "HMAC", NULL));
+  if (m_mac == nullptr) {
+    lderr(m_cct) << "EVP_MAC_fetch(HMAC) failed" << dendl;
+    log_errors();
+    return -EINVAL;
+  }
+
+  m_mac_template.reset(EVP_MAC_CTX_new(m_mac.get()));
+  if (m_mac_template == nullptr) {
+    lderr(m_cct) << "EVP_MAC_CTX_new failed" << dendl;
+    log_errors();
+    return -EIO;
+  }
+
+  OSSL_PARAM mac_params[2];
+  mac_params[0] = OSSL_PARAM_construct_utf8_string(
+      OSSL_MAC_PARAM_DIGEST, const_cast<char*>("SHA256"), 0);
+  mac_params[1] = OSSL_PARAM_construct_end();
+
+  if (1 != EVP_MAC_init(m_mac_template.get(), m_hmac_key.get(),
+                         HMAC_KEY_SIZE, mac_params)) {
+    lderr(m_cct) << "EVP_MAC_init (template) failed" << dendl;
+    log_errors();
+    return -EIO;
+  }
+
+  // Override m_iv_size to match sector IV size (8 bytes LE sector number)
+  m_iv_size = sizeof(ceph_le64);
+
   return 0;
 }
 
-  int AEADDataCryptor::update_context(EVP_CIPHER_CTX* ctx, const CryptArgs& params) const {
-    int result_len = 0;
-    int ciphertext_len = 0;
-    if (params.meta_len != AES_256_SIV_OVERHEAD) {
-      lderr(m_cct) << "Encryption buffer size mismatch. "
-                   << "Input meata Length: " << params.meta_len
-                   << ", Overhead Length: " << AES_256_SIV_OVERHEAD << dendl;
-      log_errors();
-      return -EIO;
-    }
-    // Data layout is: [ Data (len) | Tag (AES_256_SIV_TAG_SIZE) | Nonce (AES_256_SIV_NONCE_SIZE) ]
-    unsigned char* random_nonce = params.meta + AES_256_SIV_TAG_SIZE;
-    // TODO: Maybe replace with Ceph random
-    if (1 != RAND_bytes(random_nonce, AES_256_SIV_NONCE_SIZE)) {
-        lderr(m_cct) << "RAND_bytes failed" << dendl;
-        log_errors();
-        return -EIO;
-    }
-    // TODO: Maybe do full EVP_EncryptInit_ex re-init to match semantics 
-    if (1 != EVP_CipherInit_ex(ctx, nullptr, nullptr, m_key, random_nonce, -1)) {
-      lderr(m_cct) << "EVP_CipherInit_ex reset failed" << dendl;
-      log_errors();
-      return -EIO;
-    }
-    if (1 != EVP_EncryptUpdate(ctx, nullptr, &result_len, params.iv, params.iv_len)) {
-      lderr(m_cct) << "Sector IV AAD update failed" << dendl;
-      log_errors();
-      return -EIO;
-    }
-    if (1 != EVP_EncryptUpdate(ctx, params.out, &result_len, params.in, params.len)) {
-      lderr(m_cct) << "Failed encryption, len=" << params.len << dendl;
-      log_errors();
-      return -EIO;
-    }
-    ciphertext_len += result_len;
-    if (1 != EVP_EncryptFinal_ex(ctx, params.out + result_len, &result_len)) {
-      lderr(m_cct) << "Failed to finalize encryption, len=" << params.len << dendl;
-      log_errors();
-      return -EIO;
-    }
-    ciphertext_len += result_len;
-    if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, AES_256_SIV_TAG_SIZE,
-                                params.meta)) {
-      lderr(m_cct) << "Failed to retrieve authentication tag, len=" << params.len << dendl;
-      log_errors();
-      return -EIO;
-    }
-    if (std::cmp_not_equal(ciphertext_len, params.len)) {
-      lderr(m_cct) << "Decryption failed" << dendl;
-      log_errors();
-      return -EIO;
-    }
-    return ciphertext_len;
+EVP_CIPHER_CTX* AuthEncDataCryptor::get_context(CipherMode mode) {
+  auto ctx = DataCryptor::get_context(mode);
+  if (ctx != nullptr) {
+    EVP_CIPHER_CTX_set_padding(ctx, 0);
+  }
+  return ctx;
+}
+
+const unsigned char* AuthEncDataCryptor::get_key() const {
+  ceph_assert(CRYPTO_memcmp(m_volume_key.get(), m_key, m_key_size) == 0);
+  ceph_assert(CRYPTO_memcmp(m_volume_key.get() + XTS_KEY_SIZE,
+                             m_hmac_key.get(), HMAC_KEY_SIZE) == 0);
+  return m_volume_key.get();
+}
+
+int AuthEncDataCryptor::get_key_length() const {
+  return TOTAL_KEY_SIZE;
+}
+
+int AuthEncDataCryptor::compute_hmac(
+    const unsigned char* sector_iv, uint32_t sector_iv_len,
+    const unsigned char* iv, const unsigned char* data,
+    uint32_t data_len, unsigned char* tag_out) const {
+  // HMAC(key, sector_number_LE || IV || ciphertext)
+  // Matches dm-crypt authenc AAD layout
+  // Dup from pre-initialized template (key + SHA256 already set)
+  auto mac_ctx = EVP_MAC_CTX_dup(m_mac_template.get());
+  if (mac_ctx == nullptr) {
+    lderr(m_cct) << "EVP_MAC_CTX_dup failed" << dendl;
+    log_errors();
+    return -EIO;
+  }
+  // AAD: sector_number_LE (8 bytes)
+  if (1 != EVP_MAC_update(mac_ctx, sector_iv, sector_iv_len)) {
+    lderr(m_cct) << "EVP_MAC_update (sector IV) failed" << dendl;
+    log_errors();
+    EVP_MAC_CTX_free(mac_ctx);
+    return -EIO;
+  }
+  // AAD: random IV (16 bytes)
+  if (1 != EVP_MAC_update(mac_ctx, iv, RANDOM_IV_SIZE)) {
+    lderr(m_cct) << "EVP_MAC_update (IV) failed" << dendl;
+    log_errors();
+    EVP_MAC_CTX_free(mac_ctx);
+    return -EIO;
+  }
+  // Data: ciphertext
+  if (1 != EVP_MAC_update(mac_ctx, data, data_len)) {
+    lderr(m_cct) << "EVP_MAC_update (data) failed" << dendl;
+    log_errors();
+    EVP_MAC_CTX_free(mac_ctx);
+    return -EIO;
   }
 
-  int AEADDataCryptor::decrypt(EVP_CIPHER_CTX* ctx, const CryptArgs& params) const {                      
-    if (params.meta_len != ( AES_256_SIV_OVERHEAD)) {
-      lderr(m_cct) << "Encryption buffer size mismatch. "
-                   << "Input Length: " << params.meta_len
-                   << ", Overhead Length: " << AES_256_SIV_OVERHEAD << dendl;
-      log_errors();
-      return -EIO;
-    }
-    int result_len = 0;
-    int plaintext_len = 0;
-    // Data layout is: [ Data (len) | Tag (AES_256_SIV_TAG_SIZE) | Nonce (AES_256_SIV_NONCE_SIZE) ]
-    const unsigned char* tag = params.meta; //in + data_len;
-    const unsigned char* nonce = params.meta + AES_256_SIV_TAG_SIZE;
-    if (1 != EVP_CipherInit_ex(ctx, nullptr, nullptr, m_key, nonce, -1)) {
-      lderr(m_cct) << "EVP_CipherInit_ex reset failed" << dendl;
-      log_errors();
-      return -EIO;
-    }
-    if (!EVP_CIPHER_CTX_ctrl(
-            ctx, EVP_CTRL_AEAD_SET_TAG, AES_256_SIV_TAG_SIZE,
-            const_cast<void*>(static_cast<const void*>(tag)))) {
-      lderr(m_cct) << "failed to set auth-tag" << dendl;
-      log_errors();
-      return -EIO;
-    }
+  size_t tag_len = HMAC_SHA256_TAG_SIZE;
+  if (1 != EVP_MAC_final(mac_ctx, tag_out, &tag_len, HMAC_SHA256_TAG_SIZE)) {
+    lderr(m_cct) << "EVP_MAC_final failed" << dendl;
+    log_errors();
+    EVP_MAC_CTX_free(mac_ctx);
+    return -EIO;
+  }
 
-    if (1 != EVP_DecryptUpdate(ctx, NULL, &result_len, params.iv, params.iv_len)) {
-      lderr(m_cct) << "Failed to decrypt update context with nonce"<< dendl;
-      log_errors();
-      return -EIO;
-    }
-    if (1 != EVP_DecryptUpdate(ctx, params.out, &result_len, params.in, params.len)) {
-      lderr(m_cct) << "Failed decryption" << dendl;
-      log_errors();
-      // TODO: Correct error code? 
-      return -EBADMSG;
-    }
-    plaintext_len += result_len;
-    if (1 != EVP_DecryptFinal_ex(ctx, params.out + result_len, &result_len)) {
-      lderr(m_cct) << "Failed to finalize decryption" << dendl;
-      log_errors();
-      return -EIO;  
-    }
-    plaintext_len += result_len;
-    if (std::cmp_not_equal(plaintext_len, params.len)) {
-      lderr(m_cct) << "Decryption failed" << dendl;
-      log_errors();
-      return -EIO;
-    }
-    return plaintext_len;
+  EVP_MAC_CTX_free(mac_ctx);
+  return 0;
+}
+
+int AuthEncDataCryptor::init_context(EVP_CIPHER_CTX* ctx,
+                                      const unsigned char* iv,
+                                      uint32_t iv_length) const {
+  // No-op: random IV is set per-block in update_context/decrypt
+  return 0;
+}
+
+int AuthEncDataCryptor::update_context(EVP_CIPHER_CTX* ctx,
+                                        const CryptArgs& params) const {
+  if (params.meta_len != AUTHENC_OVERHEAD) {
+    lderr(m_cct) << "metadata buffer size mismatch. "
+                 << "got: " << params.meta_len
+                 << ", expected: " << AUTHENC_OVERHEAD << dendl;
+    return -EIO;
+  }
+
+  // Metadata layout: [HMAC tag (32) | random IV (16)]
+  unsigned char* random_iv = params.meta + HMAC_SHA256_TAG_SIZE;
+
+  // 1. Generate random 16-byte IV
+  if (1 != RAND_bytes(random_iv, RANDOM_IV_SIZE)) {
+    lderr(m_cct) << "RAND_bytes failed" << dendl;
+    log_errors();
+    return -EIO;
+  }
+
+  // 2. AES-256-XTS encrypt with random IV as tweak
+  if (1 != EVP_CipherInit_ex(ctx, nullptr, nullptr, nullptr, random_iv, 1)) {
+    lderr(m_cct) << "EVP_CipherInit_ex (set IV) failed" << dendl;
+    log_errors();
+    return -EIO;
+  }
+  int ciphertext_len = 0;
+  if (1 != EVP_EncryptUpdate(ctx, params.out, &ciphertext_len,
+                              params.in, params.len)) {
+    lderr(m_cct) << "EVP_EncryptUpdate failed, len=" << params.len << dendl;
+    log_errors();
+    return -EIO;
+  }
+
+  if (std::cmp_not_equal(ciphertext_len, params.len)) {
+    lderr(m_cct) << "ciphertext length mismatch: " << ciphertext_len
+                 << " vs " << params.len << dendl;
+    return -EIO;
+  }
+
+  // 3. HMAC-SHA256 over (sector_LE || IV || ciphertext)
+  int r = compute_hmac(params.iv, params.iv_len, random_iv,
+                       params.out, ciphertext_len, params.meta);
+  if (r != 0) {
+    return r;
+  }
+
+  return ciphertext_len;
+}
+
+int AuthEncDataCryptor::decrypt(EVP_CIPHER_CTX* ctx,
+                                 const CryptArgs& params) const {
+  if (params.meta_len != AUTHENC_OVERHEAD) {
+    lderr(m_cct) << "metadata buffer size mismatch. "
+                 << "got: " << params.meta_len
+                 << ", expected: " << AUTHENC_OVERHEAD << dendl;
+    return -EIO;
+  }
+
+  // Metadata layout: [HMAC tag (32) | random IV (16)]
+  const unsigned char* stored_tag = params.meta;
+  const unsigned char* iv = params.meta + HMAC_SHA256_TAG_SIZE;
+
+  // 1. Verify HMAC over (sector_LE || IV || ciphertext)
+  unsigned char computed_tag[HMAC_SHA256_TAG_SIZE];
+  int r = compute_hmac(params.iv, params.iv_len, iv,
+                       params.in, params.len, computed_tag);
+  if (r != 0) {
+    return r;
+  }
+
+  if (CRYPTO_memcmp(stored_tag, computed_tag, HMAC_SHA256_TAG_SIZE) != 0) {
+    lderr(m_cct) << "HMAC verification failed" << dendl;
+    return -EBADMSG;
+  }
+
+  // 2. AES-256-XTS decrypt with stored IV
+  if (1 != EVP_CipherInit_ex(ctx, nullptr, nullptr, nullptr, iv, 0)) {
+    lderr(m_cct) << "EVP_CipherInit_ex (set IV) failed" << dendl;
+    log_errors();
+    return -EIO;
+  }
+  int plaintext_len = 0;
+  if (1 != EVP_DecryptUpdate(ctx, params.out, &plaintext_len,
+                              params.in, params.len)) {
+    lderr(m_cct) << "EVP_DecryptUpdate failed" << dendl;
+    log_errors();
+    return -EIO;
+  }
+
+  if (std::cmp_not_equal(plaintext_len, params.len)) {
+    lderr(m_cct) << "plaintext length mismatch: " << plaintext_len
+                 << " vs " << params.len << dendl;
+    return -EIO;
+  }
+
+  return plaintext_len;
 }
 
 } // namespace openssl

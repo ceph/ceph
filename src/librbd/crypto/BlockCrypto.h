@@ -11,14 +11,6 @@
 namespace librbd {
 namespace crypto {
 
-inline bool is_aead(const char* algo) {
-  auto cipher = EVP_CIPHER_fetch(NULL, algo, NULL);
-  if (cipher == nullptr) {
-    return false;
-  }
-  return (EVP_CIPHER_flags(cipher) & EVP_CIPH_FLAG_AEAD_CIPHER) != 0;
-}
-
 template <typename T>
 class BlockCrypto : public CryptoInterface {
 

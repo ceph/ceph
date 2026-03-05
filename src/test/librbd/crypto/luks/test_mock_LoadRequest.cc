@@ -1,9 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include "acconfig.h"
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "common/JSONFormatter.h"
 
 namespace librbd {
 namespace util {
@@ -327,6 +329,47 @@ TEST_F(TestMockCryptoLuksLoadRequest, WrongPassphrase) {
   ASSERT_EQ(crypto.get(), nullptr);
   ASSERT_EQ("LUKS2", detected_format_name);
 }
+
+#ifdef HAVE_CRYPT_FORMAT_INLINE
+TEST_F(TestMockCryptoLuksLoadRequest, AES256_HMAC_SHA256) {
+  // generate AEAD header (same as FormatRequest does)
+  {
+    Header header(mock_image_ctx->cct);
+    ASSERT_EQ(0, header.init());
+    ASSERT_EQ(0, header.format(CRYPT_LUKS2, "cipher_null", nullptr, 96,
+                               "ecb", 4096, OBJECT_SIZE, true));
+    ASSERT_EQ(0, header.add_keyslot(passphrase_cstr, strlen(passphrase_cstr)));
+
+    AEADToken token{48, "authenc(hmac(sha256),xts(aes))"};
+    ceph::JSONFormatter jf(false);
+    jf.open_object_section("");
+    token.encode_json(&jf);
+    jf.close_section();
+    std::stringstream ss;
+    jf.flush(ss);
+    ASSERT_EQ(0, header.token_update(token::TYPE_AEAD, ss.str().c_str()));
+    ASSERT_LT(0, header.read(&header_bl));
+    data_offset = header.get_data_offset();
+  }
+
+  expect_image_read(0, DEFAULT_INITIAL_READ_SIZE);
+  expect_get_image_size(OBJECT_SIZE << 5);
+  expect_get_stripe_period(OBJECT_SIZE);
+  mock_load_request->send();
+
+  // cipher_null/96 header (~288KB) exceeds DEFAULT_INITIAL_READ_SIZE (256KB),
+  // so crypt_volume_key_get fails on first attempt (incomplete keyslot data),
+  // triggering a retry read up to data_offset
+  expect_image_read(DEFAULT_INITIAL_READ_SIZE,
+                    data_offset - DEFAULT_INITIAL_READ_SIZE);
+  image_read_request->complete(DEFAULT_INITIAL_READ_SIZE);
+
+  image_read_request->complete(data_offset - DEFAULT_INITIAL_READ_SIZE);
+  ASSERT_EQ(0, finished_cond.wait());
+  ASSERT_NE(crypto.get(), nullptr);
+  ASSERT_EQ("LUKS2", detected_format_name);
+}
+#endif
 
 } // namespace luks
 } // namespace crypto
