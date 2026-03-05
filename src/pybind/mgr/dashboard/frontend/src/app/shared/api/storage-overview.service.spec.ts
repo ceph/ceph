@@ -26,7 +26,7 @@ describe('OverviewStorageService', () => {
       service.getTrendData(1000, 2000, 60);
       expect(promSpy).toHaveBeenCalledWith(
         { start: 1000, end: 2000, step: 60 },
-        { TOTAL_RAW_USED: 'sum(ceph_pool_bytes_used)' },
+        { TOTAL_RAW_USED: 'sum(ceph_osd_stat_bytes_used)' },
         true
       );
     });
@@ -71,13 +71,13 @@ describe('OverviewStorageService', () => {
   });
 
   describe('getTimeUntilFull', () => {
-    it('should return ∞ when days is Infinity', (done) => {
+    it('should return N/A when days is Infinity', (done) => {
       jest
         .spyOn(service['prom'], 'getPrometheusQueryData')
         .mockReturnValue(new (require('rxjs').of)({ result: [] }));
 
       service.getTimeUntilFull().subscribe((result) => {
-        expect(result).toBe('∞');
+        expect(result).toBe('N/A');
         done();
       });
     });
@@ -115,13 +115,13 @@ describe('OverviewStorageService', () => {
       });
     });
 
-    it('should return ∞ when days <= 0', (done) => {
+    it('should return N/A when days <= 0', (done) => {
       jest
         .spyOn(service['prom'], 'getPrometheusQueryData')
         .mockReturnValue(new (require('rxjs').of)({ result: [{ value: [null, '-5'] }] }));
 
       service.getTimeUntilFull().subscribe((result) => {
-        expect(result).toBe('∞');
+        expect(result).toBe('N/A');
         done();
       });
     });

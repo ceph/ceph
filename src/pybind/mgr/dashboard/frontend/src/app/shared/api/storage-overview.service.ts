@@ -8,9 +8,9 @@ import { forkJoin, Observable } from 'rxjs';
 export class OverviewStorageService {
   private readonly prom = inject(PrometheusService);
   private readonly formatter = inject(FormatterService);
-  private readonly AVG_CONSUMPTION_QUERY = 'sum(rate(ceph_pool_bytes_used[7d])) * 86400';
-  private readonly TIME_UNTIL_FULL_QUERY = `(sum(ceph_pool_max_avail)) / (sum(rate(ceph_pool_bytes_used[7d])) * 86400)`;
-  private readonly TOTAL_RAW_USED_QUERY = 'sum(ceph_pool_bytes_used)';
+  private readonly AVG_CONSUMPTION_QUERY = 'sum(rate(ceph_osd_stat_bytes_used[7d])) * 86400';
+  private readonly TIME_UNTIL_FULL_QUERY = `(sum(ceph_osd_stat_bytes)) / (sum(rate(ceph_osd_stat_bytes_used[7d])) * 86400)`;
+  private readonly TOTAL_RAW_USED_QUERY = 'sum(ceph_osd_stat_bytes_used)';
   private readonly OBJECT_POOLS_COUNT_QUERY = 'count(ceph_pool_metadata{application="Object"})';
 
   getTrendData(start: number, end: number, stepSec: number) {
@@ -43,11 +43,12 @@ export class OverviewStorageService {
     return this.prom.getPrometheusQueryData({ params: this.TIME_UNTIL_FULL_QUERY }).pipe(
       map((res) => {
         const days = Number(res?.result?.[0]?.value?.[1] ?? Infinity);
-        if (!isFinite(days) || days <= 0) return '∞';
+        if (!isFinite(days) || days <= 0) return 'N/A';
 
         if (days < 1) return `${(days * 24).toFixed(1)} hours`;
         if (days < 30) return `${days.toFixed(1)} days`;
-        return `${(days / 30).toFixed(1)} months`;
+        if (days < 365) return `${(days / 30).toFixed(1)} months`;
+        return `${(days / 365).toFixed(1)} years`;
       })
     );
   }
