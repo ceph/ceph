@@ -236,7 +236,7 @@ class MDSThrasher(Thrasher, Greenlet):
         while not self.stopping.is_set():
             delay = self.max_thrash_delay
             if self.randomize:
-                delay = random.randrange(0.0, self.max_thrash_delay)
+                delay = random.uniform(0.0, self.max_thrash_delay)
 
             if delay > 0.0:
                 self.log('waiting for {delay} secs before thrashing'.format(delay=delay))
@@ -315,7 +315,7 @@ class MDSThrasher(Thrasher, Greenlet):
                 # standby
                 delay = self.max_revive_delay
                 if self.randomize:
-                    delay = random.randrange(0.0, self.max_revive_delay)
+                    delay = random.uniform(0.0, self.max_revive_delay)
 
                 self.log('waiting for {delay} secs before reviving {label}'.format(
                     delay=delay, label=label))
@@ -342,17 +342,17 @@ class MDSThrasher(Thrasher, Greenlet):
              # don't do replay thrashing right now
 #            for info in status.get_replays(self.fs.id):
 #                # this might race with replay -> active transition...
-#                if status['state'] == 'up:replay' and random.randrange(0.0, 1.0) < self.thrash_in_replay:
+#                if status['state'] == 'up:replay' and random.uniform(0.0, 1.0) < self.thrash_in_replay:
 #                    delay = self.max_replay_thrash_delay
 #                    if self.randomize:
-#                        delay = random.randrange(0.0, self.max_replay_thrash_delay)
+#                        delay = random.uniform(0.0, self.max_replay_thrash_delay)
 #                sleep(delay)
 #                self.log('kill replaying mds.{id}'.format(id=self.to_kill))
 #                self.kill_mds(self.to_kill)
 #
 #                delay = self.max_revive_delay
 #                if self.randomize:
-#                    delay = random.randrange(0.0, self.max_revive_delay)
+#                    delay = random.uniform(0.0, self.max_revive_delay)
 #
 #                self.log('waiting for {delay} secs before reviving mds.{id}'.format(
 #                    delay=delay, id=self.to_kill))
