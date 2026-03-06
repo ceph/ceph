@@ -11495,6 +11495,108 @@ TEST_P(CorruptedOnodesTest, Recover_TolerateMissingHeadShard)
   cleanup_store();
 }
 
+TEST_P(CorruptedOnodesTest, Fsck_FixMissingHeadShard)
+{
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  prepare_store();
+
+  mount();
+  BlueStore* bs = dynamic_cast<BlueStore*>(store.get());
+  ceph_assert(bs);
+  KeyValueDB* pdb = bs->get_kv();
+  KeyValueDB::Iterator it = pdb->get_iterator("O");
+  it->seek_to_first();
+  while (it->valid()) {
+    if (it->key().contains("my_special_object") &&
+    it->key().ends_with("o")) {
+      //delete main key for the object
+      auto trans = pdb->get_transaction();
+      trans->rm_single_key("O", it->key());
+      pdb->submit_transaction_sync(trans);
+      break;
+    }
+    it->next();
+  }
+  it.reset();
+  umount();
+
+  ASSERT_GT(store->fsck(false), 8); // I observe 11, so 8 seems safe
+  ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
+
+  cleanup_store();
+}
+
+TEST_P(CorruptedOnodesTest, Fsck_FixExtraShard)
+{
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  prepare_store();
+  mount();
+  BlueStore* bs = dynamic_cast<BlueStore*>(store.get());
+  ceph_assert(bs);
+  KeyValueDB* pdb = bs->get_kv();
+  KeyValueDB::Iterator it = pdb->get_iterator("O");
+  it->seek_to_first();
+  while (it->valid()) {
+    if (it->key().contains("my_special_object") &&
+        it->key().ends_with("x")) {
+      //duplicate shard into offset +1
+      auto trans = pdb->get_transaction();
+      std::string new_key = it->key();
+      new_key[new_key.size() - 2] = '\001';
+      trans->set("O", new_key, it->value());
+      pdb->submit_transaction_sync(trans);
+      break;
+    }
+    it->next();
+  }
+  it.reset();
+  umount();
+
+  ASSERT_EQ(store->fsck(false), 1);
+  ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
+
+  cleanup_store();
+}
+
+TEST_P(CorruptedOnodesTest, Fsck_Fix3ExtraShards) {
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  prepare_store();
+
+  mount();
+  BlueStore* bs = dynamic_cast<BlueStore*>(store.get());
+  ceph_assert(bs);
+  KeyValueDB* pdb = bs->get_kv();
+  KeyValueDB::Iterator it = pdb->get_iterator("O");
+  it->seek_to_first();
+  while (it->valid()) {
+    if (it->key().contains("my_special_object") &&
+        it->key().ends_with("x")) {
+      //duplicate shard into offset +1
+      auto trans = pdb->get_transaction();
+      std::string new_key = it->key();
+      new_key[new_key.size() - 2] = '\001';
+      trans->set("O", new_key, it->value());
+      new_key[new_key.size() - 2] = '\002';
+      trans->set("O", new_key, it->value());
+      new_key[new_key.size() - 2] = '\003';
+      trans->set("O", new_key, it->value());
+      pdb->submit_transaction_sync(trans);
+      break;
+    }
+    it->next();
+  }
+  it.reset();
+  umount();
+
+  ASSERT_EQ(store->fsck(false), 3);
+  ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
+
+  cleanup_store();
+}
+
 #endif // WITH_BLUESTORE
 
 TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsHdd) {
