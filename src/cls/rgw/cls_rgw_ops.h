@@ -4,6 +4,7 @@
 #pragma once
 
 #include "cls/rgw/cls_rgw_types.h"
+#include "include/rados/librados_fwd.hpp"
 
 struct rgw_cls_tag_timeout_op
 {
@@ -79,21 +80,27 @@ struct rgw_cls_obj_prepare_op
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_prepare_op)
 
-struct rgw_cls_obj_complete_op
-{
-  RGWModifyOp op;
+// common bilog-related fields shared across bucket index write operations.
+// wire structs (rgw_cls_obj_complete_op, rgw_cls_link_olh_op,
+// rgw_cls_unlink_instance_op) inherit from this to provide a uniform
+// interface for both InIndex (cls_rgw CLS) and FIFO bilog writing.
+struct cls_rgw_bi_log_related_op {
+  bool log_op{false};
   cls_rgw_obj_key key;
+  std::string op_tag;
+  rgw_zone_set zones_trace;
+  uint16_t bilog_flags{0};
+  RGWModifyOp op{CLS_RGW_OP_UNKNOWN};
+};
+
+struct rgw_cls_obj_complete_op : cls_rgw_bi_log_related_op
+{
   std::string locator;
   rgw_bucket_entry_ver ver;
   rgw_bucket_dir_entry_meta meta;
-  std::string tag;
-  bool log_op;
-  uint16_t bilog_flags;
-
   std::list<cls_rgw_obj_key> remove_objs;
-  rgw_zone_set zones_trace;
 
-  rgw_cls_obj_complete_op() : op(CLS_RGW_OP_ADD), log_op(false), bilog_flags(0) {}
+  rgw_cls_obj_complete_op() { op = CLS_RGW_OP_ADD; }
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(9, 7, bl);
@@ -101,7 +108,7 @@ struct rgw_cls_obj_complete_op
     encode(c, bl);
     encode(ver.epoch, bl);
     encode(meta, bl);
-    encode(tag, bl);
+    encode(op_tag, bl);
     encode(locator, bl);
     encode(remove_objs, bl);
     encode(ver, bl);
@@ -110,7 +117,7 @@ struct rgw_cls_obj_complete_op
     encode(bilog_flags, bl);
     encode(zones_trace, bl);
     ENCODE_FINISH(bl);
- }
+  }
   void decode(ceph::buffer::list::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(9, 3, 3, bl);
     uint8_t c;
@@ -121,7 +128,7 @@ struct rgw_cls_obj_complete_op
     }
     decode(ver.epoch, bl);
     decode(meta, bl);
-    decode(tag, bl);
+    decode(op_tag, bl);
     if (struct_v >= 2) {
       decode(locator, bl);
     }
@@ -162,20 +169,15 @@ struct rgw_cls_obj_complete_op
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_complete_op)
 
-struct rgw_cls_link_olh_op {
-  cls_rgw_obj_key key;
+struct rgw_cls_link_olh_op : cls_rgw_bi_log_related_op {
   std::string olh_tag;
-  bool delete_marker;
-  std::string op_tag;
+  bool delete_marker{false};
   rgw_bucket_dir_entry_meta meta;
-  uint64_t olh_epoch;
-  bool log_op;
-  uint16_t bilog_flags;
-  ceph::real_time unmod_since; /* only create delete marker if newer then this */
-  bool high_precision_time;
-  rgw_zone_set zones_trace;
+  uint64_t olh_epoch{0};
+  ceph::real_time unmod_since; /* only create delete marker if newer than this */
+  bool high_precision_time{false};
 
-  rgw_cls_link_olh_op() : delete_marker(false), olh_epoch(0), log_op(false), bilog_flags(0), high_precision_time(false) {}
+  rgw_cls_link_olh_op() {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(5, 1, bl);
@@ -229,13 +231,9 @@ struct rgw_cls_link_olh_op {
 };
 WRITE_CLASS_ENCODER(rgw_cls_link_olh_op)
 
-struct rgw_cls_unlink_instance_op {
-  cls_rgw_obj_key key;
-  std::string op_tag;
+struct rgw_cls_unlink_instance_op : cls_rgw_bi_log_related_op {
   // this represents a remote epoch during multisite sync
-  uint64_t olh_epoch;
-  bool log_op;
-  uint16_t bilog_flags;
+  uint64_t olh_epoch{0};
   // cls ops include olh_tag so the OLH class code can guard sensitive updates—only proceed if op.olh_tag equals
   // the OLH’s stored tag. If it doesn’t, the op fails and the caller refreshes state/retries.
   // for context: in real clusters, out‑of‑order replication or topology changes can recreate/move an OLH
@@ -243,9 +241,8 @@ struct rgw_cls_unlink_instance_op {
   // writers carrying the old tag get refused instead of overwriting the new state. A concrete example of failures
   // tied to OLH attributes shows how wrong attributes/tags cause bad GET behavior, which is why the guard exists.
   std::string olh_tag;
-  rgw_zone_set zones_trace;
 
-  rgw_cls_unlink_instance_op() : olh_epoch(0), log_op(false), bilog_flags(0) {}
+  rgw_cls_unlink_instance_op() { op = CLS_RGW_OP_UNLINK_INSTANCE; }
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(3, 1, bl);
@@ -1789,3 +1786,93 @@ struct cls_rgw_get_bucket_resharding_ret  {
   void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_ret)
+
+// ---------------------------------------------------------------------------
+// OpIssuer types: carry bilog metadata and issue the CLS bucket index op.
+// used by with_bilog<CLSRGWOpType>() in rgw_rados.cc to dispatch both the
+// in-index CLS operation and (for FIFO buckets) the bilog FIFO write.
+// ---------------------------------------------------------------------------
+
+// base for CLSRGWCompleteModifyOp — holds all bilog fields and issues the
+// cls_rgw_bucket_complete_op() call.
+struct CLSRGWCompleteModifyOpBase : cls_rgw_bi_log_related_op {
+  CLSRGWCompleteModifyOpBase(bool log_data, cls_rgw_obj_key key_,
+                             std::string tag_, const rgw_zone_set* zones_trace_,
+                             uint16_t bilog_flags_,
+                             RGWModifyOp op_ = CLS_RGW_OP_UNKNOWN) {
+    log_op = log_data;
+    key = std::move(key_);
+    op_tag = std::move(tag_);
+    if (zones_trace_) zones_trace = *zones_trace_;
+    bilog_flags = bilog_flags_;
+    op = op_;
+  }
+  void complete_op(librados::ObjectWriteOperation& o,
+                   const rgw_bucket_entry_ver& ver,
+                   const rgw_bucket_dir_entry_meta& dir_meta,
+                   const std::list<cls_rgw_obj_key>* remove_objs,
+                   const std::string& locator) const;
+};
+
+// typed complete-op issuer.
+template <RGWModifyOp OpType>
+struct CLSRGWCompleteModifyOp : CLSRGWCompleteModifyOpBase {
+  template <class... Args>
+  explicit CLSRGWCompleteModifyOp(Args&&... args)
+    : CLSRGWCompleteModifyOpBase(std::forward<Args>(args)...) { op = OpType; }
+};
+
+// base for CLSRGWLinkOLH
+struct CLSRGWLinkOLHBase : private cls_rgw_bi_log_related_op {
+  CLSRGWLinkOLHBase(bool log_data, cls_rgw_obj_key key_,
+                    std::string tag_, const rgw_zone_set* zones_trace_,
+                    uint16_t bilog_flags_) {
+    log_op = log_data;
+    key = std::move(key_);
+    op_tag = std::move(tag_);
+    if (zones_trace_) zones_trace = *zones_trace_;
+    bilog_flags = bilog_flags_;
+  }
+  static RGWModifyOp get_bilog_op_type(bool delete_marker) {
+    return delete_marker ? CLS_RGW_OP_LINK_OLH_DM : CLS_RGW_OP_LINK_OLH;
+  }
+  std::string& get_op_tag_ref() { return op_tag; }
+  const cls_rgw_bi_log_related_op& get_bilog_op() const { return *this; }
+
+  void link_olh(librados::ObjectWriteOperation& o,
+                const ceph::bufferlist& olh_tag,
+                bool delete_marker,
+                const rgw_bucket_dir_entry_meta* meta,
+                uint64_t olh_epoch,
+                ceph::real_time unmod_since,
+                bool high_precision_time) const;
+};
+
+// typed OLH-link issuer. DeleteMarkerV selects LINK_OLH vs LINK_OLH_DM.
+template <bool DeleteMarkerV>
+struct CLSRGWLinkOLH : CLSRGWLinkOLHBase {
+  using CLSRGWLinkOLHBase::CLSRGWLinkOLHBase;
+  static constexpr RGWModifyOp get_bilog_op_type() {
+    return DeleteMarkerV ? CLS_RGW_OP_LINK_OLH_DM : CLS_RGW_OP_LINK_OLH;
+  }
+};
+
+// issuer for unlink-instance ops. always carries CLS_RGW_OP_UNLINK_INSTANCE.
+struct CLSRGWUnlinkInstance : cls_rgw_bi_log_related_op {
+  CLSRGWUnlinkInstance(bool log_data, cls_rgw_obj_key key_,
+                       std::string tag_, const rgw_zone_set* zones_trace_,
+                       uint16_t bilog_flags_) {
+    log_op = log_data;
+    key = std::move(key_);
+    op_tag = std::move(tag_);
+    if (zones_trace_) zones_trace = *zones_trace_;
+    bilog_flags = bilog_flags_;
+    op = CLS_RGW_OP_UNLINK_INSTANCE;
+  }
+  static constexpr RGWModifyOp get_bilog_op_type() {
+    return CLS_RGW_OP_UNLINK_INSTANCE;
+  }
+  void unlink_instance(librados::ObjectWriteOperation& o,
+                       const std::string& olh_tag,
+                       uint64_t olh_epoch) const;
+};

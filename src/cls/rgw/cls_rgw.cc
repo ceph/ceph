@@ -1318,7 +1318,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     entry.meta = meta;
     entry.key = op.key;
     entry.exists = true;
-    entry.tag = op.tag;
+    entry.tag = op.op_tag;
     // account for new entry
     stats.num_entries++;
     stats.total_size += meta.accounted_size;
@@ -1337,7 +1337,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   } // CLS_RGW_OP_ADD
 
   if (log_op) {
-    rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
+    rc = log_index_operation(hctx, op.key, op.op, op.op_tag, entry.meta.mtime,
 			     entry.ver, CLS_RGW_STATE_COMPLETE, header.ver,
 			     header.max_marker, op.bilog_flags, NULL, NULL,
 			     &op.zones_trace);
