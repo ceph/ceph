@@ -2259,11 +2259,6 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   return r;
 }
 
-void RGWOp::update_usage_stats_if_needed() {
-  // Stats are now updated directly in each operation's execute() method
-  // This method can be left as a no-op.
-}
-
 int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 {
   RGWSLOInfo slo_info;

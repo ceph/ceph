@@ -75,14 +75,9 @@ void UsagePerfCounters::create_global_counters() {
 
 PerfCounters* UsagePerfCounters::create_user_counters(const std::string& user_id) {
 
-  std::string name = "rgw_user_" + user_id;
-
-  // Sanitize name for perf counters (replace non-alphanumeric with underscore)
-  for (char& c : name) {
-    if (!std::isalnum(c) && c != '_') {
-      c = '_';
-    }
-  }
+  std::string name = ceph::perf_counters::key_create("rgw_user_usage", {
+      {"owner", user_id},
+  });
 
   // Create a separate enum range for user-specific counters
   enum {
@@ -106,16 +101,15 @@ PerfCounters* UsagePerfCounters::create_user_counters(const std::string& user_id
   return counters;
 }
 
-PerfCounters* UsagePerfCounters::create_bucket_counters(const std::string& bucket_name) {
+PerfCounters* UsagePerfCounters::create_bucket_counters(const std::string& bucket_name,
+                                                        const std::string& tenant,
+                                                        const std::string& owner) {
 
-  std::string name = "rgw_bucket_" + bucket_name;
-  
-  // Sanitize name for perf counters
-  for (char& c : name) {
-    if (!std::isalnum(c) && c != '_') {
-      c = '_';
-    }
-  }
+  std::string name = ceph::perf_counters::key_create("rgw_bucket_usage", {
+      {"tenant", tenant},
+      {"owner",  owner},
+      {"bucket", bucket_name},
+  });
 
   // Create a separate enum range for bucket-specific counters
   enum {
@@ -207,7 +201,7 @@ void UsagePerfCounters::start() {
         std::unique_lock lock(counters_mutex);
         auto it = bucket_perf_counters.find(bucket_name);
         if (it == bucket_perf_counters.end()) {
-          PerfCounters* counters = create_bucket_counters(bucket_name);
+          PerfCounters* counters = create_bucket_counters(bucket_name, tenant, "");
           if (counters) {
             bucket_perf_counters[bucket_name] = counters;
             it = bucket_perf_counters.find(bucket_name);
@@ -350,10 +344,32 @@ void UsagePerfCounters::sync_bucket_from_rados(const std::string& bucket_key) {
                    << ": " << cpp_strerror(-ret) << dendl;
     return;
   }
-  
+
+  std::string owner_str;
+  const auto& bi = bucket->get_info();
+  std::visit([&owner_str](auto&& o) {
+      using T = std::decay_t<decltype(o)>;
+      if constexpr (std::is_same_v<T, rgw_user>) {
+          owner_str = o.to_str();
+      } else {
+          owner_str = std::string(o);
+      }
+      }, bi.owner);
+
   ldout(cct, 15) << "Got stats from RADOS: bucket=" << bucket_key
-                 << " bytes=" << ent.size
-                 << " objects=" << ent.count << dendl;
+                << " owner=" << owner_str
+                << " bytes=" << ent.size
+                << " objects=" << ent.count << dendl;
+
+  {
+    std::unique_lock lock(counters_mutex);
+    auto it = bucket_perf_counters.find(bucket_name);
+    if (it != bucket_perf_counters.end()) {
+      cct->get_perfcounters_collection()->remove(it->second);
+      delete it->second;
+      bucket_perf_counters.erase(it);
+    }
+  }
   
   // Update local LMDB cache
   if (cache) {
@@ -361,7 +377,7 @@ void UsagePerfCounters::sync_bucket_from_rados(const std::string& bucket_key) {
   }
   
   // Update perf counters
-  update_bucket_stats(bucket_name, ent.size, ent.count, tenant, false);
+  update_bucket_stats(bucket_name, ent.size, ent.count, owner_str, false);
 }
 
 void UsagePerfCounters::stop() {
@@ -456,7 +472,7 @@ void UsagePerfCounters::update_bucket_stats(const std::string& bucket_name,
     
     auto it = bucket_perf_counters.find(bucket_name);
     if (it == bucket_perf_counters.end()) {
-      PerfCounters* counters = create_bucket_counters(bucket_name);
+      PerfCounters* counters = create_bucket_counters(bucket_name, "", user_id);
       if (counters) {
         bucket_perf_counters[bucket_name] = counters;
         it = bucket_perf_counters.find(bucket_name);
@@ -544,7 +560,7 @@ void UsagePerfCounters::mark_bucket_active(const std::string& bucket_name,
   {
     std::unique_lock lock(counters_mutex);
     if (bucket_perf_counters.find(key) == bucket_perf_counters.end()) {
-      PerfCounters* pc = create_bucket_counters(key);
+      PerfCounters* pc = create_bucket_counters(bucket_name, tenant , "");
       if (pc) {
         bucket_perf_counters[key] = pc;
       }

@@ -247,8 +247,6 @@ protected:
     return r;
   }
 
-  void update_usage_stats_if_needed();
-
 public:
   RGWOp()
     : s(nullptr),
@@ -305,7 +303,6 @@ public:
   virtual void send_response() {}
   virtual void complete() {
     send_response();
-    update_usage_stats_if_needed(); 
   }
   virtual const char* name() const = 0;
   virtual RGWOpType get_type() { return RGW_OP_UNKNOWN; }

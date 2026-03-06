@@ -12,6 +12,7 @@
 #include <chrono>
 
 #include "common/perf_counters.h"
+#include "common/perf_counters_key.h"
 #include "rgw_usage_cache.h"
 #include "common/dout.h"
 
@@ -71,7 +72,9 @@ private:
   
   void create_global_counters();
   PerfCounters* create_user_counters(const std::string& user_id);
-  PerfCounters* create_bucket_counters(const std::string& bucket_name);
+  PerfCounters* create_bucket_counters(const std::string& bucket_name,
+                                       const std::string& tenant,
+                                       const std::string& owner);
   
   void cleanup_worker();
   void refresh_worker();
