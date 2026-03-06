@@ -9,6 +9,33 @@ log = logging.getLogger(__name__)
 
 
 class TestProgress(MgrTestCase):
+    """
+    Test suite for the progress module.
+
+    IMPORTANT: Slow Requests / IO Stalls
+    =====================================
+    These tests intentionally trigger slow requests and IO stalls as a side effect
+    of the testing methodology. This is expected behavior and should be ignored
+    when evaluating test results.
+
+    Why this occurs? here is an example:
+    - Tests run 16 concurrent 4 MB writes (via rados bench -t 16) to populate the cluster
+    - While recovery/backfill is disabled (nobackfill, norecover flags set), OSDs are
+      marked out and then back in, causing PG remapping
+    - Because recovery/backfill is disabled, PGs cannot restore their replicas after
+      remapping, leaving them in degraded/remapped states
+    - This causes writes to get stuck in the replicated write path, leading to IO
+      stalls and slow ops being reported
+
+    Why we do this:
+    - The purpose is to test the progress module's event tracking, NOT the OSD write paths
+    - We intentionally disable recovery/backfill to prolong recovery events, giving us
+      time to observe and validate that progress events are correctly generated, tracked,
+      and completed by the progress module
+    - Without disabling recovery, events would complete too quickly to properly test
+
+    Test configurations should include slow request warnings in their ignorelist.
+    """
     POOL = "progress_data"
 
     # How long we expect to wait at most between taking an OSD out
