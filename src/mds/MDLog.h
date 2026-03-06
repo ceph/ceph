@@ -134,16 +134,16 @@ public:
     _start_entry(e);
   }
   void cancel_entry(LogEvent *e);
-  void _submit_entry(LogEvent *e, MDSLogContextBase *c);
-  void submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
+  LogSegment::seq_t submit_entry(LogEvent *e, MDSLogContextBase* c = 0) {
     std::lock_guard l(submit_mutex);
-    _submit_entry(e, c);
+    auto seq = _submit_entry(e, c);
     submit_cond.notify_all();
+    return seq;
   }
   void start_submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
     std::lock_guard l(submit_mutex);
     _start_entry(e);
-    _submit_entry(e, c);
+    (void)_submit_entry(e, c);
     submit_cond.notify_all();
   }
   bool entry_is_open() const { return cur_event != NULL; }
@@ -300,6 +300,7 @@ private:
   void _journal_segment_subtree_map(MDSContext *onsync);
 
   void try_to_commit_open_file_table(uint64_t last_seq);
+  LogSegment::seq_t _submit_entry(LogEvent* e, MDSLogContextBase* c);
 
   void try_expire(LogSegment *ls, int op_prio);
   void _maybe_expired(LogSegment *ls, int op_prio);
