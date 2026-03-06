@@ -105,11 +105,7 @@ public:
     return !event_queue.empty();
   }
   
-  size_t pending_count() const {
-    return event_queue.size();
-  }
-  
-  size_t event_count() const {
+  size_t queued_event_count() const {
     return event_queue.size();
   }
   

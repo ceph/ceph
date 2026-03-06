@@ -171,7 +171,7 @@ public:
     if (event_loop) {
       if (event_loop->has_events()) {
         if (!HasFailure()) {
-          ADD_FAILURE() << "TearDown: " << event_loop->event_count()
+          ADD_FAILURE() << "TearDown: " << event_loop->queued_event_count()
                         << " orphaned events remain after a passing test";
         }
         event_loop->run_until_idle(1000);

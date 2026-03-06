@@ -13,8 +13,7 @@
  *
  */
 
-#ifndef CEPH_TEST_OSD_OSDMAPTESTHELPERS_H
-#define CEPH_TEST_OSD_OSDMAPTESTHELPERS_H
+#pragma once
 
 #include <memory>
 #include <string>
@@ -354,5 +353,3 @@ public:
     advance_epoch(*osdmap);
   }
 };
-
-#endif // CEPH_TEST_OSD_OSDMAPTESTHELPERS_H
