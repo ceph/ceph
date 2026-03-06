@@ -13,7 +13,7 @@ from ..exceptions import DashboardException
 from ..settings import Settings
 from .orchestrator import OrchClient
 
-logger = logging.getLogger('service')
+logger = logging.getLogger(__name__)
 
 
 class NoCredentialsException(Exception):

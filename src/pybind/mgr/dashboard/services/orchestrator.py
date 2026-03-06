@@ -12,7 +12,7 @@ from orchestrator import DaemonDescription, DeviceLightLoc, HostSpec, \
 from .. import mgr
 from ._paginate import ListPaginator
 
-logger = logging.getLogger('orchestrator')
+logger = logging.getLogger(__name__)
 
 
 # pylint: disable=abstract-method

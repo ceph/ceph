@@ -30,7 +30,7 @@ PLUGIN_MANAGER.hook.init()
 PLUGIN_MANAGER.hook.register_commands()
 
 
-logger = logging.getLogger('tests')
+logger = logging.getLogger(__name__)
 
 
 class ModuleTestClass(Module):

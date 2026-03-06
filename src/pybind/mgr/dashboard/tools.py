@@ -30,7 +30,7 @@ class RequestLoggingTool(cherrypy.Tool):
     def __init__(self):
         cherrypy.Tool.__init__(self, 'before_handler', self.request_begin,
                                priority=10)
-        self.logger = logging.getLogger('request')
+        self.logger = logging.getLogger(__name__)
 
     def _setup(self):
         cherrypy.Tool._setup(self)
@@ -180,7 +180,7 @@ class ViewCache(object):
             self.latency = 0
             self.exception = None
             self.lock = threading.Lock()
-            self.logger = logging.getLogger('viewcache')
+            self.logger = logging.getLogger(__name__)
 
         def reset(self):
             with self.lock:
@@ -271,7 +271,7 @@ class NotificationQueue(threading.Thread):
                 return
             cls._running = True
             cls._instance = NotificationQueue()
-        cls.logger = logging.getLogger('notification_queue')  # type: ignore
+        cls.logger = logging.getLogger(__name__)  # type: ignore
         cls.logger.debug("starting notification queue")  # type: ignore
         cls._instance.start()
 
@@ -413,7 +413,7 @@ class TaskManager(object):
 
     @classmethod
     def init(cls):
-        cls.logger = logging.getLogger('taskmgr')  # type: ignore
+        cls.logger = logging.getLogger(__name__)  # type: ignore
         NotificationQueue.register(cls._handle_finished_task, 'cd_task_finished')
 
     @classmethod
@@ -510,7 +510,7 @@ class TaskManager(object):
 # pylint: disable=protected-access
 class TaskExecutor(object):
     def __init__(self):
-        self.logger = logging.getLogger('taskexec')
+        self.logger = logging.getLogger(__name__)
         self.task = None
 
     def init(self, task):
@@ -573,7 +573,7 @@ class Task(object):
         self._end_time: Optional[float] = None
         self.duration = 0.0
         self.exception = None
-        self.logger = logging.getLogger('task')
+        self.logger = logging.getLogger(__name__)
         self.lock = threading.Lock()
 
     def __hash__(self):

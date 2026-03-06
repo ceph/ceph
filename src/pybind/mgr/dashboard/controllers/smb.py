@@ -17,7 +17,7 @@ from .. import mgr
 from ..security import Scope
 from . import APIDoc, APIRouter, Endpoint, ReadPermission, RESTController, UIRouter
 
-logger = logging.getLogger('controllers.smb')
+logger = logging.getLogger(__name__)
 
 CLUSTER_SCHEMA = {
     "resource_type": (str, "ceph.smb.cluster"),
