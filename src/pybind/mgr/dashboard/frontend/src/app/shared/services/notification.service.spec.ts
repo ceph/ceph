@@ -3,6 +3,7 @@ import { fakeAsync, TestBed, tick, flush } from '@angular/core/testing';
 import _ from 'lodash';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { DomSanitizer } from '@angular/platform-browser';
 import { RbdService } from '../api/rbd.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
@@ -19,6 +20,13 @@ describe('NotificationService', () => {
       NotificationService,
       TaskMessageService,
       { provide: CdDatePipe, useValue: { transform: (d: any) => d } },
+      {
+        provide: DomSanitizer,
+        useValue: {
+          sanitize: () => '',
+          bypassSecurityTrustHtml: (v: string) => v
+        }
+      },
       RbdService
     ],
     imports: [HttpClientTestingModule]
@@ -47,7 +55,15 @@ describe('NotificationService', () => {
       'cdNotifications',
       '[{"type":2,"message":"foobar","timestamp":"2018-05-24T09:41:32.726Z"}]'
     );
-    service = new NotificationService(null, null, null);
+    service = new NotificationService(
+      null,
+      null,
+      null,
+      {
+        sanitize: () => '',
+        bypassSecurityTrustHtml: (v: string) => v
+      } as any
+    );
     expect(service['dataSource'].getValue().length).toBe(1);
   }));
 
