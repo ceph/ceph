@@ -18,7 +18,7 @@ class OrchestratorCLICommandBase(CLICommandBase):
                 return func(*args, **kwargs)
             except (OrchestratorError, SpecValidationError) as e:
                 # Do not print Traceback for expected errors.
-                return HandleCommandResult(retval=e.errno, stderr=str(e))
+                return HandleCommandResult(retval=-e.errno, stderr=str(e))
             except ImportError as e:
                 return HandleCommandResult(retval=-errno.ENOENT, stderr=str(e))
             except NotImplementedError:
