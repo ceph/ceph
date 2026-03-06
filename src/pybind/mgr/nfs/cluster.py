@@ -73,6 +73,8 @@ class NFSCluster:
             tls_debug: bool = False,
             tls_min_version: Optional[str] = None,
             tls_ciphers: Optional[str] = None,
+            enable_rdma: bool = False,
+            rdma_port: Optional[int] = None,
     ) -> None:
         if not port:
             port = 2049   # default nfs port
@@ -114,7 +116,9 @@ class NFSCluster:
                                   tls_ktls=tls_ktls,
                                   tls_debug=tls_debug,
                                   tls_min_version=tls_min_version,
-                                  tls_ciphers=tls_ciphers)
+                                  tls_ciphers=tls_ciphers,
+                                  enable_rdma=enable_rdma,
+                                  rdma_port=rdma_port)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
             ispec = IngressSpec(service_type='ingress',
@@ -140,7 +144,9 @@ class NFSCluster:
                                   tls_ktls=tls_ktls,
                                   tls_debug=tls_debug,
                                   tls_min_version=tls_min_version,
-                                  tls_ciphers=tls_ciphers)
+                                  tls_ciphers=tls_ciphers,
+                                  enable_rdma=enable_rdma,
+                                  rdma_port=rdma_port)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
         log.debug("Successfully deployed nfs daemons with cluster id %s and placement %s",
@@ -172,6 +178,8 @@ class NFSCluster:
             tls_debug: bool = False,
             tls_min_version: Optional[str] = None,
             tls_ciphers: Optional[str] = None,
+            enable_rdma: bool = False,
+            rdma_port: Optional[int] = None,
     ) -> None:
         try:
             if virtual_ip:
@@ -197,7 +205,7 @@ class NFSCluster:
             if cluster_id not in available_clusters(self.mgr):
                 self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, ingress_mode, port,
                                           ssl, ssl_cert, ssl_key, ssl_ca_cert, tls_ktls, tls_debug,
-                                          tls_min_version, tls_ciphers)
+                                          tls_min_version, tls_ciphers, enable_rdma, rdma_port)
                 return
             raise NonFatalError(f"{cluster_id} cluster already exists")
         except Exception as e:

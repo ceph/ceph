@@ -476,3 +476,83 @@ class TestNFS:
                     '}\n'
                 )
                 assert expected_tls_block in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_config_rdma_enabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """NFS with enable_rdma=True: ganesha.conf has RDMA protocols (nfsrdma, rpcrdma)."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+                enable_rdma=True,
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_id='foo.host1.0.0',
+                        service_name=nfs_spec.service_name(),
+                        ports=[2049, 9587, 20049],
+                    ))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Protocols = 3, 4, nfsrdma, rpcrdma" in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_config_rdma_custom_port(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """NFS with enable_rdma and rdma_port: ganesha.conf has NFS_RDMA_Port."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+                enable_rdma=True,
+                rdma_port=1234,
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_id='foo.host1.0.0',
+                        service_name=nfs_spec.service_name(),
+                        ports=[2049, 9587, 1234],
+                    ))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Protocols = 3, 4, nfsrdma, rpcrdma" in ganesha_conf
+                assert "NFS_RDMA_Port = 1234" in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_config_rdma_disabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """NFS without RDMA: ganesha.conf has Protocols = 3, 4 and no NFS_RDMA_Port."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_id='foo.host1.0.0',
+                        service_name=nfs_spec.service_name(),
+                    ))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Protocols = 3, 4" in ganesha_conf
+                assert "nfsrdma" not in ganesha_conf
+                assert "NFS_RDMA_Port" not in ganesha_conf
