@@ -2265,10 +2265,6 @@ class RGWDeleteMultiObj : public RGWOp {
                                 optional_yield y,
                                 const bool skip_olh_obj_update = false);
 
-  void handle_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
-                                uint32_t max_aio, boost::asio::yield_context yield);
-  void handle_non_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
-                                    uint32_t max_aio, boost::asio::yield_context yield);
   void handle_objects(const std::vector<RGWMultiDelObject>& objects,
                       uint32_t max_aio, boost::asio::yield_context yield);
 
