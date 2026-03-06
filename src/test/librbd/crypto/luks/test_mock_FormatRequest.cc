@@ -92,7 +92,9 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
   }
 
   void verify_header(const char* expected_format, size_t expected_key_length,
-                     uint64_t expected_sector_size, bool magic_switched) {
+                     uint64_t expected_sector_size, bool magic_switched,
+                     const char* expected_cipher = nullptr,
+                     const char* expected_cipher_mode = nullptr) {
     Header header(mock_image_ctx->cct);
 
     ASSERT_EQ(0, header.init());
@@ -109,6 +111,13 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
 
     ASSERT_EQ(expected_sector_size, header.get_sector_size());
     ASSERT_EQ(0, header.get_data_offset() % OBJECT_SIZE);
+
+    if (expected_cipher) {
+      ASSERT_STREQ(expected_cipher, header.get_cipher());
+    }
+    if (expected_cipher_mode) {
+      ASSERT_STREQ(expected_cipher_mode, header.get_cipher_mode());
+    }
 
     char volume_key[96];
     size_t volume_key_size = sizeof(volume_key);
@@ -239,7 +248,8 @@ TEST_F(TestMockCryptoLuksFormatRequest, AES256_HMAC_SHA256) {
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   complete_aio(0);
   ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS2, 96, 4096, false));
+  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS2, 96, 4096, false,
+                                        "aes", "xts-random"));
 }
 #endif
 

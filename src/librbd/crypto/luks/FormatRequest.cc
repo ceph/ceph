@@ -15,7 +15,6 @@
 #include "librbd/crypto/luks/Magic.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
-#include "common/JSONFormatter.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -145,14 +144,10 @@ void FormatRequest<I>::send() {
 #ifdef HAVE_CRYPT_FORMAT_INLINE
   if (m_format == RBD_ENCRYPTION_FORMAT_LUKS2 &&
       m_alg == RBD_ENCRYPTION_ALGORITHM_AES256_HMAC_SHA256) {
-    AEADToken token{meta_size, "authenc(hmac(sha256),xts(aes))"};
-    ceph::JSONFormatter jf(false);
-    jf.open_object_section("");
-    token.encode_json(&jf);
-    jf.close_section();
-    std::stringstream ss;
-    jf.flush(ss);
-    r = m_header.token_update(token::TYPE_AEAD, ss.str().c_str());
+    // rewrite the LUKS2 JSON to match crypt_format_inline() output:
+    // proper segment cipher/mode, integrity section, inline-hw-tags
+    r = m_header.rewrite_segment_for_inline("aes", "xts-random",
+                                            "hmac(sha256)");
     if (r != 0) {
       finish(r);
       return;

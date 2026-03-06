@@ -5,7 +5,6 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
-#include "common/JSONFormatter.h"
 
 namespace librbd {
 namespace util {
@@ -332,22 +331,15 @@ TEST_F(TestMockCryptoLuksLoadRequest, WrongPassphrase) {
 
 #ifdef HAVE_CRYPT_FORMAT_INLINE
 TEST_F(TestMockCryptoLuksLoadRequest, AES256_HMAC_SHA256) {
-  // generate AEAD header (same as FormatRequest does)
+  // generate AEAD header with inline integrity rewrite
   {
     Header header(mock_image_ctx->cct);
     ASSERT_EQ(0, header.init());
     ASSERT_EQ(0, header.format(CRYPT_LUKS2, "cipher_null", nullptr, 96,
                                "ecb", 4096, OBJECT_SIZE, true));
     ASSERT_EQ(0, header.add_keyslot(passphrase_cstr, strlen(passphrase_cstr)));
-
-    AEADToken token{48, "authenc(hmac(sha256),xts(aes))"};
-    ceph::JSONFormatter jf(false);
-    jf.open_object_section("");
-    token.encode_json(&jf);
-    jf.close_section();
-    std::stringstream ss;
-    jf.flush(ss);
-    ASSERT_EQ(0, header.token_update(token::TYPE_AEAD, ss.str().c_str()));
+    ASSERT_EQ(0, header.rewrite_segment_for_inline(
+        "aes", "xts-random", "hmac(sha256)"));
     ASSERT_LT(0, header.read(&header_bl));
     data_offset = header.get_data_offset();
   }

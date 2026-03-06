@@ -14,7 +14,6 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ReadResult.h"
-#include "common/ceph_json.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -182,7 +181,11 @@ void LoadRequest<I>::handle_read_header(int r) {
   *m_detected_format_name = m_header.get_format_name();
 
   std::string cipher = std::string(m_header.get_cipher()) + "-" + std::string(m_header.get_cipher_mode());
-  if ((cipher != "aes-xts-plain64") && (cipher != "cipher_null-ecb")) {
+  if (cipher != "aes-xts-plain64"
+#ifdef HAVE_CRYPT_FORMAT_INLINE
+      && cipher != "aes-xts-random"
+#endif
+     ) {
     lderr(m_image_ctx->cct) << "unsupported cipher or cipher mode: " << cipher << dendl;
     finish(-ENOTSUP);
     return;
@@ -246,28 +249,35 @@ void LoadRequest<I>::read_volume_key() {
 
   size_t meta_size = 0;
   std::string openssl_cipher;
+
 #ifdef HAVE_CRYPT_FORMAT_INLINE
-  if (m_format == RBD_ENCRYPTION_FORMAT_LUKS2 ||
-      (m_format == RBD_ENCRYPTION_FORMAT_LUKS &&
-       strcmp(m_header.get_format_name(), CRYPT_LUKS2) == 0)) {
-    const char* json_data = nullptr;
-    r = m_header.token_get(token::TYPE_AEAD, &json_data);
-    if (r == 0 && json_data != nullptr) {
-      JSONParser parser;
-      if (parser.parse(json_data, strlen(json_data))) {
-        AEADToken aead_token;
-        aead_token.decode_json(&parser);
-        meta_size = aead_token.meta_size;
-        if (aead_token.alg == "authenc(hmac(sha256),xts(aes))") {
-          openssl_cipher = "aes-256-xts";
-        } else {
-          openssl_cipher = aead_token.alg;
-        }
-        ldout(m_image_ctx->cct, 20)
-            << "detected AEAD configuration: meta_size=" << meta_size
-            << " alg=" << aead_token.alg << dendl;
-      }
+  if (strcmp(m_header.get_cipher(), "aes") == 0 &&
+      strcmp(m_header.get_cipher_mode(), "xts-random") == 0) {
+    // AEAD: native LUKS2 inline integrity format
+    // TODO: derive meta_size from the LUKS2 segment integrity type
+    // when additional AEAD configs (hmac(sha512), GCM) are supported
+    meta_size = 48;  // 16 IV + 32 HMAC tag for hmac(sha256)
+    openssl_cipher = "aes-256-xts";
+
+    // Verify that cryptsetup's parsed integrity metadata agrees with
+    // our expected tag size. This is the same code path that would
+    // feed parameters to dm-crypt during device activation.
+    struct crypt_params_integrity ip;
+    memset(&ip, 0, sizeof(ip));
+    if (m_header.get_integrity_info(&ip) != 0 ||
+        ip.integrity == nullptr ||
+        ip.tag_size != meta_size) {
+      lderr(m_image_ctx->cct) << "integrity metadata mismatch: expected "
+          << "tag_size=" << meta_size << ", got tag_size=" << ip.tag_size
+          << dendl;
+      finish(-EINVAL);
+      return;
     }
+
+    ldout(m_image_ctx->cct, 20)
+        << "detected AEAD configuration: cipher=aes-xts-random"
+        << " integrity=" << ip.integrity
+        << " meta_size=" << meta_size << dendl;
   }
 #endif
 
@@ -279,12 +289,6 @@ void LoadRequest<I>::read_volume_key() {
       } else if (volume_key_size == 64) {
         openssl_cipher = "aes-256-xts";
       }
-    } else if (strcmp(m_header.get_cipher(), "cipher_null") == 0 &&
-               strcmp(m_header.get_cipher_mode(), "ecb") == 0) {
-      lderr(m_image_ctx->cct) << "AEAD encrypted image requires "
-                              << "libcryptsetup >= 2.8.0" << dendl;
-      finish(-ENOTSUP);
-      return;
     } else {
       lderr(m_image_ctx->cct) << "unsupported cipher configuration" << dendl;
       finish(-ENOTSUP);
