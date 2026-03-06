@@ -81,7 +81,7 @@ public:
   C_IO_PurgeStrayPurged(StrayManager *sm_, CDentry *d, bool oh) : 
     StrayManagerIOContext(sm_), dn(d), only_head(oh) { }
   void finish(int r) override {
-    ceph_assert(r == 0 || r == -CEPHFS_ENOENT);
+    ceph_assert(r == 0 || r == -ENOENT);
     sm->_purge_stray_purged(dn, only_head);
   }
   void print(ostream& out) const override {
@@ -486,7 +486,7 @@ bool StrayManager::_eval_stray(CDentry *dn)
 	if (in->state_test(CInode::STATE_MISSINGOBJS)) {
 	  mds->clog->error() << "previous attempt at committing dirfrag of ino "
 			     << in->ino() << " has failed, missing object";
-	  mds->handle_write_error(-CEPHFS_ENOENT);
+	  mds->handle_write_error(-ENOENT);
 	}
 	return false;  // not until some snaps are deleted.
       }

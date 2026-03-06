@@ -85,43 +85,43 @@ struct ceph_fuse_fake_inode_stag {
 using namespace std;
 
 static const ceph::unordered_map<int,int> cephfs_errno_to_system_errno = {
-  {CEPHFS_EBLOCKLISTED,    ESHUTDOWN},
-  {CEPHFS_EPERM,           EPERM},
-  {CEPHFS_ESTALE,          ESTALE},
-  {CEPHFS_ENOSPC,          ENOSPC},
-  {CEPHFS_ETIMEDOUT,       ETIMEDOUT},
-  {CEPHFS_EIO,             EIO},
-  {CEPHFS_ENOTCONN,        ENOTCONN},
-  {CEPHFS_EEXIST,          EEXIST},
-  {CEPHFS_EINTR,           EINTR},
-  {CEPHFS_EINVAL,          EINVAL},
-  {CEPHFS_EBADF,           EBADF},
-  {CEPHFS_EROFS,           EROFS},
-  {CEPHFS_EAGAIN,          EAGAIN},
-  {CEPHFS_EACCES,          EACCES},
-  {CEPHFS_ELOOP,           ELOOP},
-  {CEPHFS_EISDIR,          EISDIR},
-  {CEPHFS_ENOENT,          ENOENT},
-  {CEPHFS_ENOTDIR,         ENOTDIR},
-  {CEPHFS_ENAMETOOLONG,    ENAMETOOLONG},
-  {CEPHFS_EBUSY,           EBUSY},
-  {CEPHFS_EDQUOT,          EDQUOT},
-  {CEPHFS_EFBIG,           EFBIG},
-  {CEPHFS_ERANGE,          ERANGE},
-  {CEPHFS_ENXIO,           ENXIO},
-  {CEPHFS_ECANCELED,       ECANCELED},
-  {CEPHFS_ENODATA,         ENODATA},
-  {CEPHFS_EOPNOTSUPP,      EOPNOTSUPP},
-  {CEPHFS_EXDEV,           EXDEV},
-  {CEPHFS_ENOMEM,          ENOMEM},
-  {CEPHFS_ENOTRECOVERABLE, ENOTRECOVERABLE},
-  {CEPHFS_ENOSYS,          ENOSYS},
-  {CEPHFS_ENOTEMPTY,       ENOTEMPTY},
-  {CEPHFS_EDEADLK,         EDEADLK},
-  {CEPHFS_EDOM,            EDOM},
-  {CEPHFS_EMLINK,          EMLINK},
-  {CEPHFS_ETIME,           ETIME},
-  {CEPHFS_EOLDSNAPC,       EIO} // forcing to EIO for now
+  {EBLOCKLISTED,    ESHUTDOWN},
+  {EPERM,           EPERM},
+  {ESTALE,          ESTALE},
+  {ENOSPC,          ENOSPC},
+  {ETIMEDOUT,       ETIMEDOUT},
+  {EIO,             EIO},
+  {ENOTCONN,        ENOTCONN},
+  {EEXIST,          EEXIST},
+  {EINTR,           EINTR},
+  {EINVAL,          EINVAL},
+  {EBADF,           EBADF},
+  {EROFS,           EROFS},
+  {EAGAIN,          EAGAIN},
+  {EACCES,          EACCES},
+  {ELOOP,           ELOOP},
+  {EISDIR,          EISDIR},
+  {ENOENT,          ENOENT},
+  {ENOTDIR,         ENOTDIR},
+  {ENAMETOOLONG,    ENAMETOOLONG},
+  {EBUSY,           EBUSY},
+  {EDQUOT,          EDQUOT},
+  {EFBIG,           EFBIG},
+  {ERANGE,          ERANGE},
+  {ENXIO,           ENXIO},
+  {ECANCELED,       ECANCELED},
+  {ENODATA,         ENODATA},
+  {EOPNOTSUPP,      EOPNOTSUPP},
+  {EXDEV,           EXDEV},
+  {ENOMEM,          ENOMEM},
+  {ENOTRECOVERABLE, ENOTRECOVERABLE},
+  {ENOSYS,          ENOSYS},
+  {ENOTEMPTY,       ENOTEMPTY},
+  {EDEADLK,         EDEADLK},
+  {EDOM,            EDOM},
+  {EMLINK,          EMLINK},
+  {ETIME,           ETIME},
+  {EOLDSNAPC,       EIO} // forcing to EIO for now
 };
 
 /* Requirements:
@@ -283,7 +283,7 @@ static int getgroups(fuse_req_t req, gid_t **sgids)
 
   gid_t *gids = new (std::nothrow) gid_t[c];
   if (!gids) {
-    return -get_sys_errno(CEPHFS_ENOMEM);
+    return -get_sys_errno(ENOMEM);
   }
   c = fuse_req_getgroups(req, c, gids);
   if (c < 0) {
@@ -293,7 +293,7 @@ static int getgroups(fuse_req_t req, gid_t **sgids)
   }
   return c;
 #endif
-  return -get_sys_errno(CEPHFS_ENOSYS);
+  return -get_sys_errno(ENOSYS);
 }
 
 static void get_fuse_groups(UserPerm& perms, fuse_req_t req)
@@ -379,7 +379,7 @@ static void fuse_ll_getattr(fuse_req_t req, fuse_ino_t ino,
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(ino);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -406,7 +406,7 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(ino);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -448,7 +448,7 @@ static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(ino);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -468,7 +468,7 @@ static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(ino);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -498,7 +498,7 @@ static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(ino);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -523,7 +523,7 @@ static void fuse_ll_removexattr(fuse_req_t req, fuse_ino_t ino,
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(ino);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -544,7 +544,7 @@ static void fuse_ll_opendir(fuse_req_t req, fuse_ino_t ino,
   void *dirp;
   Inode *in = cfuse->iget(ino);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -570,7 +570,7 @@ static void fuse_ll_readlink(fuse_req_t req, fuse_ino_t ino)
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(ino);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -595,7 +595,7 @@ static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *i2, *i1 = cfuse->iget(parent);
   if (!i1) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -659,7 +659,7 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 
   i1 = cfuse->iget(parent);
   if (!i1) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -684,7 +684,7 @@ static void fuse_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
   UserPerm perm(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(parent);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -703,7 +703,7 @@ static void fuse_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(parent);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -724,7 +724,7 @@ static void fuse_ll_symlink(fuse_req_t req, const char *existing,
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *i2, *i1 = cfuse->iget(parent);
   if (!i1) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -757,7 +757,7 @@ static void fuse_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
   // cephfs does not support renameat2 flavors; follow same logic as done in
   // kclient's ceph_rename()
   if (flags) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 #endif
@@ -768,7 +768,7 @@ static void fuse_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
   Inode *in = cfuse->iget(parent);
   Inode *nin = cfuse->iget(newparent);
   if (!in || !nin) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -790,7 +790,7 @@ static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
   Inode *in = cfuse->iget(ino);
   Inode *nin = cfuse->iget(newparent);
   if (!in || !nin) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -836,7 +836,7 @@ static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino,
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(ino);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -1033,7 +1033,7 @@ static void fuse_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   rc.req = req;
   rc.snap = cfuse->fino_snap(ino);
   if (rc.snap == CEPH_MAXSNAP) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
   rc.buf = new char[size];
@@ -1041,7 +1041,7 @@ static void fuse_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   rc.pos = 0;
 
   int r = cfuse->client->readdir_r_cb(dirp, fuse_ll_add_dirent, &rc);
-  if (r == 0 || r == -CEPHFS_ENOSPC)  /* ignore ENOSPC from our callback */
+  if (r == 0 || r == -ENOSPC)  /* ignore ENOSPC from our callback */
     fuse_reply_buf(req, rc.buf, rc.pos);
   else
     fuse_reply_err(req, get_sys_errno(-r));
@@ -1073,7 +1073,7 @@ static void fuse_ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(ino);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -1094,7 +1094,7 @@ static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *i1 = cfuse->iget(parent), *i2;
   if (!i1) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
@@ -1134,7 +1134,7 @@ static void fuse_ll_statfs(fuse_req_t req, fuse_ino_t ino)
   UserPerm perms(ctx->uid, ctx->gid);
   Inode *in = cfuse->iget(ino);
   if (!in) {
-    fuse_reply_err(req, get_sys_errno(CEPHFS_EINVAL));
+    fuse_reply_err(req, get_sys_errno(EINVAL));
     return;
   }
 
