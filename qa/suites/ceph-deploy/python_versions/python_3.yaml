@@ -1,3 +1,0 @@
-overrides:
-  ceph-deploy:
-    python_version: "3"
