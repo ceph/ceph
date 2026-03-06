@@ -578,8 +578,7 @@ WebTokenEngine::validate_signature_using_n_e(const DoutPrefixProvider* dpp, cons
 bool WebTokenEngine::verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const std::string& cert_url,
     const std::vector<std::string>& thumbprints) const
 {
-  if (!cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification")) {
-    ldpp_dout(dpp, 5) << "Verification of JWKS endpoint is turned off." << dendl;
+  if (thumbprints.empty()) {
     return true;
   }
 
@@ -647,11 +646,10 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
             if (JSONDecoder::decode_json("x5c", x5c, &k_parser)) {
               string cert;
               bool found_valid_cert = false;
-              bool skip_thumbprint_verification = cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification");
               for (auto& it : x5c) {
                 cert = "-----BEGIN CERTIFICATE-----\n" + it + "\n-----END CERTIFICATE-----";
                 ldpp_dout(dpp, 20) << "Certificate is: " << cert.c_str() << dendl;
-                if (skip_thumbprint_verification || is_cert_valid(thumbprints, cert)) {
+                if (thumbprints.empty() || is_cert_valid(thumbprints, cert)) {
                   found_valid_cert = true;
                   break;
                 }
