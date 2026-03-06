@@ -437,16 +437,8 @@ class ExportMgr:
                         -errno.EINVAL)
 
                 for client_conf in client_list:
-                    client_entry = {
-                        'addresses': client_conf.get('addresses', []),
-                        'access_type': client_conf.get('access_type',
-                                                       'ro' if kwargs['read_only'] else 'rw'),
-                        'squash': client_conf.get('squash', kwargs['squash']),
-                    }
-                    # Add delegation if specified in the client config
-                    if 'delegations' in client_conf:
-                        client_entry['delegations'] = client_conf['delegations']
-                    clients.append(client_entry)
+                    # client config will be passed as it is in the client block.
+                    clients.append(client_conf)
 
             except json.JSONDecodeError as e:
                 raise NFSException(f"Failed to parse clients_config (must be valid JSON): {e}", -errno.EINVAL)
@@ -1149,6 +1141,9 @@ class ExportMgr:
                 log.info("Updated export-default object for cluster %s to delegation %s",
                          cluster_id, delegation)
                 action = "updated"
+
+            # Restarting NFS service to apply export default changes
+            restart_nfs_service(self.mgr, cluster_id)
 
             return {
                 "cluster": cluster_id,

@@ -1216,74 +1216,77 @@ NFS_CORE_PARAM {
                 )
         assert "Invalid cmount_path: '/invalid'" in str(e.value)
 
-    def test_create_export_cephfs_with_delegation(self):
-        self._do_mock_test(self._do_test_create_export_cephfs_with_delegation)
+    # Delegation values for parameterized tests
+    DELEGATION_VALUE = ['rw', 'ro', 'none']
+    @pytest.mark.parametrize("delegation", DELEGATION_VALUE)
+    def test_create_export_cephfs_with_delegation(self, delegation):
+        self._do_mock_test(self._do_test_create_export_cephfs_with_delegation, delegation)
 
-    def _do_test_create_export_cephfs_with_delegation(self):
+    def _do_test_create_export_cephfs_with_delegation(self, delegation):
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
 
         ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 3
 
+        pseudo = f'/cephfs_deleg_{delegation}'
         r = conf.create_export(
             fsal_type='cephfs',
             cluster_id=self.cluster_id,
             fs_name='myfs',
             path='/',
-            pseudo_path='/cephfs_deleg',
+            pseudo_path=pseudo,
             read_only=False,
             squash='root',
             addr=["192.168.1.0/8"],
-            export_delegation= 'rw',
+            export_delegation=delegation,
         )
-        assert r["bind"] == "/cephfs_deleg"
-        assert r.get("delegations") == "rw"
+        assert r["bind"] == pseudo
+        assert r.get("delegations") == delegation
 
         ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 4
 
-        export = conf._fetch_export('foo', '/cephfs_deleg')
+        export = conf._fetch_export('foo', pseudo)
         assert export.export_id
-        assert export.pseudo == "/cephfs_deleg"
+        assert export.pseudo == pseudo
         assert export.fsal.name == "CEPH"
-        # export_delegation applies at export level
-        assert export.delegation == 'rw'
+        assert export.delegation == delegation
         assert len(export.clients) == 1
-        # Client doesn't have delegation (uses export-level)
         assert export.clients[0].delegation is None
 
-    def test_create_export_cephfs_with_delegation_no_clients(self):
-        self._do_mock_test(self._do_test_create_export_cephfs_with_delegation_no_clients)
+    @pytest.mark.parametrize("delegation", DELEGATION_VALUE)
+    def test_create_export_cephfs_with_delegation_no_clients(self, delegation):
+        self._do_mock_test(self._do_test_create_export_cephfs_with_delegation_no_clients, delegation)
 
-    def _do_test_create_export_cephfs_with_delegation_no_clients(self):
+    def _do_test_create_export_cephfs_with_delegation_no_clients(self, delegation):
         nfs_mod = Module('nfs', '', '')
         conf = ExportMgr(nfs_mod)
 
         ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 3
 
+        pseudo = f'/cephfs_deleg_export_{delegation}'
         r = conf.create_export(
             fsal_type='cephfs',
             cluster_id=self.cluster_id,
             fs_name='myfs',
             path='/',
-            pseudo_path='/cephfs_deleg_export',
+            pseudo_path=pseudo,
             read_only=False,
             squash='root',
-            export_delegation='ro',
+            export_delegation=delegation,
         )
-        assert r["bind"] == "/cephfs_deleg_export"
-        assert r["delegations"] == "ro"
+        assert r["bind"] == pseudo
+        assert r["delegations"] == delegation
 
         ls = conf.list_exports(cluster_id=self.cluster_id)
         assert len(ls) == 4
 
-        export = conf._fetch_export('foo', '/cephfs_deleg_export')
+        export = conf._fetch_export('foo', pseudo)
         assert export.export_id
-        assert export.pseudo == "/cephfs_deleg_export"
-        # When no addr is provided, delegation goes to export level
-        assert export.delegation == 'ro'
+        assert export.pseudo == pseudo
+        assert export.delegation == delegation
         assert len(export.clients) == 0
 
     def test_create_export_rgw_with_delegation(self):
@@ -1321,6 +1324,54 @@ NFS_CORE_PARAM {
         # When addr is provided, client is created but inherits export delegation
         assert len(export.clients) == 1
         assert export.clients[0].delegation is None  # Client inherits from export
+
+    def test_create_export_cephfs_with_clients_config_addr_and_delegation(self):
+        self._do_mock_test(self._do_test_create_export_cephfs_with_clients_config_addr_and_delegation)
+
+    def _do_test_create_export_cephfs_with_clients_config_addr_and_delegation(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+
+        # Clients_config JSON with delegation
+        clients_config_json = json.dumps([
+            {
+                'addresses': ['192.168.10.0/24'],
+                'access_type': 'RW',
+                'squash': 'no_root_squash',
+                'delegations': 'rw'
+            },
+            {
+                'addresses': ['172.16.0.0/16'],
+                'access_type': 'RO',
+                'squash': 'all_squash',
+                'delegations': 'ro'
+            }
+        ])
+
+        # Create export with clients_config, addr, and export_delegation all together
+        r = conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/cephfs_mixed_config',
+            read_only=False,
+            squash='root',
+            clients_config=clients_config_json,
+            addr=['10.10.10.0/24'],
+            export_delegation='rw',
+        )
+
+        export = conf._fetch_export('foo', '/cephfs_mixed_config')
+        
+        # Check export-level delegation
+        assert export.delegation == 'rw'
+        
+        # Check client delegations
+        assert len(export.clients) == 3
+        assert export.clients[0].delegation == 'rw' 
+        assert export.clients[1].delegation == 'ro' 
+        assert export.clients[2].delegation is None  
 
     def test_update_export_with_delegation(self):
         self._do_mock_test(self._do_test_update_export_with_delegation)
@@ -1376,10 +1427,10 @@ NFS_CORE_PARAM {
         export = conf._fetch_export('foo', '/deleg_update_test')
         assert export.delegation == 'rw'
 
-    def test_update_export_with_ganesha_conf_delegation(self):
-        self._do_mock_test(self._do_test_update_export_with_ganesha_conf_delegation)
+    def test_update_export_with_ganesha_conf_with_Delegation_Ucase(self):
+        self._do_mock_test(self._do_test_update_export_with_ganesha_conf_with_Delegation_Ucase)
 
-    def _do_test_update_export_with_ganesha_conf_delegation(self):
+    def _do_test_update_export_with_ganesha_conf_with_Delegation_Ucase(self):
         export_conf = """
 EXPORT {
     FSAL {

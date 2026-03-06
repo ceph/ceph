@@ -52,7 +52,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
             cmount_path: Optional[str] = "/",
-            export_delegations: Optional[Delegation] = None,
+            delegations: Optional[Delegation] = None,
             inbuf: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create a CephFS export
@@ -74,7 +74,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             sectype=sectype,
             cmount_path=cmount_path,
             earmark_resolver=earmark_resolver,
-            export_delegation=export_delegations.value if export_delegations else None,
+            export_delegation=delegations.value if delegations else None,
             clients_config=inbuf
         )
 
@@ -90,7 +90,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
-            export_delegations: Optional[Delegation] = None,
+            delegations: Optional[Delegation] = None,
             inbuf: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create an RGW export
@@ -109,7 +109,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             squash=squash,
             addr=client_addr,
             sectype=sectype,
-            export_delegation=export_delegations.value if export_delegations else None,
+            export_delegation=delegations.value if delegations else None,
             clients_config=inbuf
         )
 
@@ -148,7 +148,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_nfs_export_update(self,
                                cluster_id: str,
                                pseudo_path: str,
-                               export_delegations: Optional[Delegation] = None,
+                               delegations: Optional[Delegation] = None,
                                inbuf: Optional[str] = None) -> Dict[str, Any]:
         """Update an existing NFS export configuration.
 
@@ -158,7 +158,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.modify_export(
             cluster_id=cluster_id,
             pseudo_path=pseudo_path,
-            export_delegation=export_delegations.value if export_delegations else None,
+            export_delegation=delegations.value if delegations else None,
             clients_config=inbuf
         )
 
