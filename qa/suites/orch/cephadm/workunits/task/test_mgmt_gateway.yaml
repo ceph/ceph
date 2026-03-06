@@ -29,8 +29,6 @@ tasks:
         ceph orch apply alertmanager
         ceph orch apply prometheus
         sleep 240
-        # generate SSL certificate
-        openssl req -x509 -newkey rsa:4096 -keyout /tmp/key.pem -out /tmp/cert.pem -sha256 -days 30 -nodes -subj "/CN=*"
         # Generate a mgmt.spec template
         cat << EOT > /tmp/mgmt.spec
         service_type: mgmt-gateway
@@ -39,19 +37,9 @@ tasks:
           hosts:
             - ${HOSTNAME}
         spec:
-          ssl_protocols:
-            - TLSv1.2
-            - TLSv1.3
-          ssl_ciphers:
-            - AES128-SHA
-            - AES256-SHA
+          ssl: true
           enable_health_check_endpoint: True
         EOT
-        # Add generated certificates to spec file
-        echo "  ssl_cert: |" >> /tmp/mgmt.spec
-        while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/cert.pem >> /tmp/mgmt.spec
-        echo "  ssl_key: |" >> /tmp/mgmt.spec
-        while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/key.pem >> /tmp/mgmt.spec
         # Apply spec
         ceph orch apply -i /tmp/mgmt.spec
 - cephadm.wait_for_service:
