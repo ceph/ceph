@@ -9,6 +9,16 @@
   Admins can no longer enable the older, deprecated landing page layout by
   adjusting FEATURE_TOGGLE_DASHBOARD.
 * CephFS: The `peer_add` command is deprecated in favor of the `peer_bootstrap` command.
+* RBD: Fixed incorrect behavior of the "start-time" argument for mirror
+  snapshot and trash purge schedules, where it previously offset the schedule
+  anchor instead of defining it. The argument now requires an ISO 8601
+  date-time. The `schedule ls` output displays the start time in UTC, including
+  the date and time in the format "%Y-%m-%d %H:%M:00". The `schedule status`
+  output now displays the next schedule time in UTC.
+* RBD: Mirror snapshot creation, mirror group snapshot creation and trash purge
+  schedules are now automatically staggered when no explicit "start-time" is
+  specified. This reduces scheduling spikes and distributes work more evenly
+  over time.
 
 >=20.0.0
 
