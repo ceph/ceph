@@ -20509,7 +20509,12 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
              << dendl;
         return -EIO;
       }
-      ceph_assert(oid == edecoder.get_oid());
+      if (oid != edecoder.get_oid()) {
+        derr << __func__ << " shard " << pretty_binary_string(okey)
+             << " oid: " << oid
+             << " not from current oid: " << edecoder.get_oid() << dendl;
+        continue;
+      }
       edecoder.decode_some(it->value(), nullptr);
       ++stats.shard_count;
     }
