@@ -205,4 +205,15 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
   }
+
+  setExpandedRow(expandedRow: any) {
+    const tierType = expandedRow?.tier_type?.toLowerCase();
+
+    // Prevent expansion for local storage classes
+    if (tierType === TIER_TYPE.LOCAL) {
+      return;
+    }
+
+    super.setExpandedRow(expandedRow);
+  }
 }
