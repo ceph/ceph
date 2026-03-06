@@ -3624,7 +3624,7 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
 }
 
 struct RestoreObjectRequest {
-  std::optional<uint64_t> days;
+  std::optional<int64_t> days;
 
   void decode_xml(XMLObj *obj) {
     RGWXMLDecoder::decode_xml("Days", days, obj);
@@ -3673,6 +3673,10 @@ int RGWRestoreObj_ObjStore_S3::get_params(optional_yield y)
   }
 
   if (request.days) {
+    if (request.days.value() < 1) {
+      s->err.message = "Days must be a positive integer";
+      return -EINVAL;
+    }
     expiry_days = request.days.value();
     ldpp_dout(this, 10) << "expiry_days=" << expiry_days << dendl;
   } else {
