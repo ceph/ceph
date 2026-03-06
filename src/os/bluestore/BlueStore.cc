@@ -10602,16 +10602,12 @@ void BlueStore::_fsck_check_objects(
           ++errors;
           continue;
         }
-        while (expecting_shards.front() > it->key()) {
+        if (expecting_shards.front() > it->key()) {
           derr << "fsck error:   saw " << pretty_binary_string(it->key())
             << dendl;
           derr << "fsck error:   exp "
             << pretty_binary_string(expecting_shards.front()) << dendl;
           ++errors;
-          expecting_shards.pop_front();
-          if (expecting_shards.empty()) {
-            break;
-          }
         }
         continue;
       }
