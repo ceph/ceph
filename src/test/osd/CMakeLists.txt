@@ -243,11 +243,12 @@ set(OSD_UNITTESTS
 #   - Output is shown for failing tests (--output-on-failure)
 #   - Adding a new test only requires adding it to OSD_UNITTESTS above
 #   - Excludes unittest_osdmap because it is relatively slow.
+string(JOIN "|" OSD_UNITTEST_REGEX ${OSD_UNITTESTS})
 add_custom_target(osd_unittests
   DEPENDS ${OSD_UNITTESTS}
   COMMAND ${CMAKE_CTEST_COMMAND}
     --test-dir ${CMAKE_BINARY_DIR}
-    -R "^(unittest_backend_basics|unittest_ec_transaction|unittest_ec_transaction_l|unittest_ecbackend|unittest_ecbackend_l|unittest_ecfailover_with_peering|unittest_ecutil|unittest_extent_cache|unittest_extent_cache_l|unittest_hitset|unittest_mclock_scheduler|unittest_osd_osdcap|unittest_osd_types|unittest_osdscrub|unittest_peeringstate|unittest_pg_transaction|unittest_pglog|unittest_scrubber_be)$"
+    -R "^(${OSD_UNITTEST_REGEX})$"
     --output-on-failure
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
   COMMENT "Building and running all OSD unit tests via ctest"
