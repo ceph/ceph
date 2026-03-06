@@ -233,3 +233,10 @@ target_link_libraries(ceph_test_neorados_watch_notify
 install(TARGETS
   ceph_test_neorados_watch_notify
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_neorados_leak_watch_notify leak_watch_notify.cc)
+target_link_libraries(ceph_test_neorados_leak_watch_notify global libneorados
+  neoradostest-support ${unittest_libs})
+install(TARGETS
+  ceph_test_neorados_leak_watch_notify
+  DESTINATION ${CMAKE_INSTALL_BINDIR})

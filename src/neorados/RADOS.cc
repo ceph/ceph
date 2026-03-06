@@ -1398,12 +1398,23 @@ class Notifier : public async::service_list_base_hook {
   std::shared_ptr<detail::Client> neoref;
 
   void service_shutdown() {
-    if (neoref) {
-      neoref = nullptr;
-    }
-    linger_op.reset();
+    // Ensure neorados object and operation live to the end of the
+    // function.
+    auto localop = std::move(linger_op);
+    [[maybe_unused]] auto localneo = std::move(neoref);
     std::unique_lock l(m);
     handlers.clear();
+    l.unlock();
+    if (localop) {
+      // We are being taken down and will execute no more
+      // handlers. Call `linger_cancel` to clean up properly in
+      // Objecter. (It doesn't call out to the OSD or anything.)
+      //
+      // Removal and decrement are guarded by `linger_op->canceled`
+      // so there's no risk of an underflow.
+      localop->objecter->linger_cancel(localop.get());
+    }
+    // The Notifier object is freed by the `linger_cancel` above.
   }
 
 public:
