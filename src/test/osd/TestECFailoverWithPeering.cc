@@ -317,9 +317,6 @@ TEST_F(TestECFailoverWithPeering, PeeringWithLogDivergence) {
   EXPECT_EQ(primary_log_head, post_div_log_head)
     << "Primary PG log head should reflect all writes after reconciliation";
   
-  // Check all active shards' info.last_update.  See the NOTE on ECPeeringTestFixture
-  // for why replica shards may have last_update == 0'0.
-  // Get acting_primary from OSDMap
   pg_t pgid = get_peering_state(0)->get_info().pgid.pgid;
   std::vector<int> acting_osds;
   int acting_primary = -1;
@@ -347,7 +344,6 @@ TEST_F(TestECFailoverWithPeering, PeeringWithLogDivergence) {
   int reconciled_shard = k - 1;
   if (reconciled_shard >= 0 && reconciled_shard < k + m) {
     auto* reconciled_ps = get_peering_state(reconciled_shard);
-    // See the NOTE on ECPeeringTestFixture: replica log may be empty (size 0).
     size_t reconciled_log_size = reconciled_ps->get_pg_log().get_log().log.size();
     auto* primary_ps_check = get_peering_state(acting_primary);
     size_t primary_log_size = primary_ps_check->get_pg_log().get_log().log.size();
@@ -451,7 +447,6 @@ TEST_F(TestECFailoverWithPeering, RecoveryWithPeering) {
   auto* failed_ps = get_peering_state(failed_osd);
   EXPECT_TRUE(failed_ps != nullptr) << "Failed OSD's PeeringState should still exist";
   
-  // See the NOTE on ECPeeringTestFixture: replica log may be empty (size 0).
   size_t primary_log_size = primary_ps->get_pg_log().get_log().log.size();
   size_t failed_log_size = failed_ps->get_pg_log().get_log().log.size();
   EXPECT_LE(failed_log_size, primary_log_size)

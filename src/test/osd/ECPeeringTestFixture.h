@@ -34,11 +34,6 @@
  * for each shard, enabling comprehensive testing of EC peering, recovery,
  * and failover scenarios. It combines the principles from TestPeeringState
  * with the EC backend infrastructure from PGBackendTestFixture.
- *
- * NOTE: This mock framework only populates PG log entries on the primary
- * (shard 0) via append_log.  Replica shards do not receive log entries or
- * info.last_update propagation.  Tests that check replica state should
- * account for this limitation.
  */
 class ECPeeringTestFixture : public PGBackendTestFixture {
 protected:
