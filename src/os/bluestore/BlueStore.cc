@@ -10600,6 +10600,9 @@ void BlueStore::_fsck_check_objects(
           derr << "fsck error: " << pretty_binary_string(it->key())
             << " is unexpected" << dendl;
           ++errors;
+          if (repairer) {
+            repairer->remove_key(db, PREFIX_OBJ, it->key());
+          }
           continue;
         }
         if (expecting_shards.front() > it->key()) {
@@ -10608,6 +10611,9 @@ void BlueStore::_fsck_check_objects(
           derr << "fsck error:   exp "
             << pretty_binary_string(expecting_shards.front()) << dendl;
           ++errors;
+          if (repairer) {
+            repairer->remove_key(db, PREFIX_OBJ, it->key());
+          }
         }
         continue;
       }
