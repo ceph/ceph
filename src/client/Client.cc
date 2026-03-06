@@ -5919,11 +5919,12 @@ int Client::mds_check_access(std::string& path, const UserPerm& perms, int mask)
     path = path.substr(1);
   }
 
+  std::string_view fs_name = mdsmap->get_fs_name();
   for (auto& s: cap_auths) {
-    ldout(cct, 20) << __func__ << " auth match path " << s.match.path << " r: " << s.readable
-                   << " w: " << s.writeable << dendl;
+    ldout(cct, 20) << __func__ << " auth match fsname " << s.match.fs_name << " auth match path "
+                   << s.match.path << " r: " << s.readable << " w: " << s.writeable << dendl;
     ldout(cct, 20) << " match.uid " << s.match.uid << dendl;
-    if (s.match.match(path, perms.uid(), perms.gid(), &gid_list)) {
+    if (s.match.match(fs_name, path, perms.uid(), perms.gid(), &gid_list)) {
       ldout(cct, 20) << " is matched" << dendl;
       // always follow the last auth caps' permision
       root_squash_perms = true;
