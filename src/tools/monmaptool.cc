@@ -375,6 +375,10 @@ int main(int argc, const char **argv)
       return r;
   }
 
+  if (handle_features(features, monmap)) {
+    modified = true;
+  }
+
   if (min_mon_release != ceph_release_t::unknown) {
     monmap.min_mon_release = min_mon_release;
     cout << "setting min_mon_release = " << min_mon_release << std::endl;
@@ -457,10 +461,6 @@ int main(int argc, const char **argv)
       helpful_exit();
     }
     monmap.remove(p);
-  }
-
-  if (handle_features(features, monmap)) {
-    modified = true;
   }
 
   if (!print && !modified && !show_features) {
