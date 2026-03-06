@@ -92,12 +92,21 @@
           </option>
           }
           @for (plugin of plugins; track plugin) {
+            @if (plugin === PLUGIN.ISA) {
+            <option
+              [value]="plugin"
+              selected
+            >
+              {{ plugin }}
+            </option>
+          } @else {
           <option
             [value]="plugin"
           >
             {{ plugin }}
           </option>
           }
+        }
         </cds-select>
 
         <ng-template
