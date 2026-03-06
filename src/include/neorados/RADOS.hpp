@@ -36,6 +36,8 @@
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 
+#include <boost/smart_ptr/intrusive_ptr.hpp>
+
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/uuid/uuid.hpp>
@@ -1357,17 +1359,18 @@ public:
 		BuildComp c);
   };
 
-
+  /// We take an `intrusive_ptr<CephContext>` to make it clear that we
+  /// will take ownership of the reference.
   template<boost::asio::completion_token_for<BuildSig> CompletionToken>
-  static auto make_with_cct(CephContext* cct,
+  static auto make_with_cct(boost::intrusive_ptr<CephContext> cct,
 			    boost::asio::io_context& ioctx,
 			    CompletionToken&& token) {
     auto consigned = boost::asio::consign(
       std::forward<CompletionToken>(token), boost::asio::make_work_guard(
 	boost::asio::get_associated_executor(token, ioctx.get_executor())));
     return boost::asio::async_initiate<decltype(consigned), BuildSig>(
-      [cct, &ioctx](auto&& handler) {
-	make_with_cct_(cct, ioctx, std::move(handler));
+      [cct = std::move(cct), &ioctx](auto&& handler) mutable {
+	make_with_cct_(std::move(cct), ioctx, std::move(handler));
       }, consigned);
   }
 
@@ -1817,7 +1820,7 @@ private:
   friend Builder;
 
   RADOS(std::shared_ptr<detail::Client> impl);
-  static void make_with_cct_(CephContext* cct,
+  static void make_with_cct_(boost::intrusive_ptr<CephContext> cct,
 			     boost::asio::io_context& ioctx,
 			     BuildComp c);
 
