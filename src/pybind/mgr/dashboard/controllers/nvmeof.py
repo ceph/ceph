@@ -555,24 +555,31 @@ else:
             "nvmeof namespace list", model.NamespaceList, alias="nvmeof ns list"
         )
         @EndpointDoc(
-            "List all NVMeoF namespaces in a subsystem",
+            "List all NVMeoF namespaces in a subsystem with pagination support",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN", True, None),
                 "nsid": Param(str, "NVMeoF Namespace ID to filter by", True, None),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
                 "server_address": Param(str, "NVMeoF gateway address", True, None),
+                "limit": Param(int, "Maximum number of namespaces to return (pagination)", True, None),
+                "offset": Param(int, "Number of namespaces to skip (pagination)", True, None),
             },
         )
         @convert_to_model(model.NamespaceList)
         @handle_nvmeof_error
         def list(self, nqn: Optional[str] = None, nsid: Optional[str] = None,
-                 gw_group: Optional[str] = None, server_address: Optional[str] = None):
+                 gw_group: Optional[str] = None, server_address: Optional[str] = None,
+                 limit: Optional[int] = None, offset: Optional[int] = None):
             return NVMeoFClient(
                 gw_group=gw_group,
                 server_address=server_address
             ).stub.list_namespaces(
-                NVMeoFClient.pb2.list_namespaces_req(subsystem=nqn,
-                                                     nsid=int(nsid) if nsid else None)
+                NVMeoFClient.pb2.list_namespaces_req(
+                    subsystem=nqn,
+                    nsid=int(nsid) if nsid else None,
+                    limit=int(limit) if limit else None,
+                    offset=int(offset) if offset else None
+                )
             )
 
         @pick("namespaces", first=True)

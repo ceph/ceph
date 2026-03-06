@@ -320,6 +320,8 @@ message list_namespaces_req {
 	string subsystem = 1;
 	optional uint32 nsid = 2;
 	optional string uuid = 3;
+	optional uint32 limit = 4;
+	optional uint32 offset = 5;
 }
 
 message add_host_req {
@@ -745,6 +747,7 @@ message namespaces_info {
 	string error_message = 2;
 	string subsystem_nqn = 3;
 	repeated namespace_cli namespaces = 4;
+	uint32 total_count = 5;
 }
 
 message namespace_io_error {

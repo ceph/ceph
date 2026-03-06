@@ -152,6 +152,7 @@ class NamespaceList(NamedTuple):
     status: int
     error_message: str
     namespaces: Annotated[List[Namespace], CliFlags.EXCLUSIVE_LIST]
+    total_count: int = 0
 
 
 class NamespaceIOStats(NamedTuple):
