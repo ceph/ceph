@@ -32,7 +32,8 @@ describe('OverviewComponent', () => {
   };
 
   const mockMgrModuleService = {
-    getConfig: jest.fn(() => of({ hw_monitoring: false }))
+    getConfig: jest.fn(() => of({ hw_monitoring: false })),
+    list: jest.fn(() => of([]))
   };
 
   const mockHardwareService = {
