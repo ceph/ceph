@@ -148,7 +148,7 @@ void KMSCache::stop_ttl_reaper() {
   ceph_assert(cache);
   std::visit(
       fu2::overload(
-          [](const std::monostate& mono) {},
+          [](const std::monostate&) {},
           [](AsyncState& async_state) {
             boost::asio::dispatch(
                 async_state.strand,
@@ -161,8 +161,9 @@ void KMSCache::stop_ttl_reaper() {
               if (e.code() != std::future_errc::no_state) throw;
             }
           },
-          [&](const std::jthread&) { reaper_state.emplace<std::monostate>(); }),
+          [](const std::jthread&) {}),
       reaper_state);
+  reaper_state.emplace<std::monostate>();
 }
 
 void KMSCache::clear_cache() const {
