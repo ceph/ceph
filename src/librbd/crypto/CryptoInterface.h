@@ -109,10 +109,9 @@ public:
     unsigned int meta_block_off = 0;
 
     if (extent.extent_map.empty()) {
-      ceph_assert(extent.bl.length() == extent.length);
-      extent.extent_map.emplace_back(extent.offset, extent.length);
+      ceph_assert(extent.bl.length() <= extent.length);
+      extent.extent_map.emplace_back(extent.offset, extent.bl.length());
     } // else the sparse read case
-    // we assume that the sum of all parts in the extent_map are equal to bl.length()
 
     ceph::bufferlist result_bl;
     io::Extents result_extent_map;
