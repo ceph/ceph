@@ -7529,6 +7529,14 @@ void RGWCompleteMultipart::execute(optional_yield y)
     target_attrs.emplace(RGW_ATTR_CKSUM, std::move(cksum_bl));
   } /* cksum */
 
+  {
+    // add the upload id as an xattr and prevent retried CompleteMultipartUpload
+    // requests from overwriting a valid completed upload
+    bufferlist bl;
+    bl.append(upload_id.c_str(), upload_id.size());
+    target_attrs.emplace(RGW_ATTR_MULTIPART_UPLOAD_ID, std::move(bl));
+  }
+
   s->object->set_attrs(target_attrs);
 
   // make reservation for notification if needed
@@ -7556,6 +7564,12 @@ void RGWCompleteMultipart::execute(optional_yield y)
     upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
                      compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
                      s->object.get(), processed_prefixes, if_match, if_nomatch);
+  if (op_ret == -ECANCELED) {
+    ldpp_dout(this, 4) << "Multipart upload id=" << upload_id
+        << " already completed, returning success" << dendl;
+    op_ret = 0;
+    return;
+  }
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
