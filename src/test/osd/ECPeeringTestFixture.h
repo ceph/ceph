@@ -461,15 +461,6 @@ public:
   void mark_osds_down(const std::vector<int>& osd_ids);
   
   /**
-   * Simulate primary failover by marking the current primary as down
-   * and setting primary_temp to designate a new primary.
-   * Creates a new OSDMap epoch and triggers peering.
-   *
-   * @param new_primary_shard The shard ID that should become the new primary
-   */
-  void failover_primary(int new_primary_shard);
-  
-  /**
    * Advance to a new epoch without changing OSD states.
    * Useful for testing re-peering scenarios.
    */

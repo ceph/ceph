@@ -314,29 +314,6 @@ void ECPeeringTestFixture::mark_osds_down(const std::vector<int>& osd_ids)
   dispatch_all();
 }
 
-void ECPeeringTestFixture::failover_primary(int new_primary_shard)
-{
-  // Get current primary and acting set from OSDMap
-  pg_t pg = get_peering_state(0)->get_info().pgid.pgid;
-  std::vector<int> acting_osds;
-  int acting_primary = -1;
-  osdmap->pg_to_acting_osds(pg, &acting_osds, &acting_primary);
-  
-  // Build new acting set with CRUSH_ITEM_NONE for the failed primary shard
-  // This maintains the proper shard positions for erasure coding
-  std::vector<int> new_acting = acting_osds;
-  new_acting[acting_primary] = CRUSH_ITEM_NONE;
-  
-  // Create new OSDMap with primary failover using OSDMapTestHelpers
-  auto new_osdmap = std::make_shared<OSDMap>();
-  new_osdmap->deepish_copy_from(*osdmap);
-  OSDMapTestHelpers::failover_primary(new_osdmap, pg, new_primary_shard, new_acting);
-  
-  // Don't pass new_primary parameter - let backends query primary from PeeringState
-  update_osdmap_with_peering(new_osdmap, std::nullopt);
-  dispatch_all();
-}
-
 void ECPeeringTestFixture::advance_epoch()
 {
   auto new_osdmap = std::make_shared<OSDMap>();

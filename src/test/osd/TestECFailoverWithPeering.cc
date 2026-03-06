@@ -166,10 +166,24 @@ TEST_F(TestECFailoverWithPeering, PrimaryFailoverWithPeering) {
   EXPECT_TRUE(get_peering_listener(0)->backend_listener->pgb_is_primary())
     << "Shard 0 should be primary initially";
   
-  int new_primary_shard = k;  // First parity shard becomes new primary
+  // Mark OSD 0 (the initial primary) as down
+  // PeeringState will automatically determine the new primary
+  mark_osd_down(0);
   
-  // Use fixture helper to perform primary failover
-  failover_primary(new_primary_shard);
+  // Determine the actual new primary from the OSDMap
+  int new_primary_shard = get_primary_shard_from_osdmap();
+  ASSERT_GE(new_primary_shard, 0) << "Should have a valid new primary after failover";
+  
+  // For an optimized EC pool (k=4, m=2), the new primary should be a coding shard (>= k)
+  // For a non-optimized pool, it would be shard 1
+  const pg_pool_t& pool = get_pool();
+  if (pool.allows_ecoptimizations()) {
+    EXPECT_GE(new_primary_shard, k)
+      << "New primary should be a coding shard (>= k) for optimized pool";
+  } else {
+    EXPECT_EQ(new_primary_shard, 1)
+      << "New primary should be shard 1 for non-optimized pool";
+  }
   
   EXPECT_TRUE(get_peering_listener(new_primary_shard)->backend_listener->pgb_is_primary())
     << "Shard " << new_primary_shard << " should be new primary";
@@ -178,14 +192,24 @@ TEST_F(TestECFailoverWithPeering, PrimaryFailoverWithPeering) {
     << "Failed shard should not be primary";
   
   std::string state = get_state_name(new_primary_shard);
-  EXPECT_TRUE(state.find("Peering") != std::string::npos ||
-              state.find("Primary") != std::string::npos ||
-              state.find("Active") != std::string::npos ||
-              state.find("Recovery") != std::string::npos)
-    << "New primary should be in a primary-related state, got: " << state;
+  EXPECT_TRUE(state.find("Active") != std::string::npos)
+    << "New primary should be Active after failover, got: " << state;
   
-  // Note: Full peering completion with primary failover is complex and may require
-  // additional work to handle GetInfo/GetLog message exchanges properly in the test framework
+  // Verify the PG reached Active state
+  EXPECT_TRUE(get_peering_state(new_primary_shard)->is_active())
+    << "New primary should be in Active state";
+  
+  // Verify reads work after primary failover (with EC reconstruction)
+  bufferlist read_data;
+  int read_result = read_object(obj_name, 0, test_data.length(),
+                                read_data, test_data.length());
+  EXPECT_GE(read_result, 0) << "Read should complete successfully after primary failover";
+  ASSERT_EQ(read_data.length(), test_data.length())
+    << "Read length should match after primary failover";
+  
+  std::string read_string(read_data.c_str(), read_data.length());
+  EXPECT_EQ(read_string, test_data)
+    << "Data should be correctly reconstructed via EC after primary failover";
 }
 
 TEST_F(TestECFailoverWithPeering, MultipleOSDFailuresWithPeering) {

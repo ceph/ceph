@@ -337,59 +337,6 @@ public:
   }
   
   /**
-   * Simulate primary failover by marking the current primary as down
-   * and setting pg_temp to designate a new acting set.
-   * This is a test shortcut for non-peering tests.
-   * Creates a new epoch.
-   *
-   * @param osdmap The OSDMap to modify
-   * @param pgid The PG to failover
-   * @param new_primary The OSD ID that should become the new primary
-   * @param acting The new acting set (with CRUSH_ITEM_NONE for failed OSDs)
-   */
-  static void failover_primary(
-    OSDMap& osdmap,
-    pg_t pgid,
-    int new_primary,
-    const std::vector<int>& acting)
-  {
-    // Get current primary from OSDMap
-    std::vector<int> current_acting;
-    int current_primary = -1;
-    osdmap.pg_to_acting_osds(pgid, &current_acting, &current_primary);
-    
-    // Create an incremental to properly simulate primary failover
-    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
-    inc.fsid = osdmap.get_fsid();
-    inc.new_state[current_primary] = CEPH_OSD_EXISTS;  // Mark as down (exists but not UP)
-
-    // For EC pools with optimizations, transform to primaryfirst order before
-    // setting pg_temp. This is a test shortcut that simulates the end result
-    // of: monitor marks OSD down → peering requests pg_temp → monitor applies
-    // transformation. For realistic peering tests, use mark_osd_down() instead.
-    const pg_pool_t* pool = osdmap.get_pg_pool(pgid.pool());
-    std::vector<int> pg_temp_acting = acting;
-    if (pool && pool->allows_ecoptimizations()) {
-      pg_temp_acting = osdmap.pgtemp_primaryfirst(*pool, acting);
-    }
-    inc.new_pg_temp[pgid] = mempool::osdmap::vector<int>(pg_temp_acting.begin(), pg_temp_acting.end());
-
-    // Also set primary_temp to explicitly designate the new primary
-    inc.new_primary_temp[pgid] = new_primary;
-    
-    osdmap.apply_incremental(inc);
-  }
-  
-  static void failover_primary(
-    std::shared_ptr<OSDMap> osdmap,
-    pg_t pgid,
-    int new_primary,
-    const std::vector<int>& acting)
-  {
-    failover_primary(*osdmap, pgid, new_primary, acting);
-  }
-  
-  /**
    * Advance to a new epoch without changing OSD states.
    * Useful for testing re-peering scenarios.
    *
@@ -409,5 +356,3 @@ public:
 };
 
 #endif // CEPH_TEST_OSD_OSDMAPTESTHELPERS_H
-
-// Made with Bob
