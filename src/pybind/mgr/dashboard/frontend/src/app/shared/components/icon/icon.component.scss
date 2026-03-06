@@ -5,7 +5,11 @@
 }
 
 .danger-icon {
-  color: theme.$support-error;
+  fill: theme.$support-error !important;
+}
+
+.error-icon {
+  fill: theme.$support-error !important;
 }
 
 //@TODO: this naming needs to be changed
@@ -18,6 +22,18 @@
   color: theme.$support-caution-major;
 }
 
+.warningAltFilled-icon {
+  color: theme.$support-caution-major;
+}
+
 .deploy-icon {
+  fill: theme.$layer-selected-disabled !important;
+}
+
+.notificationNew-icon circle {
+  fill: theme.$support-error !important;
+}
+
+.emptySearch-icon {
   fill: theme.$layer-selected-disabled !important;
 }

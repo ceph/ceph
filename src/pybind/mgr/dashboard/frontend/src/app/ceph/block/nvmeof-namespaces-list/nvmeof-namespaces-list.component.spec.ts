@@ -1,14 +1,15 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientModule } from '@angular/common/http';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
+import { take } from 'rxjs/operators';
 import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 
 import { NvmeofService } from '../../../shared/api/nvmeof.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { NvmeofTabsComponent } from '../nvmeof-tabs/nvmeof-tabs.component';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { NvmeofNamespacesListComponent } from './nvmeof-namespaces-list.component';
 
@@ -30,8 +31,16 @@ const mockNamespaces = [
 ];
 
 class MockNvmeOfService {
-  listNamespaces() {
-    return of(mockNamespaces);
+  listGatewayGroups() {
+    return of([[{ id: 'g1' }]]);
+  }
+
+  formatGwGroupsList(_response: any) {
+    return [{ content: 'g1', selected: false }];
+  }
+
+  listNamespaces(_group?: string) {
+    return of({ namespaces: mockNamespaces });
   }
 }
 
@@ -41,7 +50,9 @@ class MockAuthStorageService {
   }
 }
 
-class MockModalService {}
+class MockModalCdsService {
+  show = jasmine.createSpy('show');
+}
 
 class MockTaskWrapperService {}
 
@@ -49,20 +60,19 @@ describe('NvmeofNamespacesListComponent', () => {
   let component: NvmeofNamespacesListComponent;
   let fixture: ComponentFixture<NvmeofNamespacesListComponent>;
 
+  let modalService: MockModalCdsService;
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [
-        NvmeofNamespacesListComponent,
-        NvmeofTabsComponent,
-        NvmeofSubsystemsDetailsComponent
-      ],
+      declarations: [NvmeofNamespacesListComponent, NvmeofSubsystemsDetailsComponent],
       imports: [HttpClientModule, RouterTestingModule, SharedModule],
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },
         { provide: AuthStorageService, useClass: MockAuthStorageService },
-        { provide: ModalService, useClass: MockModalService },
+        { provide: ModalCdsService, useClass: MockModalCdsService },
         { provide: TaskWrapperService, useClass: MockTaskWrapperService }
-      ]
+      ],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();
 
     fixture = TestBed.createComponent(NvmeofNamespacesListComponent);
@@ -70,15 +80,41 @@ describe('NvmeofNamespacesListComponent', () => {
     component.ngOnInit();
     component.subsystemNQN = 'nqn.2001-07.com.ceph:1721040751436';
     fixture.detectChanges();
+    modalService = TestBed.inject(ModalCdsService) as any;
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should retrieve namespaces', fakeAsync(() => {
+  it('should retrieve namespaces', (done) => {
+    component.group = 'g1';
+    component.namespaces$.pipe(take(1)).subscribe((namespaces) => {
+      expect(namespaces).toEqual(
+        mockNamespaces.map((ns) => ({
+          ...ns,
+          unique_id: `${ns.nsid}_${ns['ns_subsystem_nqn']}`
+        }))
+      );
+      done();
+    });
     component.listNamespaces();
-    tick();
-    expect(component.namespaces).toEqual(mockNamespaces);
-  }));
+  });
+
+  it('should open delete modal with correct data', () => {
+    // Mock selection
+    const namespace = {
+      nsid: 1,
+      ns_subsystem_nqn: 'nqn.2001-07.com.ceph:1721040751436'
+    };
+    component.selection = {
+      first: () => namespace
+    } as any;
+    component.deleteNamespaceModal();
+    expect(modalService.show).toHaveBeenCalled();
+    const args = modalService.show.calls.mostRecent().args[1];
+    expect(args.itemNames).toEqual([1]);
+    expect(args.itemDescription).toBeDefined();
+    expect(typeof args.submitActionObservable).toBe('function');
+  });
 });

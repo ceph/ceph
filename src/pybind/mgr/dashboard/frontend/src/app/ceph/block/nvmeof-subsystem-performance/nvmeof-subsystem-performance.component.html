@@ -1,0 +1,13 @@
+<cd-grafana *ngIf="permissions.grafana.read && subsystemNQN && groupName"
+            i18n-title
+            title="Subsystem details"
+            grafanaPath="ceph-nvme-of-gateways-performance?var-group={{groupName}}&var-subsystem={{subsystemNQN}}"
+            [type]="'metrics'"
+            uid="feeuv1dno43r4deed"
+            grafanaStyle="three">
+</cd-grafana>
+
+<cd-helper *ngIf="!permissions.grafana.read"
+           i18n>
+  Grafana permissions are required to view performance details.
+</cd-helper>

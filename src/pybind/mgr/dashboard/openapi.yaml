@@ -9402,76 +9402,6 @@ paths:
       summary: Get the version of the NVMeoF gateway
       tags:
       - NVMe-oF Gateway
-  /api/nvmeof/gateway_group/{gw_group}/namespace:
-    get:
-      parameters:
-      - description: NVMeoF gateway group
-        in: path
-        name: gw_group
-        required: true
-        schema:
-          type: string
-      - allowEmptyValue: true
-        description: NVMeoF gateway address
-        in: query
-        name: traddr
-        schema:
-          type: string
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      summary: List all NVMeoF namespaces in a gateway group
-      tags:
-      - NVMe-oF Gateway
-  /api/nvmeof/gateway_group/{gw_group}/namespace/list:
-    get:
-      parameters:
-      - description: NVMeoF gateway group
-        in: path
-        name: gw_group
-        required: true
-        schema:
-          type: string
-      - allowEmptyValue: true
-        description: NVMeoF gateway address
-        in: query
-        name: traddr
-        schema:
-          type: string
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      summary: List all NVMeoF namespaces in a gateway group
-      tags:
-      - NVMe-oF Gateway
   /api/nvmeof/spdk/log_level:
     get:
       parameters:
@@ -9635,7 +9565,7 @@ paths:
               properties:
                 dhchap_key:
                   description: Subsystem DH-HMAC-CHAP key
-                  type: integer
+                  type: string
                 enable_ha:
                   default: true
                   description: Enable high availability
@@ -9655,8 +9585,8 @@ paths:
                   type: string
                 serial_number:
                   description: Subsystem serial number
-                  type: integer
-                traddr:
+                  type: string
+                server_address:
                   description: NVMeoF gateway address
                   type: string
               required:
@@ -9965,6 +9895,71 @@ paths:
       security:
       - jwt: []
       summary: Disallow hosts from accessing an NVMeoF subsystem
+      tags:
+      - NVMe-oF Subsystem Host Allowlist
+  /api/nvmeof/subsystem/{nqn}/host/{host_nqn}/change_key:
+    put:
+      parameters:
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
+      - description: NVMeoF host NQN
+        in: path
+        name: host_nqn
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                dhchap_key:
+                  description: Host DH-HMAC-CHAP key
+                  type: string
+                gw_group:
+                  description: NVMeoF gateway group
+                  type: string
+                server_address:
+                  description: NVMeoF gateway address
+                  type: string
+              required:
+              - dhchap_key
+              type: object
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Change host DH-HMAC-CHAP key
       tags:
       - NVMe-oF Subsystem Host Allowlist
   /api/nvmeof/subsystem/{nqn}/listener:
