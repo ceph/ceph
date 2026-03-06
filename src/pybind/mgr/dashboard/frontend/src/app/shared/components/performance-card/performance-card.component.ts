@@ -23,6 +23,8 @@ import { ProductiveCardComponent } from '../productive-card/productive-card.comp
 import { CommonModule } from '@angular/common';
 import { TimePickerComponent } from '../time-picker/time-picker.component';
 import { AreaChartComponent } from '../area-chart/area-chart.component';
+import { MgrModuleService } from '../../api/mgr-module.service';
+import { toSignal } from '@angular/core/rxjs-interop';
 
 @Component({
   selector: 'cd-performance-card',
@@ -50,6 +52,14 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
   metricUnitMap = METRIC_UNIT_MAP;
   icons = Icons;
   iconSize = IconSize;
+  emptyStateText = {
+    prometheusNotAvailable: $localize`You must have prometheus configured to access this capability.`,
+    storageNotAvailable: $localize`You must have storage configured to access this capability.`,
+    prometheusDisabled: $localize`You must enable prometheus to access this capability.`
+  };
+  emptyStateKey = signal<
+    'prometheusNotAvailable' | 'storageNotAvailable' | 'prometheusDisabled' | ''
+  >('prometheusNotAvailable');
 
   private destroy$ = new Subject<void>();
 
@@ -76,9 +86,12 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
 
   private prometheusService = inject(PrometheusService);
   private performanceCardService = inject(PerformanceCardService);
+  private mgrModuleService = inject(MgrModuleService);
 
   time = { ...this.prometheusService.lastHourDateObject };
   private chartSub?: Subscription;
+
+  readonly list = toSignal(this.mgrModuleService.list(), { initialValue: [] });
 
   ngOnInit() {
     this.loadCharts(this.time);
@@ -94,6 +107,22 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe((data) => {
         this.chartDataSignal.set(data);
+        this.prometheusService.ifPrometheusConfigured(
+          () => {
+            let enabled$ = this.list().filter((a) => a.name === 'prometheus')[0].enabled;
+            if (enabled$) {
+              this.chartDataSignal.set(data);
+              this.emptyStateKey.set('');
+            } else if (!enabled$) {
+              this.emptyStateKey.set('prometheusDisabled');
+            } else {
+              this.emptyStateKey.set('storageNotAvailable');
+            }
+          },
+          () => {
+            this.emptyStateKey.set('prometheusNotAvailable');
+          }
+        );
       });
   }
 
