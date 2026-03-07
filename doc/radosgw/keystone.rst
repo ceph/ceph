@@ -13,40 +13,31 @@ token that Keystone validates will be considered as valid by the gateway.
 The following configuration options are available for Keystone integration::
 
 	[client.radosgw.gateway]
-	rgw keystone api version = {keystone api version}
-	rgw keystone url = {keystone server url:keystone server admin port}
-	rgw keystone admin token = {keystone admin token}
-	rgw keystone admin token path = {path to keystone admin token} #preferred
-	rgw keystone accepted roles = {accepted user roles}
-	rgw keystone token cache size = {number of tokens to cache}
-	rgw keystone implicit tenants = {true for private tenant for each new user}
-
-It is also possible to configure a Keystone service tenant, user & password for
-Keystone (for v2.0 version of the OpenStack Identity API), similar to the way
-OpenStack services tend to be configured, this avoids the need for setting the
-shared secret ``rgw keystone admin token`` in the configuration file, which is
-recommended to be disabled in production environments. The service tenant
-credentials should have admin privileges, for more details refer the `OpenStack
-Keystone documentation`_, which explains the process in detail. The requisite
-configuration options for are::
-
-   rgw keystone admin user = {keystone service tenant user name}
-   rgw keystone admin password = {keystone service tenant user password}
-   rgw keystone admin password = {keystone service tenant user password path} # preferred
-   rgw keystone admin tenant = {keystone service tenant name}
+        rgw keystone api version = {keystone api version}
+        rgw keystone url = {keystone server url:keystone server port}
+        rgw keystone accepted roles = {accepted user roles}
+        rgw keystone token cache size = {number of tokens to cache}
+        rgw keystone implicit tenants = {true for private tenant for each new user}
+        rgw keystone admin user = {keystone service user name}
+        rgw keystone admin password = {keystone service user password}
+        rgw keystone admin password = {keystone service user password path} # preferred
+        rgw keystone admin domain = {keystone service user domain}
+        rgw keystone admin project = {keystone service project name}
 
 
-A Ceph Object Gateway user is mapped into a Keystone ``tenant``. A Keystone user
-has different roles assigned to it on possibly more than a single tenant. When
-the Ceph Object Gateway gets the ticket, it looks at the tenant, and the user
-roles that are assigned to that ticket, and accepts/rejects the request
-according to the ``rgw keystone accepted roles`` configurable.
+You need to configure credentials to use against the Keystone service. You need
+a project (tenant), username and password to talk to the Keystone v3 API.
 
-For a v3 version of the OpenStack Identity API you should replace
-``rgw keystone admin tenant`` with::
+The service credentials needs to have the ``admin`` and ``service`` roles in Keystone to
+allow ``POST /v3/s3tokens`` and ``GET /v3/users/<user>/OS-EC2/<credential>`` requests. You
+can lockdown the service credentials to only need the ``service`` role and not admin by
+changing the ``identity:ec2_get_credential`` policy in Keystone.
 
-   rgw keystone admin domain = {keystone admin domain name}
-   rgw keystone admin project = {keystone admin project name}
+A Ceph Object Gateway user is mapped for a Keystone ``project``. A Keystone
+user has different roles assigned to it on possibly more than a single project. When
+the Ceph Object Gateway processes tokens retrieved from Keystone, it looks at the
+project, and the user roles that are assigned to that token, and accepts/rejects the
+request according to the ``rgw keystone accepted roles`` configurable.
 
 For compatibility with previous versions of ceph, it is also
 possible to set ``rgw keystone implicit tenants`` to either
