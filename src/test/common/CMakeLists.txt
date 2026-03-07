@@ -255,6 +255,50 @@ add_executable(unittest_interval_set
 )
 add_ceph_unittest(unittest_interval_set)
 target_link_libraries(unittest_interval_set ceph-common GTest::Main)
+# unittest_hybrid_interval_set
+add_executable(unittest_hybrid_interval_set
+  test_hybrid_interval_set.cc
+)
+add_ceph_unittest(unittest_hybrid_interval_set)
+target_link_libraries(unittest_hybrid_interval_set ceph-common GTest::Main)
+
+# unittest_hybrid_interval_map
+add_executable(unittest_hybrid_interval_map
+  test_hybrid_interval_map.cc
+)
+add_ceph_unittest(unittest_hybrid_interval_map)
+target_link_libraries(unittest_hybrid_interval_map ceph-common)
+
+# unittest_hybrid_interval_complex_ec
+add_executable(unittest_hybrid_interval_complex_ec
+  test_hybrid_interval_complex_ec.cc
+)
+add_ceph_unittest(unittest_hybrid_interval_complex_ec)
+target_link_libraries(unittest_hybrid_interval_complex_ec ceph-common GTest::Main)
+
+# benchmark_hybrid_interval_set
+add_executable(benchmark_hybrid_interval_set
+  benchmark_hybrid_interval_set.cc
+)
+target_link_libraries(benchmark_hybrid_interval_set ceph-common)
+
+# benchmark_hybrid_interval_map
+add_executable(benchmark_hybrid_interval_map
+  benchmark_hybrid_interval_map.cc
+)
+target_link_libraries(benchmark_hybrid_interval_map ceph-common)
+
+# benchmark_hybrid_transition
+add_executable(benchmark_hybrid_transition
+  benchmark_hybrid_transition.cc
+)
+target_link_libraries(benchmark_hybrid_transition ceph-common)
+
+# benchmark_hybrid_striping
+add_executable(benchmark_hybrid_striping
+  benchmark_hybrid_striping.cc
+)
+target_link_libraries(benchmark_hybrid_striping ceph-common)
 
 # unittest_mini_flat_map
 add_executable(unittest_mini_flat_map
