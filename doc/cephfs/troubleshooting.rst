@@ -281,9 +281,10 @@ The following list details potential causes of hung operations:
    
    If you have extra RAM, increase the ``mds_cache_memory_limit``. The specific
    tunable ``mds_cache_memory_limit`` is discussed in the :ref:`MDS Cache
-   Size<cephfs_cache_configuration_mds_cache_memory_limit>`. Read the :ref:`MDS
-   Cache Configuration<cephfs_mds_cache_configuration>` section in full before
-   making any alterations to the ``mds_cache_memory_limit`` tunable.
+   Size<cephfs_cache_configuration_mds_cache_memory_limit>` section. Read the
+   :ref:`MDS Cache Configuration<cephfs_mds_cache_configuration>` section in
+   full before making any alterations to the ``mds_cache_memory_limit``
+   tunable.
 
 #. There is an older (misbehaving) client.
 
@@ -305,6 +306,10 @@ systems in user space. ceph-fuse supports ``dump_ops_in_flight``. Use the follow
   .. prompt:: bash #
 
   the command goes here - 10 Aug 2025
+
+.. _
+
+   Venky, we need the command that dumps in-flight ceph-fuse operations.
 
 See the :ref:`Mount CephFS using FUSE<cephfs_mount_using_fuse>` documentation.
 
@@ -342,6 +347,11 @@ ring buffer, which can be examined by running the following command:
    dmesg
 
 Find the relevant kernel state.
+
+.. _
+
+   Venky, can we include some examples here of the kind of thing a
+   troubleshooter might be looking for?
 
 
 Slow requests
@@ -397,6 +407,11 @@ the following::
 [Fri Aug 15 02:38:28 2025] ceph: mds0 closed our session
 [Fri Aug 15 02:38:28 2025] ceph: mds0 reconnect start
 [Fri Aug 15 02:38:28 2025] ceph: mds0 reconnect denied
+
+
+.. _
+
+   Venky, is this paragraph still accurate in 2025? It was written in 2016.
 
 Mounting
 ========
