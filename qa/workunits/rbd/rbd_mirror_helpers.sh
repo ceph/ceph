@@ -2722,7 +2722,7 @@ test_group_snap_present()
     local group_snap_id=$3
     local expected_snap_count=$4
 
-    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
+    try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" || :
 
     test "${expected_snap_count}" = "$(xmlstarlet sel -t -v "count(//group_snaps/group_snap[id='${group_snap_id}'])" < "$CMD_STDOUT")" || { fail; return 1; }
 }

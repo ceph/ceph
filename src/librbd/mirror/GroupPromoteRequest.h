@@ -116,16 +116,20 @@ private:
   const std::string m_group_id;
   const std::string m_group_name;
   bool m_force;
+  bool m_orphan_required = false;
   Context *m_on_finish;
   CephContext *m_cct;
 
   std::vector<cls::rbd::GroupSnapshot> m_snaps;
+  std::vector<cls::rbd::GroupImageSpec> m_to_add;
+  std::vector<cls::rbd::GroupImageSpec> m_to_remove;
 
   cls::rbd::MirrorGroup m_mirror_group;
   std::set<std::string> m_mirror_peer_uuids;
   std::vector<cls::rbd::GroupImageStatus> m_images;
   std::vector<ImageCtxT *> m_image_ctxs;
   ceph::bufferlist m_out_bl;
+  cls::rbd::GroupImageSpec m_start_after;
   std::vector<bool> m_locks_acquired;
   bool m_excl_locks_acquire = false;
 
@@ -152,10 +156,21 @@ private:
   void remove_resync_key();
   void handle_remove_resync_key(int r);
 
+  void open_image(const std::string& image_id, int64_t pool_id, Context* on_finish);
+  void handle_open_image(int r);
+
+  void list_group_images();
+  void handle_list_group_images(int r);
+
   void prepare_group_images();
   void handle_prepare_group_images(int r);
 
   void check_rollback_needed();
+
+  void fix_group_membership(
+      std::vector<cls::rbd::GroupImageSpec>& current_membership,
+      std::vector<cls::rbd::GroupImageSpec>& rollback_membership);
+  void handle_fix_group_membership(int r);
 
   void prepare_group_promotion();
 

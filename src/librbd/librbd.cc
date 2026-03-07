@@ -1556,7 +1556,8 @@ namespace librbd {
                image_ioctx.get_pool_name().c_str(),
                image_ioctx.get_id(), image_id);
     int r = librbd::api::Group<>::image_remove_by_id(group_ioctx, group_name,
-                                                     image_ioctx, image_id);
+                                                     image_ioctx, image_id,
+                                                     false);
     tracepoint(librbd, group_image_remove_by_id_exit, r);
     return r;
   }
@@ -7668,7 +7669,8 @@ extern "C" int rbd_group_image_remove_by_id(rados_ioctx_t group_p,
              image_ioctx.get_id(), image_id);
 
   int r = librbd::api::Group<>::image_remove_by_id(group_ioctx, group_name,
-                                                   image_ioctx, image_id);
+                                                   image_ioctx, image_id,
+                                                   false);
 
   tracepoint(librbd, group_image_remove_by_id_exit, r);
   return r;

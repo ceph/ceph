@@ -701,7 +701,9 @@ void GroupReplayer<I>::handle_start_image_replayers(int r) {
 
   if (finish_start_if_interrupted()) {
     return;
-  } else if (r < 0) {
+  } else if (r < 0 && r != -ENOENT) {
+    /* sinario for ENOENT could be, as part of the group snapshot rollback
+     * image might be disabled and hence ENOENT */
     finish_start_fail(r, "failed to start image replayers");
     return;
   }
