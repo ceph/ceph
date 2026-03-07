@@ -623,7 +623,11 @@ PerfCounters::PerfCounters(CephContext *cct, const std::string &name,
 #ifndef WITH_CRIMSON
     ,
     m_lock_name(std::string("PerfCounters::") + name.c_str()),
+#ifdef CEPH_LOCKSTAT
+    m_lock(ceph::make_mutex("PerfCounters::m_lock"))
+#else
     m_lock(ceph::make_mutex(m_lock_name))
+#endif
 #endif
 {
   m_data.resize(upper_bound - lower_bound - 1);
