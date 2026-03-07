@@ -46,7 +46,7 @@ Getopt::Long::GetOptions(
 Pod::Usage::pod2usage(-verbose => 1) && exit if ($help);
 
 #== local variables ===
-my $s3;
+our $s3;
 my $hostdom  = $ENV{RGW_FQDN}||hostfqdn();
 my $port     = $ENV{RGW_PORT}||80;
 our $hostname = "$hostdom:$port";
@@ -65,7 +65,12 @@ sub upload_file {
 
 # delete the bucket
 sub delete_bucket {
-   ($bucket->delete_bucket) and (print "bucket delete succeeded \n") or die $s3->err . "delete bucket failed\n" . $s3->errstr;
+   my $cmd = "$radosgw_admin bucket rm --bucket=$bucketname --purge-objects";
+   my $cmd_op = `$cmd 2>&1`;
+   if ($cmd_op =~ /error|fail/i) {
+        die "delete bucket failed: $cmd_op\n";
+   }
+   print "bucket delete succeeded \n";
 }
 
 # Function to perform multipart upload of given file size to the user bucket via s3 interface
@@ -105,7 +110,7 @@ sub fetch_file_from_bucket
     $response =
       $bucket->get_key_filename( $src_file, GET,
         $dest_file )
-      or die $s3->err . ": " . $s3->errstr;
+      or die "failed to fetch $src_file to $dest_file: " . $s3->err . ": " . $s3->errstr . "\n";
     }
 }
 

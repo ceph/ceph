@@ -151,7 +151,12 @@ sub upload_file {
 
 # delete the bucket
 sub delete_bucket {
-   ($bucket->delete_bucket) and (print "bucket delete succeeded \n") or die $s3->err . "delete bucket failed\n" . $s3->errstr;
+   my $cmd = "$radosgw_admin bucket rm --bucket=$bucketname --purge-objects";
+   my $cmd_op = `$cmd 2>&1`;
+   if ($cmd_op =~ /error|fail/i) {
+        die "delete bucket failed: $cmd_op\n";
+   }
+   print "bucket delete succeeded \n";
 }
 
 #Function to upload the given file size to bucket and verify
