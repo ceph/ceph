@@ -72,8 +72,10 @@
 #include "include/compat.h"
 #include "osd/OSDMap.h"
 #include "fscrypt.h"
+#include "MDSTracer.h"
 
 #include <list>
+#include <sstream>
 #include <regex>
 #include <string_view>
 #include <functional>
@@ -171,8 +173,14 @@ protected:
 
   MDRequestRef mdr;
   void pre_finish(int r) override {
-    if (mdr)
+    if (mdr) {
       mdr->mark_event("journal_committed: ");
+      // End the pending journal_wait span (started in journal_and_reply)
+      if (mdr->journal_span_id != 0) {
+        mdr->trace_data.end_pending_span(mdr->journal_span_id);
+        mdr->journal_span_id = 0;
+      }
+    }
   }
 public:
   explicit ServerLogContext(Server *s) : server(s) {
@@ -2116,6 +2124,12 @@ void Server::journal_and_reply(const MDRequestRef& mdr, CInode *in, CDentry *dn,
   dout(10) << "journal_and_reply tracei " << in << " tracedn " << dn << dendl;
   ceph_assert(!mdr->has_completed);
 
+  // Start pending span for async journal wait tracking
+  // This span will be completed in ServerLogContext::pre_finish when journal commits
+  if (!mdr->trace_data.trace_id.empty()) {
+    mdr->journal_span_id = mdr->trace_data.start_pending_span("journal_wait");
+  }
+
   // note trace items for eventual reply.
   mdr->tracei = in;
   if (in)
@@ -2161,7 +2175,13 @@ void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, const MDRe
  */
 void Server::respond_to_request(const MDRequestRef& mdr, int r)
 {
+  // Trace child span: respond to request (duration captured automatically)
+  ScopedSpan trace_span(mds->tracer, "respond", mdr->trace_span, &mdr->trace_data);
+  trace_span.SetAttribute(MDSTracer::ATTR_RESULT, static_cast<int64_t>(r));
+
   mdr->result = r;
+  mdr->trace_data.result = r;
+
   if (mdr->client_request) {
     if (mdr->is_batch_head()) {
       dout(20) << __func__ << ": batch head " << *mdr << dendl;
@@ -2286,6 +2306,9 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
 
 void Server::early_reply(const MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
 {
+  // Trace child span: early reply (duration captured automatically)
+  ScopedSpan trace_span(mds->tracer, "early_reply", mdr->trace_span);
+
   if (!g_conf()->mds_early_reply)
     return;
 
@@ -2692,6 +2715,53 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
     return;
   }
 
+  // Initialize tracing for this request
+  if (mds->tracer.is_enabled()) {
+    // Start or continue a trace
+    if (req->otel_trace.IsValid()) {
+      mdr->trace_span = mds->tracer.add_span("mds:client_request", req->otel_trace);
+    } else {
+      mdr->trace_span = mds->tracer.start_trace("mds:client_request");
+    }
+
+    // Set span attributes
+    const char* op_name = ceph_mds_op_name(req->get_op());
+    std::ostringstream reqid_ss;
+    reqid_ss << req->get_reqid();
+    std::string reqid_str = reqid_ss.str();
+    
+    mdr->trace_span->SetAttribute(MDSTracer::ATTR_OP_TYPE, req->get_op());
+    mdr->trace_span->SetAttribute(MDSTracer::ATTR_OP_NAME, op_name);
+    mdr->trace_span->SetAttribute(MDSTracer::ATTR_REQID, reqid_str);
+    mdr->trace_span->SetAttribute(MDSTracer::ATTR_MDS_RANK, static_cast<int64_t>(mds->get_nodeid()));
+
+    if (!req->get_filepath().empty()) {
+      std::string path = req->get_filepath().get_path();
+      mdr->trace_span->SetAttribute(MDSTracer::ATTR_PATH, path);
+    }
+
+    if (req->get_source().is_client()) {
+      mdr->trace_span->SetAttribute(MDSTracer::ATTR_CLIENT_ID, 
+                                    static_cast<int64_t>(req->get_source().num()));
+    }
+
+    // Populate trace_data for sliding window storage
+    mdr->trace_data.trace_id = MDSTracer::get_trace_id(mdr->trace_span);
+    mdr->trace_data.name = "mds:client_request";
+    mdr->trace_data.start_time = ceph_clock_now();
+    mdr->trace_data.attributes[MDSTracer::ATTR_OP_TYPE] = std::to_string(req->get_op());
+    mdr->trace_data.attributes[MDSTracer::ATTR_OP_NAME] = op_name;
+    mdr->trace_data.attributes[MDSTracer::ATTR_REQID] = reqid_str;
+    mdr->trace_data.attributes[MDSTracer::ATTR_MDS_RANK] = std::to_string(mds->get_nodeid());
+    if (!req->get_filepath().empty()) {
+      mdr->trace_data.attributes[MDSTracer::ATTR_PATH] = req->get_filepath().get_path();
+    }
+    if (req->get_source().is_client()) {
+      mdr->trace_data.attributes[MDSTracer::ATTR_CLIENT_ID] = 
+        std::to_string(req->get_source().num());
+    }
+  }
+
   if (session) {
     mdr->session = session;
     session->requests.push_back(&mdr->item_session_request);
@@ -2753,6 +2823,11 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
 {
   // we shouldn't be waiting on anyone.
   ceph_assert(!mdr->has_more() || mdr->more()->waiting_on_peer.empty());
+
+  // Trace event: request dispatch
+  if (mdr->trace_span && mdr->trace_span->IsRecording()) {
+    mdr->trace_span->AddEvent("dispatch");
+  }
 
   if (mdr->killed) {
     // Should already be reset in request_cleanup().
@@ -3538,6 +3613,7 @@ bool Server::check_dir_max_entries(const MDRequestRef& mdr, CDir *in)
 
 CDentry* Server::prepare_stray_dentry(const MDRequestRef& mdr, CInode *in)
 {
+  ScopedSpan trace_span(mds->tracer, "prepare_stray_dentry", mdr->trace_span, &mdr->trace_data);
   string straydname;
   in->name_stray_dentry(straydname);
 
@@ -3581,6 +3657,7 @@ CDentry* Server::prepare_stray_dentry(const MDRequestRef& mdr, CInode *in)
 CInode* Server::prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
 				  const file_layout_t *layout, bool referent_inode)
 {
+  ScopedSpan trace_span(mds->tracer, "prepare_new_inode", mdr->trace_span, &mdr->trace_data);
   CInode *in = new CInode(mdcache);
   auto _inode = in->_get_inode();
   
@@ -3838,6 +3915,7 @@ CInode* Server::rdlock_path_pin_ref(const MDRequestRef& mdr,
 				    bool want_auth,
 				    bool no_want_auth)
 {
+  ScopedSpan trace_span(mds->tracer, "rdlock_path_pin_ref", mdr->trace_span, &mdr->trace_data);
   dout(10) << "rdlock_path_pin_ref " << *mdr << " " << refpath << dendl;
 
   if (mdr->locking_state & MutationImpl::PATH_LOCKED)
@@ -3915,6 +3993,7 @@ CDentry* Server::rdlock_path_xlock_dentry(const MDRequestRef& mdr,
 					  bool create, bool okexist, bool authexist,
 					  bool want_layout)
 {
+  ScopedSpan trace_span(mds->tracer, "rdlock_path_xlock_dentry", mdr->trace_span, &mdr->trace_data);
   const filepath& refpath = mdr->get_filepath();
   dout(10) << "rdlock_path_xlock_dentry " << *mdr << " " << refpath << dendl;
 
@@ -4223,6 +4302,7 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, const MDRequestRef&
 
 void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
 {
+  ScopedSpan trace_span(mds->tracer, is_lookup ? "handle_lookup" : "handle_getattr", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   client_t client = mdr->get_client();
 
@@ -4385,6 +4465,7 @@ struct C_MDS_LookupIno2 : public ServerContext {
 void Server::handle_client_lookup_ino(const MDRequestRef& mdr,
 				      bool want_parent, bool want_dentry)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_lookup_ino", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
 
   if ((uint64_t)req->head.args.lookupino.snapid > 0)
@@ -4584,6 +4665,7 @@ void Server::_lookup_ino_2(const MDRequestRef& mdr, int r)
 
 void Server::handle_client_open(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_open", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   dout(7) << "open on " << req->get_filepath() << dendl;
 
@@ -4840,6 +4922,7 @@ bool Server::can_handle_charmap(const MDRequestRef& mdr, CDentry* dn)
 
 void Server::handle_client_openc(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_create", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   client_t client = mdr->get_client();
 
@@ -5037,6 +5120,7 @@ void Server::_finalize_readdir(const MDRequestRef& mdr,
 
 void Server::handle_client_readdir(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_readdir", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   Session *session = mds->get_session(req);
   client_t client = req->get_source().num();
@@ -5326,6 +5410,7 @@ public:
 
 void Server::handle_client_file_setlock(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_file_setlock", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   MutationImpl::LockOpVec lov;
 
@@ -5429,6 +5514,7 @@ void Server::handle_client_file_setlock(const MDRequestRef& mdr)
 
 void Server::handle_client_file_readlock(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_file_readlock", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   MutationImpl::LockOpVec lov;
 
@@ -5482,6 +5568,7 @@ void Server::handle_client_file_readlock(const MDRequestRef& mdr)
 
 void Server::handle_client_setattr(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_setattr", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   MutationImpl::LockOpVec lov;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
@@ -5753,6 +5840,7 @@ void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
 /* This function cleans up the passed mdr */
 void Server::handle_client_setlayout(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_setlayout", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
@@ -5876,6 +5964,7 @@ CInode* Server::try_get_auth_inode(const MDRequestRef& mdr, inodeno_t ino)
 
 void Server::handle_client_setdirlayout(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_setdirlayout", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
 
   // can't use rdlock_path_pin_ref because we need to xlock snaplock/policylock
@@ -6247,6 +6336,7 @@ int Server::check_layout_vxattr(const MDRequestRef& mdr,
 
 void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_setvxattr", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   bool is_rmxattr = (req->get_op() == CEPH_MDS_OP_RMXATTR);
   MutationImpl::LockOpVec lov;
@@ -7052,6 +7142,7 @@ void Server::mirror_info_removexattr_handler(CInode *cur, InodeStoreBase::xattr_
 
 void Server::handle_client_setxattr(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_setxattr", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   string name(req->get_path2());
 
@@ -7149,6 +7240,7 @@ void Server::handle_client_setxattr(const MDRequestRef& mdr)
 
 void Server::handle_client_removexattr(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_removexattr", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   std::string name(req->get_path2());
 
@@ -7218,6 +7310,7 @@ void Server::handle_client_removexattr(const MDRequestRef& mdr)
 
 void Server::handle_client_getvxattr(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_getvxattr", mdr->trace_span, &mdr->trace_data);
   const auto& req = mdr->client_request;
   string xattr_name{req->get_path2()};
 
@@ -7483,6 +7576,7 @@ public:
 
 void Server::handle_client_mknod(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_mknod", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   client_t client = mdr->get_client();
 
@@ -7589,6 +7683,7 @@ void Server::handle_client_mknod(const MDRequestRef& mdr)
 // MKDIR
 void Server::handle_client_mkdir(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_mkdir", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
 
   mdr->disable_lock_cache();
@@ -7693,6 +7788,7 @@ void Server::handle_client_mkdir(const MDRequestRef& mdr)
 
 void Server::handle_client_symlink(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_symlink", mdr->trace_span, &mdr->trace_data);
   const auto& req = mdr->client_request;
 
   mdr->disable_lock_cache();
@@ -7765,6 +7861,7 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
 
 void Server::handle_client_link(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_link", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
 
   dout(7) << "handle_client_link " << req->get_filepath()
@@ -8628,6 +8725,7 @@ void Server::handle_peer_link_prep_ack(const MDRequestRef& mdr, const cref_t<MMD
 
 void Server::handle_client_unlink(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_unlink", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   client_t client = mdr->get_client();
 
@@ -9445,6 +9543,7 @@ public:
  */
 void Server::handle_client_rename(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_rename", mdr->trace_span, &mdr->trace_data);
   const auto& req = mdr->client_request;
   dout(7) << "handle_client_rename " << *req << dendl;
 
@@ -11985,6 +12084,7 @@ void Server::_peer_rename_sessions_flushed(const MDRequestRef& mdr)
 // snaps
 void Server::handle_client_lssnap(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_lssnap", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
 
   // traverse to path
@@ -12094,6 +12194,7 @@ struct C_MDS_mksnap_finish : public ServerLogContext {
 
 void Server::handle_client_mksnap(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_mksnap", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   // make sure we have as new a map as the client
   if (req->get_mdsmap_epoch() > mds->mdsmap->get_epoch()) {
@@ -12290,6 +12391,7 @@ struct C_MDS_rmsnap_finish : public ServerLogContext {
 
 void Server::handle_client_rmsnap(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_rmsnap", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
 
   CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
@@ -12419,6 +12521,7 @@ struct C_MDS_renamesnap_finish : public ServerLogContext {
 
 void Server::handle_client_renamesnap(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_renamesnap", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest> &req = mdr->client_request;
   if (req->get_filepath().get_ino() != req->get_filepath2().get_ino()) {
     respond_to_request(mdr, -EINVAL);
@@ -12570,6 +12673,7 @@ public:
 
 void Server::handle_client_file_blockdiff(const MDRequestRef& mdr)
 {
+  ScopedSpan trace_span(mds->tracer, "handle_file_blockdiff", mdr->trace_span, &mdr->trace_data);
   const cref_t<MClientRequest>& req = mdr->client_request;
 
   dout(10) << __func__ << dendl;
