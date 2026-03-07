@@ -3145,3 +3145,132 @@ class TestRescan(fake_filesystem_unittest.TestCase):
         self.fs.create_file('/sys/class/scsi_host/host1/proc_name', contents='unknown')
         out = _cephadm.command_rescan_disks(self.ctx)
         assert out.startswith('Ok. 2 adapters detected: 1 rescanned, 1 skipped, 0 failed')
+
+
+class TestRmClusterConfigCleanup(fake_filesystem_unittest.TestCase):
+    """Tests for config cleanup logic in _rm_cluster()."""
+
+    TEST_FSID = '00000000-0000-0000-0000-0000deadbeef'
+
+    def setUp(self):
+        self.setUpPyfakefs()
+        if not fake_filesystem.is_root():
+            fake_filesystem.set_uid(0)
+
+        # Create directories that _rm_cluster expects
+        self.fs.create_dir('/var/lib/ceph')
+        self.fs.create_dir('/var/log/ceph')
+        self.fs.create_dir('/run/cephadm')
+        self.fs.create_dir('/etc/logrotate.d')
+        self.fs.create_dir('/etc/systemd/system')
+        self.fs.create_dir('/etc/sysctl.d')
+        self.fs.create_dir('/etc/ceph')
+
+    def _make_ctx(self):
+        ctx = _cephadm.CephadmContext()
+        ctx.fsid = self.TEST_FSID
+        ctx.data_dir = '/var/lib/ceph'
+        ctx.log_dir = '/var/log/ceph'
+        ctx.unit_dir = '/etc/systemd/system'
+        ctx.logrotate_dir = '/etc/logrotate.d'
+        ctx.sysctl_dir = '/etc/sysctl.d'
+        return ctx
+
+    @mock.patch('cephadm.get_ceph_cluster_count', return_value=1)
+    @mock.patch('cephadm.daemons_summary', return_value=[])
+    @mock.patch('cephadmlib.systemd.terminate_service')
+    @mock.patch('cephadm.terminate_service')
+    @mock.patch('cephadmlib.call_wrappers.call', return_value=('', '', 0))
+    @mock.patch('cephadm.call', return_value=('', '', 0))
+    @mock.patch('cephadm.logger')
+    def test_config_file_matching_fsid(
+        self, _logger, _call, _call2, _term, _term2, _daemons, _count
+    ):
+        """ceph.conf with matching fsid - all config files should be removed."""
+        conf_content = get_ceph_conf(fsid=self.TEST_FSID)
+        self.fs.create_file('/etc/ceph/ceph.conf', contents=conf_content)
+        self.fs.create_file('/etc/ceph/ceph.pub', contents='pubkey')
+        self.fs.create_file('/etc/ceph/ceph.client.admin.keyring', contents='keyring')
+
+        ctx = self._make_ctx()
+        _cephadm._rm_cluster(ctx, keep_logs=True, zap_osds=False)
+
+        assert not os.path.exists('/etc/ceph/ceph.conf')
+        assert not os.path.exists('/etc/ceph/ceph.pub')
+        assert not os.path.exists('/etc/ceph/ceph.client.admin.keyring')
+
+    @mock.patch('cephadm.get_ceph_cluster_count', return_value=1)
+    @mock.patch('cephadm.daemons_summary', return_value=[])
+    @mock.patch('cephadmlib.systemd.terminate_service')
+    @mock.patch('cephadm.terminate_service')
+    @mock.patch('cephadmlib.call_wrappers.call', return_value=('', '', 0))
+    @mock.patch('cephadm.call', return_value=('', '', 0))
+    @mock.patch('cephadm.logger')
+    def test_config_file_wrong_fsid(
+        self, _logger, _call, _call2, _term, _term2, _daemons, _count
+    ):
+        """ceph.conf with non-matching fsid - files should be preserved and warning logged."""
+        conf_content = get_ceph_conf(fsid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')
+        self.fs.create_file('/etc/ceph/ceph.conf', contents=conf_content)
+        self.fs.create_file('/etc/ceph/ceph.pub', contents='pubkey')
+        self.fs.create_file('/etc/ceph/ceph.client.admin.keyring', contents='keyring')
+
+        ctx = self._make_ctx()
+        _cephadm._rm_cluster(ctx, keep_logs=True, zap_osds=False)
+
+        assert os.path.exists('/etc/ceph/ceph.conf')
+        assert os.path.exists('/etc/ceph/ceph.pub')
+        assert os.path.exists('/etc/ceph/ceph.client.admin.keyring')
+        _logger.warning.assert_called_once()
+
+    @mock.patch('cephadm.get_ceph_cluster_count', return_value=1)
+    @mock.patch('cephadm.daemons_summary', return_value=[])
+    @mock.patch('cephadmlib.systemd.terminate_service')
+    @mock.patch('cephadm.terminate_service')
+    @mock.patch('cephadmlib.call_wrappers.call', return_value=('', '', 0))
+    @mock.patch('cephadm.call', return_value=('', '', 0))
+    @mock.patch('cephadm.logger')
+    def test_config_not_exists(
+        self, _logger, _call, _call2, _term, _term2, _daemons, _count
+    ):
+        """ceph.conf doesn't exist - should not raise any error."""
+        ctx = self._make_ctx()
+        _cephadm._rm_cluster(ctx, keep_logs=True, zap_osds=False)
+
+    @mock.patch('cephadm.get_ceph_cluster_count', return_value=1)
+    @mock.patch('cephadm.daemons_summary', return_value=[])
+    @mock.patch('cephadmlib.systemd.terminate_service')
+    @mock.patch('cephadm.terminate_service')
+    @mock.patch('cephadmlib.call_wrappers.call', return_value=('', '', 0))
+    @mock.patch('cephadm.call', return_value=('', '', 0))
+    @mock.patch('cephadm.logger')
+    def test_config_empty_directory(
+        self, _logger, _call, _call2, _term, _term2, _daemons, _count
+    ):
+        """ceph.conf is an empty directory (bind mount leftover) - should be removed."""
+        self.fs.create_dir('/etc/ceph/ceph.conf')
+
+        ctx = self._make_ctx()
+        _cephadm._rm_cluster(ctx, keep_logs=True, zap_osds=False)
+
+        assert not os.path.exists('/etc/ceph/ceph.conf')
+
+    @mock.patch('cephadm.get_ceph_cluster_count', return_value=1)
+    @mock.patch('cephadm.daemons_summary', return_value=[])
+    @mock.patch('cephadmlib.systemd.terminate_service')
+    @mock.patch('cephadm.terminate_service')
+    @mock.patch('cephadmlib.call_wrappers.call', return_value=('', '', 0))
+    @mock.patch('cephadm.call', return_value=('', '', 0))
+    @mock.patch('cephadm.logger')
+    def test_config_nonempty_directory(
+        self, _logger, _call, _call2, _term, _term2, _daemons, _count
+    ):
+        """ceph.conf is a non-empty directory - should be left alone."""
+        self.fs.create_dir('/etc/ceph/ceph.conf')
+        self.fs.create_file('/etc/ceph/ceph.conf/somefile', contents='data')
+
+        ctx = self._make_ctx()
+        _cephadm._rm_cluster(ctx, keep_logs=True, zap_osds=False)
+
+        assert os.path.exists('/etc/ceph/ceph.conf')
+        assert os.path.isdir('/etc/ceph/ceph.conf')
