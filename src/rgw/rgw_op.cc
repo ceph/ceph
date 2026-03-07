@@ -7398,6 +7398,10 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
 
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
+
+  rgw_placement_rule* dest_placement;
+  op_ret = upload->get_info(this, s->yield, &dest_placement);
+
   ldpp_dout(this, 16) <<
     fmt::format("INFO: {}->get_multipart_upload for obj {}, {} cksum_type {}",
 		s->bucket->get_name(),
@@ -7405,8 +7409,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
 		(!!upload) ? to_string(upload->cksum_type) : "nil")
 		<< dendl;
 
-  rgw_placement_rule* dest_placement;
-  op_ret = upload->get_info(this, s->yield, &dest_placement);
   if (op_ret < 0) {
     /* XXX this fails consistently when !checksum */
     ldpp_dout(this, 0) <<
