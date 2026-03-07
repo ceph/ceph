@@ -184,6 +184,12 @@ namespace ceph {
     // preload set of extblkdev plugins defined in config
     int preload(CephContext *cct)
     {
+      static bool already_loaded = false;
+      if (already_loaded) {
+        dout(10) << "plugins already loaded" << dendl;
+        return 0;
+      }
+      already_loaded = true;
       const auto& conf = cct->_conf;
       string plugins = conf.get_val<std::string>("osd_extblkdev_plugins");
       dout(10) << "starting preload of extblkdev plugins: " << plugins << dendl;
