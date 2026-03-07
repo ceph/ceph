@@ -81,6 +81,14 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_dedup_min_obj_size_for_dedup
+  type: size
+  level: advanced
+  desc: The minimum RGW object size for dedup (0 means no minimum size for dedup).
+  default: 64_K
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_max_chunk_size
   type: size
   level: advanced
