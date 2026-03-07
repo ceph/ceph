@@ -3,8 +3,12 @@ server {
 {% if not spec.ssl %}
     listen {{ spec.port or 80 }};
 {% else %}
-    listen                    {{ spec.port or 443 }} ssl;
+    {% if spec.virtual_ip %}
+    listen                    {{ spec.virtual_ip }}:{{ spec.port or 443 }} ssl;
+    {% else %}
+    listen                    0.0.0.0:{{ spec.port or 443 }} ssl;
     listen                    [::]:{{ spec.port or 443 }} ssl;
+    {% endif %}
     ssl_certificate            /etc/nginx/ssl/nginx.crt;
     ssl_certificate_key /etc/nginx/ssl/nginx.key;
     {% if spec.ssl_protocols %}
