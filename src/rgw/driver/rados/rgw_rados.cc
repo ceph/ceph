@@ -3379,6 +3379,17 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     op.setxattr(RGW_ATTR_MANIFEST, bl);
   }
 
+  // prevent racing CompleteMultipartUpload requests on the same upload id
+  // unfortunately, cmpxattr() fails with ENOENT if the object doesn't exist
+  // yet, so this is conditional on state->exists. but there's still a potential
+  // race between this write and our target->get_state() to read that state
+  if (meta.completeMultipart && state->exists) {
+    if (auto i = attrs.find(RGW_ATTR_MULTIPART_UPLOAD_ID); i != attrs.end()) {
+      op.cmpxattr(RGW_ATTR_MULTIPART_UPLOAD_ID,
+                  LIBRADOS_CMPXATTR_OP_NE, i->second);
+    }
+  }
+
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     const string& name = iter->first;
     bufferlist& bl = iter->second;
