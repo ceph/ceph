@@ -429,6 +429,15 @@ This command resizes the subvolume quota, using the size specified by
 ``new_size``.  The ``--no_shrink`` flag prevents the subvolume from shrinking
 below the current "used size" of the subvolume.
 
+Resizing can also be done using human-friendly units::
+
+  ceph fs subvolume resize foo subvol1 100KiB
+  ceph fs subvolume resize foo subvol1 200.45KiB
+  ceph fs subvolume resize foo subvol1 300KB
+
+.. note:: Values will be strictly cast to IEC units even when SI units
+   are input, i.e. 1{K|KB|Ki|KiB} all translate to 1024 bytes.
+
 The subvolume can be resized to an unlimited (but sparse) logical size by
 passing ``inf`` or ``infinite`` as ``<new_size>``.
 
