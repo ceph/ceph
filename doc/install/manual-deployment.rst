@@ -249,8 +249,8 @@ The procedure is as follows:
 
    Open the ports with firewalld::
    
-        sudo firewall-cmd --zone=public --add-service=ceph-mon
 	sudo firewall-cmd --zone=public --add-service=ceph-mon --permanent
+	sudo firewall-cmd --reload
 
 #. Verify that the monitor is running. ::
 
