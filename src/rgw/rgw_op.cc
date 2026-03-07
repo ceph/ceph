@@ -2649,7 +2649,7 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 
 int RGWGetObj::get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter, RGWGetObj_Filter* cb) {
   const auto [script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
-                                                              s->bucket_tenant, s->yield, rgw::lua::context::getData);
+                                                              s->yield, s->bucket_tenant, rgw::lua::context::getData, "");
   if (rc == -ENOENT) {
     // no script, nothing to do
     return 0;
@@ -4761,7 +4761,7 @@ auto RGWPutObj::get_torrent_filter(rgw::sal::DataProcessor* cb)
 
 int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, rgw::sal::DataProcessor* cb) {
   const auto [script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
-                                                              s->bucket_tenant, s->yield, rgw::lua::context::putData);
+                                                              s->yield, s->bucket_tenant, rgw::lua::context::putData, "");
   if (rc == -ENOENT) {
     // no script, nothing to do
     return 0;
@@ -8231,15 +8231,29 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
 int RGWDeleteMultiObj::run_lua_script(rgw::lua::context ctx,
                                       const rgw::sal::Object* multi_delete_obj)
 {
-  auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
-                                                  s->bucket_tenant, s->yield, ctx);
-  if (rc == -ENOENT) {
-    // no script, nothing to do
-  } else if (rc < 0) {
-    ldpp_dout(this, 5) <<
-      "WARNING: failed to execute " << rgw::lua::to_string(ctx) << " script. "
-      "error: " << rc << dendl;
-  } else {
+  std::vector<std::string> script_names;
+  const auto rc = rgw::lua::list_scripts(s, s->penv.lua.manager.get(), s->yield,
+                                             s->bucket_tenant, ctx, script_names);
+  if (rc < 0 && rc != -ENOENT) {
+    ldpp_dout(this, 5) << "WARNING: failed to list " << rgw::lua::to_string(ctx)
+                       << " scripts in tenant " << s->bucket_tenant
+                       << ". error " << rc << dendl;
+  }
+
+  for (const auto& name : script_names) {
+    auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
+                                                s->yield, s->bucket_tenant,
+                                                ctx, name);
+    if (rc == -ENOENT) {
+      // no script, nothing to do
+      continue;
+    }
+    if (rc < 0) {
+      ldpp_dout(this, 5) <<
+        "WARNING: failed to read " << rgw::lua::to_string(ctx) << " script. "
+        "error: " << rc << dendl;
+      continue;
+    }
     int script_return_code = 0;
     rc = rgw::lua::request::execute(s->penv.rest, s->penv.olog.get(), s, this,
                                     lua_script, script_return_code, const_cast<rgw::sal::Object*>(multi_delete_obj));
@@ -8249,7 +8263,10 @@ int RGWDeleteMultiObj::run_lua_script(rgw::lua::context ctx,
         "WARNING: failed to execute " << rgw::lua::to_string(ctx) << " script. "
         "error: " << rc << dendl;
     }
-    return script_return_code;
+    if (ctx != rgw::lua::context::postRequest && script_return_code == -EPERM) {
+      // in all other cases we run all scripts of the context
+      return script_return_code;
+    }
   }
   return 0;
 }
