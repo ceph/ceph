@@ -562,7 +562,7 @@ std::string SampleDedupWorkerThread::generate_fingerprint(const bufferlist& chun
       ret = crypto::digest<crypto::SHA512>(chunk_data).to_str();
       break;
     default:
-      ceph_assert(0 == "Invalid fp type");
+      ceph_abort_msg("invalid fp type");
       break;
   }
   return ret;

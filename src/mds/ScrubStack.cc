@@ -102,7 +102,7 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
     dir->auth_pin(this);
     dir->scrub_initialize(header);
   } else {
-    ceph_assert(0 == "queue dentry to scrub stack");
+    ceph_abort_msg("queue dentry to scrub stack");
   }
 
   dout(20) << "enqueue " << *obj << " to " << (top ? "top" : "bottom") << " of ScrubStack" << dendl;
@@ -320,7 +320,7 @@ void ScrubStack::kick_off_scrubs()
 	it = next;
       }
     } else {
-      ceph_assert(0 == "dentry in scrub stack");
+      ceph_abort_msg("dentry in scrub stack");
     }
   }
 }

@@ -695,7 +695,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
         }
       } else {
         // should not have been able to reach this
-        ceph_assert(false);
+        ceph_abort();
       }
     } else if (!mirror_ns->is_primary()) {
       dout(15) << "skipping non-primary remote snapshot" << dendl;

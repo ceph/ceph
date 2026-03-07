@@ -46,6 +46,7 @@
 #include "../support/src/run_every.h"
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
+#include "include/ceph_assert.h"
 
 #ifdef PROFILE
 #include "profile.h"
@@ -1439,7 +1440,7 @@ namespace crimson {
 	  // to avoid nesting, break out and let code below handle this case
 	  break;
 	default:
-	  assert(false);
+          ceph_abort();
 	}
 
 	// we'll only get here if we're returning an entry
@@ -1477,7 +1478,7 @@ namespace crimson {
 	  ++this->prop_sched_count;
 	  break;
 	default:
-	  assert(false);
+          ceph_abort();
 	}
 
 #ifdef PROFILE
@@ -1710,7 +1711,7 @@ namespace crimson {
 	  ++this->prop_sched_count;
 	  break;
 	default:
-	  assert(false);
+          ceph_abort();
 	}
       } // submit_request
 
@@ -1750,7 +1751,7 @@ namespace crimson {
 	  submit_request(next_req.heap_id);
 	  break;
 	default:
-	  assert(false);
+          ceph_abort();
 	}
 	return next_req.type;
       }
