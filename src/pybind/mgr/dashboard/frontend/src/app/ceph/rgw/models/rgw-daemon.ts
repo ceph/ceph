@@ -9,4 +9,5 @@ export class RgwDaemon {
   zone_name: string;
   default: boolean;
   port: number;
+  secondary_port: number;
 }
