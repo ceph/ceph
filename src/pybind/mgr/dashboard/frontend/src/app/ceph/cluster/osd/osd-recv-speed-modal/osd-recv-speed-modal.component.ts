@@ -1,8 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
+import { BaseModal } from 'carbon-components-angular';
 
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -20,7 +20,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   styleUrls: ['./osd-recv-speed-modal.component.scss'],
   standalone: false
 })
-export class OsdRecvSpeedModalComponent implements OnInit {
+export class OsdRecvSpeedModalComponent extends BaseModal implements OnInit {
   osdRecvSpeedForm: CdFormGroup;
   permissions: Permissions;
 
@@ -28,13 +28,13 @@ export class OsdRecvSpeedModalComponent implements OnInit {
   priorityAttrs = {};
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private configService: ConfigurationService,
     private notificationService: NotificationService,
     private osdService: OsdService
   ) {
+    super();
     this.permissions = this.authStorageService.getPermissions();
     this.priorities = this.osdService.osdRecvSpeedModalPriorities.KNOWN_PRIORITIES;
     this.osdRecvSpeedForm = new CdFormGroup({
@@ -181,13 +181,14 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     });
   }
 
-  onCustomizePriorityChange() {
+  onCustomizePriorityChange(checked: boolean) {
+    this.osdRecvSpeedForm.controls.customizePriority.setValue(checked);
     const values = {};
     Object.keys(this.priorityAttrs).forEach((configOptionName) => {
       values[configOptionName] = this.osdRecvSpeedForm.getValue(configOptionName);
     });
 
-    if (this.osdRecvSpeedForm.getValue('customizePriority')) {
+    if (checked) {
       const customPriority = {
         name: 'custom',
         text: $localize`Custom`,
@@ -229,10 +230,10 @@ export class OsdRecvSpeedModalComponent implements OnInit {
             'priority'
           )}'`
         );
-        this.activeModal.close();
+        this.closeModal();
       },
       () => {
-        this.activeModal.close();
+        this.closeModal();
       }
     );
   }

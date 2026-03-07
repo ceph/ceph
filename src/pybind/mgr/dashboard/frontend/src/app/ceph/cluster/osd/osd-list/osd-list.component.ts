@@ -628,7 +628,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   }
 
   configureQosParamsAction() {
-    this.bsModalRef = this.modalService.show(OsdRecvSpeedModalComponent);
+    this.bsModalRef = this.cdsModalService.show(OsdRecvSpeedModalComponent);
   }
 
   configurePgScrubAction() {
