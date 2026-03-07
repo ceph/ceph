@@ -17,6 +17,7 @@
 
 class RGWGetObj_ObjStore_SWIFT : public RGWGetObj_ObjStore {
   int custom_http_ret = 0;
+  std::map<std::string, std::string> crypt_http_responses;
 public:
   RGWGetObj_ObjStore_SWIFT() {}
   ~RGWGetObj_ObjStore_SWIFT() override {}
@@ -33,6 +34,10 @@ public:
   bool need_object_expiration() override {
     return true;
   }
+
+  int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
+                         RGWGetObj_Filter* cb,
+                         bufferlist* manifest_bl) override;
 };
 
 class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
@@ -111,6 +116,7 @@ public:
 
 class RGWPutObj_ObjStore_SWIFT : public RGWPutObj_ObjStore {
   std::string lo_etag;
+  std::map<std::string, std::string> crypt_http_responses;
 public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() override {}
@@ -120,6 +126,9 @@ public:
   int verify_permission(optional_yield y) override;
   int get_params(optional_yield y) override;
   void send_response() override;
+
+  int get_encrypt_filter(std::unique_ptr<rgw::sal::DataProcessor> *filter,
+                         rgw::sal::DataProcessor *cb) override;
 };
 
 class RGWPutMetadataAccount_ObjStore_SWIFT : public RGWPutMetadataAccount_ObjStore {
