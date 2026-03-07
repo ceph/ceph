@@ -91,9 +91,28 @@ namespace rgw::sal {
         explicit operator std::map<std::string, ceph::bufferlist>&();
         explicit operator const std::map<std::string, ceph::bufferlist>&() const;
 
+
+        void encode(ceph::bufferlist& bl) const {
+          ::ceph::encode(attrs_, bl);
+        }
+
+        void decode(ceph::bufferlist::const_iterator& bl) {
+          ::ceph::decode(attrs_, bl);
+      }
+
+
       private:
         std::map<std::string, ceph::bufferlist> attrs_;
       };
+}
+
+inline void encode(const rgw::sal::Attrs &p, ceph::bufferlist &bl) {
+    p.encode(bl);
+}
+
+inline void decode(rgw::sal::Attrs &o, const ceph::bufferlist &bl) {
+    auto p = bl.begin();
+    o.decode(p);
 }
 
 namespace rgw::lua {
