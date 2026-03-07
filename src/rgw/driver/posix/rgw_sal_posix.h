@@ -729,14 +729,16 @@ public:
 			 uint32_t max_items,
 			 RoleList& listing) override { return 0; }
   virtual int store_oidc_provider(const DoutPrefixProvider* dpp,
-				  optional_yield y,
-				  const RGWOIDCProviderInfo& info,
-				  bool exclusive) override { return -ENOTSUP; }
+                                  optional_yield y,
+                                  const RGWOIDCProviderInfo& info,
+                                  bool exclusive,
+                                  RGWObjVersionTracker* objv_tracker) override { return -ENOTSUP; }
   virtual int load_oidc_provider(const DoutPrefixProvider* dpp,
-				 optional_yield y,
-				 std::string_view tenant,
-				 std::string_view url,
-				 RGWOIDCProviderInfo& info) override { return -ENOTSUP; }
+                                 optional_yield y,
+                                 std::string_view tenant,
+                                 std::string_view url,
+                                 RGWOIDCProviderInfo& info,
+                                 RGWObjVersionTracker* objv_tracker) override { return -ENOTSUP; }
   virtual int delete_oidc_provider(const DoutPrefixProvider* dpp,
 				   optional_yield y,
 				   std::string_view tenant,
