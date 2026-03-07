@@ -1264,6 +1264,7 @@ public:
 
   // To be used by the radosgw-admin process
   int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& list_metadata_key, const std::string& key, std::vector<std::string>& scripts) override;
   // To be used by the radosgw process
   std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
   int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;

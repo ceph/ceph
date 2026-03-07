@@ -923,6 +923,7 @@ enum class OPT {
   PUBSUB_TOPIC_STATS,
   PUBSUB_TOPIC_DUMP,
   SCRIPT_PUT,
+  SCRIPT_LIST,
   SCRIPT_GET,
   SCRIPT_RM,
   SCRIPT_PACKAGE_ADD,
@@ -1191,6 +1192,7 @@ static SimpleCmd::Commands all_cmds = {
   { "topic stats", OPT::PUBSUB_TOPIC_STATS },
   { "topic dump", OPT::PUBSUB_TOPIC_DUMP },
   { "script put", OPT::SCRIPT_PUT },
+  { "script list", OPT::SCRIPT_LIST },
   { "script get", OPT::SCRIPT_GET },
   { "script rm", OPT::SCRIPT_RM },
   { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
@@ -12234,6 +12236,32 @@ next:
       return -rc;
     } else {
       std::cout << script << std::endl;
+    }
+  }
+
+  if (opt_cmd == OPT::SCRIPT_LIST) {
+    if (!str_script_ctx) {
+      cerr << "ERROR: context was not provided (via --context)" << std::endl;
+      return EINVAL;
+    }
+    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
+    if (script_ctx == rgw::lua::context::none) {
+      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
+      return EINVAL;
+    }
+    auto lua_manager = driver->get_lua_manager("");
+    std::vector<std::string> scripts;
+    const auto rc = rgw::lua::list_scripts(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, scripts);
+    if (rc == -ENOENT) {
+      std::cout << "no script exists for context: " << *str_script_ctx << 
+        (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
+    } else if (rc < 0) {
+      cerr << "ERROR: failed to read script. error: " << rc << std::endl;
+      return -rc;
+    } else {
+      for (const auto& script : scripts) {
+        std::cout << script << std::endl;
+      }
     }
   }
   

@@ -5439,6 +5439,28 @@ int RadosLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
   return 0;
 }
 
+int RadosLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& list_metadata_key, const std::string& key, std::vector<std::string>& scripts) {
+  if (pool.empty()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when reading Lua script " << dendl;
+    return 0;
+  }
+
+  // get the script list metadata
+  std::string list_meta;
+  int r = get_script(dpp, y, list_metadata_key, list_meta);
+  if (r < 0) {
+    ldpp_dout(dpp, 10) << "MESSAGE: list metadata return code is " << r << dendl;
+    return r;
+  }
+
+  std::stringstream list_meta_stream(list_meta);
+  std::string script_name;
+  while (std::getline(list_meta_stream, script_name, '\n')) {
+    scripts.push_back(script_name);
+  }
+  return 0;
+}
+
 std::tuple<rgw::lua::LuaCodeType, int> RadosLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
                                                                                const std::string& key)
 {

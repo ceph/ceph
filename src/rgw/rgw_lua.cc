@@ -79,15 +79,29 @@ bool verify(const std::string& script, std::string& err_msg)
   return true;
 }
 
-std::string script_oid(context ctx, const std::string& tenant) {
+std::string script_oid(context ctx, const std::string& tenant, const std::string& name="") {
   static const std::string SCRIPT_OID_PREFIX("script.");
-  return SCRIPT_OID_PREFIX + to_string(ctx) + "." + tenant;
+  std::string full_script_oid = SCRIPT_OID_PREFIX + to_string(ctx) + "." + tenant;
+  if (!name.empty()) {
+    full_script_oid += "." + name;
+  }
+  return full_script_oid;
+}
+
+std::string script_list_metadata_oid(context ctx, const std::string& tenant) {
+  static const std::string SCRIPT_LIST_METADATA_OID_PREFIX("script_list_metadata.");
+  return SCRIPT_LIST_METADATA_OID_PREFIX + to_string(ctx) + "." + tenant;
 }
 
 
 int read_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::string& script)
 {
   return manager ? manager->get_script(dpp, y, script_oid(ctx, tenant), script) : -ENOENT;
+}
+
+int list_scripts(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::vector<std::string>& scripts)
+{
+  return manager ? manager->list_scripts(dpp, y, script_list_metadata_oid(ctx, tenant), script_oid(ctx, tenant), scripts) : -ENOENT;
 }
 
 std::tuple<LuaCodeType, int> read_script_or_bytecode(const DoutPrefixProvider *dpp, sal::LuaManager* manager,

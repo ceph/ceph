@@ -1156,6 +1156,7 @@ public:
   virtual ~FilterLuaManager() = default;
 
   virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  virtual int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& list_metadata_key, const std::string& key, std::vector<std::string>& scripts) override;
   virtual std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
                                                                         const std::string& key) override;
   virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;

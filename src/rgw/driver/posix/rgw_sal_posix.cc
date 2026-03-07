@@ -1923,6 +1923,11 @@ int POSIXLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
   return -ENOENT;
 }
 
+int POSIXLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& list_metadata_key, const std::string& key, std::vector<std::string>& scripts)
+{
+  return -ENOENT;
+}
+
 std::tuple<rgw::lua::LuaCodeType, int> POSIXLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
                                                                                const std::string& key)
 {
