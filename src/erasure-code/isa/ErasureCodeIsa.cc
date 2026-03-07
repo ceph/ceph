@@ -27,6 +27,8 @@ extern "C" {
 #include "isa-l/include/erasure_code.h"
 #include "isa-l/include/raid.h"
 }
+
+extern "C" int ec_coefficient_size(void);
 // -----------------------------------------------------------------------------
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
@@ -358,7 +360,7 @@ ErasureCodeIsaDefault::apply_delta(const shard_id_map<bufferptr> &in,
         // We always update one parity at a time, so specify 1 row, and a pointer to the
         // correct row in encode_tbls for this particular parity
         ec_encode_data_update(blocksize, k, 1, static_cast<int>(datashard),
-                              encode_tbls + (32 * k * (static_cast<int>(codingshard) - k)),
+                              encode_tbls + (coeff_size * k * (static_cast<int>(codingshard) - k)),
                               data, &coding);
       }
     }
@@ -643,6 +645,8 @@ ErasureCodeIsaDefault::prepare()
 
   unsigned char** p_enc_coeff =
     tcache.getEncodingCoefficient(matrixtype, k, m);
+
+  coeff_size = ec_coefficient_size();
 
   if (!*p_enc_coeff) {
     dout(10) << "[ cache tables ] creating coeff for k=" <<

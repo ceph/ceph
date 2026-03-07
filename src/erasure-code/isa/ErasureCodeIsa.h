@@ -153,13 +153,14 @@ public:
 
   unsigned char* encode_coeff; // encoding coefficient
   unsigned char* encode_tbls; // encoding table
+  int coeff_size;
 
   ErasureCodeIsaDefault(ErasureCodeIsaTableCache &_tcache,
                         const std::string& technique,
                         int matrix = kVandermonde,
                         const std::string &_m = "0") :
   ErasureCodeIsa(technique, _tcache, _m),
-  encode_coeff(0), encode_tbls(0)
+  encode_coeff(0), encode_tbls(0), coeff_size(0)
   {
     matrixtype = matrix;
   }
