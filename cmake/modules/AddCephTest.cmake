@@ -29,10 +29,12 @@ function(add_ceph_test test_name test_path)
     # AddressSanitizer: odr-violation: global 'ceph::buffer::list::always_empty_bptr' at
     # /home/jenkins-build/build/workspace/ceph-pull-requests/src/common/buffer.cc:1267:34
     # see https://tracker.ceph.com/issues/65098
+    # intercept_cxx_exceptions=0: Disable exception interception to avoid CHECK failures
+    # when exceptions are thrown during early initialization (e.g., in Python bindings)
     set_property(TEST ${test_name}
       APPEND
       PROPERTY ENVIRONMENT
-      ASAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/asan.supp,detect_odr_violation=0
+      ASAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/asan.supp,detect_odr_violation=0,intercept_cxx_exceptions=0
       LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/lsan.supp,print_suppressions=0)
   endif()
   set_property(TEST ${test_name}
