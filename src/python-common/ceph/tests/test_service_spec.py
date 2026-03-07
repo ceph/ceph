@@ -18,6 +18,7 @@ from ceph.deployment.service_spec import (
     PrometheusSpec,
     RGWSpec,
     ServiceSpec,
+    TunedProfileSpec,
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
@@ -1422,3 +1423,50 @@ def test_non_osd_services_do_not_get_default_termination_if_not_provided(spec_da
 
     spec_section = j.get('spec', {})
     assert 'termination_grace_period_seconds' not in spec_section
+
+
+# Tuned profile spec (e.g. ceph orch tuned-profile apply -i os-tune.spec)
+VALID_TUNED_PROFILE_SPEC = """
+profile_name: os-tune
+placement:
+  hosts:
+    - ceph-node-0
+    - ceph-node-1
+    - ceph-node-2
+"""
+
+EMPTY_PROFILE_NAME_SPEC = """
+profile_name: ''
+placement:
+  hosts:
+    - ceph-node-0
+    - ceph-node-1
+    - ceph-node-2
+"""
+
+MISSING_PROFILE_NAME_SPEC = """
+placement:
+  hosts:
+    - ceph-node-0
+    - ceph-node-1
+    - ceph-node-2
+"""
+
+
+@pytest.mark.parametrize("spec_yaml, expect_error, error_match", [
+    (EMPTY_PROFILE_NAME_SPEC, True, r'Invalid profile_name: Must be a non-empty string\.'),
+    (MISSING_PROFILE_NAME_SPEC, True, r'Tuned profile spec must include "profile_name" field'),
+    (VALID_TUNED_PROFILE_SPEC, False, None),
+])
+def test_tuned_profile_spec_profile_name_validation(spec_yaml, expect_error, error_match):
+    """Test TunedProfileSpec.from_json validation for profile_name (ceph orch tuned-profile apply -i <spec>)."""
+    data = yaml.safe_load(spec_yaml)
+    if expect_error:
+        with pytest.raises(SpecValidationError, match=error_match):
+            TunedProfileSpec.from_json(data)
+    else:
+        spec = TunedProfileSpec.from_json(data)
+        assert spec.profile_name == 'os-tune'
+        assert spec.placement is not None
+        # round-trip
+        assert TunedProfileSpec.from_json(spec.to_json()).profile_name == spec.profile_name
