@@ -4765,7 +4765,7 @@ options:
   desc: Default value of bluestore_compression_min_blob_size for rotational media
   fmt_desc: Default value of ``bluestore compression min blob size``
     for rotational media.
-  default: 8_K
+  default: 64_K
   see_also:
   - bluestore_compression_min_blob_size
   flags:
