@@ -109,6 +109,7 @@ public:
      *         omap_iter_ret_t::NEXT means omap_iterate() reaches the end of omap tree
      */
     using omap_iterate_cb_t = std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)>;
+    using omap_iterate_conf_t = std::function<ObjectStore::omap_iter_ret_t()>;
     virtual read_errorator::future<ObjectStore::omap_iter_ret_t> omap_iterate(
       CollectionRef c,   ///< [in] collection
       const ghobject_t &oid, ///< [in] object
@@ -116,7 +117,8 @@ public:
       omap_iterate_cb_t callback,
       ///< [in] the callback function for each OMAP entry after start_from till end of the OMAP or
       /// till the iteration is stopped by `STOP`.
-      uint32_t op_flags = 0
+      uint32_t op_flags = 0,
+      omap_iterate_conf_t on_conflict = nullptr
       ) = 0;
 
     virtual get_attr_errorator::future<bufferlist> omap_get_header(

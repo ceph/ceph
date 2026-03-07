@@ -77,7 +77,8 @@ public:
       const ghobject_t &oid,
       ObjectStore::omap_iter_seek_t start_from,
       omap_iterate_cb_t callback,
-      uint32_t op_flags = 0
+      uint32_t op_flags = 0,
+      omap_iterate_conf_t on_conflict = nullptr
     ) final;
 
     get_attr_errorator::future<ceph::bufferlist> omap_get_header(

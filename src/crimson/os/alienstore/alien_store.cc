@@ -429,7 +429,8 @@ AlienStore::omap_iterate(CollectionRef ch,
                          const ghobject_t &oid,
                          ObjectStore::omap_iter_seek_t start_from,
                          omap_iterate_cb_t callback,
-                         uint32_t op_flags)
+                         uint32_t op_flags,
+			 omap_iterate_conf_t on_conflict)
 {
   logger().debug("{} with_start", __func__);
   assert(tp);
