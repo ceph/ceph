@@ -75,6 +75,7 @@ private:
 
   bool prepare_command(MonOpRequestRef op);
   bool prepare_health_checks(MonOpRequestRef op);
+  void check_for_colocated_monitors(health_check_map_t *checks);
   void check_for_older_version(health_check_map_t *checks);
   void check_for_mon_down(health_check_map_t *checks, std::set<std::string> &mons_down);
   void check_for_clock_skew(health_check_map_t *checks);

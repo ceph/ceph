@@ -634,6 +634,14 @@ options:
   default: true
   services:
   - mon
+- name: mon_warn_on_colocated_monitors
+  type: bool
+  level: advanced
+  desc: Issue MON_COLOCATED health warning if two or
+    more Monitors have the same IP address
+  default: false
+  services:
+  - mon
 - name: mon_stretch_cluster_recovery_ratio
   type: float
   level: advanced
