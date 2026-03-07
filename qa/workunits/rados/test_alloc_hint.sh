@@ -51,7 +51,7 @@ function setup_pgid() {
 }
 
 function expect_alloc_hint_eq() {
-    export CEPH_ARGS="--osd-objectstore=filestore"
+    # This is running with filestore. Is it even run with BlueStore?
     local expected_extsize="$1"
 
     for (( i = 0 ; i < "${NUM_OSDS}" ; i++ )); do
@@ -96,8 +96,7 @@ NUM_OSDS="$((EC_K + EC_M))"
 NUM_PG="12"
 NUM_PGP="${NUM_PG}"
 
-LOW_CAP="$(get_conf_val "osd.0" "filestore_max_alloc_hint_size")"
-HIGH_CAP="$((LOW_CAP * 10))" # 10M, assuming 1M default cap
+LOW_CAP="$((1 * 1024 * 1024))" # 1M
 SMALL_HINT="$((LOW_CAP / 4))" # 256K, assuming 1M default cap
 BIG_HINT="$((LOW_CAP * 6))" # 6M, assuming 1M default cap
 
@@ -108,7 +107,7 @@ setup_osd_data
 #
 
 POOL="alloc_hint-rep"
-ceph osd pool create "${POOL}" "${NUM_PG}"
+ceph osd pool create "${POOL}" "${NUM_PG}" # 1M
 ceph osd pool set "${POOL}" size "${NUM_OSDS}" --yes-i-really-mean-it
 ceph osd pool application enable "${POOL}" rados
 
@@ -124,14 +123,9 @@ expect_alloc_hint_eq "${SMALL_HINT}"
 rados -p "${POOL}" set-alloc-hint "${OBJ}" "${BIG_HINT}" "${BIG_HINT}"
 expect_alloc_hint_eq "${LOW_CAP}"
 
-# Bump the cap to HIGH_CAP
-ceph tell 'osd.*' injectargs "--filestore_max_alloc_hint_size ${HIGH_CAP}"
-
-# Try changing to BIG_HINT (2) - expect BIG_HINT (BIG_HINT < HIGH_CAP)
+# Try changing to BIG_HINT (2) - expect BIG_HINT
 rados -p "${POOL}" set-alloc-hint "${OBJ}" "${BIG_HINT}" "${BIG_HINT}"
 expect_alloc_hint_eq "${BIG_HINT}"
-
-ceph tell 'osd.*' injectargs "--filestore_max_alloc_hint_size ${LOW_CAP}"
 
 # Populate object with some data
 rados -p "${POOL}" put "${OBJ}" /etc/passwd

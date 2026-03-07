@@ -244,10 +244,7 @@ def build_ceph_cluster(ctx, config):
                 if estatus != 0:
                     raise RuntimeError("ceph-deploy: Failed to zap osds")
             osd_create_cmd = './ceph-deploy osd create '
-            # first check for filestore, default is bluestore with ceph-deploy
-            if config.get('filestore') is not None:
-                osd_create_cmd += '--filestore '
-            elif config.get('bluestore') is not None:
+            if config.get('bluestore') is not None:
                 osd_create_cmd += '--bluestore '
             if config.get('dmcrypt') is not None:
                 osd_create_cmd += '--dmcrypt '
@@ -266,7 +263,7 @@ def build_ceph_cluster(ctx, config):
         for remote in osds.remotes.keys():
             # all devs should be lvm
             osd_create_cmd = './ceph-deploy osd create --debug ' + remote.shortname + ' '
-            # default is bluestore so we just need config item for filestore
+            # default is bluestore
             roles = ctx.cluster.remotes[remote]
             dev_needed = len([role for role in roles
                               if role.startswith('osd')])
@@ -282,19 +279,7 @@ def build_ceph_cluster(ctx, config):
             for device in devs:
                 device_split = device.split('/')
                 lv_device = device_split[-2] + '/' + device_split[-1]
-                if config.get('filestore') is not None:
-                    osd_create_cmd += '--filestore --data ' + lv_device + ' '
-                    # filestore with ceph-volume also needs journal disk
-                    try:
-                        jdevice = all_devs.pop(jdevs)
-                    except IndexError:
-                        raise RuntimeError("No device available for \
-                                            journal configuration")
-                    jdevice_split = jdevice.split('/')
-                    j_lv = jdevice_split[-2] + '/' + jdevice_split[-1]
-                    osd_create_cmd += '--journal ' + j_lv
-                else:
-                    osd_create_cmd += ' --data ' + lv_device
+                osd_create_cmd += ' --data ' + lv_device
                 estatus_osd = execute_ceph_deploy(osd_create_cmd)
                 if estatus_osd == 0:
                     log.info('successfully created osd')
@@ -860,10 +845,7 @@ def task(ctx, config):
              ceph-deploy-branch: my-ceph-deploy-branch
              only_mon: true
              keep_running: true
-             # either choose bluestore or filestore, default is bluestore
              bluestore: True
-             # or
-             filestore: True
              # skip install of mgr for old release using below flag
              skip-mgr: True  ( default is False )
              # to use ceph-volume instead of ceph-disk
