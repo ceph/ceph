@@ -1240,7 +1240,8 @@ bool rgw::auth::RoleApplier::is_identity(const Principal& p) const {
     string role_session = role.name + "/" + token_attrs.role_session_name; //role/role-session
     return p.get_account() == role.tenant
         && p.get_role_session() == role_session;
-  } else {
+  } else if (!role.account) {
+    // non-account roles can match the assuming user principal
     string oidc_id;
     if (token_attrs.user_id.ns.empty()) {
       oidc_id = token_attrs.user_id.id;
