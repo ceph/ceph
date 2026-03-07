@@ -22154,6 +22154,53 @@ paths:
       tags:
       - Service
   /api/service/certificate/{service_name}:
+    delete:
+      description: "\n        Remove certificate and key for a service.\n\n      \
+        \  This endpoint removes all certificates associated with a service.\n   \
+        \     For HOST scope certificates (like cephadm-signed), it removes\n    \
+        \    certificates from all hosts where the service daemons run.\n\n      \
+        \  :param service_name: The service name, e.g. 'rgw.myzone'.\n        :return:\
+        \ None\n        "
+      parameters:
+      - description: Service name (e.g., "rgw.myzone")
+        in: path
+        name: service_name
+        required: true
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/json:
+              schema:
+                type: object
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Delete Certificate for Service
+      tags:
+      - Service
     get:
       description: "\n        Get detailed certificate information for a service.\n\
         \n        :param service_name: The service name, e.g. 'rgw.myzone'.\n    \

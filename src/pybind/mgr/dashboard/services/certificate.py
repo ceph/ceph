@@ -6,11 +6,12 @@ This service provides certificate management functionality following the
 handling is contained here.
 """
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from .. import mgr
-from ..model.certificate import CEPHADM_SIGNED_CERT, CertificateListEntry, \
-    CertificateScope, CertificateStatus, CertificateStatusResponse
+from ..model.certificate import CEPHADM_SIGNED_CERT, \
+    CertificateDeleteResponse, CertificateListEntry, CertificateScope, \
+    CertificateStatus, CertificateStatusResponse
 from .orchestrator import OrchClient
 
 
@@ -546,3 +547,146 @@ class CertificateService:
             include_cephadm_signed=include_cephadm_signed
         )
         return cert_ls_result or {}
+
+    @staticmethod
+    def _remove_cert_and_key(orch: Any, cert_name: str,
+                             service_name: Optional[str] = None,
+                             hostname: Optional[str] = None) -> Dict[str, Any]:
+        """Remove a single certificate and its key."""
+        results: Dict[str, Any] = {'certificate': None, 'key': None, 'errors': []}
+        key_name = cert_name.replace('_cert', '_key')
+
+        results['certificate'] = orch.cert_store.rm_cert(cert_name, service_name, hostname)
+        results['key'] = orch.cert_store.rm_key(key_name, service_name, hostname)
+
+        return results
+
+    @staticmethod
+    def remove_certificate_for_service(
+        orch: Any, cert_name: str, cert_scope: str, service_name: str,
+        target_key: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Remove certificate and key for a service (single target)."""
+        scope_upper = cert_scope.upper()
+        rm_service = service_name if scope_upper == CertificateScope.SERVICE.value.upper() else None
+        rm_host = target_key if scope_upper == CertificateScope.HOST.value.upper() else None
+        return CertificateService._remove_cert_and_key(orch, cert_name, rm_service, rm_host)
+
+    @staticmethod
+    def remove_all_certificates_for_service(
+        orch: Any, cert_name: str, cert_scope: str, service_name: str,
+        daemon_hostnames: List[str], target_key: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Remove certificates for a service. For HOST scope, removes from all hosts.
+        """
+        is_host_scope = cert_scope.upper() == CertificateScope.HOST.value.upper()
+
+        if not is_host_scope or not daemon_hostnames:
+            result = CertificateService.remove_certificate_for_service(
+                orch, cert_name, cert_scope, service_name, target_key)
+            return CertificateDeleteResponse(
+                service_name=service_name,
+                cert_name=cert_name,
+                certificate_removed=result['certificate'],
+                key_removed=result['key'],
+                errors=result['errors'] or None
+            ).to_dict()
+
+        # HOST scope: remove from all hosts
+        certs_removed, keys_removed, errors = [], [], []
+        for hostname in daemon_hostnames:
+            result = CertificateService._remove_cert_and_key(orch, cert_name, None, hostname)
+            if result['certificate']:
+                certs_removed.append({'hostname': hostname, 'result': result['certificate']})
+            if result['key']:
+                keys_removed.append({'hostname': hostname, 'result': result['key']})
+            errors.extend([f"{hostname}: {e}" for e in result['errors']])
+
+        return CertificateDeleteResponse(
+            service_name=service_name,
+            cert_name=cert_name,
+            certificate_removed=certs_removed,
+            key_removed=keys_removed,
+            errors=errors or None
+        ).to_dict()
+
+    @staticmethod
+    def delete_service_certificate(orch: Any, service_name: str) -> Dict[str, Any]:
+        """
+        Delete certificate and key for a service.
+
+        This method handles the complete workflow of finding and removing
+        certificates for a service, including HOST scope certificates
+        that need to be removed from all daemon hosts.
+
+        It also handles orphaned certificates where the service no longer exists
+        but certificates remain in certmgr.
+
+        :param orch: Orchestrator client instance
+        :param service_name: Service name (e.g., 'rgw.myzone')
+        :return: Dictionary with deletion results
+        :raises: LookupError if no certificate found for service
+        """
+        from ceph.deployment.service_spec import ServiceSpec
+
+        services = orch.services.get(service_name)
+        daemon_hostnames: List[str] = []
+
+        if services:
+            service = services[0]
+            service_type = service.spec.service_type
+            service_name_full = service.spec.service_name()
+            daemon_hostnames, _ = CertificateService.get_daemon_hostnames(orch, service_name_full)
+        else:
+            service_type = service_name.split('.')[0]
+            service_name_full = service_name
+
+        cert_config: Dict[str, Any] = cast(
+            Dict[str, Any], ServiceSpec.REQUIRES_CERTIFICATES.get(service_type, {}))
+        cert_scope = CertificateScope(cert_config.get('scope', CertificateScope.SERVICE.value))
+
+        user_cert_name = f"{service_type.replace('-', '_')}_ssl_cert"
+        cephadm_cert_name = f"cephadm-signed_{service_type}_cert"
+
+        cert_ls_data = CertificateService.fetch_certificates_for_service(
+            orch, service_type, user_cert_name, cephadm_cert_name)
+
+        # for orphaned certificates, get hostnames from certificate data
+        if not daemon_hostnames:
+            daemon_hostnames = CertificateService._get_hostnames_from_cert_data(
+                cert_ls_data, user_cert_name, cephadm_cert_name, service_name_full)
+
+        cert_details, target_key, cert_name, cert_scope_str = \
+            CertificateService.find_certificate_for_service(
+                cert_ls_data, service_type, service_name_full, cert_scope, daemon_hostnames)
+
+        if not cert_details:
+            raise LookupError(f'No certificate found for service {service_name}')
+
+        return CertificateService.remove_all_certificates_for_service(
+            orch, cert_name, cert_scope_str, service_name_full, daemon_hostnames, target_key)
+
+    @staticmethod
+    def _get_hostnames_from_cert_data(cert_ls_data: Dict[str, Any], user_cert_name: str,
+                                      cephadm_cert_name: str, service_name: str) -> List[str]:
+        """
+        Extract hostnames from certificate data for orphaned certificates.
+
+        :param cert_ls_data: Certificate list data
+        :param user_cert_name: User-provided certificate name
+        :param cephadm_cert_name: Cephadm-signed certificate name
+        :param service_name: Service name
+        :return: List of hostnames found in certificate data
+        """
+        hostnames: List[str] = []
+        cephadm_cert_name_by_service = f"cephadm-signed_{service_name}_cert"
+
+        for cert_name in [user_cert_name, cephadm_cert_name, cephadm_cert_name_by_service]:
+            if cert_name in cert_ls_data:
+                cert_data = cert_ls_data[cert_name]
+                certificates = cert_data.get('certificates', {})
+                if isinstance(certificates, dict):
+                    hostnames.extend(certificates.keys())
+
+        return list(set(hostnames))
