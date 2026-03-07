@@ -3,6 +3,6 @@ mock; python_version < '3.3'
 mypy; python_version >= '3'
 pytest-mypy; python_version >= '3'
 pytest >= 2.1.3; python_version >= '3'
-pyyaml
+pyyaml==6.0.2
 typing-extensions; python_version < '3.8'
 types-PyYAML
