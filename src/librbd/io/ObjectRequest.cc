@@ -662,10 +662,37 @@ void ObjectWriteRequest<I>::add_write_hint(neorados::WriteOp* wr) {
 
 template <typename I>
 void ObjectWriteRequest<I>::add_write_ops(neorados::WriteOp* wr) {
-  if (this->m_full_object) {
-    wr->write_full(bufferlist{m_write_data});
+  I *image_ctx = this->m_ictx;
+  bufferlist data_bl;
+  bufferlist meta_data;
+  size_t block_num = 0;
+  size_t meta_size = 0;
+  if (m_write_flags & OBJECT_WRITE_FLAG_ENCRYPTED_AEAD_WRITE) {
+    std::shared_lock image_locker{image_ctx->image_lock};
+    auto crypto = image_ctx->encryption_format->get_crypto();
+    ceph_assert(crypto != nullptr);
+    size_t block_length = crypto->get_block_size();
+    meta_size = crypto->get_meta_size();
+    block_num = this->m_object_off / block_length;
+    size_t blocks_cnt = m_write_data.length() / (meta_size + block_length);
+    size_t data_length = blocks_cnt * block_length;
+    // TODO: not splice because in case of a retry we still use the original m_write_data?
+    meta_data.substr_of(m_write_data, data_length, blocks_cnt * meta_size);
+    data_bl.substr_of(m_write_data, 0, data_length);
+    ceph_assert((meta_data.length() % meta_size) == 0);
   } else {
-    wr->write(this->m_object_off, bufferlist{m_write_data});
+    data_bl = m_write_data;
+  }
+  // write data first, then meta — write_full truncates the object,
+  // so meta must come after to avoid being wiped
+  if (this->m_full_object) {
+    wr->write_full(std::move(data_bl));
+  } else {
+    wr->write(this->m_object_off, std::move(data_bl));
+  }
+  if (m_write_flags & OBJECT_WRITE_FLAG_ENCRYPTED_AEAD_WRITE) {
+    wr->write(image_ctx->get_object_size() + block_num * meta_size,
+              std::move(meta_data));
   }
   util::apply_op_flags(m_op_flags, 0U, wr);
 }
@@ -680,10 +707,45 @@ void ObjectDiscardRequest<I>::add_write_ops(neorados::WriteOp* wr) {
     wr->create(false);
     // fall through
   case DISCARD_ACTION_TRUNCATE:
+    // For AEAD with a non-zero truncate point, a plain truncate would remove
+    // meta for surviving blocks stored beyond object_size. Convert to zero ops
+    // that only affect the discarded data range and its corresponding meta.
+    if (this->m_object_off > 0) {
+      std::shared_lock image_locker{this->m_ictx->image_lock};
+      if (this->m_ictx->encryption_format) {
+        auto crypto = this->m_ictx->encryption_format->get_crypto();
+        uint32_t meta_size = crypto->get_meta_size();
+        if (meta_size > 0) {
+          uint64_t block_size = crypto->get_block_size();
+          uint64_t object_size = this->m_ictx->get_object_size();
+          wr->zero(this->m_object_off, object_size - this->m_object_off);
+          uint64_t start_block = this->m_object_off / block_size;
+          uint64_t total_blocks = object_size / block_size;
+          wr->zero(object_size + start_block * meta_size,
+                   (total_blocks - start_block) * meta_size);
+          break;
+        }
+      }
+    }
     wr->truncate(this->m_object_off);
     break;
   case DISCARD_ACTION_ZERO:
     wr->zero(this->m_object_off, this->m_object_len);
+    // For AEAD, also zero the corresponding meta region beyond object_size
+    {
+      std::shared_lock image_locker{this->m_ictx->image_lock};
+      if (this->m_ictx->encryption_format) {
+        auto crypto = this->m_ictx->encryption_format->get_crypto();
+        uint32_t meta_size = crypto->get_meta_size();
+        if (meta_size > 0) {
+          uint64_t block_size = crypto->get_block_size();
+          uint64_t start_block = this->m_object_off / block_size;
+          uint64_t num_blocks = this->m_object_len / block_size;
+          wr->zero(this->m_ictx->get_object_size() + start_block * meta_size,
+                   num_blocks * meta_size);
+        }
+      }
+    }
     break;
   default:
     ceph_abort();
