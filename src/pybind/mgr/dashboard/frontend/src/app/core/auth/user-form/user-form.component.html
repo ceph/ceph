@@ -195,8 +195,7 @@
       <!--Submit Button-->
       <cd-form-button-panel (submitActionEvent)="submit()"
                             [form]="userForm"
-                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-                            wrappingClass="text-right">
+                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)">
       </cd-form-button-panel>
     </form>
   </ng-container>
