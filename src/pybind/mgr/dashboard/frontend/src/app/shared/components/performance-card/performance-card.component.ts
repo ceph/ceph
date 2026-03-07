@@ -50,6 +50,13 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
   metricUnitMap = METRIC_UNIT_MAP;
   icons = Icons;
   iconSize = IconSize;
+  emptyStateText = {
+    prometheusNotAvailable: 'You must have prometheus configured to access this capability.',
+    storageNotAvailable: 'You must have storage configured to access this capability.'
+  };
+  emptyStateKey = signal<'prometheusNotAvailable' | 'storageNotAvailable'>(
+    'prometheusNotAvailable'
+  );
 
   private destroy$ = new Subject<void>();
 
@@ -82,6 +89,14 @@ export class PerformanceCardComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.loadCharts(this.time);
+    this.prometheusService.ifPrometheusConfigured(
+      () => {
+        this.emptyStateKey.set('storageNotAvailable');
+      },
+      () => {
+        this.emptyStateKey.set('prometheusNotAvailable');
+      }
+    );
   }
 
   loadCharts(time: { start: number; end: number; step: number }) {
