@@ -43,11 +43,12 @@ export class OverviewStorageService {
     return this.prom.getPrometheusQueryData({ params: this.TIME_UNTIL_FULL_QUERY }).pipe(
       map((res) => {
         const days = Number(res?.result?.[0]?.value?.[1] ?? Infinity);
-        if (!isFinite(days) || days <= 0) return '∞';
+        if (!isFinite(days) || days <= 0) return 'N/A';
 
         if (days < 1) return `${(days * 24).toFixed(1)} hours`;
         if (days < 30) return `${days.toFixed(1)} days`;
-        return `${(days / 30).toFixed(1)} months`;
+        if (days < 365) return `${(days / 30).toFixed(1)} months`;
+        return `${(days / 365).toFixed(1)} years`;
       })
     );
   }
