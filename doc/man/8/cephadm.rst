@@ -13,7 +13,7 @@ Synopsis
 |               [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |               [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
 |               [--retry RETRY] [--no-container-init]
-|               {version,pull,inspect-image,ls,list-networks,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,add-repo,rm-repo,install,list-images,update-osd-service}
+|               {version,pull,inspect-image,ls,list-networks,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,prepare-host-sudo-hardening,setup-ssh-user,add-repo,rm-repo,install,list-images,update-osd-service,exec}
 |               ...
 
 
@@ -412,6 +412,65 @@ prepare a host for cephadm use
 Arguments:
 
 * [--expect-hostname EXPECT_HOSTNAME] Set hostname
+
+
+exec
+----
+
+Execute a shell command on a cluster host::
+
+    cephadm exec -- ls -la
+
+Positional arguments:
+
+* [command]               command to execute
+
+Arguments:
+
+* [--timeout TIMEOUT]     timeout in seconds (default: None)
+
+
+prepare-host-sudo-hardening
+--------------------------
+
+Prepare a host for sudo hardening by authorizing SSH keys, installing/upgrading
+the cephadm package, and setting up restricted sudoers permissions::
+
+    cephadm prepare-host-sudo-hardening --ssh-user cephadm --ssh-pub-key <key>
+
+This command performs the following steps:
+
+1. Authorizes the provided SSH public key for the specified user
+2. Installs or upgrades the cephadm package to match the cluster version (includes cephadm_invoker.py)
+3. Sets up sudoers with restricted permissions for cephadm_invoker.py
+
+Arguments:
+
+* [--ssh-user SSH_USER]       SSH user for key authorization (default: root)
+* [--ssh-pub-key SSH_PUB_KEY] SSH public key to authorize
+* [--cephadm-version VERSION] Specific cephadm version to install
+
+
+setup-ssh-user
+--------------
+
+Setup SSH user with passwordless sudo and SSH key authorization::
+
+    cephadm setup-ssh-user --ssh-user cephadm --ssh-pub-key <public_key>
+
+This command configures an SSH user for cephadm operations by:
+
+1. Validating that the user exists on the system
+2. Setting up passwordless sudo for the user (skipped for root)
+3. Authorizing the SSH public key for the user
+
+This command is automatically called by ``ceph cephadm set-user`` to configure
+SSH users across all cluster hosts.
+
+Arguments:
+
+* [--ssh-user SSH_USER]       SSH user to setup (required)
+* [--ssh-pub-key SSH_PUB_KEY] SSH public key to add to user's authorized_keys (required)
 
 
 pull

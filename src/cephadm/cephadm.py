@@ -72,6 +72,7 @@ from cephadmlib.context_getters import (
 from cephadmlib.exceptions import (
     ClusterAlreadyExists,
     Error,
+    TimeoutExpired,
     UnauthorizedRegistryError,
     DaemonStartException,
 )
@@ -203,6 +204,12 @@ from cephadmlib.listing_updaters import (
     VersionStatusUpdater,
 )
 from cephadmlib.container_lookup import infer_local_ceph_image, identify
+from cephadmlib.user_utils import (
+    setup_ssh_user,
+    validate_user_exists,
+    setup_sudoers_restricted,
+    install_or_upgrade_cephadm
+)
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -3330,6 +3337,41 @@ def command_logs(ctx: CephadmContext) -> None:
 ##################################
 
 
+def command_exec(ctx: CephadmContext) -> int:
+    """
+    Execute a shell command on the host
+    Return Codes:
+        - `0`: Command executed successfully
+        - `124`: Command timed out
+        - `1`: Error during execution
+        - Other: Return code from the executed command
+    """
+    if not ctx.command:
+        raise Error('No command provided to execute')
+    cmd = ctx.command
+    logger.debug('Executing command: %s' % ' '.join(cmd))
+    try:
+        stdout, stderr, returncode = call(
+            ctx,
+            cmd,
+            verbosity=CallVerbosity.SILENT,
+            timeout=ctx.timeout
+        )
+        if stdout:
+            sys.stdout.write(stdout)
+        if stderr:
+            sys.stderr.write(stderr)
+        return returncode
+    except TimeoutExpired:
+        logger.exception('Command timed out after %s seconds' % ctx.timeout)
+        return 124
+    except Exception as e:
+        logger.exception('Error executing command: %s' % str(e))
+        return 1
+
+##################################
+
+
 def command_list_networks(ctx):
     # type: (CephadmContext) -> None
     r = list_networks(ctx)
@@ -4461,6 +4503,79 @@ def change_maintenance_mode(ctx: CephadmContext) -> str:
                     return f'success - systemd target {target} enabled and started'
         return f'success - systemd target {target} enabled and started'
 
+
+def command_setup_ssh_user(ctx: CephadmContext) -> int:
+    """
+    Setup SSH user on the local host by configuring passwordless sudo and
+    copying SSH public key to user's authorized_keys.
+    """
+    if not ctx.ssh_user:
+        raise Error('--ssh-user is required')
+    if not ctx.ssh_pub_key:
+        raise Error('--ssh-pub-key is required')
+
+    setup_ssh_user(ctx, ctx.ssh_user, ctx.ssh_pub_key)
+    return 0
+
+##################################
+
+
+def command_prepare_host_sudo_hardening(ctx: CephadmContext) -> int:
+    """
+    Prepare host for sudo hardening by:
+    1. Authorizing SSH public key for the user
+    2. Installing/upgrading cephadm package to match cluster version (includes cephadm_invoker.py)
+    3. Setting up sudoers with restricted permissions for cephadm_invoker.py
+    """
+    logger.info('Preparing host for sudo hardening...')
+
+    user = ctx.ssh_user if hasattr(ctx, 'ssh_user') and ctx.ssh_user else 'root'
+    ssh_pub_key = ctx.ssh_pub_key if hasattr(ctx, 'ssh_pub_key') else None
+    cephadm_version = ctx.cephadm_version if hasattr(ctx, 'cephadm_version') else None
+
+    has_failures = False
+    try:
+        validate_user_exists(user)
+    except Exception as e:
+        logger.exception('User %s does not exists. err: %s', user, e)
+        return 1
+    # Step 1: Authorize SSH public key for the user
+    if ssh_pub_key:
+        try:
+            logger.debug('Authorizing SSH key for user %s', user)
+            authorize_ssh_key(ssh_pub_key, user)
+        except Exception as e:
+            logger.exception('Failed to authorize SSH key for %s. err: %s', user, e)
+            has_failures = True
+    else:
+        logger.warning('SSH key authorization skipped (no key provided)')
+
+    # Step 2: Install/upgrade the cephadm package (includes cephadm_invoker.py)
+    success, message = install_or_upgrade_cephadm(ctx, cephadm_version)
+    if success:
+        logger.debug('Installed the cephadm package: %s', message)
+    else:
+        logger.error('Failed to install the cephadm package: %s', message)
+        has_failures = True
+
+    # Step 3: Setup sudoers with restricted permissions for cephadm_invoker.py
+    if user and user != 'root':
+        try:
+            setup_sudoers_restricted(ctx, user, '/usr/libexec/cephadm_invoker.py')
+            logger.debug('Sudoers configured for %s (restricted to cephadm_nvoker.py)', user)
+        except Exception as e:
+            logger.exception('Failed to setup sudoers for %s. err: %s', user, e)
+            has_failures = True
+    else:
+        logger.debug('Sudoers setup skipped (root user)')
+
+    logger.info('Successfully prepared host for sudo hardening')
+
+    # Raise error if any step failed
+    if has_failures:
+        raise Error('Failed to prepare host for sudo hardening')
+    return 0
+
 ##################################
 
 
@@ -4939,6 +5054,16 @@ def _get_parser():
         'command', nargs='*',
         help='additional journalctl args')
 
+    parser_exec = subparsers.add_parser(
+        'exec', help='execute a shell command on the host')
+    parser_exec.set_defaults(func=command_exec)
+    parser_exec.add_argument(
+        '--command', nargs=argparse.REMAINDER,
+        help='command to execute')
+    parser_exec.add_argument(
+        '--fsid',
+        help='cluster FSID')
+
     parser_bootstrap = subparsers.add_parser(
         'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
     parser_bootstrap.set_defaults(func=command_bootstrap)
@@ -5180,6 +5305,32 @@ def _get_parser():
     parser_prepare_host.add_argument(
         '--expect-hostname',
         help='Set hostname')
+
+    parser_setup_ssh_user = subparsers.add_parser(
+        'setup-ssh-user', help='set up SSH user with passwordless sudo and key')
+    parser_setup_ssh_user.set_defaults(func=command_setup_ssh_user)
+    parser_setup_ssh_user.add_argument(
+        '--ssh-user',
+        required=True,
+        help='SSH user to setup')
+    parser_setup_ssh_user.add_argument(
+        '--ssh-pub-key',
+        required=True,
+        help='SSH public key to add to authorized_keys')
+
+    parser_prepare_host_sudo_hardening = subparsers.add_parser(
+        'prepare-host-sudo-hardening',
+        help='prepare host by installing cephadm, configuring sudoers, and enabling sudo hardening')
+    parser_prepare_host_sudo_hardening.set_defaults(func=command_prepare_host_sudo_hardening)
+    parser_prepare_host_sudo_hardening.add_argument(
+        '--ssh-user',
+        help='SSH user to configure (default: root)')
+    parser_prepare_host_sudo_hardening.add_argument(
+        '--ssh-pub-key',
+        help='SSH public key to authorize for the user')
+    parser_prepare_host_sudo_hardening.add_argument(
+        '--cephadm-version',
+        help='Specific cephadm version to install')
 
     parser_add_repo = subparsers.add_parser(
         'add-repo', help='configure package repository')
