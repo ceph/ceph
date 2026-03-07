@@ -13,6 +13,7 @@ export class FeatureTogglesMap {
   rgw = true;
   nfs = true;
   dashboard = true;
+  nvmeof = true;
 }
 export type Features = keyof FeatureTogglesMap;
 export type FeatureTogglesMap$ = Observable<FeatureTogglesMap>;
