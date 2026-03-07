@@ -37,6 +37,11 @@ struct SnapInfo {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
+
+  int will_metadata_op_succeed(std::string key, std::string val,
+                               int op_flag) const;
+  void do_metadata_op(std::string key, std::string val, int op_flag);
+
   static std::list<SnapInfo> generate_test_instances();
 
   std::string_view get_long_name() const;
