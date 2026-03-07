@@ -259,9 +259,11 @@ public:
         yield {
           char buf[16];
           snprintf(buf, sizeof(buf), "%d", shard_id);
+          auto my_zone_id = sync_env->svc->zone->zone_id().id;
           rgw_http_param_pair pairs[] = { { "type" , "data" },
                                           { "id", buf },
                                           { "info" , NULL },
+                                          { "zone-id", my_zone_id.c_str() },
                                           { NULL, NULL } };
 
           string p = "/admin/log/";
@@ -354,10 +356,12 @@ public:
         yield {
           char buf[16];
           snprintf(buf, sizeof(buf), "%d", shard_id);
+          auto my_zone_id = sync_env->svc->zone->zone_id().id;
           rgw_http_param_pair pairs[] = { { "type" , "data" },
                                           { "id", buf },
                                           { "marker", marker.c_str() },
                                           { "extra-info", "true" },
+                                          { "zone-id", my_zone_id.c_str() },
                                           { NULL, NULL } };
 
           string p = "/admin/log/";
@@ -479,11 +483,12 @@ public:
     snprintf(max_entries_buf, sizeof(max_entries_buf), "%d", (int)max_entries);
 
     const char *marker_key = (marker.empty() ? "" : "marker");
-
+    auto my_zone_id = sync_env->svc->zone->zone_id().id;
     rgw_http_param_pair pairs[] = { { "type", "data" },
       { "id", buf },
       { "max-entries", max_entries_buf },
       { marker_key, marker.c_str() },
+      { "zone-id", my_zone_id.c_str() },
       { NULL, NULL } };
 
     string p = "/admin/log/";
@@ -693,7 +698,9 @@ RGWRemoteDataLog::RGWRemoteDataLog(const DoutPrefixProvider *dpp,
 
 int RGWRemoteDataLog::read_log_info(const DoutPrefixProvider *dpp, rgw_datalog_info *log_info)
 {
+  auto my_zone_id = sc.env->svc->zone->zone_id().id;
   rgw_http_param_pair pairs[] = { { "type", "data" },
+                                  { "zone-id", my_zone_id.c_str() },
                                   { NULL, NULL } };
 
   int ret = sc.conn->get_json_resource(dpp, "/admin/log", pairs, null_yield, *log_info);

@@ -250,6 +250,16 @@ RGWCoroutinesStack::~RGWCoroutinesStack()
 int RGWCoroutinesStack::operate(const DoutPrefixProvider *dpp, RGWCoroutinesEnv *_env)
 {
   env = _env;
+  if (pos == ops.end()) {
+    lderr(cct) << "ERROR: " << __func__ << " stack=" << (void *)this
+              << " operate() called on done stack (ops empty)"
+              << " nref=" << get_nref()
+              << " is_scheduled=" << is_scheduled
+              << dendl;
+    done_flag = true;
+    blocked_flag = false;
+    return 0;
+  }
   RGWCoroutine *op = *pos;
   op->stack = this;
   ldpp_dout(dpp, 20) << *op << ": operate()" << dendl;
