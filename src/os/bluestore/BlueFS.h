@@ -202,6 +202,12 @@ public:
   */
   virtual void dump(std::ostream& sout) = 0;
 
+  /**
+  *  Reset VSelector's historic state
+  *
+  */
+  virtual void reset_history(std::ostream& sout) = 0;
+
   /* used for sanity checking of vselector */
   virtual BlueFSVolumeSelector* clone_empty() const { return nullptr; }
   virtual bool compare(BlueFSVolumeSelector* other) { return true; };
@@ -871,6 +877,10 @@ public:
     ceph_assert(vselector);
     vselector->dump(sout);
   }
+  void reset_volume_selector(std::ostream& sout) {
+    ceph_assert(vselector);
+    vselector->reset_history(sout);
+  }
   void update_volume_selector_from_config() {
     ceph_assert(vselector);
     vselector->update_from_config(cct);
@@ -988,6 +998,11 @@ public:
   uint8_t select_prefer_bdev(void* hint) override;
   void get_paths(const std::string& base, paths& res) const override;
   void dump(std::ostream& sout) override;
+
+  void reset_history(std::ostream& sout) override {
+    // do nothing
+    return;
+  }
 };
 
 class FitToFastVolumeSelector : public OriginalVolumeSelector {
@@ -1011,6 +1026,12 @@ class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
       clear();
     }
     T& at(size_t x, size_t y) {
+      ceph_assert(x < MaxX);
+      ceph_assert(y < MaxY);
+
+      return values[x][y];
+    }
+    const T& at(size_t x, size_t y) const {
       ceph_assert(x < MaxX);
       ceph_assert(y < MaxY);
 
@@ -1137,6 +1158,11 @@ public:
   }
   void* get_hint_by_dir(std::string_view dirname) const override;
 
+  // intended primarily for UT
+  uint64_t get_max_db_total() const {
+    return per_level_per_dev_max.at(BlueFS::BDEV_DB, per_level_per_dev_usage.get_max_y() - 1);
+  }
+
   void add_usage(void* hint, const bluefs_extent_t& extent) override {
     if (hint == nullptr)
       return;
@@ -1207,6 +1233,7 @@ public:
     const std::string& base,
     BlueFSVolumeSelector::paths& res) const override;
 
+  void reset_history(std::ostream& sout) override;
   void dump(std::ostream& sout) override;
   BlueFSVolumeSelector* clone_empty() const override;
   bool compare(BlueFSVolumeSelector* other) override;
