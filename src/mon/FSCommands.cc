@@ -206,13 +206,27 @@ class FsNewHandler : public FileSystemCommandHandler
     bool force = false;
     cmd_getval(cmdmap, "force", force);
 
-    const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(metadata);
-    if (stat) {
-      int64_t metadata_num_objects = stat->stats.sum.num_objects;
-      if (!force && metadata_num_objects > 0) {
-	ss << "pool '" << metadata_name
-	   << "' already contains some objects. Use an empty pool instead.";
-	return -EINVAL;
+    if (!force) {
+      const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(metadata);
+      if (stat) {
+	int64_t metadata_num_objects = stat->stats.sum.num_objects;
+	if (metadata_num_objects > 0) {
+	  ss << "pool '" << metadata_name << "' already contains some objects. "
+	        "Use an empty pool instead. Pass --force if you are sure that "
+		"you wish to continue";
+	  return -EINVAL;
+	}
+      }
+
+      const pool_stat_t *data_pool_stat = mon->mgrstatmon()->get_pool_stat(data);
+      if (data_pool_stat) {
+	int64_t data_num_objects = data_pool_stat->stats.sum.num_objects;
+	if (!force && data_num_objects > 0) {
+	  ss << "pool '" << data_name << "' already contains some objects. Use "
+		"an empty pool instead. Pass --force if you are sure that you "
+		" wish to continue";
+	  return -EINVAL;
+	}
       }
     }
 
@@ -1082,6 +1096,9 @@ class AddDataPoolHandler : public FileSystemCommandHandler
     string poolname;
     cmd_getval(cmdmap, "pool", poolname);
 
+    bool force = false;
+    cmd_getval(cmdmap, "force", force);
+
     string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name)
         || fs_name.empty()) {
@@ -1108,6 +1125,19 @@ class AddDataPoolHandler : public FileSystemCommandHandler
     if (fsp == nullptr) {
         ss << "filesystem '" << fs_name << "' does not exist";
         return -ENOENT;
+    }
+
+    if (!force) {
+      const pool_stat_t *pool_stat = mon->mgrstatmon()->get_pool_stat(poolid);
+      if (pool_stat) {
+	int64_t data_num_objects = pool_stat->stats.sum.num_objects;
+	if (data_num_objects > 0) {
+	  ss << "pool '" << poolname  << "' already contains some objects. Use "
+		"an empty pool instead. Pass --force if you are sure that you "
+		"wish to continue";
+	  return -EINVAL;
+	}
+      }
     }
 
     // no-op when the data_pool already on fs
