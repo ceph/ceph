@@ -221,11 +221,13 @@ protected:
     boost::asio::coroutine cr;
     bool should_exit{false};
     int ret{0};
+    int num_cr_left{0};
 
     void init() {
       cr = boost::asio::coroutine();
       should_exit = false;
       ret = 0;
+      num_cr_left = 0;
     }
   } drain_status;
 
