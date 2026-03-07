@@ -4611,3 +4611,125 @@ TEST(LibCephFS, ConcurrentWriteAndFsync) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, ZeroSizeBufferAsyncReadFsync) {
+  pid_t mypid = getpid();
+  struct ceph_mount_info *cmount;
+  UserPerm *perms = NULL;
+  Inode *root, *file;
+  struct ceph_statx stx = {0};
+  struct Fh *fh;
+  char filename[PATH_MAX]; 
+  const size_t BUFSIZE = (128 * 1024 * 1024) / sizeof(uint64_t);
+  
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  sprintf(filename, "test_zerosizebufferasyncreadfsync%u", mypid);
+
+  perms = ceph_userperm_new(0, 0, 0, NULL);
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
+  ASSERT_EQ(ceph_ll_create(cmount, root, filename, 0777,
+                           O_RDWR | O_CREAT | O_TRUNC | O_RSYNC,
+                           &file, &fh, &stx, CEPH_STATX_INO, 0, perms), 0);
+
+  // using a 128MiB buffer and construct the write io_info struct
+  auto out_buf = std::make_unique<uint64_t[]>(BUFSIZE);
+  std::fill(out_buf.get(), out_buf.get() + BUFSIZE, 65);
+  struct ceph_ll_io_info w_io_info;
+  struct iovec w_iov;
+  w_io_info.callback = io_callback;
+  w_io_info.iov = &w_iov;
+  w_io_info.iovcnt = 1;
+  w_io_info.off = 0;
+  w_io_info.fh = fh;
+  w_io_info.result = 0;
+  w_iov.iov_base = out_buf.get();
+  w_iov.iov_len = BUFSIZE * sizeof(uint64_t);
+  w_io_info.write = true;
+  w_io_info.fsync = false;
+
+  // using a zero-sized buffer and contruct read in_info struct
+  auto in_buf = std::make_unique<uint64_t[]>(0);
+  struct ceph_ll_io_info r_io_info;
+  struct iovec r_iov;
+  r_io_info.callback = io_callback;
+  r_io_info.iov = &r_iov;
+  r_io_info.iovcnt = 1;
+  r_io_info.off = 0;
+  r_io_info.fh = fh;
+  r_io_info.result = 0;
+  r_iov.iov_base = in_buf.get();
+  r_iov.iov_len = 0;
+  r_io_info.write = false;
+  r_io_info.fsync = true;
+                           
+  // do a buffered write
+  write_done = false;
+  ASSERT_EQ(ceph_ll_nonblocking_readv_writev(cmount, &w_io_info), 0);
+
+  // async-fsync read while async write is ongoing so that client flushes the
+  // file inode which is having dirty_or_tx (a requirement to flush the inode)
+  // set in it's object set.
+  read_done = false;
+  ASSERT_EQ(ceph_ll_nonblocking_readv_writev(cmount, &r_io_info), 0);
+
+  std::cout << ": waiting for write to finish" << std::endl;
+  {
+    std::unique_lock lock(mtx);
+    cond.wait(lock, []{
+      return write_done;
+    });
+  }
+  std::cout << ": write finished" << std::endl;
+  ASSERT_EQ(w_io_info.result, BUFSIZE * sizeof(uint64_t));
+
+  std::cout << ": waiting for read to finish" << std::endl;
+  {
+    std::unique_lock lock(mtx);
+    cond.wait(lock, []{
+      return read_done;
+    });
+  }
+  std::cout << ": read finished" << std::endl;
+  ASSERT_EQ(r_io_info.result, 0);
+
+  // do a buffered write
+  w_io_info.result = 0;
+  write_done = false;
+  ASSERT_EQ(ceph_ll_nonblocking_readv_writev(cmount, &w_io_info), 0);
+
+  // async-fsync-dataonly read while async write is ongoing so that client
+  // flushes the file inode which is having dirty_or_tx (a requirement to flush
+  // the inode) set in it's object set.
+  r_io_info.result = 0;
+  read_done = false;
+  r_io_info.syncdataonly = true;
+  ASSERT_EQ(ceph_ll_nonblocking_readv_writev(cmount, &r_io_info), 0);
+
+  std::cout << ": waiting for write to finish" << std::endl;
+  {
+    std::unique_lock lock(mtx);
+    cond.wait(lock, []{
+      return write_done;
+    });
+  }
+  std::cout << ": write finished" << std::endl;
+  ASSERT_EQ(w_io_info.result, BUFSIZE * sizeof(uint64_t));
+
+  std::cout << ": waiting for read to finish" << std::endl;
+  {
+    std::unique_lock lock(mtx);
+    cond.wait(lock, []{
+      return read_done;
+    });
+  }
+  std::cout << ": read finished" << std::endl;
+  ASSERT_EQ(r_io_info.result, 0);
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_release(cmount);
+  ceph_userperm_destroy(perms);
+}
