@@ -859,6 +859,11 @@ def _generate_share(conf: _ShareConf) -> Dict[str, Dict[str, str]]:
         ):
             if value := getattr(qos, field):
                 opts[f"{vfs_rl}:{field}"] = str(value)
+
+        if qos.cluster_mode is not None:
+            cluster_mode_val = "yes" if qos.cluster_mode else "no"
+            opts[f"{vfs_rl}:cluster_mode"] = cluster_mode_val
+
     if share.comment is not None:
         cfg['options']['comment'] = share.comment
 
