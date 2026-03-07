@@ -695,7 +695,8 @@ void MgrMonitor::send_digests()
     auto mdigest = make_message<MMgrDigest>();
 
     JSONFormatter f;
-    mon.healthmon()->get_health_status(true, &f, nullptr, nullptr, nullptr);
+    mon.healthmon()->get_health_status(true, &f, nullptr,
+                                       nullptr, nullptr);
     f.flush(mdigest->health_json);
     f.reset();
 
