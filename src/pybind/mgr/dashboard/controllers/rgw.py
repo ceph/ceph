@@ -958,7 +958,7 @@ class RgwUser(RgwRESTController):
                system=None, suspended=None, generate_key=None, access_key=None,
                secret_key=None, daemon_name=None, account_id: Optional[str] = None,
                account_root_user: Optional[bool] = False,
-               account_policies: Optional[str] = None):
+               account_policies: Optional[str] = None, tenant=None):
         """Create a new RGW user."""
 
         params = {'uid': uid, 'display-name': display_name}
@@ -972,7 +972,8 @@ class RgwUser(RgwRESTController):
             'generate-key': generate_key,
             'access-key': access_key,
             'secret-key': secret_key,
-            'account-id': account_id
+            'account-id': account_id,
+            'tenant': tenant
         }
 
         # Add only non-None parameters
@@ -1013,7 +1014,7 @@ class RgwUser(RgwRESTController):
     def set(self, uid, display_name=None, email=None, max_buckets=None,
             system=None, suspended=None, daemon_name=None, account_id: Optional[str] = None,
             account_root_user: Optional[bool] = False,
-            account_policies: Optional[str] = None):
+            account_policies: Optional[str] = None, tenant=None):
         """Update an existing RGW user."""
 
         params = {'uid': uid}
@@ -1025,7 +1026,8 @@ class RgwUser(RgwRESTController):
             'max-buckets': max_buckets,
             'system': system,
             'suspended': suspended,
-            'account-id': account_id
+            'account-id': account_id,
+            'tenant': tenant
         }
 
         # Add only non-None parameters
