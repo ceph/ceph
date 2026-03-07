@@ -1879,6 +1879,43 @@ TEST_P(seastore_test_t, pgmeta_io)
         p);
     }
 
+    auto &test_obj7 = get_object(make_oid(600));
+    test_obj7.touch(*sharded_seastore);
+    test_obj7.set_log_object(*sharded_seastore);
+    epoch += 1;
+    {
+      std::string start = generate_key(epoch, version);
+      {
+	CTransaction t;
+	for (int i = 0; i < 20; i++) {
+	  std::string key = generate_key(epoch, version);
+	  char c_array[240] = {(char)((i % 10) + '0')};
+	  std::string ss(&c_array[0], sizeof(c_array));
+	  bufferlist l;
+	  encode(ss, l);
+	  std::map<string, bufferlist> kvs;
+	  kvs[key] = l;
+	  test_obj7.set_omaps(t, kvs);
+	  version += i;
+	}
+	do_transaction(std::move(t));
+      }
+      bufferlist l;
+      test_obj7.set_omap(*sharded_seastore, "_info", l);
+      test_obj7.rm_omap_range(*sharded_seastore, eversion_t().get_key_name(), 
+	eversion_t::max().get_key_name());
+      std::map<string, bufferlist> kvs;
+      kvs[start] = l;
+      test_obj7.set_omap(*sharded_seastore, start, l);
+      std::set<std::string> keys;
+      keys.insert(start);
+      keys.insert(generate_key(epoch, version));
+      test_obj7.rm_omaps(*sharded_seastore, keys);
+      kvs = test_obj7.get_omaps(*sharded_seastore, start);
+      // test_obj7 should have only _info at this point
+      EXPECT_EQ(kvs.size(), 1);
+    }
+
     auto kvs = test_obj.get_omaps(*sharded_seastore, std::string());
     EXPECT_EQ(kvs.size(), test_obj.omap.size());
 
