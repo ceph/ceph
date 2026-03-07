@@ -153,6 +153,9 @@ const vector<uint64_t> bdev_label_positions = {
   100*_1G,
   1000*_1G};
 
+#ifdef BLUESTORE_COMMON_CPUTRACE
+cpucounter_group BlueStore::cputrace_bluestore("bluestore");
+#endif
 /*
  * extent map blob encoding
  *
@@ -4352,6 +4355,7 @@ void BlueStore::ExtentMap::maybe_load_shard(
     ceph_assert((size_t)start < shards.size());
     auto p = &shards[start];
     if (!p->loaded) {
+      BLUE_SCOPE(maybe_load_shard);
       dout(30) << __func__ << " opening shard 0x" << std::hex
 	       << p->shard_info->offset << std::dec << dendl;
       bufferlist v;
@@ -4913,6 +4917,7 @@ void BlueStore::Onode::put()
     c->get_onode_cache()->maybe_unpin(this);
   }
   if (--nref == 0) {
+    BLUE_SCOPE(onode_put);
     delete this;
   }
 }
@@ -5326,7 +5331,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   OnodeRef o = onode_space.lookup(oid);
   if (o)
     return o;
-
+  BLUE_SCOPE(get_onode);
   string key;
   get_object_key(store->cct, oid, &key);
 
@@ -14337,6 +14342,7 @@ void BlueStore::_txc_update_store_statfs(TransContext *txc)
 
 void BlueStore::_txc_state_proc(TransContext *txc)
 {
+  BLUE_SCOPE(txc_state_proc);
   while (true) {
     dout(10) << __func__ << " txc " << txc
 	     << " " << txc->get_state_name() << dendl;
@@ -14491,6 +14497,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
 
 void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 {
+  BLUE_SCOPE(txc_write_nodes);
   dout(20) << __func__ << " txc " << txc
 	   << " onodes " << txc->onodes
 	   << " shared_blobs " << txc->shared_blobs
@@ -14554,6 +14561,7 @@ void BlueStore::BSPerfTracker::update_from_perfcounters(
 
 void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 {
+  BLUE_SCOPE(txc_finalize_kv);
   dout(20) << __func__ << " txc " << txc << std::hex
 	   << " allocated 0x" << txc->allocated
 	   << " released 0x" << txc->released
@@ -15795,8 +15803,10 @@ void BlueStore::_txc_aio_submit(TransContext *txc)
   bdev->aio_submit(&txc->ioc);
 }
 
+
 void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
+  BLUE_SCOPE(txc_add_transaction);
   Transaction::iterator i = t->begin();
 
   _dump_transaction<30>(cct, t);
