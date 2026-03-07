@@ -182,11 +182,12 @@ namespace rgw::dedup {
                            remapper_t *remapper);
 
 #ifdef FULL_DEDUP_SUPPORT
-    int calc_object_blake3(const disk_record_t *p_rec, uint8_t *p_hash);
+    int calc_object_blake3(const disk_record_t *p_rec, uint8_t *p_hash, rgw::sal::Attrs &attrs);
     int add_obj_attrs_to_record(rgw_bucket            *p_rb,
                                 disk_record_t         *p_rec,
-                                const rgw::sal::Attrs &attrs,
+                                rgw::sal::Attrs &attrs,
                                 dedup_table_t         *p_table,
+                                crypt_mode_t           crypt_mode,
                                 md5_stats_t           *p_stats); /* IN-OUT */
 
     int read_object_attribute(dedup_table_t    *p_table,

@@ -63,11 +63,17 @@ namespace rgw::dedup {
 
     this->s.ref_tag_len     = 0;
     this->s.manifest_len    = 0;
+    this->s.crypt_key_len   = 0;
+    this->s.crypt_data_len   = 0;
+    this->s.crypt_ctx_len   = 0;
 
     this->s.shared_manifest = 0;
     memset(this->s.hash, 0, sizeof(this->s.hash));
     this->ref_tag           = "";
     this->manifest_bl.clear();
+    this->crypt_key_bl.clear();
+    this->crypt_data_bl.clear();
+    this->crypt_ctx_bl.clear();
   }
 
   //---------------------------------------------------------------------------
@@ -88,6 +94,7 @@ namespace rgw::dedup {
     this->s.md5_high        = CEPHTOH_64(p_rec->s.md5_high);
     this->s.md5_low         = CEPHTOH_64(p_rec->s.md5_low);
     this->s.obj_bytes_size  = CEPHTOH_64(p_rec->s.obj_bytes_size);
+    this->s.crypt_mode      = p_rec->s.crypt_mode;
 
     this->s.bucket_id_len   = CEPHTOH_16(p_rec->s.bucket_id_len);
     this->s.tenant_name_len = CEPHTOH_16(p_rec->s.tenant_name_len);
@@ -95,7 +102,9 @@ namespace rgw::dedup {
     this->s.stor_class_len  = CEPHTOH_16(p_rec->s.stor_class_len);
     this->s.ref_tag_len     = CEPHTOH_16(p_rec->s.ref_tag_len);
     this->s.manifest_len    = CEPHTOH_16(p_rec->s.manifest_len);
-
+    this->s.crypt_key_len   = p_rec->s.crypt_key_len;
+    this->s.crypt_data_len  = p_rec->s.crypt_data_len;
+    this->s.crypt_ctx_len   = p_rec->s.crypt_ctx_len;
     const char *p = buff + sizeof(this->s);
     this->obj_name = std::string(p, this->s.obj_name_len);
     p += p_rec->s.obj_name_len;
@@ -119,6 +128,9 @@ namespace rgw::dedup {
       // TBD:: remove asserts
       ceph_assert(this->s.ref_tag_len == 0);
       ceph_assert(this->s.manifest_len == 0);
+      ceph_assert(this->s.crypt_key_len == 0);
+      ceph_assert(this->s.crypt_data_len == 0);
+      ceph_assert(this->s.crypt_ctx_len == 0);
     }
     else {
       this->s.shared_manifest = CEPHTOH_64(p_rec->s.shared_manifest);
@@ -132,6 +144,16 @@ namespace rgw::dedup {
       p += p_rec->s.ref_tag_len;
 
       this->manifest_bl.append(p, this->s.manifest_len);
+      p += this->s.manifest_len;
+
+      this->crypt_key_bl.append(p, this->s.crypt_key_len);
+      p += this->s.crypt_key_len;
+
+      this->crypt_data_bl.append(p, this->s.crypt_data_len);
+      p += this->s.crypt_data_len;
+
+      this->crypt_ctx_bl.append(p, this->s.crypt_ctx_len);
+      p += this->s.crypt_ctx_len;
     }
   }
 
@@ -149,6 +171,7 @@ namespace rgw::dedup {
     p_rec->s.md5_high        = HTOCEPH_64(this->s.md5_high);
     p_rec->s.md5_low         = HTOCEPH_64(this->s.md5_low);
     p_rec->s.obj_bytes_size  = HTOCEPH_64(this->s.obj_bytes_size);
+    p_rec->s.crypt_mode      = this->s.crypt_mode;
 
     p_rec->s.bucket_id_len   = HTOCEPH_16(this->bucket_id.length());
     p_rec->s.tenant_name_len = HTOCEPH_16(this->tenant_name.length());
@@ -156,6 +179,10 @@ namespace rgw::dedup {
     p_rec->s.stor_class_len  = HTOCEPH_16(this->stor_class.length());
     p_rec->s.ref_tag_len     = HTOCEPH_16(this->ref_tag.length());
     p_rec->s.manifest_len    = HTOCEPH_16(this->manifest_bl.length());
+    p_rec->s.crypt_key_len   = this->crypt_key_bl.length();
+    p_rec->s.crypt_data_len  = this->crypt_data_bl.length();
+    p_rec->s.crypt_ctx_len   = this->crypt_ctx_bl.length();
+
     char *p = buff + sizeof(this->s);
     unsigned len = this->obj_name.length();
     std::memcpy(p, this->obj_name.data(), len);
@@ -185,6 +212,9 @@ namespace rgw::dedup {
       // TBD:: remove asserts
       ceph_assert(this->s.ref_tag_len == 0);
       ceph_assert(this->s.manifest_len == 0);
+      ceph_assert(this->s.crypt_key_len == 0);
+      ceph_assert(this->s.crypt_data_len == 0);
+      ceph_assert(this->s.crypt_ctx_len == 0);
     }
     else {
       p_rec->s.shared_manifest = HTOCEPH_64(this->s.shared_manifest);
@@ -202,6 +232,21 @@ namespace rgw::dedup {
       const char *p_manifest = const_cast<disk_record_t*>(this)->manifest_bl.c_str();
       std::memcpy(p, p_manifest, len);
       p += len;
+
+      len = this->crypt_key_bl.length();
+      const char *p_crypt_key = const_cast<disk_record_t*>(this)->crypt_key_bl.c_str();
+      std::memcpy(p, p_crypt_key, len);
+      p += len;
+
+      len = this->crypt_data_bl.length();
+      const char *p_crypt_data = const_cast<disk_record_t*>(this)->crypt_data_bl.c_str();
+      std::memcpy(p, p_crypt_data, len);
+      p += len;
+
+      len = this->crypt_ctx_bl.length();
+      const char *p_crypt_ctx = const_cast<disk_record_t*>(this)->crypt_ctx_bl.c_str();
+      std::memcpy(p, p_crypt_ctx, len);
+      p += len;
     }
     return (p - buff);
   }
@@ -217,7 +262,10 @@ namespace rgw::dedup {
             this->instance.length() +
             this->stor_class.length() +
             this->ref_tag.length() +
-            this->manifest_bl.length());
+            this->manifest_bl.length()  +
+            this->crypt_key_bl.length() +
+            this->crypt_data_bl.length() +
+            this->crypt_ctx_bl.length());
   }
 
   //---------------------------------------------------------------------------
@@ -267,6 +315,7 @@ namespace rgw::dedup {
     stream << rec.ref_tag << "::" << rec.s.ref_tag_len << "\n";
     stream << "num_parts = " << rec.s.num_parts << "\n";
     stream << "obj_size  = " << rec.s.obj_bytes_size/1024 <<" KiB"  << "\n";
+    stream << "Crypt Mode= " << rec.s.crypt_mode.get_crypt_mode_str() <<  "\n";
     stream << "MD5       = " << std::hex << rec.s.md5_high << rec.s.md5_low << "\n";
     stream << "HASH      = ";
     // BLAKE3 hash has 256 bit splitted into multiple 64bit units

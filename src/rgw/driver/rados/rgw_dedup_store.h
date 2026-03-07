@@ -170,7 +170,11 @@ namespace rgw::dedup {
       uint16_t      ref_tag_len;
 
       uint16_t      manifest_len;
-      uint8_t       pad[6];
+      uint8_t       pad[2];
+      uint8_t       crypt_key_len;
+      uint8_t       crypt_data_len;
+      uint8_t       crypt_ctx_len;
+      crypt_mode_t  crypt_mode;
 
       uint64_t      shared_manifest; // 64bit hash of the SRC object manifest
       uint64_t      hash[4];       // 4 * 8 Bytes of BLAKE3
@@ -184,6 +188,9 @@ namespace rgw::dedup {
     std::string instance;
     std::string stor_class;
     bufferlist  manifest_bl;
+    bufferlist  crypt_key_bl;
+    bufferlist  crypt_data_bl;
+    bufferlist  crypt_ctx_bl;
   };
   static_assert(BLAKE3_OUT_LEN == sizeof(disk_record_t::packed_rec_t::hash));
   std::ostream &operator<<(std::ostream &stream, const disk_record_t & rec);
