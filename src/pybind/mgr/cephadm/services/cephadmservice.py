@@ -318,6 +318,12 @@ class CephadmService(metaclass=ABCMeta):
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
+
+        # Scan for secrets (secret:// uris) refs in the spec and add them as dependencies
+        # TODO(redo): extend this call to other services by using their "parent" deps
+        if spec is not None:
+            deps = mgr.cephadm_secrets.deps_for_spec(spec)
+            return sorted(deps)
         return []
 
     def __init__(self, mgr: "CephadmOrchestrator"):
