@@ -45,6 +45,9 @@
 #ifdef WITH_RADOSGW_D4N
 #include "driver/d4n/rgw_sal_d4n.h" 
 #endif
+#ifdef D4N_USE_FDB_SINK
+#include "driver/fdb/sal_d4n-fdb.h"
+#endif
 
 #ifdef WITH_RADOSGW_MOTR
 #include "driver/motr/rgw_sal_motr.h"
@@ -76,6 +79,9 @@ extern rgw::sal::Driver* newDaosStore(CephContext *cct);
 extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 #ifdef WITH_RADOSGW_D4N
 extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
+#endif
+#ifdef D4N_USE_FDB_SINK
+rgw::sal::Driver *newD4N_FDB_Filter(CephContext *cct, const DoutPrefixProvider *dpp, rgw::sal::Driver *, boost::asio::io_context&);
 #endif
 }
 
@@ -115,6 +121,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						    optional_yield y, rgw::sal::ConfigStore* cfgstore, bool admin)
 {
   rgw::sal::Driver* driver{nullptr};
+  rgw::sal::Driver* next{nullptr};
 
   if (cfg.store_name.compare("rados") == 0) {
 #ifdef WITH_RADOSGW_RADOS
@@ -248,7 +255,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   ldpp_dout(dpp, 20) << "Filter name: " << cfg.filter_name << dendl;
 
   if (cfg.filter_name.compare("base") == 0) {
-    rgw::sal::Driver* next = driver;
+    next = driver;
     driver = newBaseFilter(next);
 
     if (driver->initialize(cct, dpp) < 0) {
@@ -259,7 +266,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   } 
 #ifdef WITH_RADOSGW_D4N 
   else if (cfg.filter_name.compare("d4n") == 0) {
-    rgw::sal::Driver* next = driver;
+    next = driver;
     driver = newD4NFilter(next, io_context, admin);
 
     if (driver->initialize(cct, dpp) < 0) {
@@ -270,7 +277,26 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   }
 #endif
 
-  return driver;
+#ifdef D4N_USE_FDB_SINK
+ if ("d4nfdb" == cfg.filter_name) {
+   driver = new rgw::sal::d4n::FDB_FilterDriver(driver);
+  
+   if(nullptr == driver) {
+    ldpp_dout(dpp, 0) << "ERROR: unable to create D4N driver" << dendl;
+    delete next;
+    return nullptr;
+   }
+  
+   if(int ret = driver->initialize(cct, dpp); 0 > ret) {
+    ldpp_dout(dpp, 0) << "ERROR: unable to initialize D4N driver: " << ret << dendl;
+    delete driver;
+    delete next;
+    return nullptr;
+   }
+ }
+#endif
+
+ return driver;
 }
 
 rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct,
@@ -372,11 +398,10 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
   DriverManager::Config cfg;
 
   // Get the store backend
-  const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
-  if (config_store == "rados") {
-#ifdef WITH_RADOSGW_RADOS
-    cfg.store_name = "rados";
+  cfg.store_name = g_conf().get_val<std::string>("rgw_backend_store");
 
+#ifdef WITH_RADOSGW_RADOS
+  if (cfg.store_name == "rados") {
     /* Check to see if d3n is configured, but only for non-admin */
     const auto& d3n = g_conf().get_val<bool>("rgw_d3n_l1_local_datacache_enabled");
     if (!admin && d3n) {
@@ -389,40 +414,11 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
 	cfg.store_name = "d3n";
       }
     }
-#endif
-  }
-#ifdef WITH_RADOSGW_DBSTORE
-  else if (config_store == "dbstore") {
-    cfg.store_name = "dbstore";
-  }
-#endif
-#ifdef WITH_RADOSGW_POSIX
-  else if (config_store == "posix") {
-    cfg.store_name = "posix";
-  }
-#endif
-#ifdef WITH_RADOSGW_MOTR
-  else if (config_store == "motr") {
-    cfg.store_name = "motr";
-  }
-#endif
-#ifdef WITH_RADOSGW_DAOS
-  else if (config_store == "daos") {
-    cfg.store_name = "daos";
   }
 #endif
 
   // Get the filter
-  cfg.filter_name = "none";
-  const auto& config_filter = g_conf().get_val<std::string>("rgw_filter");
-  if (config_filter == "base") {
-    cfg.filter_name = "base";
-  }
-#ifdef WITH_RADOSGW_D4N
-  else if (config_filter == "d4n") {
-    cfg.filter_name= "d4n";
-  }
-#endif
+  cfg.filter_name = g_conf().get_val<std::string>("rgw_filter");
 
   return cfg;
 }
