@@ -605,7 +605,7 @@ string gen_v4_scope(const ceph::real_time& timestamp,
   auto mon = bt.tm_mon + 1;
   auto day = bt.tm_mday;
 
-  return fmt::format(FMT_STRING("{:d}{:02d}{:02d}/{:s}/{:s}/aws4_request"),
+  return fmt::format("{:d}{:02d}{:02d}/{:s}/{:s}/aws4_request",
                      year, mon, day, region, service);
 }
 
