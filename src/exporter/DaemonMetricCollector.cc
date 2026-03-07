@@ -434,16 +434,11 @@ labels_t DaemonMetricCollector::get_extra_labels(std::string daemon_name) {
     labels["instance_id"] = quote(tmp);
   }
   else if (daemon_name.find("rgw") != std::string::npos) {
-    // fetch intance_id for e.g. "hrgsea" from daemon_name=rgw.foo.ceph-node-00.hrgsea.2.94739968030880
-    std::vector<std::string> elems;
-    std::stringstream ss;
-    ss.str(daemon_name);
-    std::string item;
-    while (std::getline(ss, item, '.')) {
-        elems.push_back(item);
-    }
-    if (elems.size() >= 4) {
-      labels["instance_id"] = quote(elems[3]);
+    // fetch intance_id for e.g. "foo.ceph-node-00.hrgsea" from daemon_name=rgw.foo.ceph-node-00.hrgsea.2.94739968030880
+    auto instance_id = get_instance_id_from_rgw_socket_name(daemon_name);
+    std::cout << "instance id: " << instance_id << std::endl;
+    if (!instance_id.empty()) {
+      labels["instance_id"] = instance_id;
     } else {
       return labels_t();
     }
@@ -451,6 +446,26 @@ labels_t DaemonMetricCollector::get_extra_labels(std::string daemon_name) {
     labels.insert({"ceph_daemon", quote(daemon_name)});
   }
   return labels;
+}
+
+std::string DaemonMetricCollector::get_instance_id_from_rgw_socket_name(std::string daemon_socket_file) {
+  if (daemon_socket_file.find('.') != std::string::npos) {
+    // Remove .<number>.<number> at the end i.e, version.rgw instance id
+    size_t lastDot = daemon_socket_file.rfind('.');
+    auto daemon_name = daemon_socket_file.substr(0, lastDot);
+    lastDot = daemon_socket_file.rfind('.');
+    // Extract the substring up to the second last dot
+    daemon_name = daemon_socket_file.substr(0, lastDot);
+
+    // remove service type
+    const std::string rgw_service_type_prefix = "rgw.";
+    if (daemon_name.rfind(rgw_service_type_prefix, 0) == 0) {
+      daemon_name = daemon_name.substr(rgw_service_type_prefix.size());
+    }
+    return daemon_name;
+  } else {
+    return daemon_socket_file;
+  }
 }
 
 // Add fixed name metrics from existing ones that have details in their names
