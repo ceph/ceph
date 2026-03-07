@@ -9,6 +9,7 @@ import logging
 from .container_engines import (
     ContainerInfo,
     ImageInfo,
+    normalize_container_id,
     parsed_container_image_list,
     parsed_container_image_stats,
 )
@@ -133,13 +134,17 @@ def infer_local_ceph_image(
         )
     ]
     # collect the running ceph daemon image ids
+    # Normalize image IDs to avoid mismatches between docker inspect output
+    # (sha256:...) and docker images list output (short ID).
     images_in_use_by_daemon = set(
-        d.image_id
+        normalize_container_id(d.image_id)
         for d, n in matching_daemons
         if (n == daemon_name and d is not None)
     )
     images_in_use = set(
-        d.image_id for d, _ in matching_daemons if d is not None
+        normalize_container_id(d.image_id)
+        for d, _ in matching_daemons
+        if d is not None
     )
 
     # prioritize images
