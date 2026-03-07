@@ -1510,6 +1510,14 @@ struct ObjectOperation {
     osd_op.op.assert_ver.ver = ver;
   }
 
+  void get_internal_versions(boost::system::error_code* ec,
+		buffer::list *pbl) {
+  	ceph::buffer::list bl;
+  	add_op(CEPH_OSD_OP_GET_INTERNAL_VERSIONS);
+  	out_bl.back() = pbl;
+  	out_ec.back() = ec;
+  }
+
   void cmpxattr(const char *name, const ceph::buffer::list& val,
 		int op, int mode) {
     add_xattr(CEPH_OSD_OP_CMPXATTR, name, val);
@@ -1883,7 +1891,6 @@ public:
     bool paused = false;
 
     int osd = -1;      ///< the final target osd, or -1
-    std::optional<shard_id_t> force_shard; // If set, only this shard may be used.
 
     epoch_t last_force_resend = 0;
 
@@ -2028,6 +2035,7 @@ public:
     uint64_t ontimeout = 0;
 
     ceph_tid_t tid = 0;
+    std::unique_ptr<std::vector<ceph_tid_t>> split_op_tids;
     int attempts = 0;
 
     version_t *objver;
@@ -2560,6 +2568,8 @@ public:
   ceph::timespan mon_timeout;
   ceph::timespan osd_timeout;
 
+  uint64_t min_split_replica_read_size;
+
   // last time osdmap was requested
   ceph::coarse_mono_time last_osdmap_request_time;
 
@@ -2568,6 +2578,8 @@ public:
   void _send_op_account(Op *op);
   void _cancel_linger_op(Op *op);
   void _finish_op(Op *op, int r);
+  boost::system::error_code process_op_reply_handlers(Op *op, std::vector<OSDOp> &out_ops);
+  void complete_op_reply(Op *op, boost::system::error_code handler_error, OSDSession *s, std::unique_lock<std::shared_mutex> &sl, int rc);
   static bool is_pg_changed(
     int oldprimary,
     const std::vector<int>& oldacting,
@@ -2773,7 +2785,6 @@ private:
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);
-  boost::system::error_code handle_osd_op_reply2(Op *op, std::vector<OSDOp> &out_ops);
   void handle_osd_backoff(class MOSDBackoff *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
@@ -2838,7 +2849,7 @@ private:
 			      int *ctx_budget = NULL);
   // public interface
 public:
-  void op_post_submit(Op *op);
+  void op_post_split_op_complete(Op* op, boost::system::error_code ec, int rc);
   void op_submit(Op *op, ceph_tid_t *ptid = NULL, int *ctx_budget = NULL);
   bool is_active() {
     std::shared_lock l(rwlock);
@@ -2966,6 +2977,10 @@ public:
   /** Clear the passed flags from the global op flag set */
   void clear_global_op_flag(int flags) {
     global_op_flags.fetch_and(~flags);
+  }
+
+  uint64_t get_min_split_replica_read_size() {
+    return min_split_replica_read_size;
   }
 
   /// cancel an in-progress request with the given return code

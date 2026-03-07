@@ -1957,6 +1957,26 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       t->erase_range(OSD_SNAP_PREFIX, "removed_snap_", "removed_snap`");
       t->erase_range(OSD_SNAP_PREFIX, "removed_epoch_", "removed_epoch`");
     }
+
+    if (osdmap.require_osd_release <= ceph_release_t::tentacle &&
+        tmp.require_osd_release > ceph_release_t::tentacle) {
+      for (auto& [id, pool] : tmp.get_pools()) {
+        if (pool.is_erasure() && !pool.ec_data_shard_count &&
+            !pool.ec_coding_shard_count && !pool.ec_site_count) {
+          ErasureCodeInterfaceRef erasure_code;
+          stringstream err_str;
+          int err = get_erasure_code(pool.erasure_code_profile, &erasure_code, &err_str);
+          if (err == 0) {
+            pool.ec_data_shard_count = erasure_code->get_data_chunk_count();
+            pool.ec_coding_shard_count = erasure_code->get_coding_chunk_count();
+            pool.ec_site_count = 1;
+          } else {
+            derr << fmt::format("{} Warning: could not parse erasure code "
+              "profile for pool {}", __func__, id) << dendl;
+          }
+        }
+      }
+    }
   }
 
   // tell me about it
@@ -5432,7 +5452,7 @@ namespace {
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
-    EC_OPTIMIZATIONS };
+    EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT, EC_SITE_COUNT };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6238,7 +6258,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"dedup_cdc_chunk_size", DEDUP_CDC_CHUNK_SIZE},
       {"bulk", BULK},
       {"read_ratio", READ_RATIO},
-      {"allow_ec_optimizations", EC_OPTIMIZATIONS}
+      {"allow_ec_optimizations", EC_OPTIMIZATIONS},
+      {"ec_data_shard_count", EC_DATA_SHARD_COUNT},
+      {"ec_coding_shard_count", EC_CODING_SHARD_COUNT},
+      {"ec_site_count", EC_SITE_COUNT},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6253,7 +6276,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N
     };
     const choices_set_t ONLY_ERASURE_CHOICES = {
-      EC_OVERWRITES, ERASURE_CODE_PROFILE, EC_OPTIMIZATIONS
+      EC_OVERWRITES, ERASURE_CODE_PROFILE, EC_OPTIMIZATIONS,
+      EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT, EC_SITE_COUNT
     };
     const choices_set_t ONLY_REPLICA_CHOICES = {
       READ_RATIO
@@ -6501,7 +6525,18 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case EC_OPTIMIZATIONS:
 	    f->dump_bool("allow_ec_optimizations",
 			 p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS));
-	    break;
+            break;
+          case EC_DATA_SHARD_COUNT:
+            f->dump_unsigned("ec_data_shard_count",
+                             p->ec_data_shard_count.value_or(0));
+          break;
+          case EC_CODING_SHARD_COUNT:
+            f->dump_unsigned("ec_coding_shard_count",
+                             p->ec_coding_shard_count.value_or(0));
+          break;
+          case EC_SITE_COUNT:
+            f->dump_unsigned("ec_site_count", p->ec_site_count.value_or(0));
+	  break;
 	}
       }
       f->close_section();
@@ -6678,6 +6713,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      (p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS) ? "true" : "false") <<
 	      "\n";
 	    break;
+          case EC_DATA_SHARD_COUNT:
+            ss << "ec_data_shard_count: " << p->ec_data_shard_count.value_or(0);
+            break;
+          case EC_CODING_SHARD_COUNT:
+            ss << "ec_coding_shard_count: " << p->ec_coding_shard_count.value_or(0);
+            break;
+          case EC_SITE_COUNT:
+            ss << "ec_site_count: " << p->ec_site_count.value_or(0);
+            break;
 	}
 	rdata.append(ss.str());
 	ss.str("");
@@ -8325,6 +8369,19 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->auid = 0;
 
   if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      ErasureCodeInterfaceRef erasure_code;
+      stringstream tmp;
+      int err = get_erasure_code(erasure_code_profile, &erasure_code, &tmp);
+      if (err == 0) {
+        pi->ec_data_shard_count = erasure_code->get_data_chunk_count();
+        pi->ec_coding_shard_count = erasure_code->get_coding_chunk_count();
+        pi->ec_site_count = 1;
+      } else {
+        if (ss) {
+          *ss << "get_erasure_code failed: " << tmp.str();
+        }
+        return -EINVAL;
+      }
       pi->erasure_code_profile = erasure_code_profile;
   } else {
       pi->erasure_code_profile = "";
@@ -8354,7 +8411,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 
   if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
     // This will fail if the pool cannot support ec optimizations.
-    enable_pool_ec_optimizations(*pi, nullptr, true);
+    enable_pool_ec_optimizations(*pi, nullptr, true, false);
   }
 
   enable_pool_ec_direct_reads(*pi);
@@ -8390,7 +8447,7 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
 }
 
 int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
-    stringstream *ss, bool enable) {
+    stringstream *ss, bool enable, bool yes_i_really_mean_it) {
   if (!p.is_erasure()) {
     if (ss) {
       *ss << "allow_ec_optimizations can only be enabled for an erasure coded pool";
@@ -8418,8 +8475,15 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
       }
       return -EINVAL;
     }
-    if ((erasure_code->get_supported_optimizations() &
+    if (yes_i_really_mean_it && (erasure_code->get_supported_optimizations() &
         ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0) {
+        if (ss) {
+          *ss << "This is experimental for use in test and development and is "
+                  "not a supported configuration.";
+        }
+    }
+    else if ((erasure_code->get_supported_optimizations() &
+        ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0)  {
       if (ss) {
         *ss << "ec optimizations not currently supported for pool profile.";
       }
@@ -8454,25 +8518,42 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
 }
 
 void OSDMonitor::enable_pool_ec_direct_reads(pg_pool_t &p) {
-  if (p.is_erasure()) {
-    ErasureCodeInterfaceRef erasure_code;
-    stringstream tmp;
-    int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+  if (!p.is_erasure()) {
+     return;
+  }
+  ErasureCodeInterfaceRef erasure_code;
+  stringstream tmp;
+  int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
 
-    // Once this feature is finished, we will replace this with upgrade code.
-    // The upgrade code will enable the split read flag once all OSDs are at
-    // Umbrella. For now, if the plugin does not support direct reads, we just
-    // disable it.  All plugins and techniques should be capable of supporting
-    // direct reads, but we put in place this capability to reduce the test
-    // matrix for less important plugins/techniques.
-    //
-    // To enable direct reads in development, set the osd_pool_default_flags to
-    // 1<<20 = 0x100000 = 1048576
-    if (err != 0 || !p.allows_ecoptimizations() ||
-          (erasure_code->get_supported_optimizations() &
-            ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) == 0) {
-      p.flags &= ~pg_pool_t::FLAG_CLIENT_SPLIT_READS;
+  // Once this feature is finished, we will replace this with upgrade code.
+  // The upgrade code will enable the split read flag once all OSDs are at
+  // Umbrella. For now, if the plugin does not support direct reads, we just
+  // disable it.  All plugins and techniques should be capable of supporting
+  // direct reads, but we put in place this capability to reduce the test
+  // matrix for less important plugins/techniques.
+  //
+  // To enable direct reads in development, set the osd_pool_default_flags to
+  // 1<<20 = 0x100000 = 1048576
+  if (err != 0 || !p.allows_ecoptimizations() ||
+        (erasure_code->get_supported_optimizations() &
+          ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) == 0) {
+    p.flags &= ~pg_pool_t::FLAG_CLIENT_SPLIT_READS;
+    return;
+  }
+
+  auto mapping = erasure_code->get_chunk_mapping();
+
+  // Plugins are permitted to provide an incomplete mapping, which makes for
+  // an inconvenient interface. Here make it either fully populated or not
+  // populated at all.
+  if (mapping.size() > 0) {
+    int shard_count = erasure_code->get_chunk_count();
+    int old_count = mapping.size();
+    mapping.resize(shard_count);
+    for (int s = old_count; s < shard_count; ++s) {
+      mapping[s] = shard_id_t(s);
     }
+    p.set_shard_mapping(std::move(mapping));
   }
 }
 
@@ -8997,7 +9078,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     bool was_enabled = p.allows_ecoptimizations();
-    int r = enable_pool_ec_optimizations(p, nullptr, enable);
+    bool force = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", force);
+    int r = enable_pool_ec_optimizations(p, nullptr, enable, force);
     if (r != 0) {
       return r;
     }
@@ -9014,6 +9097,23 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
           pending_inc.new_pg_temp[pg_temp->first] = mempool::osdmap::vector<int>(new_pg_temp.begin(), new_pg_temp.end());
         }
       }
+    }
+  } else if (var == "set_pool_flags" || var == "unset_pool_flags") {
+    bool force;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", force);
+    if (!force) {
+      ss << "This is a development tool and should not be used in production.";
+      return -EINVAL;
+    }
+    if (!interr.empty()) {
+      ss << "expecting integer value";
+      return -EINVAL;
+    }
+    bool enable = (var == "set_pool_flags");
+    if (enable) {
+      p.set_flag(n);
+    } else {
+      p.unset_flag(n);
     }
   } else if (var == "target_max_objects") {
     if (interr.length()) {
