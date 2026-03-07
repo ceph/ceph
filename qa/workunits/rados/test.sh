@@ -18,6 +18,7 @@ RADOS_TESTS=(
     api_service api_service_pp
     api_c_write_operations
     api_c_read_operations
+    api_omap_pp
     list_parallel
     open_pools_parallel
     delete_pools_parallel

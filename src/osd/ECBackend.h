@@ -28,6 +28,7 @@
 #include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer.h"
 #include "osd/scrubber/scrub_backend.h"
+#include "Coroutines.h"
 
 /* This file is soon going to be replaced (before next release), so we are going
  * to simply ignore all deprecated warnings.
@@ -131,12 +132,20 @@ class ECBackend : public ECCommon {
     );
 
   int objects_read_sync(
-      const hobject_t &hoid,
-      uint64_t off,
-      uint64_t len,
-      uint32_t op_flags,
-      ceph::buffer::list *bl
-    );
+    const hobject_t &hoid,
+    uint64_t object_size,
+    const std::list<std::pair<ec_align_t,
+    std::pair<ceph::buffer::list*, Context*>>> &to_read,
+    CoroHandles coro
+  );
+
+  int objects_read_local(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    uint32_t op_flags,
+    ceph::buffer::list *bl
+  );
 
   std::pair<uint64_t, uint64_t> extent_to_shard_extent(uint64_t off, uint64_t len);
 
@@ -397,4 +406,54 @@ public:
     }
     return object_size_to_shard_size(logical_size, shard_id);
   }
+
+  bool remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
+  std::pair<gen_t, bool> omap_get_generation(const hobject_t &hoid);
+  void omap_trim_delete_from_journal(const hobject_t &hoid, const version_t version);
+
+  using OmapIterFunction = std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)>;
+  int omap_iterate (
+    ObjectStore::CollectionHandle &c_, ///< [in] collection
+    const ghobject_t &oid, ///< [in] object
+    const ObjectStore::omap_iter_seek_t &start_from, ///< [in] where the iterator should point to at the beginning
+    const OmapIterFunction &f, ///< [in] function to call for each key/value pair
+    ObjectStore *store
+  );
+
+  int omap_get_values(
+    ObjectStore::CollectionHandle &c_, ///< [in] collection
+    const ghobject_t &oid,              ///< [in] object
+    const std::set<std::string> &keys,  ///< [in] keys to get
+    std::map<std::string, ceph::buffer::list> *out, ///< [out] returned key/values
+    ObjectStore *store
+  );
+
+  int omap_get_header(
+    ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    ceph::buffer::list *header,      ///< [out] omap header
+    bool allow_eio, ///< [in] don't assert on eio
+    ObjectStore *store
+  );
+
+  int omap_get(
+    ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    ceph::buffer::list *header,      ///< [out] omap header
+    std::map<std::string, ceph::buffer::list> *out, /// < [out] Key to value map
+    ObjectStore *store
+  );
+
+  int omap_check_keys(
+    ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    const std::set<std::string> &keys, ///< [in] Keys to check
+    std::set<std::string> *out,         ///< [out] Subset of keys defined on oid
+    ObjectStore *store
+  );
+
+  bool should_be_removed(
+    const std::map<std::string, std::optional<std::string>>& removed_ranges,
+    std::string_view key
+  );
 };

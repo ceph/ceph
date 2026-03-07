@@ -1,5 +1,6 @@
 add_executable(ceph_test_cls_2pc_queue
   test_cls_2pc_queue.cc
+  ../librados/test_pool_types.cc
 )
 target_link_libraries(ceph_test_cls_2pc_queue
   cls_2pc_queue_client

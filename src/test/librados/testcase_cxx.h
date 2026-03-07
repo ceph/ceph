@@ -5,6 +5,7 @@
 
 #include "gtest/gtest.h"
 #include "include/rados/librados.hpp"
+#include "common/json/OSDStructures.h"
 
 class RadosTestPPNS : public ::testing::Test {
 public:

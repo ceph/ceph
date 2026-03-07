@@ -1,6 +1,7 @@
 # cls_test_cls_rbd
 add_executable(ceph_test_cls_rbd
   test_cls_rbd.cc
+  ../librados/test_pool_types.cc
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_link_libraries(ceph_test_cls_rbd
   cls_rbd_client
