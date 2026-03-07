@@ -29,20 +29,23 @@ class IoOp;
 class Model {
  protected:
   int num_io{0};
+  std::string primary_oid_base;
   std::string primary_oid;
   std::string secondary_oid;
   uint64_t block_size;
-
-  void set_primary_oid(const std::string& new_oid);
-  void set_secondary_oid(const std::string& new_oid);
+  bool delete_objects;
+  int num_objects{0};
 
  public:
-  Model(const std::string& primary_oid, const std::string& secondary_oid, uint64_t block_size);
+  Model(const std::string& primary_oid, const std::string& secondary_oid,
+        uint64_t block_size, bool delete_objects);
   virtual ~Model() = default;
 
   virtual bool readyForIoOp(IoOp& op) = 0;
   virtual void applyIoOp(IoOp& op) = 0;
 
+  virtual void set_primary_oid(const std::string& new_oid);
+  virtual void set_secondary_oid(const std::string& new_oid);
   const std::string get_primary_oid() const;
   const std::string get_secondary_oid() const;
   void swap_primary_secondary_oid();

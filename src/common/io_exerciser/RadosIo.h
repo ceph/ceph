@@ -47,7 +47,7 @@ class RadosIo : public Model {
           const std::string& pool, const std::string& primary_oid, const std::string& secondary_oid,
           uint64_t block_size, int seed, int threads, ceph::mutex& lock,
           ceph::condition_variable& cond, bool is_replicated_pool,
-          bool ec_optimizations);
+          bool ec_optimizations, bool delete_objects = true);
 
   ~RadosIo();
 
