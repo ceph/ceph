@@ -93,6 +93,7 @@ status: 1
 status_desc: starting
 is_active: false
 pending_daemon_config: false
+user_stopped: false
 events:
 - 2020-06-10T10:08:22.933241Z daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on
   host 'ubuntu'"
