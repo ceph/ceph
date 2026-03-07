@@ -12,6 +12,7 @@ tasks:
 - print: "**** done install task..."
 - cephadm:
     image: quay.ceph.io/ceph-ci/ceph:reef
+    skip_dashboard: true
     roleless: true
     compiled_cephadm_branch: reef
     conf:
