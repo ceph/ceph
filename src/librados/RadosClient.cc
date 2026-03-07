@@ -1141,7 +1141,7 @@ int librados::RadosClient::get_inconsistent_pgs(int64_t pool_id,
     return 0;
   }
   JSONParser parser;
-  if (!parser.parse(outbl.c_str(), outbl.length())) {
+  if (!parser.parse(outbl)) {
     return -EINVAL;
   }
   vector<string> v;
@@ -1151,7 +1151,7 @@ int librados::RadosClient::get_inconsistent_pgs(int64_t pool_id,
       return 0;
     auto s = pgstat_obj->get_data();
     JSONParser pg_stats;
-    if (!pg_stats.parse(s.c_str(), s.length())) {
+    if (!pg_stats.parse(s)) {
       return -EINVAL;
     }
     v = pg_stats.get_array_elements();
@@ -1160,7 +1160,7 @@ int librados::RadosClient::get_inconsistent_pgs(int64_t pool_id,
   }
   for (auto i : v) {
     JSONParser pg_json;
-    if (!pg_json.parse(i.c_str(), i.length())) {
+    if (!pg_json.parse(i)) {
       return -EINVAL;
     }
     string pgid;
