@@ -1,6 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
-import { GridModule, TilesModule } from 'carbon-components-angular';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  inject,
+  ViewEncapsulation
+} from '@angular/core';
+import { GridModule, LayoutModule, TilesModule } from 'carbon-components-angular';
 import { EMPTY, Observable } from 'rxjs';
 import { catchError, exhaustMap, map, shareReplay } from 'rxjs/operators';
 
@@ -8,14 +14,19 @@ import { HealthService } from '~/app/shared/api/health.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { HealthCheck, HealthSnapshotMap } from '~/app/shared/models/health.interface';
 import {
-  HealthCardCheckVM,
+  ACTIVE_CLEAN_CHART_OPTIONS,
+  calcActiveCleanSeverityAndReasons,
+  getClusterHealth,
+  getHealthChecksAndIncidents,
+  getResiliencyDisplay,
   HealthCardTabSection,
   HealthCardVM,
-  HealthDisplayVM,
-  HealthIconMap,
-  HealthMap,
   HealthStatus,
+  maxSeverity,
+  safeDifference,
+  SEVERITY,
   Severity,
+  SEVERITY_TO_COLOR,
   SeverityIconMap
 } from '~/app/shared/models/overview';
 
@@ -25,57 +36,39 @@ import { ComponentsModule } from '~/app/shared/components/components.module';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { OverviewAlertsCardComponent } from './alerts-card/overview-alerts-card.component';
 import { PerformanceCardComponent } from '~/app/shared/components/performance-card/performance-card.component';
-
-const sev = {
-  ok: 0 as Severity,
-  warn: 1 as Severity,
-  err: 2 as Severity
-} as const;
-
-const maxSeverity = (...values: Severity[]): Severity => Math.max(...values) as Severity;
-
-function buildHealthDisplay(status: HealthStatus): HealthDisplayVM {
-  return HealthMap[status] ?? HealthMap['HEALTH_OK'];
-}
-
-function safeDifference(a: number, b: number): number | null {
-  return a != null && b != null ? a - b : null;
-}
+import { DataTableModule } from '~/app/shared/datatable/datatable.module';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 /**
  * Mapper: HealthSnapshotMap -> HealthCardVM
  * Runs only when healthData$ emits.
  */
-export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
+function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
   const checksObj: Record<string, HealthCheck> = d.health?.checks ?? {};
-  const healthDisplay = buildHealthDisplay(d.health.status as HealthStatus);
+  const clusterHealth = getClusterHealth(d.health.status as HealthStatus);
+  const pgStates = d?.pgmap?.pgs_by_state ?? [];
+  const totalPg = d?.pgmap?.num_pgs ?? 0;
 
-  // --- Health panel ---
-
-  // Count incidents
-  let incidents = 0;
-  const checks: HealthCardCheckVM[] = [];
-
-  for (const [name, check] of Object.entries(checksObj)) {
-    incidents++;
-    checks.push({
-      name,
-      description: check?.summary?.message ?? '',
-      icon: HealthIconMap[check?.severity] ?? ''
-    });
-  }
+  const { incidents, checks } = getHealthChecksAndIncidents(checksObj);
+  const resiliencyHealth = getResiliencyDisplay(checks, pgStates);
+  const {
+    activeCleanPercent,
+    severity: activeCleanChartSeverity,
+    reasons: activeCleanChartReason
+  } = calcActiveCleanSeverityAndReasons(pgStates, totalPg);
 
   // --- System sub-states ---
 
   // MON
   const monTotal = d.monmap?.num_mons ?? 0;
   const monQuorum = (d.monmap as any)?.quorum?.length ?? 0;
-  const monSev: Severity = monQuorum < monTotal ? sev.warn : sev.ok;
+  const monSev: Severity = monQuorum < monTotal ? SEVERITY.warn : SEVERITY.ok;
 
   // MGR
   const mgrActive = d.mgrmap?.num_active ?? 0;
   const mgrStandby = d.mgrmap?.num_standbys ?? 0;
-  const mgrSev: Severity = mgrActive < 1 ? sev.err : mgrStandby < 1 ? sev.warn : sev.ok;
+  const mgrSev: Severity =
+    mgrActive < 1 ? SEVERITY.err : mgrStandby < 1 ? SEVERITY.warn : SEVERITY.ok;
 
   // OSD
   const osdUp = (d.osdmap as any)?.up ?? 0;
@@ -83,12 +76,12 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
   const osdTotal = (d.osdmap as any)?.num_osds ?? 0;
   const osdDown = safeDifference(osdTotal, osdUp);
   const osdOut = safeDifference(osdTotal, osdIn);
-  const osdSev: Severity = osdDown > 0 || osdOut > 0 ? sev.err : sev.ok;
+  const osdSev: Severity = osdDown > 0 || osdOut > 0 ? SEVERITY.err : SEVERITY.ok;
 
   // HOSTS
   const hostsTotal = d.num_hosts ?? 0;
   const hostsAvailable = (d as any)?.num_hosts_available ?? 0;
-  const hostsSev: Severity = hostsAvailable < hostsTotal ? sev.warn : sev.ok;
+  const hostsSev: Severity = hostsAvailable < hostsTotal ? SEVERITY.warn : SEVERITY.ok;
 
   // Overall = worst of the subsystem severities.
   const overallSystemSev = maxSeverity(monSev, mgrSev, osdSev, hostsSev);
@@ -100,14 +93,31 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
     incidents,
     checks,
 
-    health: healthDisplay,
+    pgs: {
+      total: totalPg,
+      states: pgStates,
+      io: [
+        { label: $localize`Client write`, value: d?.pgmap?.write_bytes_sec ?? 0 },
+        { label: $localize`Client read`, value: d?.pgmap?.read_bytes_sec ?? 0 },
+        { label: $localize`Recovery I/O`, value: d?.pgmap?.recovering_bytes_per_sec ?? 0 }
+      ],
+      activeCleanChartData: [{ group: 'value', value: activeCleanPercent }],
+      activeCleanChartOptions: {
+        ...ACTIVE_CLEAN_CHART_OPTIONS,
+        color: { scale: { value: SEVERITY_TO_COLOR[activeCleanChartSeverity] } }
+      },
+      activeCleanChartReason
+    },
+
+    clusterHealth,
+    resiliencyHealth,
 
     mon: { value: $localize`Quorum: ${monQuorum}/${monTotal}`, severity: SeverityIconMap[monSev] },
     mgr: {
       value: $localize`${mgrActive} active, ${mgrStandby} standby`,
       severity: SeverityIconMap[mgrSev]
     },
-    osd: { value: $localize`${osdUp}/${osdTotal} in/up`, severity: SeverityIconMap[osdSev] },
+    osd: { value: $localize`${osdIn}/${osdUp} in/up`, severity: SeverityIconMap[osdSev] },
     hosts: {
       value: $localize`${hostsAvailable} / ${hostsTotal} available`,
       severity: SeverityIconMap[hostsSev]
@@ -125,16 +135,25 @@ export function buildHealthCardVM(d: HealthSnapshotMap): HealthCardVM {
     OverviewHealthCardComponent,
     ComponentsModule,
     OverviewAlertsCardComponent,
-    PerformanceCardComponent
+    PerformanceCardComponent,
+    LayoutModule,
+    DataTableModule,
+    PipesModule
   ],
   standalone: true,
   templateUrl: './overview.component.html',
   styleUrl: './overview.component.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None
 })
 export class OverviewComponent {
   isHealthPanelOpen = false;
+  isPGStatePanelOpen = false;
   activeHealthTab: HealthCardTabSection | null = null;
+  tableColumns = [
+    { prop: 'count', name: $localize`PGs count` },
+    { prop: 'state_name', name: $localize`Status` }
+  ];
 
   private readonly healthService = inject(HealthService);
   private readonly refreshIntervalService = inject(RefreshIntervalService);
@@ -142,7 +161,7 @@ export class OverviewComponent {
 
   private readonly healthData$: Observable<HealthSnapshotMap> = this.refreshIntervalObs(() =>
     this.healthService.getHealthSnapshot()
-  );
+  ).pipe(shareReplay({ bufferSize: 1, refCount: true }));
 
   readonly healthCardVm$: Observable<HealthCardVM> = this.healthData$.pipe(
     map(buildHealthCardVM),
@@ -164,7 +183,11 @@ export class OverviewComponent {
     );
   }
 
-  togglePanel(): void {
+  toggleHealthPanel(): void {
     this.isHealthPanelOpen = !this.isHealthPanelOpen;
+  }
+
+  togglePGStatesPanel(): void {
+    this.isPGStatePanelOpen = !this.isPGStatePanelOpen;
   }
 }

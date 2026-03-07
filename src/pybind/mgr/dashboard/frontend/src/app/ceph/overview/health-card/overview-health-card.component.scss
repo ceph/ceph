@@ -20,6 +20,10 @@
     color: var(--cds-text-secondary);
   }
 
+  &-bold {
+    font-weight: 700 !important;
+  }
+
   &-tab {
     display: flex;
   }
@@ -45,6 +49,20 @@
   &-tab-content-item-row {
     display: flex;
     justify-content: space-between;
+  }
+
+  &-resiliency-tab-content {
+    display: flex;
+  }
+
+  &-resiliency-chart {
+    flex-grow: 1;
+    flex-shrink: 0;
+  }
+
+  &-resiliency-chart-text {
+    width: 13rem;
+    margin-left: var(--cds-spacing-04);
   }
 
   &-icon-and-text {

@@ -32,6 +32,7 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { HardwareNameMapping } from '~/app/shared/enum/hardware.enum';
+import { GaugeChartComponent } from '@carbon/charts-angular';
 
 type OverviewHealthData = {
   summary: Summary;
@@ -67,7 +68,8 @@ type HwRowVM = {
     PipesModule,
     TooltipModule,
     TabsModule,
-    LayoutModule
+    LayoutModule,
+    GaugeChartComponent
   ],
   standalone: true,
   templateUrl: './overview-health-card.component.html',
@@ -85,9 +87,10 @@ export class OverviewHealthCardComponent {
 
   @Input({ required: true }) vm!: HealthCardVM;
   @Output() viewIncidents = new EventEmitter<void>();
+  @Output() viewPGStates = new EventEmitter<void>();
   @Output() activeSectionChange = new EventEmitter<HealthCardTabSection | null>();
 
-  activeSection: HealthCardTabSection | null = null;
+  activeSection: HealthCardTabSection | null;
 
   healthItems: HealthItemConfig[] = [
     { key: 'mon', label: $localize`Monitor` },
@@ -101,6 +104,14 @@ export class OverviewHealthCardComponent {
     this.activeSectionChange.emit(this.activeSection);
   }
 
+  onViewIncidentsClick() {
+    this.viewIncidents.emit();
+  }
+
+  onViewPGStatesClick() {
+    this.viewPGStates.emit();
+  }
+
   readonly data$: Observable<OverviewHealthData> = combineLatest([
     this.summaryService.summaryData$.pipe(filter((summary): summary is Summary => !!summary)),
     this.upgradeService.listCached().pipe(
@@ -108,10 +119,6 @@ export class OverviewHealthCardComponent {
       catchError(() => of(null))
     )
   ]).pipe(map(([summary, upgrade]) => ({ summary, upgrade })));
-
-  onViewIncidentsClick() {
-    this.viewIncidents.emit();
-  }
 
   private readonly permissions = this.authStorageService.getPermissions();
 

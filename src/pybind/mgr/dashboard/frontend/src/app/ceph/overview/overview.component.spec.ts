@@ -91,6 +91,22 @@ describe('OverviewComponent', () => {
           b: { severity: 'HEALTH_ERR', summary: { message: 'B issue' } }
         }
       },
+      // data resileincy
+      pgmap: {
+        pgs_by_state: [
+          {
+            state_name: 'active+clean',
+            count: 497
+          }
+        ],
+        num_pools: 14,
+        bytes_used: 3236978688,
+        bytes_total: 325343772672,
+        num_pgs: 497,
+        write_bytes_sec: 0,
+        read_bytes_sec: 0,
+        recovering_bytes_per_sec: 0
+      },
       // subsystem inputs used by mapper
       monmap: { num_mons: 3, quorum: [0, 1, 2] } as any,
       mgrmap: { num_active: 1, num_standbys: 1 } as any,
@@ -114,7 +130,7 @@ describe('OverviewComponent', () => {
       );
       expect(vm.checks[0].icon).toEqual(expect.any(String));
 
-      expect(vm.health).toEqual(HealthMap['HEALTH_OK']);
+      expect(vm.clusterHealth).toEqual(HealthMap['HEALTH_OK']);
 
       expect(vm.mon).toEqual(
         expect.objectContaining({
@@ -157,6 +173,21 @@ describe('OverviewComponent', () => {
       monmap: { num_mons: 3, quorum: [0, 1, 2] } as any, // ok
       mgrmap: { num_active: 0, num_standbys: 0 } as any, // err (active < 1)
       osdmap: { num_osds: 2, up: 2, in: 2 } as any, // ok
+      pgmap: {
+        pgs_by_state: [
+          {
+            state_name: 'active+clean',
+            count: 497
+          }
+        ],
+        num_pools: 14,
+        bytes_used: 3236978688,
+        bytes_total: 325343772672,
+        num_pgs: 497,
+        write_bytes_sec: 0,
+        read_bytes_sec: 0,
+        recovering_bytes_per_sec: 0
+      },
       num_hosts: 1,
       num_hosts_down: 0 // ok
     } as any;
@@ -198,9 +229,9 @@ describe('OverviewComponent', () => {
   // -----------------------------
   it('should toggle panel open/close', () => {
     expect(component.isHealthPanelOpen).toBe(false);
-    component.togglePanel();
+    component.toggleHealthPanel();
     expect(component.isHealthPanelOpen).toBe(true);
-    component.togglePanel();
+    component.toggleHealthPanel();
     expect(component.isHealthPanelOpen).toBe(false);
   });
 
