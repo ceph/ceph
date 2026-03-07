@@ -549,7 +549,8 @@ struct ECCommon {
           std::map<hobject_t, ECUtil::shard_extent_map_t> *written,
           shard_id_map<ceph::os::Transaction> *transactions,
           DoutPrefixProvider *dpp,
-          const OSDMapRef &osdmap) = 0;
+          const OSDMapRef &osdmap,
+          bool &first_write_in_interval) = 0;
 
       virtual bool skip_transaction(
           std::set<shard_id_t> &pending_roll_forward,
@@ -662,6 +663,11 @@ struct ECCommon {
     ECExtentCache extent_cache;
     uint64_t ec_pdw_write_mode;
     bool next_write_all_shards = false;
+
+    // Set by on_change, forces first write in each interval to be
+    // a full write to avoid PWLC spanning intervals. Fixes
+    // https://tracker.ceph.com/issues/73891
+    bool first_write_in_interval;
 
     RMWPipeline(CephContext *cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,

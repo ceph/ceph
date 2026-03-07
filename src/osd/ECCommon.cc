@@ -841,7 +841,8 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     &written,
     &trans,
     get_parent()->get_dpp(),
-    get_osdmap());
+    get_osdmap(),
+    first_write_in_interval);
 
   dout(20) << __func__ << ": written: " << written << ", op: " << op << dendl;
 
@@ -972,7 +973,8 @@ struct ECDummyOp final : ECCommon::RMWPipeline::Op {
       map<hobject_t, ECUtil::shard_extent_map_t> *written,
       shard_id_map<ObjectStore::Transaction> *transactions,
       DoutPrefixProvider *dpp,
-      const OSDMapRef &osdmap
+      const OSDMapRef &osdmap,
+      bool &first_write_in_interval
     ) override {
     // NOP, as -- in contrast to ECClassicalOp -- there is no
     // transaction involved
@@ -1054,6 +1056,7 @@ void ECCommon::RMWPipeline::on_change() {
   oid_to_version.clear();
   waiting_commit.clear();
   next_write_all_shards = false;
+  first_write_in_interval = true;
 }
 
 void ECCommon::RMWPipeline::on_change2() {
