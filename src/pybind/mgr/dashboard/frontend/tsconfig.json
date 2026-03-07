@@ -24,7 +24,11 @@
     "paths": {
       "stream": ["node_modules/stream-browserify"],
       "timers": ["node_modules/timers-browserify"],
-      "~/*": ["src/*"]
+      "~/*": ["src/*"],
+      "chart.js/dist/types/utils": ["node_modules/chart.js/dist/types/utils.d.ts"],
+      "carbon-components-angular/treeview/tree-node.types": [
+        "node_modules/carbon-components-angular/treeview/tree-node.types.d.ts"
+      ]
     },
     "typeRoots": ["node_modules/@types"],
     "lib": ["es2017", "dom"],
