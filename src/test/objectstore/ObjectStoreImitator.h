@@ -305,14 +305,6 @@ public:
       std::map<std::string, ceph::buffer::ptr, std::less<>> &aset) override {
     return 0;
   }
-  int omap_get(CollectionHandle &c,        ///< [in] Collection containing oid
-               const ghobject_t &oid,      ///< [in] Object containing omap
-               ceph::buffer::list *header, ///< [out] omap header
-               std::map<std::string, ceph::buffer::list>
-                   *out /// < [out] Key to value std::map
-               ) override {
-    return 0;
-  }
   int omap_get_header(CollectionHandle &c,   ///< [in] Collection containing oid
                       const ghobject_t &oid, ///< [in] Object containing omap
                       ceph::buffer::list *header, ///< [out] omap header
