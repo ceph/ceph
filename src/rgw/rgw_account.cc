@@ -296,19 +296,31 @@ int remove(const DoutPrefixProvider* dpp,
 
   // make sure the account is empty
   constexpr std::string_view path_prefix; // empty
-  const std::string marker; // empty
-  constexpr uint32_t max_items = 1;
+  constexpr uint32_t max_items = 100;
 
   rgw::sal::UserList users;
-  ret = driver->list_account_users(dpp, y, info.id, info.tenant, path_prefix,
-                                   marker, max_items, users);
-  if (ret < 0) {
-    return ret;
-  }
-  if (!users.users.empty()) {
-    err_msg = "The account cannot be deleted until all users are removed.";
-    return -ENOTEMPTY;
-  }
+  do {
+    ret = driver->list_account_users(dpp, y, info.id, info.tenant, path_prefix,
+                                     users.next_marker, max_items, users);
+    if (ret < 0) {
+      err_msg = "Unable to list account users";
+      return ret;
+    }
+    if (!users.users.empty() && !op_state.purge_data) {
+      err_msg = "The account cannot be deleted until all users are removed.";
+      return -ENOTEMPTY;
+    }
+
+    for (const auto& info : users.users) {
+      auto user = driver->get_user(info.user_id);
+      ret = user->remove_user(dpp, y);
+      if (ret < 0) {
+        err_msg = fmt::format("unable to delete user {}", info.user_id.to_str());
+        return ret;
+      }
+      ldpp_dout_fmt(dpp, 1, "Deleted account user {}", info.user_id.to_str());
+    }
+  } while (!users.next_marker.empty());
 
   constexpr bool need_stats = false;
   rgw::sal::BucketList buckets;
@@ -340,40 +352,101 @@ int remove(const DoutPrefixProvider* dpp,
         err_msg = fmt::format("unable to delete bucket {}", ent.bucket.name);
         return ret;
       }
+      ldpp_dout_fmt(dpp, 1, "Deleted account bucket {}", ent.bucket.name);
     }
   } while (!buckets.next_marker.empty());
 
   rgw::sal::RoleList roles;
-  ret = driver->list_account_roles(dpp, y, info.id, path_prefix,
-                                   marker, max_items, roles);
-  if (ret < 0) {
-    return ret;
-  }
-  if (!roles.roles.empty()) {
-    err_msg = "The account cannot be deleted until all roles are removed.";
-    return -ENOTEMPTY;
-  }
+  do {
+    ret = driver->list_account_roles(dpp, y, info.id, path_prefix,
+                                     roles.next_marker, max_items, roles);
+    if (ret < 0) {
+      err_msg = "Unable to list account roles";
+      return ret;
+    }
+    if (!roles.roles.empty() && !op_state.purge_data) {
+      err_msg = "The account cannot be deleted until all roles are removed.";
+      return -ENOTEMPTY;
+    }
+
+    for (const auto& info : roles.roles) {
+      auto role = driver->get_role(info);
+      ret = role->delete_obj(dpp, y);
+      if (ret < 0) {
+        err_msg = fmt::format("unable to delete role {}", info.arn);
+        return ret;
+      }
+      ldpp_dout_fmt(dpp, 1, "Deleted account role {}", info.arn);
+    }
+  } while (!roles.next_marker.empty());
 
   rgw::sal::GroupList groups;
-  ret = driver->list_account_groups(dpp, y, info.id, path_prefix,
-                                    marker, max_items, groups);
-  if (ret < 0) {
-    return ret;
-  }
-  if (!groups.groups.empty()) {
-    err_msg = "The account cannot be deleted until all groups are removed.";
-    return -ENOTEMPTY;
-  }
+  do {
+    ret = driver->list_account_groups(dpp, y, info.id, path_prefix,
+                                      groups.next_marker, max_items, groups);
+    if (ret < 0) {
+      err_msg = "Unable to list account groups";
+      return ret;
+    }
+    if (!groups.groups.empty() && !op_state.purge_data) {
+      err_msg = "The account cannot be deleted until all groups are removed.";
+      return -ENOTEMPTY;
+    }
+
+    for (const auto& info : groups.groups) {
+      RGWObjVersionTracker objv;
+      ret = driver->remove_group(dpp, y, info, objv);
+      if (ret < 0) {
+        err_msg = fmt::format("unable to delete group {}", info.id);
+        return ret;
+      }
+      ldpp_dout_fmt(dpp, 1, "Deleted account group {}", info.id);
+    }
+  } while (!groups.next_marker.empty());
 
   std::vector<RGWOIDCProviderInfo> providers;
   ret = driver->get_oidc_providers(dpp, y, info.id, providers);
   if (ret < 0) {
+    err_msg = "Unable to list account oidc providers";
     return ret;
   }
-  if (!providers.empty()) {
+  if (!providers.empty() && !op_state.purge_data) {
     err_msg = "The account cannot be deleted until all OpenIDConnectProviders are removed.";
     return -ENOTEMPTY;
   }
+
+  for (const auto& info : providers) {
+    ret = driver->delete_oidc_provider(dpp, y, info.tenant, info.provider_url);
+    if (ret < 0) {
+      err_msg = fmt::format("unable to delete oidc provider {}", info.provider_url);
+      return ret;
+    }
+    ldpp_dout_fmt(dpp, 1, "Deleted account oidc provider {}", info.provider_url);
+  }
+
+  rgw::sal::TopicList topics;
+  do {
+    ret = driver->list_account_topics(dpp, y, info.tenant,
+                                      topics.next_marker, max_items, topics);
+    if (ret < 0) {
+      err_msg = "Unable to list account topics";
+      return ret;
+    }
+    if (!topics.topics.empty() && !op_state.purge_data) {
+      err_msg = "The account cannot be deleted until all topics are removed.";
+      return -ENOTEMPTY;
+    }
+
+    for (const auto& topic_name : topics.topics) {
+      RGWObjVersionTracker objv;
+      ret = driver->remove_topic_v2(topic_name, info.tenant, objv, y, dpp);
+      if (ret < 0) {
+        err_msg = fmt::format("unable to delete topic {}", topic_name);
+        return ret;
+      }
+      ldpp_dout_fmt(dpp, 1, "Deleted account topic {}", topic_name);
+    }
+  } while (!topics.next_marker.empty());
 
   return driver->delete_account(dpp, y, info, objv);
 }
