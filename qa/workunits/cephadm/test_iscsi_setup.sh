@@ -39,22 +39,72 @@ ISCSI_POOL=$(sudo cephadm shell -- ceph orch ls iscsi --format json | jq -r '.[]
 ISCSI_USER="adminadmin"
 ISCSI_PASSWORD="adminadminadmin"
 
+ISCSI_INITIATOR_IQN="iqn.1994-05.com.redhat:client1"
+
 # gateway setup
 container_gwcli() {
-    sudo podman exec -it ${ISCSI_CONT_ID} gwcli "$@"
+    sudo podman exec -i ${ISCSI_CONT_ID} gwcli "$@"
 }
+
+# Some helpers to avoid race/flakes and improve debuggability ---
+dump_gwcli_state() {
+    # best-effort debug; do not fail the script from here
+    set +e
+    container_gwcli / ls
+    container_gwcli /iscsi-targets ls
+    container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw ls
+    container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways ls
+    container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts ls
+    set -e
+}
+
+wait_for_ls_contains() {
+    # Usage: wait_for_ls_contains <path> <needle> [retries] [sleep_s]
+    local path="$1"
+    local needle="$2"
+    local retries="${3:-30}"
+    local sleep_s="${4:-1}"
+
+    for ((i=1; i<=retries; i++)); do
+        if container_gwcli "${path}" ls 2>/dev/null | grep -qF "${needle}"; then
+            return 0
+        fi
+        sleep "${sleep_s}"
+    done
+    return 1
+}
+
+# dump gwcli state if anything fails
+trap 'rc=$?; echo "ERROR: script failed with rc=${rc}"; dump_gwcli_state; exit $rc' ERR
 
 container_gwcli /iscsi-targets create iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw
 # I've seen this give a nonzero error code with an error message even when
 # creating the gateway successfully, so this command is allowed to fail
 # If it actually failed to make the gateway, some of the follow up commands will fail
-container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways create ${FQDN} ${NODE_IP} || true
+container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways create ${FQDN} ${NODE_IP}  2>&1 | tee /tmp/gw_create.log || true
+cat /tmp/gw_create.log
+
+# verify gateway shows up
+if ! wait_for_ls_contains /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways "${FQDN}" 30 1; then
+    echo "Gateway ${FQDN} not visible in gwcli after create; failing early."
+    dump_gwcli_state
+    exit 1
+fi
+
 container_gwcli /disks create pool=${ISCSI_POOL} image=disk_1 size=2G
 container_gwcli /disks create pool=${ISCSI_POOL} image=disk_2 size=2G
-container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts create iqn.1994-05.com.redhat:client1
-container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts/iqn.1994-05.com.redhat:client1 auth username=${ISCSI_USER}  password=${ISCSI_PASSWORD}
-container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts/iqn.1994-05.com.redhat:client1 disk add ${ISCSI_POOL}/disk_1
-container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts/iqn.1994-05.com.redhat:client1 disk add ${ISCSI_POOL}/disk_2
+container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts create ${ISCSI_INITIATOR_IQN}
+
+# wait for host to appear before configuring it
+if ! wait_for_ls_contains /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts "${ISCSI_INITIATOR_IQN}" 30 1; then
+    echo "Host ${ISCSI_INITIATOR_IQN} not visible in gwcli after create; failing."
+    dump_gwcli_state
+    exit 1
+fi
+
+container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts/${ISCSI_INITIATOR_IQN} auth username=${ISCSI_USER}  password=${ISCSI_PASSWORD}
+container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts/${ISCSI_INITIATOR_IQN} disk add ${ISCSI_POOL}/disk_1
+container_gwcli /iscsi-targets/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts/${ISCSI_INITIATOR_IQN} disk add ${ISCSI_POOL}/disk_2
 
 # set up multipath and some iscsi config options
 sudo dnf install -y iscsi-initiator-utils device-mapper-multipath
@@ -62,7 +112,7 @@ sudo dnf install -y iscsi-initiator-utils device-mapper-multipath
 # this next line is purposely being done without "-a" on the tee command to
 # overwrite the current initiatorname.iscsi file if it is there
 echo "GenerateName=no" | sudo tee /etc/iscsi/initiatorname.iscsi
-echo "InitiatorName=iqn.1994-05.com.redhat:client1" | sudo tee -a /etc/iscsi/initiatorname.iscsi
+echo "InitiatorName=${ISCSI_INITIATOR_IQN}" | sudo tee -a /etc/iscsi/initiatorname.iscsi
 
 echo "node.session.auth.authmethod = CHAP" | sudo tee -a /etc/iscsi/iscsid.conf
 echo "node.session.auth.username = ${ISCSI_USER}" | sudo tee -a /etc/iscsi/iscsid.conf
