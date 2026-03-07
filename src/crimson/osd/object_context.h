@@ -64,6 +64,7 @@ class ObjectContext : public ceph::common::intrusive_lru_base<
 {
 private:
   tri_mutex lock;
+  bool recovery_read_marker = false;
 
 public:
   ObjectState obs;
@@ -73,6 +74,10 @@ public:
   // convenience.
   using watch_key_t = std::pair<uint64_t, entity_name_t>;
   std::map<watch_key_t, seastar::shared_ptr<crimson::osd::Watch>> watchers;
+
+  // attr cache. ECTransaction is the initial user
+  using attr_cache_t = std::map<std::string, ceph::buffer::list, std::less<>>;
+  attr_cache_t attr_cache;
 
   CommonOBCPipeline obc_pipeline;
 
@@ -135,6 +140,9 @@ public:
   template<typename Exception>
   void interrupt(Exception ex) {
     lock.abort(std::move(ex));
+    if (recovery_read_marker) {
+      drop_recovery_read();
+    }
   }
 
   bool is_loaded() const {
@@ -224,6 +232,23 @@ public:
   }
   bool is_request_pending() const {
     return lock.is_acquired();
+  }
+
+  bool get_recovery_read() {
+    if (lock.try_lock_for_read()) {
+      recovery_read_marker = true;
+      return true;
+    } else {
+      return false;
+    }
+  }
+  void wait_recovery_read() {
+    assert(lock.get_readers() > 0);
+    recovery_read_marker = true;
+  }
+  void drop_recovery_read() {
+    assert(recovery_read_marker);
+    recovery_read_marker = false;
   }
 };
 using ObjectContextRef = ObjectContext::Ref;
