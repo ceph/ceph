@@ -5,6 +5,7 @@ import pytest
 import json
 from pg_autoscaler import module
 
+# `tox -e py3 -- pg_autoscaler` to run all the tests under pg_autoscaler folder, including this one.
 
 class RootMapItem:
 

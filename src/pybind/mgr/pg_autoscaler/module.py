@@ -519,14 +519,16 @@ class PgAutoscaler(MgrModule):
         if max_pg and max_pg < final_pg_target:
             final_pg_target = max_pg
         self.log.info("Pool '{0}' root_id {1} using {2} of space, bias {3}, "
-                      "pg target {4} quantized to {5} (current {6})".format(
+                      "pg target {4} quantized to nearest power of two {5} (current {6}) (min_pg {7}) (max_pg {8})".format(
                       p['pool_name'],
                       root_id,
                       capacity_ratio,
                       bias,
                       pool_pg_target,
                       final_pg_target,
-                      p['pg_num_target']
+                      p['pg_num_target'],
+                      min_pg,
+                      max_pg
         ))
         return final_ratio, pool_pg_target, final_pg_target
 
@@ -612,7 +614,7 @@ class PgAutoscaler(MgrModule):
                                                   root_map[root_id].total_target_ratio,
                                                   root_map[root_id].total_target_bytes,
                                                   capacity)
-
+            self.log.info("Pool '{0}' pg_left {1}".format(pool_name, root_map[root_id].pg_left))
             # determine if the pool is a bulk
             bulk = False
             flags = p['flags_names'].split(",")
