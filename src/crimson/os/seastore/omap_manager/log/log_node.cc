@@ -244,11 +244,7 @@ bool LogNode::remove_entry(const std::string key)
   while(iter != iter_end()) {
     if (iter->get_key() == key) {
       set_cur_bitmap(index, index);
-      /* If key is time-series log,
-       * duplicate key does not exist. In this case, return true */
-      if (is_log_key(key)) {
-	return true;
-      }
+      // Duplicate keys may exist if the old entry was removed.
       removed = true;
     }
     index++;
