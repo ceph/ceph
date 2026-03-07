@@ -5362,6 +5362,9 @@ std::string RadosLuaManager::get_script_for_watch_handle(uint64_t handle) {
 }
 
 int RadosLuaManager::watch_script(const DoutPrefixProvider* dpp, const std::string& script_oid) {
+  if(!lua_background) {
+    return 0;
+  }
 
   if (get_watch_handle_for_script(script_oid) == 0) {
     uint64_t w_handle;
@@ -5384,7 +5387,9 @@ int RadosLuaManager::watch_script(const DoutPrefixProvider* dpp, const std::stri
 }
 
 int RadosLuaManager::unwatch_script(const DoutPrefixProvider* dpp, const std::string& script_oid) {
-
+  if(!lua_background) {
+    return 0;
+  }
   if (!ioctx_scripts.is_valid()) {
     ldpp_dout(dpp, 1) << "ERROR: invalid pool when unwatch Lua script " << script_oid << dendl;
     return 0;
@@ -5441,23 +5446,27 @@ std::tuple<rgw::lua::LuaCodeType, int> RadosLuaManager::get_script_or_bytecode(c
     ldpp_dout(dpp, 10) << "WARNING: missing pool when reading Lua script " << dendl;
     return std::make_tuple("", 0);
   }
-  std::vector<char> lua_bytecode;
-  lua_bytecode.clear();
-  // First try to get the bytecode
-  int r = lua_background->get_script_bytecode(key, lua_bytecode);
-  if (r == 0) {
-    return std::make_tuple(lua_bytecode, 0);
-  }
 
+  if (lua_background) {
+    std::vector<char> lua_bytecode;
+    lua_bytecode.clear();
+    // First try to get the bytecode
+    int r = lua_background->get_script_bytecode(key, lua_bytecode);
+    if (r == 0) {
+      return std::make_tuple(lua_bytecode, 0);
+    }
+  }
   std::string script;
   bufferlist bl;
-  r = rgw_get_system_obj(store->svc()->sysobj, pool, key, bl, nullptr, nullptr, y, dpp);
+  int r = rgw_get_system_obj(store->svc()->sysobj, pool, key, bl, nullptr, nullptr, y, dpp);
   if (r < 0) {
     return std::make_tuple("", r);
   }
 
   // The bytecode has not been cached yet. Let the lua background know.
-  lua_background->process_script_add(key);
+  if (lua_background) {
+    lua_background->process_script_add(key);
+  }
 
   auto iter = bl.cbegin();
   try {
@@ -5544,7 +5553,9 @@ void RadosLuaManager::handle_script_update_notify(const DoutPrefixProvider* dpp,
     return;
   }
   // Let the background thread know to remove the bytecode from the cache
-  lua_background->process_script_add(key);
+  if (lua_background) {
+    lua_background->process_script_add(key);
+  }
   ack_script_update(dpp, notify_id, cookie, 0);
 }
 
