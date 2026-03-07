@@ -11,7 +11,7 @@
 #include <seastar/core/future.hh>
 
 #include "os/Transaction.h"
-#include "crimson/common/smp_helpers.h"
+#include "crimson/common/config_proxy.h"
 #include "crimson/common/smp_helpers.h"
 #include "crimson/osd/exceptions.h"
 #include "include/buffer_fwd.h"
@@ -25,6 +25,14 @@ class Transaction;
 
 namespace crimson::os {
 class FuturizedCollection;
+class FuturizedStore;
+struct BackendStore {
+  FuturizedStore &f_store;  // indicate alienstore/seastore/cyanstore, not shard store
+  store_shard_t shard_id;       // indicate on which core it should run
+  store_index_t store_index;    // indicate which shard store on this core
+  BackendStore(FuturizedStore &f_store, store_shard_t shard_id, store_index_t store_index)
+    : f_store(f_store), shard_id(shard_id), store_index(store_index) {}
+};
 
 class FuturizedStore {
 public:
@@ -35,6 +43,14 @@ public:
     // no copying
     explicit Shard(const Shard& o) = delete;
     const Shard& operator=(const Shard& o) = delete;
+
+    bool is_shard_store_active(store_index_t store_index, uint32_t store_shard_nums) {
+      if(seastar::this_shard_id() + seastar::smp::count * store_index >= store_shard_nums) {
+        // store_index is out of range {} - inactivating this store shard
+        return false;
+      }
+      return true;
+    }
 
     using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
     using base_errorator = crimson::errorator<crimson::ct_error::input_output_error>;
@@ -138,7 +154,7 @@ public:
     virtual seastar::future<> set_collection_opts(CollectionRef c,
                                         const pool_opts_t& opts) = 0;
 
-  protected:
+  public:
     virtual seastar::future<> do_transaction_no_callbacks(
       CollectionRef ch,
       ceph::os::Transaction&& txn) = 0;
@@ -205,7 +221,8 @@ public:
   explicit FuturizedStore(const FuturizedStore& o) = delete;
   const FuturizedStore& operator=(const FuturizedStore& o) = delete;
 
-  virtual seastar::future<> start() = 0;
+  //return the number of store shards
+  virtual seastar::future<uint32_t> start() = 0;
 
   virtual seastar::future<> stop() = 0;
 
@@ -227,17 +244,89 @@ public:
 
   virtual seastar::future<> write_meta(const std::string& key,
 				       const std::string& value) = 0;
+
   // called on the shard and get this FuturizedStore::shard;
-  virtual Shard& get_sharded_store() = 0;
+  virtual BackendStore get_backend_store(store_index_t store_index) = 0;
+  virtual Shard& get_sharded_store(store_index_t store_index = 0) = 0;
 
   virtual seastar::future<std::tuple<int, std::string>> read_meta(
     const std::string& key) = 0;
 
-  using coll_core_t = std::pair<coll_t, core_id_t>;
+  using coll_core_t = std::pair<coll_t, std::pair<core_id_t, store_index_t>>;
   virtual seastar::future<std::vector<coll_core_t>> list_collections() = 0;
 
   virtual seastar::future<std::string> get_default_device_class() = 0;
 protected:
   const core_id_t primary_core;
 };
+
+template<auto MemberFunc, typename... Args>
+auto with_store(BackendStore store, Args&&... args)
+{
+  using raw_return_type = decltype((std::declval<crimson::os::FuturizedStore::Shard>().*MemberFunc)(std::forward<Args>(args)...));
+
+  constexpr bool is_errorator = is_errorated_future_v<raw_return_type>;
+  constexpr bool is_seastar_future = seastar::is_future<raw_return_type>::value && !is_errorator;
+  constexpr bool is_plain = !is_errorator && !is_seastar_future;
+  const auto original_core = seastar::this_shard_id();
+  if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
+    if (store.shard_id != GLOBAL_STORE) {
+      ceph_assert(store.shard_id == seastar::this_shard_id());
+    }
+  }
+  if (store.shard_id == seastar::this_shard_id() || store.shard_id == GLOBAL_STORE) {
+    if constexpr (is_plain) {
+      return seastar::make_ready_future<raw_return_type>(
+        (store.f_store.get_sharded_store(store.store_index).*MemberFunc)(std::forward<Args>(args)...));
+    } else {
+      return (store.f_store.get_sharded_store(store.store_index).*MemberFunc)(std::forward<Args>(args)...);
+    }
+  } else {
+    if constexpr (is_errorator) {
+      auto fut = seastar::smp::submit_to(
+        store.shard_id,
+        [store, args=std::make_tuple(std::forward<Args>(args)...)]() mutable {
+          return std::apply([store](auto&&... args) {
+            return (store.f_store.get_sharded_store(store.store_index).*MemberFunc)(
+              std::forward<decltype(args)>(args)...).to_base();
+          }, std::move(args));
+        }).then([original_core] (auto&& result) {
+          return seastar::smp::submit_to(original_core,
+            [result = std::forward<decltype(result)>(result)]() mutable {
+              return std::forward<decltype(result)>(result);
+          });
+        });
+      return raw_return_type(std::move(fut));
+    } else {
+      auto fut = seastar::smp::submit_to(
+        store.shard_id,
+        [store, args=std::make_tuple(std::forward<Args>(args)...)]() mutable {
+        return std::apply([store](auto&&... args) {
+          return (store.f_store.get_sharded_store(store.store_index).*MemberFunc)(
+            std::forward<decltype(args)>(args)...);
+        }, std::move(args));
+      });
+      if constexpr (std::is_same_v<raw_return_type, seastar::future<>>) {
+        return fut.then([original_core] {
+          return seastar::smp::submit_to(original_core, [] {
+            return seastar::make_ready_future<>();
+          });
+        });
+      } else {
+        return fut.then([original_core](auto&& result) {
+          return seastar::smp::submit_to(original_core,
+            [result = std::forward<decltype(result)>(result)]() mutable {
+              return std::forward<decltype(result)>(result);
+          });
+        });
+      }
+    }
+  }
+}
+
+seastar::future<> with_store_do_transaction(
+  BackendStore store,
+  FuturizedStore::Shard::CollectionRef ch,
+  ceph::os::Transaction&& txn);
+
 }
