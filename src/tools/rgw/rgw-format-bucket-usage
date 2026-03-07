@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# Dump radosgw bucket usage as labeled prometheus metrics.
+#
+# dependencies:
+#   radosgw-admin, jq
+
+cat <<EOF
+# TYPE rgw_bucket_usage_objects guage
+# HELP rgw_bucket_usage_objects Total number of objects stored in the bucket
+# TYPE rgw_bucket_usage_bytes guage
+# HELP rgw_bucket_usage_bytes Total size in bytes of object data stored in the bucket
+EOF
+# export the usage for each local zone, labeled by realm- and zone-id
+radosgw-admin zone list | jq -cr '.zones[]' | while read name; do
+	info=`radosgw-admin zone get --rgw-zone=${name}` || continue
+	zone=`echo $info | jq -r '.id'`
+	realm=`echo $info | jq -r '.realm_id'`
+	radosgw-admin bucket stats --realm-id=$realm --zone-id=$zone | jq -c '.[]' | while read entry; do
+		tenant=`echo $entry | jq -r '.tenant'`
+		bucket=`echo $entry | jq -r '.bucket'`
+		owner=`echo $entry | jq -r '.owner'`
+		objects=`echo $entry | jq '.usage."rgw.main".num_objects // 0'`
+		bytes=`echo $entry | jq '.usage."rgw.main".size // 0'`
+		cat <<EOF
+rgw_bucket_usage_objects{zone="$zone",tenant="$tenant",owner="$owner",bucket="$bucket"} $objects
+rgw_bucket_usage_bytes{zone="$zone",tenant="$tenant",owner="$owner",bucket="$bucket"} $bytes
+EOF
+	done
+done
