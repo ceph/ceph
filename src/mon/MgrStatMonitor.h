@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "common/ceph_mutex.h"
 #include "include/Context.h"
 #include "PaxosService.h"
 #include "mon/PGMap.h"
