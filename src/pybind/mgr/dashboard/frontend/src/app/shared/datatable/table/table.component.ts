@@ -241,7 +241,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
    * Icon to be displayed when there is no data
    */
   @Input()
-  emptyStateIcon: string = ICON_TYPE.deploy;
+  emptyStateIcon: string = ICON_TYPE.emptySearch;
 
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
