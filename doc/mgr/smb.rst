@@ -267,9 +267,9 @@ Update Share QoS
 
 .. prompt:: bash #
 
-   ceph smb share update cephfs qos <cluster_id> <share_id> [--read-iops-limit=<int>] [--write-iops-limit=<int>] [--read-bw-limit=<int>] [--write-bw-limit=<int>] [--read-delay-max=<int>] [--write-delay-max=<int>]
+   ceph smb share update cephfs qos <cluster_id> <share_id> [--read-iops-limit=<int>] [--write-iops-limit=<int>] [--read-bw-limit=<str>] [--write-bw-limit=<str>] [--read-burst-mult=<int>] [--write-burst-mult=<int>]
 
-Update Quality of Service (QoS) settings for a CephFS-backed share. This allows administrators to apply per-share rate limits on SMB input/output (I/O) operations, specifically limits on IOPS (Input/Output Operations per Second) and bandwidth (in bytes per second) for both read and write operations.
+Update Quality of Service (QoS) settings for a CephFS-backed share. This allows administrators to apply per-share rate limits on SMB input/output (I/O) operations, specifically limits on IOPS (Input/Output Operations per Second) and bandwidth (in bytes per second) for both read and write operations. Additionally, burst multipliers can be configured to allow temporary bursts above the configured limits.
 
 Options:
 
@@ -280,37 +280,69 @@ write_iops_limit
     Optional integer. Maximum number of write operations per second (0 = disabled).
     Valid range: ``0`` to ``1,000,000``. Values above this will be capped.
 read_bw_limit
-    Optional integer. Maximum allowed bandwidth for read operations in bytes per second (0 = disabled).
-    Valid range: ``0`` to ``1 << 40`` (≈1 TB/s). Values above this will be capped.
+    Optional string. Maximum allowed bandwidth for read operations (0 = disabled).
+    This can be specified as a plain integer representing bytes per second, or as a
+    human-readable string with bytes per second as a unit.
+    Example: ``"1M"`` = 1 MiB/s (1,048,576 bytes/s).
+    Valid range: ``0`` to ``1 << 40`` (≈1 T). Numeric values above this will be capped.
 write_bw_limit
-    Optional integer. Maximum allowed bandwidth for write operations in bytes per second (0 = disabled).
-    Valid range: ``0`` to ``1 << 40`` (≈1 TB/s). Values above this will be capped.
-read_delay_max
-    Optional integer. Maximum allowed delay value in seconds for read operations (default: 30, max: 300).
-    This acts as an upper bound on how long a read request will be delayed if the defined IOPS or bandwidth limits are exceeded.
-write_delay_max
-    Optional integer. Maximum allowed delay value in seconds for write operations (default: 30, max: 300).
-    Similar to `read_delay_max`, but applies to write requests.
+    Optional string. Maximum allowed bandwidth for write operations (0 = disabled).
+    This can be specified as a plain integer representing bytes per second, or as a
+    human-readable string with bytes per second as a unit.
+    Example: ``"1M"`` = 1 MiB/s (1,048,576 bytes/s).
+    Valid range: ``0`` to ``1 << 40`` (≈1 T). Numeric values above this will be capped.
+read_burst_mult
+    Optional integer. Burst multiplier for read operations (value ÷ 10 = multiplier),
+    allowing temporary bursts above the configured limit. Example: ``20`` = 2* the configured limit.
+    Range: 10-100 (1* to 10*), default: 15 (1.5*).
+write_burst_mult
+    Optional integer. Burst multiplier for write operations (value ÷ 10 = multiplier),
+    allowing temporary bursts above the configured limit. Example: ``20`` = 2* the configured limit.
+    Range: 10-100 (1* to 10*), default: 15 (1.5*).
 
 Behavior:
 
 - All limits are optional
 - Setting a limit to ``0`` disables that specific QoS limit
-- Setting all four limits to ``0`` completely removes QoS configuration
+- Setting all four limits (IOPS and bandwidth) to ``0`` completely removes QoS configuration
+- Burst multipliers only apply when their corresponding limit is enabled (non-zero)
+- Bandwidth limits can be specified with human-readable units (e.g., ``"10M"``, ``"5G"``)
+- Burst multipliers are expressed in tenths (e.g., ``15`` = 1.5*, ``20`` = 2*, ``30`` = 3*)
+
+
+Burst Behavior
+--------------
+
+The burst multiplier allows short-term I/O bursts above your configured limits.
+For example, if you set ``read_iops_limit = 1000`` and ``read_burst_mult = 20``,
+your share can handle bursts up to 2000 read operations per second for short
+periods, while maintaining an average of 1000 IOPS over time.
+
+This is useful for workloads that have occasional spikes in activity. The
+appropriate burst multiplier depends on your workload - higher values allow
+larger bursts but may temporarily consume more resources.
+
+.. note::
+   The burst multiplier only affects short-term spikes. The long-term average
+   throughput remains limited by your configured IOPS and bandwidth limits.
 
 Examples:
 
-Set QoS limits for a share:
+Set QoS limits with burst multipliers for a share:
 
 .. prompt:: bash #
 
    ceph smb share update cephfs qos foo bar \
      --read-iops-limit=100 \
      --write-iops-limit=200 \
-     --read-bw-limit=1048576 \
-     --write-bw-limit=2097152 \
-     --read-delay-max=5 \
-     --write-delay-max=5
+     --read-bw-limit="10M" \
+     --write-bw-limit="20M" \
+     --read-burst-mult=20 \
+     --write-burst-mult=15
+
+In this example:
+- Read burst multiplier of 20 means 2* the read IOPS limit (allowing bursts up to 200 read IOPS)
+- Write burst multiplier of 15 means 1.5* the write IOPS limit (allowing bursts up to 300 write IOPS)
 
 Disable QoS for a share:
 
@@ -320,10 +352,7 @@ Disable QoS for a share:
      --read-iops-limit=0 \
      --write-iops-limit=0 \
      --read-bw-limit=0 \
-     --write-bw-limit=0 \
-     --read-delay-max=0 \
-     --write-delay-max=0
-
+     --write-bw-limit=0
 
 Remove Share
 ++++++++++++
@@ -890,17 +919,25 @@ cephfs
             Optional integer. Maximum number of write operations per second (0 = disabled).
             Valid range: ``0`` to ``1,000,000``. Values above this will be capped.
         read_bw_limit
-            Optional integer. Maximum allowed bandwidth for read operations in bytes per second (0 = disabled).
-            Valid range: ``0`` to ``1 << 40`` (≈1 TB/s). Values above this will be capped.
+            Optional string. Maximum allowed bandwidth for read operations (0 = disabled).
+            This can be specified as a plain integer representing bytes per second, or as a
+            human-readable string with bytes per second as a unit.
+            Example: ``"1M"`` = 1 MiB/s (1,048,576 bytes/s).
+            Valid range: ``0`` to ``1 << 40`` (≈1 T). Numeric values above this will be capped.
         write_bw_limit
-            Optional integer. Maximum allowed bandwidth for write operations in bytes per second (0 = disabled).
-            Valid range: ``0`` to ``1 << 40`` (≈1 TB/s). Values above this will be capped.
-        read_delay_max
-            Optional integer. Maximum allowed delay value in seconds for read operations (default: 30, max: 300).
-            This acts as an upper bound on how long a read request will be delayed if the defined IOPS or bandwidth limits are exceeded.
-        write_delay_max
-            Optional integer. Maximum allowed delay value in seconds for write operations (default: 30, max: 300).
-            Similar to `read_delay_max`, but applies to write requests.
+            Optional string. Maximum allowed bandwidth for write operations (0 = disabled).
+            This can be specified as a plain integer representing bytes per second, or as a
+            human-readable string with bytes per second as a unit.
+            Example: ``"1M"`` = 1 MiB/s (1,048,576 bytes/s).
+            Valid range: ``0`` to ``1 << 40`` (≈1 T). Numeric values above this will be capped.
+        read_burst_mult
+            Optional integer. Burst multiplier for read operations (value ÷ 10 = multiplier),
+            allowing temporary bursts above the configured limit. Example: ``20`` = 2* the configured limit.
+            Default: 15 (1.5*).
+        write_burst_mult
+            Optional integer. Burst multiplier for write operations (value ÷ 10 = multiplier),
+            allowing temporary bursts above the configured limit. Example: ``20`` = 2* the configured limit.
+            Default: 15 (1.5*).
 restrict_access
     Optional boolean, defaulting to false. If true the share will only permit
     access by users explicitly listed in ``login_control``.
@@ -948,7 +985,8 @@ custom_smb_share_options
     things in ways that the Ceph team can not help with. This special key will
     automatically be removed from the list of options passed to Samba.
 
-The following is an example of a share with QoS settings:
+The following is an example of a share with QoS settings including burst
+multipliers and human-readable bandwidth limits:
 
 .. code-block:: yaml
 
@@ -962,13 +1000,30 @@ The following is an example of a share with QoS settings:
       subvolumegroup: smbshares
       subvolume: staff
       qos:
-        read_iops_limit: 100    # Max 100 read operations per second
-        write_iops_limit: 50     # Max 50 write operations per second
-        read_bw_limit: 1048576   # 1 MiB/s read bandwidth limit
-        write_bw_limit: 524288   # 512 KiB/s write bandwidth limit
-        read_delay_max: 5        # Max 5 seconds delay for read operations
-        write_delay_max: 5       # Max 5 seconds delay for write operations
+        read_iops_limit: 100
+        write_iops_limit: 50
+        read_bw_limit: "10M"
+        write_bw_limit: "5M"
+        read_burst_mult: 20
+        write_burst_mult: 15
 
+Another example with plain byte values:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.share
+    cluster_id: tango
+    share_id: sp1
+    cephfs:
+      volume: cephfs
+      path: /pics
+      qos:
+        read_iops_limit: 100
+        write_iops_limit: 50
+        read_bw_limit: 10485760      # 10 MB/s
+        write_bw_limit: 5242880       # 5 MB/s
+        read_burst_mult: 10           # 1× burst
+        write_burst_mult: 20          # 2× burst
 
 Another example, this time of a share with QoS disabled:
 
@@ -985,8 +1040,7 @@ Another example, this time of a share with QoS disabled:
         write_iops_limit: 0
         read_bw_limit: 0
         write_bw_limit: 0
-        read_delay_max: 0
-        write_delay_max: 0
+        # Note: burst multipliers are ignored when limits are disabled
 
 And finally, a share with an intent to be removed:
 
@@ -1222,6 +1276,13 @@ configuration file. First, create the YAML with the contents:
           path: /pics
           subvolumegroup: smb1
           subvolume: staff
+          qos:
+            read_iops_limit: 100
+            write_iops_limit: 50
+            read_bw_limit: "10MiB"
+            write_bw_limit: "5MiB"
+            read_burst_mult: 20
+            write_burst_mult: 15
 
 
 Save this text to a YAML file named ``resources.yaml`` and make it available

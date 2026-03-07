@@ -852,10 +852,10 @@ def _generate_share(conf: _ShareConf) -> Dict[str, Dict[str, str]]:
         for field in (
             "read_iops_limit",
             "read_bw_limit",
-            "read_delay_max",
+            "read_burst_mult",
             "write_iops_limit",
             "write_bw_limit",
-            "write_delay_max",
+            "write_burst_mult",
         ):
             if value := getattr(qos, field):
                 opts[f"{vfs_rl}:{field}"] = str(value)

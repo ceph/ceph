@@ -109,9 +109,9 @@ class TestSMBRateLimiting:
         )
         assert show_share["cephfs"]["qos"]["write_iops_limit"] == 50
 
-    def test_qos_read_bandwidth_limit(self, smb_cfg, config):
-        """Test read bandwidth rate limiting."""
-        read_bw_limit = 1048576
+    def test_qos_read_bandwidth_limit_integer(self, smb_cfg, config):
+        """Test read bandwidth rate limiting with integer bytes as string."""
+        read_bw_limit = "1048576"
 
         updated_share = _update_qos(
             smb_cfg,
@@ -127,9 +127,28 @@ class TestSMBRateLimiting:
         )
         assert show_share["cephfs"]["qos"]["read_bw_limit"] == read_bw_limit
 
-    def test_qos_write_bandwidth_limit(self, smb_cfg, config):
-        """Test write bandwidth rate limiting."""
-        write_bw_limit = 2097152
+    def test_qos_read_bandwidth_limit_human_readable(self, smb_cfg, config):
+        """Test read bandwidth rate limiting with human-readable units."""
+        test_cases = ["1M", "500K"]
+
+        for human_readable in test_cases:
+            updated_share = _update_qos(
+                smb_cfg,
+                config["cluster_id"],
+                config["share_id"],
+                read_bw_limit=human_readable,
+            )
+
+            assert updated_share["cephfs"]["qos"]["read_bw_limit"] == human_readable
+
+            show_share = smbutil.get_share_by_id(
+                smb_cfg, config["cluster_id"], config["share_id"]
+            )
+            assert show_share["cephfs"]["qos"]["read_bw_limit"] == human_readable
+
+    def test_qos_write_bandwidth_limit_integer(self, smb_cfg, config):
+        """Test write bandwidth rate limiting with integer bytes."""
+        write_bw_limit = "2097152"  # 2 MiB
 
         updated_share = _update_qos(
             smb_cfg,
@@ -145,79 +164,104 @@ class TestSMBRateLimiting:
         )
         assert show_share["cephfs"]["qos"]["write_bw_limit"] == write_bw_limit
 
-    def test_qos_delay_max(self, smb_cfg, config):
-        """Test delay_max settings."""
-        read_delay_max = 100
-        write_delay_max = 150
+    def test_qos_write_bandwidth_limit_human_readable(self, smb_cfg, config):
+        """Test write bandwidth rate limiting with human-readable units."""
+        test_cases = ["1M", "750K"]
+
+        for human_readable in test_cases:
+            updated_share = _update_qos(
+                smb_cfg,
+                config["cluster_id"],
+                config["share_id"],
+                write_bw_limit=human_readable,
+            )
+
+            assert updated_share["cephfs"]["qos"]["write_bw_limit"] == human_readable
+
+            show_share = smbutil.get_share_by_id(
+                smb_cfg, config["cluster_id"], config["share_id"]
+            )
+            assert show_share["cephfs"]["qos"]["write_bw_limit"] == human_readable
+
+    def test_qos_burst_multiplier_default(self, smb_cfg, config):
+        """Test default burst multiplier (15 = 1.5x) when QoS is enabled."""
+        # Enable QoS with only IOPS limit
         updated_share = _update_qos(
             smb_cfg,
             config["cluster_id"],
             config["share_id"],
-            read_delay_max=read_delay_max,
-            write_delay_max=write_delay_max,
+            read_iops_limit=100,
         )
 
         qos = updated_share["cephfs"]["qos"]
-        assert qos["read_delay_max"] == read_delay_max
-        assert qos["write_delay_max"] == write_delay_max
+        assert qos["read_iops_limit"] == 100
+        assert qos.get("read_burst_mult") == 15  # Default value
+
+    def test_qos_read_burst_multiplier(self, smb_cfg, config):
+        """Test read burst multiplier."""
+        updated_share = _update_qos(
+            smb_cfg,
+            config["cluster_id"],
+            config["share_id"],
+            read_iops_limit=100,
+            read_burst_mult=20,  # 2x burst
+        )
+
+        qos = updated_share["cephfs"]["qos"]
+        assert qos["read_iops_limit"] == 100
+        assert qos["read_burst_mult"] == 20
 
         show_share = smbutil.get_share_by_id(
             smb_cfg, config["cluster_id"], config["share_id"]
         )
-        assert show_share["cephfs"]["qos"]["read_delay_max"] == read_delay_max
-        assert show_share["cephfs"]["qos"]["write_delay_max"] == write_delay_max
+        assert show_share["cephfs"]["qos"]["read_burst_mult"] == 20
 
-    def test_qos_multiple_limits(self, smb_cfg, config):
-        """Test applying multiple QoS limits simultaneously."""
+    def test_qos_write_burst_multiplier(self, smb_cfg, config):
+        """Test write burst multiplier."""
+        updated_share = _update_qos(
+            smb_cfg,
+            config["cluster_id"],
+            config["share_id"],
+            write_iops_limit=50,
+            write_burst_mult=30,  # 3x burst
+        )
+
+        qos = updated_share["cephfs"]["qos"]
+        assert qos["write_iops_limit"] == 50
+        assert qos["write_burst_mult"] == 30
+
+        show_share = smbutil.get_share_by_id(
+            smb_cfg, config["cluster_id"], config["share_id"]
+        )
+        assert show_share["cephfs"]["qos"]["write_burst_mult"] == 30
+
+    def test_qos_multiple_limits_with_burst(self, smb_cfg, config):
+        """Test applying multiple QoS limits with burst multipliers."""
         updated_share = _update_qos(
             smb_cfg,
             config["cluster_id"],
             config["share_id"],
             read_iops_limit=100,
             write_iops_limit=50,
-            read_bw_limit=4194304,
-            write_bw_limit=2097152,
-            read_delay_max=100,
-            write_delay_max=150,
+            read_bw_limit="10M",
+            write_bw_limit="5M",
+            read_burst_mult=20,  # 2x burst
+            write_burst_mult=15,  # 1.5x burst
         )
 
         qos = updated_share["cephfs"]["qos"]
         assert qos["read_iops_limit"] == 100
         assert qos["write_iops_limit"] == 50
-        assert qos["read_bw_limit"] == 4194304
-        assert qos["write_bw_limit"] == 2097152
-        assert qos["read_delay_max"] == 100
-        assert qos["write_delay_max"] == 150
-
-    def test_qos_update_existing(self, smb_cfg, config):
-        """Test updating existing QoS settings."""
-        _update_qos(
-            smb_cfg,
-            config["cluster_id"],
-            config["share_id"],
-            read_iops_limit=100,
-            read_bw_limit=1048576,
-        )
-
-        updated_share = _update_qos(
-            smb_cfg,
-            config["cluster_id"],
-            config["share_id"],
-            read_iops_limit=200,
-            write_iops_limit=100,
-            read_bw_limit=2097152,
-        )
-
-        qos = updated_share["cephfs"]["qos"]
-        assert qos["read_iops_limit"] == 200
-        assert qos["write_iops_limit"] == 100
-        assert qos["read_bw_limit"] == 2097152
+        assert qos["read_bw_limit"] == "10M"
+        assert qos["write_bw_limit"] == "5M"
+        assert qos["read_burst_mult"] == 20
+        assert qos["write_burst_mult"] == 15
 
     def test_qos_limits_clamping(self, smb_cfg, config):
         """Test that QoS limits are properly clamped to maximum values."""
         excessive_iops = 2_000_000  # Above IOPS_LIMIT_MAX = 1,000,000
-        excessive_bw = 2 << 40  # Above BYTES_LIMIT_MAX = 1 << 40 (1 TB)
-        excessive_delay = 500  # Above DELAY_MAX_LIMIT = 300
+        excessive_bw = str(2 << 40)  # Above BYTES_LIMIT_MAX = 1 << 40 (1 TB)
+        excessive_burst = 200  # Above max burst 100
 
         updated_share = _update_qos(
             smb_cfg,
@@ -227,33 +271,75 @@ class TestSMBRateLimiting:
             write_iops_limit=excessive_iops,
             read_bw_limit=excessive_bw,
             write_bw_limit=excessive_bw,
-            read_delay_max=excessive_delay,
-            write_delay_max=excessive_delay,
+            read_burst_mult=excessive_burst,
+            write_burst_mult=excessive_burst,
         )
 
         qos = updated_share["cephfs"]["qos"]
         assert qos["read_iops_limit"] == 1_000_000  # IOPS_LIMIT_MAX
         assert qos["write_iops_limit"] == 1_000_000  # IOPS_LIMIT_MAX
-        assert qos["read_bw_limit"] == 1 << 40  # BYTES_LIMIT_MAX (1 TB)
-        assert qos["write_bw_limit"] == 1 << 40  # BYTES_LIMIT_MAX (1 TB)
-        assert qos["read_delay_max"] == 300  # DELAY_MAX_LIMIT
-        assert qos["write_delay_max"] == 300  # DELAY_MAX_LIMIT
+        assert qos["read_bw_limit"] == str(1 << 40)  # BYTES_LIMIT_MAX (1 TB)
+        assert qos["write_bw_limit"] == str(1 << 40)  # BYTES_LIMIT_MAX (1 TB)
+        assert qos["read_burst_mult"] == 100  # Max burst
+        assert qos["write_burst_mult"] == 100  # Max burst
 
     def test_qos_zero_values(self, smb_cfg, config):
-        """Test that zero values are handled correctly (should be treated as no limit)."""
+        """Test that zero values are handled correctly."""
+        # First set some QoS values
+        _update_qos(
+            smb_cfg,
+            config["cluster_id"],
+            config["share_id"],
+            read_iops_limit=100,
+            write_iops_limit=50,
+        )
+
+        # Now set all limits to 0 - should remove QoS entirely
         updated_share = _update_qos(
             smb_cfg,
             config["cluster_id"],
             config["share_id"],
             read_iops_limit=0,
             write_iops_limit=0,
-            read_bw_limit=0,
-            write_bw_limit=0,
-            read_delay_max=0,
-            write_delay_max=0,
+            read_bw_limit="0",
+            write_bw_limit="0",
         )
 
+        # QoS should be completely removed
         assert "qos" not in updated_share["cephfs"]
+
+    def test_qos_partial_zero_values(self, smb_cfg, config):
+        """Test that setting some limits to zero disables only those limits."""
+        # Set QoS with all limits
+        _update_qos(
+            smb_cfg,
+            config["cluster_id"],
+            config["share_id"],
+            read_iops_limit=100,
+            write_iops_limit=50,
+            read_bw_limit="10M",
+            write_bw_limit="5M",
+        )
+
+        # Disable only read limits
+        updated_share = _update_qos(
+            smb_cfg,
+            config["cluster_id"],
+            config["share_id"],
+            read_iops_limit=0,
+            read_bw_limit="0",
+        )
+
+        qos = updated_share["cephfs"]["qos"]
+        # Read limits should be disabled (None)
+        assert qos.get("read_iops_limit") is None
+        assert qos.get("read_bw_limit") is None
+        # Write limits should remain
+        assert qos["write_iops_limit"] == 50
+        assert qos["write_bw_limit"] == "5M"
+        # Burst multipliers should remain with their defaults
+        assert qos.get("read_burst_mult") == 15
+        assert qos.get("write_burst_mult") == 15
 
     def test_qos_apply_via_resources(self, smb_cfg, config):
         """Test applying QoS settings via the apply command with resources JSON."""
@@ -271,10 +357,10 @@ class TestSMBRateLimiting:
         share_resource["cephfs"]["qos"] = {
             "read_iops_limit": 300,
             "write_iops_limit": 150,
-            "read_bw_limit": 3145728,  # 3 MB/s
-            "write_bw_limit": 1572864,  # 1.5 MB/s
-            "read_delay_max": 50,
-            "write_delay_max": 75,
+            "read_bw_limit": "10M",
+            "write_bw_limit": "5M",
+            "read_burst_mult": 20,
+            "write_burst_mult": 15,
         }
 
         updated_share = smbutil.apply_share_config(smb_cfg, share_resource)
@@ -285,7 +371,7 @@ class TestSMBRateLimiting:
         qos = updated_share["cephfs"]["qos"]
         assert qos["read_iops_limit"] == 300
         assert qos["write_iops_limit"] == 150
-        assert qos["read_bw_limit"] == 3145728
-        assert qos["write_bw_limit"] == 1572864
-        assert qos["read_delay_max"] == 50
-        assert qos["write_delay_max"] == 75
+        assert qos["read_bw_limit"] == "10M"
+        assert qos["write_bw_limit"] == "5M"
+        assert qos["read_burst_mult"] == 20
+        assert qos["write_burst_mult"] == 15
