@@ -41,13 +41,14 @@ class IscsiService(CephService):
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
+                         spec: ServiceSpec,
                          daemon_type: Optional[str] = None) -> List[str]:
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         if spec:
             iscsi_spec = cast(IscsiServiceSpec, spec)
-            return [get_trusted_ips(mgr, iscsi_spec)]
+            return parent_deps + [get_trusted_ips(mgr, iscsi_spec)]
         else:
-            return [mgr.get_mgr_ip()]
+            return parent_deps + [mgr.get_mgr_ip()]
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
