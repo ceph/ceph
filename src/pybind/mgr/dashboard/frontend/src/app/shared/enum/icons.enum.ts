@@ -90,6 +90,9 @@ export enum Icons {
   checkmarkOutline = 'checkmark--outline',
   circleDash = 'circle-dash',
   datastore = 'datastore',
+  ibmCloudBareMetalServer = 'ibm-cloud--bare-metal-server',
+  ibmCloudDedicatedHost = 'ibm-cloud--dedicated-host',
+  clusterIcon = 'web-services--cluster',
   /* Icons for special effect */
   size16 = '16',
   size20 = '20',
