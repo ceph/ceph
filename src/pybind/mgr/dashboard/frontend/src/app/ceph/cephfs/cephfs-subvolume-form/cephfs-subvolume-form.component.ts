@@ -22,7 +22,7 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 import { Observable, of } from 'rxjs';
-import { catchError, map, switchMap } from 'rxjs/operators';
+import { catchError, map } from 'rxjs/operators';
 
 @Component({
   selector: 'cd-cephfs-subvolume-form',
@@ -205,25 +205,10 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
           this.loadingReady();
         },
         error: () => {
-          this.subvolumeForm.get('snapshotVisibility').setValue(true);
+          this.subvolumeForm.get('snapshotVisibility').setValue(false);
           this.loadingReady();
         }
       });
-  }
-
-  private setSnapshotVisibility(
-    subVolumeName: string,
-    subVolumeGroupName: string,
-    visible: boolean
-  ) {
-    return this.showSnapshotVisibility
-      ? this.cephFsSubvolumeService.setSnapshotVisibility(
-          this.fsName,
-          subVolumeName,
-          visible,
-          subVolumeGroupName
-        )
-      : of({ status: 200 });
   }
 
   submit() {
@@ -235,24 +220,25 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
     const gid = this.subvolumeForm.getValue('gid');
     const mode = this.formatter.toOctalPermission(this.subvolumeForm.getValue('mode'));
     const isolatedNamespace = this.subvolumeForm.getValue('isolatedNamespace');
-    const snapshotVisibility = this.subvolumeForm.getValue('snapshotVisibility');
+    const snapshotVisibility = this.showSnapshotVisibility
+      ? this.subvolumeForm.getValue('snapshotVisibility')
+      : undefined;
 
     if (this.isEdit) {
       const editSize = size === 0 ? 'infinite' : size;
-      const visibilityCall = this.setSnapshotVisibility(
-        subVolumeName,
-        subVolumeGroupName,
-        snapshotVisibility
-      );
 
       this.taskWrapper
         .wrapTaskAroundCall({
           task: new FinishedTask('cephfs/subvolume/' + URLVerbs.EDIT, {
             subVolumeName: subVolumeName
           }),
-          call: this.cephFsSubvolumeService
-            .update(this.fsName, subVolumeName, String(editSize), subVolumeGroupName)
-            .pipe(switchMap(() => visibilityCall))
+          call: this.cephFsSubvolumeService.update(
+            this.fsName,
+            subVolumeName,
+            String(editSize),
+            subVolumeGroupName,
+            snapshotVisibility
+          )
         })
         .subscribe({
           error: () => {
@@ -268,23 +254,18 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
           task: new FinishedTask('cephfs/subvolume/' + URLVerbs.CREATE, {
             subVolumeName: subVolumeName
           }),
-          call: this.cephFsSubvolumeService
-            .create(
-              this.fsName,
-              subVolumeName,
-              subVolumeGroupName,
-              pool,
-              String(size),
-              uid,
-              gid,
-              mode,
-              isolatedNamespace
-            )
-            .pipe(
-              switchMap(() =>
-                this.setSnapshotVisibility(subVolumeName, subVolumeGroupName, snapshotVisibility)
-              )
-            )
+          call: this.cephFsSubvolumeService.create(
+            this.fsName,
+            subVolumeName,
+            subVolumeGroupName,
+            pool,
+            String(size),
+            uid,
+            gid,
+            mode,
+            isolatedNamespace,
+            snapshotVisibility
+          )
         })
         .subscribe({
           error: () => {
