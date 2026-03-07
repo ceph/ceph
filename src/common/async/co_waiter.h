@@ -46,6 +46,16 @@ class co_waiter {
  public:
   co_waiter() = default;
 
+  ~co_waiter() {
+    // Clear the cancellation slot to prevent use-after-scope
+    if (handler) {
+      auto slot = boost::asio::get_associated_cancellation_slot(*handler);
+      if (slot.is_connected()) {
+        slot.clear();
+      }
+    }
+  }
+
   // copy and move are disabled because the cancellation handler captures 'this'
   co_waiter(const co_waiter&) = delete;
   co_waiter& operator=(const co_waiter&) = delete;
@@ -115,6 +125,16 @@ class co_waiter<void, Executor> {
   };
  public:
   co_waiter() = default;
+
+  ~co_waiter() {
+    // Clear the cancellation slot to prevent use-after-scope
+    if (handler) {
+      auto slot = boost::asio::get_associated_cancellation_slot(*handler);
+      if (slot.is_connected()) {
+        slot.clear();
+      }
+    }
+  }
 
   // copy and move are disabled because the cancellation handler captures 'this'
   co_waiter(const co_waiter&) = delete;
