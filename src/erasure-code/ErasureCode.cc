@@ -62,8 +62,20 @@ int ErasureCode::init(
   err |= to_string("crush-device-class", profile,
 		   &rule_device_class,
 		   "", ss);
+  err |= to_int("r", profile,
+		&replicas,
+		"1", ss);
   if (err)
     return err;
+  
+  // Validate replicas parameter
+  if (replicas < 1) {
+    if (ss) {
+      *ss << "r=" << replicas << " must be >= 1" << std::endl;
+    }
+    return -EINVAL;
+  }
+  
   _profile = profile;
   return 0;
 }

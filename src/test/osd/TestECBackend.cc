@@ -23,279 +23,9 @@
 #include "osd/osd_types.h"
 #include "common/ceph_argparse.h"
 #include "erasure-code/ErasureCode.h"
+#include "test/osd/MockErasureCode.h"
 
 using namespace std;
-
-TEST(ECUtil, stripe_info_t)
-{
-  const uint64_t swidth = 4096;
-  const unsigned int k = 4;
-  const unsigned int m = 2;
-
-  ECUtil::stripe_info_t s(k, m, swidth);
-  ASSERT_EQ(s.get_stripe_width(), swidth);
-
-  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(0), 0u);
-  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(1), s.get_chunk_size());
-  ASSERT_EQ(s.ro_offset_to_next_chunk_offset(swidth - 1),
-	    s.get_chunk_size());
-
-  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset(0), 0u);
-  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset(swidth), s.get_chunk_size());
-  ASSERT_EQ(s.ro_offset_to_prev_chunk_offset((swidth * 2) - 1),
-	    s.get_chunk_size());
-
-  ASSERT_EQ(s.ro_offset_to_next_stripe_ro_offset(0), 0u);
-  ASSERT_EQ(s.ro_offset_to_next_stripe_ro_offset(swidth - 1),
-	    s.get_stripe_width());
-
-  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset(swidth), s.get_stripe_width());
-  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset(swidth), s.get_stripe_width());
-  ASSERT_EQ(s.ro_offset_to_prev_stripe_ro_offset((swidth * 2) - 1),
-	    s.get_stripe_width());
-
-  ASSERT_EQ(s.aligned_ro_offset_to_chunk_offset(2*swidth),
-	    2*s.get_chunk_size());
-  ASSERT_EQ(s.shard_offset_to_ro_offset(shard_id_t(0), 2*s.get_chunk_size()),
-	    2*s.get_stripe_width());
-
-  // Stripe 1 + 1 chunk for 10 stripes needs to read 11 stripes starting
-  // from 1 because there is a partial stripe at the start and end
-  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(swidth+s.get_chunk_size(), 10*swidth),
-	    make_pair(s.get_chunk_size(), 11*s.get_chunk_size()));
-
-  // Stripe 1 + 0 chunks for 10 stripes needs to read 10 stripes starting
-  // from 1 because there are no partial stripes
-  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(swidth, 10*swidth),
-	    make_pair(s.get_chunk_size(), 10*s.get_chunk_size()));
-
-  // Stripe 0 + 1 chunk for 10 stripes needs to read 11 stripes starting
-  // from 0 because there is a partial stripe at the start and end
-  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(s.get_chunk_size(), 10*swidth),
-	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
-
-  // Stripe 0 + 1 chunk for (10 stripes + 1 chunk) needs to read 11 stripes
-  // starting from 0 because there is a partial stripe at the start and end
-  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(s.get_chunk_size(),
-							  10*swidth + s.get_chunk_size()),
-	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
-
-  // Stripe 0 + 2 chunks for (10 stripes + 2 chunks) needs to read 11 stripes
-  // starting from 0 because there is a partial stripe at the start
-  ASSERT_EQ(s.chunk_aligned_ro_range_to_shard_ro_range(2*s.get_chunk_size(),
-    10*swidth + 2*s.get_chunk_size()),
-    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
-
-  ASSERT_EQ(s.ro_offset_len_to_stripe_ro_offset_len(swidth-10, (uint64_t)20),
-            make_pair((uint64_t)0, 2*swidth));
-}
-
-class ErasureCodeDummyImpl : public ErasureCodeInterface {
-public:
-
-  uint64_t get_supported_optimizations() const override {
-    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
-          FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
-          FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
-          FLAG_EC_PLUGIN_ZERO_PADDING_OPTIMIZATION |
-          FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
-  }
-
-  ErasureCodeProfile _profile;
-  const std::vector<shard_id_t> chunk_mapping = {}; // no remapping
-  std::vector<std::pair<int, int>> default_sub_chunk = {std::pair(0,1)};
-  int data_chunk_count = 4;
-  int chunk_count = 6;
-
-  int init(ErasureCodeProfile &profile, std::ostream *ss) override {
-    return 0;
-  }
-
-  const ErasureCodeProfile &get_profile() const override {
-    return _profile;
-  }
-
-  int create_rule(const string &name, CrushWrapper &crush, std::ostream *ss) const override {
-    return 0;
-  }
-
-  unsigned int get_chunk_count() const override {
-    return chunk_count;
-  }
-
-  unsigned int get_data_chunk_count() const override {
-    return data_chunk_count;
-  }
-
-  unsigned int get_coding_chunk_count() const override {
-    return 0;
-  }
-
-  int get_sub_chunk_count() override {
-    return 1;
-  }
-
-  unsigned int get_chunk_size(unsigned int stripe_width) const override {
-    return 0;
-  }
-
-  int minimum_to_decode(const shard_id_set &want_to_read, const shard_id_set &available,
-                        shard_id_set &minimum_set,
-			shard_id_map<std::vector<std::pair<int, int>>> *minimum_sub_chunks) override {
-    bool recover = false;
-    for (shard_id_t shard : want_to_read) {
-      if (available.contains(shard)) {
-        minimum_set.insert(shard);
-      } else {
-        recover = true;
-        break;
-      }
-    }
-
-    if (recover) {
-      minimum_set.clear();
-
-      // Shard is missing.  Recover with every other shard and one parity
-      // for each missing shard.
-      for (auto a : available) {
-        minimum_set.insert(a);
-        if (std::cmp_equal(minimum_set.size(), data_chunk_count)) {
-          break;
-        }
-      }
-
-      if (std::cmp_not_equal(minimum_set.size(), data_chunk_count)) {
-        minimum_set.clear();
-        return -EIO; // Cannot recover.
-      }
-    }
-
-    for (auto &&shard : minimum_set) {
-      minimum_sub_chunks->emplace(shard, default_sub_chunk);
-    }
-    return 0;
-  }
-  [[deprecated]]
-  int minimum_to_decode(const std::set<int> &want_to_read,
-    const std::set<int> &available,
-    std::map<int, std::vector<std::pair<int, int>>> *minimum) override
-  {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  [[deprecated]]
-  int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
-      const std::map<int, int> &available, std::set<int> *minimum) override {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  int minimum_to_decode_with_cost(const shard_id_set &want_to_read, const shard_id_map<int> &available,
-                                shard_id_set *minimum) override {
-    return 0;
-  }
-
-  int encode(const shard_id_set &want_to_encode, const bufferlist &in, shard_id_map<bufferlist> *encoded) override {
-    return 0;
-  }
-
-  [[deprecated]]
-  int encode(const std::set<int> &want_to_encode, const bufferlist &in
-    , std::map<int, bufferlist> *encoded) override
-  {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  [[deprecated]]
-  int encode_chunks(const std::set<int> &want_to_encode,
-                    std::map<int, bufferlist> *encoded) override
-  {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  int encode_chunks(const shard_id_map<bufferptr> &in, shard_id_map<bufferptr> &out) override {
-    return 0;
-  }
-
-  int decode(const shard_id_set &want_to_read, const shard_id_map<bufferlist> &chunks, shard_id_map<bufferlist> *decoded,
-	     int chunk_size) override {
-    return 0;
-  }
-
-  [[deprecated]]
-  int decode(const std::set<int> &want_to_read, const std::map<int, bufferlist> &chunks,
-    std::map<int, bufferlist> *decoded, int chunk_size) override
-  {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  [[deprecated]]
-  int decode_chunks(const std::set<int> &want_to_read,
-                    const std::map<int, bufferlist> &chunks,
-                    std::map<int, bufferlist> *decoded) override {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  int decode_chunks(const shard_id_set &want_to_read,
-                    shard_id_map<bufferptr> &in, shard_id_map<bufferptr> &out) override
-  {
-    if (std::cmp_less(in.size(), data_chunk_count)) {
-      ADD_FAILURE();
-    }
-    uint64_t len = 0;
-    for (auto &&[shard, bp] : in) {
-      if (len == 0) {
-        len = bp.length();
-      } else if (len != bp.length()) {
-        ADD_FAILURE();
-      }
-    }
-    if (len == 0) {
-      ADD_FAILURE();
-    }
-    if (out.size() == 0) {
-      ADD_FAILURE();
-    }
-    for (auto &&[shard, bp] : out) {
-      if (len != bp.length()) {
-        ADD_FAILURE();
-      }
-      if (bp.is_zero_fast()) {
-        ADD_FAILURE();
-      }
-    }
-    return 0;
-  }
-
-  const vector<shard_id_t> &get_chunk_mapping() const override {
-    return chunk_mapping;
-  }
-
-  [[deprecated]]
-  int decode_concat(const std::set<int> &want_to_read,
-                    const std::map<int, bufferlist> &chunks, bufferlist *decoded) override {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  [[deprecated]]
-  int decode_concat(const std::map<int, bufferlist> &chunks,
-                    bufferlist *decoded) override {
-    ADD_FAILURE();
-    return 0;
-  }
-
-  size_t get_minimum_granularity() override { return 0; }
-  void encode_delta(const bufferptr &old_data, const bufferptr &new_data
-    , bufferptr *delta) override {}
-  void apply_delta(const shard_id_map<bufferptr> &in
-    , shard_id_map<bufferptr> &out) override {}
-};
 
 class ECListenerStub : public ECListener {
 
@@ -547,7 +277,7 @@ TEST(ECCommon, get_min_want_to_read_shards)
   ASSERT_EQ(s.get_chunk_size(), csize);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeInterfaceRef ec_impl(new ErasureCodeDummyImpl);
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
   ECUtil::shard_extent_set_t empty_extent_set_map(s.get_k_plus_m());
@@ -797,7 +527,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
   ASSERT_EQ(s.get_chunk_size(), swidth / k);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
+  MockErasureCode *ecode = new MockErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
@@ -1050,7 +780,7 @@ TEST(ECCommon, shard_read_combo_tests)
   ASSERT_EQ(s.get_chunk_size(), swidth/k);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
+  MockErasureCode *ecode = new MockErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
@@ -1130,7 +860,7 @@ TEST(ECCommon, get_min_want_to_read_shards_bug67087)
   ASSERT_EQ(s.get_chunk_size(), csize);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeInterfaceRef ec_impl(new ErasureCodeDummyImpl);
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
   ECUtil::shard_extent_set_t want_to_read(s.get_k_plus_m());
@@ -1171,7 +901,7 @@ TEST(ECCommon, get_remaining_shards)
   ASSERT_EQ(s.get_chunk_size(), swidth/k);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
+  MockErasureCode *ecode = new MockErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
@@ -1268,7 +998,7 @@ TEST(ECCommon, encode)
   ASSERT_EQ(s.get_chunk_size(), swidth/k);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
+  MockErasureCode *ecode = new MockErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
@@ -1313,9 +1043,7 @@ void test_decode(unsigned int k, unsigned int m, uint64_t chunk_size, uint64_t o
   ASSERT_EQ(s.get_chunk_size(), swidth/k);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
-  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
-  ecode->data_chunk_count = k;
-  ecode->chunk_count = k + m;
+  MockErasureCode *ecode = new MockErasureCode(k, k + m);
   ErasureCodeInterfaceRef ec_impl(ecode);
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
