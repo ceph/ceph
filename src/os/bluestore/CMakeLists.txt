@@ -6,6 +6,7 @@ add_library(bluestore OBJECT
   bluefs_types.cc
   BlueRocksEnv.cc
   BlueStore.cc
+  BlueFSCache.cc
   BlueStore_debug.cc
   simple_bitmap.cc
   bluestore_types.cc
