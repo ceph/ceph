@@ -31,9 +31,11 @@ test_path = os.path.normpath(os.path.dirname(os.path.realpath(__file__))) + '/..
 def bash(cmd, **kwargs):
     log.debug('running command: %s', ' '.join(cmd))
     kwargs['stdout'] = subprocess.PIPE
+    kwargs["stderr"] = subprocess.PIPE
+    kwargs["text"] = True
     process = subprocess.Popen(cmd, **kwargs)
-    s = process.communicate()[0].decode('utf-8')
-    return (s, process.returncode)
+    stdout, stderr = process.communicate()
+    return (stdout, stderr, process.returncode)
 
 
 def admin(args, **kwargs):
@@ -96,9 +98,9 @@ def another_user(tenant=None):
     secret_key = str(time.time())
     uid = 'superman' + str(time.time())
     if tenant:
-        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])  
+        _, _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])
     else:
-        _, result = admin(['user', 'create', '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])  
+        _, _, result = admin(['user', 'create', '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])
 
     assert result == 0
     hostname = get_config_host()
@@ -116,15 +118,20 @@ def another_user(tenant=None):
     return client
 
 
-def put_script(script, context, tenant=None):
+def put_script(script, context, tenant=None, script_name=None):
     fp = tempfile.NamedTemporaryFile(mode='w+')
     fp.write(script)
     fp.flush()
+    
+    args = ['script', 'put', '--infile', fp.name, '--context', context]
     if tenant:
-        result = admin(['script', 'put', '--infile', fp.name, '--context', context, '--tenant', tenant])
-    else:
-        result = admin(['script', 'put', '--infile', fp.name, '--context', context])
+        args.append('--tenant')
+        args.append(tenant)
+    if script_name:
+        args.append('--script-name')
+        args.append(script_name)
 
+    result = admin(args)
     fp.close()
     return result
 
@@ -213,20 +220,71 @@ def test_script_management():
     for context in contexts:
         script = 'print("hello from ' + context + '")'
         result = put_script(script, context)
-        assert result[1] == 0
+        assert result[2] == 0
         scripts[context] = script
     for context in contexts:
         result = admin(['script', 'get', '--context', context])
-        assert result[1] ==  0
+        assert result[2] == 0
         assert result[0].strip() == scripts[context]
     for context in contexts:
         result = admin(['script', 'rm', '--context', context])
-        assert result[1] == 0
+        assert result[2] == 0
     for context in contexts:
         result = admin(['script', 'get', '--context', context])
-        assert result[1] == 0
+        assert result[2] == 0
         assert result[0].strip() == 'no script exists for context: ' + context
 
+@pytest.mark.basic_test
+def test_multi_script_unsupported():
+    contexts = ['getdata', 'putdata']
+    for context in contexts:
+        result = put_script('print("hello")', context, None, 'test')
+        assert result[2] != 0
+        assert f"ERROR: cannot create more than one Lua script in the {context} context; remove the --script-name flag" in result[1]
+
+@pytest.mark.basic_test
+def test_multi_script_management():
+    contexts = ['prerequest', 'postauth', 'postrequest', 'background'] # getdata and putdata contexts cannot use --script-name
+    script_names = ["c", "b", "a"]
+    scripts = {}
+    for context in contexts:
+        for script_name in script_names:
+            script = 'print("hello from ' + '{} ({})'.format(context, script_name) + ' script")'
+            result = put_script(script, context, None, script_name)
+            assert result[2] == 0
+            scripts.setdefault(context, {})[script_name] = script
+    for context in contexts:
+        for script_name in script_names:
+            result = admin(['script', 'get', '--context', context, '--script-name', script_name])
+            assert result[2] == 0
+            assert result[0].strip() == scripts[context][script_name]
+    for context in contexts:
+         result = admin(['script', 'list', '--context', context])
+         assert result[2] == 0
+         assert result[0].strip() == "a\nb\nc"
+    # remove one script and verify the others remain in sorted order
+    for context in contexts:
+        result = admin(['script', 'rm', '--context', context, '--script-name', 'b'])
+        assert result[2] == 0
+    for context in contexts:
+        result = admin(['script', 'get', '--context', context, '--script-name', 'a'])
+        assert result[2] == 0
+        assert result[0].strip() == scripts[context]['a']
+        result = admin(['script', 'get', '--context', context, '--script-name', 'c'])
+        assert result[2] == 0
+        assert result[0].strip() == scripts[context]['c']
+        result = admin(['script', 'list', '--context', context])
+        assert result[2] == 0
+        assert result[0].strip() == "a\nc"
+    for context in contexts:
+        for script_name in ['c', 'a']:
+            result = admin(['script', 'rm', '--context', context, '--script-name', script_name])
+            assert result[2] == 0
+    for context in contexts:
+        for script_name in script_names:
+            result = admin(['script', 'get', '--context', context, '--script-name', script_name])
+            assert result[2] == 0
+            assert result[0].strip() == "'{}' script does not exist in context: ".format(script_name) + context
 
 @pytest.mark.basic_test
 def test_script_management_with_tenant():
@@ -238,26 +296,58 @@ def test_script_management_with_tenant():
         for t in ['', tenant]:
             script = 'print("hello from ' + context + ' and ' + tenant + '")'
             result = put_script(script, context, t)
-            assert result[1] ==  0
+            assert result[2] == 0
             scripts[context+t] = script
     for context in contexts:
         result = admin(['script', 'get', '--context', context])
-        assert result[1] == 0
+        assert result[2] == 0
         assert result[0].strip(), scripts[context]
         result = admin(['script', 'rm', '--context', context])
-        assert result[1] == 0
+        assert result[2] == 0
         result = admin(['script', 'get', '--context', context])
-        assert result[1] == 0
+        assert result[2] == 0
         assert result[0].strip(), 'no script exists for context: ' + context
         result = admin(['script', 'get', '--context', context, '--tenant', tenant])
-        assert result[1] == 0
+        assert result[2] == 0
         assert result[0].strip(), scripts[context+tenant]
         result = admin(['script', 'rm', '--context', context, '--tenant', tenant])
-        assert result[1] == 0
+        assert result[2] == 0
         result = admin(['script', 'get', '--context', context, '--tenant', tenant])
-        assert result[1] == 0
+        assert result[2] == 0
         assert result[0].strip(), 'no script exists for context: ' + context + ' in tenant: ' + tenant
 
+@pytest.mark.basic_test
+def test_multi_script_management_with_tenant():
+    tenant = 'mytenant'
+    conn2 = another_user(tenant)
+    contexts = ['prerequest', 'postauth', 'postrequest'] # background context cannot use a tenant, getdata and putdata contexts cannot use --script-name
+    script_names = ["c", "b", "a"]
+    scripts = {}
+    for context in contexts:
+        for t in ['', tenant]:
+            for script_name in script_names:
+                script = 'print("hello from ' + '{} ({})'.format(context, script_name) + ' and ' + tenant + '")'
+                result = put_script(script, context, t, script_name)
+                assert result[2] == 0
+                scripts.setdefault(context+t, {})[script_name] = script
+    for context in contexts:
+        for script_name in script_names:
+            result = admin(['script', 'get', '--context', context, '--script-name', script_name])
+            assert result[2] == 0
+            assert result[0].strip(), scripts[context][script_name]
+            result = admin(['script', 'rm', '--context', context, '--script-name', script_name])
+            assert result[2] == 0
+            result = admin(['script', 'get', '--context', context, '--script-name', script_name])
+            assert result[2] == 0
+            assert result[0].strip(), "'{}' script does not exist in context: ".format(script_name) + context
+            result = admin(['script', 'get', '--context', context, '--tenant', tenant, '--script-name', script_name])
+            assert result[2] == 0
+            assert result[0].strip(), scripts[context+tenant][script_name]
+            result = admin(['script', 'rm', '--context', context, '--tenant', tenant, '--script-name', script_name])
+            assert result[2] == 0
+            result = admin(['script', 'get', '--context', context, '--tenant', tenant, '--script-name', script_name])
+            assert result[2] == 0
+            assert result[0].strip(), "'{}' script does not exist in context: ".format(script_name) + context + ' in tenant: ' + tenant
 
 @pytest.mark.request_test
 def test_put_obj():
@@ -273,7 +363,7 @@ end
 '''
     context = "prerequest"
     result = put_script(script, context)
-    assert result[1] == 0
+    assert result[2] == 0
 	
     conn = connection()
     bucket_name = gen_bucket_name()
@@ -300,7 +390,7 @@ end
     contexts = ['prerequest', 'postauth', 'postrequest', 'getdata', 'putdata']
     for context in contexts:
         result = admin(['script', 'rm', '--context', context])
-        assert result[1] == 0
+        assert result[2] == 0
 
 
 @pytest.mark.example_test
@@ -327,7 +417,7 @@ RGWDebugLog("op was: "..Request.RGWOp)
     for context in contexts:
         footer = '\nRGWDebugLog("context was: '+context+'\\n\\n")'
         result = put_script(script+footer, context)
-        assert result[1] == 0
+        assert result[2] == 0
 	
     conn = connection()
     bucket_name = gen_bucket_name()
@@ -352,7 +442,7 @@ RGWDebugLog("op was: "..Request.RGWOp)
     contexts = ['prerequest', 'postauth', 'postrequest', 'getdata', 'putdata']
     for context in contexts:
         result = admin(['script', 'rm', '--context', context])
-        assert result[1] == 0
+        assert result[2] == 0
 
 
 @pytest.mark.example_test
@@ -390,7 +480,7 @@ RGWDebugLog("payload size of chunk of: " .. full_name .. " is: " .. #Data)
 '''
 
     result = put_script(script, "putdata")
-    assert result[1] == 0
+    assert result[2] == 0
 
     conn = connection()
     bucket_name = gen_bucket_name()
@@ -409,7 +499,7 @@ RGWDebugLog("payload size of chunk of: " .. full_name .. " is: " .. #Data)
     contexts = ['prerequest', 'postauth', 'postrequest', 'background', 'getdata', 'putdata']
     for context in contexts:
         result = admin(['script', 'rm', '--context', context])
-        assert result[1] == 0
+        assert result[2] == 0
 
 
 @pytest.mark.example_test
@@ -440,13 +530,13 @@ end
 '''.format(socket_path)
 
     result = admin(['script-package', 'add', '--package=lua-cjson', '--allow-compilation'])
-    assert result[1] ==  0
+    assert result[2] == 0
     result = admin(['script-package', 'add', '--package=luasocket', '--allow-compilation'])
-    assert result[1] == 0 
+    assert result[2] == 0
     result = admin(['script-package', 'reload'])
-    assert result[1] == 0 
+    assert result[2] == 0
     result = put_script(script, "postrequest")
-    assert result[1] == 0 
+    assert result[2] == 0
 
     socket_server = UnixSocket(socket_path)
     try:
@@ -480,8 +570,88 @@ end
         contexts = ['prerequest', 'postauth', 'postrequest', 'background', 'getdata', 'putdata']
         for context in contexts:
             result = admin(['script', 'rm', '--context', context])
-            assert result[1] == 0
+            assert result[2] == 0
 
+@pytest.mark.example_test
+def test_multi_access_log():
+    bucket_name = gen_bucket_name()
+    socket_path = '/tmp/'+bucket_name
+
+    result = admin(['script-package', 'add', '--package=lua-cjson', '--allow-compilation'])
+    assert result[2] == 0
+    result = admin(['script-package', 'add', '--package=luasocket', '--allow-compilation'])
+    assert result[2] == 0
+    result = admin(['script-package', 'reload'])
+    assert result[2] == 0
+
+    script_names = ["b", "a"]
+    for name in script_names:
+        delay = 0.5*script_names.index(name)
+        script = '''
+if Request.RGWOp == "get_obj" then
+    local json = require("cjson")
+    local socket = require("socket")
+    local unix = require("socket.unix")
+    local s = unix()
+    E = {{}}
+
+    -- sleep 0.5s for a and 0s for b
+    -- we should expect script a to execute first despite taking longer to connect to the socket
+    {}
+
+    msg = {{bucket = (Request.Bucket or (Request.CopyFrom or E).Bucket).Name,
+        object = Request.Object.Name,
+        time = Request.Time,
+        script_name = "{}",
+        operation = Request.RGWOp,
+        http_status = Request.Response.HTTPStatusCode,
+        error_code = Request.Response.HTTPStatus,
+        object_size = Request.Object.Size,
+        trans_id = Request.TransactionId}}
+    assert(s:connect("{}"))
+    s:send(json.encode(msg).."\\n")
+    s:close()
+end
+    '''.format("" if delay == 0 else "socket.sleep({})".format(delay), name, socket_path)
+        result = put_script(script, "postrequest", None, name)
+        assert result[2] == 0
+
+    socket_server = UnixSocket(socket_path)
+    try:
+        conn = connection()
+        # create bucket
+        bucket = conn.create_bucket(Bucket=bucket_name)
+        # create objects in the bucket (async)
+        number_of_objects = 3
+        keys = []
+        for i in range(number_of_objects):
+            content = str(os.urandom(1024)).encode("ascii")
+            key = str(i)
+            conn.put_object(Body=content, Bucket=bucket_name, Key=key)
+            keys.append(key)
+
+        for key in conn.list_objects(Bucket=bucket_name)['Contents']:
+            conn.get_object(Bucket=bucket_name, Key=key['Key'])
+
+        time.sleep(3)
+        events = {}
+        for event in socket_server.get_and_reset_events():
+            assert event['bucket'] == bucket_name
+            events[event['object']] = events.get(event['object'], []) + [event['script_name']]
+
+        assert len(events) == number_of_objects
+        sorted_script_names = sorted(script_names)
+        for obj in events:
+            assert sorted_script_names == events[obj]
+
+    finally:
+        socket_server.shutdown()
+        delete_all_objects(conn, bucket_name)
+        conn.delete_bucket(Bucket=bucket_name)
+        contexts = ['prerequest', 'postrequest', 'background', 'getdata', 'putdata']
+        for context in contexts:
+            result = admin(['script', 'rm', '--context', context])
+            assert result[2] == 0
 
 @pytest.mark.example_test
 def test_interrupt_request():
@@ -494,16 +664,19 @@ def test_interrupt_request():
     conn.create_bucket(Bucket=bucket_name)
     
     result = put_script(script, "prerequest")
-    assert result[1] == 0
+    assert result[2] == 0
+
+    # sleep to allow lua_bytecode_cache to sync
+    time.sleep(5)
+
     key = "hello"
-    
     try:
         conn.put_object(Body="this should be blocked".encode("ascii"), Bucket=bucket_name, Key=key)
         pytest.fail("The put_object operation was not blocked by the Lua script.")
     except Exception as e:
         pass
 
-    out, err = admin(['script', 'rm', '--context', 'prerequest'])
+    out, _, err = admin(['script', 'rm', '--context', 'prerequest'])
     assert err == 0
 
     try:
@@ -524,18 +697,21 @@ def test_interrupt_request_postauth():
     conn = connection()
     bucket_name = gen_bucket_name()
     conn.create_bucket(Bucket=bucket_name)
-    
+
     result = put_script(script, "postauth")
-    assert result[1] == 0
+    assert result[2] == 0
     key = "hello"
-    
+
+    # sleep to allow lua_bytecode_cache to sync
+    time.sleep(5)
+
     try:
         conn.put_object(Body="this should be blocked".encode("ascii"), Bucket=bucket_name, Key=key)
         pytest.fail("The put_object operation was not blocked by the Lua script.")
     except Exception as e:
         pass
 
-    out, err = admin(['script', 'rm', '--context', 'postauth'])
+    out, _, err = admin(['script', 'rm', '--context', 'postauth'])
     assert err == 0
 
     try:
@@ -545,4 +721,85 @@ def test_interrupt_request_postauth():
         assert e.response['Error']['Code'] == 'NoSuchKey'
         log.info("Successfully confirmed that the request was interrupted.")
 
+    conn.delete_bucket(Bucket=bucket_name)
+
+@pytest.mark.example_test
+def test_cache_invalidation():
+    # This test covers possible race conditions in the lua bytecode cache in the
+    # background thread.
+    #
+    # When a script is added via put_script(), its script OID is pushed onto the
+    # processing_q and the background thread eventually consumes one or more script
+    # OIDs to update the in-memory cache.
+    #
+    # If you attempt to override a script by calling put_script() a second time,
+    # a subsequent call to execute() right after the second put_script() can race
+    # with the background thread's script OID update, leading to sometimes reusing
+    # the old bytecode cache.
+    #
+    # In the example test below, we first deploy a script that returns 0 status code.
+    # If we quickly overwrite with a new script that we expect to return -EPERM and it
+    # fails to assert the -EPERM then it implies the old bytecode cache is still being
+    # read.
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    conn.create_bucket(Bucket=bucket_name)
+    contexts = ['prerequest']
+    for context in contexts:
+        # SCRIPT 1: run the test_put_obj first but do not remove the script
+        script = '''
+    RGWDebugLog("op was: "..Request.RGWOp)
+    if Request.RGWOp == "put_obj" then
+        local object = Request.Object
+        local message = Request.bucket.Name .. "," .. object.Name ..
+            "," .. object.Id .. "," .. object.Size .. "," .. object.MTime
+        RGWDebugLog("set: x-amz-meta-test to: " .. message)
+        Request.HTTP.Metadata["x-amz-meta-test"] = message
+    end
+    '''
+        result = put_script(script, context)
+        assert result[2] == 0
+
+        key = f"hello-{context}"
+        conn.put_object(Body=f"this should not be blocked in the {context} context".encode("ascii"), Bucket=bucket_name, Key=key)
+
+        # sleep to allow lua_bytecode_cache to sync
+        time.sleep(5)
+
+        result = conn.get_object(Bucket=bucket_name, Key=key)
+        message = result['ResponseMetadata']['HTTPHeaders']['x-amz-meta-test']
+
+        # The MTime part is supposed to be a datetime "1970-01-01 00:00:00"
+        # however in different TZ environment the hours can be different,
+        # for example, for UTC+1, zero date turns into "1970-01-01 01:00:00",
+        # while for UTC-1, it is "1969-12-31 23:00:00", so we only check
+        # if the date corresponds to either of those two days.
+        assert ',' in message
+        (message_without_mtime, message_mtime) = message.rsplit(',', 1)
+        assert message_without_mtime == f"{bucket_name},{key},{key},0"
+        assert message_mtime[:10] in ['1969-12-31', '1970-01-01']
+
+        # SCRIPT 2: immediately create a script that forces an abort
+        script = '''
+            return RGW_ABORT_REQUEST
+        '''
+
+        result = put_script(script, context)
+        assert result[2] == 0
+
+        # sleep to allow lua_bytecode_cache to sync
+        time.sleep(5)
+
+        # If there is a caching/race/timing issue, SCRIPT 1 may be executed here instead of SCRIPT 2.
+        try:
+            conn.put_object(Body=f"this should be blocked in the {context} context".encode("ascii"), Bucket=bucket_name, Key=key)
+
+            pytest.fail(f"The put_object operation was not blocked by the Lua script in the {context} context.")
+        except Exception as e:
+            pass
+
+        out, _, err = admin(['script', 'rm', '--context', context])
+        assert err == 0
+
+    delete_all_objects(conn, bucket_name)
     conn.delete_bucket(Bucket=bucket_name)
