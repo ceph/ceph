@@ -2959,3 +2959,56 @@ Traceback (most recent call last):
                 assert wait(cephadm_module, c) == ['Scheduled osd.foo update...']
 
                 cephadm_module.set_osd_spec('osd.foo', ['1'])
+
+
+class TestCephadmBinaryLoggingLevel:
+    """Test that host-status / cephadm binary logs are suppressed based on
+    mgr/cephadm/cephadm_binary_logging_level.
+    """
+    @pytest.mark.parametrize("logging_level", ['info', 'debug', 'error', 'warning'])
+    @mock.patch("cephadm.ssh.SSHManager._remote_connection")
+    @mock.patch("cephadm.ssh.SSHManager._execute_command")
+    @mock.patch("cephadm.ssh.SSHManager._check_execute_command")
+    def test_check_host_invokes_cephadm_with_logging_level(
+        self, check_execute_command, execute_command, remote_connection, cephadm_module, logging_level
+    ):
+        """Cephadm binary must be invoked with --logging-level matching
+        mgr/cephadm/cephadm_binary_logging_level (info, debug, error, warning).
+        Check that mgr builds the cephadm command with appropriate --logging-level flag
+        Use check-host as a sample command although all cephadm commands receive the flag.
+        """
+        remote_connection.side_effect = async_side_effect(mock.Mock())
+        check_execute_command.side_effect = async_side_effect('/usr/bin/python3')
+        captured_commands = []
+
+        async def capture_execute(host, cmd, *args, **kwargs):
+            if hasattr(cmd, 'args'):
+                if 'check-host' in cmd.args:
+                    captured_commands.append(cmd)
+                # Return valid JSON for commands that use _run_cephadm_json
+                if 'ls' in cmd.args:
+                    return ('[]', '', 0)
+                if 'gather-facts' in cmd.args:
+                    return ('{}', '', 0)
+                if 'list-networks' in cmd.args:
+                    return ('[]', '', 0)
+            return ('', '', 0)
+
+        execute_command.side_effect = capture_execute
+
+        cephadm_module.cephadm_binary_logging_level = logging_level
+        with with_host(cephadm_module, 'test'):
+            pass
+
+        check_host_cmds = [c for c in captured_commands if 'check-host' in c.args]
+        assert len(check_host_cmds) >= 1, (
+            f'expected at least one check-host invocation for level {logging_level!r}'
+        )
+        cmd = check_host_cmds[0]
+        assert '--logging-level' in cmd.args, (
+            f'cephadm should be called with --logging-level when level is {logging_level!r}'
+        )
+        idx = cmd.args.index('--logging-level')
+        assert cmd.args[idx + 1] == logging_level, (
+            f'cephadm should be called with --logging-level {logging_level!r}'
+        )

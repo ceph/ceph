@@ -1719,6 +1719,9 @@ class CephadmServe:
         if image:
             final_args.extend(['--image', image])
 
+        cephadm_log_level = self.mgr.cephadm_binary_logging_level or 'debug'
+        final_args.extend(['--logging-level', cephadm_log_level])
+
         if not self.mgr.container_init:
             final_args += ['--no-container-init']
 
