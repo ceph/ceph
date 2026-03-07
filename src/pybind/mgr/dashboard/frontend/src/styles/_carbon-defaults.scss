@@ -298,3 +298,10 @@ Tabs
 .cds--text-truncate--end {
   @include textTruncate.text-truncate-end;
 }
+
+// so that all the input fields in the modal will have
+// a different background color than the modal itself, to make them more distinguishable.
+// this is the equivalent of [cdsLayer=2] in all the forms in modal
+.cds--modal-content {
+  @extend .cds--layer-three;
+}
