@@ -412,6 +412,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Maximum number of OSD daemons upgraded in parallel.'
         ),
         Option(
+            'upgrade_osd_flags',
+            type='str',
+            default='noout,noscrub,nodeep-scrub',
+            desc='Comma separated list of OSD flags to set for the duration of an upgrade'
+        ),
+        Option(
             'service_discovery_port',
             type='int',
             default=8765,
@@ -597,6 +603,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
             self.max_parallel_osd_upgrades = 16
+            self.upgrade_osd_flags = 'noout,noscrub,nodeep-scrub'
             self.device_enhanced_scan = False
             self.inventory_list_all = False
             self.cgroups_split = True
@@ -4080,7 +4087,7 @@ Then run the following:
 
     @handle_orch_error
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None, host_placement: Optional[str] = None,
-                      services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
+                      services: Optional[List[str]] = None, limit: Optional[int] = None, no_osd_flags: bool = False) -> str:
         if self.inventory.get_host_with_state("maintenance"):
             raise OrchestratorError("Upgrade aborted - you have host(s) in maintenance state")
         if self.offline_hosts:
@@ -4112,7 +4119,7 @@ Then run the following:
                 raise OrchestratorError(
                     f'Upgrade aborted - --limit arg must be a positive integer, not {limit}')
 
-        return self.upgrade.upgrade_start(image, version, daemon_types, hosts, services, limit)
+        return self.upgrade.upgrade_start(image, version, daemon_types, hosts, services, limit, no_osd_flags)
 
     @handle_orch_error
     def upgrade_pause(self) -> str:
