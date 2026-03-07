@@ -322,6 +322,12 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
   // optional part number
   auto optstr = s->info.args.get_optional("partNumber");
   if (optstr) {
+    auto range_str = s->info.env->get("HTTP_RANGE");
+    if (range_str) {
+      s->err.message = "Cannot specify both Range header and partNumber query parameter";
+      return -ERR_INVALID_REQUEST;
+    }
+
     string err;
     multipart_part_num = strict_strtol(optstr->c_str(), 10, &err);
     if (!err.empty()) {
@@ -531,6 +537,10 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 
   if (multipart_parts_count && *multipart_parts_count > 0) {
     dump_header(s, "x-amz-mp-parts-count", *multipart_parts_count);
+  }
+
+  if (multipart_part_num && multipart_part_ofs && full_obj_size) {
+    dump_range(s, *multipart_part_ofs, *multipart_part_ofs + total_len - 1, *full_obj_size);
   }
 
   if (! op_ret) {
