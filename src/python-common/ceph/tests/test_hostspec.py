@@ -37,4 +37,12 @@ def test_parse_host_specs(test_input, expected):
 def test_parse_host_specs(bad_input):
     with pytest.raises(SpecValidationError):
         hs = HostSpec.from_json(bad_input)
+
+
+def test_hostname_case_insensitive():
+    # Test hostname is lowercased
+    hs = HostSpec(hostname="Ceph-Node-00")
+    assert hs.hostname == "ceph-node-00"
     
+    hs2 = HostSpec.from_json({"hostname": "MyHost"})
+    assert hs2.hostname == "myhost"
