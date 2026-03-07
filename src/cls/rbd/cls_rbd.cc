@@ -76,6 +76,7 @@ CLS_VER(2,0)
 CLS_NAME(rbd)
 
 #define RBD_MAX_KEYS_READ 64
+#define RBD_MAX_SNAP_HARD_LIMIT 16383
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
 #define RBD_SNAP_CHILDREN_KEY_PREFIX "snap_children_"
 #define RBD_DIR_ID_KEY_PREFIX "id_"
@@ -2371,6 +2372,9 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  // Hard cap to prevent MOSDOp __u16 num_ops overflow (4 ops per snapshot)
+  snap_limit = std::min(snap_limit, (uint64_t)RBD_MAX_SNAP_HARD_LIMIT);
+
   snap_meta.timestamp = ceph_clock_now();
 
   uint64_t total_read = 0;
@@ -4389,6 +4393,9 @@ int old_snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   } else if (rc < 0) {
     return rc;
   }
+
+  // Hard cap to prevent MOSDOp __u16 num_ops overflow (4 ops per snapshot)
+  snap_limit = std::min(snap_limit, (uint64_t)RBD_MAX_SNAP_HARD_LIMIT);
 
   if (header->snap_count >= snap_limit)
     return -EDQUOT;
