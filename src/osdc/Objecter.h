@@ -2701,7 +2701,11 @@ private:
 	   boost::asio::io_context& service);
   ~Objecter() override;
 
-  void init();
+  /// Initialize the Objecter.
+  /// @param admin_socket_name Optional name for the admin socket command.
+  ///        If empty (default), registers as "objecter_requests".
+  ///        If non-empty, registers as "objecter_requests.<name>".
+  void init(std::string_view admin_socket_name = {});
   void start(const OSDMap *o = nullptr);
   void shutdown();
 

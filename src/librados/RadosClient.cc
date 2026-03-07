@@ -268,7 +268,7 @@ int librados::RadosClient::connect()
   monclient.set_messenger(messenger);
   mgrclient.set_messenger(messenger);
 
-  objecter->init();
+  objecter->init(objecter_admin_socket_name);
   messenger->add_dispatcher_head(&mgrclient);
   messenger->add_dispatcher_tail(objecter);
   messenger->add_dispatcher_tail(this);
