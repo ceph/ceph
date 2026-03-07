@@ -54,8 +54,9 @@ public:
 
 public:
   ActivePyModule(const PyModuleRef &py_module_,
-      LogChannelRef clog_)
-    : PyModuleRunner(py_module_, clog_),
+      LogChannelRef clog_,
+      ThreadMonitor* monitor_ = nullptr)
+    : PyModuleRunner(py_module_, clog_, monitor_),
       finisher(g_ceph_context, thread_name, fmt::format("m-fin-{}", py_module->get_name()).substr(0,15))
 
   {
