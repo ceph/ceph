@@ -8406,12 +8406,13 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
   }
   if (enable) {
     ErasureCodeInterfaceRef erasure_code;
-    unsigned int k, m;
+    unsigned int k, m, chunk_size;
     stringstream tmp;
     int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
     if (err == 0) {
       k = erasure_code->get_data_chunk_count();
       m = erasure_code->get_coding_chunk_count();
+      chunk_size = erasure_code->get_chunk_size(p.get_stripe_width());
     } else {
       if (ss) {
         *ss << "get_erasure_code failed: " << tmp.str();
@@ -8422,6 +8423,13 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
         ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0) {
       if (ss) {
         *ss << "ec optimizations not currently supported for pool profile.";
+      }
+      return -EINVAL;
+    }
+
+    if ((chunk_size % 4096) != 0) {
+      if (ss) {
+        *ss << "stripe_unit must be divisible by 4096 to enable ec optimizations";
       }
       return -EINVAL;
     }
@@ -8997,7 +9005,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     bool was_enabled = p.allows_ecoptimizations();
-    int r = enable_pool_ec_optimizations(p, nullptr, enable);
+    int r = enable_pool_ec_optimizations(p, &ss, enable);
     if (r != 0) {
       return r;
     }
