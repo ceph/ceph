@@ -475,9 +475,6 @@ def make_data_dir_base(fsid, data_dir, uid, gid):
     # type: (str, str, int, int) -> str
     data_dir_base = os.path.join(data_dir, fsid)
     makedirs(data_dir_base, uid, gid, DATA_DIR_MODE)
-    makedirs(os.path.join(data_dir_base, 'crash'), uid, gid, DATA_DIR_MODE)
-    makedirs(os.path.join(data_dir_base, 'crash', 'posted'), uid, gid,
-             DATA_DIR_MODE)
     return data_dir_base
 
 
