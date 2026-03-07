@@ -255,6 +255,8 @@ elseif(HAVE_S390X)
     crc32c_s390x.c
     crc32c_s390x_le-vx.S
   )
+elseif(HAVE_RISCV_ZVBC)
+  list(APPEND crc32_srcs crc32c_riscv.c)
 endif(HAVE_INTEL)
 
 add_library(crc32 OBJECT ${crc32_srcs})
@@ -262,6 +264,9 @@ add_library(crc32 OBJECT ${crc32_srcs})
 if(HAVE_ARMV8_CRC)
   set_target_properties(crc32 PROPERTIES
     COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")
+endif()
+if(HAVE_RISCV)
+  set_target_properties(crc32 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${SIMD_COMPILE_FLAGS}")
 endif()
 target_link_libraries(crc32
   arch)
