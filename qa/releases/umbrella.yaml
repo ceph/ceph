@@ -1,0 +1,6 @@
+tasks:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release umbrella
+      - ceph osd set-require-min-compat-client umbrella
+- ceph.healthy:
