@@ -154,6 +154,17 @@
 %{!?gts_version: %global gts_version 13}
 %endif
 
+# RGW is crashing when compiled with gcc 12/13/14, since
+# vector optimization is enabled by default since gcc12.
+# https://gcc.gnu.org/gcc-12/changes.html#general
+#
+# See more: https://tracker.ceph.com/issues/74914
+%ifarch ppc64le
+%if 0%{?rhel} == 9
+%undefine gts_version
+%endif
+%endif
+
 %if ! 0%{?suse_version}
 # use multi-threaded xz compression: xz level 7 using ncpus threads
 %global _source_payload w7T%{_smp_build_ncpus}.xzdio
