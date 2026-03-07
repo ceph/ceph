@@ -42,7 +42,7 @@ try:
 except ImportError:
     pass  # For typing only
 
-logger = logging.getLogger('rgw_client')
+logger = logging.getLogger(__name__)
 
 _SYNC_GROUP_ID = 'dashboard_admin_group'
 _SYNC_FLOW_ID = 'dashboard_admin_flow'

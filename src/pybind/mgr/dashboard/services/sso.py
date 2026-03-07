@@ -20,7 +20,7 @@ from ..cli import DBCLICommand
 from ..services.auth import AuthType, BaseAuth, OAuth2, Saml2  # noqa
 from ..tools import prepare_url_prefix
 
-logger = logging.getLogger('sso')
+logger = logging.getLogger(__name__)
 
 try:
     jmespath = importlib.import_module('jmespath')

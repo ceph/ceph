@@ -14,7 +14,7 @@ from ..exceptions import DashboardException, ViewCacheNoDataException
 from ..rest_client import RequestException
 from ..services.ceph_service import SendCommandError
 
-logger = logging.getLogger('exception')
+logger = logging.getLogger(__name__)
 
 
 def serialize_dashboard_exception(e, include_http_status=False, task=None):
