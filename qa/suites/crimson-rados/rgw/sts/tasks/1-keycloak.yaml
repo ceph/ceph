@@ -1,0 +1,14 @@
+tasks:
+- tox: [ client.0 ]
+- keycloak:
+    client.0:
+      keycloak_version: 11.0.0
+
+overrides:
+  install:
+    ceph:
+      extra_system_packages:
+        rpm:
+        - java-17-openjdk-headless
+        deb:
+        - openjdk-17-jdk-headless
