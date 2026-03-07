@@ -43,6 +43,8 @@
 #define dout_prefix _prefix(_dout, mon, get_last_committed())
 using namespace TOPNSPC::common;
 
+using namespace std::string_view_literals;
+
 using std::list;
 using std::map;
 using std::make_pair;
@@ -1720,18 +1722,34 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	++it;
       }
 
-      if (cap.compare(0, 2, "rw") == 0)
-	osd_cap_wanted = "rw";
-
-      char last='\0';
-      for (size_t i = 2; i < cap.size(); ++i) {
-	char c = cap.at(i);
+      char last = '\0';
+      for (char c : cap) {
+        dout(25) << "permission flag: " << c << dendl;
 	if (last >= c) {
 	  ss << "Permission flags (except 'rw') must be specified in alphabetical order.";
 	  err = -EINVAL;
 	  goto done;
 	}
+        if (last == 'r' && c == 'w') {
+          /* treat 'rw' as a unit permitted at beginning: */
+          last = '\0';
+        } else {
+          last = c;
+        }
 	switch (c) {
+        case 'r':
+          break;
+        case '*':
+          if (cap != "*"sv) {
+	    ss << "Permission '*' implies all, remove other caps.";
+	    err = -EINVAL;
+	    goto done;
+          }
+          osd_cap_wanted += 'w';
+          break;
+        case 'w':
+          osd_cap_wanted += 'w';
+          break;
 	case 'p':
 	  break;
 	case 's':
