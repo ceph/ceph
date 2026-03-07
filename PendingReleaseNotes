@@ -1,3 +1,8 @@
+* RGW: S3 ListObjects and ListObjectVersions now support the
+  ``x-amz-optional-object-attributes: RestoreStatus`` request header to include
+  restore status in listing responses. Restore status is stored in the bucket
+  index, so only objects written or restored after this upgrade will populate
+  the field. Existing objects are unaffected.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.
