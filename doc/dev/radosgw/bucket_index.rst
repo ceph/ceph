@@ -2,9 +2,55 @@
 Rados Bucket Index
 ==================
 
-Buckets in RGW store their list of objects in a bucket index. Each index entry stores just enough metadata (size, etag, mtime, etc.) to serve API requests to list objects. These APIs are `ListObjectsV2`_ and `ListObjectVersions`_ in S3, and `GET Container`_ in Swift.
+Buckets in RGW store a list of objects and associated metadata in each
+bucket's *bucket index*. Each bucket index entry stores metadata
+(size, etag, mtime, etc.) to serve API requests to list objects along
+with some internal bookkeeping. These APIs are `ListObjectsV2`_ and
+`ListObjectVersions`_ in S3, and `GET Container`_ in Swift.
 
-.. note:: Buckets can be created as 'indexless'. Such buckets have no index, and cannot be listed.
+The entries are stored in the index object's (or index objects', see
+sharding below) RADOS omap entries.
+
+Buckets can also be created as 'indexless'. Such buckets have no
+index and cannot be listed.
+
+For non-versioned buckets there is one entry in the bucket index for
+every object. For S3 versioned buckets it's a little more complex (see
+:ref:`versioned-buckets` for details).
+
+.. _versioned-buckets:
+
+--------------------
+S3 Object Versioning
+--------------------
+
+For versioned buckets the bucket index contains an entry for each
+object version and delete marker. In addition to sorting index entries
+by object name, it also has entries that sort object versions of the
+same name from newest to oldest, which are used for versioned listings.
+
+RGW stores a head object in the rgw.buckets.data pool for each object
+version. This rados object's oid is a combination of the object name
+and its version id.
+
+In S3 a GET/HEAD request for an object name will give you that
+object's "current" version. To support this RGW stores an extra
+'object logical head' (olh) object whose oid includes the object name
+only and that acts as an indirection to the head object of its current
+version. This indirection logic is implemented in
+``src/rgw/driver/rados/rgw_rados.cc`` as ``RGWRados::follow_olh()``.
+
+To maintain the consistency between this olh object and the bucket
+index, the index keeps a separate 'olh' entry for each object
+name. This entry stores a log of all writes/deletes to its
+versions. In ``src/rgw/driver/rados/rgw_rados.cc``,
+``RGWRados::apply_olh_log()`` replays this log to guarantee that this
+olh object converges on the same "current" version as the bucket
+index.
+
+.. _ListObjectsV2: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjects.html
+.. _ListObjectVersions: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectVersions.html
+.. _GET Container: https://docs.openstack.org/api-ref/object-store/?expanded=show-container-details-and-list-objects-detail#show-container-details-and-list-objects
 
 ---------------------
 Consistency Guarantee
@@ -12,7 +58,7 @@ Consistency Guarantee
 
 RGW guarantees read-after-write consistency on object operations. This means that once a client receives a successful response to a write request, then the effects of that write must be visible to subsequent read requests.
 
-For example: if an S3 client sends a PutObject request to overwrite an existing object, followed by a GetObject request to read it back, RGW must not return the previous object's contents. It must either respond with the new object's contents, or with the result of a later object write or delete.
+For example, if an S3 client sends a PutObject request to overwrite an existing object followed by a GetObject request to read it back, RGW must not return the previous object's contents. It must either respond with the new object's contents or with the result of a later object write or delete.
 
 This consistency guarantee applies to all object write requests (PutObject, DeleteObject, PutObjectAcl, etc) and all object read requests (HeadObject, GetObject, ListObjectsV2, etc).
 
@@ -28,11 +74,45 @@ When writing an object, its head object is written last. This acts as an atomic 
 Sharding and Resharding
 -----------------------
 
-For a given bucket, the index may be split into several rados objects, called bucket index shards. In RADOS, multiple writes to the same object cannot run in parallel. By spreading the index over more rados objects, we increase its write parallelism. For a given object upload, the corresponding bucket index shard is selected based on a hash of the object's name.
+A bucket's index is generally split into several RADOS objects that
+are called bucket index shards. In RADOS multiple writes to the same
+object (e.g., bucket index objects) cannot run in parallel. By
+spreading the index over more RADOS objects we increase its write
+parallelism. For a given object upload, the corresponding bucket index
+shard is selected based on a hash of the object's name. This
+guarantees that all entries for a given object (and its versions, if
+it's an S3 versioned bucket) are located on the same shard. This also
+tends to distribute objects evenly across index shards, although this
+distribution can break down with objects with lots of versions.
 
-The default shard count for new buckets is 11, but can be overridden in the zonegroup's ``bucket_index_max_shards`` or ceph.conf's ``rgw_override_bucket_index_max_shards``. As the number of objects in a bucket grows, its index shard count will also increase as a result of dynamic resharding.
+The default shard count for new buckets is 11, but can be overridden
+in the zonegroup's ``bucket_index_max_shards`` or ceph.conf's
+``rgw_override_bucket_index_max_shards``.
 
-Information about the bucket's index object layout is stored in ``RGWBucketInfo`` as ``struct rgw::BucketLayout`` from ``src/rgw/rgw_bucket_layout.h``. The resharding logic is in ``src/rgw/driver/rados/rgw_reshard.cc``.
+Because there's a practical limit of 100,000 entries for any RADOS
+object's omap, we need to make sure that we use enough shards such
+that we do not exceed this limit. As the number of objects in a bucket
+grows, we may have to *reshard* a bucket index, so there are a
+sufficient number of shards. The ``radosgw-admin`` administration
+command allows a bucket to be resharded manually, but *dynamic
+resharding* allows resharding to occur automatically without
+administrative intervention.
+
+Dynamic resharding can also reduce the number of shards for a
+bucket. Because some buckets may experience rapid increases and
+decreases in the number of objects and because we don't want to chase
+those changes with multiple reshards, in order to reduce the number of
+shards there's a delay between when the need to reduce the number of
+shards is noted and when it will occur. At the time the resharding
+would occur, the bucket is checked again and only proceeds if the
+bucket still needs its number of bucket index shards reduced. This
+delay is by default 5 days but can be configured with ceph.conf's
+``rgw_dynamic_resharding_reduction_wait``.
+
+Information about the bucket's index object layout is stored in
+``RGWBucketInfo`` as ``struct rgw::BucketLayout`` from
+``src/rgw/rgw_bucket_layout.h``. The resharding logic is in
+``src/rgw/driver/rados/rgw_reshard.cc``.
 
 -----------------
 Index Transaction
@@ -46,7 +126,13 @@ To keep the bucket index consistent, all object writes or deletes must also upda
 
 Object writes and deletes may race with each other, so a given object may have more than one prepared transaction at a time. RGW considers an object entry to be 'pending' if there are any outstanding transactions, or 'completed' otherwise.
 
-This transaction is implemented in ``src/rgw/driver/rados/rgw_rados.cc`` as ``RGWRados::Object::Write::write_meta()`` for object writes, and ``RGWRados::Object::Delete::delete_obj()`` for object deletes. The bucket index operations are implemented in ``src/cls/rgw/cls_rgw.cc`` as ``rgw_bucket_prepare_op()`` and ``rgw_bucket_complete_op()``.
+This transaction is implemented in
+``src/rgw/driver/rados/rgw_rados.cc`` as
+``RGWRados::Object::Write::write_meta()`` for object writes and
+``RGWRados::Object::Delete::delete_obj()`` for object deletes. The
+bucket index operations are implemented in ``src/cls/rgw/cls_rgw.cc``
+as ``rgw_bucket_prepare_op()`` and
+``rgw_bucket_complete_op()``.
 
 -------
 Listing
@@ -58,18 +144,10 @@ If an RGW crashes in the middle of an `Index Transaction`_, an index entry may g
 
 Bucket listing is implemented in ``src/rgw/driver/rados/rgw_rados.cc`` as ``RGWRados::Bucket::List::list_objects_ordered()`` and ``RGWRados::Bucket::List::list_objects_unordered()``. ``RGWRados::check_disk_state()`` is the part that reads the head object and encodes suggested changes. The corresponding bucket index operations are implemented in ``src/cls/rgw/cls_rgw.cc`` as ``rgw_bucket_list()`` and ``rgw_dir_suggest_changes()``.
 
---------------------
-S3 Object Versioning
---------------------
-
-For versioned buckets, the bucket index contains an entry for each object version and delete marker. In addition to sorting index entries by object name, it also has to sort object versions of the same name from newest to oldest.
-
-RGW stores a head object in the rgw.buckets.data pool for each object version. This rados object's oid is a combination of the object name and its version id.
-
-In S3, a GET/HEAD request for an object name will give you that object's "current" version. To support this, RGW stores an extra 'object logical head' (olh) object whose oid includes the object name only, that acts as an indirection to the head object of its current version. This indirection logic is implemented in ``src/rgw/driver/rados/rgw_rados.cc`` as ``RGWRados::follow_olh()``.
-
-To maintain the consistency between this olh object and the bucket index, the index keeps a separate 'olh' entry for each object name. This entry stores a log of all writes/deletes to its versions. In ``src/rgw/driver/rados/rgw_rados.cc``, ``RGWRados::apply_olh_log()`` replays this log to guarantee that this olh object converges on the same "current" version as the bucket index.
-
-.. _ListObjectsV2: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjects.html
-.. _ListObjectVersions: https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectVersions.html
-.. _GET Container: https://docs.openstack.org/api-ref/object-store/?expanded=show-container-details-and-list-objects-detail#show-container-details-and-list-objects
+Because RGW objects are distributed across their bucket's index shards
+based on a hash, there is no lexical ordering across index shards,
+only within each shard. Therefore an ordered listing is a complex and
+I/O intensive operation. Batches of entries are retrieved in parallel
+from each shard, and a selection sort is used to produced a portion of
+an ordered listing. Once the batch from any one shard is exhausted,
+another batch is read from each shard and the process continues.
