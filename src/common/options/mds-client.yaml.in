@@ -320,7 +320,7 @@ options:
   desc: set the directory size as the number of file bytes recursively used
   long_desc: This option enables a CephFS feature that stores the recursive directory
     size (the bytes used by files in the directory and its descendents) in the st_size
-    field of the stat structure.
+    field of the stat structure. May confuse programs such as ``rsync``.
   default: true
   services:
   - mds_client
