@@ -459,6 +459,11 @@ You may set values for the following keys:
 
    .. versionadded:: 20.2.0
 
+.. describe:: supports_omap
+
+    :Description: Determines whether omap operations can be performed on a pool. On by default for replicated pools, off by default for erasure coded pools. The flag can be enabled for erasure coded pools that allow ec optimizations.
+    :Type: Boolean
+
 .. describe:: hashpspool
 
    :Description: Sets or unsets the ``HASHPSPOOL`` flag on a given pool.
