@@ -8,8 +8,43 @@ from tests.fixtures import with_cephadm_ctx, cephadm_fs, import_cephadm
 
 from cephadmlib.host_facts import _parse_ipv4_route, _parse_ipv6_route
 from cephadmlib.net_utils import get_ipv6_address
+from cephadmlib.net_utils import EndPoint
 
 _cephadm = import_cephadm()
+
+
+class TestEndPoint:
+    @pytest.mark.parametrize("ip, port, expected_str, expected_is_ipv4", [
+        # Normal IPv4
+        ('192.168.1.1', 3300, '192.168.1.1:3300', True),
+        # Normal IPv6 (bare)
+        ('fd19:8:5::11', 3300, '[fd19:8:5::11]:3300', False),
+        # Bracketed IPv6
+        ('[fd19:8:5::11]', 3300, '[fd19:8:5::11]:3300', False),
+        # Bracketed IPv6 should normalize stored ip to bare
+        ('[::1]', 6789, '[::1]:6789', False),
+    ])
+    def test_endpoint_init(self, ip, port, expected_str, expected_is_ipv4):
+        ep = EndPoint(ip, port)
+        assert str(ep) == expected_str
+        assert ep.is_ipv4 == expected_is_ipv4
+        # stored ip should always be bare (no brackets)
+        assert '[' not in ep.ip
+        assert ']' not in ep.ip
+
+    def test_endpoint_ipv4(self):
+        ep = EndPoint('10.0.0.1', 6789)
+        assert ep.is_ipv4 is True
+        assert repr(ep) == '10.0.0.1:6789'
+
+    def test_endpoint_ipv6(self):
+        ep = EndPoint('[fd19:8:5::11]', 6789)
+        assert ep.is_ipv4 is False
+        assert repr(ep) == '[fd19:8:5::11]:6789'
+
+    def test_endpoint_bracketed_ipv6_normalizes_stored_ip(self):
+        ep = EndPoint('[fd19:8:5::11]', 3300)
+        assert ep.ip == 'fd19:8:5::11'  # bare ipv6, no brackets
 
 
 class TestCommandListNetworks:
@@ -250,3 +285,20 @@ fe80000000000000505400fffe04c154 03 40 20 80     eth1
             assert json.loads(capsys.readouterr().out) == {
                 '10.4.0.1/32': {'tun0': ['10.4.0.2']}
             }
+
+    def test_build_addrv_params_brackets_ipv6_endpoints_correctly(self):
+        from cephadmlib.net_utils import build_addrv_params, EndPoint
+
+        # IPv6 must be emitted as vX:[ip]:port (NOT vX:ip:port).
+        eps = [EndPoint('2001:db8:100::10', 3300), EndPoint('2001:db8:100::10', 6789)]
+        arg = build_addrv_params(eps)
+
+        assert arg == '[v2:[2001:db8:100::10]:3300,v1:[2001:db8:100::10]:6789]'
+
+    def test_build_addrv_params_ipv4_is_not_bracketed(self):
+        from cephadmlib.net_utils import build_addrv_params, EndPoint
+
+        eps = [EndPoint('192.168.100.100', 3300), EndPoint('192.168.100.100', 6789)]
+        arg = build_addrv_params(eps)
+
+        assert arg == '[v2:192.168.100.100:3300,v1:192.168.100.100:6789]'
