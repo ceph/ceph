@@ -1390,6 +1390,13 @@ class NFSServiceSpec(ServiceSpec):
         # type: () -> str
         return 'conf-' + self.service_name()
 
+    def validate_port_number(self, port: Optional[int]) -> None:
+        if port is None:
+            return
+        if 0 <= port <= 65535:
+            return
+        raise ValueError(f"Port must be between 0 and 65535")
+    
     def validate(self) -> None:
         super(NFSServiceSpec, self).validate()
 
@@ -1410,9 +1417,18 @@ class NFSServiceSpec(ServiceSpec):
             if any(tls_fields) and not all(tls_fields):
                 raise SpecValidationError(
                     f'Either none or all of {tls_field_names} attributes must be set'
-                )
-
-
+                )       
+        # Port Parameter Validation
+        # Port values must be less than 65535 (valid TCP/UDP port range: 0-65535)
+        try:
+            self.validate_port_number(self.port)
+        except ValueError as e:
+            raise SpecValidationError(f"NFS spec has invalid port value: {self.port}. {e}")
+        try:
+            self.validate_port_number(self.monitoring_port)
+        except ValueError as e:
+            raise SpecValidationError(f"NFS spec has invalid monitoring port value: {self.monitoring_port}. {e}")
+        
 yaml.add_representer(NFSServiceSpec, ServiceSpec.yaml_representer)
 
 
