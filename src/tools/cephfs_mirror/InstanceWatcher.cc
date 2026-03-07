@@ -87,19 +87,29 @@ void InstanceWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
 
   std::string dir_path;
   std::string mode;
+  bool sync_latest_snapshot;
+  std::string sync_from_snapshot;
+
   try {
     JSONDecoder jd(bl);
     JSONDecoder::decode_json("dir_path", dir_path, &jd.parser, true);
     JSONDecoder::decode_json("mode", mode, &jd.parser, true);
+    JSONDecoder::decode_json("sync_latest_snapshot", sync_latest_snapshot, &jd.parser, true);
+    JSONDecoder::decode_json("sync_from_snapshot", sync_from_snapshot, &jd.parser, true);
   } catch (const JSONDecoder::err &e) {
     derr << ": failed to decode notify json: " << e.what() << dendl;
   }
 
   dout(20) << ": notifier_id=" << notifier_id << ", dir_path=" << dir_path
-           << ", mode=" << mode << dendl;
+           << ", mode=" << mode << ", sync_latest_snapshot=" << sync_latest_snapshot
+           << ", sync_from_snapshot=" << sync_from_snapshot << dendl;
 
   if (mode == "acquire") {
-    m_listener.acquire_directory(dir_path);
+    if (sync_from_snapshot == "null") {
+      m_listener.acquire_directory(dir_path, sync_latest_snapshot);
+    } else {
+      m_listener.acquire_directory(dir_path, sync_latest_snapshot, sync_from_snapshot);
+    }
   } else if (mode == "release") {
     m_listener.release_directory(dir_path);
   } else {
