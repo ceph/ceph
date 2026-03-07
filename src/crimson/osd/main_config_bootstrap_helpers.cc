@@ -23,6 +23,7 @@
 #include "crimson/net/Messenger.h"
 #include "crimson/osd/main_config_bootstrap_helpers.h"
 
+#include <expected>
 #include <sys/wait.h> // for waitpid()
 
 using namespace std::literals;
@@ -135,7 +136,7 @@ std::optional<std::string> get_option_value(const SeastarOption& option) {
   return std::nullopt;
 }
 
-static tl::expected<early_config_t, int>
+static std::expected<early_config_t, int>
 _get_early_config(int argc, const char *argv[])
 {
   early_config_t ret;
@@ -245,7 +246,7 @@ _get_early_config(int argc, const char *argv[])
       });
     });
   if (r < 0) {
-    return tl::unexpected(r);
+    return std::unexpected(r);
   }
   return ret;
 }
@@ -277,7 +278,7 @@ _get_early_config(int argc, const char *argv[])
  * reactor in the child process, encode the resulting early_config_t,
  * and send it back to the parent process.
  */
-tl::expected<early_config_t, int>
+std::expected<early_config_t, int>
 get_early_config(int argc, const char *argv[])
 {
   auto args = argv_to_vec(argc, argv);
@@ -294,7 +295,7 @@ get_early_config(int argc, const char *argv[])
   if (r < 0) {
     std::cerr << "get_early_config: failed to create pipes: "
 	      << -errno << std::endl;
-    return tl::unexpected(-errno);
+    return std::unexpected(-errno);
   }
 
   pid_t worker = fork();
@@ -303,7 +304,7 @@ get_early_config(int argc, const char *argv[])
     close(pipes[1]);
     std::cerr << "get_early_config: failed to fork: "
 	      << -errno << std::endl;
-    return tl::unexpected(-errno);
+    return std::unexpected(-errno);
   } else if (worker == 0) { // child
     close(pipes[0]);
     auto ret = _get_early_config(argc, argv);
@@ -324,7 +325,7 @@ get_early_config(int argc, const char *argv[])
 		<< -ret.error() << std::endl;
       exit(-ret.error());
     }
-    return tl::unexpected(-1);
+    return std::unexpected(-1);
   } else { // parent
     close(pipes[1]);
 
@@ -347,7 +348,7 @@ get_early_config(int argc, const char *argv[])
     if (r < 0) {
       std::cerr << "get_early_config: parent failed to read from pipe: "
 		<< r << std::endl;
-      return tl::unexpected(r);
+      return std::unexpected(r);
     }
     try {
       auto bliter = bl.cbegin();
@@ -355,7 +356,7 @@ get_early_config(int argc, const char *argv[])
       return ret;
     } catch (...) {
       std::cerr << "get_early_config: parent failed to decode" << std::endl;
-      return tl::unexpected(-EINVAL);
+      return std::unexpected(-EINVAL);
     }
   }
 }

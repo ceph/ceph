@@ -6,6 +6,7 @@
 #include <boost/program_options/parsers.hpp>
 #include <cstdlib>
 #include <cstring>
+#include <expected>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include <fstream>
@@ -34,7 +35,6 @@
 #include "seastar/util/closeable.hh"
 #include "seastar/util/log.hh"
 #include "crimson/os/seastore/segment_manager.h"
-#include "include/expected.hpp"
 #include "osd/osd_types.h"
 #include "json_spirit/json_spirit_reader.h"
 
@@ -115,14 +115,14 @@ std::string to_string(operation_type_t op) {
   }
 }
 
-tl::expected<operation_type_t, std::string> parse_pg_operation(const std::string& op_str) {
+std::expected<operation_type_t, std::string> parse_pg_operation(const std::string& op_str) {
   if (op_str == "list-pgs") return operation_type_t::LIST_PGS;
   if (op_str == "list") return operation_type_t::LIST_OBJECTS;
   if (op_str == "info") return operation_type_t::INFO;
-  return tl::unexpected("Unsupported PG operation: " + op_str);
+  return std::unexpected("Unsupported PG operation: " + op_str);
 }
 
-tl::expected<operation_type_t, std::string> parse_object_operation(const std::string& objcmd) {
+std::expected<operation_type_t, std::string> parse_object_operation(const std::string& objcmd) {
   if (objcmd == "get-bytes") return operation_type_t::GET_BYTES;
   if (objcmd == "set-bytes") return operation_type_t::SET_BYTES;
   if (objcmd == "get-attr") return operation_type_t::GET_ATTR;
@@ -138,7 +138,7 @@ tl::expected<operation_type_t, std::string> parse_object_operation(const std::st
   if (objcmd == "dump") return operation_type_t::DUMP;
   if (objcmd == "set-size") return operation_type_t::SET_SIZE;
   if (objcmd == "clear-data-digest") return operation_type_t::CLEAR_DATA_DIGEST;
-  return tl::unexpected("Unknown object command: " + objcmd);
+  return std::unexpected("Unknown object command: " + objcmd);
 }
 
 struct operation_params_t {
@@ -209,10 +209,10 @@ struct objectstore_config_t {
   }
 };
 
-tl::expected<pg_t, std::string> parse_pgid(const std::string& pgid_str) {
+std::expected<pg_t, std::string> parse_pgid(const std::string& pgid_str) {
   pg_t pgid;
   if (!pgid.parse(pgid_str.c_str())) {
-    return tl::unexpected("Invalid pgid: " + pgid_str);
+    return std::unexpected("Invalid pgid: " + pgid_str);
   }
   return pgid;
 }
@@ -455,7 +455,7 @@ public:
   explicit SeastoreMetaReader(const std::string& path, const std::string& device_type) :
     m_data_path(path), m_device_type(device_type) {}
 
-  tl::expected<crimson::os::seastore::block_sm_superblock_t, std::string> load_seastore_superblock() {
+  std::expected<crimson::os::seastore::block_sm_superblock_t, std::string> load_seastore_superblock() {
     try {
       std::string block_path = m_data_path + "/block";
 
@@ -463,14 +463,14 @@ public:
 
       std::ifstream file(block_path, std::ios::binary);
       if (!file.is_open()) {
-        return tl::unexpected("Could not open block file: " + block_path);
+        return std::unexpected("Could not open block file: " + block_path);
       }
 
       std::vector<char> buf(block_size);
       file.read(buf.data(), block_size);
 
       if (!file.good() && !file.eof()) {
-        return tl::unexpected("Could not read superblock from " + block_path);
+        return std::unexpected("Could not read superblock from " + block_path);
       }
 
       bufferlist bl;
@@ -490,7 +490,7 @@ public:
         std::string sb_magic;
         bliter.copy(SEASTORE_SUPERBLOCK_SIGN_LEN, sb_magic);
         if (sb_magic != SEASTORE_SUPERBLOCK_SIGN) {
-          return tl::unexpected("invalid superblock signature " + block_path);
+          return std::unexpected("invalid superblock signature " + block_path);
         }
       }
 
@@ -503,16 +503,16 @@ public:
       return superblock;
 
     } catch (const std::exception& e) {
-      return tl::unexpected("Could not read seastore superblock: " + std::string(e.what()));
+      return std::unexpected("Could not read seastore superblock: " + std::string(e.what()));
     } catch (...) {
-      return tl::unexpected("Could not read seastore superblock: unknown error");
+      return std::unexpected("Could not read seastore superblock: unknown error");
     }
   }
 
-  tl::expected<unsigned int, std::string> get_shard_count() {
+  std::expected<unsigned int, std::string> get_shard_count() {
     auto superblock_result = load_seastore_superblock();
     if (!superblock_result) {
-      return tl::unexpected(superblock_result.error());
+      return std::unexpected(superblock_result.error());
     }
 
     // fmt::println(std::cout, "Read shard count from storage: {}", superblock_result->shard_num);
@@ -520,20 +520,20 @@ public:
   }
 };
 
-static tl::expected<unsigned int, std::string>
+static std::expected<unsigned int, std::string>
 read_shard_count_from_storage(const std::string& data_path,
                               const std::string& type,
                               const std::string& device_type)
 {
   if (type != "seastore") {
-    return tl::unexpected("Store type not supported for shard count reading");
+    return std::unexpected("Store type not supported for shard count reading");
   }
 
   SeastoreMetaReader meta_reader(data_path, device_type);
   return meta_reader.get_shard_count();
 }
 
-static tl::expected<std::vector<std::string>, std::string>
+static std::expected<std::vector<std::string>, std::string>
 get_seastar_args_from_storage(const objectstore_config_t& config)
 {
   auto shard_count_result = read_shard_count_from_storage(config.data_path,
@@ -541,7 +541,7 @@ get_seastar_args_from_storage(const objectstore_config_t& config)
                                                           config.device_type);
 
   if (!shard_count_result) {
-    return tl::unexpected(shard_count_result.error());
+    return std::unexpected(shard_count_result.error());
   }
 
   // seastore case with valid shard count
@@ -572,7 +572,7 @@ seastar::future<int> write_output(
   return seastar::make_ready_future<int>(EXIT_SUCCESS);
 }
 
-tl::expected<std::string, int> read_input(
+std::expected<std::string, int> read_input(
   const std::optional<std::string>& file_path)
 {
   std::string input_data;
@@ -580,7 +580,7 @@ tl::expected<std::string, int> read_input(
     std::ifstream infile(file_path.value(), std::ios::binary);
     if (!infile.is_open()) {
       fmt::println(std::cerr, "failed to open input-file '{}'", file_path.value());
-      return tl::unexpected(EXIT_FAILURE);
+      return std::unexpected(EXIT_FAILURE);
     }
     std::stringstream buffer;
     buffer << infile.rdbuf();
@@ -588,7 +588,7 @@ tl::expected<std::string, int> read_input(
   } else {
     if (isatty(STDIN_FILENO) && (!file_path.has_value() || *file_path != "-")) {
       fmt::println(std::cerr, "stdin is a tty and no file specified");
-      return tl::unexpected(EXIT_FAILURE);
+      return std::unexpected(EXIT_FAILURE);
     }
     std::stringstream buffer;
     buffer << std::cin.rdbuf();
