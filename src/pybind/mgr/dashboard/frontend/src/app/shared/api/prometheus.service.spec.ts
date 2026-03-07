@@ -5,6 +5,7 @@ import { configureTestBed } from '~/testing/unit-test-helper';
 import { AlertmanagerNotification } from '../models/prometheus-alerts';
 import { PrometheusService } from './prometheus.service';
 import { SettingsService } from './settings.service';
+import moment from 'moment';
 
 describe('PrometheusService', () => {
   let service: PrometheusService;
@@ -242,6 +243,68 @@ describe('PrometheusService', () => {
       x = false;
       service.ifPrometheusConfigured((v) => (x = v));
       expect(x).toBe(false);
+    });
+  });
+
+  describe('updateTimeStamp', () => {
+    it('should update timestamp correctly', () => {
+      const currentTime = moment().unix();
+      const selectedTime = {
+        start: currentTime - 3600,
+        end: currentTime,
+        step: 14
+      };
+
+      const result = (service as any).updateTimeStamp(selectedTime);
+
+      expect(result).toBeDefined();
+      expect(result.step).toBe(14);
+      expect(result.start).toBeLessThanOrEqual(currentTime);
+      expect(result.end).toBeGreaterThanOrEqual(currentTime);
+      expect(result.end - result.start).toBe(3600);
+    });
+  });
+
+  describe('getMultiClusterData', () => {
+    it('should make GET request to correct endpoint', () => {
+      const params = { params: 'test_query', start: 123456, end: 123789, step: 14 };
+      service.getMultiClusterData(params).subscribe();
+
+      const req = httpTesting.expectOne((request) => {
+        return request.url === 'api/prometheus/prometheus_query_data' && request.method === 'GET';
+      });
+      expect(req.request.params.get('params')).toBe('test_query');
+      expect(req.request.params.get('start')).toBe('123456');
+      expect(req.request.params.get('end')).toBe('123789');
+      expect(req.request.params.get('step')).toBe('14');
+      req.flush({ result: [] });
+    });
+  });
+
+  describe('getMultiClusterQueryRangeData', () => {
+    it('should make GET request to correct endpoint', () => {
+      const params = { params: 'test_query', start: 123456, end: 123789, step: 14 };
+      service.getMultiClusterQueryRangeData(params).subscribe();
+
+      const req = httpTesting.expectOne((request) => {
+        return request.url === 'api/prometheus/data' && request.method === 'GET';
+      });
+      expect(req.request.params.get('params')).toBe('test_query');
+      expect(req.request.params.get('start')).toBe('123456');
+      expect(req.request.params.get('end')).toBe('123789');
+      expect(req.request.params.get('step')).toBe('14');
+      req.flush({ result: [] });
+    });
+  });
+
+  describe('getMultiClusterQueriesData', () => {
+    beforeEach(() => {
+      spyOn(service, 'ifPrometheusConfigured').and.callFake((fn) => fn());
+      service.timerTime = 100; // Reduce timer for faster tests
+    });
+
+    afterEach(() => {
+      service.unsubscribe();
     });
   });
 });

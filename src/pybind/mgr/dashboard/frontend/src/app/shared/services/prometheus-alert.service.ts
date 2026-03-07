@@ -25,6 +25,15 @@ export class PrometheusAlertService {
   activeCriticalAlerts: number;
   activeWarningAlerts: number;
 
+  private totalSubject = new BehaviorSubject<number>(0);
+  readonly totalAlerts$ = this.totalSubject.asObservable();
+
+  private criticalSubject = new BehaviorSubject<number>(0);
+  readonly criticalAlerts$ = this.criticalSubject.asObservable();
+
+  private warningSubject = new BehaviorSubject<number>(0);
+  readonly warningAlerts$ = this.warningSubject.asObservable();
+
   constructor(
     private alertFormatter: PrometheusAlertFormatter,
     private prometheusService: PrometheusService
@@ -103,9 +112,15 @@ export class PrometheusAlertService {
           : result,
       0
     );
+
+    this.totalSubject.next(this.activeAlerts);
+    this.criticalSubject.next(this.activeCriticalAlerts);
+    this.warningSubject.next(this.activeWarningAlerts);
+
     this.alerts = alerts
       .reverse()
       .sort((a, b) => a.labels.severity.localeCompare(b.labels.severity));
+
     this.canAlertsBeNotified = true;
   }
 

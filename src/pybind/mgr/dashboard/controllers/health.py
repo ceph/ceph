@@ -127,7 +127,8 @@ HEALTH_SNAPSHOT_SCHEMA = ({
         'mutes': ([str], 'List of muted check names')
     }, 'Cluster health overview'),
     'monmap': ({
-        'num_mons': (int, 'Number of monitors')
+        'num_mons': (int, 'Number of monitors'),
+        'quorum': ([int], 'List of monitors in quorum')
     }, 'Monitor map details'),
     'osdmap': ({
         'in': (int, 'Number of OSDs in'),
@@ -143,6 +144,7 @@ HEALTH_SNAPSHOT_SCHEMA = ({
         'num_pgs': (int, 'Total PG count'),
         'bytes_used': (int, 'Used capacity in bytes'),
         'bytes_total': (int, 'Total capacity in bytes'),
+        'recovering_bytes_per_sec': (int, 'Total recovery in bytes'),
     }, 'Placement group map details'),
     'mgrmap': ({
         'num_active': (int, 'Number of active managers'),
@@ -157,6 +159,8 @@ HEALTH_SNAPSHOT_SCHEMA = ({
         'up': (int, 'Count of iSCSI gateways running'),
         'down': (int, 'Count of iSCSI gateways not running')
     }, 'Iscsi gateways status'),
+    'num_hosts': (int, 'Count of hosts'),
+    'num_hosts_available': (int, 'Count of available hosts')
 })
 
 
@@ -388,6 +392,7 @@ class Health(BaseController):
         if self._has_permissions(Permission.READ, Scope.MONITOR):
             summary['monmap'] = {
                 'num_mons': data.get('monmap', {}).get('num_mons'),
+                'quorum': data.get('quorum', {})
             }
 
         if self._has_permissions(Permission.READ, Scope.OSD):
@@ -399,9 +404,12 @@ class Health(BaseController):
             summary['pgmap'] = {
                 'pgs_by_state': data.get('pgmap', {}).get('pgs_by_state', []),
                 'num_pools': data.get('pgmap', {}).get('num_pools'),
-                'num_pgs': data.get('pgmap', {}).get('num_pgs'),
+                'write_bytes_sec': data.get('pgmap', {}).get('write_bytes_sec'),
+                'read_bytes_sec': data.get('pgmap', {}).get('read_bytes_sec'),
                 'bytes_used': data.get('pgmap', {}).get('bytes_used'),
                 'bytes_total': data.get('pgmap', {}).get('bytes_total'),
+                'num_pgs': data.get('pgmap', {}).get('num_pgs'),
+                'recovering_bytes_per_sec': data.get('pgmap', {}).get('recovering_bytes_per_sec'),
             }
 
         if self._has_permissions(Permission.READ, Scope.MANAGER):
@@ -448,6 +456,12 @@ class Health(BaseController):
             summary['num_iscsi_gateways'] = self.health_minimal.iscsi_daemons()
 
         if self._has_permissions(Permission.READ, Scope.HOSTS):
-            summary['num_hosts'] = len(get_hosts())
+            hosts = get_hosts()
+            summary['num_hosts'] = len(hosts)
+            available_hosts = [
+                h for h in hosts
+                if h.get("status") == ""
+            ]
+            summary['num_hosts_available'] = len(available_hosts)
 
         return summary
