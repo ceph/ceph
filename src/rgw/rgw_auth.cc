@@ -123,12 +123,16 @@ static int load_group_policies(const DoutPrefixProvider* dpp,
   }
 
   CephContext* cct = dpp->get_cct();
-  if (auto i = attrs.find(RGW_ATTR_IAM_POLICY); i != attrs.end()) {
-    load_inline_policy(cct, i->second, tenant, policies);
+  auto iam_policy_val = attrs.find(RGW_ATTR_IAM_POLICY);
+  if (iam_policy_val != nullptr) {
+      load_inline_policy(cct, *iam_policy_val, tenant, policies);
   }
-  if (auto i = attrs.find(RGW_ATTR_MANAGED_POLICY); i != attrs.end()) {
-    load_managed_policy(cct, i->second, policies);
+
+  auto managed_policy_val = attrs.find(RGW_ATTR_MANAGED_POLICY);
+  if (managed_policy_val != nullptr) {
+      load_managed_policy(cct, *managed_policy_val, policies);
   }
+  
   return 0;
 }
 
@@ -160,11 +164,14 @@ int load_account_and_policies(const DoutPrefixProvider* dpp,
 
   // load user policies from user attrs
   CephContext* cct = dpp->get_cct();
-  if (auto bl = attrs.find(RGW_ATTR_USER_POLICY); bl != attrs.end()) {
-    load_inline_policy(cct, bl->second, policy_tenant, policies);
+  auto user_policy_val = attrs.find(RGW_ATTR_USER_POLICY);
+  if (user_policy_val != nullptr) {
+      load_inline_policy(cct, *user_policy_val, policy_tenant, policies);
   }
-  if (auto bl = attrs.find(RGW_ATTR_MANAGED_POLICY); bl != attrs.end()) {
-    load_managed_policy(cct, bl->second, policies);
+
+  auto managed_policy_val = attrs.find(RGW_ATTR_MANAGED_POLICY);
+  if (managed_policy_val != nullptr) {
+      load_managed_policy(cct, *managed_policy_val, policies);
   }
 
   // load each group and its policies
