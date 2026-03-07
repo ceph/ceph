@@ -29,6 +29,8 @@
 #include "scrub_backend.h"
 #include "scrub_machine.h"
 
+#include "scrubber_tracer.h"
+
 using std::list;
 using std::pair;
 using std::stringstream;
@@ -2678,7 +2680,9 @@ PgScrubber::PgScrubber(PG* pg)
 	m_osds->cct->_conf, "osd_stats_update_period_not_scrubbing"}
     , preemption_data{pg}
 {
-  m_fsm = std::make_unique<ScrubMachine>(m_pg, this);
+  tracing::scrubber::tracer.init(m_osds->cct, "pg_scrubber");
+  auto scrubber_parent_span = tracing::scrubber::tracer.start_trace("pg-scrubber-initialized");
+  m_fsm = std::make_unique<ScrubMachine>(m_pg, this, scrubber_parent_span);
   m_fsm->initiate();
   m_scrub_job.emplace(m_osds->cct, m_pg->pg_id, m_osds->get_nodeid());
 }
