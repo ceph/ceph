@@ -776,7 +776,7 @@ void PeeringState::start_peering_interval(
     psdout(10) << ": check_new_interval output: "
 	       << debug.str() << dendl;
     if (new_interval) {
-      if (osdmap->get_epoch() == pl->cluster_osdmap_trim_lower_bound() &&
+      if (osdmap->get_epoch() == pl->cluster_oldest_map() &&
 	  info.history.last_epoch_clean < osdmap->get_epoch()) {
 	psdout(10) << " map gap, clearing past_intervals and faking" << dendl;
 	// our information is incomplete and useless; someone else was clean
@@ -1087,9 +1087,9 @@ void PeeringState::check_past_interval_bounds() const
   if (cct->_conf.get_val<bool>("osd_skip_check_past_interval_bounds")) {
     return;
   }
-  // cluster_osdmap_trim_lower_bound gives us a bound on needed
-  // intervals, see doc/dev/osd_internals/past_intervals.rst
-  auto oldest_epoch = pl->cluster_osdmap_trim_lower_bound();
+  // cluster_oldest_map gives us a bound on needed intervals,
+  // see doc/dev/osd_internals/past_intervals.rst
+  auto oldest_epoch = pl->cluster_oldest_map();
   auto rpib = get_required_past_interval_bounds(
     info,
     oldest_epoch);
@@ -4055,6 +4055,7 @@ void PeeringState::update_calc_stats()
   info.stats.last_deep_scrub_stamp = info.history.last_deep_scrub_stamp;
   info.stats.last_clean_scrub_stamp = info.history.last_clean_scrub_stamp;
   info.stats.last_epoch_clean = info.history.last_epoch_clean;
+  info.stats.last_epoch_started = info.history.last_epoch_started;
 
   info.stats.log_size = pg_log.get_head().version - pg_log.get_tail().version;
   info.stats.log_dups_size = pg_log.get_log().dups.size();

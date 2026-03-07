@@ -583,6 +583,7 @@ public:
   void clear_primary_state() override;
 
   epoch_t cluster_osdmap_trim_lower_bound() override;
+  epoch_t cluster_oldest_map() override;
   OstreamTemp get_clog_error() override;
   OstreamTemp get_clog_info() override;
   OstreamTemp get_clog_debug() override;
@@ -692,8 +693,9 @@ public:
   void dump_pgstate_history(ceph::Formatter *f);
   void dump_missing(ceph::Formatter *f);
 
-  void with_pg_stats(ceph::coarse_real_clock::time_point now_is,
-		     std::function<void(const pg_stat_t&, epoch_t lec)>&& f);
+  void with_pg_stats(
+    ceph::coarse_real_clock::time_point now_is,
+    std::function<void(const pg_stat_t&, epoch_t lec, epoch_t les)>&& f);
   void with_heartbeat_peers(std::function<void(int)>&& f);
 
   void shutdown();

@@ -7363,9 +7363,10 @@ void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
       std::lock_guard l{min_last_epoch_clean_lock};
       beacon = new MOSDBeacon(get_osdmap_epoch(),
 			      min_last_epoch_clean,
+                              min_last_epoch_started,
 			      superblock.last_purged_snaps_scrub,
 			      cct->_conf->osd_beacon_report_interval);
-      beacon->pgs = min_last_epoch_clean_pgs;
+      beacon->pgs = pgs_for_beacon;
       last_sent_beacon = now;
     }
     monc->send_mon_message(beacon);
@@ -7893,7 +7894,8 @@ MPGStats* OSD::collect_pg_stats()
 
   std::lock_guard lec{min_last_epoch_clean_lock};
   min_last_epoch_clean = get_osdmap_epoch();
-  min_last_epoch_clean_pgs.clear();
+  min_last_epoch_started = get_osdmap_epoch();
+  pgs_for_beacon.clear();
 
   auto now_is = ceph::coarse_real_clock::now();
 
@@ -7906,10 +7908,13 @@ MPGStats* OSD::collect_pg_stats()
     if (!pg->is_primary()) {
       continue;
     }
-    pg->with_pg_stats(now_is, [&](const pg_stat_t& s, epoch_t lec) {
+    pg->with_pg_stats(
+      now_is,
+      [&](const pg_stat_t& s, epoch_t lec, epoch_t lea) {
 	m->pg_stat[pg->pg_id.pgid] = s;
 	min_last_epoch_clean = std::min(min_last_epoch_clean, lec);
-	min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
+	min_last_epoch_started = std::min(min_last_epoch_started, lea);
+	pgs_for_beacon.push_back(pg->pg_id.pgid);
       });
   }
   store_statfs_t st;
@@ -8238,8 +8243,9 @@ void OSD::handle_osd_map(MOSDMap *m)
   epoch_t last = m->get_last();
   dout(3) << "handle_osd_map epochs [" << first << "," << last << "], i have "
 	  << superblock.get_newest_map()
-	  << ", src has [" << m->cluster_osdmap_trim_lower_bound
+	  << ", src has [" << m->oldest_map
           << "," << m->newest_map << "]"
+          << ", trim_lower_bound " << m->cluster_osdmap_trim_lower_bound
 	  << dendl;
 
   logger->inc(l_osd_map);
@@ -8280,7 +8286,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (first > superblock.get_newest_map() + 1) {
     dout(10) << "handle_osd_map message skips epochs "
 	     << superblock.get_newest_map() + 1 << ".." << (first-1) << dendl;
-    if (m->cluster_osdmap_trim_lower_bound <= superblock.get_newest_map() + 1) {
+    if (m->oldest_map <= superblock.get_newest_map() + 1) {
       osdmap_subscribe(superblock.get_newest_map() + 1, false);
       m->put();
       return;
@@ -8289,8 +8295,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     //  1- is good to have
     //  2- is at present the only way to ensure that we get a *full* map as
     //     the first map!
-    if (m->cluster_osdmap_trim_lower_bound < first) {
-      osdmap_subscribe(m->cluster_osdmap_trim_lower_bound - 1, true);
+    if (m->oldest_map < first) {
+      osdmap_subscribe(m->oldest_map - 1, true);
       m->put();
       return;
     }
@@ -8427,6 +8433,7 @@ void OSD::handle_osd_map(MOSDMap *m)
              << superblock.get_maps() << dendl;
   }
   superblock.current_epoch = last;
+  superblock.cluster_oldest_map = m->oldest_map;
 
   // note in the superblock that we were clean thru the prior epoch
   epoch_t boot_epoch = service.get_boot_epoch();

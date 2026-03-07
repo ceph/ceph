@@ -1338,6 +1338,9 @@ void PG::on_new_interval()
 epoch_t PG::cluster_osdmap_trim_lower_bound() {
   return osd->get_superblock().cluster_osdmap_trim_lower_bound;
 }
+epoch_t PG::cluster_oldest_map() {
+  return osd->get_superblock().cluster_oldest_map;
+}
 
 OstreamTemp PG::get_clog_info() {
   return osd->clog->info();
@@ -2431,8 +2434,9 @@ void PG::dump_missing(Formatter *f)
   }
 }
 
-void PG::with_pg_stats(ceph::coarse_real_clock::time_point now_is,
-		       std::function<void(const pg_stat_t&, epoch_t lec)>&& f)
+void PG::with_pg_stats(
+  ceph::coarse_real_clock::time_point now_is,
+  std::function<void(const pg_stat_t&, epoch_t lec, epoch_t les)>&& f)
 {
   dout(30) << __func__ << dendl;
   // possibly update the scrub state & timers
@@ -2445,7 +2449,9 @@ void PG::with_pg_stats(ceph::coarse_real_clock::time_point now_is,
   // now - the actual publishing
   std::lock_guard l{pg_stats_publish_lock};
   if (pg_stats_publish) {
-    f(*pg_stats_publish, pg_stats_publish->get_effective_last_epoch_clean());
+    f(*pg_stats_publish,
+      pg_stats_publish->get_effective_last_epoch_clean(),
+      pg_stats_publish->get_effective_last_epoch_started());
   }
 }
 
