@@ -1,0 +1,12 @@
+os_type: rocky
+os_version: "10.1"
+overrides:
+  selinux:
+    allowlist:
+      - 'comm="systemd".*denied.*\{ prog_run \}.*tclass=bpf.*permissive=1'
+tasks:
+- pexec:
+    all:
+    # for https://tracker.ceph.com/issues/73823
+    - sudo dnf remove nvme-cli -y
+    - sudo dnf install nvmetcli nvme-cli -y
