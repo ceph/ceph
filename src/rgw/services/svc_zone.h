@@ -4,6 +4,7 @@
 #pragma once
 
 #include "driver/rados/rgw_service.h"
+#include <memory>
 
 
 class RGWSI_SysObj;
@@ -22,6 +23,7 @@ class RGWBucketSyncPolicyHandler;
 class RGWRESTConn;
 
 struct rgw_sync_policy_info;
+class RGWSI_Zone_ASocketHook;
 
 class RGWSI_Zone : public RGWServiceInstance
 {
@@ -57,6 +59,7 @@ class RGWSI_Zone : public RGWServiceInstance
   std::unique_ptr<rgw_sync_policy_info> sync_policy;
   rgw::sal::ConfigStore *cfgstore{nullptr};
   const rgw::SiteConfig* site{nullptr};
+  std::unique_ptr<RGWSI_Zone_ASocketHook> asocket_hook;
 
   void init(RGWSI_SysObj *_sysobj_svc,
 	    librados::Rados* rados_,
@@ -92,7 +95,7 @@ public:
   bool zone_is_writeable();
   bool zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const;
   bool zone_syncs_from(const RGWZone& source_zone) const;
-  bool get_redirect_zone_endpoint(std::string *endpoint);
+  bool get_redirect_zone_endpoint_url(std::string *url);
   bool sync_module_supports_writes() const { return writeable_zone; }
   bool sync_module_exports_data() const { return exports_data; }
 

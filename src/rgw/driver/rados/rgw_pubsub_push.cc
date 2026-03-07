@@ -109,7 +109,7 @@ public:
       return -EBUSY;
     }
     bufferlist read_bl;
-    RGWPostHTTPData request(cct, "POST", endpoint, &read_bl, verify_ssl);
+    RGWPostHTTPData request(cct, "POST", RGWEndpoint{endpoint}, &read_bl, verify_ssl);
     request.set_req_connect_timeout(cct->_conf->rgw_http_notif_connection_timeout);
     request.set_req_timeout(cct->_conf->rgw_http_notif_message_timeout);
     const auto post_data = json_format_pubsub_event(event);

@@ -82,6 +82,7 @@ extern "C" {
 #include "rgw_account.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_dedup_cluster.h"
+#include "rgw_resolve.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
@@ -1994,7 +1995,7 @@ static int send_to_url(const string& url,
   key.key = secret;
 
   param_vec_t params;
-  RGWRESTSimpleRequest req(g_ceph_context, info.method, url, NULL, &params, opt_region);
+  RGWRESTSimpleRequest req(g_ceph_context, info.method, RGWEndpoint{url}, NULL, &params, opt_region);
 
   bufferlist response;
   auto result = req.forward_request(dpp(), key, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
@@ -4477,6 +4478,8 @@ int main(int argc, const char **argv)
 
   /* common_init_finish needs to be called after g_conf().set_val() */
   common_init_finish(g_ceph_context);
+
+  rgw_init_resolver();
 
   std::unique_ptr<rgw::sal::ConfigStore> cfgstore;
   std::unique_ptr<rgw::SiteConfig> site;
