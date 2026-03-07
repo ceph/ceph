@@ -333,12 +333,13 @@ void BinnedLRUCacheShard::ClearStats() {
   }
 }
 
-void BinnedLRUCacheShard::print_bins(std::stringstream& out) const
+void BinnedLRUCacheShard::get_age_bins(std::vector<uint64_t>& bins) const
 {
+  bins.clear();
+  bins.reserve(age_bins.size());
   for (const auto& i : age_bins) {
-    out << *i << " ";
+    bins.push_back(*i);
   }
-  out << std::endl;
 }
 
 void BinnedLRUCacheShard::SetStrictCapacityLimit(bool strict_capacity_limit) {
@@ -580,7 +581,7 @@ public:
     if (admin_socket) {
       int r = admin_socket->register_command(
         std::string("rocksdb show cache ") + cache.name + std::string(" name=shard_no,type=CephInt,req=false"),
-        this, "show details of cache " + cache.name);
+        this, "show details of cache " + cache.name, AdminSocket::flag_t::accepts_null_formatter);
       if (r != 0) {
         dout(1) << __func__ << " cannot register SocketHook" << dendl;
         return;
@@ -609,21 +610,54 @@ public:
       int64_t shard_no;
       std::stringstream outstr;
       if (!ceph::common::cmd_getval(cmdmap, "shard_no", shard_no)) {
-        outstr << fmt::format("{:>5}", "shard");
-        for (int j = 0; j < stat_cnt; j++) {
-          outstr << fmt::format("{:>10}", ShardStats::stat_name[j]);
-        }
-        outstr << std::endl;
-        for (int i = 0; i < cache.num_shards_; i++) {
-          outstr << fmt::format("{:>5}", i);
-          ShardStats s = cache.shards_[i].GetStats();
+        if (f == nullptr) {
+          // human readable output
+          outstr << fmt::format("{:>5}", "shard");
           for (int j = 0; j < stat_cnt; j++) {
-            outstr << fmt::format("{:>10}", s[j]);
+            outstr << fmt::format("{:>10}", ShardStats::stat_name[j]);
           }
           outstr << std::endl;
+          for (int i = 0; i < cache.num_shards_; i++) {
+            outstr << fmt::format("{:>5}", i);
+            ShardStats s = cache.shards_[i].GetStats();
+            for (int j = 0; j < stat_cnt; j++) {
+              outstr << fmt::format("{:>10}", s[j]);
+            }
+            outstr << std::endl;
+          }
+        } else {
+          // formatted output
+          f->open_array_section("cache_shards_stats");
+          for (int i = 0; i < cache.num_shards_; i++) {
+            f->open_object_section(std::to_string(i));
+            ShardStats s = cache.shards_[i].GetStats();
+            f->dump_int("shard", i);
+            for (int j = 0; j < stat_cnt; j++) {
+              f->dump_int(ShardStats::stat_name[j], s[j]);
+            }
+            f->close_section();
+          }
+          f->close_section();
         }
       } else {
-        cache.printshard(shard_no, outstr);
+        std::vector<uint64_t> age_bins;
+        cache.get_age_bins(shard_no, age_bins);
+        if (f == nullptr) {
+          outstr << "age bins for shard " << shard_no << " (newest first):" << std::endl;
+          for (const auto& i : age_bins) {
+            outstr << i << " ";
+          }
+          outstr << std::endl;
+        } else {
+          f->open_object_section("age_bins_for_shard");
+          f->dump_int("shard_no", shard_no);
+          f->open_array_section("age_bins");
+          for (const auto& i : age_bins) {
+            f->dump_int("bin", i);
+          }
+          f->close_section();
+          f->close_section();
+        }
       }
       out.append(outstr.str());
     } else if(command == std::string("rocksdb reset cache ") + cache.name) {
@@ -840,9 +874,9 @@ void BinnedLRUCache::UpdatePerfCounters() {
   prev_stats = stats;
 }
 
-void BinnedLRUCache::printshard(int shard_no, std::stringstream& out) {
+void BinnedLRUCache::get_age_bins(int shard_no, std::vector<uint64_t>& bins) {
   if (shard_no < num_shards_) {
-    shards_[shard_no].print_bins(out);
+    shards_[shard_no].get_age_bins(bins);
   }
 }
 
