@@ -81,9 +81,19 @@ class FakeServiceSpec:
         return 9922
 
 
+class FakeCustomContainerSpec:
+    def __init__(self, prometheus_sd=False, prometheus_sd_port_index=0, prometheus_sd_labels=None):
+        self.service_type = 'container'
+        self.prometheus_sd = prometheus_sd
+        self.prometheus_sd_port_index = prometheus_sd_port_index
+        self.prometheus_sd_labels = prometheus_sd_labels or {}
+
+
 class FakeSpecDescription:
-    def __init__(self, service, port):
-        if service == 'ingress':
+    def __init__(self, service, port, spec=None):
+        if spec:
+            self.spec = spec
+        elif service == 'ingress':
             self.spec = FakeIngressServiceSpec(port)
         elif service == 'nfs':
             self.spec = FakeNFSServiceSpec(port)
@@ -94,7 +104,19 @@ class FakeSpecDescription:
 class FakeSpecStore():
     def __init__(self, mgr):
         self.mgr = mgr
-        self._specs = {'ingress': FakeSpecDescription('ingress', 9049), 'nfs': FakeSpecDescription('nfs', 9587), 'smb': FakeSpecDescription('smb', 9922)}
+        self._specs = {
+            "ingress": FakeSpecDescription("ingress", 9049),
+            "nfs": FakeSpecDescription("nfs", 9587),
+            "smb": FakeSpecDescription("smb", 9922),
+            "container.custom-container": FakeSpecDescription(
+                "container",
+                9123,
+                spec=FakeCustomContainerSpec(
+                    prometheus_sd=True,
+                    prometheus_sd_labels={"job": "custom", "env": "test"},
+                ),
+            ),
+        }
 
     def __contains__(self, name):
         return name in self._specs
@@ -271,6 +293,9 @@ class TestServiceDiscovery:
 
         # check content
         assert cfg[0]['targets'] == ['1.2.3.4:9123']
+        assert cfg[0]['labels'] == {'instance': 'node0', 'job': 'custom', 'env': 'test'}
+        assert cfg[1]['targets'] == ['1.2.3.5:9123']
+        assert cfg[1]['labels'] == {'instance': 'node1', 'job': 'custom', 'env': 'test'}
 
     def test_get_sd_config_invalid_service(self):
         mgr = FakeMgr()

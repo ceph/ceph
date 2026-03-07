@@ -12,8 +12,8 @@ from cephadm.services.service_registry import service_registry
 from cephadm.tlsobject_types import TLSCredentials
 
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceSpec, \
-    SNMPGatewaySpec, PrometheusSpec, MgmtGatewaySpec
+from ceph.deployment.service_spec import AlertManagerSpec, CustomContainerSpec, GrafanaSpec, \
+    ServiceSpec, SNMPGatewaySpec, PrometheusSpec, MgmtGatewaySpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls
 from mgr_util import build_url, password_hash
 from ceph.deployment.utils import wrap_ipv6
@@ -524,6 +524,14 @@ class PrometheusService(CephadmService):
             if self.mgr.cache.get_daemons_by_service(s) or self.mgr.cache.get_daemons_by_type(s)
         )]
 
+        for spec_desc in self.mgr.spec_store.get_by_service_type('container'):
+            spec = cast(CustomContainerSpec, spec_desc.spec)
+            if not getattr(spec, 'prometheus_sd', False):
+                continue
+            service_name = f'container.{spec.service_id}'
+            if self.mgr.cache.get_daemons_by_service(service_name):
+                services_to_monitor.append(service_name)
+
         return {s: sd_urls(s, service_discovery_url_prefixes) for s in services_to_monitor}
 
     def configure_alerts(self, r: Dict) -> None:
@@ -657,6 +665,14 @@ class PrometheusService(CephadmService):
         for svc in prometheus_svc_deps:
             configured = bool(mgr.cache.get_daemons_by_service(svc)) or bool(mgr.cache.get_daemons_by_type(svc))
             deps.append(f'{svc}_configured:{configured}')
+
+        for spec_desc in mgr.spec_store.get_by_service_type('container'):
+            spec = cast(CustomContainerSpec, spec_desc.spec)
+            if not getattr(spec, 'prometheus_sd', False):
+                continue
+            service_name = f'container.{spec.service_id}'
+            configured = bool(mgr.cache.get_daemons_by_service(service_name))
+            deps.append(f'{service_name}_configured:{configured}')
 
         if not mgmt_gw_enabled:
             # Ceph mgrs are dependency because when mgmt-gateway is not enabled the service-discovery depends on mgrs ips
