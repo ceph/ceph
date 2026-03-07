@@ -136,7 +136,7 @@ std::optional<std::string> get_option_value(const SeastarOption& option) {
 }
 
 static tl::expected<early_config_t, int>
-_get_early_config(int argc, const char *argv[])
+_get_early_config(int argc, const char *argv[], int entity_type)
 {
   early_config_t ret;
 
@@ -148,7 +148,7 @@ _get_early_config(int argc, const char *argv[])
 
   ret.init_params = ceph_argparse_early_args(
     early_args,
-    CEPH_ENTITY_TYPE_OSD,
+    entity_type,
     &ret.cluster_name,
     &ret.conf_file_list);
 
@@ -160,8 +160,8 @@ _get_early_config(int argc, const char *argv[])
   int r = app.run(
     sizeof(bootstrap_args) / sizeof(bootstrap_args[0]),
     const_cast<char**>(bootstrap_args),
-    [argc, argv, &ret, &early_args] {
-      return seastar::async([argc, argv, &ret, &early_args] {
+    [argc, argv, &ret, &early_args, entity_type] {
+      return seastar::async([argc, argv, &ret, &early_args, entity_type] {
 	seastar::global_logger_registry().set_all_loggers_level(
 	  seastar::log_level::debug);
 	sharded_conf().start(
@@ -173,7 +173,10 @@ _get_early_config(int argc, const char *argv[])
 	auto stop_perf_coll = seastar::deferred_stop(sharded_perf_coll());
 
 	local_conf().parse_env().get();
-	local_conf().parse_argv(early_args).get();
+	{
+	  std::vector<std::string> args_copy(early_args.begin(), early_args.end());
+	  local_conf().parse_argv(std::move(args_copy)).get();
+	}
 	local_conf().parse_config_files(ret.conf_file_list).get();
 
 	if (local_conf()->no_mon_config) {
@@ -221,20 +224,25 @@ _get_early_config(int argc, const char *argv[])
 	                  cpu_cores);
 	  } else {
 	    auto reactor_num = crimson::common::get_conf<uint64_t>("crimson_cpu_num");
-	    if (!reactor_num) {
-	      // We would like to avoid seastar using all available cores.
+	    if (entity_type == CEPH_ENTITY_TYPE_CLIENT && !reactor_num) {
+	      ret.early_args.emplace_back("--smp");
+	      ret.early_args.emplace_back("1");
+	      ret.early_args.emplace_back("--thread-affinity");
+	      ret.early_args.emplace_back("0");
+	      logger().info("get_early_config: client default --smp 1");
+	    } else if (!reactor_num) {
 	      logger().error("get_early_config: crimson_cpu_set"
 	                     " or crimson_cpu_num must be set");
 	      ceph_abort();
+	    } else {
+	      std::string smp = fmt::format("{}", reactor_num);
+	      ret.early_args.emplace_back("--smp");
+	      ret.early_args.emplace_back(smp);
+	      ret.early_args.emplace_back("--thread-affinity");
+	      ret.early_args.emplace_back("0");
+	      logger().info("get_early_config: set --thread-affinity 0 --smp {}",
+	                    smp);
 	    }
-	    std::string smp = fmt::format("{}", reactor_num);
-	    ret.early_args.emplace_back("--smp");
-	    ret.early_args.emplace_back(smp);
-	    ret.early_args.emplace_back("--thread-affinity");
-	    ret.early_args.emplace_back("0");
-	    logger().info("get_early_config: set --thread-affinity 0 --smp {}",
-	                  smp);
-
 	  }
 	} else {
 	  logger().error("get_early_config: --cpuset can be "
@@ -306,7 +314,7 @@ get_early_config(int argc, const char *argv[])
     return tl::unexpected(-errno);
   } else if (worker == 0) { // child
     close(pipes[0]);
-    auto ret = _get_early_config(argc, argv);
+    auto ret = _get_early_config(argc, argv, CEPH_ENTITY_TYPE_OSD);
     if (ret.has_value()) {
       bufferlist bl;
       ::encode(ret.value(), bl);
@@ -355,6 +363,88 @@ get_early_config(int argc, const char *argv[])
       return ret;
     } catch (...) {
       std::cerr << "get_early_config: parent failed to decode" << std::endl;
+      return tl::unexpected(-EINVAL);
+    }
+  }
+}
+
+tl::expected<early_config_t, int>
+get_early_config_client(int argc, const char *argv[])
+{
+  auto args = argv_to_vec(argc, argv);
+  if (args.empty()) {
+    std::cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    std::cout << "usage: " << argv[0] << " [options] [--pool <pool>]" << std::endl;
+    generic_server_usage();
+    exit(0);
+  }
+  int pipes[2];
+  int r = pipe2(pipes, 0);
+  if (r < 0) {
+    std::cerr << "get_early_config_client: failed to create pipes: "
+	      << -errno << std::endl;
+    return tl::unexpected(-errno);
+  }
+
+  pid_t worker = fork();
+  if (worker < 0) {
+    close(pipes[0]);
+    close(pipes[1]);
+    std::cerr << "get_early_config_client: failed to fork: "
+	      << -errno << std::endl;
+    return tl::unexpected(-errno);
+  } else if (worker == 0) { // child
+    close(pipes[0]);
+    auto ret = _get_early_config(argc, argv, CEPH_ENTITY_TYPE_CLIENT);
+    if (ret.has_value()) {
+      bufferlist bl;
+      ::encode(ret.value(), bl);
+      r = bl.write_fd(pipes[1]);
+      close(pipes[1]);
+      if (r < 0) {
+	std::cerr << "get_early_config_client: child failed to write_fd: "
+		  << r << std::endl;
+	exit(-r);
+      } else {
+	exit(0);
+      }
+    } else {
+      std::cerr << "get_early_config_client: child failed: "
+		<< -ret.error() << std::endl;
+      exit(-ret.error());
+    }
+    return tl::unexpected(-1);
+  } else { // parent
+    close(pipes[1]);
+
+    bufferlist bl;
+    early_config_t ret;
+    bool have_data = false;
+    while ((r = bl.read_fd(pipes[0], 1024)) > 0) {
+      have_data = true;
+    }
+    close(pipes[0]);
+
+    int status;
+    waitpid(worker, &status, 0);
+
+    if (!have_data && WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+      exit(0);
+    }
+    if (r < 0) {
+      std::cerr << "get_early_config_client: parent failed to read from pipe: "
+		<< r << std::endl;
+      return tl::unexpected(r);
+    }
+    try {
+      auto bliter = bl.cbegin();
+      ::decode(ret, bliter);
+      return ret;
+    } catch (...) {
+      std::cerr << "get_early_config_client: parent failed to decode" << std::endl;
       return tl::unexpected(-EINVAL);
     }
   }
