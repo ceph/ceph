@@ -6261,6 +6261,18 @@ void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_cha
   std::ignore = rgw::check_for_errors(completed);
 }
 
+
+static bool is_empty_stats(const rgw_bucket_dir_header& header) {
+  for (const auto& pair : header.stats) {
+    const rgw_bucket_category_stats& header_stats = pair.second;
+    if (header_stats.num_entries > 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+
 static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
                                  map<RGWObjCategory, RGWStorageStats>& stats)
 {
@@ -9928,6 +9940,64 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
     rgw_filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, attrs);
   }
 
+  return 0;
+}
+
+int RGWRados::get_bucket_storage_classes_stats(const DoutPrefixProvider *dpp, optional_yield y, const RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
+                                               std::optional<map<std::string, RGWStorageStats>>& sc_stats, string *max_marker,
+                                               const rgw::bucket_index_layout_generation& idx_layout, bool *syncstopped)
+{
+  vector<rgw_bucket_dir_header> headers;
+  map<int, string> bucket_instance_ids;
+  int r = svc.bi_rados->cls_bucket_head(dpp, bucket_info, idx_layout, shard_id, &headers, &bucket_instance_ids, y);
+  if (r < 0) {
+    return r;
+  }
+
+  ceph_assert(headers.size() == bucket_instance_ids.size());
+
+  auto iter = headers.begin();
+  map<int, string>::iterator viter = bucket_instance_ids.begin();
+  bool has_storage_class = true;
+  BucketIndexShardsManager ver_mgr;
+  BucketIndexShardsManager master_ver_mgr;
+  BucketIndexShardsManager marker_mgr;
+  for(; iter != headers.end(); ++iter, ++viter) {
+    if (is_empty_stats(*iter)) {
+      iter->storage_class_stats.emplace();
+    }
+    if (has_storage_class && iter->storage_class_stats.has_value()) {
+      for (auto it = iter->storage_class_stats.value().begin(); it != iter->storage_class_stats.value().end(); ++it) {
+        std::string storage_class = it->first;
+        rgw_bucket_category_stats stats = it->second;
+        RGWStorageStats& s = sc_stats.value()[storage_class];
+
+        s.size += stats.total_size;
+        s.size_rounded += stats.total_size_rounded;
+        s.size_utilized += stats.actual_size;
+        s.num_objects += stats.num_entries;
+      }
+    } else {
+      has_storage_class = false;
+    }
+    if (!has_storage_class) {
+      sc_stats.reset();
+    }
+    ver_mgr.add(viter->first, fmt::format("%lu", (unsigned long)iter->ver));
+    master_ver_mgr.add(viter->first, fmt::format("%lu", (unsigned long)iter->master_ver));
+    if (shard_id >= 0) {
+      *max_marker = iter->max_marker;
+    } else {
+      marker_mgr.add(viter->first, iter->max_marker);
+    }
+    if (syncstopped != NULL)
+      *syncstopped = iter->syncstopped;
+  }
+  ver_mgr.to_string(bucket_ver);
+  master_ver_mgr.to_string(master_ver);
+  if (shard_id < 0) {
+    marker_mgr.to_string(max_marker);
+  }
   return 0;
 }
 
