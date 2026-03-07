@@ -201,6 +201,7 @@ void usage()
   cout << "  object rm                        remove object; include --yes-i-really-mean-it to force removal from bucket index\n";
   cout << "  object put                       put object\n";
   cout << "  object stat                      stat an object for its metadata\n";
+  cout << "  object manifest                  display the manifest of an object, producing a list of RADOS objects containing the data\n";
   cout << "  object unlink                    unlink object from bucket index\n";
   cout << "  object rewrite                   rewrite the specified object\n";
   cout << "  object reindex                   reindex the object(s) indicated by --bucket and either --object or --objects-file\n";
