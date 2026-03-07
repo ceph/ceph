@@ -34,12 +34,13 @@ struct aio_t {
   boost::container::small_vector<iovec,4> iov;
   uint64_t offset, length;
   long rval;
+  int write_hint;
   ceph::buffer::list bl;  ///< write payload (so that it remains stable for duration)
 
   boost::intrusive::list_member_hook<> queue_item;
-
-  aio_t(void *p, int f) : priv(p), fd(f), offset(0), length(0), rval(-1000) {
-  }
+  
+  aio_t(void *p, int f, int write_hint) : priv(p), fd(f), offset(0), length(0), rval(-1000) , write_hint(write_hint){
+  } 
 
   void pwritev(uint64_t _offset, uint64_t len) {
     offset = _offset;
