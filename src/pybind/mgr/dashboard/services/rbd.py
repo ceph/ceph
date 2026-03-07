@@ -876,21 +876,27 @@ class RbdMirroringService:
             # by matching with the image name
             image = next((
                 sched_image for sched_image in scheduled_images
-                if sched_image.get("image") == name), None)
+                if sched_image.get("image") == name), None)  
             if not image:
                 continue
-
+            if not name:
+                inherited_type = "cluster"
+            elif name.endswith('/'):
+                inherited_type = "pool"
+            else:
+                inherited_type = "image"
             # eventually we are merging both the list and status entries
             # all the needed info are fetched above and here we are just mapping
             # it to the dictionary so that in one function we get
             # the schedule related information.
             merged = {
-                "name": name,
+                "name": image_spec if image_spec else name,
+                "schedule_source": name,
                 "schedule_interval": schedule.get("schedule", []),
-                "schedule_time": image.get("schedule_time")
+                "schedule_time": image.get("schedule_time"),
+                "inherited": inherited_type
             }
             schedule_info.append(merged)
-
         return schedule_info if schedule_info else None
 
     @classmethod
