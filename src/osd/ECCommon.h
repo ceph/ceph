@@ -30,16 +30,10 @@
 #include "osd/OSDMap.h"
 #include "osd/osd_op_util.h"
 
-struct ECTransaction {
-  struct WritePlan {
-    bool invalidates_cache = false; // Yes, both are possible
-    std::map<hobject_t,extent_set> to_read;
-    std::map<hobject_t,extent_set> will_write;
-  };
-};
 
 typedef void* OpRequestRef;
 typedef crimson::osd::ObjectContextRef ObjectContextRef;
+#include "ECTransaction.h"
 #else
 #include "common/WorkQueue.h"
 #endif
@@ -533,7 +527,10 @@ struct ECCommon {
       std::list<ECExtentCache::OpRef> cache_ops;
       RMWPipeline *pipeline;
 
+      Op(RMWPipeline &pipeline) : tid(), plan(), pipeline(&pipeline) {}
+#ifndef WITH_CRIMSON
       Op() : tid(), plan(), pipeline(nullptr) {}
+#endif
 
       /// Callbacks
       Context *on_all_commit = nullptr;
@@ -788,7 +785,11 @@ struct ECCommon {
             << " missing_on_shards=" << missing_on_shards
             << " recovery_info=" << recovery_info
             << " recovery_progress=" << recovery_progress
+#ifndef WITH_CRIMSON
             << " obc refcount=" << obc.use_count()
+#else
+            << " obc refcount=" << obc->get_use_count()
+#endif
             << " state=" << ECCommon::RecoveryBackend::RecoveryOp::tostr(state)
             << " waiting_on_pushes=" << waiting_on_pushes
             << ")";

@@ -9,7 +9,7 @@
 #include "crimson/os/seastore/segment_manager/zbd.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/logging.h"
-#include "crimson/common/errorator-loop.h"
+#include "crimson/common/errorator-utils.h"
 #include "include/buffer.h"
 
 SET_SUBSYS(seastore_device);
