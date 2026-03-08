@@ -105,9 +105,9 @@ namespace rgw::dedup {
         }
       }
       inline bool has_shared_manifest() const {return flags.has_shared_manifest(); }
-      inline uint16_t        get_count() { return this->count; }
-      inline disk_block_id_t get_src_block_id() { return this->block_idx; }
-      inline record_id_t     get_src_rec_id() { return this->rec_id; }
+      inline uint16_t        get_count() const { return this->count; }
+      inline disk_block_id_t get_src_block_id() const { return this->block_idx; }
+      inline record_id_t     get_src_rec_id() const { return this->rec_id; }
       inline bool has_valid_hash() const {return flags.has_valid_hash(); }
     private:
       inline void set_shared_manifest_src() { this->flags.set_shared_manifest(); }
@@ -116,6 +116,7 @@ namespace rgw::dedup {
       inline void clear_flags() { flags.clear(); }
       inline void set_has_valid_hash_src() { this->flags.set_has_valid_hash(); }
       inline bool is_singleton() const { return (count == 1); }
+      inline bool not_enough_copies() const { return (count <= 1); }
       inline bool is_occupied() const { return flags.is_occupied(); }
       inline void set_occupied() { this->flags.set_occupied();  }
       inline void clear_occupied() { this->flags.clear_occupied(); }
@@ -138,16 +139,16 @@ namespace rgw::dedup {
                   disk_block_id_t block_id,
                   record_id_t rec_id,
                   bool shared_manifest,
-                  dedup_stats_t *p_small_objs_stat,
-                  dedup_stats_t *p_big_objs_stat,
+                  dedup_stats_t *p_objs_stat,
                   uint64_t *p_duplicate_head_bytes);
 
-    void update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
-                      bool shared_manifest);
+    uint32_t update_entry(key_t *p_key,
+                          disk_block_id_t block_id,
+                          record_id_t rec_id,
+                          bool shared_manifest,
+                          bool inc_counters);
 
     int  get_val(const key_t *p_key, struct value_t *p_val /*OUT*/);
-
-    int inc_count(const key_t *p_key, disk_block_id_t block_id, record_id_t rec_id);
 
     int set_shared_manifest_src_mode(const key_t *p_key,
                                      disk_block_id_t block_id,
@@ -159,10 +160,8 @@ namespace rgw::dedup {
                      bool set_shared_manifest_src,
                      bool set_has_valid_hash_src);
 
-    void count_duplicates(dedup_stats_t *p_small_objs_stat,
-                          dedup_stats_t *p_big_objs_stat);
-
-    void remove_singletons_and_redistribute_keys();
+    void count_duplicates(dedup_stats_t *p_objs_stat);
+    void remove_singletons_and_redistribute_keys(const char* step, bool reset_count);
   private:
     // 32 Bytes unified entries
     struct table_entry_t {
@@ -172,9 +171,9 @@ namespace rgw::dedup {
     static_assert(sizeof(table_entry_t) == 32);
 
     uint32_t find_entry(const key_t *p_key) const;
+    void     reset_counters();
     void     inc_counters(const key_t *p_key,
-                          dedup_stats_t *p_small_objs,
-                          dedup_stats_t *p_big_objs,
+                          dedup_stats_t *p_objs_stat,
                           uint64_t *p_duplicate_head_bytes);
 
     uint32_t       entries_count = 0;
@@ -184,14 +183,6 @@ namespace rgw::dedup {
     uint32_t       max_obj_size_for_split;
     table_entry_t *hash_tab = nullptr;
 
-    // stat counters
-    uint64_t redistributed_count = 0;
-    uint64_t redistributed_search_total = 0;
-    uint64_t redistributed_search_max = 0;
-    uint64_t redistributed_loopback = 0;
-    uint64_t redistributed_perfect = 0;
-    uint64_t redistributed_clear = 0;
-    uint64_t redistributed_not_needed = 0;
     const DoutPrefixProvider* dpp;
   };
 

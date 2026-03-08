@@ -159,6 +159,12 @@ namespace rgw::dedup {
 
   struct dedup_stats_t {
     dedup_stats_t& operator+=(const dedup_stats_t& other);
+    void clear() {
+      singleton_count = 0;
+      unique_count = 0;
+      duplicate_count = 0;
+      dedup_bytes_estimate = 0;
+    }
 
     uint64_t singleton_count = 0;
     uint64_t unique_count = 0;
@@ -198,9 +204,6 @@ namespace rgw::dedup {
     uint64_t ingress_skip_too_small_bytes = 0;
     uint64_t ingress_skip_too_small = 0;
 
-    uint64_t ingress_skip_too_small_64KB_bytes = 0;
-    uint64_t ingress_skip_too_small_64KB = 0;
-
     utime_t  duration = {0, 0};
   };
   std::ostream& operator<<(std::ostream &out, const worker_stats_t &s);
@@ -212,7 +215,6 @@ namespace rgw::dedup {
     md5_stats_t& operator +=(const md5_stats_t& other);
     void dump(Formatter *f) const;
 
-    dedup_stats_t small_objs_stat;
     dedup_stats_t big_objs_stat;
     uint64_t ingress_slabs = 0;
     uint64_t ingress_failed_load_bucket = 0;
@@ -240,7 +242,7 @@ namespace rgw::dedup {
     uint64_t failed_rec_load = 0;
     uint64_t failed_block_load = 0;
 
-    uint64_t different_storage_class = 0;
+    uint64_t non_default_placement = 0;
     uint64_t invalid_hash_no_split_head = 0;
     uint64_t invalid_storage_class_mapping = 0;
     uint64_t singleton_after_purge = 0;

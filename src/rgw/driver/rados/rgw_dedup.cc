@@ -462,10 +462,41 @@ namespace rgw::dedup {
       return ret;
     }
     ldpp_dout(dpp, 20) << __func__ << "::" << p_bucket->get_name() << "/"
-                       << obj_name << " was written to block_idx="
-                       << rec_info.block_id << " rec_id=" << (int)rec_info.rec_id
-                       << dendl;
+                       << obj_name << " was written to block_idx=" << rec_info.block_id
+                       << " rec_id=" << (int)rec_info.rec_id << dendl;
     return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  static void report_failed_add_entry(const DoutPrefixProvider* const dpp,
+                                      const std::string &obj_name,
+                                      md5_stats_t *p_stats)
+  {
+    // We allocate memory for the dedup on startup based on the existing obj count
+    // If the system grew significantly since that point we won't be able to
+    // accommodate all the objects in the hash-table.
+    // Please keep in mind that it is very unlikely since duplicates objects will
+    // consume a single entry and since we skip small objects so in reality
+    // I expect the allocation to be more than sufficient.
+    //
+    // However, if we filled up the system there is still value is continuing
+    // with this process since we might find duplicates to existing object (which
+    // don't take extra space)
+
+    int level = 15;
+    if (p_stats->failed_table_load % 0x10000 == 0) {
+      level = 5;
+    }
+    else if (p_stats->failed_table_load % 0x100 == 0) {
+      level = 10;
+    }
+    ldpp_dout(dpp, level) << __func__ << "::Failed p_table->add_entry(" << obj_name
+                          << ") with an overflow"
+                          << "::loaded_objects=" << p_stats->loaded_objects
+                          << "::failed_table_load=" << p_stats->failed_table_load
+                          << dendl;
+
+    p_stats->failed_table_load++;
   }
 
   //---------------------------------------------------------------------------
@@ -487,7 +518,7 @@ namespace rgw::dedup {
     bool has_shared_manifest = p_rec->s.flags.has_shared_manifest();
     ldpp_dout(dpp, 20) << __func__ << "::bucket=" << p_rec->bucket_name
                        << ", obj=" << p_rec->obj_name << ", block_id="
-                       << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
+                       << block_id << ", rec_id=" << (int)rec_id
                        << ", shared_manifest=" << has_shared_manifest
                        << "::num_parts=" << p_rec->s.num_parts
                        << "::size_4k_units=" << key.size_4k_units
@@ -495,8 +526,7 @@ namespace rgw::dedup {
                        << p_rec->s.md5_low << std::dec << dendl;
 
     int ret = p_table->add_entry(&key, block_id, rec_id, has_shared_manifest,
-                                 &p_stats->small_objs_stat, &p_stats->big_objs_stat,
-                                 &p_stats->dup_head_bytes_estimate);
+                                 &p_stats->big_objs_stat, &p_stats->dup_head_bytes_estimate);
     if (ret == 0) {
       p_stats->loaded_objects ++;
       ldpp_dout(dpp, 20) << __func__ << "::" << p_rec->bucket_name << "/"
@@ -504,30 +534,7 @@ namespace rgw::dedup {
                          << "::loaded_objects=" << p_stats->loaded_objects << dendl;
     }
     else {
-      // We allocate memory for the dedup on startup based on the existing obj count
-      // If the system grew significantly since that point we won't be able to
-      // accommodate all the objects in the hash-table.
-      // Please keep in mind that it is very unlikely since duplicates objects will
-      // consume a single entry and since we skip small objects so in reality
-      // I expect the allocation to be more than sufficient.
-      //
-      // However, if we filled up the system there is still value is continuing
-      // with this process since we might find duplicates to existing object (which
-      // don't take extra space)
-
-      int level = 15;
-      if (p_stats->failed_table_load % 0x10000 == 0) {
-        level = 5;
-      }
-      else if (p_stats->failed_table_load % 0x100 == 0) {
-        level = 10;
-      }
-      ldpp_dout(dpp, level) << __func__ << "::Failed p_table->add_entry (overflow)"
-                            << "::loaded_objects=" << p_stats->loaded_objects
-                            << "::failed_table_load=" << p_stats->failed_table_load
-                            << dendl;
-
-      p_stats->failed_table_load++;
+      report_failed_add_entry(dpp, p_rec->obj_name, p_stats);
     }
     return ret;
   }
@@ -1152,20 +1159,22 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   [[maybe_unused]]static void __attribute__ ((noinline))
   print_record(const DoutPrefixProvider* dpp,
-               const disk_record_t *p_tgt_rec,
+               const char          *caller,
+               const disk_record_t *p_rec,
                disk_block_id_t      block_id,
                record_id_t          rec_id,
                md5_shard_t          md5_shard)
   {
-    ldpp_dout(dpp, 20) << __func__ << "::bucket=" << p_tgt_rec->bucket_name
-                       << ", obj=" << p_tgt_rec->obj_name
-                       << ", bytes_size=" << p_tgt_rec->s.obj_bytes_size
+    ldpp_dout(dpp, 20) << caller << "::bucket=" << p_rec->bucket_name
+                       << ", obj=" << p_rec->obj_name
+                       << ", stor_class=" << p_rec->stor_class
+                       << ", bytes_size=" << p_rec->s.obj_bytes_size
                        << ", block_id=" << block_id
-                       << ", rec_id=" << (int)rec_id << "\n"
+                       << ", rec_id=" << (int)rec_id
                        << ", md5_shard=" << (int)md5_shard
-                       << "::num_parts=" << p_tgt_rec->s.num_parts
-                       << "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
-                       << p_tgt_rec->s.md5_low << std::dec << dendl;
+                       << "::num_parts=" << p_rec->s.num_parts
+                       << "::ETAG=" << std::hex << p_rec->s.md5_high
+                       << p_rec->s.md5_low << std::dec << dendl;
   }
 
   //---------------------------------------------------------------------------
@@ -1199,6 +1208,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int Background::add_obj_attrs_to_record(disk_record_t         *p_rec,
                                           const rgw::sal::Attrs &attrs,
+                                          const RGWObjManifest  &manifest,
                                           md5_stats_t           *p_stats) /*IN-OUT*/
   {
     // if TAIL_TAG exists -> use it as ref-tag, eitherwise take ID_TAG
@@ -1218,73 +1228,8 @@ namespace rgw::dedup {
       }
     }
     p_rec->s.ref_tag_len = p_rec->ref_tag.length();
-
-    // clear bufferlist first
-    p_rec->manifest_bl.clear();
-
-    bool need_to_split_head = false;
-    RGWObjManifest manifest;
-    itr = attrs.find(RGW_ATTR_MANIFEST);
-    if (itr != attrs.end()) {
-      const bufferlist &bl = itr->second;
-      try {
-        auto bl_iter = bl.cbegin();
-        decode(manifest, bl_iter);
-      } catch (buffer::error& err) {
-        ldpp_dout(dpp, 1)  << __func__
-                           << "::ERROR: unable to decode manifest" << dendl;
-        return -EINVAL;
-      }
-      need_to_split_head = should_split_head(manifest.get_head_size(),
-                                             p_rec->s.obj_bytes_size);
-
-      // force explicit tail_placement as the dedup could be on another bucket
-      const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
-      if (unlikely(invalid_tail_placement(tail_placement))) {
-        set_explicit_tail_placement(dpp, &manifest, p_stats);
-        encode(manifest, p_rec->manifest_bl);
-      }
-      else {
-        p_rec->manifest_bl = bl;
-      }
-      p_rec->s.manifest_len = p_rec->manifest_bl.length();
-    }
-    else {
-      ldpp_dout(dpp, 5)  << __func__ << "::ERROR: no manifest" << dendl;
-      return -EINVAL;
-    }
-    const auto &head_placement_rule = manifest.get_head_placement_rule();
-    const std::string& storage_class =
-      rgw_placement_rule::get_canonical_storage_class(head_placement_rule.storage_class);
-
-    // p_rec holds an the storage_class value taken from the bucket-index/obj-attr
-    if (unlikely(storage_class != p_rec->stor_class)) {
-      ldpp_dout(dpp, 5) << __func__ << "::ERROR::manifest storage_class="
-                        << storage_class << " != " << "::bucket-index storage_class="
-                        << p_rec->stor_class << dendl;
-      p_stats->different_storage_class++;
-      return -EINVAL;
-    }
-
-    itr = attrs.find(RGW_ATTR_SHARE_MANIFEST);
-    if (itr != attrs.end()) {
-      uint64_t hash = 0;
-      try {
-        auto bl_iter = itr->second.cbegin();
-        ceph::decode(hash, bl_iter);
-        p_rec->s.shared_manifest = hash;
-      } catch (buffer::error& err) {
-        ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad shared_manifest" << dendl;
-        return -EINVAL;
-      }
-      ldpp_dout(dpp, 20) << __func__ << "::Set Shared_Manifest::OBJ_NAME="
-                         << p_rec->obj_name << "::shared_manifest=0x" << std::hex
-                         << p_rec->s.shared_manifest << std::dec << dendl;
-      p_rec->s.flags.set_shared_manifest();
-    }
-    else {
-      memset(&p_rec->s.shared_manifest, 0, sizeof(p_rec->s.shared_manifest));
-    }
+    bool need_to_split_head = should_split_head(manifest.get_head_size(),
+                                                p_rec->s.obj_bytes_size);
 
     itr = attrs.find(RGW_ATTR_BLAKE3);
     if (itr != attrs.end()) {
@@ -1324,8 +1269,8 @@ namespace rgw::dedup {
   // Need to read attributes from the Head-Object and output them to a new SLAB
   int Background::read_object_attribute(dedup_table_t    *p_table,
                                         disk_record_t    *p_rec,
-                                        disk_block_id_t   old_block_id,
-                                        record_id_t       old_rec_id,
+                                        disk_block_id_t   block_id,
+                                        record_id_t       rec_id,
                                         md5_shard_t       md5_shard,
                                         md5_stats_t      *p_stats /* IN-OUT */,
                                         disk_block_seq_t *p_disk,
@@ -1333,9 +1278,12 @@ namespace rgw::dedup {
   {
     bool should_print_debug = cct->_conf->subsys.should_gather<ceph_subsys_rgw_dedup, 20>();
     if (unlikely(should_print_debug)) {
-      print_record(dpp, p_rec, old_block_id, old_rec_id, md5_shard);
+      print_record(dpp, __func__, p_rec, block_id, rec_id, md5_shard);
     }
     p_stats->processed_objects ++;
+
+    // reset flags
+    p_rec->s.flags.clear();
 
     uint32_t size_4k_units = byte_size_to_disk_blocks(p_rec->s.obj_bytes_size);
     uint64_t ondisk_byte_size = disk_blocks_to_byte_size(size_4k_units);
@@ -1344,46 +1292,19 @@ namespace rgw::dedup {
     if (unlikely(sc_idx == remapper_t::NULL_IDX)) {
       return -EOVERFLOW;
     }
-    key_t key_from_bucket_index(p_rec->s.md5_high, p_rec->s.md5_low, size_4k_units,
-                                p_rec->s.num_parts, sc_idx);
-    dedup_table_t::value_t src_val;
-    int ret = p_table->get_val(&key_from_bucket_index, &src_val);
-    if (ret != 0) {
-      if (!dedupable_object(p_rec->multipart_object(), d_min_obj_size_for_dedup, ondisk_byte_size)) {
-        // record has no valid entry in table because it is a too small
-        // It was loaded to table for calculation and then purged
-        p_stats->skipped_purged_small++;
-        ldpp_dout(dpp, 20) << __func__ << "::skipped purged small obj::"
-                           << p_rec->obj_name << "::" << ondisk_byte_size << dendl;
-        // help small object tests pass - avoid complication differentiating between
-        // small objects ( < 64KB,  >= 64KB <= 4MB, > 4MB
-        p_stats->processed_objects--;
-      }
-      else {
-        // record has no valid entry in table because it is a singleton
-        p_stats->skipped_singleton++;
-        p_stats->skipped_singleton_bytes += ondisk_byte_size;
-        ldpp_dout(dpp, 20) << __func__ << "::skipped singleton::"
-                           << p_rec->obj_name << std::dec << dendl;
-      }
-      return 0;
-    }
 
-    // limit the number of ref_count in the SRC-OBJ to MAX_COPIES_PER_OBJ
-    // check <= because we also count the SRC-OBJ
-    if (src_val.get_count() <= MAX_COPIES_PER_OBJ) {
-      disk_block_id_t src_block_id = src_val.get_src_block_id();
-      record_id_t     src_rec_id   = src_val.get_src_rec_id();
-      // update the number of identical copies we got
-      ldpp_dout(dpp, 20) << __func__ << "::Obj " << p_rec->obj_name
-                         << " has " << src_val.get_count() << " copies" << dendl;
-      p_table->inc_count(&key_from_bucket_index, src_block_id, src_rec_id);
-    }
-    else {
-      // We don't want more than @MAX_COPIES_PER_OBJ to prevent OMAP overload
-      p_stats->skipped_too_many_copies++;
-      ldpp_dout(dpp, 10) << __func__ << "::Obj " << p_rec->obj_name
-                         << " has too many copies already" << dendl;
+    // get key using storage-class from BI without placement_rule
+    key_t key(p_rec->s.md5_high, p_rec->s.md5_low, size_4k_units,
+              p_rec->s.num_parts, sc_idx);
+    key_t *p_key = &key;
+    dedup_table_t::value_t src_val;
+    int ret = p_table->get_val(p_key, &src_val);
+    if (ret != 0) {
+      // record has no valid entry in table because it is a singleton
+      p_stats->skipped_singleton++;
+      p_stats->skipped_singleton_bytes += ondisk_byte_size;
+      ldpp_dout(dpp, 20) << __func__ << "::skipped singleton::"
+                         << p_rec->obj_name << std::dec << dendl;
       return 0;
     }
 
@@ -1399,6 +1320,7 @@ namespace rgw::dedup {
                          << cpp_strerror(-ret) << dendl;
       return 0;
     }
+
     const rgw_obj_index_key roi_key(p_rec->obj_name, p_rec->instance);
     unique_ptr<rgw::sal::Object> p_obj = bucket->get_object(roi_key);
     if (unlikely(!p_obj)) {
@@ -1419,19 +1341,6 @@ namespace rgw::dedup {
     }
 
     const rgw::sal::Attrs& attrs = p_obj->get_attrs();
-    if (src_val.has_shared_manifest() && (attrs.find(RGW_ATTR_SHARE_MANIFEST) != attrs.end())) {
-      // A shared_manifest object can't be a dedup target
-      // We only need to keep a single shared_manifest object
-      // to be used as a dedup-source (which we already got)
-      p_stats->skipped_shared_manifest++;
-      uint64_t dedupable_objects_bytes = __calc_deduped_bytes(p_rec->s.num_parts,
-                                                              ondisk_byte_size);
-      p_stats->shared_manifest_dedup_bytes += dedupable_objects_bytes;
-      ldpp_dout(dpp, 20) << __func__ << "::(1)skipped shared_manifest, SRC::block_id="
-                         << src_val.get_src_block_id()
-                         << "::rec_id=" << (int)src_val.get_src_rec_id() << dendl;
-      return 0;
-    }
 
     if (attrs.find(RGW_ATTR_CRYPT_MODE) != attrs.end()) {
       p_stats->ingress_skip_encrypted++;
@@ -1454,7 +1363,18 @@ namespace rgw::dedup {
     parsed_etag_t parsed_etag;
     auto itr = attrs.find(RGW_ATTR_ETAG);
     if (itr != attrs.end()) {
-      if (unlikely(!parse_etag_string(itr->second.to_str(), &parsed_etag))) {
+      if (parse_etag_string(itr->second.to_str(), &parsed_etag)) {
+        // compare ETAG attribute to the Bucket-Index ETAG
+        if (unlikely(parsed_etag.md5_high  != p_rec->s.md5_high ||
+                     parsed_etag.md5_low   != p_rec->s.md5_low  ||
+                     parsed_etag.num_parts != p_rec->s.num_parts)) {
+          ldpp_dout(dpp, 15) <<__func__ << "::object changed ETAG -> skip "
+                             << p_rec->obj_name << dendl;
+          p_stats->ingress_skip_changed_objs++;
+          return 0;
+        }
+      }
+      else {
         p_stats->ingress_corrupted_etag++;
         ldpp_dout(dpp, 10) << __func__ << "::ERROR: corrupted etag::" << p_rec->obj_name << dendl;
         return -EINVAL;
@@ -1466,40 +1386,133 @@ namespace rgw::dedup {
       return -EINVAL;
     }
 
-    std::string storage_class;
-    itr = attrs.find(RGW_ATTR_STORAGE_CLASS);
+    //===========================================================================
+    // Placement_Rule is not reported in bucket-index, only now we can add it
+    RGWObjManifest manifest;
+    itr = attrs.find(RGW_ATTR_MANIFEST);
     if (itr != attrs.end()) {
-      storage_class = itr->second.to_str();
+      const bufferlist &bl = itr->second;
+      try {
+        auto bl_iter = bl.cbegin();
+        decode(manifest, bl_iter);
+        if (unlikely(manifest.get_obj_size() != p_rec->s.obj_bytes_size)) {
+          ldpp_dout(dpp, 15) <<__func__ << "::object changed size from "
+                             << p_rec->s.obj_bytes_size << "::to"
+                             << manifest.get_obj_size() << dendl;
+          p_stats->ingress_skip_changed_objs++;
+          return 0;
+        }
+        // force explicit tail_placement as the dedup could be on another bucket
+        const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
+        if (unlikely(invalid_tail_placement(tail_placement))) {
+          set_explicit_tail_placement(dpp, &manifest, p_stats);
+          p_rec->manifest_bl.clear();
+          encode(manifest, p_rec->manifest_bl);
+        }
+        else {
+          p_rec->manifest_bl = bl;
+        }
+        p_rec->s.manifest_len = p_rec->manifest_bl.length();
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, 1)  << __func__
+                           << "::ERROR: unable to decode manifest" << dendl;
+        return -EINVAL;
+      }
     }
     else {
-      storage_class = RGW_STORAGE_CLASS_STANDARD;
-    }
-
-    // p_rec holds an the storage_class value taken from the bucket-index
-    if (unlikely(storage_class != p_rec->stor_class)) {
-      ldpp_dout(dpp, 5) << __func__ << "::ERROR::ATTR storage_class="
-                        << storage_class << " != " << "::bucket-index storage_class="
-                        << p_rec->stor_class << dendl;
-      p_stats->different_storage_class++;
+      ldpp_dout(dpp, 5)  << __func__ << "::ERROR: no manifest" << dendl;
       return -EINVAL;
     }
 
-    // no need to check for remap success as we compare keys bellow
-    sc_idx = remapper->remap(storage_class, dpp, &p_stats->failed_map_overflow);
-    key_t key_from_obj(parsed_etag.md5_high, parsed_etag.md5_low,
-                       byte_size_to_disk_blocks(p_obj->get_size()),
-                       parsed_etag.num_parts, sc_idx);
-    if (unlikely(key_from_obj != key_from_bucket_index ||
-                 p_rec->s.obj_bytes_size != p_obj->get_size())) {
-      ldpp_dout(dpp, 15) <<__func__ << "::Skipping changed object "
-                         << p_rec->obj_name << dendl;
-      p_stats->ingress_skip_changed_objs++;
+    bool placement_rule_load = false;
+    const rgw_bucket_placement& bucket_placement = manifest.get_tail_placement();
+    const rgw_placement_rule& tail_placement = bucket_placement.placement_rule;
+    const std::string storage_class_with_placement = tail_placement.to_str();
+    if (unlikely(storage_class_with_placement != p_rec->stor_class)) {
+      p_stats->non_default_placement ++;
+      ldpp_dout(dpp, 20) << __func__ << "::stor_class changed from: "
+                         << p_rec->stor_class << " to "
+                         << storage_class_with_placement << dendl;
+      p_rec->stor_class = storage_class_with_placement;
+      auto new_sc_idx = remapper->remap(storage_class_with_placement, dpp,
+                                        &p_stats->failed_map_overflow);
+      if (unlikely(new_sc_idx == remapper_t::NULL_IDX)) {
+        return -EOVERFLOW;
+      }
+
+      ldpp_dout(dpp, 20) << __func__ << "::stor_class_idx changed from: "
+                         << (int) p_key->stor_class_idx << " to "
+                         << (int) new_sc_idx << dendl;
+
+      // update the key with placement_rule
+      p_key->stor_class_idx = new_sc_idx;
+
+      // now get the correct value with Placement_Rule set in key
+      ret = p_table->get_val(p_key, &src_val);
+      if (ret != 0) {
+        ldpp_dout(dpp, 20) << __func__ << "::set new entry: " << p_rec->obj_name
+                           << "::block_id=" << block_id << dendl;
+        ret = p_table->add_entry(p_key, block_id, rec_id,
+                                 p_rec->s.flags.has_shared_manifest(),
+                                 nullptr, nullptr); // no need to update stats!
+        if (ret == 0) {
+          placement_rule_load = true;
+          ret = p_table->get_val(p_key, &src_val);
+          ceph_assert(ret == 0);
+        }
+        else {
+          report_failed_add_entry(dpp, p_rec->obj_name, p_stats);
+          return ret;
+        }
+      }
+    } // change to storage_class
+    //===========================================================================
+
+    itr = attrs.find(RGW_ATTR_SHARE_MANIFEST);
+    if (itr != attrs.end()) {
+      uint64_t hash = 0;
+      try {
+        auto bl_iter = itr->second.cbegin();
+        ceph::decode(hash, bl_iter);
+        p_rec->s.shared_manifest = hash;
+        p_rec->s.flags.set_shared_manifest();
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad shared_manifest" << dendl;
+        return -EINVAL;
+      }
+      ldpp_dout(dpp, 20) << __func__ << "::Set Shared_Manifest::OBJ_NAME="
+                         << p_rec->obj_name << "::shared_manifest=0x" << std::hex
+                         << p_rec->s.shared_manifest << std::dec << dendl;
+    }
+    else {
+      memset(&p_rec->s.shared_manifest, 0, sizeof(p_rec->s.shared_manifest));
+    }
+
+    if (src_val.has_shared_manifest() && p_rec->s.flags.has_shared_manifest()) {
+      // A shared_manifest object can't be a dedup target
+      // We only need to keep a single shared_manifest object
+      // to be used as a dedup-source (which we already got)
+      p_stats->skipped_shared_manifest++;
+      uint64_t dedupable_objects_bytes = __calc_deduped_bytes(p_rec->s.num_parts,
+                                                              ondisk_byte_size);
+      p_stats->shared_manifest_dedup_bytes += dedupable_objects_bytes;
+      ldpp_dout(dpp, 20) << __func__ << "::(1)skipped shared_manifest, SRC::block_id="
+                         << src_val.get_src_block_id()
+                         << "::rec_id=" << (int)src_val.get_src_rec_id() << dendl;
       return 0;
     }
 
-    // reset flags
-    p_rec->s.flags.clear();
-    ret = add_obj_attrs_to_record(p_rec, attrs, p_stats);
+    // limit the number of ref_count in the SRC-OBJ to MAX_COPIES_PER_OBJ
+    // check <= because we also count the SRC-OBJ
+    if (src_val.get_count() > MAX_COPIES_PER_OBJ) {
+      // We don't want more than @MAX_COPIES_PER_OBJ to prevent OMAP overload
+      p_stats->skipped_too_many_copies++;
+      ldpp_dout(dpp, 10) << __func__ << "::Obj " << p_rec->obj_name
+                         << " has too many copies already" << dendl;
+      return 0;
+    }
+
+    ret = add_obj_attrs_to_record(p_rec, attrs, manifest, p_stats);
     if (unlikely(ret != 0)) {
       ldpp_dout(dpp, 5) << __func__ << "::ERR: failed add_obj_attrs_to_record() ret="
                         << ret << "::" << cpp_strerror(-ret) << dendl;
@@ -1518,8 +1531,16 @@ namespace rgw::dedup {
                           << rec_info.block_id << "::rec_id=" << (int)rec_info.rec_id
                           << "::shared_manifest="
                           << p_rec->s.flags.has_shared_manifest() << dendl;
-      p_table->update_entry(&key_from_bucket_index, rec_info.block_id,
-                            rec_info.rec_id, p_rec->s.flags.has_shared_manifest());
+
+      // placement_rule reload already inc the counter, don't do it twice
+      bool inc_counters = !placement_rule_load;
+      uint32_t count = p_table->update_entry(p_key, rec_info.block_id,
+                                             rec_info.rec_id,
+                                             p_rec->s.flags.has_shared_manifest(),
+                                             inc_counters);
+      if (count > 1) {
+        p_stats->big_objs_stat.duplicate_count ++;
+      }
     }
     else {
       ldpp_dout(dpp, 5) << __func__ << "::ERR: Failed p_disk->add_record()"<< dendl;
@@ -1765,9 +1786,9 @@ namespace rgw::dedup {
     const rgw_bucket *p_bucket = &(src_manifest.get_tail_placement().bucket);
     build_and_set_explicit_manifest(dpp, p_bucket, *p_tail_name, &src_manifest);
 
-    bufferlist manifest_bl;
-    encode(src_manifest, manifest_bl);
-    p_src_rec->manifest_bl = manifest_bl;
+    p_src_rec->manifest_bl.clear();
+    encode(src_manifest, p_src_rec->manifest_bl);
+
     p_src_rec->s.manifest_len = p_src_rec->manifest_bl.length();
     p_src_rec->s.flags.set_split_head();
     return ret;
@@ -1957,7 +1978,7 @@ namespace rgw::dedup {
   {
     bool should_print_debug = cct->_conf->subsys.should_gather<ceph_subsys_rgw_dedup, 20>();
     if (unlikely(should_print_debug)) {
-      print_record(dpp, p_tgt_rec, block_id, rec_id, md5_shard);
+      print_record(dpp, __func__, p_tgt_rec, block_id, rec_id, md5_shard);
     }
     uint32_t size_4k_units = byte_size_to_disk_blocks(p_tgt_rec->s.obj_bytes_size);
     storage_class_idx_t sc_idx = remapper->remap(p_tgt_rec->stor_class, dpp,
@@ -1974,11 +1995,11 @@ namespace rgw::dedup {
     int ret = p_table->get_val(&key, &src_val);
     if (unlikely(ret != 0)) {
       // record has no valid entry in table because it is a singleton
-      // should never happened since we purged all singletons before
-      ldpp_dout(dpp, 5) << __func__ << "::skipped singleton::" << p_tgt_rec->bucket_name
-                        << "/" << p_tgt_rec->obj_name << "::num_parts=" << p_tgt_rec->s.num_parts
-                        << "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
-                        << p_tgt_rec->s.md5_low << std::dec << dendl;
+      // This could legally happen after storage-class change
+      ldpp_dout(dpp, 20) << __func__ << "::skipped singleton::" << p_tgt_rec->bucket_name
+                         << "/" << p_tgt_rec->obj_name << "::num_parts=" << p_tgt_rec->s.num_parts
+                         << "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
+                         << p_tgt_rec->s.md5_low << std::dec << dendl;
       p_stats->singleton_after_purge++;
       return 0;
     }
@@ -2294,9 +2315,17 @@ namespace rgw::dedup {
     // We limit dedup to objects from the same storage_class
     // TBD-Future:
     // Should we use a skip-list of storage_classes we should skip (like glacier) ?
-    const std::string& storage_class =
+    std::string storage_class =
       rgw_placement_rule::get_canonical_storage_class(entry.meta.storage_class);
+
     if (storage_class == RGW_STORAGE_CLASS_STANDARD) {
+      const rgw::sal::ZoneGroup& zonegroup = driver->get_zone()->get_zonegroup();
+      ldpp_dout(dpp, 20) << __func__ << "::RGW_STORAGE_CLASS_STANDARD -> "
+                         << zonegroup.get_default_placement_name() << dendl;
+
+      // assume default_placement (will fix it later if non default)
+      // This will prevent extra work on most configurations
+      storage_class = zonegroup.get_default_placement_name();
       p_worker_stats->default_storage_class_objs++;
       p_worker_stats->default_storage_class_objs_bytes += ondisk_byte_size;
     }
@@ -2306,20 +2335,13 @@ namespace rgw::dedup {
       p_worker_stats->non_default_storage_class_objs++;
       p_worker_stats->non_default_storage_class_objs_bytes += ondisk_byte_size;
     }
-
+    ldpp_dout(dpp, 20) << __func__ << "::storage_class:" << storage_class << dendl;
     if (ondisk_byte_size < d_min_obj_size_for_dedup) {
       if (parsed_etag.num_parts == 0) {
         // dedup only useful for objects bigger than 4MB
         p_worker_stats->ingress_skip_too_small++;
         p_worker_stats->ingress_skip_too_small_bytes += ondisk_byte_size;
-
-        if (ondisk_byte_size >= 64*1024) {
-          p_worker_stats->ingress_skip_too_small_64KB++;
-          p_worker_stats->ingress_skip_too_small_64KB_bytes += ondisk_byte_size;
-        }
-        else {
-          return 0;
-        }
+        return 0;
       }
       else {
         // multipart objects are always good candidates for dedup
@@ -2531,8 +2553,6 @@ namespace rgw::dedup {
                        << "::total_count="      << obj_count_in_shard
                        << "::loaded_objects="   << p_stats->loaded_objects
                        << p_stats->big_objs_stat << dendl;
-    ldpp_dout(dpp, 10) << __func__ << "::small objs::"
-                       << p_stats->small_objs_stat << dendl;
   }
 
   //---------------------------------------------------------------------------
@@ -2557,9 +2577,9 @@ namespace rgw::dedup {
         return -ECANCELED;
       }
     }
-    p_table->count_duplicates(&p_stats->small_objs_stat, &p_stats->big_objs_stat);
-    display_table_stat_counters(dpp, p_stats);
 
+    p_table->count_duplicates(&p_stats->big_objs_stat);
+    display_table_stat_counters(dpp, p_stats);
     ldpp_dout(dpp, 10) << __func__ << "::MD5 Loop::" << d_ctl.dedup_type << dendl;
     if (d_ctl.dedup_type != dedup_req_type_t::DEDUP_TYPE_EXEC) {
       for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
@@ -2573,7 +2593,13 @@ namespace rgw::dedup {
     return 0;
 #endif
 
-    p_table->remove_singletons_and_redistribute_keys();
+    p_table->remove_singletons_and_redistribute_keys("STEP_BUILD_TABLE", true);
+    // reset unique_count and duplicate_count
+    uint64_t unique_count    = p_stats->big_objs_stat.unique_count;
+    uint64_t duplicate_count = p_stats->big_objs_stat.duplicate_count;
+    p_stats->big_objs_stat.unique_count = 0;
+    p_stats->big_objs_stat.duplicate_count = 0;
+
     // The SLABs holds minimal data set brought from the bucket-index
     // Objects participating in DEDUP need to read attributes from the Head-Object
     // TBD  - find a better name than num_work_shards for the combined output
@@ -2593,6 +2619,20 @@ namespace rgw::dedup {
       }
       disk_block_seq.flush_disk_records(d_dedup_cluster_ioctx);
     }
+    if (!p_stats->non_default_placement) {
+      // skip this step when no storage_class update !!
+      ldpp_dout(dpp, 10) << __func__ <<"::no storage_class update, skip second call"
+                         << " to p_table->count_duplicates()"<< dendl;
+      p_stats->big_objs_stat.unique_count    = unique_count;
+      p_stats->big_objs_stat.duplicate_count = duplicate_count;
+    }
+    else {
+      p_table->count_duplicates(&p_stats->big_objs_stat);
+      display_table_stat_counters(dpp, p_stats);
+    }
+
+    // There might be singleton after storage_class update
+    p_table->remove_singletons_and_redistribute_keys("STEP_READ_ATTRIBUTES", false);
 
     ldpp_dout(dpp, 10) << __func__ << "::STEP_REMOVE_DUPLICATES::started..." << dendl;
     uint32_t slab_count = 0;
@@ -2602,6 +2642,7 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 5) << __func__ << "::STEP_REMOVE_DUPLICATES::STOPPED\n" << dendl;
       return -ECANCELED;
     }
+
     ldpp_dout(dpp, 10) << __func__ << "::STEP_REMOVE_DUPLICATES::finished..." << dendl;
     // remove the special SLAB holding aggragted data
     remove_slabs(num_work_shards, md5_shard, slab_count);
