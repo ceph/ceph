@@ -826,9 +826,12 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     op.delta_stats);
 
   shard_id_map<ObjectStore::Transaction> trans(sinfo.get_k_plus_m());
+  unsigned int k_plus_m = sinfo.get_k_plus_m();
   for (auto &&shard: get_parent()->
        get_acting_recovery_backfill_shard_id_set()) {
-    trans[shard];
+    if (shard.id < k_plus_m) {
+      trans[shard];
+    }
   }
 
   op.trace.event("start ec write");
@@ -859,8 +862,19 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     oid_to_version[op.hoid] = op.version;
   }
   for (auto &&pg_shard: get_parent()->get_acting_recovery_backfill_shards()) {
-    ObjectStore::Transaction &transaction = trans.at(pg_shard.shard);
     shard_id_t shard = pg_shard.shard;
+    // Use shard % (k+m) to get the base transaction for zone duplication
+    unsigned int k_plus_m = sinfo.get_k_plus_m();
+    shard_id_t base_shard = shard_id_t(shard.id % k_plus_m);
+    
+    // Skip if base transaction doesn't exist (base shard not in acting set)
+    if (!trans.contains(base_shard)) {
+      dout(20) << __func__ << " Skipping shard " << shard
+               << " - base shard " << base_shard << " not in acting set" << dendl;
+      continue;
+    }
+    
+    ObjectStore::Transaction &transaction = trans.at(base_shard);
     if (transaction.empty()) {
       dout(20) << __func__ << " Transaction for osd." << pg_shard.osd << " shard " << shard << " is empty" << dendl;
     } else {

@@ -713,6 +713,13 @@ public:
     return pool->size;
   }
 
+  unsigned int get_num_zones() const {
+    ceph_assert(pool);
+    int64_t num_zones = 0;
+    pool->opts.get(pool_opts_t::NUM_ZONES, &num_zones);
+    return num_zones > 0 ? num_zones : 0;
+  }
+
   const shard_id_t get_shard(const raw_shard_id_t raw_shard) const {
     return chunk_mapping[int(raw_shard)];
   }
@@ -934,7 +941,7 @@ public:
     ro_end(invalid_offset),
     start_offset(invalid_offset),
     end_offset(invalid_offset),
-    extent_maps(sinfo->get_pool_size()) {}
+    extent_maps(sinfo->get_k_plus_m()) {}
 
   shard_extent_map_t(const stripe_info_t *sinfo,
                      shard_id_map<extent_map> &&_extent_maps) :
