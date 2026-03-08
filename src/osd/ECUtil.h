@@ -708,6 +708,11 @@ public:
     return k + m;
   }
 
+  unsigned int get_pool_size() const {
+    ceph_assert(pool);
+    return pool->size;
+  }
+
   const shard_id_t get_shard(const raw_shard_id_t raw_shard) const {
     return chunk_mapping[int(raw_shard)];
   }
@@ -929,7 +934,7 @@ public:
     ro_end(invalid_offset),
     start_offset(invalid_offset),
     end_offset(invalid_offset),
-    extent_maps(sinfo->get_k_plus_m()) {}
+    extent_maps(sinfo->get_pool_size()) {}
 
   shard_extent_map_t(const stripe_info_t *sinfo,
                      shard_id_map<extent_map> &&_extent_maps) :

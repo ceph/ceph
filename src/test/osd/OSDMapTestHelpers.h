@@ -179,11 +179,22 @@ public:
     int m,
     uint64_t stripe_width,
     uint64_t flags,
-    int64_t pool_id = 0)
+    int64_t pool_id = 0,
+    int num_zones = 0)
   {
     pg_pool_t pool;
     pool.type = pg_pool_t::TYPE_ERASURE;
-    pool.size = k + m;
+    
+    // If num_zones is set, size = num_zones * (k + m)
+    // Otherwise, size = k + m (default behavior)
+    if (num_zones > 0) {
+      pool.size = num_zones * (k + m);
+      // Set the num_zones pool option
+      pool.opts.set(pool_opts_t::NUM_ZONES, num_zones);
+    } else {
+      pool.size = k + m;
+    }
+    
     pool.min_size = k;
     pool.crush_rule = 0;
     pool.erasure_code_profile = "default";

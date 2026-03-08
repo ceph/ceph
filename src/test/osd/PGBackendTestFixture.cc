@@ -20,10 +20,15 @@ void PGBackendTestFixture::setup_ec_pool()
 {
   CephContext *cct = g_ceph_context;
 
-  osdmap = std::make_shared<OSDMap>();
-  osdmap->set_max_osd(k + m);
+  // Calculate the actual number of OSDs needed
+  // If num_zones is set, we need num_zones * (k + m) OSDs
+  // Otherwise, we need k + m OSDs
+  int num_osds = (num_zones > 0) ? (num_zones * (k + m)) : (k + m);
 
-  for (int i = 0; i < k + m; i++) {
+  osdmap = std::make_shared<OSDMap>();
+  osdmap->set_max_osd(num_osds);
+
+  for (int i = 0; i < num_osds; i++) {
     osdmap->set_state(i, CEPH_OSD_EXISTS);
     osdmap->set_weight(i, CEPH_OSD_OUT);
     osdmap->crush->set_item_name(i, "osd." + std::to_string(i));
@@ -33,7 +38,7 @@ void PGBackendTestFixture::setup_ec_pool()
   OSDMap::Incremental inc(osdmap->get_epoch() + 1);
   inc.fsid = osdmap->get_fsid();
 
-  for (int i = 0; i < k + m; i++) {
+  for (int i = 0; i < num_osds; i++) {
     inc.new_state[i] = CEPH_OSD_UP;
     inc.new_weight[i] = CEPH_OSD_IN;
 
@@ -52,13 +57,20 @@ void PGBackendTestFixture::setup_ec_pool()
   // This will properly calculate up_osd_features
   osdmap->apply_incremental(inc);
 
-  pg_pool_t pool = OSDMapTestHelpers::create_ec_pool(k, m, stripe_unit * k, pool_flags, pool_id);
+  pg_pool_t pool = OSDMapTestHelpers::create_ec_pool(k, m, stripe_unit * k, pool_flags, pool_id, num_zones);
   OSDMapTestHelpers::add_pool(osdmap, pool_id, pool);
 
   pgid = pg_t(0, pool_id);
   spgid = spg_t(pgid, shard_id_t(0));
 
-  OSDMapTestHelpers::setup_ec_pg(osdmap, pgid, k, m, 0);
+  // For setup_ec_pg, we need to create an acting set with all OSDs
+  // When num_zones is set, we have num_osds OSDs, but setup_ec_pg expects k+m
+  // So we need to manually set up the acting set
+  std::vector<int> acting;
+  for (int i = 0; i < num_osds; i++) {
+    acting.push_back(i);
+  }
+  OSDMapTestHelpers::set_pg_acting(osdmap, pgid, acting);
 
   // Finalize the CRUSH map to calculate working_size
   // This is required for crush_init_workspace() to work correctly
@@ -93,7 +105,7 @@ void PGBackendTestFixture::setup_ec_pool()
   }
 
   ObjectStore::Transaction t;
-  for (int i = 0; i < k + m; i++) {
+  for (int i = 0; i < num_osds; i++) {
     spg_t shard_spgid(pgid, shard_id_t(i));
     coll_t shard_coll(shard_spgid);
     auto shard_ch = store->create_new_collection(shard_coll);
@@ -113,7 +125,7 @@ void PGBackendTestFixture::setup_ec_pool()
   const pg_pool_t* pool_ptr = OSDMapTestHelpers::get_pool(osdmap, pool_id);
   ceph_assert(pool_ptr != nullptr);
 
-  for (int i = 0; i < k + m; i++) {
+  for (int i = 0; i < num_osds; i++) {
     std::unique_ptr<MockPGBackendListener> shard_listener;
     if (listener_factory) {
       shard_listener = listener_factory(
@@ -134,7 +146,7 @@ void PGBackendTestFixture::setup_ec_pool()
     // Initialize the listener's own info.pgid so OSDMap queries work
     shard_listener->info.pgid = spg_t(pgid, shard_id_t(i));
 
-    for (int j = 0; j < k + m; j++) {
+    for (int j = 0; j < num_osds; j++) {
       shard_listener->shardset.insert(pg_shard_t(j, shard_id_t(j)));
       shard_listener->acting_recovery_backfill_shard_id_set.insert(shard_id_t(j));
 
@@ -162,13 +174,13 @@ void PGBackendTestFixture::setup_ec_pool()
     backends[i] = std::move(shard_ec_switch);
   }
 
-  for (int i = 0; i < k + m; i++) {
+  for (int i = 0; i < num_osds; i++) {
     message_router[i] = [this, i](OpRequestRef op) -> bool {
       return backends[i]->_handle_message(op);
     };
   }
 
-  for (int i = 0; i < k + m; i++) {
+  for (int i = 0; i < num_osds; i++) {
     listeners[i]->set_message_router(&message_router);
     listeners[i]->set_handle_message_callback(
       [this, i](OpRequestRef op) -> bool {

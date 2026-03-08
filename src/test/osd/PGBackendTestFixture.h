@@ -100,6 +100,7 @@ protected:
   uint64_t stripe_unit = 4096;  // aka chunk_size
   std::string ec_plugin = "isa";
   std::string ec_technique = "reed_sol_van";
+  int num_zones = 0;  // number of zones (0 = default, size = k+m)
   
   int num_replicas = 3;
   int min_size = 2;
