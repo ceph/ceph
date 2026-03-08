@@ -37,6 +37,7 @@
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
 #include "rgw_datalog.h"
+#include "rgw_op.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_lc_tier.h"
 #include "rgw_restore.h"
@@ -5443,6 +5444,10 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     accounted_size = compressed ? cs_info.orig_size : ofs;
   }
 
+  if (dp_factory) {
+    accounted_size = dp_factory->get_accounted_size(accounted_size);
+  }
+
   const req_context rctx{dpp, y, nullptr};
   return aoproc.complete(accounted_size, etag, mtime, set_mtime, attrs,
 			    rgw::cksum::no_cksum, delete_at,
@@ -5478,6 +5483,110 @@ int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &
 
   return 0;
 }
+
+/*
+ * DataProcessorFactory for lifecycle transitions.
+ *
+ * Decompresses source data (if compressed) and recompresses with the
+ * destination storage class's compression algorithm.  The caller must
+ * not construct this for encrypted objects.
+ */
+class RGWTransitionDPF : public rgw::sal::DataProcessorFactory {
+  CephContext* cct;
+  RGWObjectCtx& obj_ctx;
+  rgw_obj& obj;
+  uint64_t orig_size;
+  const std::string& compression_type;
+
+  DataProcessorFilter cb;
+  RGWGetObj_Filter* filter{&cb};
+
+  bool need_decompress;
+  RGWCompressionInfo decompress_info;
+  std::optional<RGWGetObj_Decompress> decompress;
+
+  std::optional<RGWPutObj_Compress> compressor;
+  CompressorRef compressor_plugin;
+
+public:
+  RGWTransitionDPF(CephContext* cct_,
+                   RGWObjectCtx& obj_ctx_,
+                   rgw_obj& obj_,
+                   uint64_t obj_size,
+                   const std::string& compression_type_,
+                   bool src_compressed,
+                   std::optional<RGWCompressionInfo> src_cs_info)
+    : cct(cct_), obj_ctx(obj_ctx_), obj(obj_),
+      orig_size(obj_size),
+      compression_type(compression_type_),
+      need_decompress(src_compressed),
+      decompress_info(src_cs_info ? std::move(*src_cs_info)
+                                  : RGWCompressionInfo{}) {}
+
+  int set_writer(rgw::sal::DataProcessor* writer,
+                 rgw::sal::Attrs& attrs,
+                 const DoutPrefixProvider* dpp,
+                 optional_yield y) override
+  {
+    if (need_decompress) {
+      orig_size = decompress_info.orig_size;
+      decompress.emplace(cct, &decompress_info,
+                         false /* partial_content */, filter);
+      filter = &*decompress;
+    }
+
+    // write side: compress if destination wants it
+    rgw::sal::DataProcessor* processor = writer;
+
+    if (compression_type != "none") {
+      compressor_plugin = Compressor::create(cct, compression_type);
+      if (!compressor_plugin) {
+        ldpp_dout(dpp, 1) << "WARNING: failed to load compressor for type "
+            << compression_type << dendl;
+      } else {
+        compressor.emplace(cct, compressor_plugin, processor);
+        processor = &*compressor;
+        // tell the OSD this data is already compressed by RGW
+        obj_ctx.set_compressed(obj);
+      }
+    }
+
+    attrs.erase(RGW_ATTR_COMPRESSION);
+    cb.set_processor(processor);
+
+    // initialize decompressor block iterators for full-object read
+    if (need_decompress && orig_size > 0) {
+      off_t ofs = 0;
+      off_t end = orig_size - 1;
+      filter->fixup_range(ofs, end);
+    }
+
+    return 0;
+  }
+
+  bool need_copy_data() override { return true; }
+
+  RGWGetObj_Filter* get_filter() override { return filter; }
+
+  void finalize_attrs(rgw::sal::Attrs& attrs) override {
+    if (compressor && compressor->is_compressed()) {
+      bufferlist tmp;
+      RGWCompressionInfo cs_info;
+      cs_info.compression_type = compressor_plugin->get_type_name();
+      cs_info.orig_size = orig_size;
+      cs_info.compressor_message = compressor->get_compressor_message();
+      cs_info.blocks = std::move(compressor->get_compression_blocks());
+      encode(cs_info, tmp);
+      attrs[RGW_ATTR_COMPRESSION] = tmp;
+    }
+  }
+
+  uint64_t get_accounted_size(uint64_t default_size) override {
+    if (need_decompress)
+      return orig_size;
+    return default_size;
+  }
+};
 
 int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                              RGWBucketInfo& bucket_info,
@@ -5530,6 +5639,49 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
     (void) decode_policy(dpp, i->second, &owner);
   }
 
+  rgw::sal::DataProcessorFactory* dp_factory = nullptr;
+  std::optional<RGWTransitionDPF> transition_dpf;
+
+  /*
+   * Skip recompression for encrypted objects: the stored data is
+   * ciphertext, so decompressing/recompressing would corrupt it.
+   */
+  if (!attrs.count(RGW_ATTR_CRYPT_MODE)) {
+    const auto& compression_type =
+        svc.zone->get_zone_params().get_compression_type(placement_rule);
+
+    bool src_compressed = false;
+    RGWCompressionInfo cs_info;
+    ret = rgw_compression_info_from_attrset(attrs, src_compressed, cs_info);
+    if (ret < 0)
+      return ret;
+
+    /*
+     * Skip when the source already matches the destination config.
+     * "random" never matches because the stored codec is concrete
+     * (e.g. "zlib") while the config string stays "random".
+     */
+    bool already_matches =
+        compression_type != "random" &&
+        ((!src_compressed && compression_type == "none") ||
+         (src_compressed && cs_info.compression_type == compression_type));
+
+    if (!already_matches) {
+      std::optional<RGWCompressionInfo> opt_cs_info;
+      if (src_compressed) {
+        opt_cs_info = std::move(cs_info);
+      }
+      transition_dpf.emplace(cct, obj_ctx, obj,
+                             obj_size, compression_type,
+                             src_compressed, std::move(opt_cs_info));
+      dp_factory = &*transition_dpf;
+    } else {
+      ldpp_dout(dpp, 20) << __func__
+          << " compression already matches dest config ("
+          << compression_type << "), skipping" << dendl;
+    }
+  }
+
   ret = copy_obj_data(obj_ctx,
                       owner,
                       bucket_info,
@@ -5543,7 +5695,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       olh_epoch,
                       real_time(),
                       nullptr /* petag */,
-                      nullptr, /* dp_factory */
+                      dp_factory,
                       dpp,
                       y,
                       log_op);
