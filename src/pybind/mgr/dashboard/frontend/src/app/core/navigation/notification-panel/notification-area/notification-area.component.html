@@ -1,17 +1,18 @@
 <div
   [ngClass]="{'empty-body': todayNotifications.length === 0 && previousNotifications.length === 0}"
   class="notification-area">
+
 @if (executingTasks.length > 0) {
-<div
-  class="notification-section-heading"
-  i18n>
+<div class="notification-section-heading" i18n>
   Running tasks
 </div>
 
 @for (task of executingTasks; track task.begin_time) {
 <div class="notification-wrapper">
   <div class="notification-item task-item">
-    <cd-icon type="infoCircle"></cd-icon>
+    <div class="notification-icon-wrap">
+      <cd-icon type="infoCircle"></cd-icon>
+    </div>
 
     <div class="notification-content">
       <div class="notification-title">
@@ -47,25 +48,30 @@
   #notificationItemTemplate
   let-notification="notification"
   let-last="last">
+
   <div class="notification-wrapper">
-    <div class="notification-item"
-         data-testid="notification-item">
+    <div class="notification-item" data-testid="notification-item">
+
       <cd-icon
         id="notification-icon"
         [type]="notificationIconMap[notification.type] || notificationIconMap['default']">
       </cd-icon>
 
+      <div class="notification-timestamp">
+        {{ notification.timestamp | relativeDate }}
+      </div>
+
       <div class="notification-content">
-        <div class="notification-timestamp">
-          {{ notification.timestamp | relativeDate }}
-        </div>
+
         <div class="notification-title">
           {{ notification.title }}
         </div>
+
         <div
           class="notification-message"
           [innerHTML]="notification.message | sanitizeHtml">
         </div>
+
       </div>
 
       <button
@@ -75,18 +81,19 @@
         (click)="removeNotification(notification, $event)">
         <cd-icon type="destroy"></cd-icon>
       </button>
+
     </div>
 
     @if (!last) {
     <div class="notification-divider"></div>
     }
+
   </div>
+
 </ng-template>
 
 @if (todayNotifications.length > 0) {
-<div
-  class="notification-section-heading"
-  i18n>
+<div class="notification-section-heading" i18n>
   Today
 </div>
 
@@ -99,9 +106,7 @@
 }
 
 @if (previousNotifications.length > 0) {
-<div
-  class="notification-section-heading"
-  i18n>
+<div class="notification-section-heading" i18n>
   Previous
 </div>
 
@@ -118,4 +123,5 @@
   <div i18n>No notifications</div>
 </div>
 }
+
 </div>

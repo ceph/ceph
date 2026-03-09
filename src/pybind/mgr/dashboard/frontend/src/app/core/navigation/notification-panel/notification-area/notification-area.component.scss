@@ -20,7 +20,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: var(--cds-spacing-02);
+  margin-top: $spacing-02;
 }
 
 .task-progress {
@@ -35,8 +35,9 @@
 
   color: $text-secondary;
   line-height: 1;
-  margin-top: 0;
+  margin: 0;
   display: block;
+  flex: 0 0 auto;
 }
 
 .notification-title {
@@ -79,41 +80,57 @@
 }
 
 .notification-item {
-  display: flex;
-  gap: $spacing-05;
-  padding: $spacing-03 0;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: $spacing-03;
   position: relative;
+  padding: $spacing-05 0;
+}
 
-  .notification-close {
-    position: absolute;
-    right: 0;
-    top: $spacing-03;
-    padding: $spacing-02;
-    min-height: 0;
-    color: $text-helper;
-    opacity: 0;
-    transition: opacity 0.2s ease-in-out;
+#notification-icon {
+  grid-row: 1;
+  grid-column: 1;
+  flex: 0 0 auto;
+  display: block;
+}
 
-    &:hover {
-      background-color: $layer-hover;
-    }
-  }
-
-  &:hover {
-    .notification-close {
-      opacity: 1;
-    }
-  }
+.notification-timestamp {
+  grid-row: 1;
+  grid-column: 2;
+  @include type.type-style('label-01');
+  color: $text-secondary;
+  margin: 0;
+  display: block;
+  align-self: center;
 }
 
 .notification-content {
-  flex: 1;
-  min-width: 0;
+  grid-row: 2;
+  grid-column: 2;
   display: flex;
   flex-direction: column;
-  gap: $spacing-02;
-  padding-right: $spacing-06;
+  gap: $spacing-01;
+  padding-right: $spacing-07;
+  width: 100%;
+}
+
+.notification-close {
+  position: absolute;
+  right: 0;
+  top: $spacing-03;
+  padding: $spacing-02;
+  min-height: 0;
+  color: $text-helper;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.notification-item:hover .notification-close {
+  opacity: 1;
+}
+
+.notification-close:hover {
+  background-color: $layer-hover;
 }
 
 .notification-divider {
