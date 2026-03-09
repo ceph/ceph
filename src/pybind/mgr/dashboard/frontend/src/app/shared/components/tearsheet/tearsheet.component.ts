@@ -10,7 +10,8 @@ import {
   DestroyRef,
   OnDestroy,
   ChangeDetectionStrategy,
-  TemplateRef
+  TemplateRef,
+  ViewEncapsulation
 } from '@angular/core';
 import { FormBuilder } from '@angular/forms';
 import { Step } from 'carbon-components-angular';
@@ -54,7 +55,8 @@ formgroup: CdFormGroup;
   standalone: false,
   templateUrl: './tearsheet.component.html',
   styleUrls: ['./tearsheet.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None
 })
 export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() title!: string;
