@@ -38,7 +38,7 @@ public:
    * Ondisk layout (TODO)
    *
    * ---------------------------------------------------------------------------
-   * | rbm_superblock_t | metadatas |        ...      |    data blocks    |
+   * | device_superblock_t | metadatas |        ...      |    data blocks    |
    * ---------------------------------------------------------------------------
    */
 
