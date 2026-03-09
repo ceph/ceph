@@ -3240,15 +3240,6 @@ Then run the following:
             previews_for_specs.update({host: osd_reports})
         return previews_for_specs
 
-    def _calc_daemon_deps(self,
-                          spec: Optional[ServiceSpec],
-                          daemon_type: str,
-                          daemon_id: str) -> List[str]:
-        svc_type = daemon_type_to_service(daemon_type)
-        svc_cls = service_registry.get_service(svc_type)
-        deps = svc_cls.get_dependencies(self, spec, daemon_type) if svc_cls else []
-        return sorted(deps)
-
     @forall_hosts
     def _remove_daemons(self, name: str, host: str) -> str:
         return CephadmServe(self)._remove_daemon(name, host)
