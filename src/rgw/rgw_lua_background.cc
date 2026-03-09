@@ -112,7 +112,7 @@ int Background::read_script() {
     return -EAGAIN;
   }
   std::string tenant;
-  return rgw::lua::read_script(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, rgw_script);
+  return rgw::lua::read_script(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, rgw_script, "");
 }
 
 std::unique_ptr<lua_state_guard> Background::initialize_lguard_state() {

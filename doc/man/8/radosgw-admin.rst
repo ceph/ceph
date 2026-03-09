@@ -846,6 +846,10 @@ Options
 
     Specify a file to read when setting data.
 
+.. option:: --infile-name
+
+    Specify a file name when setting data (default 'default').
+
 .. option:: --categories=<list>
 
     Comma separated list of categories, used in usage show.

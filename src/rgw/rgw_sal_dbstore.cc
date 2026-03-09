@@ -2129,28 +2129,28 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
+  int DBLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script, const std::string& name)
   {
     return -ENOENT;
   }
 
-  int DBLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& list_metadata_key, const std::string& key, std::vector<std::string>& scripts)
+  int DBLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::vector<std::string>& scripts)
   {
     return -ENOENT;
   }
 
   std::tuple<rgw::lua::LuaCodeType, int> DBLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
-                                                                    const std::string& key)
+                                                                    const std::string& key, const std::string& name)
   {
     return std::make_tuple("", -ENOENT);
   }
 
-  int DBLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
+  int DBLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script, const std::string& name)
   {
     return -ENOENT;
   }
 
-  int DBLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key)
+  int DBLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& name)
   {
     return -ENOENT;
   }

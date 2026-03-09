@@ -1918,28 +1918,28 @@ RGWBucketSyncPolicyHandlerRef POSIXZone::get_sync_policy_handler() {
   return nullptr;
 }
 
-int POSIXLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
+int POSIXLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script, const std::string& name)
 {
   return -ENOENT;
 }
 
-int POSIXLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& list_metadata_key, const std::string& key, std::vector<std::string>& scripts)
+int POSIXLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::vector<std::string>& scripts)
 {
   return -ENOENT;
 }
 
 std::tuple<rgw::lua::LuaCodeType, int> POSIXLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
-                                                                               const std::string& key)
+                                                                               const std::string& key, const std::string& name)
 {
   return std::make_tuple("", -ENOENT);
 }
 
-int POSIXLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
+int POSIXLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script, const std::string& name)
 {
   return -ENOENT;
 }
 
-int POSIXLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key)
+int POSIXLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& name)
 {
   return -ENOENT;
 }

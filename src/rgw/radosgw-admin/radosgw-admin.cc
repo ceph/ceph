@@ -475,6 +475,7 @@ void usage()
   cout << "   --skip-zero-entries               log show only dumps entries that don't have zero value\n";
   cout << "                                     in one of the numeric field\n";
   cout << "   --infile=<file>                   file to read in when setting data\n";
+  cout << "   --infile-name=<file-name>         name of file when setting data\n";
   cout << "   --categories=<list>               comma separated list of categories, used in usage show\n";
   cout << "   --caps=<caps>                     list of caps (e.g., \"usage=read, write; user=read\")\n";
   cout << "   --op-mask=<op-mask>               permission of user's operations (e.g., \"read, write, delete, *\")\n";
@@ -3691,6 +3692,7 @@ int main(int argc, const char **argv)
   int check_objects = false;
   RGWBucketAdminOpState bucket_op;
   string infile;
+  string infile_name;
   string metadata_key;
   RGWObjVersionTracker objv_tracker;
   string marker;
@@ -4212,6 +4214,8 @@ int main(int argc, const char **argv)
       caps = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--infile", (char*)NULL)) {
       infile = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--infile-name", (char*)NULL)) {
+      infile_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--metadata-key", (char*)NULL)) {
       metadata_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--marker", (char*)NULL)) {
@@ -4760,6 +4764,7 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::PUBSUB_TOPIC_DUMP
 			  && opt_cmd != OPT::SCRIPT_PUT
 			  && opt_cmd != OPT::SCRIPT_GET
+        && opt_cmd != OPT::SCRIPT_LIST
 			  && opt_cmd != OPT::SCRIPT_RM
                           && opt_cmd != OPT::ACCOUNT_CREATE
                           && opt_cmd != OPT::ACCOUNT_MODIFY
@@ -12208,7 +12213,7 @@ next:
       return EINVAL;
     }
     auto lua_manager = driver->get_lua_manager("");
-    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script, infile_name);
     if (rc < 0) {
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
       return -rc;
@@ -12227,7 +12232,7 @@ next:
     }
     auto lua_manager = driver->get_lua_manager("");
     std::string script;
-    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script, infile_name);
     if (rc == -ENOENT) {
       std::cout << "no script exists for context: " << *str_script_ctx << 
         (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
@@ -12253,7 +12258,7 @@ next:
     std::vector<std::string> scripts;
     const auto rc = rgw::lua::list_scripts(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, scripts);
     if (rc == -ENOENT) {
-      std::cout << "no script exists for context: " << *str_script_ctx << 
+      std::cout << "no scripts exists for context: " << *str_script_ctx << 
         (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
     } else if (rc < 0) {
       cerr << "ERROR: failed to read script. error: " << rc << std::endl;
@@ -12276,7 +12281,7 @@ next:
       return EINVAL;
     }
     auto lua_manager = driver->get_lua_manager("");
-    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
+    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, infile_name);
     if (rc < 0) {
       cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
       return -rc;

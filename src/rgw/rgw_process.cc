@@ -393,7 +393,7 @@ int process_request(const RGWProcessEnv& penv,
     if (!is_health_request) {
       auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
                                                   s->bucket_tenant, s->yield,
-                                                  rgw::lua::context::preRequest);
+                                                  rgw::lua::context::preRequest, "");
       if (rc == -ENOENT) {
         // no script, nothing to do
       } else if (rc < 0) {
@@ -448,7 +448,7 @@ done:
     if (!is_health_request) {
       auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
                                                   s->bucket_tenant, s->yield,
-                                                  rgw::lua::context::postRequest);
+                                                  rgw::lua::context::postRequest, "");
       if (rc == -ENOENT) {
         // no script, nothing to do
       } else if (rc < 0) {

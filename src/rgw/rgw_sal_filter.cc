@@ -1536,33 +1536,33 @@ int FilterWriter::complete(size_t accounted_size, const std::string& etag,
 }
 
 int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
-				const std::string& key, std::string& script)
+				const std::string& key, std::string& script, const std::string& name)
 {
-  return next->get_script(dpp, y, key, script);
+  return next->get_script(dpp, y, key, script, name);
 }
 
 int FilterLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y,
-				const std::string& list_metadata_key, const std::string& key, std::vector<std::string>& scripts)
+				const std::string& key, std::vector<std::string>& scripts)
 {
-  return next->list_scripts(dpp, y, list_metadata_key, key, scripts);
+  return next->list_scripts(dpp, y, key, scripts);
 }
 
 std::tuple<rgw::lua::LuaCodeType, int> FilterLuaManager::get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
-				             const std::string& key)
+				             const std::string& key, const std::string& name)
 {
-  return next->get_script_or_bytecode(dpp, y, key);
+  return next->get_script_or_bytecode(dpp, y, key, name);
 }
 
 int FilterLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
-				const std::string& key, const std::string& script)
+				const std::string& key, const std::string& script, const std::string& name)
 {
-  return next->put_script(dpp, y, key, script);
+  return next->put_script(dpp, y, key, script, name);
 }
 
 int FilterLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y,
-				const std::string& key)
+				const std::string& key, const std::string& name)
 {
-  return next->del_script(dpp, y, key);
+  return next->del_script(dpp, y, key, name);
 }
 
 int FilterLuaManager::add_package(const DoutPrefixProvider* dpp, optional_yield y,
