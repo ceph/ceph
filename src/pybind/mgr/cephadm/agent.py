@@ -972,7 +972,7 @@ class CephadmAgentHelpers:
             return down
         try:
             spec = self.mgr.spec_store.active_specs.get(CephadmAgent.TYPE, None)
-            deps = self.mgr._calc_daemon_deps(spec, CephadmAgent.TYPE, agent.daemon_id)
+            deps = CephadmAgent.sorted_dependencies(self.mgr, spec, CephadmAgent.TYPE)
             last_deps, last_config = self.mgr.agent_cache.get_agent_last_config_deps(host)
             if not last_config or last_deps != deps:
                 # if root cert is the dep that changed, we must use ssh to reconfig
