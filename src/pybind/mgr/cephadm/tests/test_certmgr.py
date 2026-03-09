@@ -1352,8 +1352,8 @@ class TestCertMgr(object):
 
         deps = CephadmService.get_dependencies(cephadm_module, spec)
         assert 'certificate_source: inline' in deps
-        assert f'ssl_cert: {utils.md5_hash("my-cert-data")}' in deps
-        assert f'ssl_key: {utils.md5_hash("my-key-data")}' in deps
+        assert f'ssl_cert: {utils.config_hash("my-cert-data")}' in deps
+        assert f'ssl_key: {utils.config_hash("my-key-data")}' in deps
 
     def test_grafana_get_dependencies_includes_parent_tls_deps(self, cephadm_module: CephadmOrchestrator):
         """GrafanaService.get_dependencies should include parent TLS deps (certificate_source)

@@ -9,7 +9,7 @@ from ceph.deployment.utils import is_ipv6
 from mgr_util import build_url
 from cephadm import utils
 from orchestrator import OrchestratorError, DaemonDescription
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, CephadmService
 from .service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.schedule import get_placement_hosts
@@ -123,7 +123,6 @@ class IngressService(CephService):
             hosts = get_placement_hosts(spec, mgr.cache.get_schedulable_hosts(), mgr.cache.get_draining_hosts())
             deps.append(f'placement_hosts:{",".join(sorted(h.hostname for h in hosts))}')
 
-        from cephadm.services.cephadmservice import CephadmService
         parent_deps = CephadmService.get_dependencies(mgr, spec)
         return sorted(deps + parent_deps)
 

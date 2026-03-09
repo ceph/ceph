@@ -8,7 +8,7 @@ from threading import Lock
 from typing import Dict, Tuple, Any, List, cast, Optional, TYPE_CHECKING
 from configparser import ConfigParser
 from io import StringIO
-
+from cephadm import utils
 from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 

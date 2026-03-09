@@ -341,10 +341,10 @@ class CephadmService(metaclass=ABCMeta):
         if cert_source:
             deps.append(f'certificate_source: {cert_source}')
         if spec.ssl_cert and spec.ssl_key:
-            deps.append(f'ssl_cert: {str(utils.md5_hash(spec.ssl_cert))}')
-            deps.append(f'ssl_key: {str(utils.md5_hash(spec.ssl_key))}')
+            deps.append(f'ssl_cert: {str(utils.config_hash(spec.ssl_cert))}')
+            deps.append(f'ssl_key: {str(utils.config_hash(spec.ssl_key))}')
         if spec.ssl_ca_cert:
-            deps.append(f'ssl_ca_cert: {str(utils.md5_hash(spec.ssl_ca_cert))}')
+            deps.append(f'ssl_ca_cert: {str(utils.config_hash(spec.ssl_ca_cert))}')
 
         return sorted(deps)
 
