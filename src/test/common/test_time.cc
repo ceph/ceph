@@ -23,6 +23,11 @@
 #include "gtest/gtest.h"
 #include "include/stringify.h"
 
+#if defined __x86_64__ or defined __i386__
+using ceph::tsc_clock;
+using ceph::tsc_tick;
+#endif
+
 using namespace std;
 
 using ceph::real_clock;
@@ -198,6 +203,66 @@ TEST(TimePoints, stringify) {
   ASSERT_TRUE(s[26] == '-' || s[26] == '+');
   ASSERT_EQ(s.substr(0, 9), "2019-04-2");
 }
+
+#if defined __x86_64__ or defined __i386__
+TEST(TscClock, Sanity) {
+  if (!tsc_clock::is_available) {
+    GTEST_SKIP() << "TSC clock not available";
+  }
+  auto now = tsc_clock::now();
+  auto now2 = tsc_clock::now();
+  ASSERT_GE(now2, now);
+  ASSERT_FALSE(tsc_clock::is_zero(now));
+  ASSERT_TRUE(tsc_clock::is_zero(tsc_clock::zero()));
+  ASSERT_TRUE(tsc_clock::is_steady);
+}
+
+TEST(TscTick, Conversions) {
+  if (!tsc_clock::is_available) {
+    GTEST_SKIP() << "TSC clock not available";
+  }
+
+  // Test ticks <-> nanoseconds
+  int64_t ticks = 1000000;
+  int64_t ns = tsc_tick::to_nanoseconds(ticks);
+  ASSERT_GT(ns, 0);
+  int64_t ticks2 = tsc_tick::from_nanoseconds(ns);
+  // Allow for some rounding error in fixed-point arithmetic
+  ASSERT_NEAR(ticks, ticks2, 2);
+
+  // Test ticks <-> seconds
+  double seconds_val = 1.0;
+  int64_t ticks_per_sec = tsc_tick::from_seconds(seconds_val);
+  ASSERT_NEAR(ticks_per_sec, tsc_tick::ticks_per_second, 1.0);
+  double seconds_val2 = tsc_tick::to_seconds((double)ticks_per_sec);
+  ASSERT_NEAR(seconds_val, seconds_val2, 0.000001);
+
+  // Test durations
+  std::chrono::nanoseconds ns_duration(1000000);
+  int64_t ticks_from_dur = tsc_tick::from_duration(ns_duration);
+  ASSERT_EQ(ticks_from_dur, tsc_tick::from_nanoseconds(1000000));
+
+  std::chrono::nanoseconds ns_duration2 = tsc_tick::to_duration<int64_t, std::nano>(ticks_from_dur);
+  ASSERT_NEAR(ns_duration.count(), ns_duration2.count(), 2);
+
+  std::chrono::duration<double> sec_duration(1.0);
+  double ticks_from_sec_dur = tsc_tick::from_duration(sec_duration);
+  ASSERT_NEAR(ticks_from_sec_dur, tsc_tick::ticks_per_second, 1.0);
+
+  std::chrono::duration<double> sec_duration2 = tsc_tick::to_duration<double, std::ratio<1>>(ticks_from_sec_dur);
+  ASSERT_NEAR(sec_duration.count(), sec_duration2.count(), 0.000001);
+
+  // Test floating point to_duration with large value
+  double large_ticks = tsc_tick::ticks_per_second * 60.0; // 1 minute
+  std::chrono::seconds s_duration = tsc_tick::to_duration<int, std::ratio<1>>(large_ticks);
+  ASSERT_NEAR(s_duration.count(), 60, 1);
+
+  // Test integer to_duration with large value
+  int64_t large_ticks_int = (int64_t)large_ticks;
+  std::chrono::seconds s_duration2 = tsc_tick::to_duration<int, std::ratio<1>>(large_ticks_int);
+  ASSERT_NEAR(s_duration2.count(), 60, 1);
+}
+#endif
 
 namespace {
   template<typename Rep, typename Period>
