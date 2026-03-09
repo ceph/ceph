@@ -15,8 +15,9 @@ Key principles
  * Everyone's role is ultimately to serve the users and participation
    is voluntary.
 
-Bodies
-------
+========
+ Bodies
+========
 
 Ceph Executive Council
 ======================
@@ -125,6 +126,14 @@ Current Members
 Component Team Leads
 ====================
 
+Component Team Leads are selected by the executive council, generally based on
+the recommendation by team members and outgoing lead.  Periodic
+rotation of lead responsibility among team members is encouraged.
+
+.. _component team: https://ceph.io/en/community/team/
+
+The current component leads are documented at: `component team`_
+
 Responsibilities
 ----------------
 
@@ -135,12 +144,10 @@ Responsibilities
  * Bug triage, scrubs
  * etc.
 
-Team leads are selected by the executive council, generally based on
-the recommendation by team members and outgoing lead.  Periodic
-rotation of lead responsibility among team members is encouraged.
+.. _cf:
 
 The Ceph Foundation
--------------------
+===================
 
 The Ceph Foundation is organized as a directed fund under the Linux
 Foundation and is tasked with supporting the Ceph project community
