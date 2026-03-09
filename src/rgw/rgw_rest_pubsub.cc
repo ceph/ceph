@@ -391,7 +391,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     encode_xml("TopicArn", topic_arn.to_string(), f);
     f->close_section(); // CreateTopicResult
     f->open_object_section("ResponseMetadata");
-    encode_xml("RequestId", s->req_id, f); 
+    encode_xml("RequestId", s->trans_id, f);
     f->close_section(); // ResponseMetadata
     f->close_section(); // CreateTopicResponse
     rgw_flush_formatter_and_reset(s, f);
@@ -501,7 +501,7 @@ public:
     encode_xml("Topics", result, f); 
     f->close_section(); // ListTopicsResult
     f->open_object_section("ResponseMetadata");
-    encode_xml("RequestId", s->req_id, f); 
+    encode_xml("RequestId", s->trans_id, f);
     f->close_section(); // ResponseMetadata
     if (!next_token.empty()) {
       encode_xml("NextToken", next_token, f);
@@ -626,7 +626,7 @@ class RGWPSGetTopicOp : public RGWOp {
     encode_xml("Topic", result, f); 
     f->close_section();
     f->open_object_section("ResponseMetadata");
-    encode_xml("RequestId", s->req_id, f); 
+    encode_xml("RequestId", s->trans_id, f);
     f->close_section();
     f->close_section();
     rgw_flush_formatter_and_reset(s, f);
@@ -712,7 +712,7 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
     result.dump_xml_as_attributes(f);
     f->close_section(); // GetTopicAttributesResult
     f->open_object_section("ResponseMetadata");
-    encode_xml("RequestId", s->req_id, f); 
+    encode_xml("RequestId", s->trans_id, f);
     f->close_section(); // ResponseMetadata
     f->close_section(); // GetTopicAttributesResponse
     rgw_flush_formatter_and_reset(s, f);
@@ -877,7 +877,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
     const auto f = s->formatter;
     f->open_object_section_in_ns("SetTopicAttributesResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ResponseMetadata");
-    encode_xml("RequestId", s->req_id, f);
+    encode_xml("RequestId", s->trans_id, f);
     f->close_section();  // ResponseMetadata
     f->close_section();  // SetTopicAttributesResponse
     rgw_flush_formatter_and_reset(s, f);
@@ -1032,7 +1032,7 @@ class RGWPSDeleteTopicOp : public RGWOp {
     const auto f = s->formatter;
     f->open_object_section_in_ns("DeleteTopicResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ResponseMetadata");
-    encode_xml("RequestId", s->req_id, f); 
+    encode_xml("RequestId", s->trans_id, f);
     f->close_section(); // ResponseMetadata
     f->close_section(); // DeleteTopicResponse
     rgw_flush_formatter_and_reset(s, f);
