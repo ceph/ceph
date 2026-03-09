@@ -1208,11 +1208,6 @@ class CephadmServe:
                     REDEPLOY_TRIGGERS = ['secure_monitoring_stack', 'mgmt-gateway']
                     if any(svc in e for e in diff for svc in REDEPLOY_TRIGGERS):
                         action = 'redeploy'
-                elif dd.daemon_type == 'jaeger-agent':
-                    # changes to jaeger-agent deps affect the way the unit.run for
-                    # the daemon is written, which we rewrite on redeploy, but not
-                    # on reconfig.
-                    action = 'redeploy'
             elif dd.daemon_type == 'haproxy':
                 if spec and hasattr(spec, 'backend_service'):
                     backend_spec = self.mgr.spec_store[spec.backend_service].spec
