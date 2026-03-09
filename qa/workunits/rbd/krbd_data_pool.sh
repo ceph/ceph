@@ -105,8 +105,8 @@ ceph osd pool create repdata 24 24
 rbd pool init repdata
 ceph osd erasure-code-profile set teuthologyprofile crush-failure-domain=osd m=1 k=2
 ceph osd pool create ecdata 24 24 erasure teuthologyprofile
-rbd pool init ecdata
 ceph osd pool set ecdata allow_ec_overwrites true
+rbd pool init ecdata
 ceph osd pool create rbdnonzero 24 24
 rbd pool init rbdnonzero
 ceph osd pool create rbdec 24 24 erasure teuthologyprofile
@@ -117,7 +117,10 @@ ceph osd pool create clonesonly 24 24
 rbd pool init clonesonly
 
 for pool in rbd rbdnonzero rbdec; do
-    rbd create --size 200 --image-format 1 $pool/img0
+    # Skip img0 for rbdec pool (format 1 not compatible with EC pools)
+    if [[ $pool != "rbdec" ]]; then
+        rbd create --size 200 --image-format 1 $pool/img0
+    fi
     rbd create --size 200 $pool/img1
     rbd create --size 200 --data-pool repdata $pool/img2
     rbd create --size 200 --data-pool ecdata $pool/img3
@@ -136,8 +139,12 @@ xfs_io -c "pwrite -b $OBJECT_SIZE -S 0x78 0 $((OBJECT_SIZE / 2))" \
        -c "pwrite -b $OBJECT_SIZE -S 0x59 $((OBJECT_SIZE / 2)) $((OBJECT_SIZE / 2))" \
        $OBJECT_XY
 
-for pool in rbd rbdnonzero; do
+for pool in rbd rbdnonzero rbdec; do
     for i in {0..3}; do
+        # Skip img0 for rbdec pool (format 1 not compatible with EC pools)
+        if [[ $pool == "rbdec" && $i -eq 0 ]]; then
+            continue
+        fi
         fill_image $pool/img$i
         if [[ $i -ne 0 ]]; then
             create_clones $pool/img$i
@@ -152,17 +159,24 @@ done
 
 # rbd_directory, rbd_children, rbd_info + rbd_trash + img0 header + ...
 NUM_META_RBDS=$((4 + 1 + 3 * (1*2 + 3*2)))
+# rbd_directory, rbd_children, rbd_info + rbd_trash + (no img0) ...
+NUM_META_RBDEC=$((4 + 3 * (1*2 + 3*2)))
 # rbd_directory, rbd_children, rbd_info + rbd_trash + ...
-NUM_META_CLONESONLY=$((4 + 2 * 3 * (3*2)))
+NUM_META_CLONESONLY=$((4 + 3 * 3 * (3*2)))
 
 [[ $(rados -p rbd ls | wc -l) -eq $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
-[[ $(rados -p repdata ls | wc -l) -eq $((2 + 14 * NUM_OBJECTS)) ]]
-[[ $(rados -p ecdata ls | wc -l) -eq $((2 + 14 * NUM_OBJECTS)) ]]
+[[ $(rados -p repdata ls | wc -l) -eq $((2 + 21 * NUM_OBJECTS)) ]]
+[[ $(rados -p ecdata ls | wc -l) -eq $((2 + 21 * NUM_OBJECTS)) ]]
 [[ $(rados -p rbdnonzero ls | wc -l) -eq $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
-[[ $(rados -p clonesonly ls | wc -l) -eq $((NUM_META_CLONESONLY + 6 * NUM_OBJECTS)) ]]
+[[ $(rados -p rbdec ls | wc -l) -eq $((NUM_META_RBDEC + 4 * NUM_OBJECTS)) ]]
+[[ $(rados -p clonesonly ls | wc -l) -eq $((NUM_META_CLONESONLY + 9 * NUM_OBJECTS)) ]]
 
-for pool in rbd rbdnonzero; do
+for pool in rbd rbdnonzero rbdec; do
     for i in {0..3}; do
+        # Skip img0 for rbdec pool
+        if [[ $pool == "rbdec" && $i -eq 0 ]]; then
+            continue
+        fi
         [[ $(count_data_objects $pool/img$i) -eq $NUM_OBJECTS ]]
         if [[ $i -ne 0 ]]; then
             for child_pool in $pool clonesonly; do
@@ -178,10 +192,15 @@ done
 [[ $(get_num_clones repdata) -eq 0 ]]
 [[ $(get_num_clones ecdata) -eq 0 ]]
 [[ $(get_num_clones rbdnonzero) -eq 0 ]]
+[[ $(get_num_clones rbdec) -eq 0 ]]
 [[ $(get_num_clones clonesonly) -eq 0 ]]
 
-for pool in rbd rbdnonzero; do
+for pool in rbd rbdnonzero rbdec; do
     for i in {0..3}; do
+        # Skip img0 for rbdec pool
+        if [[ $pool == "rbdec" && $i -eq 0 ]]; then
+            continue
+        fi
         compare $pool/img$i $OBJECT_X
         mkfs_and_mount $pool/img$i
         if [[ $i -ne 0 ]]; then
@@ -196,15 +215,17 @@ done
 
 # mkfs_and_mount should discard some objects everywhere but in clonesonly
 [[ $(list_HEADs rbd | wc -l) -lt $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
-[[ $(list_HEADs repdata | wc -l) -lt $((2 + 14 * NUM_OBJECTS)) ]]
-[[ $(list_HEADs ecdata | wc -l) -lt $((2 + 14 * NUM_OBJECTS)) ]]
+[[ $(list_HEADs repdata | wc -l) -lt $((2 + 21 * NUM_OBJECTS)) ]]
+[[ $(list_HEADs ecdata | wc -l) -lt $((2 + 21 * NUM_OBJECTS)) ]]
 [[ $(list_HEADs rbdnonzero | wc -l) -lt $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
-[[ $(list_HEADs clonesonly | wc -l) -eq $((NUM_META_CLONESONLY + 6 * NUM_OBJECTS)) ]]
+[[ $(list_HEADs rbdec | wc -l) -lt $((NUM_META_RBDEC + 4 * NUM_OBJECTS)) ]]
+[[ $(list_HEADs clonesonly | wc -l) -eq $((NUM_META_CLONESONLY + 9 * NUM_OBJECTS)) ]]
 
 [[ $(get_num_clones rbd) -eq $NUM_OBJECTS ]]
-[[ $(get_num_clones repdata) -eq $((2 * NUM_OBJECTS)) ]]
-[[ $(get_num_clones ecdata) -eq $((2 * NUM_OBJECTS)) ]]
+[[ $(get_num_clones repdata) -eq $((3 * NUM_OBJECTS)) ]]
+[[ $(get_num_clones ecdata) -eq $((3 * NUM_OBJECTS)) ]]
 [[ $(get_num_clones rbdnonzero) -eq $NUM_OBJECTS ]]
+[[ $(get_num_clones rbdec) -eq $NUM_OBJECTS ]]
 [[ $(get_num_clones clonesonly) -eq 0 ]]
 
 echo OK
