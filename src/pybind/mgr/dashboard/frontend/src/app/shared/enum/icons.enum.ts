@@ -168,3 +168,8 @@ export const ICON_TYPE = {
   inProgress: 'in-progress',
   arrowDown: 'arrow--down'
 } as const;
+
+export const EMPTY_STATE_IMAGE = {
+  default: 'assets/empty-state.png',
+  search: 'assets/empty-state-search.png'
+} as const;

@@ -12,7 +12,7 @@ import {
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
-import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
+import { ICON_TYPE, EMPTY_STATE_IMAGE } from '~/app/shared/enum/icons.enum';
 import { NvmeofSubsystemAuthType } from '~/app/shared/enum/nvmeof.enum';
 
 @Component({
@@ -34,6 +34,7 @@ export class NvmeofGatewaySubsystemComponent implements OnInit {
 
   iconType = ICON_TYPE;
   authType = NvmeofSubsystemAuthType;
+  emptyStateImage = EMPTY_STATE_IMAGE;
 
   constructor(private nvmeofService: NvmeofService, private route: ActivatedRoute) {}
 
