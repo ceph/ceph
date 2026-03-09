@@ -242,6 +242,12 @@ enum {
   l_bluestore_slow_read_onode_meta_count,
   l_bluestore_slow_read_wait_aio_count,
   //****************************************
+
+  // Fragmentation tracking
+  //****************************************
+  l_bluestore_runtime_frag_lat,
+  l_bluestore_static_frag_lat,
+  //****************************************
   l_bluestore_last
 };
 

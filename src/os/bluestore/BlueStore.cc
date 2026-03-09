@@ -6703,6 +6703,19 @@ void BlueStore::_init_logger()
     "bsal",
     PerfCountersBuilder::PRIO_USEFUL);
 
+  // Fragmentation Tracking counters
+  //****************************************
+  b.add_time_avg(l_bluestore_runtime_frag_lat,
+    "runtime_frag_lat",
+    "Latency of runtime fragmentation measurement",
+    "rfl",
+    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_static_frag_lat,
+    "static_frag_lat",
+    "Latency of static fragmentation measurement during scrub",
+    "sfl",
+    PerfCountersBuilder::PRIO_USEFUL);
+
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -13011,12 +13024,15 @@ void BlueStore::_measure_runtime_frag(
     c->runtime_read_samples.fetch_add(1, std::memory_order_relaxed);
     c->runtime_frag_count.fetch_add(frag.frag_score, std::memory_order_relaxed);
   }
+  auto finish = mono_clock::now();
+  logger->tinc_with_max(l_bluestore_runtime_frag_lat, finish - start);
 }
 
 void BlueStore::_measure_static_frag(
   Collection *c,
   const OnodeRef& o)
 {
+  auto start = mono_clock::now();
   auto read_samples = c->object_read_samples.load(std::memory_order_relaxed);
   auto frag_score = o->get_fragmentation_score();
   if (read_samples == 0) {
@@ -13026,6 +13042,8 @@ void BlueStore::_measure_static_frag(
     c->static_frag_score.fetch_add(frag_score, std::memory_order_relaxed);
     c->object_read_samples.fetch_add(1, std::memory_order_relaxed);
   }
+  auto finish = mono_clock::now();
+  logger->tinc_with_max(l_bluestore_static_frag_lat, finish - start);
 }
 
 int BlueStore::_do_read(
