@@ -245,6 +245,106 @@ TEST_P(TestBackendBasics, PartialWrite) {
 }
 
 // ---------------------------------------------------------------------------
+// TestBackendBasics: DirectRead
+// ---------------------------------------------------------------------------
+
+/**
+ * DirectRead - test EC direct reads to individual shards.
+ *
+ * This test:
+ * 1. Skips non-optimized EC (we don't support sync reads there)
+ * 2. Writes patterned data covering an entire stripe
+ * 3. Performs sync reads to each data shard with EC_DIRECT_READ flag
+ * 4. Verifies data integrity for each shard
+ */
+TEST_P(TestBackendBasics, DirectRead) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+
+  // Skip test for non-EC backends
+  if (backend_config.pool_type != EC) {
+    GTEST_SKIP() << "DirectRead test only applies to EC backends";
+  }
+
+  // Skip test for non-optimized EC - we don't support sync reads
+  if (!(backend_config.pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "DirectRead test requires optimized EC";
+  }
+
+  std::string obj_name = "test_direct_read_" + backend_config.label + "_" + param.label;
+
+  // Get stripe width from the pool
+  uint64_t stripe_width = get_stripe_width();
+
+  // Create patterned data where each stripe_unit has a distinct pattern
+  // This allows us to verify we're reading the correct shard
+  std::string test_data;
+  test_data.reserve(stripe_width);
+  
+  for (size_t i = 0; i < stripe_width; i++) {
+    // Pattern: each stripe_unit gets a different character based on its shard position
+    size_t shard_index = i / stripe_unit;
+    char fill_char = 'A' + (shard_index % 26);
+    test_data.push_back(fill_char);
+  }
+
+  // Write the data (one full stripe)
+  int result = create_and_write(obj_name, test_data);
+  EXPECT_EQ(result, 0) << param.label << " write should complete successfully";
+
+  hobject_t hoid = make_test_object(obj_name);
+
+  // Perform direct reads to each data shard (skip coding shards)
+  for (auto& [shard_id, backend] : backends) {
+    // Skip coding shards - only test data shards
+    if (shard_id >= k) {
+      continue;
+    }
+
+    ASSERT_TRUE(backend != nullptr) << "Backend for shard " << shard_id << " should not be null";
+    
+    ECSwitch* ec_switch = dynamic_cast<ECSwitch*>(backend.get());
+    ASSERT_TRUE(ec_switch != nullptr) << "Backend should be ECSwitch for EC pools";
+
+    bufferlist shard_data;
+    
+    // Perform sync read with EC_DIRECT_READ flag
+    // Read the entire stripe - we expect only this shard's data back
+    int read_result = ec_switch->objects_read_sync(
+      hoid,
+      0,                                    // offset
+      stripe_width,                         // length (full stripe)
+      CEPH_OSD_RMW_FLAG_EC_DIRECT_READ,    // op_flags with direct read flag
+      &shard_data
+    );
+
+    EXPECT_GE(read_result, 0)
+      << param.label << " direct read to shard " << shard_id << " should complete successfully";
+
+    // For direct reads, we expect to get back only the data for this shard
+    // which is one stripe_unit
+    ASSERT_EQ(shard_data.length(), stripe_unit)
+      << param.label << " shard " << shard_id << " should return " << stripe_unit << " bytes";
+
+    // Verify data integrity: this shard should contain the expected pattern
+    const char* buf = shard_data.c_str();
+    char expected_char = 'A' + (shard_id % 26);
+    
+    for (size_t i = 0; i < stripe_unit; i++) {
+      ASSERT_EQ(buf[i], expected_char)
+        << param.label << " shard " << shard_id << " byte " << i
+        << " should be '" << expected_char << "'";
+    }
+  }
+
+  // Clean up
+  auto* primary_listener = get_primary_listener();
+  if (primary_listener) {
+    primary_listener->sent_messages.clear();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Backend configurations and size parameters
 // ---------------------------------------------------------------------------
 
