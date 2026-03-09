@@ -52,11 +52,11 @@ formgroup: CdFormGroup;
 **/
 @Component({
   selector: 'cd-tearsheet',
+  standalone: false,
   templateUrl: './tearsheet.component.html',
   styleUrls: ['./tearsheet.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  encapsulation: ViewEncapsulation.None,
-  standalone: false
+  encapsulation: ViewEncapsulation.None
 })
 export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() title!: string;
@@ -139,6 +139,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   closeWideTearsheet() {
+    this.closeRequested.emit();
     this.isOpen = false;
     if (this.hasModalOutlet) {
       this.location.back();
@@ -155,13 +156,8 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onNext() {
-    const currentForm = this.stepContents?.toArray()?.[this.currentStep]?.stepComponent?.formGroup;
-    currentForm?.markAllAsTouched();
-    currentForm?.updateValueAndValidity({ emitEvent: true });
-    if (currentForm) {
-      this._updateStepInvalid(this.currentStep, currentForm.invalid);
-    }
-
+    const formEl = document.querySelector('form');
+    formEl?.dispatchEvent(new Event('submit', { bubbles: true }));
     if (this.currentStep !== this.lastStep && !this.steps[this.currentStep].invalid) {
       this.currentStep = this.currentStep + 1;
       this.stepChanged.emit({ current: this.currentStep });
