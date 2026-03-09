@@ -313,10 +313,10 @@ std::pair<LockStatEntry::LockStatEntryTableT, lockstat_clock::duration>
 LockStatEntry::show()
 {
   if (LockStatTraits::g_global_enable) {
-    auto total_duration = lockstat_clock::now() - LockStat::g_start_cycles;
+    auto total_duration = lockstat_clock::now() - LockStat::g_start_cycles.load();
     return {get_lockstat_table(), total_duration};
   } else {
-    return {{}, lockstat_clock::duration{}};
+    return {get_lockstat_table(), lockstat_clock::duration{tsc_rep{0}}};
   }
 }
 
