@@ -1339,7 +1339,6 @@ bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
   std::unique_lock smq_lock(m_peer_replayer.get_smq_lock());
   std::unique_lock lock(sdq_lock);
   dout(20) << ": snapshot data replayer waiting on m_sync_dataq, syncm=" << this << dendl;
-  sdq_cv.wait(lock, [this]{ return !m_sync_dataq.empty() || m_crawl_finished || m_datasync_error || m_crawl_error;});
   while (true) {
     bool ready = sdq_cv.wait_for(lock, 2s, [this] {
       return m_peer_replayer.is_stopping() ||
