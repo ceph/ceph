@@ -157,4 +157,15 @@ into the collaborative development process.
 
 For more information, see :ref:`foundation`.
 
-.. _component team: https://ceph.io/en/community/team/
+===========
+ Processes
+===========
+
+Escalation and Dispute Resolution
+=================================
+
+The Ceph project strives to operate on consensus. However, when consensus cannot be reached on major technical decisions or there is a perceived lack of action, the Ceph Executive Council (CEC) serves as the final arbiter through the following procedure:
+
+* Escalation: If any member of the Ceph Steering Committee (CSC) feels that a technical matter of significant interest to the project is deadlocked or not being addressed adequately, they should bring the matter to the CEC.
+* Mediation: The CEC will first attempt to mediate the dispute and help all parties find a mutually satisfactory solution.
+* Resolution: In cases where mediation fails, the CEC will break the deadlock by either taking a direct position (if the decision is clear) or organizing a small review committee to meet and recommend a final decision.
