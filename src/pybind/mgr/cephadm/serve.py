@@ -1201,15 +1201,9 @@ class CephadmServe:
                 sym_diff = set(deps).symmetric_difference(last_deps)
                 self.log.info(f'Reconfiguring {dd.name()} deps {last_deps} -> {deps} (diff {sym_diff})')
                 action = 'reconfig'
-            elif self.mgr.last_monmap and \
-                    self.mgr.last_monmap > last_config and \
-                    dd.daemon_type in CEPH_TYPES:
-                self.log.info('Reconfiguring %s (monmap changed)...' % dd.name())
-                action = 'reconfig'
-            elif self.mgr.extra_ceph_conf_is_newer(last_config) and \
-                    dd.daemon_type in CEPH_TYPES:
-                self.log.info('Reconfiguring %s (extra config changed)...' % dd.name())
-                action = 'reconfig'
+            action = _ceph_service_next_action(
+                action, dd.daemon_type, dd.name(), self.mgr, last_config
+            )
 
             if action:
                 if scheduled_action == 'redeploy' and action == 'reconfig':
@@ -1893,3 +1887,26 @@ def _host_selector(svc: Any) -> Optional[HostSelector]:
     if hasattr(svc, 'filter_host_candidates'):
         return cast(HostSelector, svc)
     return None
+
+
+def _ceph_service_next_action(
+    action: Optional[str],
+    daemon_type: str,
+    name: str,
+    mgr: 'CephadmOrchestrator',
+    last_config: Optional[datetime.datetime],
+) -> Optional[str]:
+    if daemon_type not in CEPH_TYPES:
+        return action
+    if last_config is None:
+        return action
+    if action in ['reconfig', 'redeploy']:
+        return action
+
+    if mgr.last_monmap and mgr.last_monmap > last_config:
+        logger.info('Reconfiguring %s (monmap changed)...', name)
+        return 'reconfig'
+    if mgr.extra_ceph_conf_is_newer(last_config):
+        logger.info('Reconfiguring %s (extra config changed)...', name)
+        return 'reconfig'
+    return action
