@@ -829,7 +829,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
   unsigned int k_plus_m = sinfo.get_k_plus_m();
   for (auto &&shard: get_parent()->
        get_acting_recovery_backfill_shard_id_set()) {
-    if (shard.id < k_plus_m) {
+    if (std::cmp_less(shard.id, k_plus_m)) {
       trans[shard];
     }
   }

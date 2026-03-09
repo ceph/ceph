@@ -733,6 +733,19 @@ public:
     return data_shards;
   }
 
+  /* Return data shards repeated across all zones */
+  shard_id_set get_data_shards_all_zones() const {
+    shard_id_set result = data_shards;
+    
+    // Repeat data_shards every k+m shards across all zones
+    for (unsigned int zone = 1; zone < get_num_zones(); ++zone) {
+      result <<= get_k_plus_m();
+      result.insert(data_shards);
+    }
+    
+    return result;
+  }
+
   auto get_parity_shards() const {
     return parity_shards;
   }
