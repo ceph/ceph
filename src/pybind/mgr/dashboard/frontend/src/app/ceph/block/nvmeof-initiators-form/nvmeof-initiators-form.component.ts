@@ -1,139 +1,147 @@
-import { Component, OnInit } from '@angular/core';
-import { UntypedFormArray, UntypedFormControl, Validators } from '@angular/forms';
-
-import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
-import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { CdValidators } from '~/app/shared/forms/cd-validators';
-import { Permission } from '~/app/shared/models/permissions';
-import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { Component, OnInit, ViewChild } from '@angular/core';
+import { Step } from 'carbon-components-angular';
+import { NvmeofService, SubsystemInitiatorRequest } from '~/app/shared/api/nvmeof.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
+import {
+  AuthStepType,
+  HOST_TYPE,
+  HostStepType,
+  NvmeofSubsystemInitiator
+} from '~/app/shared/models/nvmeof';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { ActivatedRoute, Router } from '@angular/router';
-import { InitiatorRequest, NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { TearsheetComponent } from '~/app/shared/components/tearsheet/tearsheet.component';
+
+type InitiatorsFormPayload = Pick<HostStepType, 'hostType' | 'addedHosts'> &
+  Partial<Pick<AuthStepType, 'hostDchapKeyList'>>;
+
+const STEP_LABELS = {
+  HOSTS: $localize`Host access control`,
+  AUTH: $localize`Authentication (optional)`
+} as const;
 
 @Component({
   selector: 'cd-nvmeof-initiators-form',
   templateUrl: './nvmeof-initiators-form.component.html',
-  styleUrls: ['./nvmeof-initiators-form.component.scss']
+  styleUrls: ['./nvmeof-initiators-form.component.scss'],
+  standalone: false
 })
 export class NvmeofInitiatorsFormComponent implements OnInit {
-  permission: Permission;
-  initiatorForm: CdFormGroup;
-  action: string;
-  resource: string;
-  pageURL: string;
-  remove: boolean = false;
-  subsystemNQN: string;
-  removeHosts: { name: string; value: boolean; id: number }[] = [];
-  group: string;
+  group!: string;
+  subsystemNQN!: string;
+  isSubmitLoading = false;
+  existingHosts: string[] = [];
+  showAuthStep = true;
+  stepTwoValue: HostStepType = null;
+
+  @ViewChild(TearsheetComponent) tearsheet!: TearsheetComponent;
+
+  steps: Step[] = [];
+
+  title = $localize`Add Initiator`;
+  description = $localize`Allow specific hosts to run NVMe/TCP commands to the NVMe subsystem.`;
+  pageURL = 'block/nvmeof/subsystems';
 
   constructor(
-    private authStorageService: AuthStorageService,
-    public actionLabels: ActionLabelsI18n,
     private nvmeofService: NvmeofService,
     private taskWrapperService: TaskWrapperService,
     private router: Router,
-    private route: ActivatedRoute,
-    private formBuilder: CdFormBuilder
-  ) {
-    this.permission = this.authStorageService.getPermissions().nvmeof;
-    this.resource = $localize`Initiator`;
-    this.pageURL = 'block/nvmeof/subsystems';
-  }
-
-  NQN_REGEX = /^nqn\.(19|20)\d\d-(0[1-9]|1[0-2])\.\D{2,3}(\.[A-Za-z0-9-]+)+(:[A-Za-z0-9-\.]+(:[A-Za-z0-9-\.]+)*)$/;
-  NQN_REGEX_UUID = /^nqn\.2014-08\.org\.nvmexpress:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-  ALLOW_ALL_HOST = '*';
-
-  customNQNValidator = CdValidators.custom(
-    'pattern',
-    (nqnInput: string) =>
-      !!nqnInput && !(this.NQN_REGEX.test(nqnInput) || this.NQN_REGEX_UUID.test(nqnInput))
-  );
+    private route: ActivatedRoute
+  ) {}
 
   ngOnInit() {
     this.route.queryParams.subscribe((params) => {
       this.group = params?.['group'];
     });
-    this.createForm();
-    this.action = this.actionLabels.ADD;
-    this.route.params.subscribe((params: { subsystem_nqn: string }) => {
-      this.subsystemNQN = params.subsystem_nqn;
-    });
-  }
-
-  createForm() {
-    this.initiatorForm = new CdFormGroup({
-      allowAnyHost: new UntypedFormControl(false),
-      addHost: new CdFormGroup({
-        addHostCheck: new UntypedFormControl(false),
-        addedHosts: this.formBuilder.array(
-          [],
-          [
-            CdValidators.custom(
-              'duplicate',
-              (hosts: string[]) => !!hosts.length && new Set(hosts)?.size !== hosts.length
-            )
-          ]
-        )
-      })
-    });
-  }
-
-  get addedHosts(): UntypedFormArray {
-    return this.initiatorForm.get('addHost.addedHosts') as UntypedFormArray;
-  }
-
-  addHost() {
-    let newHostFormGroup;
-    newHostFormGroup = this.formBuilder.control('', [this.customNQNValidator, Validators.required]);
-    this.addedHosts.push(newHostFormGroup);
-  }
-
-  removeHost(index: number) {
-    this.addedHosts.removeAt(index);
-  }
-
-  setAddHostCheck() {
-    const addHostCheck = this.initiatorForm.get('addHost.addHostCheck').value;
-    if (!addHostCheck) {
-      while (this.addedHosts.length !== 0) {
-        this.addedHosts.removeAt(0);
+    this.route.parent.params.subscribe((params: any) => {
+      if (params.subsystem_nqn) {
+        this.subsystemNQN = params.subsystem_nqn;
       }
-    } else {
-      this.addHost();
+    });
+    this.route.params.subscribe((params: any) => {
+      if (!this.subsystemNQN && params.subsystem_nqn) {
+        this.subsystemNQN = params.subsystem_nqn;
+      }
+      this.fetchExistingHosts();
+    });
+    this.rebuildSteps();
+  }
+
+  rebuildSteps() {
+    const steps: Step[] = [{ label: STEP_LABELS.HOSTS, invalid: false }];
+
+    if (this.showAuthStep) {
+      steps.push({ label: STEP_LABELS.AUTH, invalid: false });
+    }
+
+    this.steps = steps;
+
+    if (this.tearsheet?.currentStep >= steps.length) {
+      this.tearsheet.currentStep = steps.length - 1;
     }
   }
 
-  onSubmit() {
-    const component = this;
-    const allowAnyHost: boolean = this.initiatorForm.getValue('allowAnyHost');
-    const hosts: string[] = this.addedHosts.value;
-    let taskUrl = `nvmeof/initiator/${URLVerbs.ADD}`;
+  onStepChanged() {
+    if (!this.tearsheet) return;
 
-    const request: InitiatorRequest = {
-      host_nqn: hosts.join(','),
+    const hostStep = this.tearsheet.getStepValueByLabel<HostStepType>(STEP_LABELS.HOSTS);
+
+    if (hostStep) {
+      this.stepTwoValue = hostStep;
+    }
+
+    const nextShowAuth = (hostStep?.hostType ?? HOST_TYPE.SPECIFIC) === HOST_TYPE.SPECIFIC;
+
+    if (nextShowAuth !== this.showAuthStep) {
+      this.showAuthStep = nextShowAuth;
+      this.rebuildSteps();
+    }
+  }
+
+  fetchExistingHosts() {
+    if (!this.subsystemNQN || !this.group) return;
+    this.nvmeofService
+      .getInitiators(this.subsystemNQN, this.group)
+      .subscribe((response: NvmeofSubsystemInitiator[] | { hosts: NvmeofSubsystemInitiator[] }) => {
+        const initiators = Array.isArray(response) ? response : response?.hosts || [];
+        this.existingHosts = initiators.map((i) => i.nqn);
+      });
+  }
+
+  onSubmit(payload: InitiatorsFormPayload) {
+    this.isSubmitLoading = true;
+    const taskUrl = `nvmeof/initiator/add`;
+    const hostKeyList = payload.hostDchapKeyList || [];
+    const addedHosts = payload.addedHosts || [];
+    const hosts =
+      payload.hostType === HOST_TYPE.SPECIFIC
+        ? hostKeyList.length
+          ? hostKeyList
+          : addedHosts.map((host_nqn: string) => ({ host_nqn, dhchap_key: '' }))
+        : [];
+
+    const request: SubsystemInitiatorRequest = {
+      allow_all: payload.hostType === HOST_TYPE.ALL,
+      hosts,
       gw_group: this.group
     };
-
-    if (allowAnyHost) {
-      hosts.push('*');
-      request['host_nqn'] = hosts.join(',');
-    }
     this.taskWrapperService
       .wrapTaskAroundCall({
         task: new FinishedTask(taskUrl, {
           nqn: this.subsystemNQN
         }),
-        call: this.nvmeofService.addInitiators(this.subsystemNQN, request)
+        call: this.nvmeofService.addSubsystemInitiators(this.subsystemNQN, request)
       })
       .subscribe({
-        error() {
-          component.initiatorForm.setErrors({ cdSubmitButton: true });
+        error: () => {
+          this.isSubmitLoading = false;
         },
         complete: () => {
-          this.router.navigate([this.pageURL, { outlets: { modal: null } }]);
+          this.isSubmitLoading = false;
+          this.router.navigate([{ outlets: { modal: null } }], {
+            relativeTo: this.route.parent,
+            queryParamsHandling: 'preserve'
+          });
         }
       });
   }

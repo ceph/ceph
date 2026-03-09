@@ -43,6 +43,19 @@ describe('NvmeofInitiatorsFormComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should initialize with two steps (Host access control + Authentication optional)', () => {
+    expect(component.steps.length).toBe(2);
+    expect(component.steps[0].label).toBe('Host access control');
+    expect(component.steps[1].label).toBe('Authentication (optional)');
+  });
+
+  it('should hide Authentication step when showAuthStep is false', () => {
+    component.showAuthStep = false;
+    component.rebuildSteps();
+    expect(component.steps.length).toBe(1);
+    expect(component.steps[0].label).toBe('Host access control');
+  });
+
   describe('should test form', () => {
     beforeEach(() => {
       nvmeofService = TestBed.inject(NvmeofService);
@@ -55,6 +68,25 @@ describe('NvmeofInitiatorsFormComponent', () => {
       component.onSubmit();
       expect(nvmeofService.addInitiators).toHaveBeenCalledWith(subsystemNQN, {
         host_nqn: ''
+      });
+    });
+
+    it('should build hosts from addedHosts when hostDchapKeyList is absent', () => {
+      const subsystemNQN = 'nqn.test';
+      component.subsystemNQN = subsystemNQN;
+      component.group = 'test-group';
+
+      const payload: any = {
+        hostType: HOST_TYPE.SPECIFIC,
+        addedHosts: ['host2'],
+        gw_group: 'test-group'
+      };
+
+      component.onSubmit(payload);
+      expect(nvmeofService.addSubsystemInitiators).toHaveBeenCalledWith(subsystemNQN, {
+        allow_all: false,
+        gw_group: 'test-group',
+        hosts: [{ dhchap_key: '', host_nqn: 'host2' }]
       });
     });
   });
