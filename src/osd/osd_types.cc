@@ -2028,11 +2028,17 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   encode(snaps, bl, features);
   encode(removed_snaps, bl);
   encode(auid, bl);
-  if (v >= 27) {
+  if (v >= 34) {
     encode(flags, bl);
+  }
+  else if (v >= 27) {
+    auto tmp = flags;
+    tmp &= ~FLAG_CLIENT_SPLIT_READS;
+    encode(tmp, bl);
   } else {
     auto tmp = flags;
-    tmp &= ~(FLAG_SELFMANAGED_SNAPS | FLAG_POOL_SNAPS | FLAG_CREATING);
+    tmp &= ~(FLAG_SELFMANAGED_SNAPS | FLAG_POOL_SNAPS | FLAG_CREATING |
+             FLAG_CLIENT_SPLIT_READS);
     encode(tmp, bl);
   }
   encode((uint32_t)0, bl); // crash_replay_interval
