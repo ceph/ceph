@@ -32,6 +32,12 @@
 int clock_gettime(int clk_id, struct timespec *tp);
 #endif
 
+#if defined __x86_64__ or defined __i386__
+#  if !defined(__clang__)
+#    include <x86intrin.h>
+#  endif
+#endif
+
 #ifdef _WIN32
 // Clock precision:
 // mingw < 8.0.1:
@@ -577,6 +583,216 @@ static Rep to_microseconds(T t) {
       Rep,
       std::micro>>(t).count();
 }
+
+#if defined __x86_64__ or defined __i386__
+/**
+ * tsc_rep is a custom representation for TSC ticks used by std::chrono::duration.
+ * It wraps an int64_t ticks value and provides a conversion operator to int64_t
+ * which is used by std::chrono::duration_cast to convert ticks to nanoseconds.
+ */
+struct tsc_rep {
+  int64_t ticks;
+
+  tsc_rep() = default;
+  explicit tsc_rep(int64_t t) : ticks(t) {}
+
+  // Conversion to int64_t (nanoseconds)
+  operator int64_t() const;
+
+  tsc_rep& operator+=(const tsc_rep& other) {
+    ticks += other.ticks;
+    return *this;
+  }
+  tsc_rep& operator-=(const tsc_rep& other) {
+    ticks -= other.ticks;
+    return *this;
+  }
+  tsc_rep& operator*=(const int64_t& s) {
+    ticks *= s;
+    return *this;
+  }
+  tsc_rep& operator/=(const int64_t& s) {
+    ticks /= s;
+    return *this;
+  }
+
+  bool operator==(const tsc_rep& other) const { return ticks == other.ticks; }
+  bool operator<(const tsc_rep& other) const { return ticks < other.ticks; }
+  bool operator>(const tsc_rep& other) const { return ticks > other.ticks; }
+  bool operator<=(const tsc_rep& other) const { return ticks <= other.ticks; }
+  bool operator>=(const tsc_rep& other) const { return ticks >= other.ticks; }
+};
+
+inline tsc_rep operator+(tsc_rep a, const tsc_rep& b) { return a += b; }
+inline tsc_rep operator-(tsc_rep a, const tsc_rep& b) { return a -= b; }
+inline tsc_rep operator*(tsc_rep a, int64_t s) { return a *= s; }
+inline tsc_rep operator*(int64_t s, tsc_rep a) { return a *= s; }
+inline tsc_rep operator/(tsc_rep a, int64_t s) { return a /= s; }
+
+/**
+ * tsc_tick is a utility struct for TSC (Time Stamp Counter) frequency
+ * calibration and conversions between ticks, nanoseconds, and seconds.
+ * It uses fixed-point arithmetic with a 32-bit shift to perform fast
+ * and accurate conversions without floating-point math where possible.
+ */
+struct tsc_tick {
+  // TSC frequency in Hz
+  static const double ticks_per_second;
+  static const double seconds_per_tick;
+  /**
+   * nanoseconds_per_tick_shifted is a fixed-point value representing nanoseconds per TSC tick.
+   * It uses a 32-bit fractional part to avoid floating point math in the fast path.
+   * Formula: (1,000,000,000 << 32) / ticks_per_second
+   */
+  static const int64_t nanoseconds_per_tick_shifted;
+  /**
+   * ticks_per_nanosecond_shifted is a fixed-point value representing TSC ticks per nanosecond.
+   * It uses a 32-bit fractional part to avoid floating point math in the fast path.
+   * Formula: (ticks_per_second << 32) / 1,000,000,000
+   */
+  static const int64_t ticks_per_nanosecond_shifted;
+
+  static double
+  to_seconds(double ticks) noexcept
+  {
+    return ticks / ticks_per_second;
+  }
+
+  static int64_t
+  from_seconds(double seconds) noexcept
+  {
+    return std::lrint(seconds * ticks_per_second);
+  }
+
+  static int64_t
+  from_nanoseconds(int64_t ns) noexcept
+  {
+    // round the shifted value away from 0, like round() does
+    // XXX should it honor fesetround instead ?
+    __int128_t shifted = (__int128_t)ns * ticks_per_nanosecond_shifted;
+    __int128_t ticks = (shifted >> 32) + ((shifted & 0xffffffff) >= 0x80000000);
+    return static_cast<int64_t>(ticks);
+  }
+
+  static int64_t
+  to_nanoseconds(int64_t ticks) noexcept {
+    // round the shifted value away from 0, like round() does
+    // XXX should it honor fesetround instead ?
+    __int128_t shifted = (__int128_t)ticks * nanoseconds_per_tick_shifted;
+    __int128_t ns = (shifted >> 32) + ((shifted & 0xffffffff) >= 0x80000000);
+    return static_cast<int64_t>(ns);
+  }
+
+  template <typename _ToRep, typename _ToPeriod>
+  static typename std::enable_if<
+      std::chrono::treat_as_floating_point<_ToRep>::value,
+      std::chrono::duration<_ToRep, _ToPeriod>>::type
+  to_duration(double ticks)
+  {
+    std::chrono::duration<double> d(to_seconds(ticks));
+    return std::chrono::duration_cast<std::chrono::duration<_ToRep, _ToPeriod>>(
+        d);
+  }
+
+  template <typename _ToRep, typename _ToPeriod>
+  static typename std::enable_if<
+      not std::chrono::treat_as_floating_point<_ToRep>::value,
+      std::chrono::duration<_ToRep, _ToPeriod>>::type
+  to_duration(int64_t ticks)
+  {
+    std::chrono::nanoseconds d(to_nanoseconds(ticks));
+    return std::chrono::duration_cast<std::chrono::duration<_ToRep, _ToPeriod>>(
+        d);
+  }
+
+  template <typename _FromRep, typename _FromPeriod>
+  static typename std::enable_if<
+      std::chrono::treat_as_floating_point<_FromRep>::value,
+      double>::type
+  from_duration(std::chrono::duration<_FromRep, _FromPeriod> d)
+  {
+    double s =
+        std::chrono::duration_cast<std::chrono::duration<double>>(d).count();
+    return from_seconds(s);
+  }
+
+  template <typename _FromRep, typename _FromPeriod>
+  static typename std::enable_if<
+      not std::chrono::treat_as_floating_point<_FromRep>::value,
+      int64_t>::type
+  from_duration(std::chrono::duration<_FromRep, _FromPeriod> d)
+  {
+    int64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(d).count();
+    return from_nanoseconds(ns);
+  }
+};
+
+inline tsc_rep::operator int64_t() const {
+  return tsc_tick::to_nanoseconds(ticks);
+}
+
+/**
+ * tsc_clock is a high-resolution steady clock based on the x86 RDTSC instruction.
+ * It integrates with std::chrono and provides a duration type that stores raw
+ * TSC ticks (using tsc_rep) but allows conversion to std::chrono::nanoseconds
+ * and other duration types through duration_cast.
+ */
+class tsc_clock {
+public:
+  friend class tsc_tick;
+
+  // std::chrono interface
+  typedef std::chrono::duration<tsc_rep, std::nano> duration;
+  typedef duration::rep rep;
+  typedef duration::period period;
+  typedef std::chrono::time_point<tsc_clock, duration> time_point;
+
+  static const bool is_steady;
+  static const bool is_available;
+
+  static time_point
+  now() noexcept
+  {
+    return time_point(duration(tsc_rep(rdtsc())));
+  }
+
+  static bool
+  is_zero(const time_point& t)
+  {
+    return (t == zero());
+  }
+
+  static time_point
+  zero()
+  {
+    return time_point();
+  }
+
+private:
+  static uint64_t
+  rdtsc(void)
+  {
+    return __rdtsc();
+  }
+
+  static bool has_tsc();
+  static bool has_invariant_tsc();
+  static bool tsc_allowed();
+  static double calibrate_tsc_hz();
+  static double calibrate_tsc_hz_chrono();
+#if defined __linux__
+  static double calibrate_tsc_hz_perf();
+#endif // __linux__
+
+  // CPUID, EAX = 0x01, EDX values
+  static constexpr unsigned int bit_TSC = (1 << 4);
+  // CPUID, EAX = 0x80000001, EDX values
+  static constexpr unsigned int bit_RDTSCP = (1 << 27);
+  // CPUID, EAX = 0x80000007, EDX values
+  static constexpr unsigned int bit_InvariantTSC = (1 << 8);
+};
+
+#endif // __x86_64__ or __i386__
 
 } // namespace ceph
 
