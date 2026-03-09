@@ -292,7 +292,7 @@
             <p
               class="cds--type-helper-text-01 overview-health-card-secondary-text overview-health-card-bold cds-mb-2"
               i18n>
-              {{vm?.pgs?.activeCleanChartSeverity === 'progress' ? 'Data cleanup in progress' : 'What is affecting resiliency?'}}
+              {{vm?.resiliencyHealth?.severity === 'progress' ? 'Data cleanup in progress' : 'What is affecting resiliency?'}}
             </p>
             @for (item of vm?.pgs?.activeCleanChartReason; track item.state; let isLast =$last) {
             @if(item.count) {
@@ -301,7 +301,7 @@
               class="cds-mb-2">
               <span class="cds--type-label-01 cds-mr-1">{{item?.state}}:</span>
               <span class="cds--type-label-01 overview-health-card-bold">{{item.count}} %</span>
-              @if(!item?.state?.includes('Scrub') || item?.state !== 'remapped') {
+              @if(!item?.state?.includes('Scrub') && item?.state !== 'Remapped') {
               <cd-icon type="arrowDown"></cd-icon>
               }
             </p>
