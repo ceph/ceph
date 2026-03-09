@@ -5,6 +5,9 @@
 set -x
 
 function test_dump_metrics() {
+    # Skip this test unless the osd_type is crimson:
+    [ "$(ceph osd metadata 0 | jq -r '.osd_type')" == "crimson" ] || return 0
+
     # Ensure can get dump_metrics full
     ceph tell osd.0 dump_metrics 2>/dev/null > /tmp/dump_metrics_full.json || true
 
