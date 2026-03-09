@@ -1213,11 +1213,6 @@ class CephadmServe:
                     # the daemon is written, which we rewrite on redeploy, but not
                     # on reconfig.
                     action = 'redeploy'
-                elif dd.daemon_type == 'nfs':
-                    # check what has changed, based on that decide action
-                    only_kmip_updated = all(s.startswith('kmip') for s in list(sym_diff))
-                    if not only_kmip_updated:
-                        action = 'redeploy'
             elif dd.daemon_type == 'haproxy':
                 if spec and hasattr(spec, 'backend_service'):
                     backend_spec = self.mgr.spec_store[spec.backend_service].spec
