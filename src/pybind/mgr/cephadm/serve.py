@@ -1201,14 +1201,6 @@ class CephadmServe:
                 sym_diff = set(deps).symmetric_difference(last_deps)
                 self.log.info(f'Reconfiguring {dd.name()} deps {last_deps} -> {deps} (diff {sym_diff})')
                 action = 'reconfig'
-            elif dd.daemon_type == 'haproxy':
-                if spec and hasattr(spec, 'backend_service'):
-                    backend_spec = self.mgr.spec_store[spec.backend_service].spec
-                    if backend_spec.service_type == 'nfs':
-                        svc = service_registry.get_service('ingress')
-                        if svc.has_placement_changed(last_deps, spec):
-                            self.log.debug(f'Redeploy {spec.service_name()} as placement has changed')
-                            action = 'redeploy'
             elif self.mgr.last_monmap and \
                     self.mgr.last_monmap > last_config and \
                     dd.daemon_type in CEPH_TYPES:
