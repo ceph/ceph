@@ -92,5 +92,9 @@ export const AllStoragetypesQueries = {
         group_left(application)
           ceph_pool_metadata{{applicationFilter}}
     ) OR vector(0)
-  `
+  `,
+
+  READLATENCY: 'avg_over_time(ceph_osd_apply_latency_ms[1m])',
+
+  WRITELATENCY: 'avg_over_time(ceph_osd_commit_latency_ms[1m])'
 };
