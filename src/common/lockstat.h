@@ -35,8 +35,12 @@ namespace lockstat_detail {
 class LockStatTraits;
 class LockStatEntry;
 class LockStat;
-
+#if defined __x86_64__ or defined __i386__
+using lockstat_clock = ceph::tsc_clock;
+#else
 using lockstat_clock = ceph::mono_clock;
+#endif
+
 /**
  * @brief bin_histogram is a template class which can be used for
  * computing indexes for a histogram with binary bin sizes.
