@@ -40,7 +40,8 @@ const StorageType = {
   ALL: $localize`All`,
   BLOCK: $localize`Block`,
   FILE: $localize`File system`,
-  OBJECT: $localize`Object`
+  OBJECT: $localize`Object`,
+  SYSTEM_METADATA: $localize`System metadata`
 };
 
 type ChartData = {
@@ -83,8 +84,6 @@ const PROMQL_COUNT_FILESYSTEMS = 'count(ceph_fs_metadata)';
 
 const PROMQL_COUNT_FILESYSTEM_POOLS = 'count(ceph_pool_metadata{application="Filesystem"})';
 
-const chartGroupLabels = [StorageType.BLOCK, StorageType.FILE, StorageType.OBJECT];
-
 const TopPoolsQueryMap = {
   Block: PROMQL_TOP_POOLS_BLOCK,
   'File system': PROMQL_TOP_POOLS_FILESYSTEM,
@@ -120,6 +119,7 @@ export class OverviewStorageCardComponent implements OnInit, OnDestroy {
   private readonly cdr = inject(ChangeDetectorRef);
   private destroy$ = new Subject<void>();
   trendData: { timestamp: Date; values: { Used: number } }[];
+  totalUsed: number;
 
   @Input()
   set total(value: number) {
@@ -131,6 +131,7 @@ export class OverviewStorageCardComponent implements OnInit, OnDestroy {
   }
   @Input()
   set used(value: number) {
+    this.totalUsed = value;
     const [usedValue, usedUnit] = this.formatterService.formatToBinary(value, true);
     if (Number.isNaN(usedValue)) return;
     this.usedRaw = usedValue;
@@ -217,14 +218,48 @@ export class OverviewStorageCardComponent implements OnInit, OnDestroy {
 
   private _getAllData(data: PromqlGuageMetric) {
     const result = data?.result ?? [];
-    const chartData = result
-      .map((r: PromethuesGaugeMetricResult) => {
-        const group = r?.metric?.application;
-        const value = this.formatterService.convertToUnit(r?.value?.[1], 'B', this.usedRawUnit, 1);
-        return { group: group === 'Filesystem' ? StorageType.FILE : group, value };
-      })
-      // Removing 0 values and legends other than Block, File system, and Object.
-      .filter((r) => chartGroupLabels.includes(r?.group) && r?.value > 0);
+
+    const chartData: ChartData[] = [];
+    const storageTypeValues = Object.values(StorageType);
+
+    let assignedBytes = 0;
+    let nonAssignedBytes = 0;
+
+    result.forEach((r: PromethuesGaugeMetricResult) => {
+      let group = r?.metric?.application;
+      const rawBytes = Number(r?.value?.[1]);
+
+      if (group === 'Filesystem') {
+        group = StorageType.FILE;
+      }
+
+      if (storageTypeValues.includes(group) && group !== StorageType.SYSTEM_METADATA) {
+        assignedBytes += rawBytes;
+
+        const value = this.formatterService.convertToUnit(
+          rawBytes.toString(),
+          'B',
+          this.usedRawUnit,
+          1
+        );
+
+        chartData.push({
+          group,
+          value
+        });
+      } else {
+        nonAssignedBytes += rawBytes;
+      }
+    });
+
+    const miscBytes = this.totalUsed - assignedBytes + nonAssignedBytes;
+    if (miscBytes > 0) {
+      chartData.push({
+        group: StorageType.SYSTEM_METADATA,
+        value: this.formatterService.convertToUnit(miscBytes.toString(), 'B', this.totalRawUnit, 3)
+      });
+    }
+
     return chartData;
   }
 
@@ -241,7 +276,9 @@ export class OverviewStorageCardComponent implements OnInit, OnDestroy {
   }
 
   private _setDropdownItemsAndStorageType() {
-    const newData = this.allData?.map((data) => ({ content: data.group }));
+    const newData = this.allData
+      ?.filter((data) => data.group !== StorageType.SYSTEM_METADATA)
+      .map((data) => ({ content: data.group }));
     if (newData.length) {
       this.dropdownItems = [{ content: StorageType.ALL }, ...newData];
     } else {
