@@ -223,13 +223,9 @@ export class NvmeofService {
   }
 
   addNamespaceInitiators(nsid: number | string, request: NamespaceInitiatorRequest) {
-    return this.http.post(
-      `${UI_API_PATH}/subsystem/${request.subsystem_nqn}/namespace/${nsid}/host`,
-      request,
-      {
-        observe: 'response'
-      }
-    );
+    return this.http.post(`${UI_API_PATH}/namespace/${nsid}/host`, request, {
+      observe: 'response'
+    });
   }
 
   updateHostKey(subsystemNQN: string, request: InitiatorRequest) {
