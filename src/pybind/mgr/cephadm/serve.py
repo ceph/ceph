@@ -1201,13 +1201,6 @@ class CephadmServe:
                 sym_diff = set(deps).symmetric_difference(last_deps)
                 self.log.info(f'Reconfiguring {dd.name()} deps {last_deps} -> {deps} (diff {sym_diff})')
                 action = 'reconfig'
-                # we need only redeploy if secure_monitoring_stack or mgmt-gateway value has changed:
-                # TODO(redo): check if we should just go always with redeploy (it's fast enough)
-                if dd.daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'ceph-exporter']:
-                    diff = list(set(last_deps).symmetric_difference(set(deps)))
-                    REDEPLOY_TRIGGERS = ['secure_monitoring_stack', 'mgmt-gateway']
-                    if any(svc in e for e in diff for svc in REDEPLOY_TRIGGERS):
-                        action = 'redeploy'
             elif dd.daemon_type == 'haproxy':
                 if spec and hasattr(spec, 'backend_service'):
                     backend_spec = self.mgr.spec_store[spec.backend_service].spec
