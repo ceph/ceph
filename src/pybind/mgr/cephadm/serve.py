@@ -1139,13 +1139,15 @@ class CephadmServe:
             if dd.daemon_type in REQUIRES_POST_ACTIONS:
                 daemons_post[dd.daemon_type].append(dd)
 
-            if service_registry.get_service(daemon_type_to_service(dd.daemon_type)).get_active_daemon(
+            svc_type = daemon_type_to_service(dd.daemon_type)
+            svc_obj = service_registry.get_service(svc_type)
+            if svc_obj.get_active_daemon(
                self.mgr.cache.get_daemons_by_service(dd.service_name())).daemon_id == dd.daemon_id:
                 dd.is_active = True
             else:
                 dd.is_active = False
 
-            deps = self.mgr._calc_daemon_deps(spec, dd.daemon_type, dd.daemon_id)
+            deps = svc_obj.sorted_dependencies(self.mgr, spec, dd.daemon_type)
             last_deps, last_config = self.mgr.cache.get_daemon_last_config_deps(
                 dd.hostname, dd.name())
             if last_deps is None:
