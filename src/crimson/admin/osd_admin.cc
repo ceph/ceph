@@ -614,4 +614,26 @@ private:
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<DumpRecoveryReservationsHook>(crimson::osd::ShardServices& shard_services);
 
+class DumpReactorBackendHook final: public AdminSocketHook {
+public:
+  explicit DumpReactorBackendHook() :
+    AdminSocketHook{"reactor_backend",
+                    "",
+                    "seastar reactor backend used"}
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view format,
+                                      ceph::bufferlist&& input) const final
+  {
+    LOG_PREFIX(AdminSocketHook::DumpReactorBackendHook);
+    DEBUG("");
+
+    std::string_view reactor_backend_name = seastar::engine().get_backend_name();
+    std::unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    f->dump_string("reactor_backend_name", reactor_backend_name);
+    co_return std::move(f);
+  }
+};
+template std::unique_ptr<AdminSocketHook> make_asok_hook<DumpReactorBackendHook>();
+
 } // namespace crimson::admin
