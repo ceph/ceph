@@ -886,6 +886,35 @@ class CephadmService(metaclass=ABCMeta):
     def has_placement_changed(self, deps: List[str], spec: ServiceSpec) -> bool:
         return False
 
+    # manages_own_next_action allows the CephadmService subclasses
+    # to incrementally support using choose_next_action instead of
+    # "hard coded" blocks in the _check_daemons function.
+    manages_own_next_action = False
+
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+    ) -> utils.Action:
+        """Given the scheduled_action, service spec, daemon_type, and
+        current and previous dependency lists return the next action that
+        this service would prefer cephadm take.
+        """
+        if curr_deps == last_deps:
+            return scheduled_action
+        sym_diff = set(curr_deps).symmetric_difference(last_deps)
+        logger.info(
+            'Reconfigure wanted %s: deps %r -> %r (diff %r)',
+            spec.service_name() if spec else daemon_type,
+            last_deps,
+            curr_deps,
+            sym_diff,
+        )
+        return utils.Action.RECONFIG
+
 
 class CephService(CephadmService):
 
