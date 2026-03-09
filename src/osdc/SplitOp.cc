@@ -191,6 +191,13 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
       abort = true;
       return;
     }
+    const osd_xinfo_t& xinfo = objecter.osdmap->get_xinfo(direct_osd);
+    if (!HAVE_FEATURE(xinfo.features, SERVER_UMBRELLA)) {
+      ldout(cct, DBG_LVL) << __func__ <<" ABORT: OSD Doesn't support"
+                                        " direct reads" << dendl;
+      abort = true;
+      return;
+    }
     if (!sub_reads.contains(shard_index)) {
       sub_reads.emplace(shard_index, orig_op->ops.size() + 1);
     }
