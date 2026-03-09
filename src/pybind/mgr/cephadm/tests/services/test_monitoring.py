@@ -4,7 +4,7 @@ import json
 import urllib.parse
 import yaml
 import pytest
-from unittest.mock import Mock, patch, ANY
+from unittest.mock import Mock, patch, ANY, MagicMock
 
 from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
@@ -1185,6 +1185,58 @@ class TestMonitoring:
                     use_current_daemon_image=False,
                 )
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_post_remove_no_op_when_other_daemons_remain_on_same_host_host_scope(
+               self, cephadm_module: CephadmOrchestrator):
+        """
+        HOST-scope service: when a sibling daemon is still running on the same
+        """
+        cephadm_module._init_cert_mgr()
+        cm = cephadm_module.cert_mgr
+        host = 'host1'
+
+        with with_host(cephadm_module, host):
+            grafana_svc = service_registry.get_service('grafana')
+            svc_name = 'grafana'
+
+            # Seed a HOST-scoped inline cert for this host
+            cm.save_cert(grafana_svc.cert_name, ceph_generated_cert,
+                         host=host, user_made=True, editable=False)
+            cm.save_key(grafana_svc.key_name, ceph_generated_key,
+                        host=host, user_made=True, editable=False)
+
+            assert cm.get_cert(grafana_svc.cert_name, host=host) is not None
+            assert cm.get_key(grafana_svc.key_name, host=host) is not None
+
+            mock_entry = MagicMock()
+            mock_entry.spec = MagicMock()
+            mock_entry.spec.ssl = True
+            mock_entry.spec.certificate_source = 'inline'
+            mock_spec_store = MagicMock()
+            mock_spec_store.__contains__ = MagicMock(return_value=True)
+            mock_spec_store.__getitem__ = MagicMock(return_value=mock_entry)
+
+            daemon = MagicMock()
+            daemon.daemon_type = 'grafana'
+            daemon.daemon_id = 'host1.0'
+            daemon.hostname = host
+            daemon.name.return_value = f'grafana.{daemon.daemon_id}'
+            daemon.service_name.return_value = svc_name
+
+            # Sibling still on the same host
+            sibling = MagicMock()
+            sibling.hostname = host
+            sibling.name.return_value = 'grafana.host1.1'
+
+            with patch.object(cephadm_module, 'spec_store', mock_spec_store), \
+                 patch.object(cephadm_module.cache, 'get_daemons_by_service',
+                              return_value=[daemon, sibling]):
+                grafana_svc.post_remove(daemon, is_failed_deploy=False)
+
+            # Cert must still be present — sibling is still on host1
+            assert cm.get_cert(grafana_svc.cert_name, host=host) is not None
+            assert cm.get_key(grafana_svc.key_name, host=host) is not None
+
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1::4')
     @patch("cephadm.module.CephadmOrchestrator.get_fqdn", lambda a, b: 'host_fqdn')
@@ -1691,7 +1743,7 @@ class TestMonitoring:
                                     '    editable: false\n'
                                     '    options:\n'
                                     "      path: '/etc/grafana/provisioning/dashboards'"
-                            }}, ['secure_monitoring_stack:False'])
+                            }}, ['certificate_source: cephadm-signed', 'secure_monitoring_stack:False'])
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_grafana_no_anon_access(self, cephadm_module: CephadmOrchestrator):
@@ -1760,7 +1812,7 @@ class TestMonitoring:
                                     '    editable: false\n'
                                     '    options:\n'
                                     "      path: '/etc/grafana/provisioning/dashboards'"
-                            }}, ['secure_monitoring_stack:False'])
+                            }}, ['certificate_source: cephadm-signed', 'secure_monitoring_stack:False'])
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_monitoring_ports(self, _run_cephadm, cephadm_module: CephadmOrchestrator):

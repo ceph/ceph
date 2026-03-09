@@ -250,7 +250,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + haproxy_generated_conf[1][1] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
@@ -342,7 +342,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + haproxy_generated_conf[1][1] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]

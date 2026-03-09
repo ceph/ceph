@@ -2,6 +2,7 @@ import json
 from typing import Dict, List
 from unittest.mock import MagicMock, call, patch
 
+from ceph.deployment.service_spec import CertificateSource
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.services.iscsi import IscsiService
 from cephadm.module import CephadmOrchestrator
@@ -9,7 +10,6 @@ from ceph.deployment.service_spec import IscsiServiceSpec
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
 from cephadm.tlsobject_types import TLSCredentials
 from orchestrator._interface import DaemonDescription
-
 
 ceph_generated_cert = """-----BEGIN CERTIFICATE-----\nMIICxjCCAa4CEQDIZSujNBlKaLJzmvntjukjMA0GCSqGSIb3DQEBDQUAMCExDTAL\nBgNVBAoMBENlcGgxEDAOBgNVBAMMB2NlcGhhZG0wHhcNMjIwNzEzMTE0NzA3WhcN\nMzIwNzEwMTE0NzA3WjAhMQ0wCwYDVQQKDARDZXBoMRAwDgYDVQQDDAdjZXBoYWRt\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyyMe4DMA+MeYK7BHZMHB\nq7zjliEOcNgxomjU8qbf5USF7Mqrf6+/87XWqj4pCyAW8x0WXEr6A56a+cmBVmt+\nqtWDzl020aoId6lL5EgLLn6/kMDCCJLq++Lg9cEofMSvcZh+lY2f+1p+C+00xent\nrLXvXGOilAZWaQfojT2BpRnNWWIFbpFwlcKrlg2G0cFjV5c1m6a0wpsQ9JHOieq0\nSvwCixajwq3CwAYuuiU1wjI4oJO4Io1+g8yB3nH2Mo/25SApCxMXuXh4kHLQr/T4\n4hqisvG4uJYgKMcSIrWj5o25mclByGi1UI/kZkCUES94i7Z/3ihx4Bad0AMs/9tw\nFwIDAQABMA0GCSqGSIb3DQEBDQUAA4IBAQAf+pwz7Gd7mDwU2LY0TQXsK6/8KGzh\nHuX+ErOb8h5cOAbvCnHjyJFWf6gCITG98k9nxU9NToG0WYuNm/max1y/54f0dtxZ\npUo6KSNl3w6iYCfGOeUIj8isi06xMmeTgMNzv8DYhDt+P2igN6LenqWTVztogkiV\nxQ5ZJFFLEw4sN0CXnrZX3t5ruakxLXLTLKeE0I91YJvjClSBGkVJq26wOKQNHMhx\npWxeydQ5EgPZY+Aviz5Dnxe8aB7oSSovpXByzxURSabOuCK21awW5WJCGNpmqhWK\nZzACBDEstccj57c4OGV0eayHJRsluVr2e9NHRINZA3qdB37e6gsI1xHo\n-----END CERTIFICATE-----\n"""
 
@@ -78,9 +78,10 @@ class TestISCSIService:
     mgr.spec_store = MagicMock()
     mgr.spec_store.all_specs.get.return_value = iscsi_spec
 
+    @patch("cephadm.services.cephadmservice.CephadmService.get_dependencies", return_value=[])
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
-    def test_iscsi_client_caps(self):
+    def test_iscsi_client_caps(self, _get_deps):
 
         iscsi_daemon_spec = CephadmDaemonDeploySpec(
             host='host', daemon_id='a', service_name=self.iscsi_spec.service_name())
